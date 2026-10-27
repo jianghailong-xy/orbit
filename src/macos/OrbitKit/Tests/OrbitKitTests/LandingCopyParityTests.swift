@@ -328,6 +328,20 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: ""), "round 1")
     }
 
+    /// The results that give the status card its red ✕ head are the web's three, read from the
+    /// attempt's state; and the budget bar is the same fraction on both (the step's milliseconds over
+    /// the budget's, which the web writes with the budget times 1000).
+    func testTheFailureStatesAndTheBudgetFractionAreTheWebsOwn() throws {
+        let web = try source(Self.landingPage)
+        let states = LandingPageCopy.failureStates.map { "'\($0)'" }.joined(separator: ", ")
+        assertSays(web, "export const LANDING_FAILURE_STATES: readonly string[] = [\(states)];", in: Self.landingPage)
+        assertSays(web, "stoppedOnFailure: LANDING_FAILURE_STATES.includes(attempt.state),", in: Self.landingPage)
+        assertSays(web, "Math.max(0, Math.min(1, (elapsedAt - stepStart) / (attempt.check.budgetSeconds * 1_000)))",
+                   in: Self.landingPage)
+        let panorama = try source(Self.panorama)
+        assertSays(panorama, "failed ? 'cross' : 'spinner'", in: Self.panorama)
+    }
+
     /// The delivery card's third link.
     func testTheDeliveryCardsLandingLinkIsTheWebsOwn() throws {
         let web = try source(Self.deliveryCard)

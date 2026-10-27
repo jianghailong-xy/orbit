@@ -812,6 +812,7 @@ function LandingWindowCard({
                 head={{ right: card.right, isClock: card.rightIsClock, detail: card.detail }}
                 running={card.running}
                 timedOut={card.timedOut}
+                failed={card.stoppedOnFailure}
               />
             ) : (
               <span className="landing-page-note">

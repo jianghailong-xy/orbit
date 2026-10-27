@@ -304,7 +304,8 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
             // The head's one line is the card's on a narrow landing row; a card has room for the claim, the round and a takeover's
             // first start in full (mockups v4 05 h–j).
             LandingCardHead(taskName, expanded) {
-                ProjectLandingHead(card.word, LandingHead(card.right, card.rightIsClock, card.detail), card.running, card.timedOut, detailLines = 3)
+                ProjectLandingHead(card.word, LandingHead(card.right, card.rightIsClock, card.detail), card.running, card.timedOut, detailLines = 3,
+                    failed = card.stoppedOnFailure)
             }
             card.budget?.let { budget ->
                 Text(budget, Modifier.testTag("landing:budget"), style = MaterialTheme.typography.bodySmall, color = muted)

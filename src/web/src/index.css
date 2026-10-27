@@ -19429,6 +19429,14 @@ button.chat-jump-start:hover {
   background: var(--success-bg);
   color: var(--success);
 }
+/* An attempt that stopped on a failure: the Landings row's own red ✕, and the head's word in red. */
+.landing-head.is-failed .landing-head-mark {
+  background: var(--error-bg, var(--warning-bg));
+  color: var(--error);
+}
+.landing-head.is-failed .landing-head-right {
+  color: var(--error);
+}
 .landing-head-body {
   display: flex;
   flex: 1;

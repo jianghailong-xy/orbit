@@ -7,6 +7,7 @@ import type {
   SessionLandingView,
 } from '@orbit/shared';
 import {
+  LANDING_FAILURE_STATES,
   LANDING_PAGE_COPY,
   landingAttemptCard,
   landingCheckPassed,
@@ -314,6 +315,32 @@ describe('the card of an attempt that has ended: only a stopped one says it stop
     const check = ended({ kind: 'CHECK_PROMOTION', state: 'CANCELLED' }, round);
     expect(check.right).toBe('Not merged');
     expect(check.failure).toBe('Stopped · not landed');
+  });
+
+  it('a check that failed, a conflict or an error stopped on a failure: the head wears the red ✕ (board 02 d)', () => {
+    expect(LANDING_FAILURE_STATES).toEqual(['CHECK_FAILED', 'CONFLICT', 'ERROR']);
+    const failedCheck = { name: 'TASK_ACCEPTANCE', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 232_000 };
+    const checkFailed = ended({ state: 'CHECK_FAILED' }, { checks: [failedCheck] });
+    expect(checkFailed.right).toBe('Not landed');
+    expect(checkFailed.stoppedOnFailure).toBe(true);
+    expect(ended({ state: 'CONFLICT' }).stoppedOnFailure).toBe(true);
+    expect(ended({ state: 'ERROR' }).stoppedOnFailure).toBe(true);
+    expect(ended({ kind: 'CHECK_PROMOTION', state: 'CHECK_FAILED' }, round).stoppedOnFailure).toBe(true);
+    // The attempt's state decides it, never its sentence: a failed attempt with no check record says
+    // only `Stopped · not landed` and is still a failure; a cancelled one beside a failed check is not.
+    expect(ended({ state: 'CHECK_FAILED' }).detail).toBe('Stopped · not landed');
+    expect(ended({ state: 'CHECK_FAILED' }).stoppedOnFailure).toBe(true);
+    expect(ended({ state: 'CANCELLED' }, { checks: [failedCheck] }).stoppedOnFailure).toBe(false);
+  });
+
+  it('every other ending, and work in hand, keeps the quiet head', () => {
+    expect(ended({ state: 'CANCELLED' }).stoppedOnFailure).toBe(false);
+    expect(ended({ kind: 'CHECK_PROMOTION', state: 'READY' }, round).stoppedOnFailure).toBe(false);
+    expect(landingAttemptCard(landing(), NOW, { updatedAt: NOW })!.stoppedOnFailure).toBe(false);
+    expect(landingAttemptCard(landing({ currentAttempt: attempt({ state: 'QUEUED', claim: 0 }) }), NOW,
+      { updatedAt: NOW })!.stoppedOnFailure).toBe(false);
+    expect(landingAttemptCard(landing({ currentAttempt: attempt({ timedOut: true, liveness: 'LEASE_EXPIRED' }) }), NOW,
+      { updatedAt: NOW })!.stoppedOnFailure).toBe(false);
   });
 });
 

@@ -265,6 +265,8 @@ data class LandingAttemptCard(
     val failure: String?,
     val running: Boolean,
     val timedOut: Boolean,
+    /** The attempt stopped on a failure ([LandingSessionModel.FAILURE_STATES]): the head's red ✕ and red word. */
+    val stoppedOnFailure: Boolean = false,
 )
 
 /** A settled subject's card: the outcome the round (or the task's segment) reached (OrbitKit `LandingOutcomeCard`). */
@@ -294,6 +296,11 @@ data class LandingFacts(val stepStartedAt: String? = null, val typicalMs: Int? =
 object LandingSessionModel {
     private const val MINUTE = 60_000L
     private const val LEASE_STALE_MS = 90_000L
+
+    /** The results an attempt stops on as a failure: a check that failed, a conflict, an error. The status card's head wears the red
+     *  ✕ and the red word for them (board 02 d), read from the attempt's state alone, never from its sentence; CANCELLED and every
+     *  other ending keep the quiet head. OrbitKit `LandingPageCopy.failureStates`, held to it by the parity tests. */
+    val FAILURE_STATES = listOf("CHECK_FAILED", "CONFLICT", "ERROR")
 
     /** Whether a `GET /sessions/:id` answer is a landing's (LS6): the detail's own `sessionKind`, never a list row's `kind`. */
     fun isLanding(detail: JsonObject?) = detail?.text("sessionKind") == "LANDING"
@@ -584,7 +591,7 @@ object LandingSessionModel {
         return LandingAttemptCard(word, if (ready) LandingSessionCopy.READY else clause,
             if (ready) LandingSessionCopy.READY else if (mergeJob) LandingSessionCopy.NOT_MERGED else LandingSessionCopy.NOT_LANDED,
             false, if (ready) LandingSessionCopy.PASSED_CHECK else clause, null, null, null, false, null,
-            if (unavailable) null else failure, false, false)
+            if (unavailable) null else failure, false, false, stoppedOnFailure = attempt.state in FAILURE_STATES)
     }
 
     /** The settled page's head: the outcome, the commit it landed, the tasks that are now on main, the check that passed. */

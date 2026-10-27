@@ -279,6 +279,30 @@ class LandingSessionModelTest {
         assertEquals("Stopped · not landed", check.failure)
     }
 
+    /** An attempt that stopped on a failure — a check that failed, a conflict, an error — wears the red ✕ head (board 02 d), read from its
+     *  state alone; a stop, a READY and work in hand keep the quiet head (web `landingSession.test.ts`, iOS `LandingSessionPageTests`, the
+     *  same cases). */
+    @Test fun anAttemptThatStoppedOnAFailureWearsTheRedHead() {
+        assertEquals(listOf("CHECK_FAILED", "CONFLICT", "ERROR"), LandingSessionModel.FAILURE_STATES)
+        for (state in listOf("CHECK_FAILED", "CONFLICT", "ERROR")) assertTrue(state, ended(state = state).stoppedOnFailure)
+        assertTrue(ended(kind = "CHECK_PROMOTION", state = "CHECK_FAILED").stoppedOnFailure)
+        // Never the sentence: a failed attempt with no check record says only `Stopped · not landed` and is still a failure.
+        assertEquals("Stopped · not landed", ended(state = "CHECK_FAILED").detail)
+        assertFalse(ended(state = "CANCELLED").stoppedOnFailure)
+        assertFalse(ended(kind = "CHECK_PROMOTION", state = "READY").stoppedOnFailure)
+        assertFalse(card(view())!!.stoppedOnFailure)
+        assertFalse(card(view(timedOut = true, liveness = "LEASE_EXPIRED"))!!.stoppedOnFailure)
+    }
+
+    /** The budget bar is the step's share of its budget: 6m 15s of 30m fills about a fifth, the fraction iOS now draws too. */
+    @Test fun theBudgetBarIsTheStepsShareOfItsBudget() {
+        val running = card(view(step = 375, check = checkJson(375, budget = 1800, name = "MERGE_CHECK", count = 1)),
+            facts = LandingFacts(typicalMs = 540_000))!!
+        assertEquals("6m 15s of 30m", running.right)
+        assertEquals(375f / 1800f, running.progress!!, 0.0001f)
+        assertEquals(0.3f, running.usualProgress!!, 0.0001f)
+    }
+
     /** The takeover: claim 2 of the same section, and the section's first claim is where `first started` comes from. */
     @Test fun aTakeoverSaysClaimTwoAndKeepsTheFirstStart() {
         val timeline = """{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK","generation":1,"state":"RUNNING",

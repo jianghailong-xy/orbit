@@ -51,14 +51,30 @@ paragraph of §3.6, and Appendix B revision 28.
 
 | Check | Result |
 |---|---|
-| Web `vitest`, under `TZ=UTC` and under `TZ=Asia/Shanghai` | 436 files, 5707 tests passed in each |
-| OrbitKit `swift test` in the `swift:6.1` image | 4077 tests, 5 skipped, 0 failures |
-| macOS and iOS on GitHub (`native/README.md`) | the Mac app and OrbitKit (4077 tests, 0 failures), the iOS build, the navigation and font-token gates, and the probe's 4 UI tests all passed |
-| Android `src/android/scripts/verify.sh` (`android/README.md`) | 4008 local tests passed, lint and assemble passed |
-| The merge check under `TZ=Asia/Shanghai`: root build, `@orbit/shared`, `@orbit/apiserver`, `@orbit/web`, runner-go `go vet` and `go test` | every step exit 0 (apiserver 5579 tests) |
+| Web `vitest`, under `TZ=UTC` and under `TZ=Asia/Shanghai` | 436 files, 5709 tests passed in each |
+| OrbitKit `swift test` in the `swift:6.1` image | 4081 tests, 5 skipped, 0 failures |
+| macOS and iOS on GitHub (`native/README.md`) | the Mac app and OrbitKit, the iOS build, the navigation and font-token gates, and the probe's 4 UI tests all passed |
+| Android `src/android/scripts/verify.sh` (`android/README.md`) | 4014 local tests passed, lint and assemble passed |
+| The merge check under `TZ=Asia/Shanghai`: root build, `@orbit/shared`, `@orbit/apiserver`, `@orbit/web`, runner-go `go vet` and `go test` | every step exit 0 (apiserver 5579 tests, web 5709) |
 
 The apiserver's provenance census (`project-provenance-epoch.spec.ts`, SC7) names the web files that read a landing attempt's
 `sourceSessionId`; its two entries follow the page's rename to `ProjectLandingsWindow.tsx`.
+
+## Revision 2
+
+The review of revision 1 asked for two fixes on the window's Now cards, both older than this task:
+
+1. **A failed attempt's head.** An attempt that stopped on a failure — `CHECK_FAILED`, `CONFLICT`, `ERROR`, read from the
+   attempt's state, never its sentence — wears the Landings row's red ✕ and a red `Not landed` on its status card (board 02 d) in
+   all three clients; `CANCELLED` and every other state keep the quiet head. The list is the web's `LANDING_FAILURE_STATES`,
+   OrbitKit's `LandingPageCopy.failureStates` and Kotlin's `LandingSessionModel.FAILURE_STATES`, held together by the parity
+   tests, and each client's tests pin the head.
+2. **The iOS/macOS budget bar.** `LandingPageCopy.attemptCard` divided the step's seconds by the budget in milliseconds, so the
+   bar stayed empty; it is seconds over seconds now, pinned by an OrbitKit test (6m 15s of 30m ≈ 0.208) and a parity test with
+   the web's fraction.
+
+Frames d on all three clients and the iPhone's g (which shows the in-flight card's bar) were taken again, with every other frame
+that shows a waiting card.
 
 ## What the window cannot read
 

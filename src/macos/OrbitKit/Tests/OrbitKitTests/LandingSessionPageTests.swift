@@ -721,6 +721,43 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertEqual(check.failure, "Stopped · not landed")
     }
 
+    /// An attempt that stopped on a failure — a check that failed, a conflict, an error — wears the red
+    /// ✕ head (board 02 d), read from its state alone; a stop, a READY and work in hand keep the quiet
+    /// head. Web: `landingSession.test.ts`, the same cases.
+    func testAnAttemptThatStoppedOnAFailureWearsTheRedHead() {
+        XCTAssertEqual(LandingPageCopy.failureStates, ["CHECK_FAILED", "CONFLICT", "ERROR"])
+        for state in ["CHECK_FAILED", "CONFLICT", "ERROR"] {
+            XCTAssertTrue(ended(state: state).stoppedOnFailure, state)
+        }
+        XCTAssertTrue(ended(kind: "CHECK_PROMOTION", state: "CHECK_FAILED").stoppedOnFailure)
+        // Never the sentence: a failed attempt with no check record says only `Stopped · not landed`
+        // and is still a failure.
+        XCTAssertEqual(ended(state: "CHECK_FAILED").detail, "Stopped · not landed")
+        XCTAssertFalse(ended(state: "CANCELLED").stoppedOnFailure)
+        XCTAssertFalse(ended(kind: "CHECK_PROMOTION", state: "READY").stoppedOnFailure)
+        XCTAssertFalse(LandingPageCopy.attemptCard(landing(), now: now, updatedAt: now)!.stoppedOnFailure)
+        let lapsed = landing { $0.currentAttempt = attempt { $0.timedOut = true; $0.liveness = "LEASE_EXPIRED" } }
+        XCTAssertFalse(LandingPageCopy.attemptCard(lapsed, now: now, updatedAt: now)!.stoppedOnFailure)
+    }
+
+    /// The budget bar is the step's share of its budget, seconds over seconds: 6m 15s of 30m fills about
+    /// a fifth. Revision 1 of the Landings window divided seconds by milliseconds and drew an empty bar.
+    /// The usual-duration tick is milliseconds over milliseconds. Web and Kotlin draw the same fractions.
+    func testTheBudgetBarIsTheStepsShareOfItsBudget() {
+        let started = at(14, 52, 15)
+        let view = landing { $0.currentAttempt = attempt {
+            $0.startedAt = started
+            $0.check = LandingAttemptCheck(name: "MERGE_CHECK", index: 1, count: 1,
+                                           budgetSeconds: 1_800, startedAt: started)
+        } }
+        let card = LandingPageCopy.attemptCard(view, now: now, updatedAt: now,
+                                               facts: LandingFacts(typicalMs: 540_000))!
+        XCTAssertEqual(card.right, "6m 15s of 30m")
+        XCTAssertEqual(card.progress ?? -1, 375.0 / 1_800, accuracy: 0.000_1)
+        XCTAssertEqual(card.progress ?? -1, 0.208, accuracy: 0.001)
+        XCTAssertEqual(card.usualProgress ?? -1, 0.3, accuracy: 0.000_1)
+    }
+
     // MARK: - the timeline's ✓ reads the line's fields, not its sentence
 
     private func finished(_ data: [String: JSONValue]?,

@@ -6,7 +6,7 @@ INSTRUMENTATION_STATUS: stream=
 io.orbitd.android.reader.LandingsWindowShotsTest:
 INSTRUMENTATION_STATUS: test=theLandingsWindowFrames
 INSTRUMENTATION_STATUS_CODE: 1
-INSTRUMENTATION_STATUS: lw_pid=12362
+INSTRUMENTATION_STATUS: lw_pid=13657
 INSTRUMENTATION_STATUS_CODE: 0
 INSTRUMENTATION_STATUS: class=io.orbitd.android.reader.LandingsWindowShotsTest
 INSTRUMENTATION_STATUS: current=1
@@ -17,7 +17,7 @@ INSTRUMENTATION_STATUS: test=theLandingsWindowFrames
 INSTRUMENTATION_STATUS_CODE: 0
 INSTRUMENTATION_RESULT: stream=
 
-Time: 10.66
+Time: 11.769
 
 OK (1 test)
 

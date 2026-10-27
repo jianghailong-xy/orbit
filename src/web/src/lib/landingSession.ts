@@ -301,7 +301,17 @@ export interface LandingAttemptCard {
   failure: string | null;
   running: boolean;
   timedOut: boolean;
+  /** The attempt stopped on a failure (`LANDING_FAILURE_STATES`): the head's red ✕ and red word. */
+  stoppedOnFailure: boolean;
 }
+
+/**
+ * The results an attempt stops on as a failure: a check that failed, a conflict, an error. The status
+ * card's head wears the red ✕ and the red word for them (board 02 d), read from the attempt's state
+ * alone, never from its sentence; CANCELLED and every other ending keep the quiet head. OrbitKit
+ * `LandingPageCopy.failureStates` and Kotlin `LandingSessionModel.FAILURE_STATES` hold the same three.
+ */
+export const LANDING_FAILURE_STATES: readonly string[] = ['CHECK_FAILED', 'CONFLICT', 'ERROR'];
 
 /**
  * The status card over the subject's newest attempt: the landing row's head (owner 2026-10-11)
@@ -353,6 +363,7 @@ export function landingAttemptCard(
       failure: null,
       running: false,
       timedOut: false,
+      stoppedOnFailure: false,
     };
   }
 
@@ -376,6 +387,7 @@ export function landingAttemptCard(
       failure: null,
       running: false,
       timedOut: true,
+      stoppedOnFailure: false,
     };
   }
 
@@ -397,6 +409,7 @@ export function landingAttemptCard(
       failure: null,
       running: false,
       timedOut: false,
+      stoppedOnFailure: false,
     };
   }
 
@@ -506,6 +519,7 @@ export function landingAttemptCard(
     failure: null,
     running: true,
     timedOut: false,
+    stoppedOnFailure: false,
   };
 }
 
@@ -569,6 +583,7 @@ function terminalCard(
     failure: unavailable ? null : failure,
     running: false,
     timedOut: false,
+    stoppedOnFailure: LANDING_FAILURE_STATES.includes(attempt.state),
   };
 }
 

@@ -85,6 +85,20 @@ class LandingSessionCopyParityTest {
         }
     }
 
+    /** The results that give the status card its red ✕ head are OrbitKit's three, read from the attempt's state, and both draw the
+     *  head from it; the budget bar is the same fraction (Swift: the step's seconds over the budget's seconds). */
+    @Test fun theFailureStatesAndTheBudgetFractionAreTheSwifts() {
+        val page = File(root, "${kit}LandingSessionPage.swift").readText()
+        val states = LandingSessionModel.FAILURE_STATES.joinToString(", ") { "\"$it\"" }
+        listOf("public static let failureStates = [$states]",
+            "stoppedOnFailure: LandingPageCopy.failureStates.contains(attempt.state))",
+            "let budget = Double(check.budgetSeconds)\n").forEach {
+            assertTrue("LandingSessionPage.swift no longer says $it", page.contains(it))
+        }
+        val view = File(root, "${views}LandingSessionPageView.swift").readText()
+        assertTrue(view.contains("running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)"))
+    }
+
     /** The landing page's own header line and read-only footer went with the page (owner 2026-10-27): the window has its own
      *  footer, in [io.orbitd.android.directory.SessionLandingsCopy]. None of their words is left here, nor in the Swift. */
     @Test fun thePagesHeaderAndFooterWordsAreGone() {

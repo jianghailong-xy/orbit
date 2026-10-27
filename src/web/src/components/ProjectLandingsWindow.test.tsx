@@ -537,6 +537,10 @@ describe('a landing in the window', () => {
     const card = page().querySelector('.landing-status-card')!;
     expect([...card.querySelectorAll('.landing-card-line')].map((line) => line.textContent))
       .toEqual(['Stopped · not landed']);
+    // A stop is not a failure: the head keeps the quiet ring.
+    const head = card.querySelector('.landing-head')!;
+    expect(head.classList.contains('is-failed')).toBe(false);
+    expect(head.querySelector('.landing-head-mark [data-glyph]')?.getAttribute('data-glyph')).toBe('spinner');
   });
 });
 
@@ -908,6 +912,11 @@ describe('the window', () => {
     const card = page().querySelector('.landings-window-card')!;
     expect(card.textContent).toContain('Not landed');
     expect(card.textContent).toContain('checks failed · exit 1 after 3m 52s');
+    // An attempt that stopped on a failure wears the Landings row's red ✕, its word in red (board 02 d).
+    const head = card.querySelector('.landing-head')!;
+    expect(head.classList.contains('is-failed')).toBe(true);
+    expect(head.querySelector('.landing-head-mark [data-glyph]')?.getAttribute('data-glyph')).toBe('cross');
+    expect(head.querySelector('.landing-head-right')?.textContent).toBe('Not landed');
     expect([...card.querySelectorAll('.landing-card-actions button')].map((door) => door.textContent))
       .toEqual(['Open Coordinator', 'Open Task']);
     await click(button('Open Coordinator'), 'Open Coordinator');

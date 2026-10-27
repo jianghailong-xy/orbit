@@ -84,7 +84,7 @@ struct LandingStatusCardView: View {
                     title: card.word,
                     head: ProjectPage.LandingHead(right: card.right, isClock: card.rightIsClock,
                                                   detail: card.detail),
-                    running: card.running, timedOut: card.timedOut)
+                    running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)
                 titleLine
                 if let budget = card.budget {
                     Text(budget).font(.orbitMeta).foregroundStyle(.secondary)

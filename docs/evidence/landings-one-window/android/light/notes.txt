@@ -3,23 +3,23 @@ PASS the project's row
 PASS the Landings row's counts
 PASS how long the waiting one has waited
 b: line=1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today time=18m
-captured b-sessions-page-landings-row at 2026-10-27T19:15:57.446078Z
+captured b-sessions-page-landings-row at 2026-10-27T20:11:43.676934Z
 PASS the waiting card's head
 PASS the checking card's head
 PASS the waiting card's doors
 d: subtitle=Run by Orbit · Ledger service cards=[Reconcile settlement batches, Fee schedule import]
-captured d-window-at-its-bottom at 2026-10-27T19:15:59.799827Z
+captured d-window-at-its-bottom at 2026-10-27T20:11:45.690727Z
 PASS yesterday's rows
 d2: rows=[Merged into main, Audit log retention, Currency code lookup, Payout retry budget, Statement export header, Ledger migration order, Merged into main, Invoice rounding rule]
-captured d2-window-day-sections at 2026-10-27T19:16:00.603095Z
+captured d2-window-day-sections at 2026-10-27T20:11:46.573076Z
 PASS the card's menu
 g: menu=[Open task, Open source session, Open coordinator, Stop landing]
-captured g-card-long-press-menu at 2026-10-27T19:16:02.177217Z
+captured g-card-long-press-menu at 2026-10-27T20:11:47.836755Z
 PASS the menu closed, the window still up
 PASS the receipt and the round's record
 e: heading=Now on main · 2 tasks check=✓ Passed on the combined tree · 17m 41s tree=Landed exactly the tested tree 5e5bfca · as a merge commit
-captured e-merge-row-open at 2026-10-27T19:16:03.392330Z
+captured e-merge-row-open at 2026-10-27T20:11:48.926529Z
 PASS the focused landing, open and outlined
-captured f-opened-on-a-landing at 2026-10-27T19:16:04.285319Z
+captured f-opened-on-a-landing at 2026-10-27T20:11:49.624553Z
 f: outlined after 2 s=false
-captured f2-after-the-outline at 2026-10-27T19:16:05.097536Z
+captured f2-after-the-outline at 2026-10-27T20:11:50.374615Z

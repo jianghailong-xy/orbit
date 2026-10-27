@@ -85,12 +85,19 @@ final class LandingsWindowTests: ProbeCase {
         let app = launch(until: "Task page reload", extra: ["-probe.page", "window"], "window")
         XCTAssertTrue(appears(app, Self.footer, timeout: 20))
         settle(2)
-        let card = element(app, containing: "Task page reload")
-        card.press(forDuration: 1.2)
-        settle(1.2)
-        XCTAssertTrue(app.buttons["Stop Landing"].waitForExistence(timeout: 10)
-                      || element(app, containing: "Before the push only · nothing pushed yet").exists,
-                      "the card's menu offers Stop Landing before the push")
+        // The simulator can drop a long press: two runs in a row drew no menu on the only try. Press the
+        // card again, on another of its lines, until its menu is up — at most three times, each noted.
+        var opened = false
+        for (attempt, words) in ["Task page reload", "Merge check ", "Task page reload"].enumerated() where !opened {
+            let target = element(app, containing: words)
+            target.press(forDuration: 1.5)
+            opened = app.buttons["Stop Landing"].waitForExistence(timeout: 5)
+                || element(app, containing: "Before the push only · nothing pushed yet").exists
+            note("g: long press \(attempt + 1) on \"\(words)\" at \(target.frame): menu \(opened ? "up" : "not up")")
+            if !opened { settle(1) }
+        }
+        settle(1)
+        XCTAssertTrue(opened, "the card's menu offers Stop Landing before the push")
         for word in ["Open Task", "Open Source Session", "Open Coordinator"] {
             XCTAssertTrue(element(app, containing: word).exists, "the menu offers \(word)")
         }

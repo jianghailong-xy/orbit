@@ -39,6 +39,11 @@ public enum LandingPageCopy {
     public static let alreadyOn = "Already on"
     public static let notLanded = "Not landed"
     public static let notMerged = "Not merged"
+    /// The results an attempt stops on as a failure: a check that failed, a conflict, an error. The
+    /// status card's head wears the red ✕ and the red word for them (board 02 d), read from the
+    /// attempt's state alone, never from its sentence; CANCELLED and every other ending keep the quiet
+    /// head. The web's `LANDING_FAILURE_STATES`, held to it by the parity tests.
+    public static let failureStates = ["CHECK_FAILED", "CONFLICT", "ERROR"]
     public static let ready = "Ready"
     public static let passedCheck = "Passed the check · waiting for the owner"
     public static let passedOnTheTree = "✓ Passed on the combined tree"
@@ -266,11 +271,14 @@ public struct LandingAttemptCard: Equatable, Sendable {
     public let failure: String?
     public let running: Bool
     public let timedOut: Bool
+    /// The attempt stopped on a failure (`LandingPageCopy.failureStates`): the head's red ✕ and red word.
+    public let stoppedOnFailure: Bool
 
     public init(word: String = "", state: String = "", right: String = "", rightIsClock: Bool = false,
                 detail: String = "", budget: String? = nil, progress: Double? = nil,
                 live: String? = nil, fresh: Bool = false, usualProgress: Double? = nil,
-                failure: String? = nil, running: Bool = false, timedOut: Bool = false) {
+                failure: String? = nil, running: Bool = false, timedOut: Bool = false,
+                stoppedOnFailure: Bool = false) {
         self.word = word
         self.state = state
         self.right = right
@@ -284,6 +292,7 @@ public struct LandingAttemptCard: Equatable, Sendable {
         self.failure = failure
         self.running = running
         self.timedOut = timedOut
+        self.stoppedOnFailure = stoppedOnFailure
     }
 }
 
@@ -494,7 +503,8 @@ public extension LandingPageCopy {
 
         let progress: Double?
         if let check = attempt.check, let stepStart {
-            let budget = Double(check.budgetSeconds) * 1_000
+            // Seconds over seconds: `timeIntervalSince` counts seconds, as the budget does.
+            let budget = Double(check.budgetSeconds)
             progress = budget > 0
                 ? min(1, max(0, elapsedAt.timeIntervalSince(stepStart) / budget)) : nil
         } else {
@@ -576,7 +586,8 @@ public extension LandingPageCopy {
             rightIsClock: false,
             detail: ready ? LandingPageCopy.passedCheck : clause,
             budget: nil, progress: nil, live: nil, fresh: false, usualProgress: nil,
-            failure: unavailable ? nil : failure, running: false, timedOut: false)
+            failure: unavailable ? nil : failure, running: false, timedOut: false,
+            stoppedOnFailure: LandingPageCopy.failureStates.contains(attempt.state))
     }
 
     /// The settled page's head (mockup 05c): the outcome, the commit it landed, the tasks that are

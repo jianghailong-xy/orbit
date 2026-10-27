@@ -119,6 +119,30 @@ final class LandingViewsWiringTests: XCTestCase {
                       "a Mac push button keeps Abandon's word red")
     }
 
+    /// An attempt that stopped on a failure wears the red ✕ head (board 02 d), which Linux cannot
+    /// render: the status card hands the head the model's `stoppedOnFailure` (AnAttemptThatStopped…
+    /// in LandingSessionPageTests decides it), and the head draws the Landings row's ✕ in red with its
+    /// word in red. Every other head keeps its ring.
+    func testTheStatusCardsHeadWearsTheRedCrossForAnAttemptThatStoppedOnAFailure() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        XCTAssertTrue(page.contains("running: card.running, timedOut: card.timedOut, failed: card.stoppedOnFailure)"),
+                      "the status card hands its head the attempt's failure")
+        let head = code(try appSource("Views/ProjectLandingRow.swift"))
+        guard let start = head.range(of: "struct ProjectLandingHead: View {"),
+              let end = head.range(of: "struct ProjectSpinnerRing: View {", range: start.upperBound..<head.endIndex) else {
+            return XCTFail("ProjectLandingHead keeps its place")
+        }
+        let body = String(head[start.upperBound..<end.lowerBound])
+        XCTAssertTrue(body.contains("var failed = false"))
+        XCTAssertTrue(body.contains("if failed { return .red }"), "the word at the right is red")
+        guard let branch = body.range(of: "} else if failed {") else {
+            return XCTFail("the head draws a mark of its own for a failure")
+        }
+        let mark = body[branch.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertTrue(mark.hasPrefix("Text(\"✕\")"), "the mark is the Landings row's ✕")
+        XCTAssertTrue(body.contains(".background(Color.red.opacity(0.15), in: Circle())"))
+    }
+
     /// The Landing card's sentence, which Linux cannot render: a card holding only a merge job says
     /// no "Nothing to do" (that job lands no task; board v4 04 draws no body under its head), and a
     /// timed-out card still says where its runner stopped. The model's `mergeJob` decides it

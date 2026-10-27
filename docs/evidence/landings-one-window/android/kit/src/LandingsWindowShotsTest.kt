@@ -92,7 +92,11 @@ class LandingsWindowShotsTest {
 
                 // d · the window, opened at its bottom: the day sections above, Now's two cards under them.
                 compose.onNodeWithTag("landings-row").performClick()
-                await("the waiting card's head") { cardSays(waiting, "landing-head:right", "Not landed") }
+                // Its attempt stopped on a failed check: the head wears the Landings row's red ✕, its word in red (board 02 d).
+                await("the waiting card's head") {
+                    cardSays(waiting, "landing-head:right", "Not landed") && exists(hasTestTag("landing-head:failed") and inEntry(waiting), true)
+                }
+                assertTrue("the card in flight keeps its ring", !exists(hasTestTag("landing-head:failed") and inEntry(flight), true))
                 await("the checking card's head") { text("landing:budget", flight)?.startsWith("Merge check ") == true }
                 await("the waiting card's doors") { exists(hasTestTag("landing:wait:open_coordinator") and inEntry(waiting)) }
                 settle(); SystemClock.sleep(800)

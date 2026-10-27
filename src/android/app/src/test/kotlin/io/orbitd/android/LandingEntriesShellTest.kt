@@ -290,13 +290,23 @@ class LandingEntriesShellTest {
         assertTrue(exists(hasTestTag("landings:open-coordinator")))
     }
 
-    /** F′ · a card that waits for a decision carries the doors to the people who make it: the coordinator, and the task. */
+    /** F′ · a card that waits for a decision carries the doors to the people who make it: the coordinator, and the task. Its attempt
+     *  stopped on a failed check, so its head wears the Landings row's red ✕ and its word in red (board 02 d); the card in flight keeps
+     *  its ring. */
     @Test fun aWaitingCardCarriesTheDoorsToThePeopleWhoDecide() {
         project()
+        ProjectShell.landingById = mapOf("l-await" to landingView
+            .replace("\"state\":\"RUNNING\"", "\"state\":\"CHECK_FAILED\"")
+            .replace("\"checks\":[]", "\"checks\":[{\"name\":\"TASK_ACCEPTANCE\",\"exitCode\":1,\"expectedExitCode\":0,\"timedOut\":false,\"durationMs\":232000}]"))
         openPage()
         openWindow()
         val waiting = hasAnyAncestor(hasTestTag("landing-entry:l-await"))
         await { exists(hasTestTag("landing:wait:open_coordinator") and waiting) && exists(hasTestTag("landing:wait:open_task") and waiting) }
+        assertTrue("a failed check's head is the red ✕", exists(hasTestTag("landing-head:failed") and waiting, unmerged = true))
+        compose.onNode(hasTestTag("landing-head:right") and waiting, useUnmergedTree = true).assertTextEquals("Not landed")
+        val flight = hasAnyAncestor(hasTestTag("landing-entry:l-flight"))
+        assertFalse("the card in flight keeps its ring", exists(hasTestTag("landing-head:failed") and flight, unmerged = true))
+        assertTrue(exists(hasTestTag("landing-ring:running") and flight, unmerged = true))
         compose.onNode(hasTestTag("landing:wait:open_coordinator") and waiting).assert(hasText("Open coordinator"))
         compose.onNode(hasTestTag("landing:wait:open_task") and waiting).assert(hasText("Open task"))
         assertFalse("the card in flight waits for nobody",

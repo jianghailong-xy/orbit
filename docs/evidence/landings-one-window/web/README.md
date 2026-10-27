@@ -11,7 +11,7 @@ clock frozen at 2026-10-27 10:20 Asia/Shanghai (the board's moment), the shell's
 | Picture (light / dark) | Board frame | What it shows |
 |---|---|---|
 | `light-b-project-page.png` | 01 b | The project sessions page: under Coordinator one **Landings** row — ✕ (a landing waits for a decision), `18m` (the longest wait), `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` over two lines — and the timeline below it with sessions only (no Merged into main row). The coordinator conversation on the right keeps its own merge receipt lines. |
-| `light-d-window.png` | 02 d | The row opened the project's Landings window at `/projects/<id>/landings`: `Landings` / `Run by Orbit · Wiki server`, the ⋯ with Open Coordinator and Open Project, settled landings by the session list's day sections (`8–30 days ago` for a merge older than landing sessions, `Yesterday`, `Today` with ✓ / ◌ / ⇢ rows at their settle times), then `Now`: the waiting card (its doors Open Coordinator / Open Task) and the in-flight card (V6 clock, budget bar with the usual-duration tick, liveness). The window stands at its bottom; the footer reads `Orbit runs these landings — nothing to type here.` and `Decisions: the coordinator · Open coordinator ›`. No composer. |
+| `light-d-window.png` | 02 d | The row opened the project's Landings window at `/projects/<id>/landings`: `Landings` / `Run by Orbit · Wiki server`, the ⋯ with Open Coordinator and Open Project, settled landings by the session list's day sections (`8–30 days ago` for a merge older than landing sessions, `Yesterday`, `Today` with ✓ / ◌ / ⇢ rows at their settle times), then `Now`: the waiting card — its attempt stopped on a failed check, so its head wears the Landings row's red ✕ and a red `Not landed` (revision 2) — with its doors Open Coordinator / Open Task, and the in-flight card (V6 clock, budget bar about a fifth full at `6m 12s of 30m` with the usual-duration tick, liveness). The window stands at its bottom; the footer reads `Orbit runs these landings — nothing to type here.` and `Decisions: the coordinator · Open coordinator ›`. No composer. |
 | `light-e-merge-open.png` | 03 e | The Today `Merged into main` row pressed: opened in place (⌃ on its right) to the receipt — `Now on main · 2 tasks`, the tasks, `✓ Passed on the combined tree · 17m 41s`, `Landed exactly the tested tree 5e5bfca · as a merge commit` — over the round's own record (`Merge check · 1`, `Merge to main · 1`). |
 | `light-f-focused.png` | 03 f | `/sessions/<landing id>` — what every Open landing ›, orbit-session link and landing label opens — draws the window on that landing: scrolled to, opened (two generations, the failed check's tail inline, `Open Task ›`, `Open Source Session ›`) and outlined (the outline lasts about 1.5 s; the picture is taken 0.45 s after it appears). |
 | `light-f-entry.png` | 03 f | The same from a real entrance: the project page's Landing card `Open landing ›`, pressed, opens the window on that landing (here the card in hand), outlined and opened. |
@@ -33,8 +33,10 @@ network namespace (`unshare -n`), with `FONTCONFIG_FILE=/mnt/data/pe-mock/fonts.
 
 ## Notes
 
-- The waiting card is today's landing status card as implemented: its head wears the grey ring and a
-  grey `Not landed`, where the board draws a red ✕ — the card's look was not changed by this task.
+- Revision 2 (review of revision 1): an attempt that stopped on a failure — `CHECK_FAILED`, `CONFLICT`,
+  `ERROR`, read from the attempt's state — wears the red ✕ head and a red `Not landed` on its status card
+  (board 02 d); `CANCELLED` and every other state keep the quiet head. Every frame here is from one run of
+  the kit after that change: only the waiting card's head row moved (frames d, e, f-entry, g).
 - `GET /projects/:id/promotions/merged` answers the newest 20 merges (`MERGED_RECORD_LIMIT`). Every
   round since landing sessions (2026-10-19) has its own landing session, which the window lists in
   full; only a merge older than that **and** past the newest 20 cannot be read — the same as the old

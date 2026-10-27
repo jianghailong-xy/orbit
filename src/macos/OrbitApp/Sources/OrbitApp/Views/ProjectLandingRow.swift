@@ -23,13 +23,18 @@ struct ProjectLandingHead: View {
     /// A settled outcome that went the project's way: the board's green success card (mockup 05 c,
     /// where the round MERGED). The head is otherwise the row's own anatomy.
     var ok = false
+    /// An attempt that stopped on a failure (board 02 d): the red ✕ the project page's Landings row
+    /// wears, and its word in red.
+    var failed = false
 
     /// The head's ink, the landing row's own rule: the accent while the job runs, grey while it
     /// waits its turn or the app cannot read the server, and the amber a runner the server stopped
-    /// hearing from wears. A settled success is the one green.
+    /// hearing from wears. A settled success is the one green, a failure the one red.
     private var ink: Color {
         if ok { return .green }
-        return timedOut ? ProjectPalette.warningInk : running ? Color.accentColor : Color.secondary
+        if timedOut { return ProjectPalette.warningInk }
+        if failed { return .red }
+        return running ? Color.accentColor : Color.secondary
     }
 
     var body: some View {
@@ -70,6 +75,13 @@ struct ProjectLandingHead: View {
                 .foregroundStyle(ink)
                 .frame(width: 30, height: 30)
                 .background(Color.orange.opacity(0.15), in: Circle())
+                .accessibilityHidden(true)
+        } else if failed {
+            Text("✕")
+                .font(.orbitGlyph.weight(.semibold))
+                .foregroundStyle(ink)
+                .frame(width: 30, height: 30)
+                .background(Color.red.opacity(0.15), in: Circle())
                 .accessibilityHidden(true)
         } else {
             LandingRing(size: 15, running: running)
