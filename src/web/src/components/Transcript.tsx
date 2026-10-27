@@ -2657,8 +2657,9 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 // (an image-only turn has empty text) — prefer the local preview (instant), falling back to the
 // durable refs when there's none. Below the bubble, one right-aligned meta row: the copy button and
 // the relative time, which fade in on hover like Claude's, then the bubble's own state (a steer's
-// progress, a message that did not land), which is always shown. The row lives inside the hover
-// wrap so the pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
+// progress, a message that did not land) and the line naming what Orbit attached, both always
+// shown. The row lives inside the hover wrap so the pointer can travel down onto it without
+// dismissing it (CSS :hover hits ancestors).
 //
 // Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
 // with that line at its foot — so a message does not change shape when the runner picks it up — and
@@ -2672,12 +2673,12 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
   // whose bubble this is. The apiserver records what it appended: `node.note` holds it, `node.text`
-  // is already just the person's, and the note is one entry under their words (ControlPlaneNote).
-  // An event with no note is the echo as it came, however much of it looks like a block. Copying
-  // and the length cap follow the typed text for the same reason: neither should be measured
-  // against a block nobody wrote.
+  // is already just the person's, and the note is one line in the meta row under their bubble,
+  // never in it (useControlPlaneNote). An event with no note is the echo as it came, however much
+  // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
+  // neither should be measured against a block nobody wrote.
   const typed = node.text;
-  const attached = node.note ? { kind: describeNote(node.note), text: node.note } : null;
+  const note = useControlPlaneNote(node.note ? { kind: describeNote(node.note), text: node.note } : null);
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -2720,12 +2721,6 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
-        {attached && (
-          // Named, not hidden: without this the agent answers about a quota outage nobody
-          // appears to have raised. Folded under the words, so what the model read is one click
-          // away without putting it in the middle of someone's sentence.
-          <ControlPlaneNote kind={attached.kind} text={attached.text} />
-        )}
         {queued}
       </div>
       {longText && !exp && (
@@ -2735,7 +2730,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status) && (
+      {(typed || status || note) && (
         <div className="chat-user-meta">
           {typed && (
             <button
@@ -2749,10 +2744,14 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && status && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note) && <span className="chat-meta-sep">·</span>}
           {status}
+          {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
+              to have raised. */}
+          {note?.line}
         </div>
       )}
+      {note?.opened}
     </div>
   );
 }
@@ -3516,62 +3515,69 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
-// What the control plane appended to the message in the bubble — a reference's summary, a list's
-// condition board, the background work a returning engine is told about, a coordinator's standing
-// role — named on one line under the person's words, as Orbit's rather than theirs. Folded, not
-// dropped: it is why a reply can mention something the message never did, and opening it shows
-// exactly what the model read. Opened by a click rather than carried in a tooltip, which a touch
-// screen cannot reach.
-function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
+// What the control plane appended to a message — a reference's summary, a list's condition board,
+// the background work a returning engine is told about, a coordinator's standing role — named on one
+// quiet line as Orbit's rather than the person's. Folded, not dropped: it is why a reply can mention
+// something the message never did, and opening it shows exactly what the model read. Opened by a
+// click rather than carried in a tooltip, which a touch screen cannot reach.
+//
+// The line is in the voice of the time under a message and says what is attached, nothing more:
+// "⊕ Orbit attached: background jobs", ⊖ once it is open. What the person typed is what the eye
+// should land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands —
+// "1 running, 1 failed" — is the line's tooltip and accessible name, and the opened rows say it
+// job by job.
+//
+// The line and what it opens to come back apart because a person's bubble places them apart: the
+// line ends the meta row under the bubble and the rows go under that row (UserBubble). Everywhere
+// else they stand together (ControlPlaneNote). Null when there is no note.
+function useControlPlaneNote(note: { kind: string; text: string } | null): { line: ReactNode; opened: ReactNode } | null {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
   // Three of the blocks open as something other than their own text: the inventory a returning engine
   // is handed, whose lines are a list of outcomes; the tasks a person named with `#`, whose table
   // holds an id nobody could click; and the wiki's notes for this codebase, whose lines are what the
   // agent read before it began. One note can carry several, so each reading is handed what the one
-  // before it did not take and what is left over is drawn as it always was. Their counts go on the
-  // line that names the note shut: "background jobs" alone never said whether opening it was worth
-  // the click.
+  // before it did not take and what is left over is drawn as it always was.
+  const text = note?.text ?? '';
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
+  if (!note) return null;
+  const { kind } = note;
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
   const baseLabel = `⊕ Orbit attached: ${kind}`;
   const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
-  return (
-    <div className={`chat-injected${open ? ' is-open' : ''}`}>
+  return {
+    line: (
       <button
         type="button"
         className="chat-injected-head"
-        data-display-kind={kind}
         aria-expanded={open}
+        aria-label={label}
+        title={`${label.slice(2)}. The agent read it with this message.`}
         onClick={() => setOpen((o) => !o)}
       >
-        {label}
+        <span className="chat-injected-mark">{open ? '⊖' : '⊕'}</span> Orbit attached: {kind}
       </button>
-      {!open && (
-        <div className="chat-injected-overview">
-          <div className="chat-injected-summary">
-            <strong>Orbit context</strong>
-            <span>Attached to this message</span>
-          </div>
-          <p>Context is kept out of your message and available when you need the full details.</p>
-          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
-            View full context <RightOutlined />
-          </button>
-        </div>
-      )}
-      {open &&
-        (tasks || jobs || wiki ? (
-          <>
-            {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
-            {jobs && <BackgroundJobsNote jobs={jobs} />}
-            {wiki && <WikiContextNote context={wiki} />}
-            {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
-          </>
-        ) : (
-          <pre className="chat-injected-body">{text}</pre>
-        ))}
+    ),
+    opened: open && (
+      <div className="chat-injected-panel">
+        {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
+        {jobs && <BackgroundJobsNote jobs={jobs} />}
+        {wiki && <WikiContextNote context={wiki} />}
+        {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
+      </div>
+    ),
+  };
+}
+
+/** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
+function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
+  const note = useControlPlaneNote({ kind, text });
+  return (
+    <div className="chat-injected">
+      {note?.line}
+      {note?.opened}
     </div>
   );
 }

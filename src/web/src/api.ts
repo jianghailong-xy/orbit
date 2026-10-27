@@ -1292,6 +1292,41 @@ export const approveCliLogin = (userCode: string) =>
 export const denyCliLogin = (userCode: string) =>
   api<{ status: 'DENIED'; name: string }>(`${cliLoginPath(userCode)}/deny`, { method: 'POST' });
 
+/**
+ * An `orbit register` waiting at /enroll?code=…: the machine a terminal asks to add as a runner.
+ * Approving mints the runner — the terminal collects its credential the next time it asks — and
+ * denying tells it no.
+ */
+export interface DeviceEnrollment {
+  userCode: string;
+  /** The runner name the terminal asked for; the hostname unless `--name` chose another. */
+  name: string;
+  hostname: string | null;
+  labels: string[];
+  maxConcurrent: number;
+  status: 'PENDING' | 'APPROVED' | 'DENIED';
+  /** A runner of this name is already on the account, so approving re-issues its credential. */
+  nameConflict: boolean;
+  /** When that runner was last heard from; null without one, or before its first heartbeat. */
+  existingLastSeenAt: string | null;
+  /** The runner an approval minted; null until approved. */
+  runnerId: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+const enrollmentPath = (userCode: string) => `/runners/device/${encodeURIComponent(userCode)}`;
+
+export const getDeviceEnrollment = (userCode: string) => api<DeviceEnrollment>(enrollmentPath(userCode));
+
+export const approveDeviceEnrollment = (userCode: string) =>
+  api<{ ok: true; name: string; replaced: boolean; runnerId: string | null }>(`${enrollmentPath(userCode)}/approve`, {
+    method: 'POST',
+  });
+
+export const denyDeviceEnrollment = (userCode: string) =>
+  api<{ ok: true; name: string }>(`${enrollmentPath(userCode)}/deny`, { method: 'POST' });
+
 /** Administrators: a user's tokens, as that user's own list shows them. */
 export const listUserAccessTokens = (userId: string) =>
   api<{ tokens: AccessToken[] }>(`/admin/users/${userId}/access-tokens`);

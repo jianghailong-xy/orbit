@@ -122,9 +122,9 @@ export function SettingsPage() {
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 className="page-title">Settings</h1>
 
-      {/* The same order as Settings on iOS: how sessions start, then where agents run, then the alerts
-          and the look, then what the account has shared. iOS lays these out as one list (SettingsHome in
-          OrbitKit). */}
+      {/* How sessions start, then where agents run, then the alerts and the look, then what the account
+          has shared. The phones open with Machines & models instead, and keep the session cards on a page
+          of their own (SettingsHome and SessionSettings in OrbitKit, docs/mocks/ios-settings-order). */}
       <Card title="Session defaults" style={{ marginBottom: 16 }}>
         <Field
           label="Default permission mode"

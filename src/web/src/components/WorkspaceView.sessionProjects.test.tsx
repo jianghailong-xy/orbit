@@ -552,6 +552,23 @@ describe('project entries in the arrow keys and the landing', { timeout: 60_000 
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
   });
 
+  it('stays on a folder’s page when the arrow keys open a coordinator with a question for the owner', async () => {
+    const ITEM_ID = pid(817);
+    const BELOW = { ...OLDER, folderId: FOLDER.id };
+    folders = [FOLDER];
+    rows = [LOOSE, BELOW, TASK, { ...COORDINATOR, folderId: FOLDER.id, pendingApprovals: 1, waitingKind: 'OWNER_ITEM',
+      ownerItems: [{ itemId: ITEM_ID, kind: 'COORDINATOR_QUESTION', since: '2026-10-03T09:00:00Z' }] }];
+    await mount(() => expect(projectRows()).toHaveLength(1), `/sessions/${BELOW.id}?folder=${FOLDER.id}`);
+    expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
+    await press('ArrowUp');
+    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`));
+    const search = new URLSearchParams(location.split('?')[1]);
+    expect(search.get('item')).toBe(ITEM_ID);
+    expect(search.get('folder')).toBe(FOLDER.id);
+    expect(mounted().querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
+    expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
+  });
+
   it('does not land on the coordinator when a workspace opens on an entry from another workspace', async () => {
     // A workspace no other case opens: the list remembers each workspace's last session for the page's
     // lifetime, and a remembered session is landed on whatever the entries hold.

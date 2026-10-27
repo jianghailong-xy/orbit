@@ -159,7 +159,7 @@ class SessionRecapShotsTest {
         val handle = signedIn()
         val api = ManagementApi(stub, handle)
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS), 0, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), 0, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         } } }
         compose.waitUntil(60_000) { compose.onAllNodesWithText("Session recaps", substring = true).fetchSemanticsNodes().isNotEmpty() }

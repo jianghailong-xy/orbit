@@ -292,7 +292,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `commitsAheadOfUpstream` | number | 最近一条终态 `LAND_TASK` 的 `ahead_of_upstream` | `NO_LANDING_YET` |
 | `lastUpstreamSyncAt` | Date | 最近一条 `main_sync_sha` 非空的 `LANDED` 作业的 `finished_at` | `NEVER_SYNCED` |
 | `integratingCount` / `queuedCount` | number | 本项目 `RUNNING` / `QUEUED` 作业数 | — |
-| `inFlightJobs` | `ProjectIntegrationJob[]` | 两个计数数到的每个作业，顺序同 `inFlight`（先运行中，再按领取或入队时刻、`id`），首条就是 `inFlight` 描述的那个；带任务、代数、runner 名、谁要求的重跑，以及读时判定的超时（`timedOut` / `limitSeconds`，见 J-T9）。**要求**（修订 12，新字段一律可选）：每一项还带 §7.2 给 `inFlight` 加的那些可选字段——`landingSessionId`、`promotionId`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`；本修订原先提的 `landings[]` 由它取代，落地行动态行与项目 sessions 页的 Landings 组都读它；`timedOut` / `limitSeconds` 按 §7.2 V6 的唯一定义算，不另立规则 | 旧服务端不带 |
+| `inFlightJobs` | `ProjectIntegrationJob[]` | 两个计数数到的每个作业，顺序同 `inFlight`（先运行中，再按领取或入队时刻、`id`），首条就是 `inFlight` 描述的那个；带任务、代数、runner 名、谁要求的重跑，以及读时判定的超时（`timedOut` / `limitSeconds`，见 J-T9）。**要求**（修订 12，新字段一律可选）：每一项还带 §7.2 给 `inFlight` 加的那些可选字段——`landingSessionId`、`promotionId`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`；本修订原先提的 `landings[]` 由它取代，落地行动态行与项目的 Landings 窗口（§2.9 LS6，修订 28）都读它；`timedOut` / `limitSeconds` 按 §7.2 V6 的唯一定义算，不另立规则 | 旧服务端不带 |
 | `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余（含 `NOTHING_TO_LAND`——没有可检的树）→ UNKNOWN | — |
 
 项目列表行带 `integration: { line, ref } | null`（§7.1）。项目文档（`project_get`）的 `integration` 是上表的设置一半，另带 `upstreamChosenAt` 与 `lastMainBranch`：协调者靠 `lastMainBranch` 判断开始请求要不要建议主分支（L6）。它们多花项目文档一条语句（`readMainBranchMemory`，按项目一条），`repository` 与 `branches` 只在本接口。
@@ -771,7 +771,7 @@ prompt **永不投递**：没有 initial 轮、不做准入与 sign-in 预检、
 列表范围（项目分组已在 main 上：`sessions/session-project-membership.ts`，`GET /sessions?projectId=&view=`，web 的 `?project=` 页与 iOS 的项目 sessions 页）：
 
 - 平铺的 `GET /sessions`（不带 `projectId` 的各 view）、`GET /sessions/compact`、`GET /sessions/search`、`GET /sessions/counts`，以及 MCP `session_list`、`session_search`，**默认排除 LANDING**。
-- `GET /sessions?projectId=` 只在带 `includeLanding=1` 时，以 `LANDING` 角色返回该项目的落地会话；项目 sessions 页采用它，以 Landings 组列出未结的和有待办的，已结的折叠成 `<n> landed`。
+- `GET /sessions?projectId=` 只在带 `includeLanding=1` 时，以 `LANDING` 角色返回该项目的落地会话。项目 sessions 页采用它（修订 28，owner 2026-10-27）：页上只有一行 Landings，整行打开**这个项目的 Landings 窗口**；窗口列出该项目的全部落地会话——没结的（在途的与等决定的）在最下面，结了的按天分组、按结案时刻排，全部保留、不折叠；每一轮合入 main 的「Merged into main」行也在窗口里（§3.6）。读的仍是这一条（`view=open` 与 `view=completed`，不带 `limit` 即全量），展开一次落地读 `GET /sessions/:id` 的 landing 视图，不加接口。一个落地会话 id 打开它所属项目的 Landings 窗口并定位到那一条（滚到、展开、高亮）。
 - 成员关系 SQL 的两处——`directProjectMembershipSql` 与 `projectMembershipCandidatesSql`——都加 LANDING 分支（`s.kind = 'LANDING'` 且 `project_landing.session_id = s.id`，项目取主体的 `project_id`），否则 `projectId` 读口收不到它们，详情与推送也算不出归属。
 - 项目条目与项目 sessions 页的会话数、running 数、状态点都不计 LANDING；平铺会话列表里落地会话为零行。
 - **种子读与材料读同样排除 LANDING**（修订 23）：`workspaces/workspace-provider.ts` 的 `lastProviderByWorkspace` 三处种子读（:98、:108、:116）、`managed-runners/managed-runner-supply.ts`:174-178、`wiki/wiki-plan-job.ts` 的 materials 计数与会话查询（:578-595；1c1c78d72 上为 :1008-1027）。它们都按 `task_id IS NULL AND parent_session_id IS NULL` 找 workspace 里「最近的一条普通会话」，LANDING 行恰好满足这两个条件；一旦它成为该 workspace 最新的会话，那里的新会话、任务运行与 @ 提及就会读到 `provider = 'orbit'`，报 `provider not available: "orbit"`。每一处在列上线后加 `kind = 'CONVERSATION'`（等价于排除 LANDING）的过滤。
@@ -781,18 +781,22 @@ prompt **永不投递**：没有 initial 轮、不做准入与 sign-in 预检、
 
 门：在途尝试的 owner 门（LAND_TASK 的叫停、晋升的 Cancel、Abandon）只出现在落地会话页头、修订 10 的合入卡与 X-E5 待办三处，是同一组用户门（§2.7a、§4.7）；协调会话里只留修订 10 的那一行。agent 的 `integration_abandon` 新获在途放弃权，门槛严格为「**项目当前协调会话 且 LEASE_EXPIRED**」（§7.2 V6），不套 J-T1b 的待办归属、Automatic 或 owner blocker 规则。owner 走用户门；owner-only 门继续拒绝带 acting session 的请求，新的 owner 门标 `@PatForbidden('OWNER_INTERACTIVE')` 并登记 `auth/pat-owner-channel-routes.ts`，带 `:param` 的新用户路由进 `auth/tenant-isolation-cases.ts`。放弃的两种 PUSH 结果与围栏见 J-T10 / J12；重跑仍走有理由的显式门，落地会话从不自行重跑。
 
-入口（与 §7.2 V6 同一套，owner 2026-10-19 决定，v4 方案 A）：
+入口（与 §7.2 V6 同一套，owner 2026-10-19 决定，v4 方案 A；修订 28 起，凡打开落地会话的按压与「Open landing ›」，都打开它所属项目的 Landings 窗口并定位到这一次）：
 
 | 面 | 按压 | 「Open landing ›」 |
 |---|---|---|
+| 项目 sessions 页的 Landings 行（修订 28） | 整行 → 这个项目的 Landings 窗口（停在最底） | — |
 | Work overview 的 Landing 卡、项目 sessions 页的 Landing 卡 | 整张 → 作业清单 | 一个作业时卡底一个；多个作业时每个作业行一个（合入作业行不放） |
-| 合入卡的头（CHECKING / CONFIRMED / RECHECKING） | 整行 → 这一轮合入的落地会话（不再叫 Watch） | —（这一行的按压就是入口）；BLOCKED 不加，旧服务端没有 id 时照 main 打开作业清单 |
+| 合入卡的头（CHECKING / CONFIRMED / RECHECKING） | 整行 → Landings 窗口，定位到这一轮合入（不再叫 Watch） | —（这一行的按压就是入口）；BLOCKED 不加，旧服务端没有 id 时照 main 打开作业清单 |
 | 作业清单的每一行 | 有任务时 → 任务 | 每行一个（合入作业行只有它这一个按压） |
-| 「Merged into main」行 | 整行 → 回执 | 回执底部一个 |
+| Landings 窗口里的「Merged into main」行（修订 28 起不在项目 sessions 页的时间线上） | 整行在原地展开这一轮（回执、检查、推送），再按收起 | —（已在窗口里） |
+| 协调会话里那一行合入回执（修订 10） | 整行 → 回执 | 回执底部一个，进窗口并定位到这一轮 |
 | 会话列表的项目行 | 协调会话或项目 | — |
 | web 任务页的 Landing 段（iOS / Android 同） | 只读 | 当前这一代一个 |
 
-源工作会话的派生标签、协调会话的待办与合入卡、项目集成行与 Landings 组、agent 读口也都能通过 `landingSessionId` 链接到这个地址；`project_integration_get` 只读作业与日志。
+源工作会话的派生标签、协调会话的待办与合入卡、项目集成行与 Landings 窗口、agent 读口也都能通过 `landingSessionId` 链接到这个地址；新客户端打开这个地址，就是进 Landings 窗口并定位到这一次，agent 照旧用 `session_get` 读这一次；`project_integration_get` 只读作业与日志。
+
+修订 28 起，新客户端不再单独打开落地会话页：本文说的「落地会话页」，在新客户端上就是 Landings 窗口里定位到的这一次——它的卡是原来页头的状态卡（没结时在窗口最下面），展开是原来的各代时间线与检查输出；原来页头的门挂在这张卡上（长按的菜单与卡上的门，效果图 `docs/mocks/landings-one-window/` 的 03 g），窗口右上角的菜单只有 Open Coordinator 与 Open Project。旧客户端照旧打开单个落地会话页。
 
 **LS7（无时钟）**：不存在由时钟打开、改变或结束落地会话的路径。活性只读推导；§4.6 X-E5 的租约过期提醒只给 owner 开待办，不结束作业或会话、不唤醒 agent。
 
@@ -958,7 +962,7 @@ interface ProjectPromotionView {
 
 修订 10 的合入卡（web `ProjectMergeStrip`，iOS `ProjectMergeCardView`）据 `cancelRequested` 与 `pushBoundaryPassed` 画「取消中」和 Cancel 的可按与否，不再自己看 `execution.phase`（今天 `ProjectMergeStrip.tsx:173` 只在 `phase === 'PUSH'` 时禁用 Cancel）；旧服务端不给这两个字段时照旧。数字型的 `recheck.upstreamMovedBy`（0294）不变，推送被抢的提交列表是另一个字段 `upstreamMovedCommits`（J-T4）。
 
-`GET /projects/:id/promotions/merged` → `ProjectPromotionView[]`，最近的合入在前（上限 20 条）：这次合入留下的**记录**，画在**它发生的那一刻**：项目 sessions 页的时间线上一行（`ProjectTimeline` / `projectTimelineSections`，按 `merged.at` 排进会话之间），协调会话里一行（`ProjectPromotionReceipt` 的单行形态，`WorkspaceView` 用 `decisionReceiptAnchor` 按 `merged.at` 落位）；两处点开都是同一份回执（修订 10）。
+`GET /projects/:id/promotions/merged` → `ProjectPromotionView[]`，最近的合入在前（上限 20 条）：这次合入留下的**记录**，画在**它发生的那一刻**：这个项目的 Landings 窗口里一行「Merged into main」（修订 28；按 `merged.at` 排进当天那一组），与这一轮的落地会话按 `landingSessionId` 合成一条，整行在原地展开——回执在上，这一轮自己的记录（检查、推送）在下；落地会话上线之前的合入没有 `landingSessionId`，只展开回执。协调会话里一行（`ProjectPromotionReceipt` 的单行形态，`WorkspaceView` 用 `decisionReceiptAnchor` 按 `merged.at` 落位），点开是同一份回执（修订 10），回执底部的「Open landing ›」进窗口并定位到这一轮。项目 sessions 页的时间线不再画合入行（修订 28 取代修订 10 的这一半）。上限 20 条不变：更早的合入轮有落地会话的，仍按落地会话列在窗口里，展开只有它自己的记录；没有落地会话的更早合入读不到，与修订 10 的时间线相同。
 
 自己的读接口而不是 `current` 的加宽：`current` 是**现在在问**的那个候选，下一个候选一出现它就换人——从它画出来的回执，每次分支再被提议都会说成另一次合入；而在它换人之前，同一张卡就一直待在会话底部，压在之后每一条消息下面（owner 2026-09-21 的报告）。`MERGED` 行是终态且不可变（`project_promotion_terminal_guard`），自带 `merged_sha` / `merged_at`，所以它读回来永远是它当时那次合入。项目页没有转录可以落位，仍按 `current` 画 C 状态那一张。
 
@@ -1635,7 +1639,7 @@ interface ProjectListAttention {
 
 `doneNotIntegrated`（非代码任务、未开始集成项目的 DONE）、`failed`、`cancelled`、`awaitingVerification` 非零时才显示为附加格（附录 A-Q19）。
 
-修订 12 对实现的要求（从本段到下面「活性读时推导」一段为止；展示位的列举是现状）：名字位永不为空，按 kind 显示 `Land · <task>`、`Merge check`、`Merge to main`，卡头在多个作业时显示 `Landing <n> jobs`；合入轮自己的标题在合入卡上。运行中的步骤按 runner 事实显示，排队者显示 queued；`inFlight` 与列表/侧栏的 platform working 只计真实 QUEUED / RUNNING，不把失败、待批准或已撤销 QUEUED 算作运行。任务已 DONE 但仍有待落地工作、只在项目分支上，或存在在途作业时，不显示 Ready to wrap up。`inFlight` 的 jobId / landingSessionId / taskId / promotionId、runner、claim、round、check（name/index/count/budgetSeconds/startedAt）、outputMovedAt、progressProtocol、typicalMs、liveness 与 blockingReason 都是可选新字段。这些可选字段同样加在 main 的 `inFlightJobs` 的每一项上（§1.6，要求）；**本修订原先提的 `landings[]` 由 `inFlightJobs` 取代**，本条说的展示位与项目 sessions 页的 Landings 组都读它，不再各读一份。
+修订 12 对实现的要求（从本段到下面「活性读时推导」一段为止；展示位的列举是现状）：名字位永不为空，按 kind 显示 `Land · <task>`、`Merge check`、`Merge to main`，卡头在多个作业时显示 `Landing <n> jobs`；合入轮自己的标题在合入卡上。运行中的步骤按 runner 事实显示，排队者显示 queued；`inFlight` 与列表/侧栏的 platform working 只计真实 QUEUED / RUNNING，不把失败、待批准或已撤销 QUEUED 算作运行。任务已 DONE 但仍有待落地工作、只在项目分支上，或存在在途作业时，不显示 Ready to wrap up。`inFlight` 的 jobId / landingSessionId / taskId / promotionId、runner、claim、round、check（name/index/count/budgetSeconds/startedAt）、outputMovedAt、progressProtocol、typicalMs、liveness 与 blockingReason 都是可选新字段。这些可选字段同样加在 main 的 `inFlightJobs` 的每一项上（§1.6，要求）；**本修订原先提的 `landings[]` 由 `inFlightJobs` 取代**，本条说的展示位与项目的 Landings 窗口（§2.9 LS6，修订 28）都读它，不再各读一份。
 
 读 `inFlight` 的落地展示位今天有六处，本条的计时、活性与可点规则对六处一样适用（owner 2026-10-19 决定，v4 方案 A）：
 1. 项目页的 Work overview（Landing 卡；web `ProjectPanoramaHeader.tsx`、OrbitKit `ProjectsView.swift`、Android `ProjectsScreen.kt`）；
@@ -1648,9 +1652,10 @@ interface ProjectListAttention {
 按压与「Open landing ›」，main 现有的按压一律不变：
 - 第 1、2 处整张卡打开作业清单，清单的行打开任务。
 - 「Open landing ›」另写：第 1、2 处的卡上，一个作业时卡底一个；多个作业时每个作业行一个，合入作业那一行不放（它的入口在第 3 处）。第 4 处的每一行一个（合入作业行只有它这一个按压）。
-- 第 3 处的整行按压打开**这一轮合入**的落地会话（不再叫 Watch，也不再另放一个链接）；作业不少于 2 个时，清单由「All jobs ›」进。BLOCKED 形态不加这个入口（这一轮在等决定，入口在 Landings 组与落地会话页）；旧服务端没有 id 时照 main 打开作业清单。
-- 「Merged into main」行仍打开回执；这一轮有落地会话时，回执底部加「Open landing ›」。
+- 第 3 处的整行按压打开**这一轮合入**的落地会话，即 Landings 窗口并定位到这一轮（修订 28；不再叫 Watch，也不再另放一个链接）；作业不少于 2 个时，清单由「All jobs ›」进。BLOCKED 形态不加这个入口（这一轮在等决定，入口在 Landings 窗口：它在窗口最下面）；旧服务端没有 id 时照 main 打开作业清单。
+- 「Merged into main」行在 Landings 窗口里（修订 28，不再在项目 sessions 页的时间线上），整行在原地展开这一轮（回执、检查、推送）；协调会话里那一行仍打开回执，这一轮有落地会话时回执底部加「Open landing ›」，进窗口并定位到这一轮。
 - 第 5 处保持 main 的按压（协调会话，或项目）。第 6 处只读，当前这一代一个「Open landing ›」。
+- 修订 28 起，本节每个「Open landing ›」都打开所属项目的 Landings 窗口并定位到这一次；项目 sessions 页另有一行 Landings，整行打开窗口、停在最底（§2.9 LS6）。
 
 旧服务端没有 `landingSessionId` 时：没有派的按压就是只读（main 的规则，22124bb0a），卡与头不画入口、也不解释；只有第 4 处（链接本该在的地方）在标题下写一句 `No landing page on this server yet.`。新字段一律可选，旧服务端不给时六处都照今天的样子画。
 
@@ -1693,7 +1698,7 @@ interface ProjectListAttention {
 
 会话页卡片区（`WorkspaceView` 的 `<Transcript>` 之后）按既有模式挂 `Session*Card({ projectId })`，React key 带前缀，查询 `['project', id, …]`，每 20 秒轮询，只在项目协调会话里渲染。项目页 Open items 的 `Review` / `Answer` 展开同一组件。
 
-**合入 main 的卡在项目 sessions 页**（修订 10）：`ProjectPromotionCard` 的家是项目 sessions 页进度条下面那张卡（iOS `ProjectMergeCardView`，web `ProjectMergeStrip`）：检查中（`CHECK_PROMOTION` 在途，进度条里那行合入状态挪进来）、A、B、D 四个时刻都在这张卡上，按钮就是卡的三扇门，Details 打开完整的卡；C 不在卡上，是时间线上的一行。协调会话里每个时刻只留**一行**（iOS `PromotionEventLine` / `PromotionReceiptLine`，web `asLine`），说卡的状态（`PromotionCards.eventLine` / `promotionEventLine`），点开就是完整的卡或回执；等你时那一行是橙色，needs-you 计数照旧。macOS 没有项目 sessions 页，靠这一行和项目页 Open items 的 `Review` 进同一个审阅。D 的按钮位置写谁在处理、处理了多久（`Coordinator is resolving it · 4m`，转给 owner 后 `It is yours · waiting 2h`），读的是指向这个候选的那条待办；待办读回来了、却没有一条指向它时，没有人在处理，按钮不画，不再默认写协调会话（2026-10-09：协调会话已把异常项以「工作已在 main 上」关掉，卡片仍写着「Coordinator is resolving it」并转圈）。
+**合入 main 的卡在项目 sessions 页**（修订 10）：`ProjectPromotionCard` 的家是项目 sessions 页进度条下面那张卡（iOS `ProjectMergeCardView`，web `ProjectMergeStrip`）：检查中（`CHECK_PROMOTION` 在途，进度条里那行合入状态挪进来）、A、B、D 四个时刻都在这张卡上，按钮就是卡的三扇门，Details 打开完整的卡；C 不在卡上，是这个项目 Landings 窗口里的一行（§3.6，修订 28；此前是项目 sessions 页时间线上的一行）。协调会话里每个时刻只留**一行**（iOS `PromotionEventLine` / `PromotionReceiptLine`，web `asLine`），说卡的状态（`PromotionCards.eventLine` / `promotionEventLine`），点开就是完整的卡或回执；等你时那一行是橙色，needs-you 计数照旧。macOS 没有项目 sessions 页，靠这一行和项目页 Open items 的 `Review` 进同一个审阅。D 的按钮位置写谁在处理、处理了多久（`Coordinator is resolving it · 4m`，转给 owner 后 `It is yours · waiting 2h`），读的是指向这个候选的那条待办；待办读回来了、却没有一条指向它时，没有人在处理，按钮不画，不再默认写协调会话（2026-10-09：协调会话已把异常项以「工作已在 main 上」关掉，卡片仍写着「Coordinator is resolving it」并转圈）。
 
 **卡片区只放"现在为真"的东西**（2026-09-21，2026-09-24 扩到被拦下的候选；修订 10 起这些都只画成一行）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`）；被检查拦下的候选（`decided_at`）同样是既成事实，那张卡自己画在那一刻（web `promotionRecordMoment`、原生 `DeliveryAnchor.promotion`）。卡片区那一张传 `drawRecords={false}` 不再画这两者——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
 
@@ -2011,3 +2016,4 @@ SELECT resolution_note, count(*)
 - **v1 修订 25**（2026-10-20，文档任务 `34jBwFauwwQeTcOyXpV0q`；缘由：落地会话项目 `34a0e97BOc6shsNLJbIuM` 完成后，它的协调会话复核时发现下面四处；第四处里 M 的含义是 owner 2026-10-20 的决定；只改条文，无代码与行为改动）：四处勘误。其一，§2.2 J-T8「放弃写的 `ERROR` 同样不开待办」限定为只适用于**被叫停的那一代**（作业带 `cancel_requested_at`）：没被叫停的作业被放弃时（J-T10、§4.7）照 J-T10 与 §4 X 表开 `INTEGRATION_ERROR`；J-T10 行、§4.7「放弃在途作业」一行与 X 表 `INTEGRATION_ERROR` 行写明同一条规则。代码已经这样实现：`integration-job-relay.ts` 的结果事务（放弃门共用它）只在 `!cancelRequested` 时开失败待办。其二，J-T4 的 `IntegrationJobProgressRequest` 补上只在 PUSH 回报里带的 `testedSha`、`testedTreeSha`、`sourceSha`、`targetShaBefore`（都可选，值是完整 sha；shared `dto.ts` 与 runner-go `types.go` 同名同形）：runner 只在 v2 领取的 PUSH 前同步回报里填，服务端只在 `phase = PUSH` 时读；这次回报划下推送界线，四项写进作业行同名列，供 J12 修复时查证推送并补写回执（今天的写法与它的缺口见下面的「现状与待修」）。其三，J12 修复（§2.6）补写回执的那条路径：被追回的 `LAND_PROMOTION` 的候选保持它此刻的状态（`BLOCKED` 或 `CANCELLED`），不改成 `MERGED`——修复只写回执、不改写候选行；按规则 `PUSH_OUTCOME_UNKNOWN` 留下的是 `BLOCKED`，`CANCELLED` 只来自重检后重新确认、下一代又被 owner 的 Cancel 叫回的候选（M-T10）；候选里的任务经补写的 M9 回执（`detail.recoveredUnknownPush`）读作已落地（`project-promotion.service.ts#recoverPromotionPushReceipts`）；M9 加一句指向它，并改正它的 `detail`（`fromIntegrationJob` 写的是 `source`、`integrationJobId` 与几项树和确认事实，没有 `promotionId`）。其四，§7.2 V6 写明 `round N of M` 的 **M 是该种作业一次领取最多能跑的轮数，不是检查条数**：`LAND_TASK` 最多 3 轮（J5、附录 A-Q5），写 `round N of 3`；`LAND_PROMOTION`（J-T13）与 `CHECK_PROMOTION` 只有 1 轮，只写 `round N`，不写 of。§2.9 的时间线、§4.2 X-E5 那一行（payload 列全代码写的字段与可空性，并写明 `checkCount` 不是 M）与 J-T4 接口块里 `round` 的注释改成同一说法；J-T13、J5 与 M-T12 里「`LAND_PROMOTION` 也走 2 轮重取」的现状句已经过时（e94080db6 起 `promotionRefetchRounds = 0`），一并改成已实现。三端今天在 `of` 后写的是当前检查的条数，改由三端的落地会话收尾任务（`34jBwFmcEPK012TsNL0Lc`）做。现状与待修（规则不变，只记下代码今天与条文不一致的地方）：(a) 待在代码里修：`applyPromotionJobResult` 带取消请求的那一支把被叫停的领取的每一种非 `LANDED` 结果都结算成候选 `CANCELLED`，其中不能证明没有推送的——J-T10 放弃写的 `PUSH_OUTCOME_UNKNOWN`、legacy 领取推送之后报的 `VERIFY` 错误——按 §2.6 与 M-T10 应为 `BLOCKED`（§2.6 J12 段的现状注，M-T10 指向它）；§2.6 同时写明没有推送就结束的那些结果写 `CANCELLED`，M-T10 的「结果为 CANCELLED 才」随之写成「结果证明没有推送才」；(b) 四个 PUSH 事实列用 COALESCE 写、领取不清空，J12 只能查证作业第一次被接受的 PUSH 回报：`LAND_TASK` 第 2、3 轮或接管后的推送结果未知时，修复会漏掉，但不会写出假回执（J-T4 接口块里的现状注）。(c) 待定：Not now 的 `applyDecline` 也收 `BLOCKED`，M-T5 只列 `READY`，补进 M-T5 还是收窄代码未定（§2.6 J12 段注明这是现状）。另外，M-T8 与 M-T10 里修订 11 留下的两句现状（`applyCancel` 当场写 CANCELLED、界线只排除 `PUSH`）已不符合代码，改记为已修正。
 - **v1 修订 26**（2026-10-21，任务 `34jBwFldsZVGXcU3hPS6A`；只改现状注，规则不变）：修订 25「现状与待修」的 (a) 已在代码里修正（`ef3f9c705`）。`applyPromotionJobResult` 带取消请求的那一支里，被叫停的 `LAND_PROMOTION` 以不能证明没有推送的结果结束时，候选写 `BLOCKED`（`blockPromotion`）。这种结果是 J-T10 放弃写的 `PUSH_OUTCOME_UNKNOWN`，和 legacy 领取推送之后在 `VERIFY` 报的 `ERROR`。能证明没有推送的结果仍写 `CANCELLED`，被叫停的一代照 J-T8 不开失败待办。`integration-job-cancel.pg.spec.ts` (16)–(19) 与 `integration-abandon.pg.spec.ts` (11)–(12) 钉住两种结局。§2.6 J12 段的现状注与 M-T10 指向它的那句改记为已修正。
 - **v1 修订 27**（2026-10-25，任务 `34iSqQcZj6PLO4nk77pMf`；缘由：2026-10-19 生产事故，见 §2.3 J-T3a 的「缘由」）：新增 §2.3 J-T3a。过期的领取若仍由正在心跳的同一进程持有，且是 v2 领取或领取后从未回报，心跳在领取新作业之前把它原样重投给那个进程：同一 `claimGeneration` 与 `leaseOwner`，command 与领取时同列、同步骤（`integration-job-relay.ts` 的 `silentClaimsOf`、`handOut`、`HELD_CLAIM_COLUMNS`）；不写作业行，不记事件，不占每拍 2 条的新领取。J-T3 那一行、G3 第 2 条、§7.2 V6 与 X-E5 各加一句指向它；`claimOne`、`dispatchIntegrationJobs`、控制器与 shared `HeartbeatResponse.integrationJobs` 的注释照改。控制器原来写的是「失败只少这一拍的作业，下一拍会从队列里重新领取」，这对本拍已经提交的领取从来不成立。三处选型：(a) 不换代，因为 runner 只按 job id 去重，换代会让真在跑的作业跳过新 command、下一次回报被 `STALE_CLAIM` 拒绝；(b) 不续租，让 V6、X-E5 与放弃门照旧看到沉默，runner 一直不接时 owner 照常收到 X-E5 待办；(c) legacy 领取只重投从未回报的那种，因为 legacy runner 不读应答、推送前不问，与长步骤结束赛跑的一次重投可能推送第二遍；回报过的 legacy 领取仍由 X-E5、放弃门或下一个进程的接管收口。只改服务端，不需要迁移：runner 本来就按 job id 去重（0.1.232 已是如此），收到自己已持有、没在跑的那条 command 就开始跑，所以不必发 runner。另一种做法是让 runner 在心跳里声明在跑哪些 job id、服务端据此判定：更快，也不靠租约，但要发 runner（须 owner 批准），老 runner 又不会声明，服务端仍要有本条这条路径，所以没选。正常的领取（J-T2、J-T3）语句与行为不变，只把 RETURNING 的列表挪进与重投共用的 `HELD_CLAIM_COLUMNS`。生产现场已在 10-19 由重启解开（任务评论 `34itQ2WHMwQCSWQpF5XKM`），本修订不动生产库。测试：`integration-job-lost-claim.pg.spec.ts` 复现 10-19 的情形（修复前红、修复后绿），并钉住按时回报、租约之内、本机锁上排队、回报过的 legacy 领取这几种都不重投，以及重投带着叫停请求、工作目录已不在时按 unworkable 结束。
+- **v1 修订 28**（2026-10-27 owner 决定，文档任务 `34nGbUrpAHgkEhiSzeg2D`；效果图 `docs/mocks/landings-one-window/`，分支 `orbit/landing-e0346e` 的 `3c6c34f47`）：**一个项目的落地合到一个 Landings 窗口里看，Merged into main 也合进来**。缘由：owner 2026-10-27「这个 landing 有好多个，是否可以合并到一个会话窗口里」，随后补「和 Merged into main 也合并到一个会话里」；看过效果图后定了图上的两条待定：方案 A（只合窗口），结了的落地在窗口里全部保留。改动：§2.9 LS6 的列表范围——项目 sessions 页只有一行 Landings，整行打开这个项目的 Landings 窗口；窗口列出该项目的全部落地会话，没结的在最下面，结了的按天分组、全部保留、不折叠；一个落地会话 id 打开它所属项目的窗口并定位到那一条（滚到、展开、高亮）。LS6 的入口表加「项目 sessions 页的 Landings 行」（整行进窗口、停在最底），合入卡的头与各处「Open landing ›」改为进窗口并定位到这一次，「Merged into main」行挪进窗口、整行在原地展开这一轮（回执、检查、推送），协调会话里那一行回执照旧、回执底部的「Open landing ›」进窗口；表下一句的 Landings 组改为 Landings 窗口，并新加一段：新客户端上的「落地会话页」就是窗口里定位到的这一次，原来页头的门挂在这一次的卡上。§3.6 `promotions/merged` 的记录从项目 sessions 页的时间线挪进窗口，与这一轮的落地会话按 `landingSessionId` 合成一条，没有 id 的合入（落地会话上线之前）只展开回执；协调会话里那一行不动。§1.6 `inFlightJobs` 一行与 §7.2 V6 里读它的 Landings 组改为 Landings 窗口；V6 第 3 处的按压、BLOCKED 时的入口与「Merged into main」行同步；§7.5 的 C 改为窗口里的一行。**取代**：owner 2026-10-19 批准 v4 时定下的 24 小时窗口与 Earlier 折叠——Landings 组只列等决定的与 24 小时内结案的，更早的折成 `Earlier · N landed · N nothing to land`，也不收已合入的合入轮（v4 待定第 3、4 条，`docs/session-list-projects-design.md` §3.2）；修订 10（2026-10-06）把合完的记录作为一行排进项目 sessions 页时间线的那一半（合入卡、协调会话里那一行与回执不变）；修订 23 写的「Merged into main」行整行打开回执，在窗口里改为原地展开。**服务端不变**：一次落地仍是一条记录（一个任务段一个，一轮合入一个），§2.9 的数据、`landingSessionId`、`GET /sessions/:id` 与 `session_get`、agent 读口、`GET /sessions?projectId=&includeLanding=1` 与 `promotions/merged`（上限 20 条）都不动，不加接口、不加迁移；只改客户端的展示与入口，旧客户端照旧。没选方案 B（一个项目只有一个落地会话）：看到的一样，却要加迁移、改 §2.9 LS1–LS3 与 LS6、改服务端与 agent 工具。设计文档 `docs/landing-session-design.md` §3、§8 与 `docs/session-list-projects-design.md` 同步。三端实现另是一个任务（`34nGbUykKeP4geymwZYB8`）；效果图只画了 iPhone，web 与 Android 用同一个结构。

@@ -14,7 +14,7 @@
     "deepmerge-ts": "^8.0.2",
     "katex": "^0.18.2",
     "mysql2": "^3.24.3",
-    "multer": "^2.4.0"
+    "multer": "^2.5.0"
   },
   "scripts": {
     "docs:check": "node scripts/check-docs.mjs",
@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "github-slugger": "2.0.0",
-    "markdown-it": "15.0.2",
+    "markdown-it": "15.0.3",
     "markdown-link-check": "3.15.0",
     "markdownlint": "0.41.1"
   }

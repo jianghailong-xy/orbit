@@ -1592,6 +1592,38 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "runner_engine_install":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		runnerID, engine := getString(args, "runnerId"), getString(args, "engine")
+		if runnerID == "" || engine == "" {
+			return toolResult("runnerId and engine are required", true)
+		}
+		mode := "install"
+		if getBool(args, "update") {
+			mode = "update"
+		}
+		raw, err := s.t.requestEngineInstall(s.sessionID, s.orchestrationToken, runnerID, engine, mode)
+		if err != nil {
+			return toolResult("request the "+mode+" failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "runner_engine_install_status":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		runnerID := getString(args, "runnerId")
+		if runnerID == "" {
+			return toolResult("runnerId is required", true)
+		}
+		raw, err := s.t.engineInstallState(s.sessionID, s.orchestrationToken, runnerID)
+		if err != nil {
+			return toolResult("read the install status failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -4579,6 +4611,37 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"status, version, lastHeartbeatAt and maxConcurrent; os, and engines — each installed engine CLI with auth \"yes\", \"no\" or \"unknown\" for whether it is signed in — when its heartbeats reported them; " +
 					"and workspaceCount, the number of agents bound to it.",
 				"inputSchema": obj(map[string]interface{}{}),
+			},
+			// The runner page's Install and Update engines, for the runners runner_list names. On the
+			// orchestration gate: it runs an installer on a machine of the account, any machine of it.
+			map[string]interface{}{
+				"name": "runner_engine_install",
+				"description": "Install an engine CLI on one of this owner's runners, or update the engine CLIs there — what pressing Install, or Update engines, on that runner's page in the Orbit app does. " +
+					"This runs that engine's own official installer on that machine: the request is the consent for that engine there, whether or not the runner was registered to install engines on its own. " +
+					"Only available in a session with orchestration enabled, and it reaches every runner of the account. No command is taken from you, only one of the known engines. " +
+					"The runner must be online (runner_list's online); its next heartbeat hands it the request. " +
+					"Returns the runner's engine relay at once, as runner_engine_install_status reads it: status \"pending\" until the runner picks the request up, then \"installing\" with the command it runs, then \"done\" or \"failed\" with what the machine said. " +
+					"Follow it with runner_engine_install_status; an install can take minutes. " +
+					"One install or update runs on a runner at a time.",
+				"inputSchema": obj(map[string]interface{}{
+					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to install on. Use runner_list to look up a runner's id."},
+					"engine": map[string]interface{}{
+						"type":        "string",
+						"enum":        append([]string{}, engineNames...),
+						"description": "The engine CLI: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI).",
+					},
+					"update": map[string]interface{}{"type": "boolean", "description": "Run the runner's engine update pass instead of installing engine: every engine CLI installed on that machine is updated, this one among them, and one with a session running there is left until that session finishes and named in the result. Default false."},
+				}, "runnerId", "engine"),
+			},
+			map[string]interface{}{
+				"name": "runner_engine_install_status",
+				"description": "Where an engine install or update on one of this owner's runners stands — the state that runner's page in the Orbit app shows. Read-only; only available in a session with orchestration enabled. " +
+					"status is null when nothing is in flight, \"pending\" until the runner picks the request up, \"installing\" with the command it runs, then \"done\" or \"failed\", with that command and the machine's own message — for a failed install, also what to run by hand. " +
+					"mode is \"install\" (of engine) or \"update\" (of every engine CLI there, engine null). " +
+					"A finished install is cleared, status null again, by the heartbeat that reports its engine installed: runner_list then shows it among the runner's engines. A finished update stays until it is dismissed in the app.",
+				"inputSchema": obj(map[string]interface{}{
+					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to read. Use runner_list to look up a runner's id."},
+				}, "runnerId"),
 			},
 			// A project tool on the orchestration gate rather than beside the other project_* ones:
 			// this is the one project door that can OPEN a conversation, and it spends a live

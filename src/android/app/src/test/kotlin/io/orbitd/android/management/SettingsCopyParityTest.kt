@@ -39,6 +39,15 @@ class SettingsCopyParityTest {
         }
     }
 
+    /** The Sessions row and its page — each setting's name and the hint that is its footer — say what iOS's do (SettingsHome,
+     * SessionSettings), and iOS is held to the web's own Settings page by `SettingsCopyParityTests` (OrbitKit). */
+    @Test fun theSessionsPageSaysWhatIosSays() {
+        val source = swift("SettingsHome.swift")
+        listOf(SESSIONS, DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SUGGESTED_REPLIES, SUGGESTED_REPLIES_HINT).forEach {
+            assertTrue("\"$it\" is not in SettingsHome.swift", source.contains("\"$it\""))
+        }
+    }
+
     /** The session recaps switch says what iOS says, and iOS is held to the web's own Settings page by `SettingsCopyParityTests`
      * (OrbitKit), so all three clients put the same words on this row. */
     @Test fun theSessionRecapsSwitchSaysWhatIosSays() {

@@ -1345,6 +1345,8 @@ export class RunnerApiController {
       where: { deviceCodeHash: sha256(dto.deviceCode) },
     });
     if (!session) throw new NotFoundException('unknown device code');
+    // A denial says so even past the ten minutes, so the CLI stops instead of timing out.
+    if (session.status === 'DENIED') return { status: 'denied' };
     if (session.expiresAt < new Date()) return { status: 'expired' };
     if (session.status !== 'APPROVED' || !session.runnerId || !session.runnerToken) {
       return { status: 'pending' };

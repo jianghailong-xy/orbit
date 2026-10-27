@@ -119,9 +119,13 @@ class ManagementDeviceTest {
                 // The runner is offline here: a line of Infrastructure's Needs you, which the row counts (A13g, iOS 5e75edbde).
                 await("1 needs you"); await("1 active")
                 capture("settings-home")
-                // Default permission and Appearance are menus on their rows; each write is one preference key.
+                // Default permission and Appearance are menus on their rows — the first on Sessions' page (docs/mocks/ios-settings-order);
+                // each write is one preference key.
+                click(hasText("Sessions") and hasClickAction()); await("Default permission")
                 click(hasText("Default permission") and hasClickAction()); click(hasText("Plan") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { permission == "plan" }
+                capture("settings-sessions")
+                back(); await("Appearance")
                 click(hasText("Appearance") and hasClickAction()); click(hasText("Dark") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { theme == "dark" }
                 await("Dark")
@@ -135,7 +139,7 @@ class ManagementDeviceTest {
                 capture("edit-profile")
                 click(hasText("Save profile") and hasClickAction())
                 compose.waitUntil(10_000) { name == "Updated fixture" }
-                await("Default permission")
+                await("Appearance")
                 click(hasText("Change password") and hasClickAction())
                 await("At least 6 characters")
                 capture("change-password")
@@ -186,12 +190,12 @@ class ManagementDeviceTest {
                 await("Administrator access is required.")
                 capture("admin-demoted")
                 back(); back()
-                await("Default permission")
+                await("Appearance")
                 shell("settings put system font_scale 2.0")
                 compose.activityRule.scenario.recreate()
                 await("Updated fixture")
                 // The page reads the account again after the recreate; capture it settled, from the top.
-                compose.waitUntil(15_000) { compose.onAllNodes(hasText("Session orchestration") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                compose.waitUntil(15_000) { compose.onAllNodes(hasText("Appearance") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithContentDescription("Edit profile").performScrollTo()
                 capture("settings-home-font200")
                 assertEquals(1, calls.count { it == "PATCH /api/users/me" })
@@ -476,12 +480,15 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; modelRouting = null; revoked = emptySet(); deepSeekLow = false
                 signIn(server); settings()
-                await("Smart model selection"); await("2 active")
+                await("2 active")
+                // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
+                click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
                 capture("a13d-settings-sessions")
                 click(hasText("Smart model selection") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
                 compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
+                back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
                 capture("a13d-settings-account")
                 click(hasText("Access tokens") and hasClickAction())
@@ -499,9 +506,12 @@ class ManagementDeviceTest {
                 click(hasText("Revoked & expired 3") and hasClickAction(), scroll = false)
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
-                back(); await("Default permission")
-                click(hasText("Machines & models") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                back(); await("Appearance")
+                // The keys end the page, below the engines and machines, which come only once each of its lists has answered
+                // (InfrastructureModel.settled): wait for those, bring the keys up, then read their balances.
+                click(hasText("Machines & models") and hasClickAction()); await("What your agents can run on")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
+                await("¥110.00 · $5.00"); await("Unavailable")
                 capture("a13d-infrastructure-keys")
                 click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
                 capture("a13d-deepseek-key")
@@ -759,7 +769,7 @@ class ManagementDeviceTest {
                 // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
-                await("Default permission")
+                await("Appearance")
                 page("settings-home", report, problems)
                 activate("Machines & models", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened")
@@ -771,14 +781,14 @@ class ManagementDeviceTest {
                 activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
                 report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
-                back(); back(); await("Default permission")
+                back(); back(); await("Appearance")
                 activate("Machines & models", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened again")
                 // The pool's row by its SHARED mark: "Team Codex" is also the Codex engine's pool line, which opens nothing.
                 activate("SHARED", "talkback-infrastructure-pool", report, problems); await("Who can use it")
                 report.appendLine("double tap Team Codex (SHARED) -> the pool page opened")
                 page("codex-pool", report, problems)
-                back(); back(); await("Default permission")
+                back(); back(); await("Appearance")
                 activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
                 report.appendLine("double tap Shared links -> the shared links page opened")
                 page("shared-links", report, problems)
@@ -787,7 +797,7 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
                 // The key goes to the window in front: let the dialog go first.
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
-                back(); await("Default permission")
+                back(); await("Appearance")
                 activate("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
                 report.appendLine("double tap Edit profile -> the profile card opened")
                 page("edit-profile", report, problems)
@@ -797,7 +807,7 @@ class ManagementDeviceTest {
                 // gone and the page's window is in front again (sent at once, on A15b's first 360×640 dp round, the two Backs left
                 // the profile page open).
                 back(); compose.waitUntil(5_000) { compose.onAllNodesWithText("Photo library").fetchSemanticsNodes().isEmpty() && compose.activity.hasWindowFocus() }
-                back(); await("Default permission")
+                back(); await("Appearance")
                 activate("Admin", "talkback-settings-admin", report, problems); await("Second user")
                 report.appendLine("double tap Admin -> the users list opened")
                 page("admin-users", report, problems)
@@ -1107,7 +1117,7 @@ class ManagementDeviceTest {
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         click(hasText("Settings") and hasClickAction())
-        await("Default permission")
+        await("Appearance")
     }
     private fun await(text: String) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
@@ -1363,6 +1373,11 @@ class ManagementDeviceTest {
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
                 "/api/providers/shared-pools/P1" -> access()
+                // The rejected key's balance answers a second after the other's. Under the test rule a page's effects resume on the
+                // threads that answer them: two balances answered at once were written side by side and one was lost, its row never
+                // getting a value (A15 F-50); in the app both are written on the main thread, one after the other.
+                "/api/providers/mine/K2/balance" -> return MockResponse().setHeader("Content-Type", "application/json")
+                    .setBody(balance("K2")).setHeadersDelay(1, TimeUnit.SECONDS)
                 "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setChunkedBody(": connected\n\n".repeat(120), 13).throttleBody(13, 1, TimeUnit.SECONDS)
                 else -> when {

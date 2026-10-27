@@ -1,0 +1,137 @@
+// Writes docs/mocks/attached-context-note/built.html: the change as built (final = the branch's own src/web),
+// after the owner's picks on round 2 — no counts on the line, ⊕ turns to ⊖ when open, all three clients.
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+const KIT = '/var/tmp/attach-note-mock';
+const WT = '/root/.orbit/worktrees/01a17c4a-2917-730f-b47a-4da0f9b5cd27';
+const DIR = `${WT}/docs/mocks/attached-context-note`;
+mkdirSync(`${DIR}/shots`, { recursive: true });
+const B = JSON.parse(readFileSync(`${KIT}/shots/boxes.json`, 'utf8'));
+
+const pct = (v, of) => `${((v / of) * 100).toFixed(2)}%`;
+
+/** A real frame, copied in, with dashed numbered marks (or pins, for a line too thin to box). */
+function fig(name, marks = []) {
+  copyFileSync(`${KIT}/shots/${name}.png`, `${DIR}/shots/${name}.png`);
+  const b = B[name];
+  const c = b.clip;
+  const m = marks.map(([key, n, { pad = 4, cls = 'good', pin = false, at = '' } = {}]) => {
+    const r = typeof key === 'string' ? b[key] : key(b);
+    if (!r) throw new Error(`${name}: no box ${key}`);
+    if (pin) return `<span class="b-pin ${cls}" style="left:${pct(r.x + r.w / 2, c.width)};top:${pct(r.y + r.h + 1, c.height)}"><span class="m-n">${n}</span></span>`;
+    const style = `left:${pct(r.x - pad, c.width)};top:${pct(r.y - pad, c.height)};width:${pct(r.w + 2 * pad, c.width)};height:${pct(r.h + 2 * pad, c.height)}`;
+    return `<span class="b-mk ${cls} ${at}" style="${style}"><span class="m-n">${n}</span></span>`;
+  }).join('');
+  return `<div class="b-fig"><img class="b-shot" src="shots/${name}.png" alt="">${m}</div>`;
+}
+const px = (name, key) => Math.round(B[name][key].h);
+const ui = (s) => `<span class="ui">${s}</span>`;
+const H_TODAY = px('today-jobs-folded', 'bubble');
+const H_F = px('final-jobs-folded', 'bubble');
+
+const html = `<!doctype html>
+<!-- The change as built (2026-10-27), after the owner's picks on round 2 (board-v2.html): no counts on the line, and
+     the plus turns to a minus while it is open. Every picture is the branch's own src/web on vite, Chromium 1280 wide
+     (390 for the phone frames), 2x, src/web/ui-migration's fixtures plus the sample conversation. One change from the
+     drawn round 2: the line joined the bubble's meta row (⧉ time · state · line), because the same day's foot-row
+     decision (docs/mocks/user-bubble-foot-row, 8b76f2547) made that row the one line of grey under a bubble. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit 附加上下文 · 已实现</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1440px; }
+  .m-sheet + .m-sheet { padding-top: 0; }
+  .b-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; }
+  .b-phones { display: grid; grid-template-columns: 300px 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .b-stack > * + * { margin-top: 18px; }
+  .b-fig { position: relative; }
+  .b-shot { display: block; width: 100%; border-radius: 10px; background: #fff;
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .b-mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 12px; pointer-events: none; }
+  .b-mk > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .b-mk.br > .m-n { top: auto; bottom: -11px; }
+  .b-mk.tl > .m-n { right: auto; left: -11px; }
+  .b-mk.good { border-color: #16833a; }
+  .b-mk.good > .m-n, .b-list .m-n.good { background: #16833a; }
+  .b-pin { position: absolute; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%);
+           pointer-events: none; }
+  .b-pin::before { content: ''; width: 1.5px; height: 12px; background: #16833a; }
+  .b-pin > .m-n { margin: 0; background: #16833a; box-shadow: 0 0 0 2px #fff; }
+  .b-h { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .b-h .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .b-h .m-k.old { background: #f3f4f6; color: #8f959e; text-decoration: line-through; }
+  .b-cap { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.8; color: var(--text-2); }
+  .b-cap b { color: var(--text-1); }
+  .ui { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; padding: 0 5px;
+        border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .b-rule { margin: 0 0 16px; padding: 12px 16px; border-radius: 8px; background: var(--brand-tint);
+            font-size: 14px; line-height: 1.7; color: var(--text-1); }
+  .b-list { margin: 14px 0 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+            font-size: 12.5px; line-height: 1.8; color: #3f4652; }
+  .b-list li { display: flex; gap: 8px; }
+  .b-list li + li { margin-top: 6px; }
+  .b-list b { color: var(--text-1); }
+  .b-list .dot { flex: none; width: 18px; text-align: center; color: var(--text-3); }
+  .b-stat { display: flex; gap: 26px; margin: 16px 0 0; padding: 12px 16px; border-radius: 8px; background: #fff;
+            border: 1px solid #dde0e6; font-size: 12.5px; color: var(--text-2); }
+  .b-stat b { color: var(--text-1); font-size: 15px; }
+  .b-stat .to { color: #16833a; }
+  .b-old { display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 24px; align-items: center; margin-top: 22px;
+           padding-top: 18px; border-top: 1px dashed #d5d9e0; }
+  .b-ask { padding: 14px 18px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+           font-size: 13px; line-height: 1.85; color: #5c4210; }
+  .b-ask b { color: #3d2b08; }
+  .b-ask .rec { color: #16833a; font-weight: 700; }
+  .b-ask .alt { color: #8a6a2c; font-weight: 700; }
+  .b-files { margin: 18px 0 0; padding: 14px 18px; list-style: none; background: #f5f6f8; border-radius: 8px;
+             font-size: 12.5px; line-height: 1.8; color: #3f4652; counter-reset: step; }
+  .b-files > li { position: relative; padding-left: 30px; }
+  .b-files > li + li { margin-top: 12px; }
+  .b-files > li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 2px;
+                          width: 20px; height: 20px; border-radius: 5px; background: var(--text-1); color: #fff;
+                          font: 700 12px/20px -apple-system, "Inter", sans-serif; text-align: center; }
+  .b-files b { color: var(--text-1); }
+  .b-files ul { margin: 4px 0 0; padding-left: 18px; }
+  .b-files code, .b-cap code, .b-list code, .b-ask code { font-size: 11.5px; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet" id="part-1">
+  <h1 class="m-h1 zh">Orbit 附加上下文 · 已实现（三端）</h1>
+  <p class="m-sub zh" style="line-height:1.85">按你定的：<b>不带数字</b>；<b>点开后加号变减号</b>。下面全是本分支 Web 的真实页面。和第二版图上不一样的只有一处：这行灰字<b>并进了气泡下面那一行</b>（⧉ 时间 · 状态 · 这行），因为今天另一个改动（${ui('user-bubble-foot-row')}）刚把气泡下面的小字定成一行，再单独起一行就又是两行灰字了。</p>
+  <div class="m-stage">
+    <div class="b-cols">
+      <div>
+        <div class="b-h zh"><span class="m-k rec">收起</span>平时</div>
+        ${fig('final-jobs-folded', [['bubble', 1, { pad: 3 }], ['head', 2, { pin: true }]])}
+        <p class="b-cap zh"><b>1</b> 气泡里只有你的话（${H_TODAY} → ${H_F}px）。<b>2</b> 气泡下面一行灰字 ${ui('⊕ Orbit attached: background jobs')}，和时间同字号同灰度；数字在悬停提示里。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">展开</span>点那一行</div>
+        ${fig('final-jobs-open', [['head', 3, { pad: 3 }], ['panel', 4, { at: 'tl' }]])}
+        <p class="b-cap zh"><b>3</b> 加号变减号：${ui('⊖ Orbit attached: background jobs')}；鼠标停着时左边出现 ⧉ 和时间（和平时一样）。<b>4</b> 内容在这行下面展开，气泡不动；再点收起。</p>
+      </div>
+    </div>
+    <div class="b-phones" style="margin-top:26px">
+      <div><div class="b-h zh"><span class="m-k">手机 390 宽</span>收起</div>${fig('final-phone-jobs-folded')}</div>
+      <div><div class="b-h zh"><span class="m-k">手机 390 宽</span>展开</div>${fig('final-phone-jobs-open')}</div>
+      <div class="b-stack">
+        <div><div class="b-h zh"><span class="m-k">任务卡里</span>卡底一行</div>${fig('final-card-folded')}</div>
+        <p class="b-cap zh">卡片（任务开始、唤醒行、别的会话发来的消息）里还是卡底一行灰字，点开在卡里展开。手机上那一行不折行：太长时往左边的空白里伸。</p>
+      </div>
+    </div>
+    <ol class="b-files zh">
+      <li><b>Web</b>：<code>Transcript.tsx</code>（<code>useControlPlaneNote</code> 把「那一行」和「展开的内容」分开交出去，气泡把它们分开放；卡片里用 <code>ControlPlaneNote</code> 放一起）、<code>index.css</code>（卡片那套删掉）。全量 Web 测试 5682 条全过；改了 13 条钉旧卡片/旧位置的测试。</li>
+      <li><b>iOS / macOS</b>：<code>AttachedNoteEntry</code> 拆成 <code>AttachedNoteLine</code> + <code>AttachedNoteBody</code>；<code>UserBubbleView</code> 把这一行放进气泡下面那一行的末尾，展开的内容放在它下面。OrbitKit 4077 条全过（5 条在 Linux 上恒跳过）；Mac CI（run 40531763711）macOS 编译+测试、iOS 编译都通过。</li>
+      <li><b>Android</b>：<code>AttachedNoteCard</code> → <code>AttachedNoteEntry</code>，同样一行灰字，放在你那一行的最后。合并检查（<code>test lintDebug assembleDebug</code>）通过：3964 条测试全过，lint 无错误；设备测试改了断言、编译通过，没在模拟器上跑。</li>
+    </ol>
+  </div>
+</section>
+</body>
+</html>
+`;
+writeFileSync(`${DIR}/built.html`, html);
+console.log('wrote', `${DIR}/built.html`);

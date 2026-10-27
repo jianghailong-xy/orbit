@@ -17,8 +17,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** The conversation's Recap card as it is drawn (iOS `RecapCardView`): its head says the word and when the recap was written, its
- * body the recap whole, and its refresh — named for TalkBack — asks once and cannot be pressed again while it is asking. */
+/** The conversation's Recap card as it is drawn (iOS `RecapCardView`): one paragraph, the word and when the recap was written running
+ * into the recap whole, with its refresh — named for TalkBack — beside the first line, asking once and not again while it asks. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class)
 class RecapCardViewTest {
@@ -35,15 +35,24 @@ class RecapCardViewTest {
     @Test fun theCardSaysTheRecapWholeAndWhenItWasWritten() {
         var asked = 0
         compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false) { asked++ } } }
-        compose.onNodeWithTag("recap-card-head", useUnmergedTree = true).assertTextEquals("Recap · Sat, Oct 17, 1:44 PM")
-        compose.onNodeWithTag("recap-card-text", useUnmergedTree = true).assertTextEquals("Research done: integrate Copilot CLI first.")
+        compose.onNodeWithTag("recap-card-text", useUnmergedTree = true)
+            .assertTextEquals("Recap · Sat, Oct 17, 1:44 PM  Research done: integrate Copilot CLI first.")
         compose.onNodeWithContentDescription("Refresh recap").performClick()
         assertEquals(1, asked)
     }
 
     @Test fun aRecapWithNoTimeSaysTheWordAloneAndARefreshInFlightCannotBePressedAgain() {
         compose.setContent { OrbitTheme { RecapCardView(card.copy(whenWritten = null), refreshing = true) {} } }
-        compose.onNodeWithTag("recap-card-head", useUnmergedTree = true).assertTextEquals("Recap")
+        compose.onNodeWithTag("recap-card-text", useUnmergedTree = true).assertTextEquals("Recap  Research done: integrate Copilot CLI first.")
         compose.onNodeWithTag("recap-refresh").assertIsNotEnabled()
+    }
+
+    @Test fun theRefreshSitsBesideTheFirstLine() {
+        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false) {} } }
+        val text = compose.onNodeWithTag("recap-card-text", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val refresh = compose.onNodeWithTag("recap-refresh").getUnclippedBoundsInRoot()
+        // bodyMedium's line is 21sp: the first line's middle is the 48dp button's middle, 24dp down, so the paragraph starts 13.5dp down.
+        assertEquals(24f, (refresh.top + refresh.bottom).value / 2, 0.5f)
+        assertEquals(24f, text.top.value + 10.5f, 0.5f)
     }
 }

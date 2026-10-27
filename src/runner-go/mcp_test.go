@@ -87,7 +87,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list", "runner_engine_install", "runner_engine_install_status"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -821,7 +821,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list", "runner_engine_install", "runner_engine_install_status"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])
@@ -1135,6 +1135,107 @@ func TestMCPRunnerListReadsTheAccountsRunnersForAgentRunnerID(t *testing.T) {
 		runnerID, _ := mcpToolProps(tools, tool)["runnerId"].(map[string]interface{})
 		if text, _ := runnerID["description"].(string); !strings.Contains(text, "Use runner_list to look up a runner's id") {
 			t.Errorf("%s runnerId does not point at runner_list: %q", tool, text)
+		}
+	}
+}
+
+// runner_engine_install is the runner page's Install for the runners runner_list names: it posts the engine
+// and the mode — nothing that could be a command — to the runner door as the calling session, and its
+// description says what it runs where, and who may; runner_engine_install_status reads the relay back.
+func TestMCPRunnerEngineInstallAsksTheRunnerDoorAndSaysWhatItRuns(t *testing.T) {
+	type request struct {
+		method, path, session, token string
+		body                         map[string]interface{}
+	}
+	var got []request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen := request{method: r.Method, path: r.URL.Path, session: r.Header.Get("X-Orbit-Session-Id"), token: r.Header.Get("X-Orbit-Session-Token")}
+		if r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&seen.body)
+		}
+		got = append(got, seen)
+		_, _ = w.Write([]byte(`{"status":"pending","engine":"claude","command":null,"message":null,"mode":"install"}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{allowOrchestration: true, sessionID: "s1", orchestrationToken: "session-token", t: NewTransport(srv.URL, "tok")}
+	const runnerPath = "/api/runner/runners/349tsNoHC7biW3WXF1ddp/engine-install"
+
+	for _, tc := range []struct {
+		tool string
+		args map[string]interface{}
+		want request
+	}{
+		{tool: "runner_engine_install", args: map[string]interface{}{"runnerId": "349tsNoHC7biW3WXF1ddp", "engine": "claude"},
+			want: request{method: http.MethodPost, path: runnerPath, session: "s1", token: "session-token", body: map[string]interface{}{"engine": "claude", "mode": "install"}}},
+		{tool: "runner_engine_install", args: map[string]interface{}{"runnerId": "349tsNoHC7biW3WXF1ddp", "engine": "codex", "update": true},
+			want: request{method: http.MethodPost, path: runnerPath, session: "s1", token: "session-token", body: map[string]interface{}{"engine": "codex", "mode": "update"}}},
+		{tool: "runner_engine_install_status", args: map[string]interface{}{"runnerId": "349tsNoHC7biW3WXF1ddp"},
+			want: request{method: http.MethodGet, path: runnerPath, session: "s1", token: "session-token"}},
+	} {
+		got = nil
+		result := mcp.callTool(tc.tool, tc.args)
+		if result["isError"] == true {
+			t.Fatalf("%s returned an error: %#v", tc.tool, result["content"])
+		}
+		if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
+			t.Fatalf("%s sent %#v, want %#v", tc.tool, got, tc.want)
+		}
+		content, _ := result["content"].([]map[string]interface{})
+		if text, _ := content[0]["text"].(string); !strings.Contains(text, `"status": "pending"`) {
+			t.Errorf("%s result does not carry the relay: %s", tc.tool, text)
+		}
+	}
+
+	// Refused before anything is sent: a runner or an engine missing, or an id that is no path segment.
+	got = nil
+	for _, tc := range []struct {
+		tool string
+		args map[string]interface{}
+	}{
+		{tool: "runner_engine_install", args: map[string]interface{}{"engine": "claude"}},
+		{tool: "runner_engine_install", args: map[string]interface{}{"runnerId": "349tsNoHC7biW3WXF1ddp"}},
+		{tool: "runner_engine_install", args: map[string]interface{}{"runnerId": "../agents", "engine": "claude"}},
+		{tool: "runner_engine_install_status", args: map[string]interface{}{}},
+	} {
+		if result := mcp.callTool(tc.tool, tc.args); result["isError"] != true {
+			t.Errorf("%s %v: isError = %#v", tc.tool, tc.args, result["isError"])
+		}
+	}
+	if len(got) != 0 {
+		t.Fatalf("a refused call still reached the server: %#v", got)
+	}
+
+	tools := toolDescriptors(false, true)
+	description := strings.Join(strings.Fields(mcpToolDescription(tools, "runner_engine_install")), " ")
+	for _, want := range []string{"official installer on that machine", "only available in a session with orchestration enabled", "every runner of the account",
+		"No command is taken from you", "must be online", "runner_list", "runner_engine_install_status", "pending", "installing", "failed"} {
+		if !strings.Contains(strings.ToLower(description), strings.ToLower(want)) {
+			t.Errorf("runner_engine_install description does not say %q: %q", want, description)
+		}
+	}
+	props := mcpToolProps(tools, "runner_engine_install")
+	if names := sortedParamNames(props); !reflect.DeepEqual(names, []string{"engine", "runnerId", "update"}) {
+		t.Errorf("runner_engine_install takes %v", names)
+	}
+	engine, _ := props["engine"].(map[string]interface{})
+	if !reflect.DeepEqual(engine["enum"], engineNames) {
+		t.Errorf("engine enum = %#v, want the seven engines %v", engine["enum"], engineNames)
+	}
+	for tool, required := range map[string][]string{"runner_engine_install": {"runnerId", "engine"}, "runner_engine_install_status": {"runnerId"}} {
+		for _, d := range tools {
+			if d["name"] != tool {
+				continue
+			}
+			schema, _ := d["inputSchema"].(map[string]interface{})
+			if !reflect.DeepEqual(schema["required"], required) {
+				t.Errorf("%s requires %#v, want %v", tool, schema["required"], required)
+			}
+		}
+	}
+	status := strings.Join(strings.Fields(mcpToolDescription(tools, "runner_engine_install_status")), " ")
+	for _, want := range []string{"Read-only", "orchestration enabled", "null", "pending", "installing", "\"done\" or \"failed\"", "cleared", "runner_list then shows it"} {
+		if !strings.Contains(status, want) {
+			t.Errorf("runner_engine_install_status description does not say %q: %q", want, status)
 		}
 	}
 }

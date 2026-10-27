@@ -1,0 +1,257 @@
+diff --git a/src/web/src/components/Transcript.tsx b/src/web/src/components/Transcript.tsx
+index 1ac523d..1b9de53 100644
+--- a/src/web/src/components/Transcript.tsx
++++ b/src/web/src/components/Transcript.tsx
+@@ -3532,6 +3532,12 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
+   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
+   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
+   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
++  // One line, never a card: what is attached and how it stands, so whether to open it is decided
++  // without opening it. Its words are the ones it has always read as; only the counts are toned.
++  const facts = [tasks && summarizeReferencedTasks(tasks.tasks), jobs && summarizeBackgroundJobs(jobs)].filter(
++    (summary): summary is string => !!summary,
++  );
++  // The line's own words, for a screen reader too — without the chevron's icon name in them.
+   const baseLabel = `⊕ Orbit attached: ${kind}`;
+   const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
+   return (
+@@ -3539,39 +3545,58 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
+       <button
+         type="button"
+         className="chat-injected-head"
+-        data-display-kind={kind}
+         aria-expanded={open}
++        aria-label={label}
++        title="Added by Orbit on delivery: the agent read it with this message."
+         onClick={() => setOpen((o) => !o)}
+       >
+-        {label}
++        <span className="chat-injected-by">
++          <span className="chat-injected-mark">⊕</span> Orbit attached:
++        </span>{' '}
++        <span className="chat-injected-kind">{kind}</span>
++        {facts.map((summary) => (
++          <Fragment key={summary}>
++            {' · '}
++            <NoteFacts summary={summary} />
++          </Fragment>
++        ))}
++        <RightOutlined className="chat-injected-chevron" aria-hidden />
+       </button>
+-      {!open && (
+-        <div className="chat-injected-overview">
+-          <div className="chat-injected-summary">
+-            <strong>Orbit context</strong>
+-            <span>Attached to this message</span>
+-          </div>
+-          <p>Context is kept out of your message and available when you need the full details.</p>
+-          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
+-            View full context <RightOutlined />
+-          </button>
++      {open && (
++        <div className="chat-injected-panel">
++          {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
++          {jobs && <BackgroundJobsNote jobs={jobs} />}
++          {wiki && <WikiContextNote context={wiki} />}
++          {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
+         </div>
+       )}
+-      {open &&
+-        (tasks || jobs || wiki ? (
+-          <>
+-            {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
+-            {jobs && <BackgroundJobsNote jobs={jobs} />}
+-            {wiki && <WikiContextNote context={wiki} />}
+-            {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
+-          </>
+-        ) : (
+-          <pre className="chat-injected-body">{text}</pre>
+-        ))}
+     </div>
+   );
+ }
+ 
++/** "1 running, 1 failed", each count in the tone of what it says, so a failure reads before the line does. */
++function NoteFacts({ summary }: { summary: string }) {
++  return (
++    <span className="chat-injected-facts">
++      {summary.split(', ').map((fact, i) => (
++        <Fragment key={i}>
++          {i > 0 && ', '}
++          <span className={`chat-injected-fact${factTone(fact)}`}>{fact}</span>
++        </Fragment>
++      ))}
++    </span>
++  );
++}
++
++const factTone = (fact: string) =>
++  /failed|killed|FAILED|exit [1-9]/.test(fact)
++    ? ' is-bad'
++    : /running|IN_PROGRESS/.test(fact)
++      ? ' is-live'
++      : /DONE|exit 0/.test(fact)
++        ? ' is-ok'
++        : '';
++
+ /**
+  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
+  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index e990295..5d01fb3 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -8124,91 +8124,64 @@ button.chat-jump-start:hover {
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+-/* What delivery appended to a person's message (ControlPlaneNote). The folded state is a compact
+-   card: the message keeps its own words, while the Orbit context gets a clear status and one
+-   deliberate entry point. The raw block remains the opened state for traceability. */
++/* What delivery appended to a person's message (ControlPlaneNote): one line at the foot of whatever
++   carried it — a bubble, a task's brief, a wake line — under a hairline, in the transcript's muted
++   meta voice. It is provenance, not content: the person's words stay the biggest thing in their own
++   bubble, and the line says what is attached and how it stands. Opened, the rows hang under the line
++   in the same container. */
+ .chat-injected {
+   margin-top: 6px;
+-  overflow: hidden;
+-  border: 1px solid var(--brand-border);
+-  border-radius: 14px;
+-  background: var(--brand-tint);
+-  color: var(--text-1);
++  color: var(--text-3);
+   font-size: 12px;
++  line-height: 18px;
++}
++/* Under a person's words, a hairline says where their words end. A card has its own rules. */
++.chat-user > .chat-injected {
++  margin-top: 8px;
++  padding-top: 6px;
++  border-top: 1px solid var(--brand-border);
+ }
+ .chat-injected-head {
+-  position: relative;
+-  display: block;
+-  width: 100%;
+-  min-height: 48px;
+-  padding: 11px 12px 9px 38px;
++  max-width: 100%;
++  padding: 0;
+   border: 0;
+-  border-bottom: 1px solid var(--brand-border);
+-  background: transparent;
+-  color: transparent;
++  background: none;
++  color: inherit;
+   font: inherit;
+-  font-size: 0;
+   text-align: left;
+   cursor: pointer;
+ }
+-.chat-injected-head::before {
+-  content: '⊕  Orbit context';
+-  display: block;
+-  color: var(--text-1);
+-  font-size: 13px;
+-  font-weight: 600;
+-  line-height: 17px;
+-}
+-.chat-injected-head::after {
+-  content: 'Attached · ' attr(data-display-kind);
+-  display: block;
+-  color: var(--text-3);
+-  font-size: 10.5px;
+-  line-height: 14px;
+-}
+-.chat-injected-overview {
+-  padding: 11px 12px 12px;
++.chat-injected-mark {
++  font-size: 10px;
++  vertical-align: 1px;
+ }
+-.chat-injected-summary {
+-  display: flex;
+-  align-items: baseline;
+-  gap: 8px;
++.chat-injected-kind {
++  color: var(--text-2);
++  font-weight: 500;
+ }
+-.chat-injected-summary strong {
++.chat-injected-head:hover .chat-injected-kind {
+   color: var(--text-1);
+-  font-size: 13px;
+-  font-weight: 600;
+ }
+-.chat-injected-summary span {
+-  color: var(--text-3);
+-  font-size: 11px;
++/* "1 running" never splits across a wrap. */
++.chat-injected-fact {
++  white-space: nowrap;
+ }
+-.chat-injected-overview p {
+-  margin: 7px 0 10px;
+-  color: var(--text-2);
+-  font-size: 12px;
+-  line-height: 1.5;
++.chat-injected-fact.is-bad {
++  color: var(--error);
+ }
+-.chat-injected-action {
+-  display: flex;
+-  align-items: center;
+-  justify-content: space-between;
+-  width: 100%;
+-  min-height: 31px;
+-  padding: 0 9px;
+-  border: 1px solid var(--brand-border);
+-  border-radius: 8px;
+-  background: var(--bg-raised);
+-  color: var(--brand-strong);
+-  font: inherit;
+-  font-size: 12px;
+-  cursor: pointer;
++.chat-injected-fact.is-live {
++  color: var(--brand);
+ }
+-.chat-injected-action .anticon {
+-  font-size: 10px;
++.chat-injected-fact.is-ok {
++  color: var(--success);
+ }
+-.chat-injected.is-open > .chat-injected-head {
+-  background: var(--bg-raised);
++.chat-injected-chevron {
++  margin-left: 5px;
++  font-size: 9px;
++  transition: transform 0.15s ease;
++}
++.chat-injected.is-open .chat-injected-chevron {
++  transform: rotate(90deg);
+ }
+ /* Drop the focus ring on mouse click; keep it for keyboard navigation. */
+ .chat-injected-head:focus {
+@@ -8219,13 +8192,17 @@ button.chat-jump-start:hover {
+   outline: 2px solid var(--brand);
+   outline-offset: 2px;
+ }
++.chat-injected-panel {
++  margin-top: 2px;
++}
+ .chat-injected-body {
+   max-height: 320px;
+-  margin: 0;
+-  padding: 10px 12px;
++  margin: 6px 0 0;
++  padding: 8px 10px;
+   overflow: auto;
+-  border-top: 1px solid var(--brand-border);
+-  background: var(--bg-raised);
++  border-radius: 8px;
++  /* Translucent, as the rows above it are: the bubble this sits in is already tinted. */
++  background: var(--fill-inset);
+   color: var(--text-2);
+   font-size: 11px;
+   line-height: 1.5;

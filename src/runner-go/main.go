@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
@@ -70,7 +71,7 @@ Usage:
   orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
-  orbit runner <command>            List this account's runners, for an agent's --runner-id (when enabled)
+  orbit runner <command>            List this account's runners and install engine CLIs on them (when enabled)
   orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
@@ -513,25 +514,37 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		"  %s\n\n  Verification code: %s\n\nWaiting for approval...\n", link, start.UserCode)
 	openBrowser(link)
 
+	poll, err := awaitDeviceApproval(t, start, time.Sleep)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
+		server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
+}
+
+// awaitDeviceApproval polls a device registration until the browser decides it: the approved poll,
+// or why there is none — denied there, or not decided before it expired.
+func awaitDeviceApproval(t *Transport, start *DeviceStartResponse, sleep func(time.Duration)) (*DevicePollResponse, error) {
+	timedOut := errors.New("registration timed out — please run `orbit register` again")
 	deadline := time.Now().Add(time.Duration(start.ExpiresIn) * time.Second)
 	interval := time.Duration(max(1, start.Interval)) * time.Second
 	for time.Now().Before(deadline) {
-		time.Sleep(interval)
+		sleep(interval)
 		poll, err := t.devicePoll(start.DeviceCode)
 		if err != nil {
 			continue // transient — keep waiting until the deadline
 		}
-		if poll.Status == "approved" {
-			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
-				server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
-			return
-		}
-		if poll.Status == "expired" {
-			break
+		switch poll.Status {
+		case "approved":
+			return poll, nil
+		case "denied":
+			return nil, errors.New("registration was denied in the browser; nothing was added to your account")
+		case "expired":
+			return nil, timedOut
 		}
 	}
-	fmt.Fprintln(os.Stderr, "registration timed out — please run `orbit register` again")
-	os.Exit(1)
+	return nil, timedOut
 }
 
 // autoInstallConsent decides whether this runner may install an engine CLI on its own when a
