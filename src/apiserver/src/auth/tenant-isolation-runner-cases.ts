@@ -694,6 +694,7 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
   'POST /runner/agents': () => ({ params: {}, body: { name: 'census agent' } }),
   'PATCH /runner/workspaces/:id': (mine) => ({ params: { id: mine.workspaceId }, body: { description: 'renamed by the census' } }),
   'PATCH /runner/agents/:id': (mine) => ({ params: { id: mine.workspaceId }, body: { description: 'renamed by the census' } }),
+  'GET /runner/runners': () => ({ params: {} }),
   'POST /runner/projects/:id/coordinator/ensure': (mine) => ({ params: { id: mine.projectId } }),
   'POST /runner/projects/:id/coordinator/messages': (mine) => ({ params: { id: mine.projectId }, body: { message: 'from the census' } }),
 };

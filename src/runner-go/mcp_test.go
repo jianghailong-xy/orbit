@@ -87,7 +87,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -821,7 +821,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update", "runner_list"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])
@@ -1084,6 +1084,58 @@ func TestMCPAgentUpdateRejectsUnsafeIDBeforeTransport(t *testing.T) {
 	}
 	if requestCount != 0 {
 		t.Fatalf("unsafe agent id sent %d requests, want 0", requestCount)
+	}
+}
+
+// runner_list is where an orchestrator finds the runnerId agent_create and agent_update take — a
+// runner no agent is bound to yet included — so it reads the runner route as the calling session,
+// and the two agent tools point at it.
+func TestMCPRunnerListReadsTheAccountsRunnersForAgentRunnerID(t *testing.T) {
+	var gotMethod, gotPath, gotSession, gotToken string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotSession, gotToken = r.Header.Get("X-Orbit-Session-Id"), r.Header.Get("X-Orbit-Session-Token")
+		_, _ = w.Write([]byte(`[{"id":"349tsNoHC7biW3WXF1ddp","name":"instance-20261027-071926","online":true,"workspaceCount":0}]`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{allowOrchestration: true, sessionID: "s1", orchestrationToken: "session-token", t: NewTransport(srv.URL, "tok")}
+	result := mcp.callTool("runner_list", map[string]interface{}{})
+	if result["isError"] == true {
+		t.Fatalf("runner_list returned an error: %#v", result["content"])
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/runner/runners" {
+		t.Fatalf("runner_list hit %s %s", gotMethod, gotPath)
+	}
+	if gotSession != "s1" || gotToken != "session-token" {
+		t.Fatalf("runner_list sent session %q and credential %q, want the calling session's", gotSession, gotToken)
+	}
+	content, _ := result["content"].([]map[string]interface{})
+	if len(content) == 0 {
+		t.Fatalf("runner_list result content = %#v", result["content"])
+	}
+	text, _ := content[0]["text"].(string)
+	for _, want := range []string{`"id": "349tsNoHC7biW3WXF1ddp"`, `"name": "instance-20261027-071926"`, `"online": true`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("runner_list result does not carry %s: %s", want, text)
+		}
+	}
+
+	tools := toolDescriptors(false, true)
+	description := mcpToolDescription(tools, "runner_list")
+	for _, want := range []string{"runnerId", "agent_create", "agent_update", "online", "Read-only"} {
+		if !strings.Contains(description, want) {
+			t.Errorf("runner_list description does not say %q: %q", want, description)
+		}
+	}
+	if props := mcpToolProps(tools, "runner_list"); len(props) != 0 {
+		t.Errorf("runner_list takes no arguments, its schema has %#v", props)
+	}
+	for _, tool := range []string{"agent_create", "agent_update"} {
+		runnerID, _ := mcpToolProps(tools, tool)["runnerId"].(map[string]interface{})
+		if text, _ := runnerID["description"].(string); !strings.Contains(text, "Use runner_list to look up a runner's id") {
+			t.Errorf("%s runnerId does not point at runner_list: %q", tool, text)
+		}
 	}
 }
 
