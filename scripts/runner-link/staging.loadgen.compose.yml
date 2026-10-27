@@ -24,4 +24,5 @@ services:
     # The database's CPU allocation, ORBIT_LINK_STAGING_DB_CPUS: the capacity "database CPU" is a share of in the load
     # test's report. 0 leaves it unlimited.
     cpus: ${STAGING_DB_CPUS:-0}
-    mem_limit: 4g
+    # ORBIT_LINK_STAGING_DB_MEM: room for the cache a cell-scale run's database needs (task O3).
+    mem_limit: ${STAGING_DB_MEM:-4g}

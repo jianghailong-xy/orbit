@@ -39,7 +39,10 @@ const steadyFrom = Date.parse(summary.steadyStartedAt ?? summary.startedAt);
 const steadyTo = Date.parse(summary.steadyEndedAt ?? summary.endedAt);
 const inSteady = (t) => t >= steadyFrom && t <= steadyTo;
 const round = (v, d = 1) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
-const STACK = ['postgres', 'apiserver', 'apiserver-b', 'link-gateway', 'gateway', 'nats'];
+// The other apiservers the run sampled come after apiserver-b: apiserver-c and on (ORBIT_LINK_STAGING_BACKENDS of 3 or
+// more), or a deployment override's replicas, apiserver-2 and on.
+const moreApiservers = [...new Set(samples.flatMap((s) => Object.keys(s)).filter((k) => /^apiserver-[a-z0-9]+$/.test(k) && k !== 'apiserver-b'))].sort();
+const STACK = ['postgres', 'apiserver', 'apiserver-b', ...moreApiservers, 'link-gateway', 'gateway', 'nats'];
 
 // --- CPU from the 5 s samples. -----------------------------------------------------------------------------------------
 // Samples at the window's edges are included one interval out, so every second of the window is covered. A mean counts
@@ -95,6 +98,22 @@ for (const key of [...STACK, 'loadgen']) {
     cpuPressurePeak60sPct: round(100 * peak(psi, 60_000), 1),
     throttledPct: round(100 * mean(thr), 1),
   };
+}
+
+// Each apiserver's main thread over the window (threads.jsonl, task O3): how busy it was, in cores, and its share of its
+// process's CPU. A Node process's main thread is what fills, so it is what a process carries. Only for a run that
+// recorded it: the report of an older run is what it was.
+const threads = jsonl('threads.jsonl').filter((s) => s.t >= steadyFrom && s.t <= steadyTo);
+if (threads.length >= 2) {
+  const [a, b] = [threads[0], threads.at(-1)];
+  const secs = (b.t - a.t) / 1000;
+  for (const key of Object.keys(b)) {
+    if (!components[key] || !a[key] || a[key].pid !== b[key].pid || !(secs > 0)) continue;
+    const main = (b[key].mainTicks - a[key].mainTicks) / b.clkTck;
+    const all = (b[key].processTicks - a[key].processTicks) / b.clkTck;
+    components[key].mainThreadBusy = round(main / secs, 3);
+    components[key].mainThreadShare = all > 0 ? round(main / all, 3) : null;
+  }
 }
 
 // The host: busy CPUs from /proc/stat, and what of that was not this test.
@@ -266,6 +285,60 @@ gw.mergeCalls = delta('link_event_merge_batches_count');
 gw.mergeBatchesPerCall = gw.mergeCalls > 0 ? round(delta('link_event_merge_batches_sum') / gw.mergeCalls, 1) : null;
 gw.mergeHeld = histogram('link_event_merge_held_seconds');
 gw.mergeCall = histogram('link_event_merge_call_duration_seconds');
+// The live stream (task O3): the loadgen's deltas (-live-rate), what the gateway did with them, and what the watchers
+// (loadgen-run.sh --watch, loadgen-watch.mjs) received and how late. Only for a run that had either: the report of a run
+// without them is what it was before.
+let live = null;
+if ((summary.config.liveRate ?? 0) > 0 || existsSync(join(dir, 'watch.jsonl'))) {
+  // A watch line covers its interval, from..t, every 10 s: the lines whose interval lies inside the window (to a second),
+  // and not the last one, written as the watchers stopped.
+  const lines = jsonl('watch.jsonl').filter((l) => !l.final && l.from >= steadyFrom - 1000 && l.t <= steadyTo + 1000);
+  const secs = lines.reduce((n, l) => n + (l.t - l.from) / 1000, 0);
+  const delay = {};
+  const messages = {};
+  const errors = {};
+  let deltas = 0;
+  for (const l of lines) {
+    deltas += l.deltas;
+    for (const [ms, n] of Object.entries(l.delayMs)) delay[ms] = (delay[ms] ?? 0) + n;
+    for (const [type, n] of Object.entries(l.messages)) messages[type] = (messages[type] ?? 0) + n;
+    for (const [kind, n] of Object.entries(l.errors)) errors[kind] = (errors[kind] ?? 0) + n;
+  }
+  const sorted = Object.entries(delay).map(([ms, n]) => [Number(ms), n]).sort((a, b) => a[0] - b[0]);
+  const quantile = (q) => {
+    let seen = 0;
+    for (const [ms, n] of sorted) {
+      seen += n;
+      if (seen >= q * deltas) return ms;
+    }
+    return null;
+  };
+  const watch = existsSync(join(dir, 'watch.json')) ? json('watch.json') : null;
+  const openMs = watch?.openMs ?? [];
+  const steadyLines = series.filter((l) => l.phase === 'steady');
+  const window = summary.steady ?? summary.whole;
+  const c = window.counters;
+  live = {
+    loadgen: { liveRate: summary.config.liveRate ?? 0, sentPerSecond: window.liveEventsSentPerSecond ?? 0, produced: c.liveEventsProduced ?? 0,
+      sent: c.liveEventsSent ?? 0, dropped: c.liveEventsDropped ?? 0, batches: c.liveBatchesSent ?? 0,
+      eventsPerBatch: c.liveBatchesSent ? round(c.liveEventsSent / c.liveBatchesSent, 2) : null, turnPrefixAnswers: c.turnPrefixAnswers ?? 0,
+      watched: { min: steadyLines.length ? Math.min(...steadyLines.map((l) => l.watched ?? 0)) : null,
+        max: steadyLines.length ? Math.max(...steadyLines.map((l) => l.watched ?? 0)) : null } },
+    gateway: { liveEvents: counterFamily('link_live_events_total'), turnPrefixRequests: counterFamily('link_turn_prefix_requests_total'),
+      watchedSessions: { min: steadyScrapes.length ? Math.min(...steadyScrapes.map((x) => x.values.get('link_watched_sessions') ?? 0)) : null,
+        max: steadyScrapes.length ? Math.max(...steadyScrapes.map((x) => x.values.get('link_watched_sessions') ?? 0)) : null } },
+    watchers: { sessions: watch?.sessions ?? null, seconds: round(secs, 1), open: { min: lines.length ? Math.min(...lines.map((l) => l.open)) : null },
+      deltas, deltasPerSecond: secs ? round(deltas / secs, 1) : null,
+      messagesPerSecond: Object.fromEntries(Object.entries(messages).map(([k, n]) => [k, secs ? round(n / secs, 1) : null])),
+      deltasPerTextMessage: messages.text_delta ? round(deltas / messages.text_delta, 2) : null,
+      delayMs: { p50: quantile(0.5), p90: quantile(0.9), p99: quantile(0.99), p999: quantile(0.999), max: sorted.at(-1)?.[0] ?? null },
+      errors, openMs: { count: openMs.length, p50: openMs[Math.floor(openMs.length * 0.5)] ?? null, p99: openMs[Math.floor(openMs.length * 0.99)] ?? null } },
+  };
+  // Of the deltas the loadgen sent a second over the window, the share the watchers received.
+  live.watchers.receivedShare = live.loadgen.sentPerSecond && live.watchers.deltasPerSecond !== null
+    ? round(live.watchers.deltasPerSecond / live.loadgen.sentPerSecond, 3) : null;
+}
+
 // The gateway counters that are errors when they move.
 const gatewayErrors = {};
 const flag = (label, n) => {
@@ -312,7 +385,7 @@ function tally(lines, timeOf, levelOf) {
   return { byLevel, samples: samplesBy };
 }
 const logs = {};
-for (const svc of ['apiserver', 'apiserver-b']) {
+for (const svc of ['apiserver', 'apiserver-b', ...moreApiservers]) {
   const lines = logLines(svc);
   if (lines.length === 0) continue;
   logs[svc] = tally(lines, nestTime, (l) => /\s(LOG|WARN|ERROR|FATAL|DEBUG|VERBOSE)\s\[/.exec(l)?.[1] ?? null);
@@ -396,6 +469,8 @@ const errorCounts = {
   postgresErrorLines: (logs.postgres.byLevel.ERROR ?? 0) + (logs.postgres.byLevel.FATAL ?? 0) + (logs.postgres.byLevel.PANIC ?? 0),
   deadlocks: db.deadlocks ?? 0,
   natsErrorLines: (logs.nats.byLevel.ERR ?? 0) + (logs.nats.byLevel.FTL ?? 0),
+  // The watchers' streams: refused, failed or ended while the run lasted.
+  ...(live ? { watchers: Object.values(live.watchers.errors).reduce((n, v) => n + v, 0) } : {}),
 };
 const totalErrors = Object.values(errorCounts).reduce((n, v) => n + v, 0);
 const criteria = [
@@ -418,6 +493,7 @@ const report = {
   steadyTo: summary.steadyEndedAt, loadgen: { steady, whole: summary.whole, notes: summary.notes, unacknowledgedEvents: summary.unacknowledgedEvents,
     errorSamples: summary.errorSamples, config: summary.config }, components, host, others: others.slice(0, 15), gateway: gw, nginx, logs, db,
   dbAllocation: allocation, dbPeak10sPct: dbPeakPct, dbPeak60sPct: dbPeak60Pct, backends: run.backends, memory,
+  ...(live ? { live } : {}),
 };
 writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 
@@ -493,11 +569,35 @@ for (const family of ['link_handshakes_total', 'link_disconnects_total', 'link_b
   'link_event_merge_calls_total', 'link_event_merge_flushes_total', 'link_event_merge_alone_total']) {
   row(family, Object.entries(gw[family]).map(([k, v]) => `${k} ${v}`).join(', ') || '—');
 }
+if (live) {
+  const l = live;
+  md.push('', '## The live stream (steady window)', '');
+  row('Measure', 'Value');
+  row('---', '---');
+  row('loadgen: -live-rate, deltas sent per second', `${l.loadgen.liveRate}, ${l.loadgen.sentPerSecond}`);
+  row('loadgen: deltas produced, sent, dropped; LiveBatch frames', `${l.loadgen.produced}, ${l.loadgen.sent}, ${l.loadgen.dropped}; ${l.loadgen.batches} (${l.loadgen.eventsPerBatch} deltas each)`);
+  row('loadgen: sessions watched (min, max); turn prefixes answered', `${l.loadgen.watched.min}, ${l.loadgen.watched.max}; ${l.loadgen.turnPrefixAnswers}`);
+  row('gateway: live events', Object.entries(l.gateway.liveEvents).map(([k, v]) => `${k} ${v}`).join(', ') || '—');
+  row('gateway: watched sessions (min, max)', `${l.gateway.watchedSessions.min}, ${l.gateway.watchedSessions.max}`);
+  row('gateway: turn prefix requests', Object.entries(l.gateway.turnPrefixRequests).map(([k, v]) => `${k} ${v}`).join(', ') || '—');
+  row('watchers: sessions, streams open (lowest)', `${l.watchers.sessions}, ${l.watchers.open.min}`);
+  row('watchers: deltas received per second, share of those sent', `${l.watchers.deltasPerSecond}, ${l.watchers.receivedShare}`);
+  row('watchers: SSE messages per second by type', JSON.stringify(l.watchers.messagesPerSecond));
+  row('watchers: deltas per text_delta message (merged in 50 ms)', l.watchers.deltasPerTextMessage);
+  row('watchers: delay from production (ms)', `p50 ${l.watchers.delayMs.p50}, p90 ${l.watchers.delayMs.p90}, p99 ${l.watchers.delayMs.p99}, p99.9 ${l.watchers.delayMs.p999}, max ${l.watchers.delayMs.max}`);
+  row('watchers: stream open (ms)', `p50 ${l.watchers.openMs.p50}, p99 ${l.watchers.openMs.p99} (${l.watchers.openMs.count} opens over the run)`);
+  row('watchers: errors', JSON.stringify(l.watchers.errors));
+}
 md.push('', '## CPU and memory (steady window)', '');
 row('Component', 'mean cores', 'peak 10 s', 'peak 60 s', 'peak MiB', 'CPU pressure (mean / peak 60 s)', 'throttled');
 row('---', '---', '---', '---', '---', '---', '---');
 for (const [k, c] of Object.entries(components)) {
   row(k, c.meanCores, c.peak10sCores, c.peak60sCores, c.peakMemMiB, `${c.cpuPressurePct}% / ${c.cpuPressurePeak60sPct}%`, `${c.throttledPct}%`);
+}
+const mainThreads = Object.entries(components).filter(([, c]) => c.mainThreadBusy != null);
+if (mainThreads.length) {
+  md.push('', 'Main thread of each apiserver (busy cores, share of its process): ' +
+    mainThreads.map(([k, c]) => `${k} ${c.mainThreadBusy} (${c.mainThreadShare})`).join(', ') + '.');
 }
 md.push('', '## The host', '');
 row('Measure', 'Value');

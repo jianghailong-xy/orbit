@@ -40,6 +40,20 @@ compose_files() {
   if [ "$(setting STAGING_LOADGEN 0)" = 1 ]; then
     printf '%s\n' -f "$here/staging.loadgen.compose.yml"
   fi
+  # The apiservers past apiserver-b (extra_backends), which staging-up.sh writes for ORBIT_LINK_STAGING_BACKENDS of 3 or
+  # more.
+  if [ -f "$state/backends.compose.yml" ]; then
+    printf '%s\n' -f "$state/backends.compose.yml"
+  fi
+}
+
+# extra_backends [N]: the apiservers past the first that N backends take (N defaults to the stack's
+# ORBIT_LINK_STAGING_BACKENDS), one name a line: apiserver-b (staging.compose.yml), then apiserver-c and on.
+extra_backends() {
+  local n="${1:-$(setting STAGING_BACKENDS 1)}" letters=bcdefghijklmnop i
+  for ((i = 0; i < n - 1; i++)); do
+    printf 'apiserver-%s\n' "${letters:i:1}"
+  done
 }
 
 compose() {

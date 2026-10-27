@@ -121,6 +121,14 @@ type counters struct {
 	EventsAcked          int64 `json:"eventsAcked"`
 	PayloadBytes         int64 `json:"payloadBytes"`
 	Hints                int64 `json:"hints"`
+	// The live stream (-live-rate, live.go), each left out while zero, so a run without it writes what it wrote
+	// before: deltas produced, sent and dropped (unsent when their session stopped being watched or their connection
+	// ended), the LiveBatch frames that carried them, and the TurnPrefixRequests answered.
+	LiveEventsProduced int64 `json:"liveEventsProduced,omitempty"`
+	LiveEventsSent     int64 `json:"liveEventsSent,omitempty"`
+	LiveEventsDropped  int64 `json:"liveEventsDropped,omitempty"`
+	LiveBatchesSent    int64 `json:"liveBatchesSent,omitempty"`
+	TurnPrefixAnswers  int64 `json:"turnPrefixAnswers,omitempty"`
 }
 
 func (c *counters) add(o *counters) {
@@ -139,6 +147,11 @@ func (c *counters) add(o *counters) {
 	c.EventsAcked += o.EventsAcked
 	c.PayloadBytes += o.PayloadBytes
 	c.Hints += o.Hints
+	c.LiveEventsProduced += o.LiveEventsProduced
+	c.LiveEventsSent += o.LiveEventsSent
+	c.LiveEventsDropped += o.LiveEventsDropped
+	c.LiveBatchesSent += o.LiveBatchesSent
+	c.TurnPrefixAnswers += o.TurnPrefixAnswers
 }
 
 // window is what one span of the run saw: an interval of the series, the steady window, or all of it.
@@ -246,6 +259,8 @@ type seriesLine struct {
 	AckEvent  histSummary      `json:"ackEvent"`
 	BeatAck   histSummary      `json:"beatAck"`
 	Errors    map[string]int64 `json:"errors,omitempty"`
+	// Watched is how many running sessions somebody watched live when the line was written (live.go); left out at 0.
+	Watched int64 `json:"watched,omitempty"`
 }
 
 func sortedKeys[V any](m map[string]V) []string {
