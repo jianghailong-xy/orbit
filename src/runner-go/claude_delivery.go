@@ -321,6 +321,12 @@ func echoUUID(msg map[string]interface{}) string {
 // event is built.
 type deliveryReporter func(turnID string, state deliveryState, reason string, retryable bool)
 
+// fileWrittenReport files the report that a frame's bytes reached the CLI, which the receipt watcher
+// does on its own schedule. A variable only so a test can hold that report back until another
+// goroutine has reported the same message further along, at a moment nothing outside the watcher can
+// observe.
+var fileWrittenReport = func(turnID string, file func()) { file() }
+
 // failUndeliveredTurn settles a turn whose message never reached the CLI. It is reported
 // FAILED rather than left unanswered: nothing ran, and parking the session at
 // AWAITING_INPUT would leave an ordinary-looking idle conversation with the user's

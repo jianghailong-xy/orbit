@@ -2151,6 +2151,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		emit(evUserDelivery, p)
 	})
+	// How the receipt watcher below files `written` (fileWrittenReport). Read once per process, here
+	// rather than on each watcher's goroutine, so a test that swaps it for one run never races a watcher
+	// another run left behind.
+	fileWritten := fileWrittenReport
 	// requeueSteer takes a steer back before it has been offered to anything and files it as the
 	// ordinary queued message it would have been had it arrived a moment later.
 	//
@@ -2447,7 +2451,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					switch err := receipt.wait(procCtx); {
 					case err == nil:
 						if deliveries.markWritten(d) {
-							reportDelivery(turnID, deliveryWritten, "", false)
+							fileWritten(turnID, func() { reportDelivery(turnID, deliveryWritten, "", false) })
 						}
 					case procCtx.Err() != nil:
 						// The process is going away; its teardown accounts for what it
