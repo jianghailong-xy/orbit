@@ -30,6 +30,20 @@ internal object WorktreeBarLogic {
         return if (changedFileCount > 0 || actionable || hasMergeRecovery) Mode.WORKTREE else Mode.HIDDEN
     }
 
+    /** What a session without a worktree (`shared-nogit`: it edits its workspace's folder directly) says above the composer. */
+    enum class SharedFolder { HIDDEN, NOT_GIT, NO_BRANCH }
+
+    /**
+     * From the session's workspace record (web's `sharedFolderOf`): nothing once the workspace has answered the notice — worktree
+     * isolation turned off, or git initialization queued; a repository git couldn't branch; else a folder that is not a repository,
+     * which is also how an unknown reads (an older runner never probed the folder, or the record couldn't be read).
+     */
+    fun sharedFolder(workDirIsGit: Boolean?, autoInitGit: Boolean?, enableWorktree: Boolean?): SharedFolder = when {
+        enableWorktree == false || autoInitGit == true -> SharedFolder.HIDDEN
+        workDirIsGit == true -> SharedFolder.NO_BRANCH
+        else -> SharedFolder.NOT_GIT
+    }
+
     enum class Primary { NONE, COMMIT, MERGE }
 
     /** A dirty live tree commits and a clean one merges; an older runner (no `worktreeDirty`) goes by the lifecycle. Merge waits for the turn. */
@@ -152,6 +166,44 @@ internal object WorktreeBarLogic {
     }
 
     private fun trimmed(value: String?) = value?.trim()?.ifEmpty { null }
+}
+
+/**
+ * The words of the notice for a session without a worktree, of its Initialize git… confirmation and of its actions' toasts: web's
+ * `SharedFolderNotice` and `InitializeGitSteps`, and `WorkspaceView`'s `askEnableIsolation`, `enableIsoMut` and `keepSharedMut`,
+ * word for word (SharedFolderCopyParityTest).
+ */
+internal object SharedFolderCopy {
+    /** The headline either side of its folder, which the view sets in monospace; an unknown folder is said in words. */
+    fun headline(notice: WorktreeBarLogic.SharedFolder, path: String?): Triple<String, String, String> =
+        if (notice == WorktreeBarLogic.SharedFolder.NO_BRANCH) Triple("⚠ No branch for this session: it edits ", path ?: "the folder", " directly")
+        else Triple("⚠ ", path ?: "This folder", " isn’t a git repository")
+
+    const val NOT_GIT_DETAIL = "Sessions here edit the folder directly: no branch or diff to review, and sessions running at the same time" +
+        " can overwrite each other’s changes."
+    const val NO_BRANCH_DETAIL = "The folder is a git repository, but git couldn’t add a worktree for this session. A repository with no" +
+        " commits has nothing to branch from."
+    const val INITIALIZE = "Initialize git…"
+    /** The ✕ aloud: on a folder that is not a repository it turns worktree isolation off for the workspace; on a repository, it only hides. */
+    const val KEEP_PLAIN = "Keep it as a plain folder"
+    const val HIDE_HERE = "Hide for this session"
+
+    const val CONFIRM_TITLE = "Initialize git in this folder?"
+    const val CONFIRM = "Initialize git"
+    fun confirmLead(workspace: String?) = "When the next session starts in ${workspace?.let { "“$it”" } ?: "this workspace"}, Orbit will:"
+    /** The runner's `initGitRepo`, step by step. */
+    val confirmSteps = listOf("run git init", "add a .gitignore for dependencies, build output and .env files, unless the folder has one",
+        "commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.")
+    const val CONFIRM_AFTER = "Each new session then works on its own branch, with a diff you review and merge. This session keeps editing" +
+        " the folder directly."
+
+    const val GIT_QUEUED = "Git will be set up when the next session starts"
+    const val GIT_FAILED = "Couldn't turn on git setup"
+    fun isolationOff(workspace: String?) = "Worktree isolation is off for ${workspace?.let { "“$it”" } ?: "this workspace"}"
+    const val ISOLATION_OFF_DETAIL = "Its sessions keep editing the folder directly, without this notice. Turn it back on in the workspace’s settings."
+    const val UNDO = "Turn worktree isolation back on"
+    const val OFF_FAILED = "Couldn't turn off worktree isolation"
+    const val ON_FAILED = "Couldn't turn worktree isolation back on"
 }
 
 /** Why a current-worktree file can't be shown, and whether trying again can help (OrbitKit `WorktreeFileFailure`). */

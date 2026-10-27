@@ -16,6 +16,8 @@ import kotlinx.serialization.json.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
 import org.junit.After
@@ -31,7 +33,8 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * The worktree bar and its merge operation over a controlled `/api` (iOS WorktreeBar/WorktreeModel): what each
  * git state offers, the requests each press sends, the runner's answers as the bar then says them, a
- * coordinator's integration line (A06-8) and a binary file's current bytes (A06-7).
+ * coordinator's integration line (A06-8), a binary file's current bytes (A06-7), and the notice of a session
+ * without a worktree with what its Initialize git… and ✕ change in the workspace.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp")
@@ -43,6 +46,10 @@ class WorktreeBarTest {
     @Volatile private var detail: JsonObject = session()
     private val opened = mutableListOf<String>()
     private lateinit var model: WorktreeModel
+    private val workspaceId = "01a0cca7-8609-70ed-a0e2-d4b55b832b70"
+    @Volatile private var workspace: JsonObject = folder()
+    /** While set, the server refuses each change to the workspace with these words. */
+    @Volatile private var refusing: String? = null
 
     @After fun close() { scope.cancel() }
     @Before fun quiet() = OrbitToasts.clear()
@@ -54,6 +61,16 @@ class WorktreeBarTest {
         "changedFiles" to Wire.json.parseToJsonElement("""[{"path":"src/reader/Bar.kt","additions":12,"deletions":3,"status":"M"},
             {"path":"docs/shot.png","additions":-1,"deletions":-1,"status":"A"},{"path":"dist/app.zip","additions":-1,"deletions":-1,"status":"A"},
             {"path":"old/logo.png","additions":-1,"deletions":-1,"status":"D"}]"""),
+    ) + fields)
+
+    /** A session that runs directly in its workspace's folder: the runner could give it no worktree. */
+    private fun shared() = session("isolationStatus" to JsonPrimitive("shared-nogit"),
+        "workspace" to buildJsonObject { put("id", workspaceId); put("name", "notes") })
+
+    /** Its workspace as `GET workspaces/:id` answers: a folder that is not a repository, the notice not yet answered. */
+    private fun folder(vararg fields: Pair<String, JsonElement>) = JsonObject(mapOf(
+        "id" to JsonPrimitive(workspaceId), "name" to JsonPrimitive("notes"), "workDir" to JsonPrimitive("/Users/alex/notes"),
+        "workDirIsGit" to JsonPrimitive(false), "autoInitGit" to JsonPrimitive(false), "enableWorktree" to JsonPrimitive(true),
     ) + fields)
 
     /** [sending] stands for the composer's message on its way (A06-14). */
@@ -80,12 +97,23 @@ class WorktreeBarTest {
                 "dist/app.zip" -> ApiResponse(200, byteArrayOf(0x50, 0x4b, 0x03, 0x04, 1, 2, 3))
                 else -> ApiResponse(404, """{"message":"Not found"}""".encodeToByteArray())
             }
+            path == listOf("workspaces", workspaceId) -> {
+                val refusal = refusing
+                when {
+                    api.method != HttpMethod.PATCH -> ok(workspace.toString())
+                    refusal != null -> ApiResponse(409, buildJsonObject { put("message", refusal) }.toString().encodeToByteArray())
+                    else -> { workspace = JsonObject(workspace + body(api)); ok(workspace.toString()) }
+                }
+            }
             else -> ok("{}")
         }
     }
 
     private fun body(api: ApiRequest) = Wire.json.parseToJsonElement(api.body?.decodeToString() ?: "{}").jsonObject
     private fun sent(vararg path: String) = server.calls.filter { it.path == path.toList() && it.method == HttpMethod.POST }
+    /** The changes asked of the session's workspace, refused ones included. */
+    private fun patches() = server.calls.filter { it.path == listOf("workspaces", workspaceId) && it.method == HttpMethod.PATCH }.map(::body)
+    private fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
     private fun settle(next: JsonObject) { detail = next; runBlocking { model.loadDetail() }; compose.waitForIdle() }
 
     @Test fun aCleanTreeMergesToTheTargetThePersonPickedAndTheBarFollowsTheRunnersAnswer() {
@@ -157,7 +185,10 @@ class WorktreeBarTest {
         settle(session("status" to JsonPrimitive("RUNNING")))
         compose.onNodeWithText("Merge to main").assertDoesNotExist()
         settle(session("isolationStatus" to JsonPrimitive("shared-nogit")))
-        compose.onNodeWithText("⚠ Shared workDir — not isolated").assertIsDisplayed()
+        // No worktree, and no workspace known to read or change: the notice only says so.
+        compose.onNodeWithText("⚠ This folder isn’t a git repository").assertIsDisplayed()
+        compose.onNodeWithText("Initialize git…").assertDoesNotExist()
+        compose.onNodeWithText("✕").assertDoesNotExist()
     }
 
     /**
@@ -289,5 +320,120 @@ class WorktreeBarTest {
         compose.onNodeWithText("File deleted").assertIsDisplayed()
         compose.onNodeWithText("↻ Retry").assertDoesNotExist()
         assertEquals(listOf("docs/shot.png", "dist/app.zip"), server.calls.filter { it.path.lastOrNull() == "worktree-file" }.map { it.query.toMap()["path"] })
+    }
+
+    /**
+     * A folder that is not a repository (docs/mocks/nogit-folder-notice ②–④): the notice names it and what editing it directly costs,
+     * and Initialize git… spells out what it will do before it asks the workspace to set git up, which answers the notice.
+     */
+    @Test fun aFolderThatIsNotARepositoryIsNamedAndInitializeGitAsksFirst() {
+        detail = shared()
+        show()
+        val headline = "⚠ /Users/alex/notes isn’t a git repository"
+        compose.waitUntil(5_000) { shown(headline) }
+        compose.onNodeWithText(headline).assertIsDisplayed()
+        compose.onNodeWithText("Sessions here edit the folder directly: no branch or diff to review, and sessions running at the same time" +
+            " can overwrite each other’s changes.").assertIsDisplayed()
+        compose.onNodeWithText("Initialize git…").performClick()
+        compose.onNodeWithText("Initialize git in this folder?").assertIsDisplayed()
+        listOf("/Users/alex/notes", "When the next session starts in “notes”, Orbit will:", "run git init",
+            "add a .gitignore for dependencies, build output and .env files, unless the folder has one",
+            "commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.",
+            "Each new session then works on its own branch, with a diff you review and merge. This session keeps editing the folder directly.",
+        ).forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        assertTrue("nothing changes before it is confirmed", patches().isEmpty())
+        compose.onNodeWithText("Initialize git").performClick()
+        compose.waitUntil(5_000) { shown("Git will be set up when the next session starts") }
+        assertEquals(listOf(buildJsonObject { put("autoInitGit", true) }), patches())
+        compose.onNodeWithText("/Users/alex/notes").assertIsDisplayed()
+        compose.waitUntil(5_000) { !shown(headline) }
+    }
+
+    /** ✕ on a folder that is not a repository keeps it a plain folder: worktree isolation goes off for the workspace, said by a toast
+     * whose Undo turns it back on, and the notice with it (docs/mocks/nogit-folder-notice ⑤⑥). */
+    @Test fun theCloseKeepsAPlainFolderAndUndoTurnsIsolationBackOn() {
+        detail = shared()
+        show()
+        val headline = "⚠ /Users/alex/notes isn’t a git repository"
+        compose.waitUntil(5_000) { shown(headline) }
+        compose.onNodeWithContentDescription("Keep it as a plain folder").performClick()
+        compose.waitUntil(5_000) { shown("Worktree isolation is off for “notes”") }
+        assertEquals(listOf(buildJsonObject { put("enableWorktree", false) }), patches())
+        compose.onNodeWithText("Its sessions keep editing the folder directly, without this notice. Turn it back on in the workspace’s settings.")
+            .assertIsDisplayed()
+        compose.waitUntil(5_000) { !shown(headline) }
+        compose.onNodeWithContentDescription("Turn worktree isolation back on").performClick()
+        compose.waitUntil(5_000) { shown(headline) }
+        assertEquals(listOf(buildJsonObject { put("enableWorktree", false) }, buildJsonObject { put("enableWorktree", true) }), patches())
+        compose.onNodeWithText("Worktree isolation is off for “notes”").assertDoesNotExist()
+    }
+
+    /** A repository git couldn't branch (docs/mocks/nogit-folder-notice ⑦): Initialize git… can't help there and isn't offered, and ✕
+     * hides the notice for this session only, changing nothing. */
+    @Test fun aRepositoryGitCouldNotBranchSaysWhyAndClosesForThisSessionOnly() {
+        detail = shared()
+        workspace = folder("workDir" to JsonPrimitive("/Users/alex/new-app"), "workDirIsGit" to JsonPrimitive(true))
+        show()
+        val headline = "⚠ No branch for this session: it edits /Users/alex/new-app directly"
+        compose.waitUntil(5_000) { shown(headline) }
+        compose.onNodeWithText("The folder is a git repository, but git couldn’t add a worktree for this session. A repository with no" +
+            " commits has nothing to branch from.").assertIsDisplayed()
+        compose.onNodeWithText("Initialize git…").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Hide for this session").performClick()
+        compose.onNodeWithText(headline).assertDoesNotExist()
+        assertTrue("the workspace has nothing to change", patches().isEmpty())
+    }
+
+    /** A refused change says what failed, in the server's words, and changes nothing: Initialize git…, ✕, and the toast's Undo. */
+    @Test fun aRefusedChangeSaysWhatFailedInTheServersWords() {
+        detail = shared()
+        refusing = "This workspace is managed by your administrator"
+        show()
+        val headline = "⚠ /Users/alex/notes isn’t a git repository"
+        compose.waitUntil(5_000) { shown(headline) }
+        compose.onNodeWithText("Initialize git…").performClick()
+        compose.onNodeWithText("Initialize git").performClick()
+        compose.waitUntil(5_000) { shown("Couldn't turn on git setup") }
+        compose.onNodeWithText("This workspace is managed by your administrator").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Keep it as a plain folder").performClick()
+        compose.waitUntil(5_000) { shown("Couldn't turn off worktree isolation") }
+        compose.onNodeWithText(headline).assertIsDisplayed()
+        // The ✕ goes through this time; then its Undo is refused.
+        refusing = null
+        compose.onNodeWithContentDescription("Keep it as a plain folder").performClick()
+        compose.waitUntil(5_000) { shown("Worktree isolation is off for “notes”") }
+        refusing = "This workspace is managed by your administrator"
+        compose.onNodeWithContentDescription("Turn worktree isolation back on").performClick()
+        compose.waitUntil(5_000) { shown("Couldn't turn worktree isolation back on") }
+        compose.onNodeWithText("This workspace is managed by your administrator").assertIsDisplayed()
+        assertEquals(listOf(buildJsonObject { put("autoInitGit", true) }, buildJsonObject { put("enableWorktree", false) },
+            buildJsonObject { put("enableWorktree", false) }, buildJsonObject { put("enableWorktree", true) }), patches())
+    }
+
+    /** On a phone the headline wraps, and Initialize git… and ✕ keep their size (docs/mocks/nogit-folder-notice frames/8b-phone-notice.png). */
+    @Test @Config(qualifiers = "w360dp-h640dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onAPhoneTheHeadlineWrapsAndTheActionsKeepTheirSize() {
+        detail = shared()
+        show()
+        val headline = "⚠ /Users/alex/notes isn’t a git repository"
+        compose.waitUntil(5_000) { shown(headline) }
+        assertKeepsItsSize("Initialize git…", compose.onNodeWithText("Initialize git…"))
+        assertKeepsItsSize("✕", compose.onNodeWithContentDescription("Keep it as a plain folder"))
+        assertTrue("the headline wraps", layout(compose.onNodeWithText(headline)).lineCount > 1)
+        compose.onNodeWithText("Sessions here edit the folder directly", substring = true).assertIsDisplayed()
+    }
+
+    private fun layout(node: SemanticsNodeInteraction): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        return results.single()
+    }
+
+    /** The text got all the width its words need: its row didn't squeeze it. Not `hasVisualOverflow`: semantics lays a plain
+     * string out again at the width it was offered, so that reads as overflow whenever it was offered more than it took. */
+    private fun assertKeepsItsSize(what: String, node: SemanticsNodeInteraction) {
+        val text = layout(node)
+        assertTrue("$what got ${text.size.width} px for words ${text.multiParagraph.maxIntrinsicWidth} px wide",
+            text.size.width >= text.multiParagraph.maxIntrinsicWidth)
     }
 }

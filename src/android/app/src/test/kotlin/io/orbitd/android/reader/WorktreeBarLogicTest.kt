@@ -3,6 +3,7 @@ package io.orbitd.android.reader
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.reader.WorktreeBarLogic.SharedFolder
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -19,6 +20,32 @@ class WorktreeBarLogicTest {
         assertEquals(WorktreeBarLogic.Mode.WORKTREE, L.mode("worktree", "orbit/x-abcdef", 0, hasMergeRecovery = true))
         assertEquals(WorktreeBarLogic.Mode.HIDDEN, L.mode("worktree", null, 5))
         assertEquals(WorktreeBarLogic.Mode.WORKTREE, L.mode("worktree", "orbit/x-abcdef", 5))
+    }
+
+    /** A session without a worktree: the notice its workspace hasn't answered yet (web's `sharedFolderOf`, docs/mocks/nogit-folder-notice). */
+    @Test fun theNoticeOfASessionWithoutAWorktree() {
+        // Answered — isolation turned off, or git initialization queued: no session of the workspace shows it.
+        assertEquals(SharedFolder.HIDDEN, L.sharedFolder(workDirIsGit = false, autoInitGit = false, enableWorktree = false))
+        assertEquals(SharedFolder.HIDDEN, L.sharedFolder(workDirIsGit = false, autoInitGit = true, enableWorktree = true))
+        assertEquals(SharedFolder.HIDDEN, L.sharedFolder(workDirIsGit = true, autoInitGit = false, enableWorktree = false))
+        assertEquals(SharedFolder.HIDDEN, L.sharedFolder(workDirIsGit = null, autoInitGit = true, enableWorktree = null))
+        assertEquals(SharedFolder.NOT_GIT, L.sharedFolder(workDirIsGit = false, autoInitGit = false, enableWorktree = true))
+        assertEquals(SharedFolder.NO_BRANCH, L.sharedFolder(workDirIsGit = true, autoInitGit = false, enableWorktree = true))
+        // Unknown reads as the common case, a folder that is not a repository: never probed, or the record not read.
+        assertEquals(SharedFolder.NOT_GIT, L.sharedFolder(workDirIsGit = null, autoInitGit = false, enableWorktree = true))
+        assertEquals(SharedFolder.NOT_GIT, L.sharedFolder(workDirIsGit = null, autoInitGit = null, enableWorktree = null))
+    }
+
+    @Test fun theNoticeNamesItsFolderAndItsWorkspaceOrSaysThemInWords() {
+        fun headline(notice: SharedFolder, path: String?) = SharedFolderCopy.headline(notice, path).toList().joinToString("")
+        assertEquals("⚠ /Users/alex/notes isn’t a git repository", headline(SharedFolder.NOT_GIT, "/Users/alex/notes"))
+        assertEquals("⚠ This folder isn’t a git repository", headline(SharedFolder.NOT_GIT, null))
+        assertEquals("⚠ No branch for this session: it edits /Users/alex/new-app directly", headline(SharedFolder.NO_BRANCH, "/Users/alex/new-app"))
+        assertEquals("⚠ No branch for this session: it edits the folder directly", headline(SharedFolder.NO_BRANCH, null))
+        assertEquals("When the next session starts in “notes”, Orbit will:", SharedFolderCopy.confirmLead("notes"))
+        assertEquals("When the next session starts in this workspace, Orbit will:", SharedFolderCopy.confirmLead(null))
+        assertEquals("Worktree isolation is off for “notes”", SharedFolderCopy.isolationOff("notes"))
+        assertEquals("Worktree isolation is off for this workspace", SharedFolderCopy.isolationOff(null))
     }
 
     @Test fun primaryAction() {
