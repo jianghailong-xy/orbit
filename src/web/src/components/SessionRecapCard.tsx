@@ -51,6 +51,11 @@ export function recapRefreshNotice(reason: string): { text: string; failed: bool
  * docs/mocks/session-recap-display/04-decided): the recap its list row reads in one line, here in
  * full, with when it was written and a way to write it again now. Where it is drawn and when it
  * steps aside is the conversation's business (WorkspaceView); this is the card.
+ *
+ * Drawn as a footnote, not a panel (the owner, 2026-10-27, 05-quiet A): a filled box the composer's
+ * shape, sitting on the composer, read as something floating over the conversation. So it is one
+ * paragraph in the list line's own size and colour — the head runs into the recap — and Refresh
+ * shows only under the pointer or keyboard focus (always, on a screen with no hover).
  */
 export function SessionRecapCard({
   sessionId,
@@ -87,22 +92,24 @@ export function SessionRecapCard({
   const when = recapWhen(recapAt);
   return (
     <div className={`chat-recap${refresh.isPending ? ' is-busy' : ''}`} aria-busy={refresh.isPending || undefined}>
-      <div className="chat-recap-head">
-        <AlignLeftOutlined aria-hidden="true" />
-        <span className="chat-recap-word">{RECAP_CARD_COPY.word}</span>
-        {when && <span className="chat-recap-when">· {when}</span>}
-        <button
-          type="button"
-          className="chat-recap-refresh"
-          aria-label={RECAP_CARD_COPY.refresh}
-          title={RECAP_CARD_COPY.refresh}
-          disabled={refresh.isPending}
-          onClick={() => refresh.mutate()}
-        >
-          {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <ReloadOutlined />}
-        </button>
-      </div>
-      <div className="chat-recap-text">{text}</div>
+      <p className="chat-recap-line">
+        <span className="chat-recap-head">
+          <AlignLeftOutlined aria-hidden="true" />
+          <span className="chat-recap-word">{RECAP_CARD_COPY.word}</span>
+          {when && <span className="chat-recap-when">· {when}</span>}
+        </span>
+        <span className="chat-recap-text">{text}</span>
+      </p>
+      <button
+        type="button"
+        className="chat-recap-refresh"
+        aria-label={RECAP_CARD_COPY.refresh}
+        title={RECAP_CARD_COPY.refresh}
+        disabled={refresh.isPending}
+        onClick={() => refresh.mutate()}
+      >
+        {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <ReloadOutlined />}
+      </button>
     </div>
   );
 }
