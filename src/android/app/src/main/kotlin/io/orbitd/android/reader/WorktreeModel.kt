@@ -1,12 +1,14 @@
 package io.orbitd.android.reader
 
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastMergeConflict
 import io.orbitd.android.toast.ToastTone
+import io.orbitd.android.toast.ToastUndo
 import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -19,13 +21,16 @@ internal data class WorktreeNotice(val message: String, val detail: String? = nu
     val key: String? = null, val inProgress: Boolean = false, val mergeConflict: ToastMergeConflict? = null)
 
 internal data class WorktreeState(val detail: JsonObject? = null, val busy: Boolean = false,
-    val diff: List<JsonObject> = emptyList(), val diffLoading: Boolean = false, val diffRefreshing: Boolean = false)
+    val diff: List<JsonObject> = emptyList(), val diffLoading: Boolean = false, val diffRefreshing: Boolean = false,
+    /** The session's workspace, read for the notice of a session without a worktree. */
+    val workspace: JsonObject? = null)
 
 /**
  * The worktree bar for one session (iOS `WorktreeModel`): the session detail behind the bar, polled while
  * an outcome is pending (3 s) or the session is live (5 s), the lazily read per-file diffs, and the commit /
  * merge / adopt / resolve-in-session actions with their shared busy flag. A request the server accepted is
- * followed to its result, which the bar then says.
+ * followed to its result, which the bar then says. A session without a worktree reads its workspace instead,
+ * whose answer to the notice — Initialize git…, or ✕ — this changes.
  */
 internal class WorktreeModel(private val api: DirectoryApi, private val id: String, private val scope: CoroutineScope) {
     private val mutable = MutableStateFlow(WorktreeState())
@@ -140,6 +145,40 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         loadDetail()
     }
 
+    /** The session's workspace: its folder, whether that is a repository, and whether it has answered the notice. Best effort, as the
+     * detail is: a failed read keeps what the notice had. */
+    suspend fun loadWorkspace(workspaceId: String) {
+        val next = try { api.objectRead(listOf("workspaces", workspaceId)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return }
+        mutable.update { it.copy(workspace = next) }
+    }
+
+    /** Initialize git… confirmed: the runner `git init`s the folder when the workspace's next session starts, and the notice, answered,
+     * goes (web's `enableIsoMut`). */
+    fun initializeGit(workspaceId: String) = act {
+        try { api.mutate(listOf("workspaces", workspaceId), HttpMethod.PATCH, buildJsonObject { put("autoInitGit", true) }) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (error: Exception) { tell(workspaceId, failure(SharedFolderCopy.GIT_FAILED, error, "init-git")); return@act }
+        tell(workspaceId, WorktreeNotice(SharedFolderCopy.GIT_QUEUED, mutable.value.workspace?.string("workDir"), key = "init-git"))
+        loadWorkspace(workspaceId)
+    }
+
+    /** ✕ on a folder that is not a repository keeps it a plain folder: the workspace's worktree isolation goes off — its sessions edit
+     * the folder directly already — so none of them raises the notice again. The toast's Undo turns it back on (web's `keepSharedMut`). */
+    fun keepShared(workspaceId: String) = act { setWorktree(workspaceId, on = false) }
+
+    private suspend fun setWorktree(workspaceId: String, on: Boolean) {
+        try { api.mutate(listOf("workspaces", workspaceId), HttpMethod.PATCH, buildJsonObject { put("enableWorktree", on) }) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (error: Exception) {
+            tell(workspaceId, failure(if (on) SharedFolderCopy.ON_FAILED else SharedFolderCopy.OFF_FAILED, error, "keep-shared"))
+            return
+        }
+        if (!on) tell(workspaceId, WorktreeNotice(SharedFolderCopy.isolationOff(mutable.value.workspace?.string("name")),
+            SharedFolderCopy.ISOLATION_OFF_DETAIL, ToastTone.NEUTRAL, key = "keep-shared"),
+            ToastUndo(SharedFolderCopy.UNDO) { scope.launch { setWorktree(workspaceId, on = true) } })
+        loadWorkspace(workspaceId)
+    }
+
     /** Current-worktree bytes, never kept: reopening or retrying a preview reads the file as it is now. */
     suspend fun readFile(path: String): ByteArray = api.bytes(listOf("sessions", id, "worktree-file"), listOf("path" to path))
 
@@ -188,6 +227,11 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
     private fun say(notice: WorktreeNotice) {
         OrbitToasts.show(notice.message, toastTitle(mutable.value.detail?.string("title")), id, notice.detail, notice.tone,
             mergeConflict = notice.mergeConflict, key = notice.key?.let { "$it:${ObjectId.canonical(id) ?: id}" }, inProgress = notice.inProgress)
+    }
+
+    /** A workspace's outcome, as web says it: about the workspace, so it names no session; one operation on it is one toast. */
+    private fun tell(workspaceId: String, notice: WorktreeNotice, undo: ToastUndo? = null) {
+        OrbitToasts.show(notice.message, detail = notice.detail, tone = notice.tone, key = notice.key?.let { "$it:$workspaceId" }, undo = undo)
     }
 
     /** A failed merge or commit picked up again: say it is under way until its result takes the place. */

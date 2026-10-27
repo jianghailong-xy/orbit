@@ -31,6 +31,10 @@ enum class ToastGlyph { TRASH, FOLDER }
 /** The branch and target the worktree bar hands the session to resolve a failed merge. */
 data class ToastMergeConflict(val branch: String, val target: String)
 
+/** An Undo the toast carries itself, for an outcome that isn't a session's (web's toast `action`): what it does, and what its
+ * button says aloud ("Turn worktree isolation back on"). */
+class ToastUndo(val description: String, val perform: () -> Unit)
+
 /** One toast, as the host draws it. */
 data class ToastItem(
     /** The outcome: "Accepted", "Couldn't merge into main". */
@@ -45,6 +49,8 @@ data class ToastItem(
     val sessionId: String? = null,
     /** The action is reversible; the card carries Undo. */
     val canUndo: Boolean = false,
+    /** What Undo does when it isn't restoring the toast's session. */
+    val undo: ToastUndo? = null,
     /** A merge conflict's primary action resolves it in the session instead of only opening it. */
     val mergeConflict: ToastMergeConflict? = null,
     /** One operation's toasts share a key — "Merging into main…" and the merge's result — so the result takes the

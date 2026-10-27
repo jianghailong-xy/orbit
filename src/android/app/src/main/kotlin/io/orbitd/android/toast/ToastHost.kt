@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -65,9 +66,9 @@ object OrbitToasts {
      * repeat of what went up under two seconds ago. */
     fun show(message: String, subtitle: String? = null, sessionId: String? = null, detail: String? = null,
         tone: ToastTone = ToastTone.SUCCESS, glyph: ToastGlyph? = null, canUndo: Boolean = false,
-        mergeConflict: ToastMergeConflict? = null, key: String? = null, inProgress: Boolean = false): Long? {
+        mergeConflict: ToastMergeConflict? = null, key: String? = null, inProgress: Boolean = false, undo: ToastUndo? = null): Long? {
         val item = ToastItem(message = message, subtitle = subtitle, detail = detail, tone = tone, glyph = glyph, sessionId = sessionId,
-            canUndo = canUndo, mergeConflict = mergeConflict, key = key, inProgress = inProgress)
+            canUndo = canUndo || undo != null, undo = undo, mergeConflict = mergeConflict, key = key, inProgress = inProgress)
         var shown: Long? = null
         mutable.update { feed -> feed.post(item, SystemClock.elapsedRealtime()).let { (next, id) -> shown = id; next } }
         return shown
@@ -196,7 +197,11 @@ private fun ResultCard(toast: ToastItem, open: (ToastItem) -> Unit, undo: (Toast
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ToastIcon(toast, card = true)
         ToastCopy(toast, showsDetail = true, Modifier.weight(1f), if (toast.opens) ({ open(toast) }) else null)
-        if (toast.canUndo) FilledTonalButton(onClick = { undo(toast) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("Undo") }
+        // A toast's own Undo closes it and runs (web's toast action); any other restores the toast's session.
+        val own = toast.undo
+        if (toast.canUndo) FilledTonalButton(onClick = { if (own != null) { OrbitToasts.dismiss(toast.id); own.perform() } else undo(toast) },
+            modifier = if (own != null) Modifier.semantics { contentDescription = own.description } else Modifier,
+            contentPadding = PaddingValues(horizontal = 14.dp)) { Text("Undo") }
     }
 }
 
