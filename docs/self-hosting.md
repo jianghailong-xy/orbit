@@ -588,13 +588,13 @@ arithmetic, and how to repeat both.
 
 | Part | For a cell | What it carries at the peak |
 | --- | --- | --- |
-| Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | 5,000 connections each, 7,500 with one node down (about 1.4 GB of connections); about 1 core across the cell |
-| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 42% busy, 56% with one of them down. The first one also takes people's requests and the live relay (see below). |
-| Database | 8 cores, 32 GB of memory, its own fast disk | 3.9 cores at its 10-second peak, under 60% of 7 cores |
+| Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | 5,000 connections each, 7,500 with one node down (about 1.4 GB of connections); about 0.4 cores across the cell |
+| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 41% busy, 54% with one of them down. The first one also takes people's requests and the live relay, which at a cell's full live load it cannot carry (see below). |
+| Database | 8 cores, 32 GB of memory, its own fast disk | 4.2 cores at its 10-second peak, 53% of its cores |
 | NATS | 1 node, 1 core | Hints, and the live stream |
 
 - **The apiservers' limit is the main thread.** It does nine tenths of a process's work, so a process carries about one
-  core. The count leaves room for one process to fail: three carry the peak at 56%.
+  core. The count leaves room for one process to fail: three carry the peak at 54%.
 - **Losing a gateway node.** Its 5,000 runners reconnect to the other two, which let in 200 handshakes a second each.
   For about 13 seconds that adds up to 1.9 apiserver cores and 3.5 database cores, while each connection's first
   heartbeat is reconciled in full. The database then runs near its 8 cores; about 13 would keep even that under 60%.
@@ -615,8 +615,20 @@ arithmetic, and how to repeat both.
   - a managed database whose failover keeps every acknowledged commit.
 
   Keep the standby near, since every commit that writes events waits for it.
-- **Not measured here:** people's own requests (web, apps, their streams), which go to the first apiserver, and the
-  live relay's cost (pending). Each process's figures leave room for them.
+- **The live relay** is an order-of-magnitude estimate. Every run that could have measured it cleanly on the test host
+  was voided by the host's swapping, so the estimate comes from the void runs.
+  - **Its cost.** Each delta forwarded to a watcher costs about 0.04 ms of apiserver CPU, which comes to 0.4 cores at
+    10,000 a second. It lands on the apiserver that holds the watchers' session streams, and the web gateway sends those
+    to the first apiserver. Each delta reached its watcher about 105 ms after it was produced (p99): two 50 ms
+    gatherings, the runner's and the stream's.
+  - **Its consequence.** With its share of the runners' calls on top, the first apiserver's main thread would be about
+    87% busy at the peak. As streams reach it now, the first apiserver does not carry a cell's full live load.
+  - **The ways out.** Spread the session streams over every apiserver: a web-gateway route the deployment does not have
+    yet, with which four processes carry everything at 52%, 70% with one down. Or take the first apiserver out of
+    `LINK_INTERNAL_API_URLS` once the sign-in hand-overs under [Several apiservers](#several-apiservers) no longer
+    need its heartbeats.
+- **Not measured here:** people's own requests (web, apps, their streams), which go to the first apiserver; and what each
+  apiserver's own background work costs the database. Each process's figures leave room for them.
 
 ### Several apiservers
 

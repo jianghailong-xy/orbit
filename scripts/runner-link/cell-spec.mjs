@@ -48,8 +48,10 @@ const total = (part) => parts[part].reduce((n, x) => n + x.cores, 0);
 // N is the least number of processes that keeps the main thread of each process but the first under
 // rules.apiserverMainThreadMax at the peak, and under rules.apiserverMainThreadMaxOneDown with one of them down. The first
 // one carries its share and the relay: it is checked against the same limits, and when it does not fit, more processes
-// are not the answer (the relay does not divide); the spec says so.
-const spreadLabels = new Set(['heartbeats', 'durable events', 'connects (renewals)']);
+// are not the answer (the relay does not divide); the spec says so. With rules.sessionStreamsSpread, the session
+// streams are spread over every process too (an open design question: a web-gateway route the deployment does not have),
+// and the relay divides with the rest.
+const spreadLabels = new Set(['heartbeats', 'durable events', 'connects (renewals)', ...(rules.sessionStreamsSpread ? ['live deltas forwarded'] : [])]);
 const isSpread = (x) => [...spreadLabels].some((l) => x.label.startsWith(l));
 const apiSpread = parts.apiserver.filter(isSpread).reduce((n, x) => n + x.cores, 0);
 const apiFirstOnly = parts.apiserver.filter((x) => !isSpread(x)).reduce((n, x) => n + x.cores, 0);
@@ -85,7 +87,8 @@ for (const part of Object.keys(parts)) {
   say(`  mean ${r2(total(part))} cores`);
 }
 say('', `apiserver: mean ${r2(apiMean)} cores, of which ${r2(apiSpread)} spread over every process and ${r2(apiFirstOnly)} the first ` +
-  `one's alone (the live relay); peak/mean ${peak}; main thread ${share} of a process's CPU; idle ${idle} cores a process.`);
+  `one's alone${rules.sessionStreamsSpread ? ' (the session streams spread over every process too)' : ' (the live relay)'}; ` +
+  `peak/mean ${peak}; main thread ${share} of a process's CPU; idle ${idle} cores a process.`);
 say(`  ${n} processes: at the peak the first one's main thread ${r2(first(n) * 100)}% busy and each other's ${r2(other(n) * 100)}% ` +
   `(≤ ${rules.apiserverMainThreadMax * 100}%); with one of the others down ${r2(first(n - 1) * 100)}% and ${r2(other(n - 1) * 100)}% ` +
   `(≤ ${rules.apiserverMainThreadMaxOneDown * 100}%). People's own requests come on top, on the first one: not measured here.`);
@@ -101,7 +104,7 @@ say(`a gateway node's loss: ${Math.round(cell.connections / nodes)} runners reco
   `${r2(stormSeconds)} s, ${r2((stormRate * costs.connect.apiserverMs) / 1000)} apiserver cores and ` +
   `${r2((stormRate * costs.connect.databaseMs) / 1000)} database cores meanwhile (a connect with its token minted: an upper bound).`);
 const spec = {
-  apiserverProcesses: n, firstProcessFits: firstFits, firstProcessFloorPct: r2(firstFloor * 100), apiserverMeanCores: r2(apiMean), apiserverSpreadCores: r2(apiSpread), apiserverFirstOnlyCores: r2(apiFirstOnly),
+  sessionStreamsSpread: !!rules.sessionStreamsSpread, apiserverProcesses: n, firstProcessFits: firstFits, firstProcessFloorPct: r2(firstFloor * 100), apiserverMeanCores: r2(apiMean), apiserverSpreadCores: r2(apiSpread), apiserverFirstOnlyCores: r2(apiFirstOnly),
   mainThreadPeakPct: { first: r2(first(n) * 100), other: r2(other(n) * 100) },
   mainThreadOneDownPct: { first: r2(first(n - 1) * 100), other: r2(other(n - 1) * 100) }, databaseMeanCores: r2(dbMean), databasePeakCores: r2(dbPeak),
   databaseCores: dbCores, gatewayNodes: nodes, gatewayConnectionsPerNodeOneDown: perNodeConnections, gatewayMemGiBPerNode: r2(perNodeMemGiB),

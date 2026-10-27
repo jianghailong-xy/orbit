@@ -374,6 +374,14 @@ A run without `-live-rate` and `--watch` sends no `LiveBatch`, and its report is
 byte. The loadgen's test (`TestNoLiveBatchWithoutTheLiveRate`) shows the first. The second was checked by reporting
 copies of O1's and O2's runs with both versions of `loadgen-report.mjs` and `loadgen-baseline.mjs`.
 
+On HPC (task O3) the tool ran end to end in every attempt:
+- 100 watchers took 1,992–1,997 of the 2,000 deltas a second, in LiveBatch frames of about two deltas;
+- the gateway published every one (`link_live_events_total{result="published"}`);
+- each delta reached its watcher p99 103–115 ms after it was produced.
+
+No attempt ran clean, though: the host's swapping voided all of them. What a delta costs is therefore an
+order-of-magnitude estimate, in [The cell's size](#the-cells-size).
+
 ### Several apiservers
 
 A stack runs several apiservers in one of two ways:
@@ -416,7 +424,7 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
 | heartbeat, 10.3% of them reconciled in full | 0.86 | 1.03 | 0.31 | 3.37 | 3.38 |
 | event, merged: 1.55 a batch, 27 batches a call | 0.445 | 0.58 | 0.045 | 1.94 | none of its own: 9.3 calls a second |
 | connect: link token, TLS, Welcome, first beat reconciled in full | 4.7 | 8.6 | 1.05, and 0.16 at the web gateway | | |
-| live delta forwarded to a watcher | pending | | | | |
+| live delta forwarded to a watcher (an estimate: see below) | about 0.04 | 0.015–0.019, within the controls' spread | 0.015–0.017; NATS 0.012–0.013; web gateway 0.008 | | |
 
 - **Where the rows come from.** `loadgen-baseline.mjs o3-hb-1 o3-ev400-1` gives the first two rows, and
   `loadgen-connects.mjs o3-hb-1` the third. A beat's statements and commits are the steady window's, renewals and the
@@ -440,8 +448,8 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
 | an event | 0.47 ms apiserver, 0.761 ms database | O2: unpinned, on mixed cores, with other work on the host. The coordinator's rule is to size with it. This task's 0.58 ms on the P-cores goes beside it. |
 | an event at the link gateway | 0.045 ms | this task |
 | a connect | 4.7, 8.6 and 1.05 ms | this task |
-| a live delta | pending | |
-| a process's own background work | pending | |
+| a live delta | 0.042 ms apiserver, 0.017 link gateway, 0.013 NATS, 0.0085 web gateway, 0.019 database | An order-of-magnitude estimate, the coordinator's fallback. No attempt at the live pair was clean (below), so these are its void attempts: per part, the higher of the medians over all of them and the means of the three least swapped. |
+| a process's own background work | 0.004 apiserver cores; 0.008 database cores | The apiserver figure is each of the two processes of the documented override, idle from 03:00 to 05:55Z on 2026-10-27 (the thread sampler). The database figure is O1's for the whole one-apiserver stack; per process it is open. |
 | the main thread's share of a process | 0.91 | this task |
 | gateway memory | 190 KB a connection | C2; this task saw 155–194 KB at 3,000 connections |
 
@@ -450,10 +458,14 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
   most 60% of its cores (the project's criterion). The cell has at least 3 gateway nodes, each carrying at most 7,500
   connections with one node down (§9) and taking 200 handshakes a second.
 - **Heartbeats, events and renewals** come to 1.48 apiserver cores, spread over every process. Four processes carry
-  them: each main thread is 42% busy at the peak, 56% with one process down. The first process also takes the live
-  relay (pending) and people's requests (not measured).
-- **The database** takes 2.6 cores on average (heartbeats 1.03, events 1.52, renewals 0.04, the processes' own work),
-  3.9 at the 10-second peak: 7 cores at 60%, 8 recommended.
+  them: each main thread is 41% busy at the peak, 54% with one process down.
+- **The first process** also takes the live relay, 0.42 cores at 10,000 deltas a second, which does not divide, and
+  people's requests (not measured). Its main thread would be 87% busy at the peak, 100% with one of the others down. As
+  session streams reach it now, the first apiserver does not carry a cell's full live load.
+  - With the session streams spread over every process (`"sessionStreamsSpread": true` in the inputs), the same four
+    processes carry everything at 52%, 70% with one down.
+- **The database** takes 2.8 cores on average (heartbeats 1.03, events 1.52, the live relay's estimate 0.19, renewals
+  0.04, the processes' own work), 4.2 at the 10-second peak: 8 cores at 53%.
 - **A gateway node's loss** sends its 5,000 runners to the other two nodes at 400 a second, for 12.5 s. Meanwhile it
   adds 1.9 apiserver and 3.45 database cores.
 - **Each percent of beats reconciled in full** adds 0.009 apiserver and 0.029 database cores.
@@ -471,6 +483,22 @@ standby was synchronous. A cell's database needs a synchronous standby (`synchro
   34mNe8DOyUq2wlk81EGlZ): Antigravity's pasted code and the Cursor key check.
 - **(c) The default upgrade recreating the replicas** (task 34mNe8H0YZ4Qkwd0t6jPJ). Until then, the manual step in
   docs/self-hosting.md applies.
+
+**Open items** of the spec:
+
+- **The live relay, measured cleanly.**
+  - On HPC, 24 attempts at the live pair on the 3,000-runner fleet (2026-10-26, 13:25–23:13Z) and 12 on a 600-runner
+    fleet (until the coordinator's deadline, 06:00Z on 2026-10-27) were all void. The host swapped in 132–17,944 pages/s.
+  - C2b measures it on the dedicated machine, with `--watch 500` and `-live-rate 10000` at the cell's scale.
+- **The design question: do the session streams need spreading over every apiserver?** It would take a web-gateway
+  route sending `GET /api/sessions/:id/events` to every apiserver (proposal only; not in the deployment). Or the first
+  apiserver leaves `LINK_INTERNAL_API_URLS` once (b) is done.
+- **What else the first apiserver carries.** People's own requests, the web, the apps and their streams, are not
+  measured here.
+- **The beat's split by kind, re-measured on a quiet host** (C2b). The share reconciled in full in production is the
+  25% estimate.
+- **What each apiserver's own background work costs the database.** The jobs that run in every process repeat their
+  reads N times (the reaper's sweep, the task sweep), on a production database larger than staging's.
 
 **If the database runs hot.** The Prisma adapter sends every statement unnamed except those marked `PREPARED_STATEMENT`
 (task O1), and an unnamed statement costs about 0.21 ms of database CPU in parse and plan each time it runs.
