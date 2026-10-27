@@ -581,7 +581,8 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     // fixes it (iOS 2's four states). Its page installs a missing build, or puts the pinned one back.
     val cursor = if (engine == ProviderEngines.CURSOR) CursorRuntime.state(runner) else null
     val cursorHint = cursor?.takeIf { it.blocksRow }?.let { CursorRuntime.hint(it, health) }
-    val opens = installed || cursor == CursorRuntime.RunnerState.NOT_INSTALLED
+    // An engine the machine lacks opens its page where that page installs it (Infrastructure.installsFromPage).
+    val opens = installed || cursor == CursorRuntime.RunnerState.NOT_INSTALLED || (cursor == null && Infrastructure.installsFromPage(runner, engine))
     Row(Modifier.fillMaxWidth().clickable(enabled = opens, role = Role.Button, onClick = open).padding(vertical = 8.dp)
         .testTag("engine-row:$engine"), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

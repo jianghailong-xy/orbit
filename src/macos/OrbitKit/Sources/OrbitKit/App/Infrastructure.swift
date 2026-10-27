@@ -3,12 +3,11 @@ import Foundation
 /// The Infrastructure page on iOS and macOS — the web's `/infrastructure` (InfrastructurePage.tsx): where
 /// the account's agents run and whose quota they spend, on one page (docs/mocks/infrastructure-page/03-ios.png).
 /// It is the Mac's Infrastructure section, and Settings › Infrastructure on a phone. Top to bottom: what
-/// needs a person, what each engine can run on now, the machines, the account pools and the API keys.
+/// needs a person, the machines, the account pools and the API keys.
 ///
-/// The two blocks at its top are the web's own (InfrastructureOverview.tsx): the same rules, read from the
-/// same lists — the machines (GET /runners), the account's own keys (GET /providers/mine) and its pools, its
-/// own and the ones it is in — so nothing new is asked of the server. Their words are the web's too, which
-/// `InfrastructureCopyParityTests` reads back out of the web source.
+/// Needs you, at its top, is what the web's page drew too until it dropped it (2026-10-25): the same rules,
+/// read from the same lists — the machines (GET /runners) and the pools, its own and the ones it is in —
+/// so nothing new is asked of the server.
 public enum Infrastructure {
 
     // MARK: - Words
@@ -18,20 +17,8 @@ public enum Infrastructure {
     /// Over the lines that wait on a person — Settings' "1 needs you" counts them. The web draws them as a
     /// card of their own, with no heading.
     public static let needsYou = "Needs you"
-    public static let enginesTitle = "What your agents can run on"
-    public static let enginesDetail = "Every engine, and everything that can pay for it right now."
     public static let machines = "Machines"
     public static let machinesDetail = "Subscriptions signed in here are spent only by sessions on that machine."
-    public static let ready = "Ready"
-    public static let notSetUp = "Not set up"
-    public static let subscription = "Subscription"
-    /// OpenCode's sign-in on a machine, which is its own rather than a subscription's.
-    public static let ownSignIn = "Own sign-in"
-    public static let apiKey = "API key"
-    public static let pool = "Pool"
-    /// An engine nothing can pay for. The web goes on to offer a key too; adding a key happens on the web.
-    public static let nothingCanPay = "No machine signed in, no key."
-    public static let installOnAMachine = "Install on a machine"
     public static let signIn = "Sign in"
     public static let details = "Details"
     public static let manage = "Manage"
@@ -150,94 +137,7 @@ public enum Infrastructure {
         return !(health?.accounts ?? []).contains { $0.auth == "yes" }
     }
 
-    // MARK: - What each engine can run on
-
-    /// One engine and what can pay for it now (web's `EngineOverview` card), for every engine a session can
-    /// run on — OpenCode and DeepSeek Harness among them.
-    public struct EngineCard: Equatable, Sendable, Identifiable {
-        /// A key that runs on the engine, and the model a session on it starts on there.
-        public struct Key: Equatable, Sendable {
-            public let label: String
-            public let model: String?
-
-            public init(label: String, model: String?) {
-                self.label = label
-                self.model = model
-            }
-        }
-
-        /// "claude", "codex", "kimi", "antigravity", "opencode" or "dsh".
-        public let engine: String
-        /// Each machine online signed in to it — "Mac Studio ×2" for two of its accounts; for OpenCode,
-        /// each one its own sign-in is set up on. None for DeepSeek Harness, which signs in nowhere.
-        public let machines: [String]
-        /// API key: the enabled keys that run on it, with the model a session there starts on.
-        public let keys: [Key]
-        /// Pool: its pools that can start a session.
-        public let pools: [String]
-
-        /// Its CLI's own name: "Antigravity CLI".
-        public var name: String { ProviderEngines.cliName(engine) }
-        /// What its machines are: OpenCode's own sign-in, every other engine's subscription.
-        public var machinesLabel: String { engine == "opencode" ? Infrastructure.ownSignIn : Infrastructure.subscription }
-        /// Ready with any source at all; Not set up without.
-        public var ready: Bool { !machines.isEmpty || !keys.isEmpty || !pools.isEmpty }
-        public var id: String { engine }
-    }
-
-    /// Every engine, and what can pay for it now: the machines online signed in to it, by how many of their
-    /// accounts; each enabled key under every engine the server says it runs on (`engines`) — a DeepSeek
-    /// key under Claude Code, OpenCode and DeepSeek Harness, a Claude subscription token under Claude Code
-    /// alone — with the model a session on it starts on there; its pools that can start a session (one
-    /// that is unavailable is in Needs you instead). Cursor CLI once a runner of the account knows it
-    /// (`ProviderEngines.appleShowsEngine`).
-    public static func engineCards(runners: [Runner], keys: [ConfiguredProvider],
-                                   pools: [ProviderPool]) -> [EngineCard] {
-        let online = runners.filter { $0.online == true }
-        let harness = harnessModel(online)
-        let cursor = cursorModel(online)
-        return ProviderEngines.all.filter { ProviderEngines.appleShowsEngine($0, runners: runners) }.map { engine in
-            // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
-            let machines = engine == "dsh" ? [] : online.compactMap { runner -> String? in
-                let count = logins(runner, engine)
-                guard count > 0 else { return nil }
-                let name = RunnerPageFormat.displayName(runner)
-                return count > 1 ? "\(name) ×\(count)" : name
-            }
-            let engineKeys = keys.filter { $0.enabled != false && ProviderEngines.of($0).contains(engine) }
-                .map { key -> EngineCard.Key in
-                    let model = engine == "dsh" ? harness : engine == CursorRuntime.engine ? cursor : defaultModel(key)
-                    return EngineCard.Key(label: key.label, model: model)
-                }
-            let enginePools = pools.filter {
-                $0.unavailable == nil && (ProviderPools.runsCodex($0) ? "codex" : "claude") == engine
-            }
-            return EngineCard(engine: engine, machines: machines, keys: engineKeys, pools: enginePools.map(\.label))
-        }
-    }
-
-    /// The machine Install on a machine opens, on that engine's page: the first one online, as the web's
-    /// does. Nil with none online — the way to one is registering a machine.
-    public static func installTarget(_ runners: [Runner]) -> Runner? {
-        runners.first { $0.online == true }
-    }
-
-    /// How many logins of this engine a session on this machine can run on (web's `loginsOn`): each
-    /// account signed in, or the engine's own answer where it reports no accounts — for OpenCode, whether
-    /// its own sign-in (`opencode auth login`) is set up there. Antigravity's Default on the machine's own
-    /// Gemini key counts, as it does on the machine's page (`runsOnEnvKey`).
-    static func logins(_ runner: Runner, _ engine: String) -> Int {
-        let login = LoginEngine(rawValue: engine)
-        let health = login.flatMap { engineHealth(runner, $0) } ?? runner.engines?.first { $0.engine == engine }
-        guard let health, health.installed == true,
-              !(login == .antigravity && runner.antigravity?.supported == false),
-              !(login == .cursor && CursorRuntime.state(of: runner) != .ready) else { return 0 }
-        let accounts = health.accounts ?? []
-        if accounts.isEmpty { return health.auth == "yes" ? 1 : 0 }
-        return accounts.filter {
-            $0.auth == "yes" || RunnerPageFormat.runsOnEnvKey(health, account: $0.id, auth: $0.auth)
-        }.count
-    }
+    // MARK: - A key's model and name
 
     /// The model a Cursor CLI session on a Cursor key starts on: Auto, Cursor's own default, by the name
     /// the catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on
@@ -260,20 +160,6 @@ public enum Infrastructure {
         else { return nil }
         let label = key.models.first { $0.value == model }?.label
         return label.flatMap { $0.isEmpty ? nil : $0 } ?? model
-    }
-
-    /// The model a DeepSeek Harness session starts on, by the name its catalogue gives it (web's
-    /// `harnessModelOf`). Not a key's own: Harness lists its models on each machine, whichever DeepSeek key
-    /// it runs on (docs/provider-engine-contract.md §2.2) — read off the first machine online that can run
-    /// it and has reported them, and with none, no name.
-    static func harnessModel(_ online: [Runner]) -> String? {
-        for runner in online {
-            guard DshRuntime.state(of: runner) == .ready, let catalog = runner.modelCatalog?.dsh, !catalog.isEmpty
-            else { continue }
-            let model = runner.runtimeDefaultModels?["dsh"]
-            return catalog.first { $0.value == model }?.label ?? catalog[0].label
-        }
-        return nil
     }
 
     /// What a key is called: the name its owner gave it, a Gemini key's too — a key is no engine's to be
@@ -401,6 +287,17 @@ public enum Infrastructure {
         case .missing, .installFailed: return true
         default: return false
         }
+    }
+
+    /// Whether an engine the machine lacks has its page to open from the machine's record (web's Install on
+    /// its row): that page installs it — Install, or Retry after an install that failed — or shows the
+    /// install running. DeepSeek Harness's page installs its pinned CLI where the machine can run one.
+    public static func installsFromPage(_ runner: Runner, engine: String) -> Bool {
+        if engine == "dsh" { return DshRuntime.state(of: runner).installable || runner.install?.engine == "dsh" }
+        let health = runner.engines?.first { $0.engine == engine }
+        if rowKind(health, install: runner.install, slug: engine) == .installing { return true }
+        if engine == "opencode" { return installsOpenCode(runner) }
+        return LoginEngine(rawValue: engine).map { installable(runner, $0) } ?? false
     }
 
     /// Whether OpenCode's page offers to install it (web's OpenCode row): it signs in per provider, on the

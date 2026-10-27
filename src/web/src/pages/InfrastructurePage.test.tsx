@@ -185,7 +185,7 @@ const card = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-runner-card')].find((el) => text(el.querySelector('.re-runner')) === name)!;
 
 describe('/infrastructure', () => {
-  it('heads the page with its name, its line and Add, then Machines, API keys, Account pools and By engine in that order', async () => {
+  it('heads the page with its name, its line and Add, then Machines, API keys and Account pools in that order', async () => {
     await mount();
     expect(text(document.body.querySelector('h1'))).toBe('Machines & models');
     // Settings' page (docs/mocks/machines-and-models, 02): the way back to Settings above its name.
@@ -197,7 +197,6 @@ describe('/infrastructure', () => {
       'Machines',
       'API keys',
       'Account pools',
-      'By engine',
     ]);
     // Nothing above the machines but the page's own head.
     expect(document.body.querySelector('.prov-page-head')?.nextElementSibling?.id).toBe('machines');
@@ -237,7 +236,7 @@ describe('/infrastructure', () => {
     host?.remove();
     await mount();
     await click((await openMenu(button('Add')))[2]);
-    // The dialog the pools' own New pool opens.
+    // The page's one way to a new pool: the pools' own head has no button of its own.
     expect(await openDialog('New account pool')).not.toBeNull();
     expect(path).toBe('/infrastructure');
   });
@@ -255,7 +254,9 @@ describe('/infrastructure', () => {
     expect(text(noKeys.querySelector('h3'))).toBe('No keys yet');
     expect(text(noKeys.querySelector('p'))).toBe('Pick a provider and paste your API key — or skip it and sign a machine in above.');
     expect(noKeys.querySelector('a[href="/providers/new/anthropic"]')).not.toBeNull();
-    expect(button('New pool', document.body.querySelector('.pool-sec')!)).not.toBeNull();
+    // The pools stand with none too, saying what one is, with nothing of their own to press: Add makes one.
+    expect(text(sectionHead('Account pools')?.querySelector('.re-sec-sub'))).toBe('Several accounts under one name.');
+    expect(sectionHead('Account pools')?.querySelector('button')).toBeNull();
   });
 
   it('puts the vendors not connected yet under the keys there are, edits a key on its page, and deletes one once asked', async () => {

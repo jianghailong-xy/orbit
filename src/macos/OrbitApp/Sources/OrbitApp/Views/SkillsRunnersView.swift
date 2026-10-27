@@ -69,9 +69,9 @@ struct SkillRow: View {
 
 /// The Infrastructure page (docs/mocks/infrastructure-page/03-ios.png): the Infrastructure section's list
 /// on a Mac and an iPad, the section's own page on a phone, and Settings › Infrastructure there — what needs
-/// a person, what each engine can run on, the machines (each opening its record; reordered and removed
-/// here), then the account pools and the API keys. Every way out stays in the app: an engine is signed in
-/// or installed on its page, a machine on its record, a pool on its page — iOS's own; the Mac has none.
+/// a person, the machines (each opening its record; reordered and removed here), then the account pools
+/// and the API keys. Every way out stays in the app: an engine is signed in on its page, a machine on its
+/// record, a pool on its page — iOS's own; the Mac has none.
 struct RunnersListView: View {
     @Environment(AppModel.self) private var model
     /// How this list's rows navigate. Defaults to the three-column shape; the compact shell and Settings,
@@ -106,7 +106,6 @@ struct RunnersListView: View {
                         InfrastructureNeedsYouSection(items: attention, opensPools: opensPools,
                                                       open: openAttention)
                     }
-                    InfrastructureEnginesSection(engines: lists.engines, install: install)
                 }
                 Section {
                     ForEach(runners.runners) { r in
@@ -198,16 +197,6 @@ struct RunnersListView: View {
         case .poolUnavailable(let poolID, let own):
             model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))
         }
-    }
-
-    /// Install on a machine: that engine's page on the first machine online, where Install is — or, with
-    /// none online, registering one.
-    private func install(_ engine: String) {
-        guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {
-            addingRunner = true
-            return
-        }
-        openEngine(runner.id, engine)
     }
 
     /// An engine's page — over its machine's record where the pane shows the record the list selects.
@@ -853,7 +842,8 @@ struct RunnerDetailContent: View {
         .padding(.vertical, 4)
     }
 
-    /// An engine the machine has installed opens its page; one it hasn't is only a line.
+    /// An engine the machine has opens its page, as does one it lacks whose page installs it; any other is
+    /// only a line.
     @ViewBuilder private func engineRow(_ health: RunnerEngineHealth, offline: Bool, now: Date) -> some View {
         let row = RunnerEngineRow(health: health, runner: runner, offline: offline, now: now)
         if RunnerEngineRow.opensPage(health, runner: runner) {
