@@ -2655,10 +2655,10 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 // out the way it was written, bare URLs stay clickable through remark-gfm's autolink, and the copy
 // button still hands back the original source. Any images sent with the turn render above the text
 // (an image-only turn has empty text) — prefer the local preview (instant), falling back to the
-// durable refs when there's none. Below the bubble a right-aligned meta row (copy button · relative
-// time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
-// and lives inside the hover wrap so the pointer can travel down onto it without dismissing
-// it (CSS :hover hits ancestors).
+// durable refs when there's none. Below the bubble, one right-aligned meta row: the copy button and
+// the relative time, which fade in on hover like Claude's, then the bubble's own state (a steer's
+// progress, a message that did not land), which is always shown. The row lives inside the hover
+// wrap so the pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
 //
 // Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
 // with that line at its foot — so a message does not change shape when the runner picks it up — and
@@ -2687,6 +2687,27 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       setTimeout(() => setCopied(false), 1600);
     });
   };
+  // The bubble's own state, at the end of its meta row: it waits for no hover, where the copy
+  // button and the time before it do. A message that did not land says so (the one thing a
+  // bubble must never do is stand there looking sent; the reason rides in the tooltip); a steer
+  // says how far it got.
+  const status =
+    node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
+      <div className="chat-undelivered" title={node.deliveryReason}>
+        ⚠ {steerDeliveryState(node.delivery).label}
+        {node.delivery === 'failed' && putBack && typed && (
+          <button
+            type="button"
+            className="chat-undelivered-retry"
+            onClick={() => putBack(typed, node.attachmentRefs)}
+          >
+            Put back in the composer
+          </button>
+        )}
+      </div>
+    ) : node.steer ? (
+      <SteerState node={node} typed={typed} />
+    ) : null;
   return (
     <div className="chat-user-wrap">
       <div
@@ -2707,27 +2728,6 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         )}
         {queued}
       </div>
-      {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
-        // The one thing a bubble must never do is stand there looking sent when the engine
-        // never received the message. Outside the meta row on purpose: that row is hidden
-        // until hover, and this is the one thing about a message nobody should have to go
-        // looking for. The reason rides in the tooltip — what is needed at a glance is that
-        // this message did not land.
-        <div className="chat-undelivered" title={node.deliveryReason}>
-          ⚠ {steerDeliveryState(node.delivery).label}
-          {node.delivery === 'failed' && putBack && typed && (
-            <button
-              type="button"
-              className="chat-undelivered-retry"
-              onClick={() => putBack(typed, node.attachmentRefs)}
-            >
-              Put back in the composer
-            </button>
-          )}
-        </div>
-      ) : (
-        node.steer && <SteerState node={node} typed={typed} />
-      )}
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
           {expanded
@@ -2735,18 +2735,22 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {typed && (
+      {(typed || status) && (
         <div className="chat-user-meta">
-          <button
-            type="button"
-            className="chat-copy"
-            onClick={copy}
-            title={copied ? 'Copied' : 'Copy message'}
-            aria-label={copied ? 'Copied' : 'Copy message'}
-          >
-            {copied ? <CheckOutlined /> : <CopyOutlined />}
-          </button>
-          {node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
+          {typed && (
+            <button
+              type="button"
+              className="chat-copy"
+              onClick={copy}
+              title={copied ? 'Copied' : 'Copy message'}
+              aria-label={copied ? 'Copied' : 'Copy message'}
+            >
+              {copied ? <CheckOutlined /> : <CopyOutlined />}
+            </button>
+          )}
+          {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
+          {typed && node.ts && status && <span className="chat-meta-sep">·</span>}
+          {status}
         </div>
       )}
     </div>

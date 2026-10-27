@@ -263,4 +263,12 @@ describe('where the row’s ⋯ shows', () => {
   it('always shows in the touch drawer, which has no hover', () => {
     expect(styles).toMatch(/@media \(max-width: 960px\) \{\s*\.tp-workspace-actions \{\s*display: flex;/);
   });
+
+  it('comes in before a needs-you count, which keeps the row’s far end instead of moving over for it', () => {
+    const selector = '.app-shell .app-nav:not(.collapsed) .tp-workspace-label ~ .tp-count.needs-you';
+    expect(rule(selector)).toContain('order: 1;');
+    // On the desktop sidebar only: the drawer shows every row's ⋯, so there it stays at the row's end.
+    const at = styles.indexOf(`${selector} {`);
+    expect(styles.slice(styles.lastIndexOf('@media', at), at)).toMatch(/^@media \(min-width: 961px\) \{/);
+  });
 });

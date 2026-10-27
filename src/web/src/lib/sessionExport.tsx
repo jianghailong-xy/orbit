@@ -100,7 +100,8 @@ body { margin: 0; background: var(--bg-base); color: var(--text-1);
 .orbit-export .chat-copy, .orbit-export .md-copy, .orbit-export .chat-more,
 .orbit-export .chat-tool-caret, .orbit-export .chat-image-mask { display: none !important; }
 .orbit-export .chat-tool-row { cursor: default !important; }
-.orbit-export .chat-user-meta { position: static; opacity: 1; height: auto; }
+.orbit-export .chat-user-meta { position: static; height: auto; }
+.orbit-export .chat-user-meta > * { opacity: 1; }
 `;
 
 /** Build a standalone HTML document string for a session's transcript. `linkResolver` is the
