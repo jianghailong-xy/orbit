@@ -321,10 +321,54 @@ func echoUUID(msg map[string]interface{}) string {
 // event is built.
 type deliveryReporter func(turnID string, state deliveryState, reason string, retryable bool)
 
+// orderedDeliveryReports files one process's delivery reports in the order its messages moved.
+//
+// Each state is settled under the ledger's lock but reported by whichever goroutine settled it, once
+// that lock is gone: the receipt watcher says written, the stdout reader acknowledged, a withdrawal
+// withdrawn. Nothing orders those goroutines, and a client applies a turn's reports in the order they
+// were filed, the last one standing. A watcher set aside between recording a write and reporting it
+// could therefore file `written` after the steer's `withdrawn` or `acknowledged`, and put a bubble that
+// was taken back, or read, back on "written".
+//
+// So a turn's reports are filed one at a time, and one that would move the turn backwards is not filed
+// at all: nothing comes after `written` but the turn's last word, and nothing after that. What each
+// state means, and when it is reached, is the ledger's as before; this decides only what the stream
+// hears, and in which order.
+func orderedDeliveryReports(report deliveryReporter) deliveryReporter {
+	var mu sync.Mutex
+	// How far along each turn's reports have gone (deliveryProgress), for the life of the process:
+	// a report can come in late after its turn's last word, so that word is never forgotten.
+	filed := map[string]int{}
+	return func(turnID string, state deliveryState, reason string, retryable bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if at, ok := filed[turnID]; ok && deliveryProgress(state) <= at {
+			return // late: this turn has already been reported as far as this, or further
+		}
+		filed[turnID] = deliveryProgress(state)
+		report(turnID, state, reason, retryable)
+	}
+}
+
+// deliveryProgress places a state on the one path a message's reports may take: pending, enqueued,
+// written, then its last word — acknowledged, withdrawn, requeued or failed — after which nothing is
+// said about it.
+func deliveryProgress(state deliveryState) int {
+	switch state {
+	case deliveryPending:
+		return 0
+	case deliveryEnqueued:
+		return 1
+	case deliveryWritten:
+		return 2
+	}
+	return 3
+}
+
 // fileWrittenReport files the report that a frame's bytes reached the CLI, which the receipt watcher
 // does on its own schedule. A variable only so a test can hold that report back until another
-// goroutine has reported the same message further along, at a moment nothing outside the watcher can
-// observe.
+// goroutine has reported the same message further along — the interleaving orderedDeliveryReports
+// exists for, at a moment nothing outside the watcher can observe.
 var fileWrittenReport = func(turnID string, file func()) { file() }
 
 // failUndeliveredTurn settles a turn whose message never reached the CLI. It is reported

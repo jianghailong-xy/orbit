@@ -2142,8 +2142,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// reportDelivery publishes one message's delivery state. The turn is named in the
 	// payload rather than left to the event's own attribution: a delivery settles on the
 	// writer's schedule, not the conversation's, so the turn in progress when it settles
-	// is often a different one.
-	reportDelivery := deliveryReporter(func(turnID string, state deliveryState, reason string, retryable bool) {
+	// is often a different one. Several goroutines settle a message's states and nothing
+	// orders them, so the reports go out one at a time and never move a turn backwards.
+	reportDelivery := orderedDeliveryReports(func(turnID string, state deliveryState, reason string, retryable bool) {
 		p := map[string]interface{}{"turnId": turnID, "delivery": string(state)}
 		if reason != "" {
 			p["reason"] = reason
