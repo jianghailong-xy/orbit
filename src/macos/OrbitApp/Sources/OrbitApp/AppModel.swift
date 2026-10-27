@@ -2095,6 +2095,9 @@ final class AppModel {
     @ObservationIgnored private var toastExpiry: Task<Void, Never>?
     @ObservationIgnored private var heldToastID: ToastItem.ID?
     @ObservationIgnored private var toastFold: Task<Void, Never>?
+    /// The Undo a toast was posted with (`showToast(undo:)`), run in place of moving its session back
+    /// to Open. Only the transient toast draws Undo, so one is all there is to keep.
+    @ObservationIgnored private var toastUndo: (id: ToastItem.ID, run: @MainActor () -> Void)?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
     /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
@@ -2118,17 +2121,20 @@ final class AppModel {
     /// for a result whose session has already left every loaded scope by the time the card is
     /// built — completing one drops it from Open, so the name has to be taken before the mutation
     /// or the line just disappears. Everything else lets it resolve here. `key` makes one operation
-    /// one toast: a result posted with its progress pill's key takes the pill's place.
+    /// one toast: a result posted with its progress pill's key takes the pill's place. `undo` is the
+    /// Undo of a toast that names no session to move back to Open.
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
-                   icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   icon: String? = nil, canUndo: Bool = false, undo: (@MainActor () -> Void)? = nil,
+                   awaitsApproval: Bool = false,
                    mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
-                             sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
+                             sessionID: sessionID, canUndo: canUndo || undo != nil, awaitsApproval: awaitsApproval,
                              key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
+        if let undo { toastUndo = (id, undo) }
         announce(shown)
         if shown.level == .attention {
             foldToastLater(id)
@@ -2435,10 +2441,60 @@ final class AppModel {
         }
     }
 
-    func undoSessionAction(_ id: ToastItem.ID) {
+    /// A toast's Undo: the one it was posted with (`showToast(undo:)`), else moving its session back
+    /// to Open.
+    func undoToast(_ id: ToastItem.ID) {
+        if let undo = toastUndo, undo.id == id {
+            toastUndo = nil
+            toasts.dismiss(id)
+            undo.run()
+            return
+        }
         guard let toast = toasts.item(id), toast.canUndo, let sessionID = toast.sessionID else { return }
         moveSessionToOpen(sessionID)
         toasts.dismiss(id)
+    }
+
+    // MARK: the worktree bar's notice for a session without a worktree
+
+    /// Initialize git… confirmed: the runner `git init`s the workspace's folder when its next session
+    /// starts (`autoInitGit`). Reading the workspaces again settles the notice — the workspace has
+    /// answered it for every session in it. Web's `enableIsoMut`.
+    func initializeGit(inWorkspace workspaceID: String) {
+        guard let api else { return }
+        let workDir = agents?.agent(workspaceID)?.workDir
+        Task { @MainActor in
+            do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(autoInitGit: true)) }
+            catch {
+                showToast(WorktreeBarLogic.gitSetupFailed, detail: APIClient.failureReason(error), tone: .error)
+                return
+            }
+            showToast(WorktreeBarLogic.gitSetupQueued, detail: workDir)
+            await agents?.load()
+        }
+    }
+
+    /// The notice's ✕ on a folder that isn't a repository keeps it as a plain folder: worktree
+    /// isolation off for the workspace — what its sessions already do — with Undo to turn it back on.
+    /// Web's `keepSharedMut`.
+    func setWorktreeIsolation(_ on: Bool, inWorkspace workspaceID: String) {
+        guard let api else { return }
+        let name = agents?.agent(workspaceID)?.name
+        Task { @MainActor in
+            do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(enableWorktree: on)) }
+            catch {
+                showToast(on ? WorktreeBarLogic.worktreeIsolationOnFailed : WorktreeBarLogic.worktreeIsolationOffFailed,
+                          detail: APIClient.failureReason(error), tone: .error)
+                return
+            }
+            if !on {
+                showToast(WorktreeBarLogic.worktreeIsolationOff(workspaceName: name),
+                          detail: WorktreeBarLogic.worktreeIsolationOffDetail, tone: .neutral,
+                          undo: { [weak self] in self?.setWorktreeIsolation(true, inWorkspace: workspaceID) },
+                          key: "keep-shared-\(workspaceID)")
+            }
+            await agents?.load()
+        }
     }
 
     /// Each landing session's job, as the last integration read described it — what a landing page

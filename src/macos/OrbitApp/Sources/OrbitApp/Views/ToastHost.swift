@@ -262,7 +262,7 @@ private struct ToastHost: ViewModifier {
                 ToastCopy(toast: toast, showsDetail: true)
             }
             if toast.canUndo {
-                Button("Undo") { model.undoSessionAction(toast.id) }
+                Button("Undo") { model.undoToast(toast.id) }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)
                     .controlSize(.small)

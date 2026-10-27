@@ -39,6 +39,21 @@ final class AgentWriteCodableTests: XCTestCase {
         XCTAssertFalse(obj.keys.contains("allowedTools"))
     }
 
+    /// The worktree bar notice's answers each PATCH one switch — Initialize git… `autoInitGit`, ✕ and
+    /// its Undo `enableWorktree` — and nothing rides along as a null the server would read as a value.
+    func testTheWorktreeNoticesAnswersSendOnlyTheirSwitch() throws {
+        let initGit = try jsonObject(UpdateAgentRequest(autoInitGit: true))
+        XCTAssertEqual(Set(initGit.keys), ["autoInitGit"])
+        XCTAssertEqual(initGit["autoInitGit"] as? Bool, true)
+        let off = try jsonObject(UpdateAgentRequest(enableWorktree: false))
+        XCTAssertEqual(Set(off.keys), ["enableWorktree"])
+        XCTAssertEqual(off["enableWorktree"] as? Bool, false)
+        let on = try jsonObject(UpdateAgentRequest(enableWorktree: true))
+        XCTAssertEqual(Set(on.keys), ["enableWorktree"])
+        XCTAssertEqual(on["enableWorktree"] as? Bool, true)
+        XCTAssertFalse(try jsonObject(UpdateAgentRequest(name: "new")).keys.contains("enableWorktree"))
+    }
+
     func testCreateEncodes() throws {
         let obj = try jsonObject(CreateAgentRequest(name: "dev", model: "gpt-5.6-sol",
                                                     allowedTools: ["Bash"], env: ["K": "V"]))
