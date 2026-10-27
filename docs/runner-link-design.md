@@ -1,6 +1,6 @@
 # 设计文档：Runner 链路协议 v1（runner ↔ 控制面）
 
-状态：定稿 v1 · 2026-10-07（代码引用按 main 的 701d9bae2 核对，2026-10-25）· 决策见 §2（D1–D8 由 jianghailong 拍板，D9–D15 随本文定稿）
+状态：定稿 v1 · 2026-10-07（代码引用按 main 的 701d9bae2 核对，2026-10-25）· 2026-10-27 增补 §15（实现与设计的差异）并更新 §11.4，按项目分支 4a493f6b8 的代码核对 · 决策见 §2（D1–D8 由 jianghailong 拍板，D9–D15 随本文定稿）
 作者：Claude（应 jianghailong 评估请求）
 影响面：`src/runner-go`（链路客户端）、`src/apiserver`（连接令牌、定向提示、在线状态、事件入库、旧路由下线）、新增链路网关（Go）、新增 `contracts/runner-link/v1`、部署（四层入口、NATS）
 关联：[architecture.md](./architecture.md)、[interactive-claude-runner-design.md](./interactive-claude-runner-design.md)、[realtime-control-plane-stream.md](./realtime-control-plane-stream.md)、[run-event-retention-proposal.md](./run-event-retention-proposal.md)、[postgres-runtime-settings.md](./postgres-runtime-settings.md)
@@ -91,7 +91,7 @@ runner 只主动发出站 HTTPS，路径是 Cloudflare → nginx → apiserver�
 | D12 | 第一版事件 payload 用 JSON 字节（§5.1） | 服务端本来存的就是 jsonb，客户端收的也是 JSON，避免重复定义 |
 | D13 | 长尾的结果回报原样转发给现有内部路由（§5.6） | 业务逻辑和测试都不用动 |
 | D14 | agent 工具 API、注册、附件、二进制下载继续走 HTTPS（§4） | 它们不属于守护进程协议 |
-| D15 | 所有改动按开关分批合入 main：服务端的链路能力只新增、不改变现有 HTTP 行为；runner 的链路模式默认关闭；切换由服务端开关 `RUNNER_LINK_REQUIRED` 触发（§11.3） | main 每天有上百次合入，长期分支不可行；切换和首选回滚都只是翻一个开关 |
+| D15 | 所有改动按开关分批合入 main：服务端的链路能力只新增、不改变现有 HTTP 行为；runner 的链路模式默认关闭；切换由服务端开关 `RUNNER_LINK_REQUIRED` 触发（§11.3；实现上是运行时开关，见 §15.1） | main 每天有上百次合入，长期分支不可行；切换和首选回滚都只是翻一个开关 |
 
 ---
 
@@ -219,6 +219,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - **每个请求带 `request_id`，重发返回同一个结果。**
   - 取消息：同一个进程再来取、而它手上没有正在执行的那条时，立即重新投递，不再等 300 秒租约过期（`runner-api.controller.ts:4160`、`:480`）。runner 本来就按 turnId 去重。
   - 领会话：重试时返回同一个会话，取代现在事后靠 reclaim 对账。代码里已有先例：`TASK_RUN_REQUEST_IN_PROGRESS`（`src/runner-go/transport.go:176`）。
+  - 实现上，取消息和领会话没拿到应答时，下一次沿用原来的 `request_id`，直到拿到应答为止，见 §15.4。
 - **取消息时的现场判断全部保留：** 插队顺序（`runner-api.controller.ts:4169`）、插话只给正在运行的那一轮、账号暂停检查、按本次请求声明的能力决定是否下发。
 - **`after_seq`。** 有顺序依赖的请求要带上它，例如 turn 完成必须在投递回执落库之后处理。服务端先确认该会话已经持久化到 `after_seq`，再处理请求。
 - **错误统一带 `code`、`retryable`、`retry_after`。** 数据库资源类故障一律回可重试错误，不再回 500。
@@ -239,7 +240,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 - **发送与确认。** runner 按会话发 `EventBatch{session, events[seq…]}`，服务端写入成功后回 `EventAck{session, durable_seq, rejected[]}`。
 - **本地缓冲。** runner 只删已确认的部分。未确认的先放在内存里（每会话 8MB、总共 256MB），超出后写到磁盘（例如上限 2GB）。
-- **seq 续接。** 会话开始或重新开始时，从"服务端 durable_seq 和本地最大 seq 两者中较大的那个"加 1 开始，并先补发积压。否则，撞号的事件会被 `skipDuplicates` 静默跳过。
+- **seq 续接。** 会话开始或重新开始时，从"服务端 durable_seq 和本地最大 seq 两者中较大的那个"加 1 开始，并先补发积压。否则，撞号的事件会被 `skipDuplicates` 静默跳过。实现上服务端遇到同一 seq 上不同的事件时照常确认，但记错误日志并计数，见 §15.7。
 - **坏事件单独拒绝。** 服务端在这个 seq 上写一条墓碑占位，后面的事件照常写入。
 - **额度（`Credit`）。** 网关按入库队列的深度发放额度。额度用完时，runner 只放慢发送，仍照常读取引擎的 stdout（`src/runner-go/session.go:830`）；进度类事件合并，实时类事件丢弃。
 - **提交节奏。** 每个会话约 1–3 秒提交一次；遇到边界事件（回复结束、工具结果、状态变化）立即提交。
@@ -254,7 +255,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 ### 5.10 大块数据
 
 - 附件、产物继续走现有的 HTTPS 接口。
-- 超过约 64KB 的工具输出也不进链路，事件里只放引用。引用格式在 v1 里就定下来，以后换成对象存储预签名 URL 时，runner 不需要换协议。
+- 超过约 64KB 的工具输出也不进链路，事件里只放引用。引用格式在 v1 里就定下来，以后换成对象存储预签名 URL 时，runner 不需要换协议。这一条没有实现，见 §15.2。
 
 ### 5.11 演进
 
@@ -302,7 +303,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - **新表 `runner_presence`（UNLOGGED）。** 字段包括 `runner_id`、`process_id`、`gateway_id`、`last_beat_at`、`link_state`、事实哈希、对账哈希。每次心跳 upsert 一行，每单元约 500 次/秒。
 - **读取统一收口。** 现在有约 69 处（分布在 23 个文件里，2026-10-25 统计）直接读 `lastHeartbeatAt`，统一改成调用在线状态接口；`runner.last_heartbeat_at` 降为低频记录，例如每 5 分钟写一次。
 - **启动宽限期。** UNLOGGED 表在主库崩溃或主备切换后会被清空，所以 reaper 启动后有一段宽限期（例如 3 分钟），期间不回收任何会话。
-- **大面积断线时暂停回收。** 如果单元内短时间有超过一定比例（例如 20%）的 runner 同时失联，或者在线状态写入出现异常，reaper 就暂停回收。这是把现有"数据库出问题时不把沉默当证据"的规则（`transaction-retry.ts:129`）推广开。
+- **大面积断线时暂停回收。** 如果单元内短时间有超过一定比例（例如 20%）的 runner 同时失联，或者在线状态写入出现异常，reaper 就暂停回收。这是把现有"数据库出问题时不把沉默当证据"的规则（`transaction-retry.ts:129`）推广开。实现上按"漏了一次心跳"计数，而不是按 90 秒离线线计数，见 §15.6。
 
 ### 6.6 事件入库
 
@@ -325,7 +326,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - **链路客户端**：拨号时遵循 `HTTPS_PROXY`；TLS；重连用带全抖动的指数退避，从 1s 起、上限 60s，并遵守 `Close.retry_after`；支持续传。
 - **`doVia` 改走链路**（`src/runner-go/transport.go:285`），所有守护进程调用随之迁移。链路模式由开关控制，默认关闭（D15）：服务端的切换开关打开、或收到 `UPGRADE_REQUIRED` 时切到链路，`Welcome` / `HeartbeatAck` 说回到 HTTP 时退回。
 - **inbox poller**：claude、codex、codex app-server、kimi、opencode、antigravity 这 6 处，先收成一个公共组件，再改成由提示驱动。
-- **事件流**：确认、额度、内存缓冲与落盘、seq 续接；实时流支持停发。
+- **事件流**：确认、额度、内存缓冲与落盘、seq 续接；实时流支持停发。turn 完成通知在发出之前也先写入本地暂存，重启后先补发，见 §15.8。
 - **心跳**：改用事实哈希。
 - **自更新**：`Welcome` 和 `HeartbeatAck` 下发指定版本；二进制仍从 `/dl` 下载并校验摘要（现有逻辑）。
 - **`orbit doctor`**：检查链路连通性、TLS、代理、RTT，并明确报告"WebSocket 被代理拦截"。
@@ -351,6 +352,8 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 | 实时增量 | 产生约 15 万条/秒，只在有人看时转发后约 1 万条/秒 | 每条约 100 字节 |
 | 上行带宽 | 每秒几 MB | 大块数据不走连接 |
 
+apiserver 进程数和数据库规格按 O3 的测量补齐，见 §15.3。
+
 ---
 
 ## 10. 故障模式
@@ -360,7 +363,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 | 网关节点宕机 | runner 带全抖动退避，重连到其他节点并续传；大面积断线时暂停回收，避免误判 |
 | 后端发布或宕机 | 网关重试幂等请求，runner 不断线 |
 | NATS 故障 | 提示和实时流降级，由心跳兜底；持久事件不受影响 |
-| Postgres 主库切换 | 写库返回可重试错误，runner 先缓冲在内存、满了落盘；在线状态有宽限期，配合"大面积断线时暂停回收" |
+| Postgres 主库切换 | 写库返回可重试错误，runner 先缓冲在内存、满了落盘；在线状态有宽限期，配合"大面积断线时暂停回收"；主备切换不能丢已确认的提交，见 §15.5 |
 | 在线状态写入异常 | reaper 暂停 |
 | 在途响应丢失 | 带同一个 `request_id` 重发，拿回同一个结果 |
 | 大量 runner 同时重连 | 全抖动退避 + 网关握手限速；`Welcome` 直接带上"有活的会话列表"，避免每个会话都去查一遍 |
@@ -400,7 +403,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 1. 确认生产上的 runner 都已是支持链路模式的版本；切换步骤先在 staging 复验。
 2. 打开"暂停派发"，等所有正在运行的 turn、集成任务、merge/commit 跑完（D8）。看板上列出剩余项和各自已运行的时长。
-3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。
+3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。实现上开关是运行时的，用 `PUT /api/admin/runner-link-required` 打开，1 秒内生效，不用部署；返回 `UPGRADE_REQUIRED` 的是其中 44 个，见 §15.1。
 4. runner 的处理：
    - 支持链路的 runner 收到 `UPGRADE_REQUIRED` 后，立即切到链路模式；
    - 还不支持的版本会触发自更新，升级后再切换。自更新最长等 10 分钟，此时没有 turn 在跑，`updateWhenNoTurnInFlight` 不会拦住；也可以手动执行 `orbit upgrade`。
@@ -411,9 +414,19 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 ### 11.4 回滚
 
-- **首选：关闭切换开关。** 旧路由恢复，runner 按 `Welcome` / `HeartbeatAck` 里的模式退回 HTTP。
+- **首选：关闭切换开关。** 旧路由恢复，runner 按 `Welcome` / `HeartbeatAck` 里的模式退回 HTTP。开关是运行时的，用 `PUT /api/admin/runner-link-required` 关，1 秒内生效，不用部署，见 §15.1。
 - **第二道退路：版本回滚。** 服务端回到 vN-1，`/runner/release` 指定 vN-1 并标记回滚（`src/runner-go/selfupdate.go:420`），runner 降级后重新走 HTTP。
 - 两种回滚都要在 staging 完整演练一次。
+
+runner 本地的两种暂存，回滚和降级时这样处理：
+
+- **持久事件暂存（`~/.orbit/link-spool`；设了 `ORBIT_HOME` 的 runner 在 `$ORBIT_HOME/link-spool`，下同）。** 链路模式的 runner 停止时，未确认的持久事件留在暂存里。从 34mumXbJjOvZUwNmDNzmY 起，runner 接管会话时不论链路模式还是 HTTPS 模式（包括 `ORBIT_LINK_MODE=off`），都先按原 seq 把暂存发出去，发完再产生新事件，并从“服务端 MaxSeq 和暂存最大 seq 中较大的那个”加 1 编号。关闭切换开关（首选回滚）不需要额外步骤：停止时如果链路不通、HTTPS 没被拒，runner 在停止的宽限时间内改走 HTTPS 发完，发不完的留在暂存，由下一个进程先发。
+
+**版本回滚：降级到没有 B8 的 runner 版本之前，先确认暂存为空。** 旧版本读不了暂存，会从服务端 MaxSeq+1 编号，占掉暂存事件的 seq；有 B8、但早于 34mumXbJjOvZUwNmDNzmY 的版本，在关了链路模式（`ORBIT_LINK_MODE=off`，或 config.json 里的 `"linkMode": "off"`）的 runner 上也是这样。这些事件以后存不进去：服务端只记错误日志，并计入 `orbit_run_event_seq_conflicts_total`（§15.7）。暂存超过 72 小时没动过，有 B8 的 runner 进程启动后会把它删掉；vN 删之前按会话在 runner 日志里写明条数和 seq 范围。顺序：先关切换开关，让 runner 继续以 vN 跑 HTTPS；在每台 runner 上确认 `find ~/.orbit/link-spool -name '*.jsonl' | wc -l` 为 0，不为 0 时子目录名就是会话 id（UUID 形式），给这些会话各发一条消息，让 runner 接管它，暂存先发；全部为 0 后，再让 `/runner/release` 指定 vN-1。降级后才发现暂存不为空：不要删暂存，先让这台 runner 回到 vN，接管会话时暂存先发；旧版本占掉的 seq 上的事件已无法恢复，看服务端的冲突日志确认丢了哪些。
+
+- **turn 完成通知的暂存（`~/.orbit/link-spool/<会话 id>/turn-complete-<turn id>.json`）。** 从 34mwBTpOPo3S9LM2SXs10 起，runner 发出一个 turn 的完成通知之前，先把它写进会话的暂存目录，控制面应答后删除；只有 runner 停止或被杀时还没拿到应答，才留给下一个进程（§15.8）。下一个进程启动时接管名下所有未结束的会话，在会话的暂存事件存完之后、第一次取消息之前，以自己的租约补发留下的完成通知，所以已经结束的 turn 不会再交给引擎。链路模式和 HTTPS 模式（包括 `ORBIT_LINK_MODE=off`）都这样。同一任务还让空闲会话的暂存事件在 runner 启动时就发出，不再等下一次领取。关闭切换开关不需要额外步骤：停止时如果链路不通、HTTPS 没被拒，完成通知和暂存事件一样在停止的宽限时间内改走 HTTPS，没拿到应答的留给下一个进程补发。
+
+**版本回滚：降级到不含 34mwBTpOPo3S9LM2SXs10 的 runner 版本之前，还要确认没有留下的完成通知，事件暂存也要为空。** 旧版本不读这些文件：完成通知丢了、服务端仍认为在执行的 turn，会带着续写重新交给引擎，引擎在已经结束的 turn 上再做一遍。事件不丢，但会重复执行：多耗额度，用户看到第二段回答，还可能在工作区里重复操作。这些版本也还有 34mwBTpOPo3S9LM2SXs10 修掉的两条暂存丢失途径：空闲会话的暂存要等下一次被领取才发，超过 72 小时没动过就会在 runner 进程启动时被删掉；暂存分段在发送途中被强杀，这一段就丢了。所以降级到这些版本时，即使是有 B8、没关链路模式的版本，也按上面的顺序先让事件暂存为空，再在每台 runner 上确认 `find ~/.orbit/link-spool -name 'turn-complete-*.json' | wc -l` 为 0；不为 0 时子目录名同样是会话 id，给这些会话各发一条消息，让 runner 接管它，先补发完成通知。降级后才发现不为 0：旧版本已经重新交给引擎的 turn 无法撤回；文件不用删，回到 vN 后补发的完成通知对已经结束的 turn 不起作用。
 
 ### 11.5 自托管用户
 
@@ -459,3 +472,103 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 | UNLOGGED 表在故障后被清空 | 启动宽限期 + 大面积断线时暂停回收 |
 | 跨境网络质量 | 影子期实测后再定机房 |
 | runner 首次引入外部 Go 依赖（protobuf、WebSocket 库） | 按 [dependency-security.md](./dependency-security.md) 审查 |
+
+---
+
+## 15. 实现与设计的差异
+
+下面各条是实现落地后，和上文设计不一样或设计里没写到的地方，每条注明出处任务，并按项目分支 4a493f6b8（2026-10-27）上的代码核对过。正文相关的地方有一句指向这里；两处说法不一致时，以本节为准。
+
+### 15.1 `RUNNER_LINK_REQUIRED` 是运行时开关
+
+出处：D0（34lqlVVjIXZRmKyCWzATR）。涉及 D15、§11.3、§11.4。
+
+- 开关是数据库里的一行（表 `runner_link_switch`，迁移 0446），不是部署时设的环境变量。登录的管理员用 `GET` / `PUT /api/admin/runner-link-required` 查询和翻转（不接受访问令牌），不用重新构建，也不用重启或部署。
+- 1 秒内生效：处理 `PUT` 的 apiserver 进程立即按新值应答，其他进程最多 1 秒后重读。网关每秒读一次 `GET /api/runner/link/mode`，之后的 `Welcome` 和每个 `HeartbeatAck` 都带新模式：连着网关的 runner（包括影子连接）在下一次心跳时得知；打开时，走 HTTPS 的 runner 也会在下一次守护进程调用被拒时得知。
+- 读不到时保持上一次的值：数据库或路由不可用时，各 apiserver 进程和网关都按上一次读到的值应答，不来回切换。进程启动后还没读到过时，按关闭处理（网关告诉 runner `MODE_HTTP`）。
+- 打开时，runner-api 主控制器的 49 个路由（2026-10-25 统计）里，44 个守护进程路由对 HTTPS 调用返回 426 `UPGRADE_REQUIRED`，并提示执行 `orbit upgrade`；注册的 3 个（register、device/start、device/poll）和附件的 2 个按 D14 留在 HTTPS，照常应答。§11.3 第 3 步说"全部旧守护进程路由（当前 49 个）"统一返回 `UPGRADE_REQUIRED`，实际返回的是这 44 个。带 `X-Orbit-Runner-Caller` 标记的调用（`orbit mcp`、Antigravity 审批钩子、CLI 命令）也照常处理，守护进程从不带这个标记。
+- 网关的 `LINK_MODE=link` 会不看开关，一直告诉 runner `MODE_LINK`。生产网关要保持默认的 `http`（跟随开关），否则关开关时 runner 不会退回 HTTP。
+
+### 15.2 大载荷没有按引用传输
+
+出处：B8（34bsPlVgY066plLgvdROj），以及协调者 2026-10-25 在 B8 上的评论。涉及 §5.10。
+
+- §5.10 说超过约 64KB 的工具输出不进链路、事件里只放引用、引用格式在 v1 定下。这没有实现，proto 的 `Event` 也没有引用字段。
+- B8 的临时做法（`src/runner-go/link_events.go`、`src/runner-go/link_events_kind.go`）：
+  - 一个 `EventBatch` 最多 500 条事件、payload 合计不超过 1 MiB；单条超过 1 MiB 的事件单独成批。编码后超过 256 KiB 的帧照 §5.3 用 `Chunk` 分块传输。
+  - 只有单独成批后帧仍超过链路上限（分块拼接后的帧最大 8 MiB，留 64 KiB 余量）的事件才截断：保留 seq、类型、turn 和不超过 4 KiB 的顶层字段，加上 `omittedBytes`（原 payload 的字节数）和 `omittedFields`（去掉的字段名）。每次截断都写 runner 日志并累计计数。
+- 和 HTTPS 的差别：HTTPS 的事件上报请求体上限是 10 MB（`src/apiserver/src/main.ts`），payload 在链路上限和 10 MB 之间的事件，经 HTTPS 能完整保存，经链路会丢掉大字段的内容。
+- 按引用传输留给后续任务：经 HTTPS 的附件接口上传（D14），入库时解析引用，或在 proto 里加引用字段、读取时解析。它不是 D1 的前置，除非账号所有者另有决定。
+
+### 15.3 单元规格
+
+出处：O3（34m88i2iPbDw1OpBHttrn）的测量。推算过程见 [scripts/runner-link/README.md](../scripts/runner-link/README.md#the-cells-size) 的 "The cell's size"，运维文档见 [self-hosting.md](./self-hosting.md#large-deployments) 的 "Large deployments"。涉及 §9。
+
+§9 只写了网关节点数。O3 按 §9 的高峰负载（1.5 万条连接、约 500 次/秒心跳、约 2 千条/秒持久事件、转发后约 1 万条/秒实时增量），用五分之一负载下测得的每种操作开销线性推算，每个单元：
+
+- **链路网关**：3 个节点，每个 2 核 4 GB，前面是四层负载均衡。
+- **apiserver**：4 个进程，每个 2 GB。高峰时每个进程的主线程 41% 忙，坏一个进程时 54%。
+- **数据库**：8 核、32 GB 内存、独占的高速磁盘。10 秒高峰约 4.2 核，占 53%。
+- **NATS**：1 个节点，1 核。
+
+另外：
+
+- 起多个 apiserver 的做法（在 `docker-compose.override.yml` 里加 `apiserver-2` 等，网关的 `LINK_INTERNAL_API_URLS` 列出全部 apiserver，web 网关的请求仍只到第一个）见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)。
+- 多个 apiserver 上生产之前，要先完成三项前置。2026-10-27 三项都还没完成，在此之前多个 apiserver 只用于压测和 staging。
+  - (a) 34mNe88onMT6k23kHz7ce：reaper、任务定时扫描和自动重试同一时刻只在一个进程上跑；心跳写入失败的保护所有进程都看得到。
+  - (b) 34mNe8DOyUq2wlk81EGlZ：Antigravity 的登录码和 Cursor 的密钥检查，不管心跳落在哪个进程都能送到 runner。
+  - (c) 34mNe8H0YZ4Qkwd0t6jPJ：默认升级流程同时重建 apiserver 副本。
+- 待定：会话实时流要不要分散到所有 apiserver。现在会话流都到第一个 apiserver。按 O3 的估算，第一个 apiserver 加上实时流的转发，高峰时主线程约 87% 忙，超过 60% 的上限；分散到所有 apiserver 时约 52%（坏一个时 70%），但要给 web 网关加一条路由。实时流的开销 O3 只有数量级估算（每条约 0.04 ms），等 C2b（34m88i6i8CQeU4dSuw7HM）在专用机器上测量后再定。
+- 数据库连接池只能用会话模式：心跳语句是命名预编译语句，不能放在事务模式的 pgbouncer 后面，见 [self-hosting.md 的 "Database connections"](./self-hosting.md#database-connections)。
+
+### 15.4 取消息和领会话：没拿到应答就沿用原来的 request id
+
+出处：B2b（34m2PAvGXR3zxVWiQiVAp），协调者 2026-10-26 的裁定。涉及 §5.6。
+
+- B6 的约定是每次调用一个 `request_id`：同一次调用的重发沿用它，下一次调用换新的。一次取消息或领会话的调用最多等 35 秒。
+- B2b 改了其中两处：链路上的取消息（inbox poller）和领会话（领会话循环）没拿到应答时（传输错误、超时、链路断开），下一次取消息或领会话沿用同一个 `request_id`，不论隔了多久；拿到任何应答（一条 turn 或一个会话、"没有"、拒绝）之后才换新的。服务端对同一进程用同一个 id 的重取，原样返回上次交出的那条 turn（控制指令和插话也一样）或领到的那个会话。
+- 原因：应答在提交后丢失、链路又断开超过 35 秒时，换了新 id 的重取拿不回那条控制指令或插话；领会话则会让会话停在"已分给这台 runner、却没有 supervisor"的状态。
+- 其他守护进程调用仍是每次调用一个 id。HTTPS 的调用不带 request id，行为不变。开关关着时，链路连续 5 分钟不可达，runner 会把工作退回 HTTPS，保留的 id 随之作废；开关打开后 HTTPS 被拒，runner 不会退回，id 能撑过任意长的断连。
+
+### 15.5 单元数据库的主备切换不能丢已确认的提交
+
+出处：C1a（34bsPlctk8bxiL0FMsU9S）。涉及 §10。
+
+- runner 收到 `EventAck`（HTTPS 下是事件上报的成功应答）就丢掉自己那份事件，之后这些事件只在数据库里。异步备库接管时可能丢掉最后一刻已确认的提交，这些事件就永久丢了。
+- 所以单元数据库用同步备库（`synchronous_commit = on`，并在 `synchronous_standby_names` 里写明备库），或两个备库加法定数（`ANY 1 (...)`），或切换时不丢已确认提交的托管数据库。备库要放得近：每个写事件的提交都要等它。见 [self-hosting.md 的 "The cell's size"](./self-hosting.md#the-cells-size)。
+- C1a 在 staging 演练的是同步备库的切换，没有丢事件；异步备库的情形没有演练。
+
+### 15.6 reaper 按"漏了一次心跳"计大面积静默
+
+出处：B3 的修复（34mY701NpkuzCFNg9VoiV）；问题由 C1b（34bsPllNT0PRG032Ejecc）的演练发现，修复后由它复验。涉及 §6.5。
+
+- 最初的实现按 90 秒离线线数静默的 runner。同时断开的 runner，最后一次心跳本来就分散在一个心跳周期里，会在 30 秒内一台台越过 90 秒线；头一台越线之后、占比到 20% 之前的扫描，会把已越线 runner 的会话回收掉。C1b 隔离 10 台中的 2 台时，就有一个会话这样被回收。
+- 现在（`src/apiserver/src/runners/runner-presence.ts` 的 `fleetSilence`）：runner 超过 1.5 个心跳周期没有心跳（30 秒周期下是 45 秒，由 `RUNNER_HEARTBEAT_EVERY_MS` 推导）就算静默。分母是最近 645 秒（45 秒加 10 分钟窗口）内有过心跳的 runner，不算标记为 OFFLINE 的，也不算被管理器排空或休眠的托管 runner。静默的占到 20% 时暂停回收，最后一次看到之后再暂停 90 秒。
+- 不变：单个 runner 按 90 秒判离线并回收、20% 的门槛、reaper 启动后 3 分钟的宽限期、心跳写入失败时"沉默不算死亡"的保护（这一条只看本进程，见 §15.3 的前置 (a)）。
+- C1b 在修复后复验了 10 次断线（2 次停网关节点、8 次隔离 10 台中的 2 台），都没有回收会话。
+
+### 15.7 同一 seq 上来了不同的事件：照常确认，但记错误日志并计数
+
+出处：暂存修复（34mumXbJjOvZUwNmDNzmY）。涉及 §5.8。
+
+- §5.8 说撞号的事件会被 `skipDuplicates` 静默跳过。现在服务端（HTTPS 和链路两个入口）发现某个 seq 已经存了另一个事件时，这一批照常确认，这条事件不存，但记一条错误日志，并计入 `orbit_run_event_seq_conflicts_total{door="https"|"link"}`（`GET /api/metrics`，每个 apiserver 进程从启动起各自计数）。
+- 判断是不是同一个事件，只比类型、turn 和 runner 记的毫秒时间，不比 payload：入库会改写 payload，同一事件重发也会对不上。所以同类型、同 turn、同一毫秒的两个不同事件，会被当成重发。
+- 不拒收的理由：这个 seq 已经有别的事件，拒收也存不进去；可重试的拒绝会挡住这个会话后面所有的事件；`EventAck.rejected` 的意思是墓碑占了这个 seq，这里不是；HTTPS 也没有拒收单条事件的办法。
+- 从 34mumXbJjOvZUwNmDNzmY 起，runner 不再在暂存上编号，出现冲突说明是旧版本 runner 所致（§11.4），或者出了故障。
+
+### 15.8 turn 完成通知先写入本地暂存，重启后先补发
+
+出处：34mwBTpOPo3S9LM2SXs10（方案经协调者 2026-10-27 批准）。涉及 §5.6、§7。
+
+- 问题：runner 停止时一个 turn 的完成通知没发出去（链路断开、开关又拒绝 HTTPS；HTTPS 模式下完成通知和 runner 一起丢了也一样），而它的 turn_end 事件留在暂存里，后来存了进去。服务端仍认为这个 turn 在执行，把它带着续写重新交给新进程，引擎在已经结束的 turn 上再做一遍。
+- 现在（`src/runner-go/turn_complete_journal.go`、`src/runner-go/session.go`；服务端代码没改）：
+  - 完成通知发出之前（也在它前面那次事件 flush 之前），先写入 `~/.orbit/link-spool/<会话 id>/turn-complete-<turn id>.json`（写临时文件再改名，权限 0600）。
+  - 控制面应答，或为这个会话拒绝（409/403/404）之后删除。runner 运行中，暂时性的失败会一直重试；遇到明确的拒绝（400/401/413，或 `ORBIT_LINK_MODE=off` 时的 426）也删除，这个 turn 照旧被重新投递。只有 runner 停止或被杀时还没拿到应答，文件才留下。
+  - 下一个进程启动时接管名下所有未结束的会话。会话的 supervisor 先把暂存的事件存完，再以自己的租约补发留下的完成通知，然后才第一次取消息，所以已经结束的 turn 不会再交给引擎。服务端对 turn 的完成是比较并设置，已经生效过的完成通知再发一次不改变任何东西。
+  - 完成通知没写下来时，turn 照旧带着续写重新投递，投递仍是至少一次：runner 在引擎做完之前被杀，或在 turn_end 存进去之后、写文件之前被杀。后一段是读工作区 diff 的时间，34mwBTpOPo3S9LM2SXs10 在 HPC 上实测中位数 12.5–208 毫秒，随工作区大小而变。
+  - 会话没交回这台 runner（已经关闭，或属于别的 runner）时不补发，文件等 72 小时清理，清理前写 runner 日志。
+- 链路模式和 HTTPS 模式都这样，所以 HTTPS 模式的行为也变了：完成通知丢了的 turn 不再重跑。这是项目说明第 11 条（开关关着时行为和以前完全一样）的例外，经协调者批准；没有暂存文件时，两种模式的完成路径和以前一样。
+- 同一任务还改了两处暂存：
+  - runner 启动时，交回给它的空闲会话的暂存事件马上发出，不再等下一次领取；
+  - 暂存分段读进内存后留在磁盘上，直到其中的事件全部存好；发送途中被强杀，下一个进程重发，服务端每个 seq 只存一次。
+- 回滚和降级时怎么处理这些文件，见 §11.4。

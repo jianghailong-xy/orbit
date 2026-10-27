@@ -791,6 +791,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			seq = linkStoredSeqAfterTakeover(sessionCtx, t, sessionID, seq)
 		}
 	}
+	// The turn completions this supervisor sends, kept on disk until the control plane answers them;
+	// those an earlier process kept go before this supervisor's first inbox fetch (turn_complete_journal.go).
+	completions := newTurnCompletions(t, sessionID)
 	// What the buffer numbers its events with: the stream while a link mode can carry them, and
 	// nothing with the link mode off, where every event takes a seq of its own, as it always has.
 	bufferLink := linkStream
@@ -1258,10 +1261,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		handle.cancel()
 		return true
 	}
+	// unansweredAtStop is why a completion stays for the runner's next process: err, when the runner
+	// stopped before the control plane answered it (turn_complete_journal.go).
+	unansweredAtStop := func(err error) error {
+		return completionUnansweredAtStop(err, shutdownCtx.Err() != nil, criticalFlushFence.check() != nil)
+	}
 	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
 	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
+		// stops, or is killed, before the control plane answers leaves it to its next process.
+		completions.keep(req)
 		// Say it while the author is still here. Emitted before anything terminal below: a failed
 		// turn seals event admission on its way out, and events posted after the session goes
 		// terminal are persisted but no longer broadcast — the notice would exist and nobody
@@ -1306,6 +1317,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			if isLeaseOwnershipError(flushErr) {
 				markOwnershipLost(flushErr)
 				stopCurrentEngine()
+				completions.settle(req.TurnID, nil) // the session is another process's now
 				return flushErr
 			}
 			if flushErr != nil {
@@ -1314,12 +1326,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			permitGeneration := pool.permitGeneration(live)
 			if permitGeneration == 0 || !pendingTerminalAck.store(req, permitGeneration) {
 				stopCurrentEngine()
-				return fmt.Errorf("failed-turn completion lost its exact local permit")
+				err := fmt.Errorf("failed-turn completion lost its exact local permit")
+				completions.settle(req.TurnID, unansweredAtStop(err))
+				return err
 			}
 			if !stopCurrentEngine() {
 				pendingTerminalAck.clear(req.TurnID)
-				return fmt.Errorf("failed-turn completion has no provider generation to stop")
+				err := fmt.Errorf("failed-turn completion has no provider generation to stop")
+				completions.settle(req.TurnID, unansweredAtStop(err))
+				return err
 			}
+			// Kept until the supervisor's terminal acknowledgement below is answered.
 			logln("failed-turn completion handed to session supervisor for", sessionID)
 			return nil
 		}
@@ -1342,6 +1359,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				return t.turnComplete(turnCompleteCtx, sessionID, req)
 			},
 		)
+		completions.settle(req.TurnID, unansweredAtStop(err))
 		if isLeaseOwnershipError(err) {
 			markOwnershipLost(err)
 		}
@@ -1408,7 +1426,43 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln(fmt.Sprintf("inbox generation of %s released %s after its engine stopped", sessionID, time.Since(began).Round(time.Millisecond)))
 		return nil
 	}
-	for {
+	// The completions an earlier process kept of this session's turns, because it stopped before the control plane
+	// answered them (turn_complete_journal.go), go now: after the events the spool held, stored above, and before this
+	// supervisor's first inbox fetch, so that no fetch hands a turn whose engine finished it to an engine again. Each is
+	// answered as completeTurn's own: AWAITING_INPUT parks, RUNNING keeps the permit for the follow-up queued behind it,
+	// and a terminal status ends the run, as a failed turn's acknowledgement does.
+	for _, kept := range completions.pending() {
+		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
+			break
+		}
+		permitGeneration := pool.permitGeneration(live)
+		next, err := t.turnComplete(turnAckCtx, sessionID, kept)
+		completions.settle(kept.TurnID, unansweredAtStop(err))
+		if err != nil {
+			switch {
+			case isLeaseOwnershipError(err):
+				completions.log(fmt.Sprintf("runner link: the completion an earlier process kept of turn %s of session %s is dropped: the control plane refused it for the session (%v)",
+					kept.TurnID, sessionID, err))
+				markOwnershipLost(err)
+			case shutdownCtx.Err() == nil:
+				completions.log(fmt.Sprintf("runner link: the completion an earlier process kept of turn %s of session %s is dropped: the control plane refused it (%v); the turn is handed out again, as it was before completions were kept",
+					kept.TurnID, sessionID, err))
+			}
+			break
+		}
+		completions.log(fmt.Sprintf("runner link: turn %s of session %s, which an earlier process finished, is settled from the completion it kept: %s",
+			kept.TurnID, sessionID, next))
+		if terminalTurnCompleteStatus(next) {
+			terminalAckSettled = true
+			status = next
+			leaseResetGeneration = ""
+			break
+		}
+		if !retainsTurnPermit(next) {
+			pool.park(live, permitGeneration)
+		}
+	}
+	for !terminalAckSettled {
 		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
@@ -1566,15 +1620,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			bgEmissionGate.seal()
 			if pool.permitGeneration(live) != ack.permitGeneration {
 				terminalAckErr = fmt.Errorf("failed-turn terminal ack crossed its local permit generation")
+				completions.settle(ack.request.TurnID, unansweredAtStop(terminalAckErr))
 				localDetach()
 			} else if flushErr := flushWithContext(turnAckCtx); flushErr != nil {
 				terminalAckErr = flushErr
+				completions.settle(ack.request.TurnID, unansweredAtStop(flushErr))
 				if isLeaseOwnershipError(flushErr) {
 					markOwnershipLost(flushErr)
 				}
 			} else {
 				syncManagedVolume("a failed turn", execDir)
 				terminalAckStatus, terminalAckErr = t.turnComplete(turnAckCtx, sessionID, ack.request)
+				completions.settle(ack.request.TurnID, unansweredAtStop(terminalAckErr))
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
 				}
