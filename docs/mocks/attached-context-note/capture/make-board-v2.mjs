@@ -1,0 +1,238 @@
+// Writes docs/mocks/attached-context-note/board-v2.html: the second round, after the owner's ruling that the
+// visual weight belongs to what the person typed. Frames from shots/ (c = this round, d = its counts variant),
+// marks from shots/boxes.json, and prototype-v2.patch. render.mjs board-v2.html <names> shoots the parts.
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+const KIT = '/var/tmp/attach-note-mock';
+const WT = '/root/.orbit/worktrees/01a17c4a-2917-730f-b47a-4da0f9b5cd27';
+const DIR = `${WT}/docs/mocks/attached-context-note`;
+mkdirSync(`${DIR}/shots`, { recursive: true });
+copyFileSync(`${KIT}/prototype-v2.patch`, `${DIR}/prototype-v2.patch`);
+const B = JSON.parse(readFileSync(`${KIT}/shots/boxes.json`, 'utf8'));
+
+const patchLines = readFileSync(`${KIT}/prototype-v2.patch`, 'utf8').split('\n');
+const ADDED = patchLines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
+const REMOVED = patchLines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+const pct = (v, of) => `${((v / of) * 100).toFixed(2)}%`;
+
+/** A real frame, copied in, with dashed numbered marks (or pins, for a line too thin to box). */
+function fig(name, marks = []) {
+  copyFileSync(`${KIT}/shots/${name}.png`, `${DIR}/shots/${name}.png`);
+  const b = B[name];
+  const c = b.clip;
+  const m = marks.map(([key, n, { pad = 4, cls = 'good', pin = false, at = '' } = {}]) => {
+    const r = typeof key === 'string' ? b[key] : key(b);
+    if (!r) throw new Error(`${name}: no box ${key}`);
+    if (pin) return `<span class="b-pin ${cls}" style="left:${pct(r.x + r.w / 2, c.width)};top:${pct(r.y + r.h + 1, c.height)}"><span class="m-n">${n}</span></span>`;
+    const style = `left:${pct(r.x - pad, c.width)};top:${pct(r.y - pad, c.height)};width:${pct(r.w + 2 * pad, c.width)};height:${pct(r.h + 2 * pad, c.height)}`;
+    return `<span class="b-mk ${cls} ${at}" style="${style}"><span class="m-n">${n}</span></span>`;
+  }).join('');
+  return `<div class="b-fig"><img class="b-shot" src="shots/${name}.png" alt="">${m}</div>`;
+}
+const px = (name, key) => Math.round(B[name][key].h);
+const ui = (s) => `<span class="ui">${s}</span>`;
+const H_TODAY = px('today-jobs-folded', 'bubble');
+const H_C = px('c-jobs-folded', 'bubble');
+
+const html = `<!doctype html>
+<!-- Design board, round 2 (2026-10-27): the owner's ruling on round 1 (board.html) was "视觉重心应该是用户输入的内容"
+     — the visual weight belongs to what the person typed. So the note leaves the bubble: the bubble is the person's
+     words alone, and Orbit's line hangs under it in the voice of the time under a message. Every picture is a real
+     page, as in round 1: this branch's src/web (main 6880a6fc4) on vite, Chromium 1280 wide (390 for the phone
+     frames), 2x, src/web/ui-migration's fixtures plus a sample conversation. "Today" is the branch; "this round" is
+     a copy with prototype-v2.patch applied; the counts variant is that copy drawing the whole label on the line.
+     Kit: /var/tmp/attach-note-mock (copies in capture/). -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Orbit 附加上下文 · 第二版：视觉重心是你输入的内容</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1440px; }
+  .m-sheet + .m-sheet { padding-top: 0; }
+  .b-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; }
+  .b-phones { display: grid; grid-template-columns: 300px 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .b-stack > * + * { margin-top: 18px; }
+  .b-fig { position: relative; }
+  .b-shot { display: block; width: 100%; border-radius: 10px; background: #fff;
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .b-mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 12px; pointer-events: none; }
+  .b-mk > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .b-mk.br > .m-n { top: auto; bottom: -11px; }
+  .b-mk.tl > .m-n { right: auto; left: -11px; }
+  .b-mk.good { border-color: #16833a; }
+  .b-mk.good > .m-n, .b-list .m-n.good { background: #16833a; }
+  .b-pin { position: absolute; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%);
+           pointer-events: none; }
+  .b-pin::before { content: ''; width: 1.5px; height: 12px; background: #16833a; }
+  .b-pin > .m-n { margin: 0; background: #16833a; box-shadow: 0 0 0 2px #fff; }
+  .b-h { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .b-h .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .b-h .m-k.old { background: #f3f4f6; color: #8f959e; text-decoration: line-through; }
+  .b-cap { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.8; color: var(--text-2); }
+  .b-cap b { color: var(--text-1); }
+  .ui { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; padding: 0 5px;
+        border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .b-rule { margin: 0 0 16px; padding: 12px 16px; border-radius: 8px; background: var(--brand-tint);
+            font-size: 14px; line-height: 1.7; color: var(--text-1); }
+  .b-list { margin: 14px 0 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+            font-size: 12.5px; line-height: 1.8; color: #3f4652; }
+  .b-list li { display: flex; gap: 8px; }
+  .b-list li + li { margin-top: 6px; }
+  .b-list b { color: var(--text-1); }
+  .b-list .dot { flex: none; width: 18px; text-align: center; color: var(--text-3); }
+  .b-stat { display: flex; gap: 26px; margin: 16px 0 0; padding: 12px 16px; border-radius: 8px; background: #fff;
+            border: 1px solid #dde0e6; font-size: 12.5px; color: var(--text-2); }
+  .b-stat b { color: var(--text-1); font-size: 15px; }
+  .b-stat .to { color: #16833a; }
+  .b-old { display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 24px; align-items: center; margin-top: 22px;
+           padding-top: 18px; border-top: 1px dashed #d5d9e0; }
+  .b-ask { padding: 14px 18px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+           font-size: 13px; line-height: 1.85; color: #5c4210; }
+  .b-ask b { color: #3d2b08; }
+  .b-ask .rec { color: #16833a; font-weight: 700; }
+  .b-ask .alt { color: #8a6a2c; font-weight: 700; }
+  .b-files { margin: 18px 0 0; padding: 14px 18px; list-style: none; background: #f5f6f8; border-radius: 8px;
+             font-size: 12.5px; line-height: 1.8; color: #3f4652; counter-reset: step; }
+  .b-files > li { position: relative; padding-left: 30px; }
+  .b-files > li + li { margin-top: 12px; }
+  .b-files > li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 2px;
+                          width: 20px; height: 20px; border-radius: 5px; background: var(--text-1); color: #fff;
+                          font: 700 12px/20px -apple-system, "Inter", sans-serif; text-align: center; }
+  .b-files b { color: var(--text-1); }
+  .b-files ul { margin: 4px 0 0; padding-left: 18px; }
+  .b-files code, .b-cap code, .b-list code, .b-ask code { font-size: 11.5px; }
+</style>
+</head>
+<body class="m">
+
+<section class="m-sheet" id="part-1">
+  <h1 class="m-h1 zh">Orbit 附加上下文 · 第二版：视觉重心是你输入的内容</h1>
+  <p class="m-sub zh" style="line-height:1.85">按你的话改：<b>气泡里只放你打的字</b>，Orbit 加的东西退到气泡下面，和消息下面的时间一个分量。同一份示例数据，全是真实页面：左边是现在的 Web（main 6880a6fc4），右边是改过的同一页面（同目录 <code>prototype-v2.patch</code>）。说明写中文；界面上的字是上线文案，英文。</p>
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">后台任务</span>Orbit 在你的消息后面附上了三个后台任务的状态</div>
+    <div class="b-cols">
+      <div>
+        <div class="b-h zh"><span class="m-k">现在</span>你的话只占气泡最上面一行</div>
+        ${fig('today-jobs-folded', [['note', 1, { cls: '' }]])}
+        <p class="b-cap zh"><b>1</b> 一张 ${px('today-jobs-folded', 'note')}px 的卡占了气泡的大半，粗体标题、蓝边、白按钮，都比你的那句话显眼。</p>
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k rec">这一版</span>气泡还给你的话</div>
+        ${fig('c-jobs-folded', [['bubble', 1, { pad: 3 }], ['head', 2, { pin: true }]])}
+        <ul class="b-list zh">
+          <li><span class="m-n good">1</span><span><b>气泡只装你打的字</b>（还有你传的图和文件）。高度、宽度都由你的话决定，和一条普通消息一模一样。</span></li>
+          <li><span class="m-n good">2</span><span>Orbit 加的退到气泡下面，一行右对齐的灰字：${ui('⊕ Orbit attached: background jobs ›')}。<b>和消息下面的时间同字号、同灰度</b>；不上色，没有框，也没有底色。</span></li>
+          <li><span class="dot">·</span><span>数字（${ui('1 running, 1 ended, 1 failed')}）收进悬停提示和展开后的行里，读屏照样读整句。要不要放回这行，见第 5 张。</span></li>
+          <li><span class="dot">·</span><span>点这一行，在气泡下面展开；再点收起。气泡始终不变。</span></li>
+        </ul>
+        <div class="b-stat zh"><span>气泡高度 <b>${H_TODAY}</b> → <b class="to">${H_C}px</b>（就是一条普通消息）</span><span>Orbit 那一行：<b>12px 灰字</b>，在气泡外</span></div>
+      </div>
+    </div>
+    <div class="b-old">
+      <div>${fig('a-jobs-folded')}</div>
+      <div><div class="b-h zh"><span class="m-k old">上一版 A</span>不用了</div>
+        <p class="b-cap zh" style="margin-top:0">一行，但还在气泡里：气泡被这行撑宽，宽度由它定，不由你的话定；红蓝两色的数字是气泡里最亮的东西。重心还是不在你的话上。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="m-sheet" id="part-2">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">整页</span>同一个窗口（1280×900）、同一段对话：三条消息，每条都带了东西</div>
+    <div class="b-cols">
+      <div><div class="b-h zh"><span class="m-k">现在</span></div>${fig('today-page')}
+        <p class="b-cap zh">一屏只放得下两条消息，两张卡都比问题本身大。</p></div>
+      <div><div class="b-h zh"><span class="m-k rec">这一版</span></div>${fig('c-page')}
+        <p class="b-cap zh">三问三答都在一屏里。<b>一眼先看到的是你问的三句话</b>；灰字是脚注，要找的时候才去看。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="m-sheet" id="part-3">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">展开</span>点那一行之后；卡片里怎么办</div>
+    <div class="b-cols">
+      <div>
+        <div class="b-h zh"><span class="m-k rec">这一版</span>点开</div>
+        ${fig('c-jobs-open', [['bubble', 1, { pad: 3 }], ['panel', 2, { at: 'tl' }]])}
+        <p class="b-cap zh"><b>1</b> 气泡不动，还是你那一句。<b>2</b> 下面展开一块浅灰面板，里面是现有的行（还在跑 / 你不在时结束了，失败的红叉、退出码都在这里），原文在 ${ui('The block, verbatim')} 里。再点那一行收起。</p>
+      </div>
+      <div class="b-stack">
+        <div>
+          <div class="b-h zh"><span class="m-k rec">这一版</span>任务开始卡</div>
+          ${fig('c-card-folded', [['head', 3, { pad: 3 }]])}
+          <p class="b-cap zh"><b>3</b> 任务卡、唤醒行这类卡片里没有「你的话」，卡本身就是 Orbit 的。那一行就是卡底的一行灰字，和上面的 ${ui('Task … · 50m ago')} 一样的分量。</p>
+        </div>
+        <div>${fig('c-card-open')}<p class="b-cap zh">展开在卡里：三条 Wiki 笔记，标题可点。</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="m-sheet" id="part-4">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">其他样子</span>短消息、引用任务、手机、深色</div>
+    <div class="b-cols">
+      <div class="b-stack">
+        <div>${fig('c-multi-folded')}<p class="b-cap zh">短消息 ${ui('继续')}：气泡还是贴着这两个字。带了两块时那行灰字长一些，但它在气泡外，不改变气泡。</p></div>
+        <div>${fig('c-tasks-folded')}<p class="b-cap zh">引用了两个任务：状态也收进悬停提示和展开。</p></div>
+      </div>
+      <div class="b-stack">
+        <div>${fig('c-jobs-folded-dark')}</div>
+        <div>${fig('c-jobs-open-dark')}<p class="b-cap zh">深色：全是现有颜色变量。</p></div>
+      </div>
+    </div>
+    <div class="b-phones" style="margin-top:26px">
+      <div><div class="b-h zh"><span class="m-k rec">这一版</span>390 宽</div>${fig('c-phone-jobs-folded')}</div>
+      <div><div class="b-h zh"><span class="m-k rec">这一版</span>展开</div>${fig('c-phone-jobs-open')}</div>
+      <p class="b-cap zh" style="margin-top:34px">手机宽度：气泡照旧贴着你的字（最多 80% 屏宽），那行灰字放不下就换行。</p>
+    </div>
+  </div>
+</section>
+
+<section class="m-sheet" id="part-5">
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">待定 · 要你拍板</span>那行灰字要不要带上数字？</div>
+    <div class="b-cols">
+      <div>
+        <div class="b-h zh"><span class="m-k rec">不带（推荐）</span></div>
+        ${fig('c-jobs-folded')}
+      </div>
+      <div>
+        <div class="b-h zh"><span class="m-k">带，灰色</span></div>
+        ${fig('d-jobs-folded')}
+      </div>
+    </div>
+    <div class="b-ask zh" style="margin-top:18px">
+      <span class="rec">不带（推荐）</span>：这行说的是「Orbit 加了什么」，不是「结果怎样」。结果回复里会说（这一条就是：哪个分区失败了、要不要重跑）。悬停能看到数字，点开能看到每一个。<br>
+      <span class="alt">带，灰色</span>：不点开就知道有没有失败；代价是这行长一倍，带了两块时更长。不上色，所以不抢你的话。改动只有一行。
+    </div>
+    <ol class="b-files zh">
+      <li><b>Web</b>（最小，这台机器上能验）
+        <ul>
+          <li><code>Transcript.tsx</code>：<code>UserBubble</code> 把那一行从气泡里挪到气泡下面；<code>ControlPlaneNote</code> 那一行只写类型，数字进 <code>title</code> / <code>aria-label</code>。<code>index.css</code> 删掉卡片那套。<code>prototype-v2.patch</code> 就是截图用的改动：2 个文件，+${ADDED} / −${REMOVED}。</li>
+          <li>测试：相关 12 个文件 235 条里 <b>13 条要改</b>，都钉着这次要改的两件事：「注在气泡里」「数字在收起的那行上」。<code>indexCss</code> 通过；OrbitKit 读 web 源码的那几行（${ui('`⊕ Orbit attached: ${kind}`')} 等）都还在。</li>
+        </ul>
+      </li>
+      <li><b>iOS / macOS</b>（同一份 SwiftUI）
+        <ul>
+          <li><code>UserBubbleView</code> 把 <code>AttachedNoteEntry</code> 从气泡里（分隔线下面那一格）挪到气泡下面；<code>AttachedNoteEntry</code> 改成一行灰字。<code>DeliveredMessageTests</code> 里「画在气泡里、不在气泡下」那条断言，正是这次改的设计，跟着改。</li>
+          <li>这台 Linux 编不了 SwiftUI：靠 macOS CI，再在你手机上看一眼。</li>
+        </ul>
+      </li>
+      <li><b>Android</b>
+        <ul>
+          <li><code>TranscriptRowView.kt</code> 把 <code>AttachedNoteCard</code> 挪出气泡、改成一行灰字；<code>AttachedNoteTest.kt</code>、<code>TranscriptDeviceTest.kt:186</code> 的断言跟着改。</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+</section>
+
+</body>
+</html>
+`;
+writeFileSync(`${DIR}/board-v2.html`, html);
+console.log('wrote', `${DIR}/board-v2.html`);
