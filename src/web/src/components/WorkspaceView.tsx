@@ -3460,8 +3460,11 @@ export function WorkspaceView({
         return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
           - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
       })[0];
-    return item?.itemId ? sessionItemHref(session.id, item.itemId) : sessionPath(session.id);
-  }, [sessionPath]);
+    // A session waiting on the owner opens at that item's card, and the list's page goes along too.
+    return item?.itemId
+      ? `${sessionItemHref(session.id, item.itemId)}${listSearch.replace(/^\?/, '&')}`
+      : sessionPath(session.id);
+  }, [sessionPath, listSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
