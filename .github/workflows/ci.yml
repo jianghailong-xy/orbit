@@ -256,10 +256,13 @@ jobs:
             exit 1
           }
 
+  # The orbit package alone takes most of go test's default 10 minutes per package, so the step allows 30, as the
+  # project merge check does. The job's limit sits above that: a test that hangs is stopped by go test, which prints
+  # every goroutine's stack, rather than by the job being cancelled with nothing to show for it.
   go-runner:
     name: Go runner
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -268,7 +271,7 @@ jobs:
           cache-dependency-path: src/runner-go/go.sum
       - name: Test runner
         working-directory: src/runner-go
-        run: go test ./...
+        run: go test -timeout 30m ./...
 
   # The runner link gateway (src/link-gateway), a Go module of its own. -race because it is a server of concurrent
   # connections whose reader, writer and pinger share state.
