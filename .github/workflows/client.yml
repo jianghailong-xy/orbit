@@ -174,7 +174,7 @@ jobs:
         run: |
           bash docs/evidence/ios-http-ip/probe-harness/run.sh 2>&1 | tee probe-output.log
           exit "${PIPESTATUS[0]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ios-http-ip-probe
@@ -240,7 +240,7 @@ jobs:
           { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
             osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
           } >> .sr-probe/shots/outcomes.txt || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: source-refused-shots
