@@ -50,8 +50,6 @@ jobs:
         run: npm run test:docs
       - name: Validate public documentation
         run: npm run docs:check
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Build workspaces
@@ -74,6 +72,25 @@ jobs:
         run: npm run test:upgrade-source-sha
       - name: Test macOS runner signing
         run: npm run test:macos-runner-signing
+
+  # The dependency audit, as a job of its own. As a step of the JavaScript job it ran ahead of
+  # Prisma generation, the build and the workspace tests, so a high advisory published against an
+  # unchanged lockfile skipped every one of them, as it did in run 40490180139 (73d3fec16). The run
+  # still fails when the audit does. npm audits the tree the lockfile describes, not node_modules,
+  # so there is no `npm ci` here. `main`'s branch protection requires `JavaScript`, which no longer
+  # includes the audit; requiring `Dependency audit` as well is the account owner's call, not this
+  # file's.
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
   # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
   #
