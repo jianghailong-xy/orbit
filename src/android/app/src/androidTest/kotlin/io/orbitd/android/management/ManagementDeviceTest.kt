@@ -8,6 +8,7 @@ import android.graphics.Point
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.view.Display
 import android.view.KeyEvent
@@ -829,10 +830,14 @@ class ManagementDeviceTest {
     }
     /**
      * The app's top window (a dialog over the page, else the page), read afresh: TalkBack's focus can be in another
-     * window, and a page that changed under a cached tree would be read as it was.
+     * window, and a page that changed under a cached tree would be read as it was. UiAutomation.clearCache() came in API 34
+     * (on API 33 it threw NoSuchMethodError, A15 F-45). Below it, setServiceInfo() empties the same cache before it applies
+     * the info, so the info is set again as it is. A read without that came back on API 33 with only the top bar of a page
+     * (A15g: Machines & models, the pool and shared links).
      */
     private fun appRoot(): AccessibilityNodeInfo? {
-        automation.clearCache()
+        if (Build.VERSION.SDK_INT >= 34) automation.clearCache()
+        else automation.apply { serviceInfo = serviceInfo }
         return automation.windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() == app.packageName } ?: automation.rootInActiveWindow
     }
 
@@ -906,7 +911,15 @@ class ManagementDeviceTest {
         for (step in 1..20) {
             swipeRight(screen); SystemClock.sleep(1_000)
             if (photograph && step <= 8) capture("talkback-walk-$page-$step")
-            val node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+            var node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+            // A swipe past the last item on screen makes TalkBack 14 (API 33) scroll and stop on a row the window's edge cuts, which
+            // it then brings on screen: until it has, the row's words are past the edge, out of the tree. Read the row once it is there
+            // (A15g, 360×640 dp: 1 s after the swipe, Admin lay cut at the bottom with no words; 0.8 s later it was on screen, "Admin").
+            val settled = SystemClock.uptimeMillis() + 3_000
+            while (node.isClickable && spoken(node).isEmpty() && SystemClock.uptimeMillis() < settled) {
+                SystemClock.sleep(250)
+                node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: break
+            }
             val said = spoken(node)
             val stop = "${Rect().also(node::getBoundsInScreen)} $said"
             if (stop == stops.lastOrNull()) { if (++unmoved >= 2) { report.appendLine("  (the last item)"); break } else continue }
