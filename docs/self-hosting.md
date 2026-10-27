@@ -683,14 +683,9 @@ This was tested with Docker Compose v5.5.1. Versions have treated `extends` from
 differently. `docker compose config apiserver-2` should list both `postgres` and `apiserver` under its `depends_on`.
 
 **Upgrades.** [Upgrading](#upgrading) with `docker compose up -d --build` recreates the other apiservers too, because
-their image is the one it rebuilt. `/upgrade`'s script recreates only the services it names. After it, recreate the
-others yourself, before anything else:
-
-```bash
-docker compose up -d --wait --no-deps --force-recreate apiserver-2   # and apiserver-3 and on
-```
-
-Until then they run the old code against the schema the first apiserver has just migrated.
+their image is the one it rebuilt. So does `/upgrade`'s script. It finds them among the services Compose lists, by
+their names (`apiserver-` and a number), and recreates them once the first apiserver has applied the migrations and is
+healthy. Until then they run the old code against the schema the first apiserver has just migrated.
 
 **Before production.** Each apiserver runs every background job. Most jobs coordinate through the database, so with
 several processes they repeat work but do nothing twice:
@@ -700,7 +695,7 @@ several processes they repeat work but do nothing twice:
 - scheduled wakeups and session requests;
 - mentions and claims.
 
-Three things still assume one process. Until they are fixed, run more than one apiserver for load tests and staging
+Two things still assume one process. Until they are fixed, run more than one apiserver for load tests and staging
 only:
 
 - **The reaper, the task scheduler's sweep and the auto-retry sweep** are written for one process.
@@ -713,7 +708,6 @@ only:
 - **Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the process that took them.
   They reach the runner only through a heartbeat that lands on that same process. The link gateway spreads heartbeats
   over every apiserver, so a code waits several beats, and a key check mostly times out.
-- **`/upgrade`'s script** leaves the other apiservers on the old image (see above).
 
 ### Database connections
 
@@ -898,10 +892,11 @@ runner in their image never updates itself, so each upgrade:
    `orbit-managed-runner:local`, on this host and pushed nowhere;
 3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
    file replaced whole by a rename;
-4. recreates the other services, then the apiserver if that did not recreate it, then `docker-channel`, last.
-   Both read their file only as they start. Until the channel serves the image the apiserver's profile names, the
-   apiserver starts no runner and only waits; in the other order, a channel already on the new image would refuse
-   the previous apiserver and fail a runner it was starting.
+4. recreates the other services, then the apiserver if that did not recreate it, and with it any
+   [other apiservers](#several-apiservers), then `docker-channel`, last. Both read their file only as they start.
+   Until the channel serves the image the apiserver's profile names, the apiserver starts no runner and only waits;
+   in the other order, a channel already on the new image would refuse the previous apiserver and fail a runner it
+   was starting.
 
 Nothing a managed runner is doing is interrupted. A container keeps the image it was made from: the upgrade does not
 stop, drain or restart it, and the channel still reads, stops and removes containers of the previous image. Each

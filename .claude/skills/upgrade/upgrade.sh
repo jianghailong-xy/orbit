@@ -169,6 +169,12 @@ managed_runner_services_up() {
     if [ "$($DC ps -q apiserver 2>/dev/null || true)" = "$MR_APISERVER" ]; then
       echo "==> Recreating apiserver to read the managed runner profile"
       $DC up -d --wait --no-deps --force-recreate apiserver
+      # The other apiservers read it as they start too. They run the apiserver's image, so they were not recreated
+      # either.
+      if [ -n "$APISERVERS" ]; then
+        echo "==> Recreating the other apiservers ($APISERVERS) to read it too"
+        $DC up -d --wait --no-deps --force-recreate $APISERVERS
+      fi
     fi
     echo "==> Recreating docker-channel to read its configuration"
     $DC up -d --wait --no-deps --force-recreate docker-channel
@@ -284,19 +290,25 @@ fi
 # wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
 # keeps this list and the recreate list below the same services.
 SERVICES="apiserver wiki-worker web"
+# The services Compose lists for this deployment, read once for the Docker channel and the other apiservers below.
+COMPOSE_SERVICES="$($DC config --services 2>/dev/null || true)"
 # Managed runners stay as this deployment's .env has them: this script never writes .env. A deployment
 # whose .env switched on the managed-runners-docker profile (a fresh install's scripts/install-server.sh
 # does) runs the Docker channel, which is rebuilt with the rest and recreated after them, and its managed
 # runner image, rebuilt and switched to (the section above). Without that profile, Compose does not list
-# the service and nothing is added. (grep reads to the end, unlike -q: an early exit could stop Compose
+# the service and nothing is added. (grep reads to the end, unlike -q: an early exit could stop printf
 # mid-list with SIGPIPE, which pipefail would read as no channel.) The managed runners' firewall
 # (managed-runner-firewall) is never built, started or recreated here: its rules stay as the install or
 # --enable-managed-runner-firewall left them, and a deployment without it gains none.
 CHANNEL=""
-if $DC config --services 2>/dev/null | grep -x docker-channel >/dev/null; then
+if printf '%s\n' "$COMPOSE_SERVICES" | grep -x docker-channel >/dev/null; then
   CHANNEL=docker-channel
   managed_runners_preflight
 fi
+# The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
+# "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
+# Where Compose lists none, nothing is added.
+APISERVERS="$(printf '%s\n' "$COMPOSE_SERVICES" | grep -xE 'apiserver-[0-9]+' | paste -sd ' ' - || true)"
 echo "==> Building images from source ($SERVICES${CHANNEL:+ $CHANNEL})"
 if [ "$NO_CACHE" -eq 1 ]; then
   $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} $SERVICES $CHANNEL
@@ -330,6 +342,12 @@ if [ "$PULL_BASE" -eq 1 ]; then
 else
   echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
   $DC up -d --wait $SERVICES gateway
+  if [ -n "$APISERVERS" ]; then
+    # Only once the apiserver is healthy, its migrations applied, so the others find none to apply. They run its
+    # image, so a new one recreates them too.
+    echo "==> Recreating the other apiservers ($APISERVERS) now that apiserver is healthy"
+    $DC up -d --wait --no-deps $APISERVERS
+  fi
 fi
 if [ -n "$CHANNEL" ]; then
   managed_runner_services_up
