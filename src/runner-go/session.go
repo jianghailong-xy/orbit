@@ -780,14 +780,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// supervisor, or the process before this one, left unacknowledged in it goes first, and
 	// numbering continues after that. For a session older than link mode the claim's MaxSeq and a
 	// Welcome's durable_seq stop at different places, and numbering takes the later of every one.
+	// With the link mode off the stream holds only what a process in link mode left in the spool:
+	// it goes over HTTPS first all the same, and is never numbered over.
 	var linkStream *linkEventStream
-	if t.link != nil {
-		linkStream = t.link.events.open(sessionID)
+	if streams := t.eventStreams(); streams != nil {
+		linkStream = streams.open(sessionID)
 		defer linkStream.release()
 		seq = linkStream.firstSeq(seq)
 		if linkStream.onLink() {
 			seq = linkStoredSeqAfterTakeover(sessionCtx, t, sessionID, seq)
 		}
+	}
+	// What the buffer numbers its events with: the stream while a link mode can carry them, and
+	// nothing with the link mode off, where every event takes a seq of its own, as it always has.
+	bufferLink := linkStream
+	if t.link == nil {
+		bufferLink = nil
 	}
 	// The engine the session runs on, for the one event the link carries it with (linkEventFateOf).
 	// Kept apart from job, which the outer loop swaps on a cold resume while the emitters run.
@@ -813,7 +821,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The session's emitted events, numbered and buffered for the flush in one step. How long each
 	// stretch of reasoning took is written onto the block that closes it by a clock that sees them in
 	// the order they are buffered (thinking_clock.go).
-	eventBuf := &sessionEventBuffer{next: seq, clock: &thinkingClock{}, link: linkStream,
+	eventBuf := &sessionEventBuffer{next: seq, clock: &thinkingClock{}, link: bufferLink,
 		provider: func() string { return engineProvider.Load().(string) }, soon: make(chan struct{}, 1)}
 	// A coordinator context can be acknowledged only after its compaction boundary is durable on
 	// the control plane. The provider emits and completes on different goroutines, so count under
@@ -1089,6 +1097,26 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 	}
 	emit := emitOn(emissionGate)
+
+	// What the stream still holds, left in the spool by an earlier process or not yet seen stored for an
+	// earlier supervisor of the session, is stored before this supervisor emits anything, whichever way the
+	// session's events go now: it was written first, so it is stored first, and nothing numbered after it
+	// lands ahead of it. The wait ends with the session, its lease or the runner's stop; what is still held
+	// then goes ahead of everything else in every flush after it, and back to the spool if the runner stops.
+	if linkStream != nil {
+		if held, through := linkStream.holding(); held > 0 {
+			spoolCtx, cancelSpool := contextUntilEither(sessionCtx, shutdownCtx)
+			err := flushWithContext(spoolCtx)
+			cancelSpool()
+			if err != nil {
+				logln(fmt.Sprintf("runner link: of the %d events session %s held through seq %d, not all are stored yet (%v); every flush sends them first",
+					held, sessionID, through, err))
+			} else {
+				logln(fmt.Sprintf("runner link: the %d events session %s held through seq %d are stored; its new events are numbered from seq %d",
+					held, sessionID, through, seq))
+			}
+		}
+	}
 
 	// Snappier streaming for interactive: flush every 250ms (vs 1s one-shot).
 	stopFlush := make(chan struct{})

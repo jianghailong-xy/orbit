@@ -60,6 +60,16 @@ func superviseClaudeSessionIn(t *testing.T, pool *sessionPool, execDir string, s
 // is what runLoop's loopCtx is to a supervisor.
 func superviseClaudeSessionUntil(t *testing.T, pool *sessionPool, execDir string, shutdown context.Context, script ...fakeStep) *supervisedSession {
 	t.Helper()
+	return superviseClaudeSessionVia(t, pool, execDir, shutdown, func(_ *supervisedSession, apiURL string) *Transport {
+		return NewTransport(apiURL, "runner-token")
+	}, script...)
+}
+
+// superviseClaudeSessionVia is the same run on the transport start makes, handed the session before its supervisor
+// starts and the stub control plane's URL: a transport with what an earlier process left on this machine, say.
+func superviseClaudeSessionVia(t *testing.T, pool *sessionPool, execDir string, shutdown context.Context,
+	start func(s *supervisedSession, apiURL string) *Transport, script ...fakeStep) *supervisedSession {
+	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	job := claudeSpawnJob(t)
@@ -78,10 +88,11 @@ func superviseClaudeSessionUntil(t *testing.T, pool *sessionPool, execDir string
 	}
 	s.live = live
 	s.execDir = execDir
+	transport := start(s, api.URL)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runInteractiveSession(NewTransport(api.URL, "runner-token"), job, ctx, shutdown,
+		runInteractiveSession(transport, job, ctx, shutdown,
 			s.execDir, nil, pool, live)
 		pool.finish(live)
 	}()

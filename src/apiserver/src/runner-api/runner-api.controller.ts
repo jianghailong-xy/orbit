@@ -355,6 +355,13 @@ import {
   type LinkTombstone,
 } from './link-events';
 import {
+  countRunEventSeqConflicts,
+  describeRunEventSeqConflicts,
+  runEventSeqConflicts,
+  type RunEventDoor,
+  type RunEventSeqConflict,
+} from './run-event-seq-conflicts';
+import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
 } from '../tasks/task-completion-criterion';
@@ -543,6 +550,9 @@ interface IngestOutcome {
   events: NormalizedRunEvent[];
   durable: NormalizedRunEvent[];
   alreadyStored: number;
+  /** The batch's events not stored because their seq holds another event, and the door they came by. */
+  seqConflicts: RunEventSeqConflict[];
+  door: RunEventDoor;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -606,14 +616,20 @@ const TURN_COMPLETE_TRANSACTION_TIMEOUT_MS = 120_000;
 // the whole batch relies on is unchanged.
 const CREATE_MANY_CHUNK_ROWS = 256;
 
-/** Run one createMany in bounded chunks so no single compile can stall the event loop. */
+/**
+ * Run one createMany in bounded chunks so no single compile can stall the event loop. Returns how many rows the chunks
+ * inserted, or null when one of them does not say.
+ */
 async function chunkedCreateMany(
   insert: (data: never[]) => Promise<unknown>,
   data: never[],
-): Promise<void> {
+): Promise<number | null> {
+  let inserted: number | null = 0;
   for (let offset = 0; offset < data.length; offset += CREATE_MANY_CHUNK_ROWS) {
-    await insert(data.slice(offset, offset + CREATE_MANY_CHUNK_ROWS));
+    const count = ((await insert(data.slice(offset, offset + CREATE_MANY_CHUNK_ROWS))) as { count?: unknown } | null)?.count;
+    inserted = inserted !== null && typeof count === 'number' ? inserted + count : null;
   }
+  return inserted;
 }
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
@@ -7260,6 +7276,12 @@ export class RunnerApiController {
       const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
+      // What was left out is the same event sent again, or another at its seq, which nothing will store: that one is
+      // logged and counted once the batch commits (run-event-seq-conflicts.ts). Over HTTPS it is found by the insert.
+      let seqConflicts = stored.size > 0
+        ? await runEventSeqConflicts(tx, sessionId, batch.filter((e) => stored.has(e.seq)
+          && !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e)))
+        : [];
       // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
       // text_delta / thinking_delta are streaming-animation increments: broadcast them
       // live (below) but DON'T persist them — the full reply is durably saved as the
@@ -7377,7 +7399,8 @@ export class RunnerApiController {
         // has nothing to swallow. A batch that is nothing but pings stores nothing at all
         // (chunkedCreateMany's loop does not run on an empty list). A merged link call inserts
         // the rows built here itself, every session's in one statement (MergedIngest.runEvents).
-        const rows = durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
+        const storable = durable.filter((e) => !isNoiseSystemEvent(e));
+        const rows = storable.map((e) => ({
           sessionId,
           seq: e.seq,
           type: e.type,
@@ -7388,10 +7411,16 @@ export class RunnerApiController {
           ingestedUnderLeaseGeneration: leaseOwner,
         }));
         if (merged?.runEvents) merged.runEvents.push(...rows);
-        else await chunkedCreateMany(
-          (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
-          rows as never[],
-        );
+        else {
+          const inserted = await chunkedCreateMany(
+            (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
+            rows as never[],
+          );
+          // Over HTTPS a batch is taken whole: a row skipped here is the same event sent again, or another at its seq.
+          if (!link && inserted !== null && inserted < rows.length) {
+            seqConflicts = await runEventSeqConflicts(tx, sessionId, storable);
+          }
+        }
         // Persisted conversation/background activity is liveness. Session-level system events
         // are different: every reclaimed idle session emits init/resumed when its runner restarts,
         // and counting that handshake would move every waiting session to "now" and scramble the
@@ -7904,7 +7933,10 @@ export class RunnerApiController {
           },
         });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size };
+      return {
+        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        seqConflicts, door: link ? 'link' : 'https',
+      };
     };
     if (merged) return ingest(merged.tx);
     const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
@@ -7925,6 +7957,14 @@ export class RunnerApiController {
   ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
+    if (eventOutcome.seqConflicts.length > 0) {
+      // Each of them is an event nothing will store, acknowledged with the batch (run-event-seq-conflicts.ts).
+      const { seqConflicts, door } = eventOutcome;
+      const total = countRunEventSeqConflicts(door, seqConflicts.length);
+      this.logger.error(`session ${sessionId}: ${seqConflicts.length} event(s) sent over ${door === 'link' ? 'the runner link' : 'HTTPS'} `
+        + `are not stored, because the session already holds another event at their seq; ${describeRunEventSeqConflicts(seqConflicts)} `
+        + `(${total} such event(s) over ${door === 'link' ? 'the link' : 'HTTPS'} since this server started)`);
+    }
 
     if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's
