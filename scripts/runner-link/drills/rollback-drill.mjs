@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// The API calls rollback-drill.sh, lost-answer-drill.sh and release-outage-drill.sh make on the staging stack (README.md beside this file): as its
+// The API calls rollback-drill.sh, lost-answer-drill.sh, release-outage-drill.sh and mass-disconnect-drill.sh make on the staging stack (README.md beside this file): as its
 // owner, who is also its administrator, or as the drill runner. Each prints one line of JSON and exits non-zero on an
 // answer outside 2xx.
 //
 //   node rollback-drill.mjs <origin> <state dir> switch on|off|get
+//   node rollback-drill.mjs <origin> <state dir> enrollment-token <label>
 //   node rollback-drill.mjs <origin> <state dir> workspace <runner id> <work dir> <name>
 //   node rollback-drill.mjs <origin> <state dir> session <workspace id> <prompt>
 //   node rollback-drill.mjs <origin> <state dir> turn <session id> <content>
@@ -62,6 +63,12 @@ switch (command) {
     out = args[0] === 'get'
       ? await call('GET', '/admin/runner-link-required', { token })
       : await call('PUT', '/admin/runner-link-required', { token, body: { required: args[0] === 'on' } });
+    break;
+  }
+  case 'enrollment-token': {
+    // One more runner's registration: an enrollment token is good for one.
+    const enrollment = await call('POST', '/runners/enrollment-tokens', { token: await owner(), body: { label: args[0] } });
+    out = { token: enrollment.token };
     break;
   }
   case 'workspace': {
