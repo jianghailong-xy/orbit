@@ -3286,6 +3286,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		// The agent verbs ride the same gate as the session ones and have no headless form:
 		// no service-token scope names them, so they never appear outside a live session.
 		specs = append(specs, agentCLICapabilities...)
+		// And the runner list beside them, which answers for their --runner-id.
+		specs = append(specs, runnerCLICapabilities...)
 	} else if asUser {
 		specs = append(specs, sessionCLICapabilities...)
 	} else if includeHeadlessSession {

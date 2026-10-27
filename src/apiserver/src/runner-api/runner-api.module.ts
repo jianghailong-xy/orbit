@@ -13,6 +13,7 @@ import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confi
 import { RunnerTaskProgressController } from './runner-task-progress.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerRunnersController } from './runner-runners.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
@@ -85,6 +86,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,
+    // The account's runners, for the runnerId the agent routes above take (runner-runners.controller.ts).
+    RunnerRunnersController,
     RunnerProvidersController,
     RunnerNotifyController,
     RunnerProjectsController,
