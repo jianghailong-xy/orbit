@@ -44,6 +44,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
         "infrastructure" -> InfrastructureSettings(api, revision, route.recordId, open, back)
+        "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
@@ -70,7 +71,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
     } ?: Infrastructure.TITLE
-    "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
+    "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
@@ -83,8 +84,17 @@ internal fun settingsSharedLinksValue(active: Int): String = if (active > 0) "$a
 /** SettingsHome.accessTokensValue: "3 active" — the tokens that still work. */
 internal fun settingsAccessTokensValue(active: Int): String = if (active > 0) "$active active" else "None"
 
-/** SettingsCopy's smart model selection switch: the one switch on the list whose name doesn't say what it does, so the web's hint
- * goes under it. */
+/** SettingsHome.title(.sessions): Preferences' first row, which opens the account's five session settings, and that page's title. */
+internal const val SESSIONS = "Sessions"
+
+/** SettingsCopy's hints for the Sessions page's other rows, each its row's footer there, in the web Settings page's words. */
+internal const val DEFAULT_PERMISSION_HINT = "The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
+internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+internal const val SUGGESTED_REPLIES = "Suggested replies"
+internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
+
+/** SettingsCopy's smart model selection switch: its name doesn't say what it does, so the web's hint is its footer on the Sessions
+ * page. */
 internal const val SMART_MODEL_SELECTION = "Smart model selection"
 internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
 
@@ -109,16 +119,34 @@ internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrN
 /** SettingsHome.signOutTitle: no server name — the instance is the app's business, and the account is on the screen behind it. */
 internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 
+/** One preference key written alone, as Settings and its Sessions page write theirs. What the server then has, read back after the
+ * write, is what the whole app follows: the theme, smart model selection and session recaps each have a page-wide answer. */
+@Composable
+private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord): (String, JsonPrimitive) -> Unit {
+    val appearance = LocalAppearanceChanged.current
+    val smartSelectionChanged = LocalSmartSelectionChanged.current
+    val recapsChanged = LocalSessionRecapsChanged.current
+    val scope = rememberCoroutineScope()
+    return { key, value ->
+        scope.launch {
+            if (!record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) }) return@launch
+            val saved = (record.value as? JsonObject)?.get("preferences") as? JsonObject
+            when (key) {
+                "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
+                "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
+                "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
+            }
+        }
+    }
+}
+
 /** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
     deviceAlerts: () -> Boolean?) {
-    val appearance = LocalAppearanceChanged.current
-    val smartSelectionChanged = LocalSmartSelectionChanged.current
-    val recapsChanged = LocalSessionRecapsChanged.current
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
-    val scope = rememberCoroutineScope()
+    val preference = rememberPreferenceWrite(api, record)
     val user = record.value as? JsonObject
     val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     val photo = rememberAccountPhoto(api, user)
@@ -157,18 +185,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         }
     }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
-    fun preference(key: String, value: JsonPrimitive) {
-        scope.launch {
-            if (!record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) }) return@launch
-            // What the server now has, read back after the write, is what the whole app follows.
-            val saved = (record.value as? JsonObject)?.get("preferences") as? JsonObject
-            when (key) {
-                "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
-                "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
-                "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
-            }
-        }
-    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         val name = user?.text("name")?.ifBlank { null } ?: user?.text("email").orEmpty()
         Column(Modifier.fillMaxWidth().clickable(enabled = user != null, role = Role.Button) { page("profile") }
@@ -195,24 +211,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
                 Button(onClick = { page("notifications") }) { Text("Turn on") }
             }
         }
-        SettingsGroup("Sessions") {
-            SettingsPicker("Default permission", R.drawable.ic_permission, preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
-                record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
-            SettingsSwitch("Session orchestration", R.drawable.ic_orchestration, (preferences["enableOrchestration"] as? JsonPrimitive)?.booleanOrNull != false,
-                record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
-            // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
-            SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
-                record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
-            // The server's rolling recap on a session's list row (0418); absent means on. One switch for the whole account, so
-            // turning it off holds on the phone and on the web at once — the moment the server has taken the change, the lists
-            // behind Settings redraw without it.
-            SettingsSwitch(SESSION_RECAPS, R.drawable.ic_contents, sessionRecapsEnabled(preferences), record.ready,
-                hint = SESSION_RECAPS_HINT) { preference("recaps", JsonPrimitive(it)) }
-            // Off unless the account turned it on; written alone (iOS 9fb3ae6ee), its glyph beside its name (614a21410).
-            SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
-                hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }
-        }
-        // No header: the one row says the group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
+        // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
+        // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
         SettingsGroup(null, footer = Infrastructure.SUBTITLE) {
             val needsYou = runners?.let { infrastructure.attention(it, System.currentTimeMillis()).size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
@@ -220,6 +220,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
                 valueColor = if (needsYou > 0) Ink.amber else null) { page("infrastructure") }
         }
         SettingsGroup("Preferences") {
+            // The account's five session settings are a page of their own, as on iOS (SessionSettings).
+            SettingsLink(SESSIONS, R.drawable.ic_sessions) { page("sessions") }
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
             SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
@@ -248,6 +250,41 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(SETTINGS_SIGN_OUT_TITLE) },
         confirmButton = { TextButton(onClick = { signingOut = false; logout() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { signingOut = false }) { Text("Cancel") } })
+}
+
+/** iOS's Sessions page (SessionSettings): the account's five session settings, in iOS's order, each in a group of its own with the
+ * web's hint as its footer (docs/mocks/ios-settings-order, 2A). Each is written alone the moment it moves; absent on the server means
+ * on, except smart model selection, which is off unless turned on. */
+@Composable
+private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
+    val record = remember(api) { PersonalRecord { api.get("users/me") } }
+    PersonalRecordLifecycle(record, revision)
+    val preference = rememberPreferenceWrite(api, record)
+    val preferences = (record.value as? JsonObject)?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
+    fun on(key: String) = (preferences[key] as? JsonPrimitive)?.booleanOrNull != false
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (record.busy || record.stale || record.error != null) PersonalRecordStatus(record)
+        SettingsGroup(null, footer = DEFAULT_PERMISSION_HINT) {
+            SettingsPicker("Default permission", null, preferences.text("defaultPermissionMode").ifBlank { "auto" }, personalPermissions,
+                record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
+        }
+        SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
+            SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
+        }
+        // Off unless the account turned it on; written alone (iOS 9fb3ae6ee).
+        SettingsGroup(null, footer = SMART_MODEL_SELECTION_HINT) {
+            SettingsSwitch(SMART_MODEL_SELECTION, smartModelSelection(preferences), record.ready) { preference("modelRouting", JsonPrimitive(it)) }
+        }
+        // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md).
+        SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
+            SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+        }
+        // The server's rolling recap on a session's list row (0418). One switch for the whole account, so turning it off holds on
+        // the phone and on the web at once — the moment the server has taken the change, the lists behind Settings redraw without it.
+        SettingsGroup(null, footer = SESSION_RECAPS_HINT) {
+            SettingsSwitch(SESSION_RECAPS, sessionRecapsEnabled(preferences), record.ready) { preference("recaps", JsonPrimitive(it)) }
+        }
+    }
 }
 
 /** A row's glyph, in the label colour as iOS draws it. */
@@ -287,12 +324,13 @@ private fun SettingsValue(title: String, icon: Int, value: String) {
         trailingContent = { SelectionContainer { Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) } })
 }
 
-/** A menu on the row itself, as iOS's pickers are; a write goes out only for a different value. */
+/** A menu on the row itself, as iOS's pickers are; a write goes out only for a different value. No glyph on the Sessions page, as
+ * iOS draws none there. */
 @Composable
-private fun SettingsPicker(title: String, icon: Int, current: String, options: List<Pair<String, String>>, enabled: Boolean, select: (String) -> Unit) {
+private fun SettingsPicker(title: String, icon: Int?, current: String, options: List<Pair<String, String>>, enabled: Boolean, select: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
+        ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = icon?.let { { SettingsIcon(it) } },
             trailingContent = { Text(options.firstOrNull { it.first == current }?.second ?: current, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { expanded = true })
         DropdownMenu(expanded, { expanded = false }) {
@@ -304,10 +342,10 @@ private fun SettingsPicker(title: String, icon: Int, current: String, options: L
     }
 }
 
+/** The Sessions page's switch: the row is the switch, its hint the group's footer. */
 @Composable
-private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, hint: String? = null, change: (Boolean) -> Unit) {
-    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
-        supportingContent = hint?.let { { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
+    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }

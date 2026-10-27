@@ -6,12 +6,13 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case infrastructure, notifications, sharedLinks, accessTokens, changePassword, admin
+    case infrastructure, sessions, notifications, sharedLinks, accessTokens, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
         case .infrastructure: return SettingsHome.title(.infrastructure)
+        case .sessions:       return SettingsHome.title(.sessions)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
@@ -26,20 +27,21 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// value, and the explanation behind it lives on the page it opens — so the view draws exactly this
 /// and nothing of its own — the ChatGPT-style sheet the owner picked from the mockups.
 ///
-/// The rows are the web's Settings and Profile pages, regrouped for a phone: Session defaults and
-/// Session orchestration under Sessions, the Machines & models page — the web's Runners and Providers
-/// pages, made one — on a row of its own, Notifications and Appearance under Preferences,
-/// Profile's email and password under Account with Shared links and Access tokens beside them. The
-/// words are the web's wherever it has one.
+/// The rows are the web's Settings and Profile pages, regrouped for a phone, in the order the owner
+/// picked from docs/mocks/ios-settings-order: first the Machines & models page — the web's Runners
+/// and Providers pages, made one — on a row of its own, since it is the one row that says what needs
+/// you; then Preferences: Sessions (the web's Session defaults and Session orchestration cards, on a
+/// page of their own — `SessionSettings`), Notifications and Appearance; then Profile's email and
+/// password under Account with Shared links and Access tokens beside them. The words are the web's
+/// wherever it has one.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
-        case sessions, machines, preferences, account
+        case machines, preferences, account
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
         case infrastructure
-        case notifications, appearance
+        case sessions, notifications, appearance
         case email, instance, sharedLinks, accessTokens, changePassword, admin
     }
 
@@ -47,7 +49,6 @@ public enum SettingsHome {
     /// would say it twice (docs/mocks/machines-and-models, ⑥-2) — the line under the row is its footer.
     public static func header(_ group: Group) -> String? {
         switch group {
-        case .sessions:    return "Sessions"
         case .machines:    return nil
         case .preferences: return "Preferences"
         case .account:     return "Account"
@@ -57,9 +58,8 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps]
         case .machines:    return [.infrastructure]
-        case .preferences: return [.notifications, .appearance]
+        case .preferences: return [.sessions, .notifications, .appearance]
         case .account:
             let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
             return isAdmin ? rows + [.admin] : rows
@@ -68,12 +68,8 @@ public enum SettingsHome {
 
     public static func title(_ row: Row) -> String {
         switch row {
-        case .defaultPermission: return "Default permission"
-        case .orchestration:     return "Session orchestration"
-        case .modelRouting:      return SettingsCopy.smartModelSelection
-        case .promptSuggestions: return SettingsCopy.suggestedReplies
-        case .recaps:            return SettingsCopy.sessionRecaps
         case .infrastructure:    return AppSection.runners.title
+        case .sessions:          return "Sessions"
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
         case .email:             return "Email"
@@ -88,12 +84,8 @@ public enum SettingsHome {
     /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
     public static func systemImage(_ row: Row) -> String {
         switch row {
-        case .defaultPermission: return "hand.raised"
-        case .orchestration:     return "point.3.connected.trianglepath.dotted"
-        case .modelRouting:      return "sparkles"
-        case .promptSuggestions: return "text.bubble"
-        case .recaps:            return "text.alignleft"
         case .infrastructure:    return AppSection.runners.systemImage
+        case .sessions:          return "bubble.left.and.bubble.right"
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
         case .email:             return "envelope"
@@ -105,20 +97,18 @@ public enum SettingsHome {
         }
     }
 
-    /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, the orchestration, smart model selection, suggested replies and
-    /// session recaps switches — each one for the whole account, so the row is the switch — and the
-    /// two lines that only say something.
+    /// The page a row opens. Nil for the rows that are answered in place: Appearance, a menu on the
+    /// row itself, and the two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
         case .infrastructure: return .infrastructure
+        case .sessions:       return .sessions
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps, .appearance,
-             .email, .instance:
+        case .appearance, .email, .instance:
             return nil
         }
     }
@@ -171,6 +161,38 @@ public enum SettingsHome {
         guard let version, !version.isEmpty else { return nil }
         guard let build, !build.isEmpty else { return "Orbit \(version)" }
         return "Orbit \(version) (\(build))"
+    }
+}
+
+/// The page Settings' Sessions row opens on iOS, top to bottom: the account's five session settings —
+/// the web's Session defaults card and its Session orchestration card — each in a section of its own
+/// with the web's hint as its footer, as the Notifications page's switches have theirs
+/// (docs/mocks/ios-settings-order, 2A). Every one is the whole account's, so it is answered on its
+/// row and opens nothing.
+public enum SessionSettings {
+    public enum Row: String, CaseIterable, Sendable {
+        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
+    }
+
+    public static func title(_ row: Row) -> String {
+        switch row {
+        case .defaultPermission: return "Default permission"
+        case .orchestration:     return "Session orchestration"
+        case .modelRouting:      return SettingsCopy.smartModelSelection
+        case .promptSuggestions: return SettingsCopy.suggestedReplies
+        case .recaps:            return SettingsCopy.sessionRecaps
+        }
+    }
+
+    /// The line under a row: what it does, in the web Settings page's words.
+    public static func footer(_ row: Row) -> String {
+        switch row {
+        case .defaultPermission: return SettingsCopy.defaultPermissionHint
+        case .orchestration:     return SettingsCopy.letSessionsOrchestrateHint
+        case .modelRouting:      return SettingsCopy.smartModelSelectionHint
+        case .promptSuggestions: return SettingsCopy.suggestedRepliesHint
+        case .recaps:            return SettingsCopy.sessionRecapsHint
+        }
     }
 }
 
@@ -285,32 +307,38 @@ public enum SettingsCopy {
     public static let notificationsOffDetail = "Hear when a session finishes or an agent asks for you."
     public static let turnOn = "Turn on"
 
+    // MARK: Default permission (the web page's Session defaults card)
+
+    /// What the mode is for, as the web says it under its "Default permission mode" — the footer of
+    /// the row on iOS' Sessions page.
+    public static let defaultPermissionHint = "The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
+
     // MARK: Session orchestration (the web page's card)
 
-    /// The account's one switch, where a form has room to label and explain it (macOS). On iOS the
-    /// row is the switch, under the row's own name.
+    /// The account's one switch, where a form has room to label and explain it (macOS). On iOS' Sessions
+    /// page the row is the switch, under the row's own name, and the hint is its footer.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
     public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
 
     // MARK: Smart model selection (the web page's Session defaults card)
 
-    /// The account's master switch for smart model selection, off unless turned on. On iOS the row is
-    /// the switch, with the hint under its name, since nothing else on the list says what it does.
+    /// The account's master switch for smart model selection, off unless turned on. On iOS' Sessions
+    /// page the row is the switch and the hint its footer.
     public static let smartModelSelection = "Smart model selection"
     public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
 
     // MARK: Suggested replies (the web page's Session defaults card)
 
-    /// The account's switch for the engine's guess at the next message, on unless turned off. On iOS
-    /// the row is the switch, with the hint under its name, as smart model selection's is.
+    /// The account's switch for the engine's guess at the next message, on unless turned off. On iOS'
+    /// Sessions page the row is the switch and the hint its footer, as smart model selection's is.
     public static let suggestedReplies = "Suggested replies"
     public static let suggestedRepliesHint = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
 
     // MARK: Session recaps (the web page's Session defaults card)
 
     /// The account's switch for the server's rolling recap — the line on a session's list row and the
-    /// Recap card its conversation ends with — on unless turned off. On iOS the row is the switch,
-    /// with the hint under its name, as its two neighbours are.
+    /// Recap card its conversation ends with — on unless turned off. On iOS' Sessions page the row is
+    /// the switch and the hint its footer, as its two neighbours'.
     public static let sessionRecaps = "Session recaps"
     public static let sessionRecapsHint = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
 

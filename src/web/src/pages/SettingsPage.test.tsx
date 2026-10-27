@@ -98,10 +98,10 @@ describe('the way into Machines & models (docs/mocks/machines-and-models, 02)', 
 });
 
 describe('the order of the cards', () => {
-  it('reads as Settings on iOS does: how sessions start, then where agents run, then the alerts and the look, then sharing', () => {
-    // iOS lays the same settings out as one list (SettingsHome in OrbitKit); a card moved here alone
-    // would put the two clients' pages in different orders. Access tokens comes last: the web's alone
-    // until the apps list tokens too.
+  it('reads how sessions start, then where agents run, then the alerts and the look, then sharing', () => {
+    // The phones open with Machines & models instead and keep the session cards on a page of their own
+    // (SettingsHome and SessionSettings in OrbitKit, docs/mocks/ios-settings-order); this page keeps its
+    // order. Access tokens comes last: the web's alone until the apps list tokens too.
     const html = render({});
     const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
     expect(titles).toEqual([

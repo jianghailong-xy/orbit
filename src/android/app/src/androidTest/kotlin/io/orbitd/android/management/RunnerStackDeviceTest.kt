@@ -83,7 +83,7 @@ class RunnerStackDeviceTest {
         compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         keepServersAnswer("server-runners")
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction()); await("Default permission")
+        click(hasText("Settings") and hasClickAction()); await("Appearance")
         click(hasText("Machines & models") and hasClickAction()); await("a13c-agy")
         capture("stack-runners")
         // Google sign-in relayed, two Google accounts: one window on the row, the account a new session starts on named above it.

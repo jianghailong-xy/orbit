@@ -115,7 +115,7 @@ class A13dStackDeviceTest {
     }
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        click(hasText("Settings") and hasClickAction()); await("Default permission")
+        click(hasText("Settings") and hasClickAction()); await("Appearance")
     }
 
     @Test fun a13dWritesAreReadBackFromTheServer() {
@@ -128,11 +128,14 @@ class A13dStackDeviceTest {
         // A13-14: the switch is written alone, and the server keeps what was written.
         val routingBefore = read("users/me").jsonObject["preferences"]?.jsonObject?.get("modelRouting")
         ok("smart model selection starts off on the server ($routingBefore)", routingBefore == null || routingBefore == JsonPrimitive(false))
+        // The switch is on Sessions' page (docs/mocks/ios-settings-order).
+        click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
         click(hasText("Smart model selection") and isToggleable())
         eventually("preferences.modelRouting is true") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(true) }
         capture("stack-smart-selection-on")
         click(hasText("Smart model selection") and isToggleable())
         eventually("preferences.modelRouting is false again") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(false) }
+        back(); await("Appearance")
 
         // A13-7: the tokens the account issued on the web, and one revoked from here.
         val issued = keep("server-access-tokens-before", "access-tokens").jsonObject["tokens"]!!.objects()
@@ -150,7 +153,7 @@ class A13dStackDeviceTest {
         await("Token revoked")
         capture("stack-access-tokens-revoked")
         keep("server-access-tokens-after", "access-tokens")
-        back(); await("Default permission")
+        back(); await("Appearance")
 
         // A13-16: the DeepSeek key's balance is the server's answer — this key is refused, so no amount is drawn.
         val key = read("providers/mine").objects().first { it.s("label") == "DeepSeek (a13d)" }
@@ -168,7 +171,7 @@ class A13dStackDeviceTest {
         click(hasText("Retry", substring = true) and hasClickAction())
         Thread.sleep(1_500)
         keep("server-deepseek-balance-after-retry", "providers/mine/${key.s("id")}/balance")
-        back(); back(); await("Default permission")
+        back(); back(); await("Appearance")
 
         // A13-11: the runners' order is the dragged one, and a runner removed from its menu is gone.
         val before = keep("server-runners-before", "runners").objects()

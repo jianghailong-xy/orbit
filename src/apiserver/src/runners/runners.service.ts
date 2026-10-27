@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -311,15 +312,15 @@ export class RunnersService {
   /** Details shown on the browser approval page for an `orbit register` session. */
   async getDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
-    const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
-      throw new NotFoundException('enrollment request not found or expired');
-    }
+    const s = await this.openDeviceEnrollment(ownerId, userCode);
     // Warn (don't block) if a runner with this name is already registered, so the
-    // user knows approving re-issues its credential rather than adding a 2nd machine.
-    const runnerName = s.name;
-    const nameConflict =
-      (await this.prisma.runner.count({ where: { ownerId, name: runnerName, managedRunner: { is: null } } })) > 0;
+    // user knows approving re-issues its credential rather than adding a 2nd machine —
+    // and when that runner was last heard from, so they can tell whether it is this one.
+    const existing = await this.prisma.runner.findFirst({
+      where: { ownerId, name: s.name, managedRunner: { is: null } },
+      orderBy: { enrolledAt: 'desc' },
+      select: { lastHeartbeatAt: true },
+    });
     return {
       userCode: s.userCode,
       name: s.name,
@@ -327,24 +328,31 @@ export class RunnersService {
       labels: s.labels,
       maxConcurrent: s.maxConcurrent,
       status: s.status,
-      nameConflict,
+      nameConflict: !!existing,
+      existingLastSeenAt: existing?.lastHeartbeatAt ?? null,
+      // The runner an approval minted, for the page's way to it.
+      runnerId: s.status === 'APPROVED' ? s.runnerId : null,
       createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
     };
   }
 
   /**
    * Approve a device session: mint one Runner for the machine, then stash its
-   * credential. Workspaces are registered separately, not here.
+   * credential. Workspaces are registered separately, not here. The session is
+   * claimed first, so an approval and a denial racing each other settle on one.
    */
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
-    const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
-      throw new NotFoundException('enrollment request not found or expired');
-    }
+    const s = await this.openDeviceEnrollment(ownerId, userCode);
     const runnerName = s.name;
-    if (s.status === 'APPROVED') {
-      return { ok: true, name: runnerName, replaced: false };
+    if (s.status !== 'PENDING') return deviceDecidedAlready(s, 'APPROVED');
+    const claimed = await this.prisma.deviceEnrollment.updateMany({
+      where: { id: s.id, status: 'PENDING', expiresAt: { gt: new Date() } },
+      data: { status: 'APPROVED', approvedById: ownerId, approvedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      return deviceDecidedAlready(await this.openDeviceEnrollment(ownerId, userCode), 'APPROVED');
     }
 
     // One Runner per machine. Re-registering reuses the same runner (reissuing its
@@ -371,15 +379,35 @@ export class RunnersService {
 
     await this.prisma.deviceEnrollment.update({
       where: { id: s.id },
-      data: {
-        status: 'APPROVED',
-        runnerId: runner.id,
-        runnerToken,
-        approvedById: ownerId,
-        approvedAt: new Date(),
-      },
+      data: { runnerId: runner.id, runnerToken },
     });
-    return { ok: true, name: runnerName, replaced: !!existing };
+    return { ok: true, name: runnerName, replaced: !!existing, runnerId: runner.id };
+  }
+
+  /**
+   * Deny a device session: its CLI is told so on its next poll and stops, and nothing is minted.
+   * Denying one already denied is answered as it stands, as approving is.
+   */
+  async denyDeviceEnrollment(ownerId: string, userCode: string) {
+    this.rateLimitDeviceLookup(ownerId);
+    const s = await this.openDeviceEnrollment(ownerId, userCode);
+    if (s.status !== 'PENDING') return deviceDecidedAlready(s, 'DENIED');
+    const now = new Date();
+    const denied = await this.prisma.deviceEnrollment.updateMany({
+      where: { id: s.id, status: 'PENDING', expiresAt: { gt: now } },
+      data: { status: 'DENIED', approvedById: ownerId, approvedAt: now },
+    });
+    if (denied.count === 1) return { ok: true, name: s.name };
+    return deviceDecidedAlready(await this.openDeviceEnrollment(ownerId, userCode), 'DENIED');
+  }
+
+  /** A device session `ownerId` may see and decide, or 404 — gone, past its ten minutes, or decided by another account. */
+  private async openDeviceEnrollment(ownerId: string, userCode: string) {
+    const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
+    if (!s || s.expiresAt < new Date() || decidedByAnother(s, ownerId)) {
+      throw new NotFoundException('enrollment request not found or expired');
+    }
+    return s;
   }
 
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
@@ -1097,10 +1125,35 @@ function loginStateOf(r: {
 }
 
 /**
- * A device enrollment nobody has approved is open to whoever holds its code — that is the device
- * flow. Once approved it is the approver's: to every other account the code is one that names
- * nothing, so its machine's name and host, and whether it exists at all, stay the approver's.
+ * A device enrollment nobody has decided is open to whoever holds its code — that is the device
+ * flow. Once approved or denied it is its decider's (`approvedById` names them either way): to every
+ * other account the code is one that names nothing, so its machine's name and host, and whether it
+ * exists at all, stay the decider's.
  */
-function approvedByAnother(s: { status: string; approvedById: string | null }, ownerId: string): boolean {
-  return s.status === 'APPROVED' && s.approvedById !== ownerId;
+function decidedByAnother(s: { status: string; approvedById: string | null }, ownerId: string): boolean {
+  return s.status !== 'PENDING' && s.approvedById !== ownerId;
+}
+
+/**
+ * The answer to deciding a device enrollment already decided — by this account, since any other is
+ * answered 404 before it gets here: the same decision is answered as it stands, the other is a 409
+ * that says what it was.
+ */
+function deviceDecidedAlready(
+  s: { status: string; name: string; runnerId: string | null },
+  wanted: 'APPROVED' | 'DENIED',
+) {
+  const decision = s.status === 'DENIED' ? 'DENIED' : 'APPROVED';
+  if (decision === wanted) {
+    return decision === 'APPROVED'
+      ? { ok: true, name: s.name, replaced: false, runnerId: s.runnerId }
+      : { ok: true, name: s.name };
+  }
+  throw new ConflictException({
+    code: 'DEVICE_ENROLLMENT_DECIDED',
+    message:
+      decision === 'DENIED'
+        ? 'This registration request was denied — run `orbit register` again'
+        : 'This registration request was already approved',
+  });
 }

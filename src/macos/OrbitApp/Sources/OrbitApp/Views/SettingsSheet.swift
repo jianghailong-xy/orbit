@@ -76,6 +76,7 @@ private struct SettingsPageView: View {
         // The page the Infrastructure section shows, pushing onto Settings' stack: Machines & models'
         // one row, where the web's Runners and Providers pages became one.
         case .infrastructure: RunnersListView(rowNavigation: .push)
+        case .sessions:       SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
@@ -93,15 +94,6 @@ struct SettingsHomeView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var theme = "system"
-    @State private var permMode: PermissionMode = .default
-    /// The account's one orchestration switch. Absent on the server means on.
-    @State private var orchestration = true
-    /// The account's switch for smart model selection. Absent on the server means off.
-    @State private var modelRouting = false
-    /// The account's switch for suggested replies. Absent on the server means on.
-    @State private var promptSuggestions = true
-    /// The account's switch for session recaps. Absent on the server means on.
-    @State private var recaps = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -149,33 +141,11 @@ struct SettingsHomeView: View {
         .sheet(isPresented: $editingProfile) {
             ProfileEditSheet(name: model.user?.name ?? "")
         }
-        // Changes apply the moment they are made, as settings do on iOS. Each write is guarded
-        // against the value the account already has, so seeding the pickers never writes.
+        // Changes apply the moment they are made, as settings do on iOS. The write is guarded
+        // against the value the account already has, so seeding the picker never writes.
         .onChange(of: theme) { _, value in
             guard (model.user?.preferences?.theme ?? "system") != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
-        }
-        .onChange(of: permMode) { _, value in
-            let saved = model.user?.preferences?.defaultPermissionMode
-                ?? AgentDefaults.defaultPermissionMode.rawValue
-            guard saved != value.rawValue else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(defaultPermissionMode: value.rawValue)) }
-        }
-        .onChange(of: orchestration) { _, value in
-            guard (model.user?.preferences?.enableOrchestration ?? true) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: value)) }
-        }
-        .onChange(of: modelRouting) { _, value in
-            guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
-        }
-        .onChange(of: promptSuggestions) { _, value in
-            guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
-        }
-        .onChange(of: recaps) { _, value in
-            guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
         }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
@@ -254,58 +224,6 @@ struct SettingsHomeView: View {
     @ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {
         let label = SettingsRowLabel(row)
         switch row {
-        case .defaultPermission:
-            Picker(selection: $permMode) {
-                ForEach(AgentDefaults.permissionModes, id: \.self) { mode in
-                    Text(AgentDefaults.label(mode)).tag(mode)
-                }
-            } label: { label }
-        case .orchestration:
-            Toggle(isOn: $orchestration) { label }
-        case .modelRouting:
-            // The one switch on the list whose name doesn't say what it does, so the web's hint goes
-            // under it.
-            Toggle(isOn: $modelRouting) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
-                        Text(SettingsCopy.smartModelSelectionHint)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
-                }
-            }
-        case .promptSuggestions:
-            // The same shape: what it does, and what each one costs, goes under the name.
-            Toggle(isOn: $promptSuggestions) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
-                        Text(SettingsCopy.suggestedRepliesHint)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
-                }
-            }
-        case .recaps:
-            // The same shape as its two neighbours: what the list shows, and what turning it off
-            // leaves, under the name.
-            Toggle(isOn: $recaps) {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
-                        Text(SettingsCopy.sessionRecapsHint)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
-                }
-            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -326,7 +244,7 @@ struct SettingsHomeView: View {
                     }
                 } label: { label }
             }
-        case .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
+        case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -381,15 +299,7 @@ struct SettingsHomeView: View {
     private func seed() {
         guard !seeded else { return }
         seeded = true
-        let p = model.user?.preferences
-        theme = p?.theme ?? "system"
-        // An unset preference is the server's floor (Auto), not Default — showing Default would name
-        // a mode the account isn't actually running.
-        permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
-        orchestration = p?.enableOrchestration ?? true
-        modelRouting = p?.smartModelSelection ?? false
-        promptSuggestions = p?.suggestedReplies ?? true
-        recaps = p?.showRecaps ?? true
+        theme = model.user?.preferences?.theme ?? "system"
     }
 }
 
@@ -797,6 +707,94 @@ private struct AvatarCropView: View {
         .background(Color.black.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Sessions
+
+/// The account's five session settings, which the list's Sessions row opens (`SessionSettings`): each
+/// in a section of its own with the web's hint as its footer, as the Notifications page below draws
+/// its switches. Each is written the moment it changes, guarded against the value the account
+/// already has, so seeding them never writes.
+private struct SessionSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var permMode: PermissionMode = .default
+    /// The account's one orchestration switch. Absent on the server means on.
+    @State private var orchestration = true
+    /// The account's switch for smart model selection. Absent on the server means off.
+    @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
+    /// The account's switch for session recaps. Absent on the server means on.
+    @State private var recaps = true
+    @State private var seeded = false
+
+    var body: some View {
+        Form {
+            ForEach(SessionSettings.Row.allCases, id: \.self) { row in
+                Section {
+                    control(row)
+                } footer: {
+                    Text(SessionSettings.footer(row))
+                }
+            }
+        }
+        .navigationTitle(SettingsPage.sessions.title)
+        .onAppear(perform: seed)
+        .onChange(of: permMode) { _, value in
+            let saved = model.user?.preferences?.defaultPermissionMode
+                ?? AgentDefaults.defaultPermissionMode.rawValue
+            guard saved != value.rawValue else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(defaultPermissionMode: value.rawValue)) }
+        }
+        .onChange(of: orchestration) { _, value in
+            guard (model.user?.preferences?.enableOrchestration ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: value)) }
+        }
+        .onChange(of: modelRouting) { _, value in
+            guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
+        }
+        .onChange(of: promptSuggestions) { _, value in
+            guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
+        }
+        .onChange(of: recaps) { _, value in
+            guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
+        }
+    }
+
+    /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
+    /// are the account's switches.
+    @ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {
+        let title = SessionSettings.title(row)
+        switch row {
+        case .defaultPermission:
+            Picker(title, selection: $permMode) {
+                ForEach(AgentDefaults.permissionModes, id: \.self) { mode in
+                    Text(AgentDefaults.label(mode)).tag(mode)
+                }
+            }
+        case .orchestration:     Toggle(title, isOn: $orchestration)
+        case .modelRouting:      Toggle(title, isOn: $modelRouting)
+        case .promptSuggestions: Toggle(title, isOn: $promptSuggestions)
+        case .recaps:            Toggle(title, isOn: $recaps)
+        }
+    }
+
+    private func seed() {
+        guard !seeded else { return }
+        seeded = true
+        let p = model.user?.preferences
+        // An unset preference is the server's floor (Auto), not Default — showing Default would name
+        // a mode the account isn't actually running.
+        permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
+        orchestration = p?.enableOrchestration ?? true
+        modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
+        recaps = p?.showRecaps ?? true
     }
 }
 
