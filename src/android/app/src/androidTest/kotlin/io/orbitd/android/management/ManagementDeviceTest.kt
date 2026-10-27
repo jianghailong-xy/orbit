@@ -507,8 +507,11 @@ class ManagementDeviceTest {
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
                 back(); await("Appearance")
-                click(hasText("Machines & models") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                // The keys end the page, below the engines and machines, which come only once each of its lists has answered
+                // (InfrastructureModel.settled): wait for those, bring the keys up, then read their balances.
+                click(hasText("Machines & models") and hasClickAction()); await("What your agents can run on")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
+                await("¥110.00 · $5.00"); await("Unavailable")
                 capture("a13d-infrastructure-keys")
                 click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
                 capture("a13d-deepseek-key")
@@ -1370,6 +1373,11 @@ class ManagementDeviceTest {
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
                 "/api/providers/shared-pools/P1" -> access()
+                // The rejected key's balance answers a second after the other's. Under the test rule a page's effects resume on the
+                // threads that answer them: two balances answered at once were written side by side and one was lost, its row never
+                // getting a value (A15 F-50); in the app both are written on the main thread, one after the other.
+                "/api/providers/mine/K2/balance" -> return MockResponse().setHeader("Content-Type", "application/json")
+                    .setBody(balance("K2")).setHeadersDelay(1, TimeUnit.SECONDS)
                 "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setChunkedBody(": connected\n\n".repeat(120), 13).throttleBody(13, 1, TimeUnit.SECONDS)
                 else -> when {
