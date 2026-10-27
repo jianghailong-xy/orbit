@@ -135,6 +135,150 @@ checks); `ORBIT_ROLLBACK_UPDATE_NOW=1` presses Update Runner Now instead. It nee
 namespace: the runner looks for its engines under the account's home whatever `$HOME` says, and there it would find this
 host's own CLIs, signed in to nothing on the stack.
 
+# Durable events through outages: the drill
+
+A runner holds a session's durable events until the control plane says they are stored (docs/runner-link-design.md
+§5.8): in memory, then in its spool on disk. Whatever goes down in between, the link gateway, the apiserver, the
+database or the network, the events wait and go again once it is back, and the session's run_event rows stay numbered
+1..N without a hole (§10). `durable-events-drill.sh` beside this file drills the four faults §11.1 lists, one after
+another, on one session that streams output through all of them, with a real runner in the cut-over state (task C1a).
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-c1a ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c1a
+ORBIT_LINK_STAGING_HTTP_PORT=31086 ORBIT_LINK_STAGING_LINK_PORT=31443 ORBIT_LINK_STAGING_METRICS_PORT=31464 \
+ORBIT_LINK_STAGING_NATS_PORT=31422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=31822 \
+scripts/runner-link/drills/durable-events-drill.sh all
+scripts/runner-link/drills/durable-events-drill.sh report
+scripts/runner-link/drills/durable-events-drill.sh stop
+scripts/runner-link/staging-down.sh
+```
+
+The session's engine is the test suite's scripted claude (`src/runner-go/fake_claude_test.go`), so the drill spends no
+model. Its prompt streams a tick every `ORBIT_DURABLE_EVENTS_TICK` (2) seconds for as long as the drill lasts, each tick
+released by a timer of the drill's own (`await: release`): a progress ping (`system`/`status`), a reply delta and an
+assistant message saying `tick K`. Over the link the ping takes no seq and the delta goes to the live stream (task B8),
+so only the assistant message is a durable event. The engine needs nothing of the network, so it writes on through
+every fault, as a model's stream does.
+
+| Phase | What it does | What must hold |
+| --- | --- | --- |
+| `prepare` | Starts the stack in the cut-over state, built from this checkout: the link gateway following the server's switch and `RUNNER_LINK_REQUIRED` on, so HTTPS refuses the runner's daemon calls and only the link carries them. Builds the runner and the scripted claude from this checkout, registers the runner and starts it as a systemd unit of its own. | The runner logs `runner link mode: on`, and its presence says `LINK`. |
+| `stream` | Opens the session. Its prompt streams ticks until `finish`. | The session is `RUNNING` and stores its ticks. |
+| `gateway` | Kills the link gateway (`docker kill`, as a crash ends it) for `ORBIT_DURABLE_EVENTS_GATEWAY_SECONDS` (60), then starts it again. | See below. |
+| `apiserver` | Kills the apiserver for `ORBIT_DURABLE_EVENTS_APISERVER_SECONDS` (60), the link gateway up. | See below. |
+| `database` | Fails the database over. A standby, taken from a base backup of the primary, streams from it synchronously. The primary is killed, and `ORBIT_DURABLE_EVENTS_DATABASE_SECONDS` (20) later the standby is promoted and takes the name `postgres` in the stack's network. Then a planned switchback: the promoted standby stops cleanly, and the stack's own container starts on its data. | See below, for each of the two. |
+| `partition` | Cuts the runner off for `ORBIT_DURABLE_EVENTS_PARTITION_SECONDS` (600), with `RUNNER_LINK_REQUIRED` on: an nftables rule drops every packet its unit's processes send (`socket cgroupv2`). The runner and its engine keep running. | See below. |
+| `finish` | Releases the stream's last ticks at once and waits for its turn to end. | The whole session: every seq held, every tick stored once, no ping or delta stored, nothing dropped in the runner's whole log, the prompt delivered to the engine once, the engine started once, and the session `AWAITING_INPUT`. |
+| `rollback` | See [the rollback](#the-rollback-with-events-not-acknowledged) below. | |
+| `partition-off` | The partition with `RUNNER_LINK_REQUIRED` off and the gateway telling the runner `MODE_LINK` (it recreates the gateway with `ORBIT_LINK_STAGING_MODE=link`), on a session of its own whose ticks are assistant messages alone: part of its stream goes over HTTPS, where a ping or a delta takes a seq and leaves a hole by design. It leaves the stack that way. Not in `all`. | As for `partition`, except that the runner may take its work back to HTTPS. |
+| `all` | `prepare`, `stream`, `gateway`, `apiserver`, `database`, `partition`, `finish`, `rollback`. | |
+
+What must hold after each fault. The drill waits for the tick released as the fault ended to be stored, for up to
+`ORBIT_DURABLE_EVENTS_CATCHUP` (300) seconds, then checks:
+
+- **No hole.** Every seq up to the session's last is held by a row: an event's, or a tombstone's for an event the server
+  refused (task B5).
+- **Every tick once.** The ticks written during the fault are among them, and no progress ping or live event is stored.
+- **Read as it came.** The runner recorded each tick within 5 s of its release, however late it was stored: a row's
+  `created_at` is the runner's time and `ingested_at` the database's. A runner that stopped reading its engine's stdout
+  while it could not send would fail here.
+- **Nothing dropped.** The runner logs no `dropping N events` and none of the link's losses: a stream given up, events
+  not sent or not kept, the spool losing what it held. It never takes its work back to HTTPS.
+- **The same session and runner.** The session stays `RUNNING` throughout, and the runner is the same process.
+
+Why the standby is synchronous: an asynchronous one can be behind the primary by commits whose acknowledgements the
+runner has already had. The runner drops the events an acknowledgement covers, so a failover to such a standby loses
+them for good, and no protocol can send them again. Only a failover that loses no acknowledged commit can keep the
+events, which is what the drill checks. The standby is the primary's container in all but its data directory: the same
+image, command, WAL archive and environment, streaming through the primary's unix socket, which `pg_hba` already trusts
+for replication. `runner_presence` is UNLOGGED, so it is empty on the promoted standby until the runner's next beat. The
+database phase waits until the apiserver is past its reaper's 3-minute startup grace, which the apiserver phase restarts,
+so that grace is not what keeps the session through the failover.
+
+The cut runner is the stack's only beating runner, so it is the whole cell, and the reaper holds its sessions as a mass
+silence (task B3). A runner cut off alone in a cell of many is reaped at the 90 s offline line instead. The drill does
+not cover that case: there the reaper decides, not the link.
+
+What the drill measured on 2026-10-27, in two runs: at 84a0b7424, and at 3b0141a78 with the project line merged in.
+Every fault held in both runs.
+
+- **The link gateway, killed for 60 s:** 33 ticks written meanwhile. The runner was back on the link 62 to 80 s after it
+  lost the connection, and the stored ticks caught up within 15 s of the gateway's restart.
+- **The apiserver, killed for 60 s:** 33 ticks written meanwhile. The link connection held. The gateway answered the
+  event batch `BACKEND_UNAVAILABLE`, retryable, and the runner sent it again; it was stored 0.1 s after the apiserver
+  was healthy.
+- **The failover:** 11 ticks written in the 20 s without a primary, stored 3.6 to 5.2 s after the promotion.
+  `runner_presence` held no row on the promoted standby. The switchback cost 6 to 8 s.
+- **The 10-minute cut:** 301 ticks written meanwhile. The runner reconnected 9 to 10 minutes after it lost its connection,
+  and never took its work back to HTTPS. The reaper held 18 sweeps in the second run.
+- **Through all of it:** the runner read every tick off its engine within 0.1 s of its release. Each run's session
+  stored seqs 1..1275 without a hole, and each of its 1270 ticks once. No ping or delta was stored, and there were no
+  tombstones. The runner's log has no `dropping N events` and none of the link's loss lines.
+
+`partition-off` held too, at 3b0141a78. The link had been unreachable for 5m27s when the runner took its work back to
+HTTPS (`runner link mode: off — the runner link has been unreachable for 5m27s`), with the network still cut. Once the
+network was back, all 300 ticks written during the cut were stored within 1.2 s, each once, and the session stored seqs
+1..755 without a hole. 29 s after the network was back, the Welcome of the shadow's connection said `MODE_LINK`,
+and the runner took its work back onto the link. This phase sends no control turn or message during the cut, so
+it says nothing about the claim and inbox request ids that going back to HTTPS gives up (task B2b).
+
+## The rollback, with events not acknowledged
+
+When the runner stops normally, it writes the link events the control plane has not acknowledged to its spool
+(`~/.orbit/link-spool`), and the next process sends them first. Only a process in link mode reads the spool. The
+`rollback` phase drills the case that task C3 left open:
+
+1. A second session streams.
+2. The link gateway is killed, and the engine writes the rest of its ticks and ends its turn.
+3. The runner is stopped as a service manager stops it (SIGTERM) and logs `N unacknowledged events of session …, through
+   seq T, are kept for the next process`.
+4. `RUNNER_LINK_REQUIRED` goes off and the runner starts again with `ORBIT_LINK_MODE=off`, as a rollback leaves it, and
+   answers a message over HTTPS.
+5. The switch goes on again, and the runner starts again as it was, on the same machine, and answers a message over the
+   link.
+
+After steps 3, 4 and 5 the drill records:
+
+- the session's seqs and holes;
+- which of the prompt's ticks it stores;
+- what the spool still holds;
+- for each event the stopped runner kept, whether the session stores it at its seq, stores another event there, or
+  stores nothing there.
+
+The phase holds only if every tick the engine wrote is stored once.
+
+It did not hold in either run on 2026-10-27, and both runs lost the same events.
+
+1. **The stop.** The session had stored seqs 1..9 (ticks 1 to 5). The stopping runner kept 56 events in its spool: seqs
+   10..65, ticks 6 to 60 and the turn's end.
+2. **On HTTPS, with `ORBIT_LINK_MODE=off`.** The runner did not send them. It numbered its own events from the server's
+   last seq (`job.MaxSeq + 1`, session.go), so seqs 10..21 went to new events: the interrupted turn's recovery and the
+   message after the rollback. The session then stored seqs 1..21 without a hole, while 55 of its prompt's ticks were
+   missing.
+3. **On the link again.** The spool's events went first. The 44 whose seqs were still free were stored after the newer
+   turns (ticks 18 to 60 at seqs 22..65), with a second `turn_end` for a turn that already had one. The 12 whose seqs
+   were taken were acknowledged as already stored. Ticks 6 to 17 are lost, with no hole and nothing in the runner's log
+   to show it.
+
+A runner that never runs in link mode on that machine again loses all 56 once the spool is 72 hours old.
+
+## Records
+
+The records go to `<state>/client/durable-events/`, which `prepare` empties first, so that a run's records are its
+own; keep a copy of one you want to compare:
+
+- `timeline.txt` is the drill's account.
+- `phases.tsv` has a line per fault and one for the whole session, and `rollback.tsv` a line per step of the rollback.
+- `summary.txt` has the judgement, which `durable-events-drill.sh report` prints.
+- `<label>-ticks.tsv` has each tick's release time. Each phase leaves `<phase>-samples.tsv`, sampled every 2 s: the
+  session's status, the ticks released and stored, and the runner's presence. It also leaves the runner's, the link
+  gateway's and the apiserver's logs over the phase.
+
+The runner, its log, its spool and the scripted claude's records are in `<state>/durable-events/`. The runner and its
+ticker keep running after the drill until `durable-events-drill.sh stop`, which also undoes any fault a drill that died
+left in place: the nftables table, a killed container, a standby. The drill needs root, for the runner's mount namespace
+and unit and for nftables.
+
 # An answer lost on its way: the drill
 
 A control request's answer can be lost on its way to the runner: the connection drops after the apiserver has committed

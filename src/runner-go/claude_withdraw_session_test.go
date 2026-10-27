@@ -20,12 +20,30 @@ func withdrawTurn(id, target, targetText string) scriptedTurn {
 	}
 }
 
-// steerAfterRead is a steer handed over only once the engine has read the message that opened the
-// turn, so it is written into a turn that is running rather than refused for having none.
+// steerAfterRead is a steer handed over only once the runner has seen the engine read the message
+// that opened the turn, so it is written into a turn that is running rather than refused for having
+// none — and to a CLI whose init handshake the runner has already read. That handshake names the
+// CLI's version, which decides whether the steer is offered as withdrawable.
 func steerAfterRead(id, text, opening string) scriptedTurn {
 	s := steerTurn(id, text)
-	s.afterEngineRead = opening
+	s.afterAcknowledged = opening
 	return s
+}
+
+// untilSettled ends a run once every named turn has settled. The harness takes the session down
+// the moment it holds, so the turn a steer was aimed at is named too, not only the withdraw turn.
+// A withdrawal is answered off to the side of the poller (session.go), so a CLI scripted to exit
+// can be gone before the withdraw turn has settled; its withdrawn report, when there is one, goes
+// out first on that same goroutine.
+func untilSettled(turnIDs ...string) func(*deliverySession) bool {
+	return func(r *deliverySession) bool {
+		for _, id := range turnIDs {
+			if r.turnResult(id) == nil {
+				return false
+			}
+		}
+		return true
+	}
 }
 
 // controlRequests lists the control_request frames written to the CLI with this subtype.
@@ -69,7 +87,7 @@ func TestWithdrawDropsASteerTheEngineHasNotReadYet(t *testing.T) {
 			messageTurn("turn-1", "build it"),
 			steerAfterRead("steer-1", "then push it to main", "turn-1"),
 			withdrawTurn("withdraw-1", "steer-1", "then push it to main"),
-		}, nil)
+		}, untilSettled("withdraw-1", "turn-1"))
 
 	// The steer went in under its own turn's id, which is the only handle the withdrawal has on it.
 	frames := run.fake.Stdin()
@@ -145,7 +163,7 @@ func TestWithdrawLeavesASteerTheEngineAnswersItHasRead(t *testing.T) {
 			messageTurn("turn-1", "list the files"),
 			steerAfterRead("steer-1", "and count them", "turn-1"),
 			withdrawTurn("withdraw-1", "steer-1", "and count them"),
-		}, nil)
+		}, untilSettled("withdraw-1", "turn-1"))
 
 	w := run.turnResult("withdraw-1")
 	if w == nil || w.Subtype != subtypeSteerWithdraw || w.Result != withdrawAlreadyRead {
