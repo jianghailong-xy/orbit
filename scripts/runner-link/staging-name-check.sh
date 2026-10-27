@@ -41,8 +41,26 @@ for name in "${refused[@]}"; do
   done
 done
 
+# loadgen-watch.mjs (task O3) is given a state directory rather than ORBIT_LINK_STAGING_PROJECT: it refuses one whose
+# compose.env names a project outside orbit-link-*, before it looks for the secret there (absent here, which would fail
+# otherwise).
+node_bin="$(command -v node)"
+for name in "${refused[@]}"; do
+  rm -rf "$work/watch"
+  mkdir -p "$work/watch"
+  printf 'STAGING_PROJECT=%s\n' "$name" > "$work/watch/compose.env"
+  rc=0
+  out="$("$node_bin" "$here/loadgen-watch.mjs" "$work/watch" http://127.0.0.1:9 /dev/null "$work/watch" 2>&1)" || rc=$?
+  checked=$((checked + 1))
+  if [ "$rc" != 2 ] || ! grep -q "is not an orbit-link-\* staging stack's state directory" <<<"$out"; then
+    echo "FAIL: loadgen-watch.mjs with a state directory of project '$name': exit $rc, said: ${out:0:200}"
+    fail=1
+  fi
+done
+scripts+=(loadgen-watch.mjs)
+
 accepted=(orbit-link-staging orbit-link-b1 orbit-link-b4 orbit-link-b4a orbit-link-b4b orbit-link-b6 orbit-link-d0
-  orbit-link-c2 orbit-link-c2b orbit-link-a_b)
+  orbit-link-c2 orbit-link-c2b orbit-link-o3 orbit-link-a_b)
 for name in "${accepted[@]}" ""; do
   got="$(ORBIT_LINK_STAGING_PROJECT="$name" bash -c 'source "$1/staging-lib.sh" && printf %s "$project"' _ "$here" 2>&1)" || {
     echo "FAIL: ORBIT_LINK_STAGING_PROJECT='$name' was refused: $got"
