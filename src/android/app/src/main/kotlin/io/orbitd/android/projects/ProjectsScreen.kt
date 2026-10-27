@@ -576,11 +576,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         is ProjectDialog.Resolve -> {
             var reason by remember(current.blocker.text("id")) { mutableStateOf("") }
             AlertDialog(onDismissRequest = { dialog = null }, title = { Text(ProjectPage.resolveBlockerTitle(current.blocker)) },
-                text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(ProjectPage.resolveBlockerMessage(current.blocker), style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(reason, { reason = it.take(ProjectPage.blockerReasonLimit) }, Modifier.fillMaxWidth().testTag("blocker-reason"),
-                        label = { Text(ProjectPage.resolveBlockerQuestion(current.blocker)) })
-                } },
+                text = { ResolveBlockerText(current.blocker, reason) { reason = it.take(ProjectPage.blockerReasonLimit) } },
                 confirmButton = { TextButton(onClick = {
                     dialog = null
                     val blockerId = current.blocker.text("id") ?: return@TextButton
@@ -616,6 +612,20 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             // Review on the coordinator's request to start: into its conversation, onto the start card.
             reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
             retry = { scope.launch { load(refreshGraph = false) } }, close = { dialog = null })
+    }
+}
+
+/**
+ * "Resolve / Review this blocker"'s words and reason field, which scroll (A15 F-44): with the keyboard up a phone leaves the dialog
+ * less room than they need — a delivery's files alone can outgrow a screen. Unscrolled, the field was measured to nothing, out of
+ * sight while typed into; and Android 11, which measures the dialog's window at the screen's height and then at the room above the
+ * keyboard, saw the field's label measure differently each time and laid the dialog out again every frame, never idle.
+ */
+@Composable
+internal fun ResolveBlockerText(blocker: JsonObject, reason: String, onReason: (String) -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(ProjectPage.resolveBlockerMessage(blocker), style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(reason, onReason, Modifier.fillMaxWidth().testTag("blocker-reason"), label = { Text(ProjectPage.resolveBlockerQuestion(blocker)) })
     }
 }
 
