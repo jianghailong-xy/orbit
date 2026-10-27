@@ -2799,6 +2799,28 @@ func (t *Transport) listRunners(sessionID, orchestrationToken string) (json.RawM
 	return out, err
 }
 
+// requestEngineInstall asks one of the account's runners to install an engine CLI, or (mode "update")
+// to update the CLIs on it: the web's Install, relayed on that runner's next heartbeat.
+func (t *Transport) requestEngineInstall(sessionID, orchestrationToken, runnerID, engine, mode string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(runnerID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/runners/"+url.PathEscape(runnerID)+"/engine-install",
+		map[string]string{"engine": engine, "mode": mode}, &out, sessionID, orchestrationToken)
+	return out, err
+}
+
+// engineInstallState is that runner's engine relay as the web's runner page reads it.
+func (t *Transport) engineInstallState(sessionID, orchestrationToken, runnerID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(runnerID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("GET", "/runner/runners/"+url.PathEscape(runnerID)+"/engine-install", nil, &out, sessionID, orchestrationToken)
+	return out, err
+}
+
 func (t *Transport) createAgent(sessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/agents", body, &out, sessionID, orchestrationToken)
