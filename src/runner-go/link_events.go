@@ -591,6 +591,13 @@ func newLinkEventStream(e *linkEvents, id, key string) *linkEventStream {
 // onLink reports whether the session's events go over the link now.
 func (s *linkEventStream) onLink() bool { return s.e.onLink.Load() }
 
+// holding is how many events the stream holds that are not known stored, and the highest seq handed over.
+func (s *linkEventStream) holding() (int, uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.mem) + s.disk.count() + len(s.over), s.tail
+}
+
 // setFence makes fence the one a refused CURRENT_WORK acknowledgement is recorded in: the holder's own.
 func (s *linkEventStream) setFence(fence *criticalEventFlushFence) {
 	s.mu.Lock()

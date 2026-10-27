@@ -222,6 +222,20 @@ type Transport struct {
 	// (link_mode.go). Set only on the daemon's transport, by startLink; nil everywhere else, where
 	// every call goes over HTTPS.
 	link *linkMode
+	// spooled is the sessions' event streams of a daemon whose link mode is turned off: they hold what a
+	// process in link mode left unacknowledged in the link spool, which goes over HTTPS before anything
+	// newer (session.go). Set by startLink in place of link; nil everywhere else.
+	spooled *linkEvents
+}
+
+// eventStreams is the sessions' event streams of the daemon's transport (link_events.go): the link mode's,
+// or with the link mode off, those that send what the link spool holds over HTTPS. Nil on any other
+// transport.
+func (t *Transport) eventStreams() *linkEvents {
+	if t.link != nil {
+		return t.link.events
+	}
+	return t.spooled
 }
 
 // runnerCallerHeader names the process making a request with the runner credential when it is not

@@ -99,6 +99,9 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 	t.caller = ""
 	if off, why := linkModeOff(cfg); off {
 		logln("runner link mode: off (" + why + "); daemon calls stay on HTTPS")
+		// What a process in link mode left unacknowledged in the spool still goes first, over HTTPS, and nothing
+		// newer is numbered over it (session.go): the spool is the session's, whatever carries its events now.
+		t.spooled = newLinkEvents(nil, logln)
 	} else {
 		t.link = newLinkMode(t, logln)
 	}
@@ -107,6 +110,9 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 		stopShadow()
 		if t.link != nil {
 			t.link.close()
+		}
+		if t.spooled != nil {
+			t.spooled.close() // what is still held goes back to the spool, for the next process
 		}
 	}
 }
@@ -224,6 +230,17 @@ func (m *linkMode) linkUnusable(why string) {
 	}
 	m.server = linkpb.Mode_MODE_UNSPECIFIED
 	m.updateLocked(why)
+}
+
+// stopping takes that the runner has begun to stop (runLoop): from then on a link without a connection is not waited
+// for. Unless the control plane refused HTTPS, the work goes back to HTTPS at once when the link has no connection now,
+// or loses the one it has (linkWork.stopping), and with it what the sessions' event streams hold: their last flushes
+// reach the control plane within the stop's grace instead of waiting for the link until it runs out. What HTTPS does
+// not store within it stays in the spool, as before (close).
+func (m *linkMode) stopping() {
+	if m.work.stopping() {
+		m.linkUnusable("the runner is stopping and the runner link is not connected")
+	}
 }
 
 // updateLocked starts or stops the work connection as the link comes into use or goes out of it, and tells whoever

@@ -86,6 +86,9 @@ type linkWork struct {
 	// stopped, which a time on HTTPS follows.
 	lostAt    time.Time
 	stoppedAt time.Time
+	// runnerStopping is set once the runner has begun to stop (linkMode.stopping): a time without a connection then
+	// sends the work back to HTTPS at once, not after linkUnreachableFallback.
+	runnerStopping bool
 }
 
 // linkWorkConn is the work's state of one of its connections.
@@ -160,6 +163,21 @@ func (w *linkWork) stop() {
 	w.cancel()
 	w.cancel = nil
 	w.notifyLocked()
+}
+
+// stopping marks the runner stopping, and reports whether the work is running without a connection now.
+func (w *linkWork) stopping() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.runnerStopping = true
+	return w.cancel != nil && (w.cur == nil || w.cur.ended())
+}
+
+// stoppingWithoutConn reports whether the runner is stopping while the work has no connection.
+func (w *linkWork) stoppingWithoutConn() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.runnerStopping && w.cur == nil
 }
 
 // wait waits for the last loop to end, at most d.
@@ -260,6 +278,9 @@ func (w *linkWork) loop(ctx context.Context) {
 			}
 			w.setCurrent(cur, nil)
 			retryAt, drainAt = w.now().Add(wait), time.Time{}
+			if w.stoppingWithoutConn() {
+				w.m.linkUnusable("the runner is stopping and lost its runner link connection")
+			}
 		case ev := <-w.events:
 			if ev.conn != cur {
 				continue // from a connection replaced since
@@ -456,6 +477,8 @@ func (w *linkWork) failed(err error) time.Duration {
 	}
 	if lostFor >= linkUnreachableFallback {
 		w.m.linkUnusable(fmt.Sprintf("the runner link has been unreachable for %s", lostFor.Round(time.Second)))
+	} else if w.stoppingWithoutConn() {
+		w.m.linkUnusable("the runner is stopping and cannot connect to the runner link")
 	}
 	return wait
 }

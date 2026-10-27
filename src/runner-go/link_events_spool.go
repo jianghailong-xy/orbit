@@ -87,13 +87,50 @@ func (sp *linkSpool) init() {
 			}
 		}
 		if len(files) == 0 || time.Since(newest) > linkSpoolStaleAfter {
-			if err := os.RemoveAll(dir); err == nil && len(files) > 0 {
+			// Every event still in it is one the control plane never acknowledged, and none of it will reach it now: said
+			// before it goes, session by session, with how many and which, and counted as lost.
+			if n, first, last := linkSpoolDirEvents(dir, files); n > 0 {
+				sp.log(fmt.Sprintf("runner link: removing the event spool of session %s, untouched since %s: its %d events, of seqs %d-%d, were never acknowledged by the control plane and are lost (%d lost so far)",
+					entry.Name(), newest.Format(time.RFC3339), n, first, last, sp.losing(n)))
+			}
+			if err := os.RemoveAll(dir); err != nil {
+				sp.log(fmt.Sprintf("runner link: the event spool of session %s could not be removed: %v", entry.Name(), err))
+			} else if len(files) > 0 {
 				sp.log(fmt.Sprintf("runner link: removed the event spool of session %s, untouched since %s", entry.Name(), newest.Format(time.RFC3339)))
 			}
 			continue
 		}
 		sp.bytes += size
 	}
+}
+
+// linkSpoolDirEvents is how many events a session's spool directory holds, and the lowest and highest of their seqs: a
+// finished segment's by its name, an open one's by its whole lines (load).
+func linkSpoolDirEvents(dir string, files []os.DirEntry) (n int, first, last uint64) {
+	note := func(a, b uint64, count int) {
+		if count <= 0 {
+			return
+		}
+		if n == 0 || a < first {
+			first = a
+		}
+		last = max(last, b)
+		n += count
+	}
+	for _, f := range files {
+		name := f.Name()
+		switch {
+		case strings.HasSuffix(name, ".open.jsonl"):
+			if events, _, _ := linkSpoolRead(filepath.Join(dir, name), 0); len(events) > 0 {
+				note(events[0].seq, events[len(events)-1].seq, len(events))
+			}
+		case strings.HasSuffix(name, ".jsonl"):
+			if a, b, ok := linkSpoolRange(strings.TrimSuffix(name, ".jsonl")); ok {
+				note(a, b, int(b-a+1))
+			}
+		}
+	}
+	return n, first, last
 }
 
 // charge takes n bytes of the spool's bound, when there is room.

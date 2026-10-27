@@ -99,15 +99,32 @@ class Device:
         left, top, right, bottom = map(int, re.findall(r'\d+', node.get('bounds')))
         self.shell(f'input tap {(left + right) // 2} {(top + bottom) // 2}')
 
+    def bars(self):
+        """Where the status and navigation bars cover the screen while they show, from the window manager's insets
+        sources: statusBars/navigationBars since API 34, ITYPE_STATUS_BAR/ITYPE_NAVIGATION_BAR on API 30-33 and
+        TYPE_TOP_BAR/TYPE_SIDE_BAR_n on API 29."""
+        return sorted({tuple(map(int, frame)) for frame in re.findall(
+            r'InsetsSource .*?type=(?:statusBars|navigationBars|I?TYPE_(?:STATUS_BAR|NAVIGATION_BAR|TOP_BAR|SIDE_BAR_\d)) '
+            r'frame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\](?: visibleFrame=\S+)? visible=true',
+            self.shell('dumpsys window displays'))})
+
     def visible(self, texts, attempts=8):
-        """The node, swiped into the upper part of the screen first when the page has to scroll. Compose leaves
-        rows outside the viewport out of the window dump, so a missing node also means: scroll on."""
-        width, height = map(int, re.search(r'(\d+)x(\d+)', self.shell('wm size')).groups())
+        """The node once a tap at its centre reaches it: its bounds on the screen and its centre clear of the status
+        and navigation bars. Until then the page is swiped up; Compose leaves rows outside the viewport out of the
+        window dump, so a missing node also means: scroll on. How low the row sits does not matter: the drawer's
+        Settings is the last row of its column and stops just above the navigation bar (~91% down a 1920 px screen)."""
+        # A `wm size` override is the space uiautomator's bounds and `input` use, and wm size prints it last.
+        width, height = map(int, re.findall(r'(\d+)x(\d+)', self.shell('wm size'))[-1])
+        bars = self.bars()
         for _ in range(attempts):
             node = self.find(texts=texts, timeout=5, absent_ok=True)
             if node is not None:
-                left, top, right, bottom = map(int, re.findall(r'\d+', node.get('bounds')))
-                if bottom > top and 0 <= top and bottom <= height * 0.85:
+                left, top, right, bottom = map(int, re.findall(r'-?\d+', node.get('bounds')))
+                x, y = (left + right) // 2, (top + bottom) // 2
+                if 0 <= left < right <= width and 0 <= top < bottom <= height and not any(
+                        bar_left <= x < bar_right and bar_top <= y < bar_bottom
+                        for bar_left, bar_top, bar_right, bar_bottom in bars):
+                    self.note(f'{texts} in view at {node.get("bounds")} on {width}x{height}, clear of the bars {bars}')
                     return node
             self.shell(f'input swipe {width // 2} {height * 3 // 4} {width // 2} {height // 4} 400')
             time.sleep(1)
@@ -420,6 +437,7 @@ def main():
             time.sleep(2)
             result['processAfterPermission'] = dict(before=pid, after=device.shell(f'pidof {package}', check=False).strip())
             device.note(f"Allowed installs from the app and returned; pid {result['processAfterPermission']}")
+        since = device.shell("date '+%m-%d %H:%M:%S.000'").strip()  # logcat from here on is this update's
         # Android's installer asks for confirmation. If Android restarted the app meanwhile, it offers the
         # same verified update again first.
         deadline, confirmed = time.time() + 240, False
@@ -445,6 +463,15 @@ def main():
         while device.package(package)[0]['versionCode'] != str(new['versionCode']):
             assert time.time() < deadline, 'The update did not install'
             time.sleep(2)
+        # The new version shows before Android has finished: on API 29 it compiles the new code after the commit and
+        # only then stops the package once more ("pkg removed"), which kills an app launched meanwhile and leaves the
+        # launcher in front. Relaunch once ActivityManager has logged that stop.
+        shown = time.time()
+        while not re.search(rf'Force stopping {re.escape(package)} appid=\d+ user=-?\d+: pkg removed',
+                            device.adb('logcat', '-d', '-T', since, '-s', 'ActivityManager:I')):
+            assert time.time() < deadline, 'Android did not finish the update'
+            time.sleep(1)
+        device.note(f'Android finished the update {time.time() - shown:.1f}s after the new version showed')
         updated, text = device.package(package)
         device.save('package-to.txt', text)
         result['installedTo'] = updated

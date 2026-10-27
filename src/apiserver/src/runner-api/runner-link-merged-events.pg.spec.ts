@@ -34,6 +34,8 @@
  *       sends every batch alone, with nothing written.
  *   (8) The route is the gateway's alone (HTTPS answers 404), a body that is not a merged call is 400, and HTTPS ingest
  *       is answered as it always was.
+ *   (9) A batch at a seq the session holds another event at is answered as alone, the row there left as it was, and the
+ *       event logged as an error and counted (run-event-seq-conflicts.ts); the same event sent again is neither.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -51,7 +53,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { type PrismaClient, RunStatus } from '@prisma/client';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
@@ -85,6 +87,7 @@ import { listenForRunnerLinkCalls } from './runner-link-call';
 import { RunnerLinkEventsController, RunnerLinkGatewayCallGuard } from './runner-link-events.controller';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -887,5 +890,34 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
     assert.deepEqual(https.body, { ok: true });
     assert.deepEqual((await storedRows(s.sessionId)).map((r) => [r.seq, r.type, r.payload]),
       [[1, 'assistant', { text: 'over https' }], [2, 'tool_result', 'not an object']]);
+  });
+  await t.test('(9) a batch of a merged call at a seq that holds another event: answered as alone, the row left as it was, logged and counted', async (st) => {
+    resetRunEventSeqConflictMetrics();
+    const errors: string[] = [];
+    st.mock.method(Logger.prototype, 'error', (message: unknown) => {
+      errors.push(String(message));
+    });
+    const s = await liveSession(a, 'a taken seq in a merged call');
+    const t0 = Date.parse('2026-10-27T00:46:10.000Z');
+    const at = (seconds: number) => new Date(t0 + seconds * 1_000).toISOString();
+    assert.deepEqual((await alone(door.linkPort, a, s.sessionId, [ev(1, RunEventType.ASSISTANT, { text: 'the event at seq 1' }, s.turnId, at(0))])).body,
+      { ok: true, durableSeq: 1, rejected: [] });
+    const answer = await merged(door.linkPort, [{ of: a, sessionId: s.sessionId, events: [
+      ev(1, RunEventType.ASSISTANT, { text: 'another event that wants seq 1' }, s.turnId, at(60)),
+      ev(2, RunEventType.ASSISTANT, { text: 'the event at seq 2' }, s.turnId, at(61)),
+    ] }]);
+    assert.deepEqual(answersOf(answer), [{ ok: true, durableSeq: 2, rejected: [] }], 'answered as the events route answers it alone');
+    assert.deepEqual((await storedRows(s.sessionId)).map((r) => [r.seq, r.payload]),
+      [[1, { text: 'the event at seq 1' }], [2, { text: 'the event at seq 2' }]]);
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 1 });
+    assert.equal(errors.length, 1, errors.join('\n'));
+    assert.match(errors[0], new RegExp(`^session ${s.sessionId}: 1 event\\(s\\) sent over the runner link are not stored, because the session already holds another event at their seq; seq 1: assistant \\(turn ${s.turnId}, 2026-10-27T00:47:10\\.000Z\\) where it holds assistant \\(turn ${s.turnId}, 2026-10-27T00:46:10\\.000Z\\) `));
+    // The same event sent again in a call of its own: no conflict.
+    const again = await merged(door2.linkPort, [{ of: a, sessionId: s.sessionId, events: [
+      ev(2, RunEventType.ASSISTANT, { text: 'the event at seq 2' }, s.turnId, at(61)),
+    ] }]);
+    assert.deepEqual(answersOf(again), [{ ok: true, durableSeq: 2, rejected: [] }]);
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 1 });
+    assert.equal(errors.length, 1);
   });
 });
