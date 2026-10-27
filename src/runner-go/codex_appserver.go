@@ -345,6 +345,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	steerDispatch := &codexSteerDispatcher{
 		app: app, t: t, job: job, threadID: threadID,
 		activeMu: &activeMu, active: &active, emitFor: emitFor, completeTurn: completeTurn,
+		// Read once per generation rather than on each delivery, as a Claude process reads it once.
+		fileWritten: fileWrittenReport,
 	}
 
 	// sendTurn sends the active turn's turn/start; assigned below, once what it calls exists.
