@@ -80,6 +80,9 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var env: [String: String]?
     public var enabled: Bool?
     public var autoInitGit: Bool?
+    /// Worktree isolation for this workspace's sessions (`Agent.enableWorktree`): the worktree bar's
+    /// notice turns it off for a folder kept as it is, and its Undo back on.
+    public var enableWorktree: Bool?
     /// Smart model selection for this Agent's task runs (`Agent.modelRouting`).
     public var modelRouting: Bool?
 
@@ -91,7 +94,8 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 maxTurns: Int? = nil, maxBudgetUsd: Double? = nil,
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
-                enabled: Bool? = nil, autoInitGit: Bool? = nil, modelRouting: Bool? = nil) {
+                enabled: Bool? = nil, autoInitGit: Bool? = nil, enableWorktree: Bool? = nil,
+                modelRouting: Bool? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -110,6 +114,7 @@ public struct UpdateAgentRequest: Encodable, Sendable {
         self.env = env
         self.enabled = enabled
         self.autoInitGit = autoInitGit
+        self.enableWorktree = enableWorktree
         self.modelRouting = modelRouting
     }
 }

@@ -6,8 +6,9 @@ import OrbitKit
 /// diff summary, collapsed to one line and expandable to the changed-file list. A git-state-driven
 /// primary action — Commit while the worktree is dirty, Merge once it's clean — sits on the right,
 /// reflecting the runner's async outcome (Merging…/✓ Merged/✓ In main/Resolve/Retry). For a session
-/// whose agent dir isn't a git repo it becomes an amber "not isolated" nudge. Hidden entirely when
-/// there's nothing to show. All the decisions live in `WorktreeBarLogic`; this view just renders them.
+/// that edits its workspace's folder directly (no worktree) it becomes an amber notice that says why,
+/// offers Initialize git… and closes. Hidden entirely when there's nothing to show. All the decisions
+/// live in `WorktreeBarLogic`; this view just renders them.
 struct WorktreeBar: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
@@ -19,6 +20,11 @@ struct WorktreeBar: View {
     }
     @State private var sheet: Sheet?
     @State private var copied = false
+    /// The session whose no-branch notice its ✕ hid (web's `noticeHiddenFor`): there is nothing to
+    /// change on the workspace, so closing only hides it here. A session id, not a flag, because a Mac
+    /// reuses this bar for whichever session is open.
+    @State private var noticeHiddenFor: String?
+    @State private var confirmingInitGit = false
 
     var body: some View {
         // A CONCRETE container (VStack), not `Group`, so the `.sheet` below has a stable host that's
@@ -53,16 +59,70 @@ struct WorktreeBar: View {
 
     // MARK: - shared-nogit nudge
 
+    /// The amber notice for a session that edits its workspace's folder directly (web's
+    /// `SharedFolderNotice`): why, and what that costs, then the way out — Initialize git… on a folder
+    /// that isn't a repository — and ✕. Gone once the workspace has answered it, and from a session
+    /// whose ✕ hid it. With no workspace to act on, it only says.
+    @ViewBuilder
     private var nudge: some View {
-        HStack(spacing: 8) {
-            Text("⚠ Shared workDir — not isolated")
-                .font(.orbitLabel.weight(.semibold)).foregroundStyle(.orange)
-            Spacer(minLength: 4)
+        let workspaceID = console.worktree.detail?.workspace?.id
+        let workspace = workspaceID.flatMap { app.agents?.agent($0) }
+        if noticeHiddenFor != console.sessionID,
+           let notice = WorktreeBarLogic.sharedFolderNotice(workDirIsGit: workspace?.workDirIsGit,
+                                                            enableWorktree: workspace?.enableWorktree,
+                                                            autoInitGit: workspace?.autoInitGit) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    noticeHeadline(notice.headline(workDir: workspace?.workDir))
+                        .font(.orbitLabel.weight(.semibold)).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                    Spacer(minLength: 4)
+                    // The button and ✕ keep their size (web `flex: none`); the headline wraps instead.
+                    if notice == .noBranch {
+                        noticeClose(notice) { noticeHiddenFor = console.sessionID }
+                    } else if let workspaceID {
+                        WTPillButton(title: WorktreeBarLogic.initializeGit, tint: .orange) { confirmingInitGit = true }
+                            .fixedSize()
+                        noticeClose(notice) { app.setWorktreeIsolation(false, inWorkspace: workspaceID) }
+                    }
+                }
+                Text(notice.detail)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4)))
+            .orbitConfirmation(WorktreeBarLogic.initializeGitTitle, isPresented: $confirmingInitGit) {
+                Button(WorktreeBarLogic.initializeGitConfirm) {
+                    if let workspaceID { app.initializeGit(inWorkspace: workspaceID) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(WorktreeBarLogic.initializeGitMessage(workDir: workspace?.workDir,
+                                                           workspaceName: workspace?.name))
+            }
+            .padding(.bottom, .composerBandGap)
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4)))
-        .padding(.bottom, .composerBandGap)
+    }
+
+    /// The headline with the folder set in monospace, as web sets it in `<code>`.
+    private func noticeHeadline(_ headline: (lead: String, path: String?, tail: String)) -> Text {
+        guard let path = headline.path else { return Text(headline.lead + headline.tail) }
+        return Text(headline.lead) + Text(path).font(.orbitMono.weight(.medium)) + Text(headline.tail)
+    }
+
+    /// The notice's ✕: muted and plain, named for what it does, which a Mac also shows on hover.
+    private func noticeClose(_ notice: WorktreeBarLogic.SharedFolderNotice,
+                             action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark").font(.orbitLabel)
+                .padding(4).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).foregroundStyle(.secondary)
+        .accessibilityLabel(notice.closeLabel)
+        .help(notice.closeHelp)
     }
 
     // MARK: - worktree pill
