@@ -380,3 +380,74 @@ for each step, and `phases.tsv` has a line per outage. The runner keeps running 
 `release-outage-drill.sh stop`. The drill needs root for the runner's mount namespace, as the rollback drill does. A
 runner built from before task B9 (`ORBIT_RELEASE_OUTAGE_RUNNER_SRC` pointing at an older checkout) fails the `https`
 phase: its session goes `FAILED` once one release has failed for 10 s.
+
+# Many runners out of reach at once: the drill
+
+A runner's silence is the reaper's only evidence that it died: a session whose runner has not beaten for 90 s is
+finalized `runner offline` (src/apiserver/src/realtime/reaper.service.ts). When a link gateway node stops, or a network
+cuts a share of the cell off, many runners go quiet together while they work on, and a reaper that took that for their
+death would fail every turn they were running. The design's answer (docs/runner-link-design.md §6.5, §10; task B3): while
+a fifth of the cell's runners have gone silent at once, the reaper holds the offline reaping. `mass-disconnect-drill.sh`
+beside this file drills that on a staging stack with real runners (task C1b).
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-c1b ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c1b
+ORBIT_LINK_STAGING_HTTP_PORT=29086 ORBIT_LINK_STAGING_LINK_PORT=29443 ORBIT_LINK_STAGING_METRICS_PORT=29464 \
+ORBIT_LINK_STAGING_NATS_PORT=29422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=29822 \
+scripts/runner-link/drills/mass-disconnect-drill.sh all
+scripts/runner-link/drills/mass-disconnect-drill.sh stop
+scripts/runner-link/staging-down.sh
+```
+
+| Phase | What it does | What must hold |
+| --- | --- | --- |
+| `prepare` | Starts the stack in the cut-over state, built from this checkout: the link gateway following the server's switch and `RUNNER_LINK_REQUIRED` on, so HTTPS refuses every runner's daemon calls and only the link carries them, as in production after the cut-over. Builds the runner and the scripted claude from this checkout, registers `ORBIT_MASS_DISCONNECT_RUNNERS` (10) runners, each with a configuration directory (`ORBIT_HOME`) and a systemd unit of its own, and starts them across one heartbeat interval. | Every runner logs `runner link mode: on`, and its presence says `LINK`. |
+| `gateway` | Every runner's session runs a turn its engine holds open. Kills the link gateway node (`docker kill`, as a crash ends it) for `ORBIT_MASS_DISCONNECT_SECONDS` (180), then starts it again. Every runner loses the link. | See below. |
+| `partition` | The same, with `ORBIT_MASS_DISCONNECT_CUT` (2) runners, a fifth of them, cut off instead: an nftables rule drops every packet the processes of their units send, the link's and HTTPS's alike. The others stay connected. | See below. The runners still connected end their turns during the outage. |
+| `all` | `prepare`, `gateway`, `partition`. | |
+
+What must hold in each outage:
+
+- **Nothing reaped.** Every session stays `RUNNING` while its runner is out of reach, and the apiserver logs no
+  `reaped session` for any of them.
+- **The outage reached the reaper.** Every runner cut off was silent past the 90 s line, and the reaper logged that it
+  held their sessions (`not reaping N session(s) whose runner looks offline (…): X of the Y runners heard from … have
+  been silent for over 90s at once`), for the mass silence and not for its startup grace or a failed heartbeat write.
+- **The same process comes back.** Once the control plane is back, every runner cut off is heard again with the process
+  id it had (`runner_presence.process_id`), so it kept its leases.
+- **Every session goes on.** It stores the event its engine wrote during the outage (after the restore, for a runner cut
+  off), ends its turn, answers one message more, stores its events as seqs 1..N each once, and its engine started once.
+  No runner is told it no longer holds its session.
+
+How an outage is set up, and why:
+
+- **Beats spread as a fleet's are.** A runner beats every 30 s from when it started, and is past the offline line 90 s
+  after its last beat. The runners start 3 s apart, so in an outage they cross the line one after another across a whole
+  heartbeat interval, as a fleet's runners do, rather than in the same second. The phase opens its sessions one interval
+  before the cut, since the hint of a new session makes a runner beat at once.
+- **A quiet cell first.** Before each cut the drill waits until the apiserver is past its 3-minute startup grace by a
+  sweep, any hold an earlier outage left has lapsed (the reaper keeps one for 90 s past the last sweep that saw it), and
+  the reaper counts no runner silent: whatever holds during the outage is then the outage's doing. On a new stack that
+  takes up to 11.5 minutes: the probe runner `staging-up.sh` registers never beats, and stays in the reaper's count until
+  it is past its window.
+- **Cut off for real.** The partition drops a runner's packets by its unit's cgroup (`socket cgroupv2`), so the runner
+  and its engine keep running and buffering events, while nothing they send leaves: a lost network, not a stopped
+  process.
+
+The records go to `<state>/client/mass-disconnect/`:
+
+- `timeline.txt` is the drill's account: each runner's last beat before the cut and when that puts it past the offline
+  line, the reaper's held sweeps with its own reading of the cell, each runner heard again and its log's connection
+  lines, and each session's account.
+- `outages.tsv` has a line per outage, and `sessions.tsv` a line per session in it.
+- `<run>-samples.tsv` has the outage sampled every 2 s: each session's status (`S`), each runner's silence in seconds
+  (`P`), and the cell as the reaper reads it (`F`: runners heard from, runners silent).
+- `<run>-apiserver.log` and `<run>-link-gateway.log` are the two logs over the run.
+
+A phase can be run again, with new sessions, as often as its outage should be: when the reaper sweeps, every 30 s,
+falls at a different point of the runners' crossings each time. Each run is numbered (`gateway-1`, `partition-2`, …),
+and names its sessions' release gates and its records; `prepare` starts the numbering again.
+
+The runners keep running after the drill until `mass-disconnect-drill.sh stop`, which also removes the partition's
+nftables table should a drill have died with it in place. Each runner's log and its scripted claude's records are in
+`<state>/mass-disconnect/r<n>/`. The drill needs root, for the runners' mount namespaces and units and for nftables.
