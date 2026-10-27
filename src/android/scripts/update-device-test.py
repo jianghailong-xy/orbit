@@ -437,6 +437,7 @@ def main():
             time.sleep(2)
             result['processAfterPermission'] = dict(before=pid, after=device.shell(f'pidof {package}', check=False).strip())
             device.note(f"Allowed installs from the app and returned; pid {result['processAfterPermission']}")
+        since = device.shell("date '+%m-%d %H:%M:%S.000'").strip()  # logcat from here on is this update's
         # Android's installer asks for confirmation. If Android restarted the app meanwhile, it offers the
         # same verified update again first.
         deadline, confirmed = time.time() + 240, False
@@ -462,6 +463,15 @@ def main():
         while device.package(package)[0]['versionCode'] != str(new['versionCode']):
             assert time.time() < deadline, 'The update did not install'
             time.sleep(2)
+        # The new version shows before Android has finished: on API 29 it compiles the new code after the commit and
+        # only then stops the package once more ("pkg removed"), which kills an app launched meanwhile and leaves the
+        # launcher in front. Relaunch once ActivityManager has logged that stop.
+        shown = time.time()
+        while not re.search(rf'Force stopping {re.escape(package)} appid=\d+ user=-?\d+: pkg removed',
+                            device.adb('logcat', '-d', '-T', since, '-s', 'ActivityManager:I')):
+            assert time.time() < deadline, 'Android did not finish the update'
+            time.sleep(1)
+        device.note(f'Android finished the update {time.time() - shown:.1f}s after the new version showed')
         updated, text = device.package(package)
         device.save('package-to.txt', text)
         result['installedTo'] = updated
