@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -580,5 +581,62 @@ func TestDeliveryLedgerWithdrawsNothingAlreadySettled(t *testing.T) {
 	l.fail(d)
 	if l.withdraw(d) {
 		t.Error("a failed message was withdrawn")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// the order a turn's reports are filed in
+// ---------------------------------------------------------------------------
+
+// A turn's reports are filed only the way a message moves: written, then its last word, then nothing.
+// One that comes in behind a later one is the turn's past, and is not filed at all.
+func TestOrderedDeliveryReportsNeverMoveATurnBackwards(t *testing.T) {
+	cases := []struct {
+		name      string
+		in, filed []deliveryState
+	}{
+		{"in order", []deliveryState{deliveryWritten, deliveryAcknowledged}, []deliveryState{deliveryWritten, deliveryAcknowledged}},
+		{"written after the echo", []deliveryState{deliveryAcknowledged, deliveryWritten}, []deliveryState{deliveryAcknowledged}},
+		{"written after the withdrawal", []deliveryState{deliveryWithdrawn, deliveryWritten}, []deliveryState{deliveryWithdrawn}},
+		{"written after a requeue", []deliveryState{deliveryRequeued, deliveryWritten}, []deliveryState{deliveryRequeued}},
+		{"written after a failure", []deliveryState{deliveryFailed, deliveryWritten}, []deliveryState{deliveryFailed}},
+		{"nothing after the last word", []deliveryState{deliveryWritten, deliveryWithdrawn, deliveryAcknowledged, deliveryFailed}, []deliveryState{deliveryWritten, deliveryWithdrawn}},
+		{"written once", []deliveryState{deliveryWritten, deliveryWritten}, []deliveryState{deliveryWritten}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var reports []reportedDelivery
+			report := orderedDeliveryReports(recordingReporter(&reports))
+			for _, state := range c.in {
+				report("steer-1", state, "", false)
+			}
+			var filed []deliveryState
+			for _, r := range reports {
+				filed = append(filed, r.state)
+			}
+			if !slices.Equal(filed, c.filed) {
+				t.Errorf("reporting %v filed %v, want %v", c.in, filed, c.filed)
+			}
+		})
+	}
+}
+
+// Each turn is ordered on its own, and what is filed is filed as it was reported.
+func TestOrderedDeliveryReportsOrderEachTurnOnItsOwn(t *testing.T) {
+	var reports []reportedDelivery
+	report := orderedDeliveryReports(recordingReporter(&reports))
+	report("steer-1", deliveryWithdrawn, "", false)
+	report("steer-2", deliveryWritten, "", false)
+	report("turn-3", deliveryFailed, errNeverWritten.Error(), true)
+	report("steer-1", deliveryWritten, "", false)
+	report("steer-2", deliveryAcknowledged, "", false)
+	want := []reportedDelivery{
+		{"steer-1", deliveryWithdrawn, "", false},
+		{"steer-2", deliveryWritten, "", false},
+		{"turn-3", deliveryFailed, errNeverWritten.Error(), true},
+		{"steer-2", deliveryAcknowledged, "", false},
+	}
+	if !slices.Equal(reports, want) {
+		t.Fatalf("filed %v, want %v", reports, want)
 	}
 }

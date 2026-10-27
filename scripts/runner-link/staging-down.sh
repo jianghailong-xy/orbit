@@ -29,8 +29,9 @@ args=(down --remove-orphans --timeout 100)
 [ "$purge" = 1 ] && args+=(--volumes)
 [ "$rmi" = 1 ] && args+=(--rmi local)
 log "stopping project $project"
-# The profile staging-up.sh starts the link gateway and NATS under. The link gateway drains on the way down.
-compose --profile runner-link "${args[@]}"
+# The profiles staging-up.sh starts the link gateway and NATS under, and the apiservers past the first. The link gateway
+# drains on the way down.
+compose --profile runner-link --profile staging-backend-b "${args[@]}"
 if [ "$rmi" = 1 ]; then
   docker image rm "$project-apiserver:local" "$project-link-gateway:local" >/dev/null 2>&1 || true
 fi
