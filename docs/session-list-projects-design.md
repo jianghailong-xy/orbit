@@ -1,6 +1,6 @@
 # 会话列表里的项目条目：一个项目合成一个条目
 
-状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
+状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）；10-27 项目会话页的落地合成一行 Landings 与这个项目的 Landings 窗口，合入行也挪进窗口（集成线契约修订 28；§2、§3.2、§3.4、§5）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先说清楚再改，别悄悄偏离。
 
 ## 1. 为什么
@@ -24,7 +24,7 @@
 
 - 一个会话同时命中多条时按表格顺序取第一条（正常不会发生：coordinator 不执行任务，`task_id` 和 `context_task_id` 有 CHECK 互斥）。
 - 被 `/coordinator/replace` 换掉的旧 coordinator 认不回来（项目不再指向它），它留在 Completed 里平铺。本期不处理。
-- `LANDING`（修订 12，对实现的要求）的 `AWAITING_INPUT` 只表示容器未结案，不表示等用户回复；实时状态读 `landing` 视图。它的 `root_session_id` 为 NULL，不会以 `CHILD` 归属任何项目。平铺的列表（§3.2）默认不返回它；`GET /sessions?projectId=` 带 `includeLanding=1` 时才以 `LANDING` 角色返回，项目会话页以 Landings 组列出未结的和有待办的，已结的折叠。项目条目与项目会话页的会话数、running 数、状态点都不计 `LANDING`。
+- `LANDING`（修订 12，对实现的要求）的 `AWAITING_INPUT` 只表示容器未结案，不表示等用户回复；实时状态读 `landing` 视图。它的 `root_session_id` 为 NULL，不会以 `CHILD` 归属任何项目。平铺的列表（§3.2）默认不返回它；`GET /sessions?projectId=` 带 `includeLanding=1` 时才以 `LANDING` 角色返回，项目会话页拿它画这个项目的 Landings 窗口（页上只有一行 Landings，集成线契约修订 28）。项目条目与项目会话页的会话数、running 数、状态点都不计 `LANDING`。
 
 ## 3. 服务端
 
@@ -52,7 +52,7 @@
 
 集成线契约修订 12（§2.9 LS6，对实现的要求）：平铺的 `GET /sessions`（不带 `projectId` 的各 view）、`GET /sessions/compact`、`GET /sessions/search`、`GET /sessions/counts`，以及 agent 工具 `session_list`、`session_search`，默认排除落地会话；`GET /sessions?projectId=` 只在带 `includeLanding=1` 时把该项目的落地会话以 `LANDING` 角色返回，项目会话页带上它。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
 
-`includeLanding=1` 读回的 `LANDING` 行另带可选的 `landing` 摘要：`{ subject: 'TASK' | 'PROMOTION', state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED', settledAs, settledAt }`（`settledAs` 只在 `SETTLED` 时有值）。`AWAITING_DECISION` 指段里有 OPEN 的集成类待办，或候选为 `BLOCKED`；`SETTLED` 的行在 `view=completed` 里。分组与 24 小时窗口在客户端：Landings 组只列等决定的与 24 小时内结案的，从不列在途的与已合入的合入轮，已结的折叠成「Earlier · n landed」。
+`includeLanding=1` 读回的 `LANDING` 行另带可选的 `landing` 摘要：`{ subject: 'TASK' | 'PROMOTION', state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED', settledAs, settledAt }`（`settledAs` 只在 `SETTLED` 时有值）。`AWAITING_DECISION` 指段里有 OPEN 的集成类待办，或候选为 `BLOCKED`；`SETTLED` 的行在 `view=completed` 里。分组在客户端（集成线契约修订 28，owner 2026-10-27，取代 10-19 定的 24 小时窗口与折叠）：项目会话页只有一行 Landings，整行打开这个项目的 Landings 窗口；窗口列出全部落地会话，没结的（在途的与等决定的）在最下面，结了的按天分组、全部保留、不折叠；合入 main 的那一轮与 `promotions/merged` 的回执按 `landingSessionId` 合成一行 `Merged into main`。
 
 ### 3.3 `/projects/sidebar` 补进度数字
 
@@ -63,7 +63,7 @@
 不加新事件（集成线契约修订 12 确认这一条对落地会话同样成立）。客户端：
 
 - 成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变。
-- 落地会话（修订 12，对实现的要求）不发 `session.created` / `session.updated`，也不新增 `landing.updated`：它不进条目的状态点，项目会话页的 Landings 组随页面轮询刷新，落地会话页按集成线契约 §2.7a 的节奏轮询。旧客户端因此收不到落地会话行，也不会为它弹「Session failed」通知。
+- 落地会话（修订 12，对实现的要求）不发 `session.created` / `session.updated`，也不新增 `landing.updated`：它不进条目的状态点，项目会话页的 Landings 行与 Landings 窗口随页面轮询刷新，落地会话页按集成线契约 §2.7a 的节奏轮询。旧客户端因此收不到落地会话行，也不会为它弹「Session failed」通知。
 - 进度数字（`taskCounts`、`buckets.running`）和 coordinator 处理中的例外来自 `/projects/sidebar`：照旧 15 秒轮询，另外收到成员会话的 `session.updated` 时去抖（约 2 秒）顺手刷新一次。
 - 把两端都没处理的 `project.changed` 接上：Web 的 `groupsFor` 现在只刷会话，Swift 的 `ControlEventType` 把它解成 `.unknown`；收到时刷新项目摘要。
 
@@ -120,9 +120,9 @@
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；右上角一个按钮（iOS 用 `square.grid.2x2`）直接进项目页，不再是 ⋯ 菜单（owner 10-06 的决定）。这里没有 New session：项目的会话由 coordinator 派发。
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，不进项目页：Web 用 ↗，iOS 走页头右上角那个按钮（owner 10-06 的决定）。
-- **合入 main**（owner 10-06 的决定，效果图 `docs/mocks/project-merge-sessions-page/`）：进度条下面一张合入卡，只在有话说时出现——检查中（`CHECK_PROMOTION` 在途，它那行合入状态从进度条挪进来，任务落到项目分支的 Landing 行仍在进度条里）、等你确认（可直接按 `Merge to main` / `Not now`，`Details ›` 打开完整的卡）、合入中（推送前可 `Cancel`）、暂时合不了（`Coordinator is resolving it · <age>`，`Open coordinator ›`）。合完卡片收起，这次合入作为一行 `Merged into main`（`<sha> · <n> tasks · by you`）按 `merged.at` 排进下面的时间分组，点开是回执。协调会话里只留一行。契约见 `docs/project-integration-line-contract.md` 修订 10。
+- **合入 main**（owner 10-06 的决定，效果图 `docs/mocks/project-merge-sessions-page/`）：进度条下面一张合入卡，只在有话说时出现——检查中（`CHECK_PROMOTION` 在途，它那行合入状态从进度条挪进来，任务落到项目分支的 Landing 行仍在进度条里）、等你确认（可直接按 `Merge to main` / `Not now`，`Details ›` 打开完整的卡）、合入中（推送前可 `Cancel`）、暂时合不了（`Coordinator is resolving it · <age>`，`Open coordinator ›`）。合完卡片收起，这次合入作为一行 `Merged into main`（`<sha> · <n> tasks · by you`）排进这个项目的 Landings 窗口（集成线契约修订 28；此前按 `merged.at` 排进下面的时间分组），整行在原地展开回执与这一轮的记录。协调会话里只留一行。契约见 `docs/project-integration-line-contract.md` 修订 10。
 - **搜索**：页头和进度条下面直接是列表，没有搜索框（owner 10-04 的决定）。Web 的 ⌘K 仍能打开全局搜索面板；iOS 项目页不接全局搜索。Workspace 列表和文件夹页的搜索保持原样。
-- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算（集成线契约修订 12 起，带 `includeLanding=1` 读回的 `LANDING` 成员只进 Landings 组，不计入这两个数）。
+- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算（集成线契约修订 12 起，带 `includeLanding=1` 读回的 `LANDING` 成员只进 Landings 窗口（页上是一行 Landings），不计入这两个数）。
 - **打开与轮询**（iOS，2026-10-06）：打开时先用 App 手里已有的会话填上——Open 列表里这个项目的成员、Workspace 列表里的行、这一页上次读到的 Completed 成员（OrbitKit `SessionProjectMembers`，和上面的合并去重同一条规则），不先清成 0，上面两个请求回来后再替换。之后每 4 秒的轮询不再重拉两份完整列表：Open 成员直接取 App 的 Open 列表（它有自己的轮询和实时推送），Completed 列表只在某个 Open 成员离开 Open 列表时、或距上次读满 60 秒（同 Web 的 `PROJECT_SESSION_REFRESH_MS`）时再读。landing 行、合入卡、开工行的读各自并行轮询，不排在成员列表后面。`view=completed` 回来空列表就是答案，不再用旧参数 `archived` 重问。
 
 ## 6. 文案（Web 与 OrbitKit 逐字一致）
@@ -137,7 +137,7 @@
 | 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
 | 项目会话页页头按钮（iOS，owner 10-06 的决定） | `Open Project` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running` |
-| 合入卡与时间线行（owner 10-06 的决定） | `Merge into main?`、`Needs you`、`Merge into main queued` / `confirmed`、`Re-checking before merging into main…`、`Merging into main…`、`Can’t merge into main yet`、`Details`、`Merged into main`、`<sha> · <n> tasks · by you`；协调会话那一行 `Merge into main is waiting for you · Review`、`✓ Merged into main · <sha> · <n> tasks`（OrbitKit `PromotionCards`，web `lib/projectMerge.ts`，`ProjectMergeCopyParityTests` 对照） |
+| 合入卡与合入行（owner 10-06 的决定；合入行修订 28 起在 Landings 窗口里） | `Merge into main?`、`Needs you`、`Merge into main queued` / `confirmed`、`Re-checking before merging into main…`、`Merging into main…`、`Can’t merge into main yet`、`Details`、`Merged into main`、`<sha> · <n> tasks · by you`；协调会话那一行 `Merge into main is waiting for you · Review`、`✓ Merged into main · <sha> · <n> tasks`（OrbitKit `PromotionCards`，web `lib/projectMerge.ts`，`ProjectMergeCopyParityTests` 对照） |
 
 等待原话、coordinator 的话沿用会话行已有的常量，不另写。处理例外的五句来自 `projectAttention.ts` 的 `COORDINATOR_LEAD_COPY`，首字母大写。Swift 侧加对照测试，读取 `src/web/src/lib/sessionProjects.ts`（照 `ProjectAttentionCopyParityTests`）。
 

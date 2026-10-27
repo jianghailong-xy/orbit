@@ -1,0 +1,296 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  /* 05 自己的东西一律 q- 开头（kit.css 里有 .tx .rcard .cap 等短类名） */
+  .q-wide { max-width: 1880px; }
+  .q-heads, .q-row { display: grid; grid-template-columns: 880px 440px 480px; gap: 0 40px; align-items: start; }
+  .q-heads { margin: 0 0 8px; font-size: 13px; font-weight: 650; color: #6b6b74; }
+  .q-row { margin: 0 0 34px; }
+  .q-row > .q-cap { margin-top: 0; }
+  .q-cap h3 { font-size: 17px; margin: 2px 0 8px; color: #16161a; }
+  .q-cap { font-size: 14px; color: #4f4f58; line-height: 1.62; }
+  .q-cap ul { margin: 4px 0 0; padding-left: 18px; }
+  .q-cap li { margin: 4px 0; }
+  .q-cap b { color: #16161a; }
+  .q-h { display: inline-block; font-weight: 650; color: #16161a; background: #fff; border-radius: 6px; padding: 0 7px; }
+  .q-sub { font-size: 12.5px; color: #6b6b74; margin: 10px 0 6px; }
+
+  /* ── Mac 会话窗格（照 10-27 截图量：窗格 #202023、卡底 #2D2D31、正文 #CACED4、label rgb(140,144,152)） ── */
+  .q-mac { width: 880px; height: 340px; position: relative; display: flex; flex-direction: column; background: #202023;
+           border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.28), 0 18px 40px rgba(0,0,0,.14);
+           font-family: "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .q-mac.q-strip { height: auto; }
+  .q-mcol { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 16px; overflow: hidden; }
+  .q-mac.q-strip .q-mcol { padding: 0 16px 14px; }
+  .q-mfade { position: absolute; left: 0; right: 0; top: 0; height: 56px; background: linear-gradient(#202023, rgba(32,32,35,0)); z-index: 3; pointer-events: none; }
+  .q-mtx { font: 14px/22px "Inter", "Noto Sans SC", sans-serif; color: #CACED4; }
+  .q-mtx p { margin: 0 0 10px; }
+  .q-mtx ul { margin: 0 0 10px; padding: 0; list-style: none; }
+  .q-mtx li { position: relative; padding-left: 18px; margin: 0 0 4px; }
+  .q-mtx li::before { content: "•"; position: absolute; left: 4px; top: 0; }
+  .q-mtx b { color: #ECEEF2; font-weight: 650; }
+  .q-mtx .last { margin-bottom: 0; }
+  /* 今天的卡（RecapCardView：内边 8/14/13、圆角 14、gray 12%） */
+  .q-mcard { margin-top: 14px; background: #2D2D31; border-radius: 14px; padding: 5px 14px 13px; }
+  .q-mcard .hd { display: flex; align-items: center; gap: 6px; height: 28px; font: 12px/16px "Inter"; color: rgb(140,144,152); }
+  .q-mcard .hd b { font-weight: 600; }
+  .q-mcard .hd .rf { margin-left: auto; margin-right: -8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+  .q-mcard .bd { margin-top: 1px; font: 13px/18px "Inter", "Noto Sans SC"; color: #CACED4; }
+  .q-mcard.q-dim { background: #28282B; }
+  .q-mcard.q-dim .bd { color: rgb(140,144,152); }
+  /* A：一段尾注 */
+  .q-mnote { margin-top: 14px; display: flex; align-items: flex-start; gap: 6px; }
+  .q-mnote .t { flex: 1; min-width: 0; font: 13px/19px "Inter", "Noto Sans SC"; color: rgb(140,144,152); }
+  .q-mnote .lab { white-space: nowrap; margin-right: 7px; }
+  .q-mnote .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .q-mnote .lab b { font-weight: 600; }
+  .q-mnote .rf { flex: none; width: 24px; height: 19px; margin-right: -4px; display: flex; align-items: center; justify-content: center; visibility: hidden; position: relative; }
+  .q-mnote.q-hover .rf { visibility: visible; }
+  .q-mnote.q-hover .rf::before { content: ""; position: absolute; inset: -3px -1px; border-radius: 6px; background: rgba(255,255,255,.08); }
+  .q-cursor { position: absolute; z-index: 5; pointer-events: none; }
+  /* Mac 输入框（示意：实底圆角 + 发丝边 + 轻阴影，ComposerView 的 composerCardSurface） */
+  .q-mcomp { flex: none; margin: 14px 16px 16px; height: 78px; border-radius: 12px; background: #2A2A2E; border: 1px solid rgba(255,255,255,.07);
+             box-shadow: 0 1.5px 4px rgba(0,0,0,.3); position: relative; }
+  .q-mcomp .p1 { position: absolute; left: 12px; top: 10px; font: 14px "Inter"; color: rgba(235,235,245,.3); }
+  .q-mcomp .bt { position: absolute; left: 10px; right: 8px; bottom: 8px; height: 26px; display: flex; align-items: center; gap: 9px; font: 13px "Inter"; color: #E6E8EC; }
+  .q-mcomp .bt .a { color: rgb(140,144,152); }
+  .q-mcomp .bt .m { margin-left: auto; font-weight: 650; }
+  .q-mcomp .bt .e { color: rgb(140,144,152); }
+  .q-mcomp .bt .s { width: 24px; height: 24px; border-radius: 50%; background: rgba(142,142,147,.32); display: flex; align-items: center; justify-content: center; }
+
+  /* ── iPhone：只画下半截（y 500 → 956） ── */
+  .ph.q-bot { border-radius: 0 0 56px 56px; }
+  .q-pcol { position: absolute; left: 0; right: 0; top: 0; height: 822px; padding: 0 16px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .q-pcol .tx { position: static; }
+  .q-pcol .rcard { position: static; margin-top: 18px; }
+  .q-pcol .rcard.q-dim { background: rgba(142,142,147,.06); }
+  .q-pcol .rcard.q-dim .bd { color: var(--l2); }
+  .q-pfade { position: absolute; left: 0; right: 0; height: 48px; z-index: 3; background: linear-gradient(#000, rgba(0,0,0,0)); }
+  .q-pnote { margin-top: 18px; display: flex; align-items: flex-start; gap: 6px; }
+  .q-pnote .t { flex: 1; min-width: 0; font: 15px/21px "Inter", "Noto Sans SC"; color: var(--l2); letter-spacing: -.003em; }
+  .q-pnote .lab { white-space: nowrap; margin-right: 8px; }
+  .q-pnote .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .q-pnote .lab b { font-weight: 600; }
+  .q-pnote .rf { flex: none; width: 28px; height: 21px; margin-right: -6px; display: flex; align-items: center; justify-content: center; }
+
+  /* 规格表 / 待定 */
+  table.q-tok { border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; width: 1880px; table-layout: fixed; }
+  table.q-tok th, table.q-tok td { padding: 8px 14px; text-align: left; border-bottom: 1px solid #ececf0; vertical-align: top; line-height: 1.55; }
+  table.q-tok th { background: #f4f4f7; font-weight: 650; color: #16161a; white-space: nowrap; }
+  table.q-tok td { color: #3a3a40; }
+  table.q-tok td:first-child { font-weight: 650; color: #16161a; white-space: nowrap; }
+  .q-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 1880px; }
+  .q-box { background: #fff; border-radius: 12px; padding: 16px 20px; font-size: 14px; color: #3a3a40; line-height: 1.62; }
+  .q-box h3 { font-size: 16px; margin: 0 0 8px; color: #16161a; }
+  .q-box ul { margin: 6px 0 0; padding-left: 18px; }
+  .q-box li { margin: 5px 0; }
+  .q-box b { color: #16161a; }
+  .q-rec { color: #14428f; font-weight: 650; }
+  .q-land { width: 1880px; font-size: 14px; color: #3a3a40; line-height: 1.65; }
+  .q-land ol { margin: 0; padding-left: 20px; }
+  .q-land li { margin: 6px 0; }
+  .q-land b { color: #16161a; }
+</style>
+<body>
+<h1>Recap 卡 · 换个不打扰的样子（05，待你定）</h1>
+<p class="lede">你 10-27 说「Recap 悬浮着会打扰」。它其实是转录的最后一行，跟着滚动，并不是浮层。读起来像浮着，原因在 ① 现状的标注里：<b>整个转录只有它是一块实底圆角板</b>，<b>和输入框同一种形状、正好叠在输入框上面</b>，<b>正文还和回复一样亮</b>。
+下面三个方向只改它的样子、放不放；<b>什么时候出现不动</b>：会话静止才有，这次进来一开始新一轮就让位，Settings 的 Session recaps 一个开关同时管列表和会话页。
+Mac 的颜色和尺寸照你 10-27 的截图量；示例文字是样例，不是你会话里的原文。灰字 = 上线文案（英文），说明用中文。</p>
+
+<section id="part-1">
+<div class="q-heads"><div>Mac · 会话窗格底部（你截图的那一处）</div><div>iPhone · 同一处（下半屏）</div><div>说明</div></div>
+
+<div class="q-row">
+  <div><span class="tag now">现状（04 定稿）</span><div id="m-today"></div></div>
+  <div><span class="tag" style="visibility:hidden">·</span><div id="p-today"></div></div>
+  <div class="q-cap" id="cap-today"></div>
+</div>
+
+<div class="q-row">
+  <div><span class="tag rec">A · 退成一段尾注 · 我建议</span><div id="m-A"></div>
+    <div class="q-sub">鼠标移上去：</div><div id="m-A-hover"></div></div>
+  <div><span class="tag" style="visibility:hidden">·</span><div id="p-A"></div></div>
+  <div class="q-cap" id="cap-A"></div>
+</div>
+
+<div class="q-row">
+  <div><span class="tag alt">B · 留卡，调淡</span><div id="m-B"></div></div>
+  <div><span class="tag" style="visibility:hidden">·</span><div id="p-B"></div></div>
+  <div class="q-cap" id="cap-B"></div>
+</div>
+
+<div class="q-row" style="margin-bottom:0">
+  <div><span class="tag alt">C · 会话页不放</span><div id="m-C"></div></div>
+  <div><span class="tag" style="visibility:hidden">·</span><div id="p-C"></div></div>
+  <div class="q-cap" id="cap-C"></div>
+</div>
+</section>
+
+<section id="part-2">
+<h2>③ A 的规格（四端一起改，只动这一个视图）</h2>
+<div id="spec"></div>
+</section>
+
+<section id="part-3">
+<h2>④ 待定 · 要你拍板</h2>
+<div class="q-decide" id="decide"></div>
+<h2>⑤ 落地（按代价排）</h2>
+<div class="q-land" id="land"></div>
+</section>
+
+<script>
+// ── 样例：一个清理磁盘的会话，最后一条回复的尾巴 + 它的 recap ─────────────
+const Q_WHEN = '2:07 AM';
+const Q_TEXT = RECAP.disk;
+const DISK_TAIL = `
+<p>清理做完了。删之前逐个核对过：这些仓库最近 30 天没有被任何会话或服务引用。</p>
+<ul>
+<li>删掉 10 个旧模型仓库，释放 258G；数据盘现在剩 319G。</li>
+<li>保留的 3 个模型和 vLLM 服务重启后复核过：推理正常，延迟和清理前一样。</li>
+<li>164 个 worktree 里有 120 个对应的任务早已完成，这一批还没动。</li>
+</ul>
+<p class="last"><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p>`;
+
+const M2 = 'rgb(140,144,152)';
+const qLabel = (color, size) => `<span class="lab">${ic('align', size, color, 2.1)}<b>Recap</b> · ${Q_WHEN}</span>`;
+
+// Mac
+const macComposer = () => `<div class="q-mcomp"><div class="p1">Message…</div><div class="bt">${ic('plus', 17, M2, 2)}<span class="a">Auto</span><span class="m">Opus 5.5</span><span class="e">Max</span><span class="s">${ic('up', 14, 'rgba(0,0,0,.75)', 2.6)}</span></div></div>`;
+const macCard = (dim = false) => `<div class="q-mcard${dim ? ' q-dim' : ''}"><div class="hd">${ic('align', 13, M2, 2.1)}<span><b>Recap</b> · ${Q_WHEN}</span><span class="rf">${ic('refresh', 15, M2, 2.2)}</span></div><div class="bd">${Q_TEXT}</div></div>`;
+const macNote = (hover = false) => `<div class="q-mnote${hover ? ' q-hover' : ''}"><div class="t">${qLabel(M2, 13)}${Q_TEXT}</div><span class="rf">${ic('refresh', 14, hover ? '#CACED4' : M2, 2.2)}</span></div>`;
+const macPane = (variant) => `<div class="q-mac"><div class="q-mfade"></div><div class="q-mcol"><div class="q-mtx">${DISK_TAIL}</div>${variant}</div>${macComposer()}</div>`;
+const CURSOR = `<svg class="q-cursor" width="17" height="24" viewBox="0 0 17 24"><path d="M1.5 1.5v18.2l4.6-4.4 3 6.9 3.1-1.3-3-6.8h6.3z" fill="#000" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+
+document.getElementById('m-today').innerHTML = macPane(macCard());
+document.getElementById('m-A').innerHTML = macPane(macNote());
+document.getElementById('m-A-hover').innerHTML = `<div class="q-mac q-strip"><div class="q-mcol"><div class="q-mtx"><p class="last" style="padding-top:12px"><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p></div>${macNote(true)}</div>${CURSOR}</div>`;
+document.getElementById('m-B').innerHTML = macPane(macCard(true));
+document.getElementById('m-C').innerHTML = macPane('');
+
+// iPhone（kit 的手机、字和输入框；只画 y 500 → 956）
+const OFF = 500;
+const pNote = () => `<div class="q-pnote"><div class="t">${qLabel('var(--l2)', 14)}${Q_TEXT}</div><span class="rf">${ic('refresh', 17, 'var(--l2)', 2.1)}</span></div>`;
+const pCard = (dim = false) => recapCard({ when: Q_WHEN, text: Q_TEXT }).replace('class="rcard', `class="rcard${dim ? ' q-dim' : ''}`);
+const pPhone = (variant) => phone('dark', `<div class="q-pcol"><div class="tx">${DISK_TAIL}</div>${variant}</div><div class="q-pfade" style="top:${OFF}px"></div>${composer()}`, { h: 956 - OFF, off: OFF, cls: 'q-bot' });
+document.getElementById('p-today').innerHTML = pPhone(pCard());
+document.getElementById('p-A').innerHTML = pPhone(pNote());
+document.getElementById('p-B').innerHTML = pPhone(pCard(true));
+document.getElementById('p-C').innerHTML = pPhone('');
+
+// ── 标注（排版之后再量）────────────────────────────────────
+function boxIn(frame, el) {
+  const f = frame.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: r.left - f.left, y: r.top - f.top, w: r.width, h: r.height };
+}
+function markMac(id, el, n, { pad = 3, at = 'tl', cls = '' } = {}) {
+  const frame = document.querySelector(`#${id} .q-mac`);
+  const r = boxIn(frame, el);
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const pos = { tl: [x0 - 9, y0 - 9], tr: [x1 - 11, y0 - 9], bl: [x0 - 9, y1 - 11], br: [x1 - 11, y1 - 11], bm: [(x0 + x1) / 2 - 10, y1 + 1] }[at];
+  frame.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+}
+const H = (sel, root = document) => Math.round(root.querySelector(sel).getBoundingClientRect().height);
+
+window.drawMarks = () => {
+  if (window.qDrawn) return;
+  window.qDrawn = true;
+  const mt = document.getElementById('m-today');
+  const card = mt.querySelector('.q-mcard'), comp = mt.querySelector('.q-mcomp');
+  markMac('m-today', card, 1, { at: 'tl' });
+  // ② 卡 + 输入框：同一种形状叠在一起
+  const f = mt.querySelector('.q-mac').getBoundingClientRect();
+  const a = card.getBoundingClientRect(), b = comp.getBoundingClientRect();
+  mt.querySelector('.q-mac').insertAdjacentHTML('beforeend',
+    mk(a.left - f.left - 8, a.top - f.top - 8, a.width + 16, b.bottom - a.top + 16) + num(2, a.right - f.left - 4, a.top - f.top - 17));
+  markMac('m-today', card.querySelector('.bd'), 3, { pad: 2, at: 'br' });
+
+  const ma = document.getElementById('m-A');
+  markMac('m-A', ma.querySelector('.q-mnote'), 1, { cls: 'blue', at: 'tr' });
+  markMac('m-A', ma.querySelector('.q-mnote .lab'), 2, { cls: 'blue', pad: 2, at: 'bm' });
+  // 悬停条：光标落在 ↻ 上
+  const hv = document.getElementById('m-A-hover');
+  const hf = hv.querySelector('.q-mac'), rf = hv.querySelector('.rf');
+  const rr = boxIn(hf, rf);
+  const cur = hv.querySelector('.q-cursor');
+  cur.style.left = `${rr.x + rr.w - 4}px`; cur.style.top = `${rr.y + rr.h - 3}px`;
+  markMac('m-A-hover', rf, 3, { cls: 'blue', pad: 4, at: 'tl' });
+
+  markMac('m-B', document.querySelector('#m-B .q-mcard'), 1, { at: 'tl' });
+
+  // 量出来的高度写进说明
+  const hToday = H('#m-today .q-mcard'), hA = H('#m-A .q-mnote'), hB = H('#m-B .q-mcard');
+  const pToday = H('#p-today .rcard'), pA = H('#p-A .q-pnote'), pB = H('#p-B .rcard');
+  const wToday = Math.round(card.getBoundingClientRect().width);
+  document.getElementById('cap-today').innerHTML = `<h3>现状：一块灰底卡，贴在输入框上</h3>
+  <ul>
+  <li><span class="n">1</span>整个转录只有它是<b>实底圆角板</b>：回复本身是没有底的字，这块 ${wToday}pt 宽的板就成了屏幕上最重的东西，比它总结的那条回复还显眼。</li>
+  <li><span class="n">2</span>它和<b>输入框是同一种形状</b>（实底、圆角），又正好叠在输入框正上方 14pt，看上去像从输入框弹出来的一张浮层，而不像对话的一部分。「悬浮」的感觉主要来自这里。</li>
+  <li><span class="n">3</span>正文用的是<b>回复的颜色</b>（#CACED4，和回复一样亮），它说的又多半是上面那条回复的结论：视线落到底部，先撞上的是复述。</li>
+  <li>进会话就落在尾部，它刚好占住视线落的地方；这次进来不开新一轮就一直在，没法让它走。</li>
+  </ul>
+  <p>占高：Mac <span class="q-h">${hToday}pt</span> · iPhone <span class="q-h">${pToday}pt</span></p>`;
+
+  document.getElementById('cap-A').innerHTML = `<h3>A · 退成一段尾注（我建议）</h3>
+  <ul>
+  <li><span class="n blue">1</span><b>没有底、边、圆角</b>：它就是转录里的一段字，紧跟在回复后面，和回复左对齐。和输入框不再是同一种东西，也就不「浮」了。</li>
+  <li><span class="n blue">2</span>头还是原词原格式 <code>Recap · 2:07 AM</code>，但<b>和正文并成一段</b>（不再单占一行）；整段降到<b>次要色</b>、小一号（Mac 13pt，iPhone 15pt），一看就是旁注，不和回复抢。</li>
+  <li><span class="n blue">3</span>Mac 和 web 上 <b>↻ 鼠标移上去才出现</b>，静止时这一行只剩字；手机和 Android 没有悬停，↻ 照旧一直在。</li>
+  <li>全文照旧不截断；什么时候出现、什么时候让位、读屏、文案都不动。</li>
+  </ul>
+  <p>占高：Mac <span class="q-h">${hToday} → ${hA}pt</span>（一行）· iPhone <span class="q-h">${pToday} → ${pA}pt</span></p>`;
+
+  document.getElementById('cap-B').innerHTML = `<h3>B · 留卡，调淡</h3>
+  <ul>
+  <li><span class="n">1</span>卡还在，底从 gray 12% 降到 6%，正文从回复色降到次要色；↻ 照旧一直在。</li>
+  <li>改动最小（两个颜色值）。但它<b>还是一块和输入框同形的板、还叠在输入框上面</b>：浮层感轻了，没消失。</li>
+  </ul>
+  <p>占高：不变，Mac <span class="q-h">${hB}pt</span> · iPhone <span class="q-h">${pB}pt</span></p>`;
+
+  document.getElementById('cap-C').innerHTML = `<h3>C · 会话页不放</h3>
+  <ul>
+  <li>会话到最后一条回复就结束，回到 10-22 之前；recap 只在列表那一行。</li>
+  <li>↻ 搬进会话的 ⋯ 菜单（<code>Refresh recap</code>，原词）。</li>
+  <li>代价：从通知、链接、项目页直接进会话的人看不到 recap（他们没经过列表那一行，这正是 10-22 加卡的理由）；想看全文得回列表，而列表一行是尾截的。</li>
+  </ul>
+  <p>占高：<span class="q-h">0</span></p>`;
+};
+
+// ── ③ 规格 ────────────────────────────────────────────────
+document.getElementById('spec').innerHTML = `<table class="q-tok">
+<colgroup><col style="width:150px"><col><col><col><col></colgroup>
+<tr><th></th><th>Mac</th><th>iPhone / iPad</th><th>web</th><th>Android</th></tr>
+<tr><td>样子</td><td colspan="4">一段字。没有底、边框、圆角；左边和回复正文对齐。头 <code>Recap · 时间</code> 是这段的开头（text.alignleft 图标 + <b>Recap</b> 半粗 + <code>· 时间</code>，时间照旧用 recapLabel 的格式），后面空一格接 recap 全文，不截断。</td></tr>
+<tr><td>字号 · 颜色</td><td>13pt（orbitSubtext）· secondary</td><td>15pt（subheadline）· secondaryLabel</td><td>13px · --text-2</td><td>bodyMedium · onSurfaceVariant</td></tr>
+<tr><td>↻ Refresh recap</td><td>第一行右端，15pt；<b>悬停或键盘聚焦时才出现</b>，位置一直占着，出现时字不挪</td><td>第一行右端，17pt，一直在，点按区 44</td><td>同 Mac：悬停或聚焦才出现</td><td>第一行右端，IconButton 48dp，一直在</td></tr>
+<tr><td>间距</td><td>照今天卡的上下间距</td><td>离回复 18，离输入框 14（同 04）</td><td>照今天卡的上下间距</td><td>照今天卡的上下间距</td></tr>
+<tr><td>按着 ↻ 之后</td><td colspan="4">照 04：转圈，正文变淡；写好了换正文和时间；没写成按 reason 弹那四句之一。</td></tr>
+<tr><td>不动的</td><td colspan="4">什么时候出现（会话静止、有 recap、Session recaps 开着、这次进来还没开始新一轮）；一开始新一轮就让位，这次不回来；读屏「Recap, 时间, 全文」+ 按钮「Refresh recap」；长按 / 右键 = Copy；<b>没有新文案</b>，copy parity 测试不用动。</td></tr>
+</table>`;
+
+// ── ④ 待定 ────────────────────────────────────────────────
+document.getElementById('decide').innerHTML = `
+<div class="q-box"><h3>1 · 会话页的 Recap 换成哪种？</h3>
+<ul>
+<li><span class="q-rec">A 尾注（我建议）</span>：位置、规则、内容都不变，只是不再是一块板。从通知、链接进来的人照旧在最后一行看到结论，但它不再比回复显眼，也不再像贴在输入框上的浮层。Mac 上一行就完。</li>
+<li><b>B 留卡调淡</b>：改得最少，可还是一块和输入框同形的板，「浮」的感觉只是轻了。</li>
+<li><b>C 不放</b>：最安静；代价是不经过列表就进会话的人看不到 recap，↻ 要去 ⋯ 菜单找。</li>
+</ul>
+<p style="margin:10px 0 0">不建议<b>给卡加 ×</b>：每次进来都得再关一次。想要「列表留 recap、会话里不要」，那就是 C。</p></div>
+<div class="q-box"><h3>2 · A 的 ↻ 在 Mac 和 web 上</h3>
+<ul>
+<li><span class="q-rec">悬停才出现（我建议）</span>：服务端自己会让 recap 跟上最后一轮，手动刷新很少用；静止时这一行只剩字，最安静。键盘聚焦到这一段时也出现，读屏照旧念得到。</li>
+<li><b>一直在</b>：和手机一样；一行字尾巴上多一个常驻的灰图标。</li>
+</ul>
+<p style="margin:10px 0 0">手机和 Android 没有悬停，A 里 ↻ 一直在（和今天同一个位置、同一个颜色）。</p></div>`;
+
+// ── ⑤ 落地 ────────────────────────────────────────────────
+document.getElementById('land').innerHTML = `<ol>
+<li><b>B</b>：四端各改两个颜色值（卡底、正文色）。</li>
+<li><b>A</b>：四端各改一个视图：web <code>SessionRecapCard</code> 和 <code>.chat-recap*</code> 样式，Mac / iOS <code>RecapCardView</code>，Android <code>RecapCardView</code>。规则（<code>restsForRecap</code> / <code>RecapCard.rests</code>、让位）、接口、文案都不动，copy parity 不受影响；web 的卡片测试、Android 的 <code>RecapCardViewTest</code> 跟着改，Mac / iOS 过 <code>client.yml</code>。一个任务，四端一起。</li>
+<li><b>C</b>：四端删卡和让位逻辑；⋯ 菜单加 <code>Refresh recap</code>（四端，加进 copy parity）；Settings 里 Session recaps 的说明删掉 “and the conversation ends with it” 和 “and no summary in the conversation” 两处（四端 + parity）。</li>
+</ol>`;
+
+document.fonts.ready.then(() => window.drawMarks());
+</script>
+</body></html>

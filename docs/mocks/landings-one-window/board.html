@@ -1,0 +1,303 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>落地合成一个窗口</title>
+<link rel="stylesheet" href="../landing-session/v4/kit.css">
+<script src="../landing-session/v4/kit.js"></script>
+<style>
+/* 2026-10-27 · 落地合成一个窗口。部件与取值照 ../landing-session/v4（main 上已实现的落地页、Landings 组与头）；
+   本图自己的类都带 lw- 前缀，避开 kit.css 的短类名。 */
+.lw-lede { max-width: 1240px; }
+.lw-part { margin-bottom: 46px; width: max-content; padding: 6px 4px 0; }
+.lw-row { display: flex; gap: 44px; align-items: flex-start; }
+.lw-row figure { width: 393px; }
+.capdd { max-width: 393px; }
+figcaption ul.lw-ul { list-style: none; padding-left: 0; }
+figcaption ul.lw-ul li { margin: 6px 0; }
+
+/* 现在 · 项目页画成一整条，红虚线是屏幕底 */
+.phone.lw-tall { height: auto; padding-bottom: 26px; }
+.lw-below { position: absolute; left: 0; right: 0; top: 852px; bottom: 0; background: rgba(255, 59, 48, .07); z-index: 6; }
+.lw-fold { position: absolute; left: 0; right: 0; top: 852px; border-top: 2px dashed var(--mark); z-index: 7; }
+.lw-fold span { position: absolute; right: 16px; top: 6px; font-size: 11.5px; font-weight: 700; color: #fff; background: var(--mark); border-radius: 5px; padding: 1px 7px; }
+
+/* 现在 · 每一次落地一个窗口：叠起来画 */
+.lw-stack { position: relative; padding-top: 81px; }
+.lw-stack > .phone { z-index: 4; }
+.lw-ghost { position: absolute; left: 0; width: 393px; height: 160px; border-radius: 44px 44px 0 0; transform-origin: top center;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.1), 0 -2px 10px rgba(0,0,0,.05); font-size: 12px; font-weight: 600; color: #3a3a3c;
+            text-align: center; padding: 7px 56px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lw-ghost.g1 { top: 54px; transform: scale(.97); z-index: 3; background: #F2F2F7; }
+.lw-ghost.g2 { top: 27px; transform: scale(.94); z-index: 2; background: #EAEAF0; }
+.lw-ghost.g3 { top: 0; transform: scale(.91); z-index: 1; background: #E2E2E9; }
+.lw-stack .lw-n { position: absolute; top: 4px; right: -6px; z-index: 5; }
+
+/* 改后 · 项目页的那一行：下面一行可以折成两行 */
+.lw-2l .hd4 .h2 { white-space: normal; line-height: 1.32; }
+.lw-red { color: var(--red-ink); }
+
+/* 改后 · 落地窗口 */
+.lw-sc { position: absolute; left: 0; right: 0; overflow: hidden; display: flex; flex-direction: column;
+         -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px); }
+.lw-in { padding: 4px 14px 8px; }
+.lw-in .sc4 { margin: 6px 0 10px; }
+.sc4.lw-m0, .lw-in .sc4.lw-m0 { margin: 0; }
+.lw-day { text-align: center; font-size: 12px; font-weight: 600; color: var(--l2); margin: 14px 0 6px; }
+.lw-day.now { color: var(--tint); }
+.lw-grp { background: #fff; border-radius: 14px; padding: 0 12px; box-shadow: inset 0 0 0 .5px rgba(60,60,67,.12); }
+.lw-grp > .tr4:last-child, .lw-grp > .mk:last-child .tr4, .lw-grp > .lw-open:last-child { border-bottom: none; }
+.lw-what { font-size: 13px; line-height: 1.36; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lw-open { background: rgba(120,120,128,.07); margin: 0 -12px; padding: 0 12px 10px; border-bottom: .5px solid var(--sep); position: relative; }
+.lw-open > .tr4 { border-bottom: none; }
+.lw-x .ev { font-size: 13.5px; padding: 4px 0; }
+.lw-x .ev .tm2 { width: 36px; }
+.lw-x .rnd { margin: 6px 0 2px; }
+.lw-x code { font-size: 11.5px; }
+.lw-links { display: flex; gap: 18px; padding: 6px 0 0 45px; }
+.lw-up { display: inline-flex; margin-left: 6px; transform: rotate(-90deg); vertical-align: -1px; }
+.lw-hl { box-shadow: 0 0 0 3px rgba(62,105,246,.5); border-radius: 12px; }
+.lw-in .sc4 ul.tk li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--l2); }
+.lw-from { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13px; color: #4a4a52; }
+.lw-from .card { background: #fff; border-radius: 10px; padding: 5px 10px; box-shadow: inset 0 0 0 .5px rgba(60,60,67,.18); font-size: 12.5px; color: var(--tint); font-weight: 600; }
+.lw-in .sc4.lw-liftin { position: relative; z-index: 2; box-shadow: 0 0 0 1600px rgba(0,0,0,.22), 0 16px 40px rgba(0,0,0,.3); }
+.lw-dim { position: absolute; left: 0; right: 0; background: rgba(0,0,0,.22); z-index: 20; }
+
+/* 待定与落地 */
+.lw-panel { width: 1240px; }
+.lw-panel h3 { font-size: 16px; margin: 20px 0 8px; }
+.lw-panel p, .lw-panel li { font-size: 14px; line-height: 1.65; color: #33333a; }
+.lw-panel ol { padding-left: 20px; margin: 6px 0 0; }
+.lw-panel li { margin: 6px 0; }
+.lw-done { background: #eaf6ee; border: 1px solid #b9e2c5; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; color: #1d4d2b; margin: 4px 0 6px; }
+table.mx td.rec { background: rgba(62,105,246,.06); }
+</style>
+<body>
+<h1>落地合成一个窗口（2026-10-27 · 按 main 0f43132c3）</h1>
+<p class="lede lw-lede">今天一个项目里的<b>每一次落地都是一个单独的会话</b>：一个任务的一段落地一个（<code>Land · &lt;task&gt;</code>），一轮合入 main 一个（<code>Merge project/&lt;id&gt; → main · #n</code>）。项目 sessions 页的 Landings 组一条一行，合入 main 的回执又在时间线里各占一行，一天下来就是十几个窗口。<br>
+<b>owner 10-27</b>：这些落地合到一个会话窗口里；<b>Merged into main</b> 也合进来。<br>
+本图：① 项目页，现在与改后；② 落地窗口，现在与改后；③ 改后的展开、从别处进来、一条落地自己的门；④ 待定与落地。英文是上线文案，中文是说明；项目与任务名是示例数据。只画了 iPhone，web 与 Android 等方向定了再画。</p>
+<div id="board"></div>
+<script>
+// ── 示例数据（10:20，一个 Android 客户端项目；名字是编的）──────────────────────────
+const WP = 'Android 客户端';
+const WBR = 'project/34ZZn…CsCFp';
+const WRUN = 'workstation-gpu';
+const WT = {
+  a10c: 'A10c · 通知冷启动后跳转丢失会话',
+  a11k: 'A11k · 任务页写入后先回读再放开按钮',
+  a13f: 'A13f · Runner 设置页的模型账户排序',
+  a08l: 'A08l · Android 15 重建窗口时折叠输入框',
+  a01: 'A01 · 对齐矩阵补记 iOS 27 的差异',
+  a05i: 'A05i · 会话目录搜索漏掉折叠文件夹',
+  a12d: 'A12d · Wiki 审核卡的深链返回来源',
+  a03i: 'A03i · 并发刷新令牌只换一次',
+};
+const WTASK = ic('task', 14, '#8e8e93', 2);
+const WUPG = ic('up', 15, 'var(--green-ink)', 2);
+const WMRG = ic('merge', 14, 'var(--tint)', 2.2);
+const WQUIET = () => hm4('idle', ic('dashc', 15, 'var(--l2)', 2));
+const W_UP = `<span class="lw-up">${ic('chevr', 11, 'var(--l3)', 3)}</span>`;
+const wTerm = (lines) => `<div class="term">${lines}</div>`;
+const wcap = (title, items, dd = '') => `<b>${title}</b><ul class="lw-ul">${items.map((i) => `<li>${i}</li>`).join('')}</ul>${dd ? `<div class="capdd">${dd}</div>` : ''}`;
+// 一页可滚动的正文：end 时像会话一样停在最底，否则从上往下排
+const wBody = (inner, { top = 116, bottom = 84, end = true, shift = 0 } = {}) =>
+  `<div class="lw-sc" style="top:${top}px;bottom:${bottom}px;justify-content:${end ? 'flex-end' : 'flex-start'}"><div class="lw-in" style="margin-top:${-shift}px">${inner}</div></div>`;
+const wfig = (tag, label, ph, capHtml, above = '') => `<figure><span class="tag ${tag}">${label}</span>${above}${ph}<figcaption>${capHtml}</figcaption></figure>`;
+
+// ── 项目 sessions 页（iOS，照 main 的 SessionProjectPage）────────────────────────────
+const W_COORD = sessRow({ t: WP, tm: '2m ago', chip: 'Coordinator', eye: true, sub: 'Watching any 1 of 2 tasks…' });
+const W_S = {
+  k: sessRow({ t: `执行任务：${WT.a11k}`, tm: '7m ago', sub: 'Recap · 10:13 AM 写入后先回读，回读前按钮保持禁用' }),
+  c: sessRow({ t: `执行任务：${WT.a10c}`, tm: '19m ago', sub: 'Recap · 10:01 AM 冷启动跳转改为等会话列表就绪' }),
+  f: sessRow({ t: `执行任务：${WT.a13f}`, tm: '41m ago', sub: 'Recap · 9:39 AM 模型账户按最近使用排序' }),
+  l: sessRow({ t: `执行任务：${WT.a08l}`, tm: '1h ago', sub: 'Recap · 8:58 AM 第 2 轮：键盘弹起时折叠输入框' }),
+};
+const W_MERGED = mergedRow4({ tm: '29m ago', detail: '3f1c2a9 · 2 tasks · automatically' });
+const W_LCARD = lcard4(head4({ tone: 'run', title: 'Landing', right: '6m 12s', detail: 'checking · output 2s ago' }) + lcWhat(WT.a11k) + lcOnto(WBR) + lcMeta(NOTHING)
+  + lcFoot('<span class="sp"></span>' + openLk()));
+const wPage = ({ landings, rows, cls = '', extra = '' }) => phone(`${statusBar('10:20', 97)}${navP(91, WP)}<div class="list">${pc4({ done: 79, total: 91, run: 1 })}${W_LCARD}${sh('Coordinator')}${W_COORD}${landings}${sh('Today')}${rows.join('')}</div>${extra}`, cls);
+const wg = (o) => tr4(head4({ rcls: 'tm', ...o }));
+
+// a · 现在：Landings 组一条一行，合入 main 的回执在时间线里
+const LG_NOW = sh('Landings') + [
+  wg({ tone: 'fail', title: `Land · ${WT.a10c}`, right: '18m', detail: 'Checks failed · with the coordinator' }),
+  wg({ tone: 'ok', mark: MARK.landed(), title: `Land · ${WT.a13f}`, right: '18m', detail: 'Landed' }),
+  wg({ tone: 'ok', mark: MARK.landed(), title: `Land · ${WT.a08l} (#2)`, right: '1h', detail: 'Landed' }),
+  wg({ tone: 'idle', mark: WQUIET(), title: `Land · ${WT.a01}`, right: '1h', detail: 'Nothing to land' }),
+  wg({ tone: 'ok', mark: MARK.landed(), title: `Land · ${WT.a05i}`, right: '2h', detail: 'Landed' }),
+  wg({ tone: 'ok', mark: MARK.landed(), title: `Land · ${WT.a12d}`, right: '16h', detail: 'Landed' }),
+  wg({ tone: 'ok', mark: MARK.landed(), title: `Land · ${WT.a03i}`, right: '16h', detail: 'Landed' }),
+].join('') + `<div class="lgx">${ic('check', 13, 'var(--l2)', 2.6)}Earlier · 71 landed · 4 nothing to land<span class="sp">${chev()}</span></div>`;
+const pA = wPage({ landings: mkx(LG_NOW, 1, 'in', 'border-radius:12px'), rows: [W_S.k, W_S.c, mkx(W_MERGED, 2, 'in'), W_S.f, W_S.l], cls: 'lw-tall',
+  extra: '<div class="lw-below"></div><div class="lw-fold"><span>屏幕底 852pt</span></div>' });
+
+// c · 改后：Landings 只剩一行，时间线里不再有合入行
+const LG_ONE = sh('Landings') + `<div class="lw-2l">${wg({ tone: 'fail', title: 'Landings', right: '18m',
+  detail: '<span class="lw-red">1 waiting for a decision</span> · 1 in flight · 3 landed · 1 merged into main today' })}</div>`;
+const pC = wPage({ landings: mkx(LG_ONE, 1, 'in', 'border-radius:12px'), rows: [mkx(W_S.k + W_S.c + W_S.f + W_S.l, 2, 'in', 'border-radius:12px')] });
+
+// ── 落地窗口 ────────────────────────────────────────────────────────────────────
+const W_FAILHEAD = head4({ tone: 'fail', title: 'Landing', right: 'Not landed', detail: 'checks failed · exit 1 after 3m 52s' });
+const W_FAILBODY = `<div class="t13">Merge check exited 1 (expected 0) on the combined tree · <b>nothing was pushed</b></div>`
+  + scl(`${ic('person', 13, '#7a5af5', 2)}<b>Coordinator</b>&nbsp;has it · 18m`)
+  + `<div class="acts">${cap4('Open Coordinator')}${cap4('Open Task', 'grey')}</div>`;
+const W_FAILTERM = wTerm(`<span class="dim">$ bash src/android/gradlew -p src/android test lintDebug</span>
+ ColdStartRouteTest &gt; opens the session after the list loads <span style="color:#ff6b61">FAILED</span>
+   expected the session page but the list was empty
+ <span style="color:#ff6b61">BUILD FAILED</span> in 3m 51s`);
+const W_RUNTERM = wTerm(`<span class="dim">$ bash src/android/gradlew -p src/android test lintDebug</span>
+ &gt; Task :app:testDebugUnitTest
+ TaskPageWriteBackTest &gt; holds the controls until read back <span class="ok">PASSED</span>
+ LandingPageWriteBackTest &gt; keeps Abandon disabled <span class="cur"></span>`);
+
+// b · 现在：一次落地一个会话页（照 main 的 LandingSessionPageView；v4 05 g）
+const pB_front = phone(`${statusBar('10:21', 97)}${mkx(navL4(`Land · ${WT.a10c}`, `Run by Orbit · runner ${WRUN}`), 1, 'in', 'border-radius:14px;margin:0 4px')}
+${sc4('fail', W_FAILHEAD + W_FAILBODY)}
+${wBody(rnd('Generation 1') + ev('10:01', WTASK, `Task marked done · queued to land on ${WBR}`)
+  + ev('10:02', RING, `Claimed by runner ${WRUN} · claim 1<span class="sub">fetch, sync main, rebase</span>`)
+  + ev('10:02', X, toolBlock('Merge check', 'exit 1', '3m 52s', W_FAILTERM, 'var(--red-ink)'))
+  + ev('10:06', STOP, '<b>Check failed</b> · nothing was pushed<span class="sub">The project branch did not move.</span>')
+  + ev('10:06', ARR, 'Asked the coordinator to fix it'), { top: 306, end: false })}
+${lfoot('Orbit runs this landing — <b>nothing to type here.</b><br>Decisions: the coordinator · <a>Open coordinator ›</a>')}`, 'page');
+const ghost = (cls, t) => `<div class="lw-ghost ${cls}">${t}</div>`;
+const pB = `<div class="lw-stack">${ghost('g3', `Land · ${WT.a08l} (#2)`)}${ghost('g2', `Merge ${WBR} → main · #12`)}${ghost('g1', `Land · ${WT.a13f}`)}<span class="badge lw-n">2</span>${pB_front}</div>`;
+
+// d–g · 改后：一个项目一个落地窗口。结了的按天分组，按结案时刻排；没结的在最下面的 Now
+const wNavW = () => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>Landings</b><span>Run by Orbit · ${WP}</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const W_FOOT = lfoot('Orbit runs these landings — <b>nothing to type here.</b><br>Decisions: the coordinator · <a>Open coordinator ›</a>');
+const wh = (o) => tr4(head4({ tone: 'ok', rcls: 'tm', ...o }));
+const H = {
+  a03i: wh({ mark: MARK.landed(), title: WT.a03i, right: '17:42', detail: 'Landed' }),
+  a12d: wh({ mark: MARK.landed(), title: WT.a12d, right: '18:10', detail: 'Landed' }),
+  m11: wh({ mark: MARK.merged(), title: 'Merged into main', right: '18:40', detail: '8ed0ea7 · 3 tasks · automatically' }),
+  a05i: wh({ mark: MARK.landed(), title: WT.a05i, right: '08:12', detail: 'Landed' }),
+  a01: wh({ tone: 'idle', mark: WQUIET(), title: WT.a01, right: '08:30', detail: 'Nothing to land' }),
+  a08l: wh({ mark: MARK.landed(), title: `${WT.a08l} (#2)`, right: '09:05', detail: 'Landed' }),
+  m12: wh({ mark: MARK.merged(), title: 'Merged into main', right: '09:51', detail: '3f1c2a9 · 2 tasks · automatically' }),
+  a13f: wh({ mark: MARK.landed(), title: WT.a13f, right: '10:02', detail: 'Landed' }),
+};
+const day = (t, now = false) => `<div class="lw-day${now ? ' now' : ''}">${t}</div>`;
+const grp = (rows) => `<div class="lw-grp">${rows.join('')}</div>`;
+const NOW_FAIL = sc4('fail', W_FAILHEAD + `<div class="lw-what">${WT.a10c}</div>` + W_FAILBODY);
+const NOW_RUN = (cls = '', extra = '') => sc4(cls, head4({ tone: 'run', title: 'Landing', right: '6m 12s', detail: 'checking · output 2s ago' }) + `<div class="lw-what">${WT.a11k}</div>`
+  + scl('Merge check <b>6m 12s</b> of 30m<span class="u">usually ~9m</span>') + bud4(20.7, 30) + live4('Output 2s ago · Updated just now') + extra);
+const HIST_Y = day('Yesterday') + grp([H.a03i, H.a12d, H.m11]);
+
+// d · 打开时停在最底，像一个会话
+const pD = phone(`${statusBar('10:20', 97)}${wNavW()}${wBody(HIST_Y + day('Today')
+  + mkx(`<div class="lw-grp">${H.a05i}${H.a01}${H.a08l}${mkx(H.m12, 2, 'in', 'border-radius:10px')}${H.a13f}</div>`, 1, 'in', 'border-radius:14px')
+  + mkx(day('Now', true) + NOW_FAIL + NOW_RUN(), 3, 'in', 'border-radius:16px'))}<div class="lfoot mk in" style="outline-offset:-5px;border-radius:0 0 40px 40px">Orbit runs these landings — <b>nothing to type here.</b><br>Decisions: the coordinator · <a>Open coordinator ›</a>${badge(4)}</div>`, 'page');
+
+// e · 点「Merged into main」那一行：原地展开这一轮（回执 + 检查 + 推送）
+const W_RCPT = sc4('ok lw-m0', `<div class="t13"><b>Now on main · 2 tasks</b></div><ul class="tk"><li>${WT.a05i}</li><li>${WT.a08l} (#2)</li></ul>`
+  + `<div class="t13" style="color:var(--green-ink)">✓ Passed on the combined tree · 17m 41s</div>`
+  + `<div class="t13" style="color:var(--l2)">Landed exactly the tested tree <b style="color:var(--label)">5e5bfca</b> · as a merge commit</div>`);
+const W_M12_OPEN = `<div class="lw-open">${wh({ mark: MARK.merged(), title: 'Merged into main', right: `09:51${W_UP}`, detail: '3f1c2a9 · 2 tasks · automatically' })}`
+  + mkx(W_RCPT, 1, 'in', 'border-radius:16px')
+  + mkx(`<div class="lw-x">${rnd('Merge check')}${ev('09:33', RING, `Merge check started on the combined tree<span class="sub">${WBR} + main @ 41ac9e0 · claim 1</span>`)}`
+    + `${ev('09:50', OK, 'Merge check passed · 17m 41s <a>Log ›</a>')}${rnd('Merge to main')}${ev('09:50', WMRG, 'Merging into main on its own — Automatic is on')}`
+    + `${ev('09:51', WUPG, 'Pushed to main · <code>3f1c2a9</code>')}${ev('09:51', OK, '<b>Merged</b> · receipts for 2 tasks')}</div>`, 2, 'in', 'border-radius:10px;margin-top:8px')
+  + '</div>';
+const pE = phone(`${statusBar('10:23', 97)}${wNavW()}${wBody(day('Today') + `<div class="lw-grp">${H.a05i}${H.a01}${H.a08l}${W_M12_OPEN}${H.a13f}</div>` + day('Now', true) + NOW_FAIL,
+  { end: false, shift: 0 })}${W_FOOT}`, 'page');
+
+// f · 从协调会话卡的 Open the landing ↗ 进来：滚到昨天那一条，展开，描边亮一下
+const W_A12D_OPEN = `<div class="lw-open lw-hl">${wh({ mark: MARK.landed(), title: WT.a12d, right: `18:10${W_UP}`, detail: 'Landed' })}`
+  + `<div class="lw-x">${rnd('Generation 1')}${ev('16:20', WTASK, `Task marked done · queued to land on ${WBR}`)}${ev('16:21', RING, `Claimed by runner ${WRUN} · claim 1`)}`
+  + `${ev('16:39', X, 'Merge check failed · exit 1 after 18m 02s <a>Log ›</a>')}${ev('16:39', ARR, 'Asked the coordinator to fix it')}`
+  + mkx(`${rnd('Generation 2')}${ev('17:52', '<span class="av co">C</span>', 'Rerun by the coordinator · the emulator timed out booting; the task did not change', 'who')}`
+    + `${ev('17:52', WTASK, `Queued again to land on ${WBR}`)}${ev('18:09', OK, 'Merge check passed · 16m 48s <a>Log ›</a>')}${ev('18:10', OK, `Landed on ${WBR} · <code>9c2e7d1</code>`)}`, 2, 'in', 'border-radius:10px')
+  + `</div><div class="lw-links">${openLk('Open Task')}${openLk('Open Source Session')}</div></div>`;
+const pF = phone(`${statusBar('10:24', 97)}${wNavW()}${wBody(day('Yesterday') + `<div class="lw-grp">${H.a03i}${mkx(W_A12D_OPEN, 1, 'in', 'border-radius:12px')}${H.m11}</div>`
+  + day('Today') + grp([H.a05i, H.a01, H.a08l]), { end: false, shift: 0 })}${W_FOOT}`, 'page');
+const FROM_F = `<div class="lw-from">从协调会话里这张卡进来：<span class="card">Open the landing ↗</span></div>`;
+
+// g · 长按一张卡：这一条落地自己的门（今天落地会话页 ⋯ 里的那几项）
+const MENU_G = `<div class="lmenu" id="lw-menu-g" style="top:300px;right:14px">
+${mkx(`<div class="mi">Open Task${ic('task', 19, '#000', 1.9)}</div><div class="mi">Open Source Session${ic('bubble', 19, '#000', 1.9)}</div><div class="mi">Open Coordinator${ic('person', 19, '#000', 1.9)}</div>`, 1, 'in', 'border-radius:0;outline-offset:-4px')}
+<div class="gap"></div>
+${mkx(`<div class="mi red"><span>Stop Landing<span class="sm">Before the push only · nothing pushed yet</span></span>${ic('stop', 19, '#E5281D', 2)}</div>`, 2, 'in', 'border-radius:0;outline-offset:-4px')}
+</div>`;
+const pG = phone(`${statusBar('10:20', 97)}${wNavW()}${wBody(HIST_Y + day('Today') + grp([H.a05i, H.a01, H.a08l, H.m12, H.a13f]) + day('Now', true) + NOW_FAIL + NOW_RUN('lw-liftin'))}${W_FOOT}
+<div class="lw-dim" style="top:0;height:116px"></div><div class="lw-dim" style="bottom:0;height:84px"></div>${MENU_G}`, 'page');
+
+// ── 图板 ─────────────────────────────────────────────────────────────────────────
+document.getElementById('board').innerHTML = `
+<section class="lw-part" id="part-1" data-png="01-project-page">
+${band('① 项目 sessions 页', 'now', 'iPhone · 10:20 · 同一个项目、同一时刻')}
+<div class="lw-row">
+${wfig('now', 'a · 现在 · main 0f43132c3', pA, wcap('落地一条一行，合入 main 的回执又在时间线里', [
+  `${n(1)}<b>Landings 组</b>：等决定的 1 条 + 24 小时内结案的 6 条，每条一行，每行打开它自己的落地会话（见 c）。更早的折成 <i>Earlier · 71 landed · 4 nothing to land</i>，点开还是一条一行。`,
+  `${n(2)}<b>Merged into main</b>：合入 main 的每一轮是时间线里的一行，点开是回执；这一轮自己的落地会话又是另一个窗口。`,
+  '红虚线是屏幕底：落地一多，Today 时间线被挤到一屏以外。']))}
+${wfig('after', 'b · 改后', pC, wcap('Landings 只剩一行，进这个项目唯一的落地窗口', [
+  `${n(1)}一行：标记跟最急的那一条（有等决定的是 ✕，否则有在途的是蓝环，全结了是 ✓）；右边是等得最久的那条等了多久；下面写数：等决定的、在途的、今天落地的、今天合入 main 的。整行打开落地窗口（d）。`,
+  `${n(2)}时间线只剩会话：<b>Merged into main</b> 行搬进落地窗口（owner 10-27）。Today 回到一屏之内。`,
+  '上面的 Landing 卡与合入卡（有合入在途时）不动：它们是在途那一次的实时状态和要你按的门；卡上的 Open landing › 都进这一个窗口，定位到那一条（见 f）。']))}
+</div></section>
+
+<section class="lw-part" id="part-2" data-png="02-one-window">
+${band('② 落地窗口', 'now', 'iPhone · 从项目页点进来')}
+<div class="lw-row">
+${wfig('now', 'c · 现在 · 一次落地一个会话', pB, wcap('每一行各开一个会话窗口', [
+  `${n(1)}标题就是这一次落地：一个任务的一段落地一个会话（<i>Land · &lt;task&gt;</i>），一轮合入 main 一个（<i>Merge project/… → main · #12</i>）。`,
+  `${n(2)}看下一条要返回项目页再点；这个项目已经有 80 多个这样的窗口。`]))}
+${wfig('after', 'd · 改后 · 一个窗口（打开时停在最底）', pD, wcap('一个项目一个落地窗口，像会话一样从下往上读', [
+  `${n(1)}结了的按天分组、按结案时刻排，一条一行，用的就是今天 Landings 组的行：✓ 落地、◌ 没东西可落、⇢ 合入 main。往上翻读更早的天。`,
+  `${n(2)}<b>Merged into main</b> 在这里，和这一轮带上 main 的任务排在一起（owner 10-27）。`,
+  `${n(3)}没结的在最下面的 <b>Now</b>，打开就看得到：等决定的一张卡（门照今天的状态卡：Open Coordinator、Open Task，超时时 Retry / Re-run the check / Abandon），在途的一张卡（活的时钟、预算条、活性，V6）。结案后这张卡收成一行，挪进上面的 Today。`,
+  `${n(4)}底部照旧没有输入框：Orbit 跑这些落地，判断在协调会话。`]))}
+</div></section>
+
+<section class="lw-part" id="part-3" data-png="03-open-and-doors">
+${band('③ 改后 · 展开、从别处进来、一条落地自己的门', 'after', 'iPhone')}
+<div class="lw-row">
+${wfig('after', 'e · 改后 · 点一行在原地展开', pE, wcap('点 Merged into main：展开这一轮', [
+  `${n(1)}今天的回执搬进来：这一轮带上 main 的任务、合并树上的检查、落到 main 的那一棵树。`,
+  `${n(2)}下面是这一轮自己的记录（今天落地会话页的时间线原样搬进来）：检查、推送；<i>Log ›</i> 打开检查输出。任务的一行展开也一样：认领、检查、推送、回执，底下 <i>Open Task ›</i>、<i>Open Source Session ›</i>。`,
+  '整行按压展开，再按收起；展开的行右边一个朝上的箭头。']))}
+${wfig('after', 'f · 改后 · 从别处进来', pF, wcap('别处的 Open landing › 都进这个窗口，定位到那一条', [
+  `${n(1)}滚到那一条、展开、描边亮一下。入口照旧：项目页 Landing 卡、作业清单、合入检查行、合入回执、X-E5 卡、协调会话卡、任务页的 Landing 段、写代码会话底部的落地标签。`,
+  `${n(2)}这一条昨天先没过，协调会话重跑后才落地：两代都收在它自己的展开里，不和别的落地混在一起。`]), FROM_F)}
+${wfig('after', 'g · 改后 · 长按一张卡', pG, wcap('一条落地自己的门，挂在它自己的卡上', [
+  `${n(1)}长按一张卡：<i>Open Task</i>、<i>Open Source Session</i>、<i>Open Coordinator</i>，和今天落地会话页 ⋯ 菜单里的一样；合入 main 那一轮是 <i>Review Card</i>、<i>Open Coordinator</i>。`,
+  `${n(2)}推送之前还有 <i>Stop Landing</i>（合入那一轮是 <i>Cancel Merge</i>）。Abandon、Retry、Re-run the check 照旧在卡上，只在超时时出现。`,
+  '窗口右上角的 ⋯ 只有 <i>Open Coordinator</i> 和 <i>Open Project</i>。']))}
+</div></section>
+
+<section class="lw-part" id="part-4" data-png="04-decisions">
+<div class="panel lw-panel">
+<h2>④ 待定 · 要你拍板</h2>
+<div class="lw-done"><b>已定（owner 10-27）</b>：一个项目的落地合到一个窗口；<b>Merged into main</b> 也合进来——项目页时间线里不再有合入行，合入 main 的每一轮都在窗口里（b ②、d ②、e）。</div>
+<h3>1 · 怎么合：A 只合窗口（推荐），还是 B 真的只留一个会话</h3>
+<table class="mx">
+<thead><tr><th></th><th>A · 只合窗口（推荐）</th><th>B · 一个项目只有一个落地会话</th></tr></thead>
+<tbody>
+<tr><th>你看到的</th><td colspan="2">一样，就是本图 b、d–g</td></tr>
+<tr><th>服务端的记录</th><td class="rec">不动：一次落地仍是一条记录（契约 §2.9：一个任务段一个，一轮合入一个），窗口把同一个项目的都读进来</td><td>一个项目只开一个落地会话；迁移把已有的几百条并进去；它不再结案，跟着项目走</td></tr>
+<tr><th>链接与 agent</th><td class="rec">全部照旧：卡上的 Open landing ›、协调会话卡、待办里的落地 id、agent 的 <code>landingSessionId</code> 与 <code>session_get</code>；新客户端把一个落地 id 读成「窗口 + 定位到这一条」，旧客户端照旧打开单个落地页</td><td>同一个项目的所有落地共用一个 id：agent 读某一次落地要多带一个参数；已经发出的卡片和待办里的 id 要改写</td></tr>
+<tr><th>契约</th><td class="rec">改一句：§2.9 LS6 的列表范围写成「落地会话在项目的 Landings 窗口里列出」</td><td>改 §2.9 L1–L3（怎么开、怎么记、怎么结案）与 LS6，另加迁移的条文</td></tr>
+<tr><th>代价</th><td class="rec">三端客户端</td><td>迁移 + 契约修订 + 服务端 + MCP / CLI + 三端客户端</td></tr>
+</tbody></table>
+<p>推荐 <b>A</b>：你看到的完全一样；B 多出来的迁移和 agent 改动都是风险，换不来新的东西。</p>
+<h3>2 · 结了的落地在窗口里留多久</h3>
+<p>今天 Landings 组只列 24 小时内结案的，更早的折成 <i>Earlier</i>（owner 10-19 定的窗口）。<b>推荐</b>：窗口里全部保留，按天往上翻，翻到哪读到哪；项目页那一行只写今天的数。<b>另一个选择</b>：窗口里也只放最近 24 小时，更早的折成一行 <i>Earlier · 71 landed · 4 nothing to land</i>。</p>
+</div>
+<div class="panel lw-panel">
+<h2>落地（按代价排，按方案 A）</h2>
+<ol>
+<li><b>三端客户端</b>，这是 A 的全部工作。iOS / macOS：OrbitKit 里 <code>SessionProjectLandings</code> 从「组」改成按天的列表模型（结了的、Now），加 Landings 窗口；今天落地会话页的状态卡与时间线挪进卡里和展开里复用；项目页的 Landings 组换成一行，时间线去掉 Merged into main 行。web：同样的一行与窗口（新路由带定位到哪一条），<code>LandingSessionView</code> 的正文复用。Android：同上，每处 Swift 文案改动在同一个提交里移植到 <code>src/android</code>。新文案只有几句（<i>Orbit runs these landings — nothing to type here.</i>、那一行的计数、<i>Now</i>），三端对拍测试照旧。</li>
+<li><b>入口</b>：所有打开落地会话的地方（Open landing ›、待办的 OPEN_LANDING 门、协调会话卡、<code>orbit-session:</code> 链接、写代码会话底部的标签）改成打开窗口并定位；客户端拿到一个落地会话 id 时去它所属项目的窗口。</li>
+<li><b>服务端</b>：A 不加接口。窗口读项目页今天就在读的两条：项目的落地（<code>GET /sessions?projectId=&amp;includeLanding=1</code>，带每次落地的摘要，展开时读现有的落地视图），和合入 main 的回执（<code>GET /projects/:id/promotions/merged</code>，今天时间线的 Merged into main 行就读它，包括落地会话上线之前的合入；没有落地会话的那几轮只展开回执）。某个项目落地多到读起来慢时，再给第一条读加分页，可以后做。</li>
+<li><b>文档</b>：契约 §2.9 LS6 那一句，设计文档 <code>docs/landing-session-design.md</code> §3「会话列表不被刷屏」与「其他入口」；v4 的 24 小时窗口与 Earlier 折叠由待定第 2 条的答案取代；项目页时间线画合入行的 10-06 决定由 owner 10-27 这一条取代。</li>
+</ol>
+<p style="color:#6a6a72;font-size:13.5px;margin-top:12px">本图只画了 iPhone。web 与 Android 用同一个结构（项目页一行、一个窗口、按天分组、Now 在最下面），方向定了再画。</p>
+</div>
+</section>`;
+// g 的菜单放在被按住那张卡的正上方（卡在最底，下面没有地方）
+document.fonts.ready.then(() => {
+  const card = document.querySelector('.lw-liftin');
+  const menu = document.getElementById('lw-menu-g');
+  const top = card.getBoundingClientRect().top - card.closest('.phone').getBoundingClientRect().top;
+  menu.style.top = `${Math.round(top - menu.offsetHeight - 10)}px`;
+});
+</script>
+</body></html>
