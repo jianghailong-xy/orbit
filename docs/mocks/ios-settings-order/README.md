@@ -2,7 +2,7 @@
 
 所有者 2026-10-27：「iOS 的 settings 页面重新设计，先给效果图，我认为现在的顺序不符合预期」（附 TestFlight 截图）。板子是 [`01-board-light.png`](01-board-light.png)（源 `01-board.html`），四段也各出了一张，方便在手机上看：`01-board-part-1-light.png` … `part-4`。界面文案全部英文，板上的说明是中文。
 
-**已定、已实现（2026-10-27）**：所有者「1A 2A 3A」，三项都按建议，代码在分支 `orbit/ios-settings-39abfb`，待合入 main。见文末「已实现」。
+**已定、已实现（2026-10-27）**：所有者「1A 2A 3A」，三项都按建议，同日合入 main。见文末「已实现」。
 
 ## 怎么做的
 
@@ -22,7 +22,7 @@ FONTCONFIG_FILE=<fonts.conf> node docs/mocks/ios-settings-order/calib.mjs
 
 ## 已实现
 
-00f5ccbdc（`feat(clients): Settings opens with Machines & models; the session settings get a page of their own`）：
+781a7e61f（`feat(clients): Settings opens with Machines & models; the session settings get a page of their own`；分支上测过的是同一个补丁 00f5ccbdc，合入前 rebase 到 main）：
 
 - **iPhone / iPad**：`SettingsHome` 的组是 Machines & models → Preferences → Account；Preferences 第一行 Sessions（`SettingsPage.sessions`），点进去是 `SessionSettingsPage`：五项各一段、说明作段脚，照 Notifications 页的样子；Default permission 补上 web 的那句说明（`SettingsCopy.defaultPermissionHint`）。写入和默认值不变。
 - **Android**：同一张列表、同一页（`"sessions"`），五项顺序跟 iOS；`ic_sessions` 是新行的图标，原来那几行专用的 `ic_orchestration`、`ic_sparkles` 删了。

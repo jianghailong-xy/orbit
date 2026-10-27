@@ -29,7 +29,9 @@ The iPhone pictures come from `SettingsOrderShotTests` on GitHub's `macos-26` ru
 
 The Android pictures come from `SettingsOrderShotsTest`: Robolectric renders of the real `SettingsScreen` over fake reads, not an emulator. The test asserts the same order and values before it saves them. Its run on this host passed together with every Android class the change touches (25 tests), and `:app:compileDebugAndroidTestKotlin` compiled the device tests, which CI's `verify.sh` doesn't build.
 
-## Gates on the change itself (commit 00f5ccbdc)
+## Gates on the change itself (commit 00f5ccbdc, on main as 781a7e61f)
+
+00f5ccbdc is the branch commit these runs tested. It was rebased onto main as 781a7e61f; `git range-diff` shows the same patch.
 
 - **OrbitKit `swift test`** in `swift:6.1` on Linux: 4079 tests, 5 skipped (the perf baselines, as always on Linux), 0 failures.
 - **Client CI dispatch** `40476989453`: iOS (generate + build) and macOS (build + test) both succeeded.
