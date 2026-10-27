@@ -44,8 +44,8 @@
   },
   "devDependencies": {
     "github-slugger": "2.0.0",
-    "markdown-it": "15.0.2",
+    "markdown-it": "15.0.3",
     "markdown-link-check": "3.15.0",
-    "markdownlint": "0.41.1"
+    "markdownlint": "0.42.0"
   }
 }
