@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderRunEventSeqConflictMetrics } from '../runner-api/run-event-seq-conflicts';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 import { renderWatchMetrics } from '../watches/watch-metrics';
 import { renderWikiModelMetrics } from '../wiki/wiki-model-metrics';
@@ -40,7 +41,8 @@ export class MetricsController {
   async read(): Promise<string> {
     // The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
     // (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts).
-    return renderDbConflictMetrics() + renderCodexResetMetrics() + (await renderWatchMetrics(this.prisma))
+    return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
+      + (await renderWatchMetrics(this.prisma))
       + (await renderWikiModelMetrics(this.prisma));
   }
 }

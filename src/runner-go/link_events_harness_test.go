@@ -405,6 +405,15 @@ func (in *fakeIngest) waitLive(t *testing.T, sessionID string, n int) []fakeLive
 // over HTTPS, while the gateway's ingest stores the session's events.
 func superviseClaudeSessionOverLink(t *testing.T, r *linkWorkRig, pool *sessionPool, script ...fakeStep) *supervisedSession {
 	t.Helper()
+	return superviseClaudeSessionOverLinkVia(t, r, pool, context.Background(), nil, script...)
+}
+
+// superviseClaudeSessionOverLinkVia is the same run under a runner whose stop the test decides (shutdown is what
+// runLoop's loopCtx is to a supervisor), with before, when set, handed the session once the link is in use and before
+// its supervisor starts.
+func superviseClaudeSessionOverLinkVia(t *testing.T, r *linkWorkRig, pool *sessionPool, shutdown context.Context,
+	before func(s *supervisedSession), script ...fakeStep) *supervisedSession {
+	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	job := claudeSpawnJob(t)
@@ -424,6 +433,9 @@ func superviseClaudeSessionOverLink(t *testing.T, r *linkWorkRig, pool *sessionP
 	r.cp.delegate = s.serve
 	r.cp.mu.Unlock()
 	r.useLink(t)
+	if before != nil {
+		before(s)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	live, added := pool.register(job, cancel, true)
 	if !added {
@@ -433,7 +445,7 @@ func superviseClaudeSessionOverLink(t *testing.T, r *linkWorkRig, pool *sessionP
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runInteractiveSession(r.t, job, ctx, context.Background(), s.execDir, nil, pool, live)
+		runInteractiveSession(r.t, job, ctx, shutdown, s.execDir, nil, pool, live)
 		pool.finish(live)
 	}()
 	t.Cleanup(func() {

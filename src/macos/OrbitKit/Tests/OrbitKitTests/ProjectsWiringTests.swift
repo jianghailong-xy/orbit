@@ -172,6 +172,8 @@ final class ProjectsWiringTests: XCTestCase {
                               to: "\n    }\n")
         XCTAssertTrue(entry.contains("guard destination != drawerDestination else { return }"),
                       "the selected row's tap only closes the drawer")
+        XCTAssertTrue(entry.contains("nav.switchWorkspace(from: selectedAgentID, to: agentID, folders: sessionFolders)"),
+                      "another workspace's row lands on the folder page its list was left on")
         let project = try slice(app, from: "private func openProjectSessions(_ projectID: String, inColumn: Bool) {",
                                 to: "\n    }\n")
         XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")

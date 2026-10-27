@@ -30,6 +30,9 @@
  *   (7) Two copies of one batch at once, on the two backends, both waiting for the session lock: stored once, derived
  *       once, and answered alike.
  *   (8) A batch sent again with new events after the old ones: only the new ones are written, with what they derive.
+ *   (9) An event at a seq the session holds another event at, over either door: answered as before, the row there left
+ *       as it was, and the event logged as an error and counted (run-event-seq-conflicts.ts). The same event sent again
+ *       is neither.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -47,7 +50,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { type PrismaClient, RunStatus } from '@prisma/client';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
@@ -78,6 +81,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { listenForRunnerLinkCalls } from './runner-link-call';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -486,6 +490,7 @@ test('durable events over the runner link: one bad event fails alone, seqs stay 
   });
 
   await t.test('(2) values the database refuses are found by halves and refused alone, the rest of the batch stored', async () => {
+    resetRunEventSeqConflictMetrics();
     const s = await liveSession('values the database refuses');
     // Base64 of random bytes does not compress: past the 2704 bytes a btree index row may hold.
     const hugeToolId = randomBytes(6_000).toString('base64');
@@ -533,6 +538,8 @@ test('durable events over the runner link: one bad event fails alone, seqs stay 
     assert.deepEqual(again.body, answer.body);
     await assertContiguous(s.sessionId, 8);
     assert.deepEqual(await toolCalls(s.sessionId), [{ toolUseId: 'toolu_ok', rows: 1, output: 'seven' }]);
+    // The same events at their own seqs, the two the tombstones hold among them: no conflict (run-event-seq-conflicts.ts).
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 0 });
   });
 
   await t.test('(3) a noise ping in a link batch is acknowledged and skipped; a live event sent as a durable one is refused', async () => {
@@ -738,5 +745,61 @@ test('durable events over the runner link: one bad event fails alone, seqs stay 
     assert.deepEqual((await viaLinkBatch(s.sessionId, mixed)).body, answer.body);
     assert.deepEqual(await sessionState(s.sessionId), state);
     await assertContiguous(s.sessionId, 8);
+  });
+  await t.test('(9) an event at a seq that holds another is answered as before, and logged and counted, over both doors; the same event sent again is neither', async (st) => {
+    resetRunEventSeqConflictMetrics();
+    const errors: string[] = [];
+    st.mock.method(Logger.prototype, 'error', (message: unknown) => {
+      errors.push(String(message));
+    });
+    const s = await liveSession('a seq another event took');
+    const t0 = Date.parse('2026-10-27T00:46:10.000Z');
+    const tick = (seq: number, k: number) => ({
+      seq,
+      type: RunEventType.ASSISTANT,
+      ts: new Date(t0 + k * 2_000).toISOString(),
+      turnId: s.turnId,
+      payload: { text: `tick ${k}` },
+    });
+    // Ticks 1 and 2 stored over the link; the same batch sent again, its answer lost, is no conflict.
+    assert.deepEqual((await viaLinkBatch(s.sessionId, [tick(1, 1), tick(2, 2)])).body, { ok: true, durableSeq: 2, rejected: [] });
+    assert.deepEqual((await viaLinkBatch(s.sessionId, [tick(1, 1), tick(2, 2)])).body, { ok: true, durableSeq: 2, rejected: [] });
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 0 });
+
+    // A process numbering from the server's last seq while ticks 3..5 were still in a spool: its own events take 3 and 4.
+    const later = Date.parse('2026-10-27T00:49:41.000Z');
+    assert.deepEqual((await viaHttpsBatch(s.sessionId, [
+      { seq: 3, type: RunEventType.SYSTEM, ts: new Date(later).toISOString(), payload: { content: 'the engine started again' } },
+      { seq: 4, type: RunEventType.ASSISTANT, ts: new Date(later + 500).toISOString(), turnId: s.turnId, payload: { text: 'recovered' } },
+    ])).body, { ok: true });
+
+    // The spool, over the link: answered as before, its two taken seqs left as they were, the third stored.
+    const spool = [tick(3, 3), tick(4, 4), tick(5, 5)];
+    assert.deepEqual((await viaLinkBatch(s.sessionId, spool)).body, { ok: true, durableSeq: 5, rejected: [] });
+    assert.deepEqual((await storedRows(s.sessionId)).map((r) => [r.seq, r.type, r.payload]), [
+      [1, 'assistant', { text: 'tick 1' }],
+      [2, 'assistant', { text: 'tick 2' }],
+      [3, 'system', { content: 'the engine started again' }],
+      [4, 'assistant', { text: 'recovered' }],
+      [5, 'assistant', { text: 'tick 5' }],
+    ]);
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 2 });
+    assert.equal(errors.length, 1, errors.join('\n'));
+    assert.match(errors[0], new RegExp(`^session ${s.sessionId}: 2 event\\(s\\) sent over the runner link are not stored, because the session already holds another event at their seq; `));
+    assert.match(errors[0], /seq 3: assistant \(turn [0-9a-f-]+, 2026-10-27T00:46:16\.000Z\) where it holds system \(no turn, 2026-10-27T00:49:41\.000Z\); seq 4: assistant \(turn [0-9a-f-]+, 2026-10-27T00:46:18\.000Z\) where it holds assistant \(turn [0-9a-f-]+, 2026-10-27T00:49:41\.500Z\) \(2 such event\(s\) over the link since this server started\)$/);
+
+    // The same spool over HTTPS, as a runner with the link mode off sends it: taken whole, answered as before. Its two
+    // taken seqs are counted again, and tick 5, stored now, is the same event sent again.
+    assert.deepEqual((await viaHttpsBatch(s.sessionId, spool)).body, { ok: true });
+    assert.deepEqual((await storedRows(s.sessionId)).map((r) => r.seq), [1, 2, 3, 4, 5]);
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 2, link: 2 });
+    assert.equal(errors.length, 2, errors.join('\n'));
+    assert.match(errors[1], /: 2 event\(s\) sent over HTTPS are not stored, because the session already holds another event at their seq; seq 3: .* \(2 such event\(s\) over HTTPS since this server started\)$/);
+
+    // Tick 5 alone, sent again over either door, is no conflict.
+    assert.deepEqual((await viaLinkBatch(s.sessionId, [tick(5, 5)])).body, { ok: true, durableSeq: 5, rejected: [] });
+    assert.deepEqual((await viaHttpsBatch(s.sessionId, [tick(5, 5)])).body, { ok: true });
+    assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 2, link: 2 });
+    assert.equal(errors.length, 2);
   });
 });

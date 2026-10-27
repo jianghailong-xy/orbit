@@ -225,42 +225,89 @@ it says nothing about the claim and inbox request ids that going back to HTTPS g
 ## The rollback, with events not acknowledged
 
 When the runner stops normally, it writes the link events the control plane has not acknowledged to its spool
-(`~/.orbit/link-spool`), and the next process sends them first. Only a process in link mode reads the spool. The
+(`~/.orbit/link-spool`). The session's next supervisor sends them first, by their own seqs, and stores them before it
+emits anything; it numbers its own events after the later of the server's last seq and the spool's (task
+34mumXbJjOvZUwNmDNzmY). It does so whichever way the session's events go next: over the link, or over HTTPS, the link
+mode turned off (`ORBIT_LINK_MODE=off`) included. Until then only a process in link mode read the spool. The
 `rollback` phase drills the case that task C3 left open:
 
 1. A second session streams.
 2. The link gateway is killed, and the engine writes the rest of its ticks and ends its turn.
 3. The runner is stopped as a service manager stops it (SIGTERM) and logs `N unacknowledged events of session …, through
-   seq T, are kept for the next process`.
+   seq T, are kept for the next process`. `RUNNER_LINK_REQUIRED` is on, so HTTPS is refused, and what the link did not
+   store stays in the spool.
 4. `RUNNER_LINK_REQUIRED` goes off and the runner starts again with `ORBIT_LINK_MODE=off`, as a rollback leaves it, and
    answers a message over HTTPS.
 5. The switch goes on again, and the runner starts again as it was, on the same machine, and answers a message over the
    link.
 
-After steps 3, 4 and 5 the drill records:
+After steps 3, 4 and 5 the drill records, in `rollback.tsv`:
 
 - the session's seqs and holes;
-- which of the prompt's ticks it stores;
+- which of the prompt's ticks it stores, and whether in the order the engine wrote them;
 - what the spool still holds;
 - for each event the stopped runner kept, whether the session stores it at its seq, stores another event there, or
-  stores nothing there.
+  stores nothing there;
+- the prompt turn's `turn_end` rows, the control plane's resume continuations among its user rows, and the most
+  `turn_end` rows any other turn has.
 
-The phase holds only if every tick the engine wrote is stored once.
+`rollback-redelivery-STEP.tsv` has the prompt turn's rows after the last seq the runner kept, with the lease generation
+that stored each one.
 
-It did not hold in either run on 2026-10-27, and both runs lost the same events.
+The phase holds when every step does:
+
+- **After the stop.** Every tick the engine wrote is stored or kept, once.
+- **After each restart:**
+  - every tick is stored once, in the order written;
+  - every kept event is stored at its own seq;
+  - the spool is empty;
+  - no seq is without a row;
+  - no turn but the prompt's has more than one `turn_end`.
+- **The prompt's turn** has its own `turn_end`, the one the runner kept, at its own seq. It may have one more, after
+  that one, and only after a resume continuation.
+
+The prompt's completion is lost at the stop (HTTPS refused, the link down). The control plane still holds that turn
+`IN_FLIGHT`, so after the restart it hands the turn back:
+
+- `takeoverLeases` expires the turn's lease;
+- `dequeueTurn` sends it with the resume continuation (`resume-continuation.ts`);
+- the resumed engine answers and ends the turn again.
+
+That second `turn_end` comes from the re-delivery, not from the spool. Task 34mwBTpOPo3S9LM2SXs10 takes the
+re-delivery of such a turn up.
+
+**Before the fix**, the phase did not hold, and every run lost the same events: C1a's two runs at 84a0b7424 and
+3b0141a78, and two runs at 22aef2017 on 2026-10-27, one with C1a's script and one with the judgments above.
 
 1. **The stop.** The session had stored seqs 1..9 (ticks 1 to 5). The stopping runner kept 56 events in its spool: seqs
    10..65, ticks 6 to 60 and the turn's end.
 2. **On HTTPS, with `ORBIT_LINK_MODE=off`.** The runner did not send them. It numbered its own events from the server's
-   last seq (`job.MaxSeq + 1`, session.go), so seqs 10..21 went to new events: the interrupted turn's recovery and the
-   message after the rollback. The session then stored seqs 1..21 without a hole, while 55 of its prompt's ticks were
-   missing.
-3. **On the link again.** The spool's events went first. The 44 whose seqs were still free were stored after the newer
-   turns (ticks 18 to 60 at seqs 22..65), with a second `turn_end` for a turn that already had one. The 12 whose seqs
-   were taken were acknowledged as already stored. Ticks 6 to 17 are lost, with no hole and nothing in the runner's log
-   to show it.
+   last seq (`job.MaxSeq + 1`, session.go). So seqs 10..21 went to new events: the re-delivered turn (its resume
+   continuation at seq 11, its `turn_end` at 16) and the message after the rollback. The session then stored seqs 1..21
+   without a hole, while 55 of its prompt's ticks were missing.
+3. **On the link again.** The spool's events went first:
+   - the 44 whose seqs were still free were stored after the newer turns (ticks 18 to 60 at seqs 22..65), with the
+     kept `turn_end` at 65, after a turn that came later;
+   - the 12 whose seqs were taken were acknowledged as already stored.
 
-A runner that never runs in link mode on that machine again loses all 56 once the spool is 72 hours old.
+   Ticks 6 to 17 are lost, with no hole and nothing in the runner's log to show it.
+
+**After the fix**, at 8d5e896c5 (2026-10-27), the phase holds:
+
+1. **The stop.** Seqs 1..9 stored, and 56 events kept: seqs 10..65, ticks 6 to 60 and the turn's end.
+2. **On HTTPS, with `ORBIT_LINK_MODE=off`.** The restarted runner reclaimed the session and logged
+   `session … has 56 events through seq 65 an earlier process could not send; they go first`. 0.1 s later it logged
+   `the 56 events … are stored; its new events are numbered from seq 66`, and only then did it emit anything:
+   - the spool's events were ingested at 02:59:19.599–.602, the first new event (seq 66) at .899;
+   - the turn was handed back at .869, its resume continuation at seq 67 and its second `turn_end` at seq 72;
+   - the message after the rollback took seqs 73..77.
+
+   The session stored seqs 1..77 without a hole: all 60 ticks once and in order, and every kept event at its own seq.
+3. **On the link again.** Nothing was left to send. The message took seqs 78..83.
+
+The server now logs an event that arrives at a seq holding another one, as an error, and counts it in
+`orbit_run_event_seq_conflicts_total{door}` (`GET /api/metrics`), instead of acknowledging it in silence. The spool's
+72-hour cleanup logs, for each session it removes, how many unacknowledged events of which seqs it loses.
 
 ## Records
 
