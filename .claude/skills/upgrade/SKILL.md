@@ -59,7 +59,12 @@ It will, in order:
    image or mounted `nginx.conf` changed), and block
    until they pass their healthcheck (apiserver runs migrations on boot).
    `postgres` is left running untouched — it is not in the recreate set.
-4. Print `docker compose ps`.
+4. `docker compose up -d --wait --no-deps apiserver-2 …` — only where
+   `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on,
+   docs/self-hosting.md, "Several apiservers"), and only once `apiserver` is healthy
+   and has applied the migrations, so they find none to apply. They run the
+   `apiserver` image, so a new one recreates them.
+5. Print `docker compose ps`.
 
 On a deployment whose `.env` turns on the `managed-runners-docker` profile, steps
 2 and 3 also cover managed runners: `docker-channel` is built with the rest, the
@@ -121,7 +126,8 @@ which follows the apiserver as above.
      applies to it too);
   3. when its image ID is new, writes that ID into both files, each replaced whole by a rename;
   4. recreates the other services as above, then the apiserver again if that did not recreate it
-     (it reads the profile only as it starts), then `docker-channel`, last. The apiserver goes
+     (it reads the profile only as it starts), and with it the other apiservers, then
+     `docker-channel`, last. The apiserver goes
      first: until the channel serves the image its profile names, it makes no container and only
      waits, while a channel already on the new image would refuse the old apiserver's creates.
   A managed runner's container keeps the image it was made from and is never stopped by the
