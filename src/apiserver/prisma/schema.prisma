@@ -934,8 +934,32 @@ model RunnerPresence {
   /// When the last full reconcile that left nothing pending ran; null until one has, which is a reconcile
   /// owed. A link heartbeat reconciles in full at least once in each five minutes (migration 0447).
   reconciledAt  DateTime? @map("reconciled_at")
+  /// The last beat the runner was heard with before it last lost contact: `lastBeatAt` as it stood when the link
+  /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
+  /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
+  lostAt        DateTime? @map("lost_at")
 
   @@map("runner_presence")
+}
+
+/// A mass disconnection of the cell's runners, as a sweep of the reaper saw it (migration 0450,
+/// realtime/reaper.service.ts): the span of the last beats its runners were heard with before they lost contact, both
+/// ends included. A silent runner whose last beat falls in it is not reaped for its silence until it has been silent
+/// for RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS.
+model RunnerMassDisconnect {
+  id        BigInt   @id @default(autoincrement())
+  lostFrom  DateTime @map("lost_from")
+  lostTo    DateTime @map("lost_to")
+  /// How many runners lost contact in it, of how many the cell had heard from, as the sweep that last widened it
+  /// counted them.
+  runners   Int
+  heard     Int
+  /// When a sweep first saw it, and when one last widened it.
+  seenAt    DateTime @default(now()) @map("seen_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@index([lostTo])
+  @@map("runner_mass_disconnect")
 }
 
 /// An apiserver process of this deployment, as it reports itself (migration 0449). Each process writes its

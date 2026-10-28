@@ -32,7 +32,7 @@ export const RUNNER_OFFLINE_AFTER_MS = 90_000;
 
 /**
  * A beat missed: no beat for a heartbeat period and a half. Not a verdict on any one runner (that is
- * RUNNER_OFFLINE_AFTER_MS); what RunnerPresenceService.fleetSilence counts a runner silent by.
+ * RUNNER_OFFLINE_AFTER_MS); what RunnerPresenceService.cellLosses counts a runner silent by.
  */
 export const RUNNER_SILENT_AFTER_MS = 1.5 * RUNNER_HEARTBEAT_EVERY_MS;
 
@@ -176,10 +176,37 @@ export async function markRunnersChanged(
   `;
 }
 
-/** The cell's runners heard from lately (`heard`), and how many of those have since missed a beat (`silent`). */
-export interface FleetSilence {
+/**
+ * The link gateway is opening a new connection for this runner (the welcome route, which it calls for each one before
+ * Welcome, and so before the connection's first beat): the runner's last beat is the last it was heard with before it
+ * connected again — before it lost contact, if it did — and is kept as such (`lost_at`, migration 0450). A connection
+ * opened while the one before is still up, for a token's renewal or a process just started, is kept alike: what the
+ * reaper reads off these is many runners losing contact at once, which renewals spread over the hour are not. One
+ * statement on the primary key, which writes nothing when it would change nothing; nothing for a runner with no presence
+ * row.
+ */
+export async function recordRunnerLinkOpened(prisma: Pick<PrismaService, '$executeRaw'>, runnerId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "runner_presence" SET "lost_at" = "last_beat_at"
+     WHERE "runner_id" = ${runnerId}::uuid AND "lost_at" IS DISTINCT FROM "last_beat_at"
+  `;
+}
+
+/** The cell as the reaper reads a mass disconnection off it (RunnerPresenceService.cellLosses). */
+export interface CellLosses {
+  /** The runners heard from lately: within the window past the silence line. */
   heard: number;
+  /** How many of those are past the silence line now: a beat missed. */
   silent: number;
+  /** The earliest and the latest of those silent runners' last beats, epoch ms; null when none is silent. */
+  silentFrom: number | null;
+  silentTo: number | null;
+  /**
+   * When each runner heard from lost contact, where that was within the window past the silence line: a silent runner
+   * at its last beat, any other at the last beat it was heard with before it last lost contact (`lost_at`). Counted by
+   * the second, in order: [epoch seconds, runners].
+   */
+  losses: Array<[number, number]>;
 }
 
 /** How often each apiserver process writes its row in `apiserver_process` (migration 0449). */
@@ -208,7 +235,7 @@ export interface ApiserverProcessReport {
 
 /**
  * What this control plane knows about presence beyond any one runner: whether the heartbeats its
- * processes took could be written, and how much of the cell has gone quiet at once. The reaper asks
+ * processes took could be written, and how much of the cell has lost contact at once. The reaper asks
  * both before it takes a runner's silence for its death (realtime/reaper.service.ts).
  *
  * The write half has two readers. This process's own failures are kept here, in memory, as they always
@@ -361,10 +388,17 @@ export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The cell's runners last heard from within `windowMs` before the silence line — at most
-   * RUNNER_SILENT_AFTER_MS + windowMs ago — and how many of those are past the line now: silent for
-   * longer than RUNNER_SILENT_AFTER_MS, a beat missed. Read on Postgres' clock, like every SQL liveness
-   * reading.
+   * The cell as the reaper reads a mass disconnection off it (realtime/reaper.service.ts), in one statement, on
+   * Postgres' clock like every SQL liveness reading:
+   *
+   *  - the runners last heard from within `windowMs` before the silence line — at most RUNNER_SILENT_AFTER_MS + windowMs
+   *    ago — and how many of those are past the line now, silent for longer than RUNNER_SILENT_AFTER_MS: a beat missed;
+   *    with the span of those silent runners' last beats;
+   *  - when each of the runners heard lost contact, where that falls inside the same window: a silent runner at its last
+   *    beat, any other at the last beat it was heard with before it last lost contact (`lost_at`, kept as the gateway
+   *    opens a new connection for it or a link beat comes after a missed one). This is what a runner that is already back
+   *    leaves of its loss: a disconnection most runners come back from within seconds is silent at no sweep's moment.
+   *    Counted by the second.
    *
    * The line is a missed beat, not the RUNNER_OFFLINE_AFTER_MS that calls one runner offline. Runners
    * cut off at the same moment had their last beats spread across a heartbeat period, so they cross
@@ -375,29 +409,51 @@ export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
    * two periods — while a runner still beating is about a period from its last beat at most: a period
    * and a half leaves half a period of room on either side.
    *
-   * Only runners that can LOSE contact are counted, in either number. Not one marked OFFLINE: that is
+   * Only runners that can LOSE contact are counted, in any number. Not one marked OFFLINE: that is
    * written when a managed runner's row is created, before it has beaten, or reported by a runner about
    * itself as it leaves — never by a runner cut off. And not a managed runner its manager is putting to
    * sleep or has put to sleep (`managed_runner.management_state` DRAINING or SLEEPING): its silence is
    * the manager's own doing. A fleet of those going quiet together is no outage.
    */
-  async fleetSilence(windowMs: number): Promise<FleetSilence> {
-    const [row] = await this.prisma.$queryRaw<Array<{ heard: number; silent: number }>>(Prisma.sql`
-      SELECT count(*)::int AS "heard",
-             (count(*) FILTER (
-               WHERE beats."at" < now() - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
-             ))::int AS "silent"
-        FROM (
-          SELECT ${runnerLastBeatSql('r')} AS "at"
-            FROM "runner" r
-           WHERE r."status" <> 'OFFLINE'
-             AND NOT EXISTS (
-               SELECT 1 FROM "managed_runner" mr
-                WHERE mr."runner_id" = r."id" AND mr."management_state" IN ('DRAINING', 'SLEEPING')
-             )
-        ) beats
-       WHERE beats."at" >= now() - (${RUNNER_SILENT_AFTER_MS + windowMs} * interval '1 millisecond')
+  async cellLosses(windowMs: number): Promise<CellLosses> {
+    const silentLine = Prisma.sql`now() - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')`;
+    const windowLine = Prisma.sql`now() - (${RUNNER_SILENT_AFTER_MS + windowMs} * interval '1 millisecond')`;
+    const [row] = await this.prisma.$queryRaw<Array<CellLosses>>(Prisma.sql`
+      WITH heard AS MATERIALIZED (
+        SELECT beats."at", beats."at" < ${silentLine} AS "silent",
+               CASE WHEN beats."at" < ${silentLine} THEN beats."at" ELSE beats."lostAt" END AS "lost"
+          FROM (
+            SELECT ${runnerLastBeatSql('r')} AS "at",
+                   (SELECT presence."lost_at" FROM "runner_presence" presence WHERE presence."runner_id" = r."id") AS "lostAt"
+              FROM "runner" r
+             WHERE r."status" <> 'OFFLINE'
+               AND NOT EXISTS (
+                 SELECT 1 FROM "managed_runner" mr
+                  WHERE mr."runner_id" = r."id" AND mr."management_state" IN ('DRAINING', 'SLEEPING')
+               )
+          ) beats
+         WHERE beats."at" >= ${windowLine}
+      )
+      SELECT (SELECT count(*)::int FROM heard) AS "heard",
+             (SELECT count(*)::int FROM heard WHERE heard."silent") AS "silent",
+             (SELECT (extract(epoch FROM min(heard."at")) * 1000)::float8 FROM heard WHERE heard."silent") AS "silentFrom",
+             (SELECT (extract(epoch FROM max(heard."at")) * 1000)::float8 FROM heard WHERE heard."silent") AS "silentTo",
+             COALESCE((
+               SELECT json_agg(json_build_array(losses."second", losses."runners") ORDER BY losses."second")
+                 FROM (
+                   SELECT floor(extract(epoch FROM heard."lost"))::bigint AS "second", count(*)::int AS "runners"
+                     FROM heard
+                    WHERE heard."lost" >= ${windowLine}
+                    GROUP BY 1
+                 ) losses
+             ), '[]'::json) AS "losses"
     `);
-    return { heard: row?.heard ?? 0, silent: row?.silent ?? 0 };
+    return {
+      heard: row?.heard ?? 0,
+      silent: row?.silent ?? 0,
+      silentFrom: row?.silentFrom == null ? null : Number(row.silentFrom),
+      silentTo: row?.silentTo == null ? null : Number(row.silentTo),
+      losses: (row?.losses ?? []).map(([second, runners]) => [Number(second), Number(runners)]),
+    };
   }
 }

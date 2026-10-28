@@ -16,6 +16,13 @@
 #                                       link.
 #   mass-disconnect-drill.sh partition  Every runner's session runs a turn held open. ORBIT_MASS_DISCONNECT_CUT runners,
 #                                       a fifth of them or more, lose the network for as long; the others keep working.
+#   mass-disconnect-drill.sh node       On a stack prepared with two link gateway nodes behind a balancer
+#                                       (ORBIT_MASS_DISCONNECT_GATEWAYS=2): every runner's session runs a turn held open,
+#                                       and the first node is killed for ORBIT_MASS_DISCONNECT_SECONDS. The runners it held
+#                                       connect again through the second, whose handshake limiter lets a burst through
+#                                       and the rest one at a time (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE and _BURST, the
+#                                       second node's alone), so that most are back within seconds and the last only
+#                                       past the reaper's offline line. Then the first node is started again.
 #   mass-disconnect-drill.sh all        prepare, gateway, partition.
 #   mass-disconnect-drill.sh stop       Stop the drill runners.
 #
@@ -27,6 +34,11 @@
 #                                      reaper's offline line its next sweep is to fall, under 30; the runners cut off
 #                                      and the moment are chosen for it (README.md). Unset, the partition cuts off
 #                                      runners spread across the fleet, whenever it gets to the cut.
+#   ORBIT_MASS_DISCONNECT_GATEWAYS     prepare: link gateway nodes, 1, or 2 behind a TCP balancer for node          1
+#   ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE   prepare: the second node's handshakes a second (LINK_HANDSHAKE_RATE)    200
+#   ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST  prepare: the second node's handshake burst (LINK_HANDSHAKE_BURST)       400
+#   ORBIT_MASS_DISCONNECT_NODE_LATE    node: how many of the runners the first node holds are to find the second's
+#                                      burst spent; the drill spends the rest of it just before the kill            1
 #
 # Run it as root on a stack no other runner works on: each runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, and the partition cuts a runner off with an nftables
@@ -52,6 +64,12 @@ count="${ORBIT_MASS_DISCONNECT_RUNNERS:-10}"
 cut="${ORBIT_MASS_DISCONNECT_CUT:-2}"
 outage="${ORBIT_MASS_DISCONNECT_SECONDS:-180}"
 sweep_after="${ORBIT_MASS_DISCONNECT_SWEEP_AFTER:-}"
+gateways="${ORBIT_MASS_DISCONNECT_GATEWAYS:-1}"
+handshake_rate="${ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE:-200}"
+handshake_burst="${ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST:-400}"
+node_late="${ORBIT_MASS_DISCONNECT_NODE_LATE:-1}"
+# The second link gateway node, with ORBIT_MASS_DISCONNECT_GATEWAYS=2 (staging.gateways.compose.yml).
+gateway_b="$project-link-gateway-b"
 # The reaper's own numbers (src/apiserver/src/realtime/reaper.service.ts, src/apiserver/src/runners/runner-presence.ts):
 # silent for longer than offline_after, a runner reads as offline; a sweep every sweep_every; nothing reaped as offline
 # for startup_grace after the apiserver starts; the mass silence counts the runners that missed a beat (silent for
@@ -103,10 +121,11 @@ fleet() { psql_rows "$fleet_sql" | tr '\t' ' '; }
 reaper_log() { docker logs --timestamps --since "$1" "$project-apiserver" 2>&1 | sed 's/\x1b\[[0-9;]*m//g'; }
 held_pattern='not reaping [0-9]+ session\(s\) whose runner looks offline'
 # quiet_cell PHASE: the cell as an outage starts from, so that whatever holds the reaping in it is the outage's doing:
-# the apiserver past its startup grace by a sweep; no hold left from an earlier silence (the reaper keeps one for 90 s
-# past the last sweep that saw it); no runner the reaper counts silent; and the drill's runners all the cell it hears,
-# so that the runners an outage cuts off are the share of it the drill says. A runner stopped without signing off stays
-# in the count until it is past the window, up to 10¾ minutes.
+# the apiserver past its startup grace by a sweep; a while past the last sweep that held (a mass disconnection the
+# reaper kept holds the runners last heard in it, which are heard again by now, and no runner silent later); no runner
+# the reaper counts silent; and the drill's runners all the cell it hears, so that the runners an outage cuts off are
+# the share of it the drill says. A runner stopped without signing off stays in the count until it is past the window,
+# up to 10¾ minutes.
 quiet_cell() {
   local phase=$1 deadline=$((SECONDS + silent_after + window + 120)) started up reading last wait
   started="$(docker inspect -f '{{.State.StartedAt}}' "$project-apiserver")"
@@ -216,6 +235,31 @@ wait_log() {
 presence() {
   psql_value "SELECT link_state || ' ' || COALESCE(process_id::text, 'none') || ' ' || to_char(last_beat_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
     FROM runner_presence WHERE runner_id = '${rid[$1]}'"
+}
+# presence_node I: the gateway node runner I was last heard through and when, as "gateway_id last_beat_at"; "none" for
+# no node.
+presence_node() {
+  psql_value "SELECT COALESCE(gateway_id, 'none') || ' ' || to_char(last_beat_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+    FROM runner_presence WHERE runner_id = '${rid[$1]}'"
+}
+# node_of CONTAINER: the gateway node's id, which the beats it forwards name (X-Orbit-Link-Gateway-Id): its hostname.
+node_of() { docker inspect -f '{{.Config.Hostname}}' "$1"; }
+# spend_node_b RUN LEFT: the second node's handshake burst spent down to LEFT handshakes, by upgrade requests of no runner's
+# straight to the node: its limiter counts a handshake before it looks at the token (src/link-gateway/gateway.go,
+# ServeHTTP), so each one costs a token and is then refused 401. Spent just before the kill, the runners the first node
+# held find LEFT handshakes waiting, and the rest one every 1/ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE seconds. The burst is
+# whole when the second node has admitted nobody for that long times the burst, which a quiet cell's wait gives it.
+spend_node_b() {
+  local run=$1 left=$2 burst ip k code spent=0
+  burst="$(setting STAGING_HANDSHAKE_BURST_B 400)"
+  [ "$left" -lt "$burst" ] || return 0
+  ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$gateway_b")"
+  for k in $(seq 1 $((burst - left))); do
+    code="$(curl -sk --http1.1 -o /dev/null -w '%{http_code}' --max-time 5 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+      -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "https://$ip:8443/")" || true
+    [ "$code" = 401 ] && spent=$((spent + 1))
+  done
+  say "$run: $spent of $gateway_b's $burst handshakes spent by upgrades of no runner's (each answered 401), $left left for the runners the kill sends it"
 }
 # wait_presence I SECONDS: runner I's last beat came over the link; non-zero when it did not within SECONDS.
 wait_presence() {
@@ -481,8 +525,9 @@ outage() {
   local held_count=0 most_held=0 reaped=0 passed=0 n verdict lead released=0 mid ends deadline
   local status_during final_status during_at turn_at ran_seqs rows distinct first last runtime starts told
   local kind a b c d e f first_past="" first_after="" past_then="" wrong=""
+  local node_a="" node_b="" g at last_back="" late="" seen_late=""
   local -a why=() verdicts=() log_from=()
-  local -A is_cut=() process0=() beat_cut=() crossing=() back=() reconnected=()
+  local -A is_cut=() process0=() beat_cut=() crossing=() back=() reconnected=() before_cut=() is_late=()
   # Each run of a phase has a number: its sessions' release gates and texts, and its records, are its own.
   run="$phase-$(($(awk -F'\t' -v p="$phase" 'index($1, p "-") == 1' "$outages" | wc -l) + 1))"
   statuses=() silence_max=()
@@ -503,13 +548,33 @@ outage() {
   done
   sample "$run"
   if [ "$phase" = partition ] && [ -n "$sweep_after" ]; then aim_cut "$run"; fi
+  if [ "$phase" = node ]; then
+    # The runners the first node holds: those whose last beat came through it.
+    node_a="$(node_of "$gateway")" node_b="$(node_of "$gateway_b")"
+    CUT=""
+    for i in $(runners); do
+      read -r g at <<< "$(presence_node "$i")"
+      if [ "$g" = "$node_a" ]; then CUT+="$i "; before_cut[$i]="$at"; fi
+    done
+    [ -n "$CUT" ] || fail "$run: no runner is connected through $gateway ($node_a)"
+  fi
   for i in $CUT; do is_cut[$i]=1; done
+  if [ "$phase" = node ]; then spend_node_b "$run" "$(( $(wc -w <<< "$CUT") - node_late ))"; fi
 
   # The cut.
-  if [ "$phase" = gateway ]; then kill_gateway; else cut_off $CUT; fi
+  if [ "$phase" = gateway ] || [ "$phase" = node ]; then kill_gateway; else cut_off $CUT; fi
   cut_at="$(now)"
   if [ "$phase" = gateway ]; then
     say "$run: $gateway killed: every runner has lost the link"
+  elif [ "$phase" = node ]; then
+    # Each runner cut off was last heard through the node just killed: by the beat its row holds a moment after the kill,
+    # one that was on its way included, unless it is back through the other node already.
+    sleep 1
+    for i in $CUT; do
+      read -r g at <<< "$(presence_node "$i")"
+      if [ "$g" = "$node_a" ]; then beat_cut[$i]="$at"; else beat_cut[$i]="${before_cut[$i]}"; fi
+    done
+    say "$run: $gateway ($node_a) killed: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)($(wc -w <<< "$CUT") of $count) lost the link and connect again through $gateway_b ($node_b), whose limiter lets $(setting STAGING_HANDSHAKE_BURST_B 400) handshakes through at once and $(setting STAGING_HANDSHAKE_RATE_B 200) a second after"
   else
     say "$run: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)cut off, $(wc -w <<< "$CUT") of $count: every packet their processes send is dropped (nft table inet $nft_table)"
   fi
@@ -521,6 +586,17 @@ outage() {
   ends=$((SECONDS + outage))
   while [ $SECONDS -lt $ends ]; do
     sample "$run"
+    # A runner the node held is back once its beat comes through the other.
+    if [ "$phase" = node ]; then
+      for i in $CUT; do
+        [ -z "${back[$i]:-}" ] || continue
+        read -r g at <<< "$(presence_node "$i")"
+        if [ "$g" = "$node_b" ] && [[ "$at" > "$cut_at" ]]; then
+          back[$i]="$at"
+          say "$run: runner r$i back through $gateway_b at $at, $(awk -v a="$(epoch "${beat_cut[$i]}")" -v b="$(epoch "$at")" 'BEGIN { printf "%.1f", b - a }') s after its last beat through $gateway"
+        fi
+      done
+    fi
     if [ "$released" = 0 ] && [ $SECONDS -ge $mid ]; then
       for i in $(runners); do
         release "$i" "$run-during"
@@ -528,20 +604,23 @@ outage() {
       done
       released=1
       say "$run: halfway: every engine writes an event; the runners still connected end their turns"
-      for i in $CUT; do
-        beat_cut[$i]="$(presence "$i" | cut -d' ' -f3)"
-        lead="$(awk -v a="$(epoch "$cut_at")" -v b="$(epoch "${beat_cut[$i]}")" 'BEGIN { printf "%.1f", a - b }')"
-        crossing[$i]="$(date -u -d "@$(awk -v b="$(epoch "${beat_cut[$i]}")" -v o="$offline_after" 'BEGIN { printf "%.3f", b + o }')" +%Y-%m-%dT%H:%M:%S.%3NZ)"
-        say "$run: runner r$i last beat at ${beat_cut[$i]}, $lead s before the cut: past the reaper's $offline_after s line at ${crossing[$i]}, +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
-      done
+      # A runner the node held may be back by now: its last beat before the cut was read at the cut.
+      if [ "$phase" != node ]; then
+        for i in $CUT; do
+          beat_cut[$i]="$(presence "$i" | cut -d' ' -f3)"
+          lead="$(awk -v a="$(epoch "$cut_at")" -v b="$(epoch "${beat_cut[$i]}")" 'BEGIN { printf "%.1f", a - b }')"
+          crossing[$i]="$(date -u -d "@$(awk -v b="$(epoch "${beat_cut[$i]}")" -v o="$offline_after" 'BEGIN { printf "%.3f", b + o }')" +%Y-%m-%dT%H:%M:%S.%3NZ)"
+          say "$run: runner r$i last beat at ${beat_cut[$i]}, $lead s before the cut: past the reaper's $offline_after s line at ${crossing[$i]}, +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
+        done
+      fi
     fi
     sleep 2
   done
   reading="$(fleet)"
   # The control plane is back from the moment the gateway starts, before it reports healthy.
   restore_at="$(now)"
-  if [ "$phase" = gateway ]; then start_gateway; else reconnect; fi
-  if [ "$phase" = gateway ]; then
+  if [ "$phase" = gateway ] || [ "$phase" = node ]; then start_gateway; else reconnect; fi
+  if [ "$phase" = gateway ] || [ "$phase" = node ]; then
     say "$run: $gateway started again at $restore_at, $(since "$cut_at") s after the kill, and healthy now; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
   else
     say "$run: the cut lifted at $restore_at, $(since "$cut_at") s after it began; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
@@ -550,13 +629,17 @@ outage() {
   # Every runner cut off heard again, as the same process; the samples go on as long as that takes.
   deadline=$((SECONDS + 300))
   for i in $CUT; do
-    while :; do
-      sample "$run"
-      line="$(presence "$i")"
-      if [ "${line%% *}" = LINK ] && [[ "${line##* }" > "$restore_at" ]]; then back[$i]="${line##* }"; break; fi
-      [ $SECONDS -lt $deadline ] || break
-      sleep 2
-    done
+    # One the node held may be back through the other node already: that was its return.
+    if [ "$phase" != node ] || [ -z "${back[$i]:-}" ]; then
+      while :; do
+        sample "$run"
+        line="$(presence "$i")"
+        if [ "${line%% *}" = LINK ] && [[ "${line##* }" > "$restore_at" ]]; then back[$i]="${line##* }"; break; fi
+        [ $SECONDS -lt $deadline ] || break
+        sleep 2
+      done
+    fi
+    line="$(presence "$i")"
     reconnected[$i]="$(log_since "$i" "${log_from[$i]}" 'carries the work of process' | tail -n 1 | sed -nE 's/.*(after [^ ]+ without one).*/\1/p')"
     if [ -n "${back[$i]:-}" ]; then
       say "$run: runner r$i heard again at ${back[$i]}, $(awk -v a="$(epoch "$restore_at")" -v b="$(epoch "${back[$i]}")" 'BEGIN { printf "%.1f", b - a }') s after the restore, as process $(cut -d' ' -f2 <<< "$line"); its log: ${reconnected[$i]:-no reconnection}"
@@ -568,6 +651,20 @@ outage() {
     while IFS= read -r line; do say "$run: runner r$i log: $line"; done < <(log_since "$i" "${log_from[$i]}" 'runner link: connection' | grep -E 'ended \(|carries the work' || true)
   done
   sample "$run"
+  # The runners the node held that were out past the reaper's offline line: theirs are the crossings, and the last of
+  # them back is when the control plane had them all again.
+  if [ "$phase" = node ]; then
+    for i in $CUT; do
+      if [ -z "${back[$i]:-}" ] || awk -v a="$(epoch "${beat_cut[$i]}")" -v b="$(epoch "${back[$i]}")" -v o="$offline_after" 'BEGIN { exit !(b - a > o) }'; then
+        is_late[$i]=1
+        late+="r$i "
+        crossing[$i]="$(date -u -d "@$(awk -v b="$(epoch "${beat_cut[$i]}")" -v o="$offline_after" 'BEGIN { printf "%.3f", b + o }')" +%Y-%m-%dT%H:%M:%S.%3NZ)"
+        if [ -n "${back[$i]:-}" ] && [[ "${back[$i]}" > "$last_back" ]]; then last_back="${back[$i]}"; fi
+      fi
+    done
+    [ -n "$last_back" ] || last_back="$restore_at"
+    say "$run: back only past the reaper's $offline_after s line: ${late:-no runner}$([ -z "$late" ] || echo "; the last at $last_back")"
+  fi
 
   # Every session: what its engine wrote during the outage stored, its turn ended, one message more answered.
   for i in $(runners); do wait_until 120 has_during "${suuid[$i]}" "$run" || true; done
@@ -599,10 +696,15 @@ outage() {
     while IFS= read -r line; do say "$run: apiserver: $(sed -E 's/^([^ ]+) .*\[Reaper\] /\1 /' <<< "$line")"; done <<< "$reaped_lines"
   fi
   # A hold the outage did not make (the startup grace, a heartbeat write that failed) says nothing of the mass silence.
-  reason="$(sed -nE 's/.*whose runner looks offline \([^)]*\): //p' <<< "$held_lines" | grep -vE 'have been silent for over|went silent together' | head -n 1 || true)"
+  reason="$(sed -nE 's/.*whose runner looks offline \([^)]*\): //p' <<< "$held_lines" | grep -vE 'lost contact in a mass disconnection' | head -n 1 || true)"
   # The reaper's sweeps against the crossings: each held sweep since the first crossing, and whether it held from then on.
-  for i in $CUT; do printf 'r%s\t%s\t%s\n' "$i" "${crossing[$i]}" "${suuid[$i]}"; done > "$out/$run-crossings.tsv"
-  while IFS=$'\t' read -r kind a b c d e f; do
+  for i in $CUT; do
+    [ "$phase" != node ] || [ -n "${is_late[$i]:-}" ] || continue
+    printf 'r%s\t%s\t%s\n' "$i" "${crossing[$i]}" "${suuid[$i]}"
+  done > "$out/$run-crossings.tsv"
+  if [ ! -s "$out/$run-crossings.tsv" ]; then
+    wrong="no runner cut off was out past the offline line: slow the second node's handshakes (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE, _BURST)"
+  else while IFS=$'\t' read -r kind a b c d e f; do
     case "$kind" in
       S) say "$run: sweep held at $a, +$b s after the first crossing: $c of the $(wc -w <<< "$CUT") runners cut off past the offline line$([ "$d" = none ] || echo ", $d crossing $e s later"); the reaper read: \"$f\"" ;;
       V) first_past="$a at $b" first_after="$c" past_then="$d" wrong="$f"
@@ -612,7 +714,8 @@ outage() {
            say "$run: the reaper did not hold from the first crossing on ($a, at $b): $wrong"
          fi ;;
     esac
-  done < <(sweeps "$run" "$restore_at")
+  done < <(sweeps "$run" "$([ "$phase" = node ] && echo "$last_back" || echo "$restore_at")")
+  fi
 
   # Each session's account.
   for i in $(runners); do
@@ -626,9 +729,14 @@ outage() {
     turn_at="$(long_turn_answered_at "${suuid[$i]}")"
     if [ -n "${is_cut[$i]:-}" ]; then
       [ "$status_during" = RUNNING ] || why+=("was ${status_during:-never read} while out of reach, not RUNNING throughout")
-      awk -v s="${silence_max[$i]:-0}" -v l="$offline_after" 'BEGIN { exit !(s > l) }' ||
+      # A runner the node held that was back within seconds was never past the line, and is not asked to be: the
+      # outage's own verdict asks that some runner was.
+      [ "$phase" = node ] || awk -v s="${silence_max[$i]:-0}" -v l="$offline_after" 'BEGIN { exit !(s > l) }' ||
         why+=("silent for ${silence_max[$i]:-0} s at most: never past the reaper's $offline_after s line")
-      if [ "$n" = 0 ] && [ "$most_held" -le 10 ]; then why+=("named in no sweep the reaper held"); fi
+      if [ "$n" = 0 ] && [ "$most_held" -le 10 ] && { [ "$phase" != node ] ||
+        awk -v s="${silence_max[$i]:-0}" -v l="$((offline_after + sweep_every + 5))" 'BEGIN { exit !(s > l) }'; }; then
+        why+=("named in no sweep the reaper held")
+      fi
       [ -n "${back[$i]:-}" ] || why+=("not heard again within 300 s of the restore")
       line="$(presence "$i")"
       [ "$(cut -d' ' -f2 <<< "$line")" = "${process0[$i]}" ] ||
@@ -644,7 +752,7 @@ outage() {
     during_at="$(assistant_at "${suuid[$i]}" "$run: written during the outage.")"
     if [ -z "$during_at" ]; then
       why+=("what its engine wrote during the outage was not stored")
-    elif [ -n "${is_cut[$i]:-}" ] && [[ "$during_at" < "$restore_at" ]]; then
+    elif [ -n "${is_cut[$i]:-}" ] && [ "$phase" != node ] && [[ "$during_at" < "$restore_at" ]]; then
       why+=("what its engine wrote during the outage was stored at $during_at, before the restore")
     fi
     final_status="$(session_status "${suuid[$i]}")"
@@ -674,8 +782,21 @@ outage() {
 
   [ "$reaped" = 0 ] || verdicts+=("$reaped session(s) reaped")
   [ "$held_count" -gt 0 ] || verdicts+=("the reaper held no sweep: the outage did not reach its offline line")
-  [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass silence: $reason")
-  [ "$wrong" = none ] || verdicts+=("the reaper did not hold from the first crossing on: ${wrong:-the sweeps could not be read}")
+  [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass disconnection: $reason")
+  if [ "$phase" = node ]; then
+    # The runners the node held come back one by one, so a late one may be back between two sweeps, unseen: what must
+    # hold is that some runner was out past the line for longer than a sweep interval, which a sweep then read as
+    # offline, and that each such runner's session was held (its own account, below).
+    seen_late=""
+    for i in $CUT; do
+      if awk -v s="${silence_max[$i]:-0}" -v l="$((offline_after + sweep_every + 5))" 'BEGIN { exit !(s > l) }'; then seen_late+="r$i "; fi
+    done
+    say "$run: out past the offline line for longer than a sweep interval: ${seen_late:-no runner}"
+    [ -n "$seen_late" ] ||
+      verdicts+=("no runner the node held was out past the reaper's offline line for a whole sweep interval: slow the second node's handshakes (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE, _BURST)")
+  else
+    [ "$wrong" = none ] || verdicts+=("the reaper did not hold from the first crossing on: ${wrong:-the sweeps could not be read}")
+  fi
   [ "$passed" = "$count" ] || verdicts+=("$((count - passed)) of $count sessions did not hold")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
@@ -693,10 +814,12 @@ outage() {
 prepare() {
   local i name token answer spacing
   rm -f "$timeline" "$outages" "$sessions_table"
-  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD); $count runners"
+  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD); $count runners; $gateways link gateway node(s)$([ "$gateways" = 1 ] || echo ", the second letting $handshake_burst handshakes through at once and $handshake_rate a second after")"
   stop_runners
   reconnect
-  ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
+  ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 ORBIT_LINK_STAGING_GATEWAYS="$gateways" \
+    ORBIT_LINK_STAGING_HANDSHAKE_RATE_B="$handshake_rate" ORBIT_LINK_STAGING_HANDSHAKE_BURST_B="$handshake_burst" \
+    "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings
   answer="$(api switch on)" || fail "switching RUNNER_LINK_REQUIRED on"
@@ -777,12 +900,22 @@ partition_phase() {
   outage partition
 }
 
+node_phase() {
+  stack_settings
+  load_runners
+  [ "$(setting STAGING_GATEWAYS 1)" = 2 ] ||
+    fail "node: the stack has one link gateway node; prepare it with ORBIT_MASS_DISCONNECT_GATEWAYS=2"
+  local i
+  for i in $(runners); do runner_running "$i" || fail "runner r$i is not running: run prepare"; done
+  outage node
+}
+
 summary() {
   say "summary: $(awk -F'\t' 'NR > 1 { printf "%s%s: %s of %s runners cut, %s sweeps held (the first %s s after %s, %s cut off past the line then), %s reaped, %s sessions held: %s", (NR > 2 ? "; " : ""), $1, $3, $2, $7, $10, $9, $11, $12, $13, $14 }' "$outages")"
 }
 
 case "${1:-}" in
-  prepare|gateway|partition|all|stop) mkdir -p "$out" ;;
+  prepare|gateway|partition|node|all|stop) mkdir -p "$out" ;;
 esac
 trap restore_stack EXIT
 failed=0
@@ -790,8 +923,9 @@ case "${1:-}" in
   prepare) prepare ;;
   gateway) gateway_phase; summary; exit "$failed" ;;
   partition) partition_phase; summary; exit "$failed" ;;
+  node) node_phase; summary; exit "$failed" ;;
   all) prepare; gateway_phase; partition_phase; summary; exit "$failed" ;;
   stop) reconnect; stop_runners ;;
-  -h|--help|"") sed -n '2,39p' "$0" ;;
+  -h|--help|"") sed -n '2,49p' "$0" ;;
   *) die "unknown phase $1 (see --help)" ;;
 esac
