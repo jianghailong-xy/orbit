@@ -42,7 +42,7 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 29 routes today (naming, a turn suggestion and the Cursor key check included). */
+/** The runner door: 30 routes today (naming, a turn suggestion, the Cursor key check and a job's alert included). */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
@@ -249,12 +249,12 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   'ProvidersService.recordCursorKeyCheck': {
     file: 'providers/providers.service.ts',
     snippet: '// Before the ownership answer, but only for a row of this runner\'s own account: another',
-    note: 'POST /runner/sessions/:id/cursor-key-check (its own controller, RunnerProvidersController)',
+    note: 'POST /runner/sessions/:id/cursor-key-check (RunnerApiController, which leaves the check to the service)',
   },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
-    note: 'the runner doors that load the row themselves: attachments, artifacts, approvals, wakes, naming, suggestion, diff',
+    note: 'the runner doors that load the row themselves: attachments, artifacts, approvals, wakes, a job\'s alert, naming, suggestion, diff',
   },
   'RunnerApiController.assertEngineSessionById': {
     file: 'runner-api/runner-api.controller.ts',
@@ -305,7 +305,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
 
-  // ── the runner door (29) ──────────────────────────────────────────────────────────────────────
+  // ── the runner door (30) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/takeover-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/activate-leases': 'RunnerApiController.assertEngineSessionById',
@@ -315,6 +315,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/artifacts/result': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/approvals': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/background-wake': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/notify': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/scheduled-wakeup': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/naming': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/cursor-key-check': 'ProvidersService.recordCursorKeyCheck',
