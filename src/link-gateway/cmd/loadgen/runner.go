@@ -404,9 +404,13 @@ func (r *runner) tick(ctx context.Context, now time.Time, generating bool) {
 			}
 		}
 	}
+	// A session has one batch out at a time, as a runner's does (src/runner-go/link_events.go): an EventAck names no
+	// batch, and the gateway answers a batch it refuses on sight ahead of one it is still storing, so the answer to a
+	// second batch out could not be told from the first's. Nothing is sent for it on a new connection either while its
+	// batch is out on the one being replaced, so its events are stored in seq order.
 	if r.cur != nil && !r.quiescing {
 		for _, s := range r.active {
-			if len(s.pending) > 0 && !now.Before(s.flushAt) && !now.Before(s.resendAfter) && !r.heldByRetired(s) &&
+			if len(s.pending) > 0 && len(s.inflight) == 0 && !now.Before(s.flushAt) && !now.Before(s.resendAfter) &&
 				r.cur.room(s.pending[:1]) > 0 {
 				r.flush(s, now)
 			}
@@ -459,8 +463,9 @@ func (r *runner) nextDeadline(now time.Time, generating bool) time.Time {
 		if generating && s.started {
 			take(s.nextEventAt)
 		}
-		// A session the credit holds back waits for an acknowledgement or a Credit frame, which wake the loop.
-		if len(s.pending) > 0 && r.cur != nil && !r.quiescing && r.cur.room(s.pending[:1]) > 0 {
+		// A session whose batch is out, or that the credit holds back, waits for an acknowledgement or a Credit frame,
+		// which wake the loop.
+		if len(s.pending) > 0 && len(s.inflight) == 0 && r.cur != nil && !r.quiescing && r.cur.room(s.pending[:1]) > 0 {
 			take(maxTime(s.flushAt, s.resendAfter))
 		}
 		inflight = inflight || len(s.inflight) > 0
@@ -485,17 +490,6 @@ func (r *runner) inflightOn(c *rconn) bool {
 			if b.conn == c {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// heldByRetired: the session has batches out on a connection being replaced. Nothing more is sent for it until they
-// are acknowledged or that connection ends and they are sent again, so its events are stored in seq order.
-func (r *runner) heldByRetired(s *session) bool {
-	for _, b := range s.inflight {
-		if b.conn != r.cur {
-			return true
 		}
 	}
 	return false
@@ -934,7 +928,7 @@ func (r *runner) onEventAck(c *rconn, a *linkpb.EventAck, now time.Time) {
 	}
 	r.ackThrough(s, a.GetDurableSeq(), now)
 	if fl := a.GetFailure(); fl != nil {
-		// What this connection had out after the failed batch fails alike, and is sent again from durable_seq + 1.
+		// The batch is sent again from durable_seq + 1.
 		requeued := r.requeue(s, c)
 		if requeued > 0 {
 			g.stats.fail("event_failure_"+fl.GetCode(), fmt.Sprintf("runner %s conn %s session %s: durable_seq %d, retryable %v, retry_after %dms: %s",
