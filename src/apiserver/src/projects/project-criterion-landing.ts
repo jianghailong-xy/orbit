@@ -195,20 +195,24 @@ export function canonicalRepoUrl(raw: string): string | null {
 }
 
 /**
- * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): the workspace a work session
- * ran in names, through SR36, the repository the project's line is bound to. A project with no
- * binding has none to differ from — its first integration binds it to this work's repository (L3) —
- * and a workspace with no `repo_url` differs from every binding. The binding's own URL is read
- * through SR36 as well: that changes nothing for one `bind()` wrote, which is canonical already, and
- * keeps one written by hand comparable. `workOnProjectRepositorySql` is the same condition in SQL.
+ * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): no repository is KNOWN to
+ * differ from the one the project's line is bound to — the workspace a work session ran in names,
+ * through SR36, that repository, or names none. Only a known, different repository takes work off
+ * the line. A project with no binding has none to differ from — its first integration binds it to
+ * this work's repository (L3) — and a session with no workspace, or a workspace with no `repo_url`,
+ * names none: that work stays this line's, queued, waited on and in its criterion's conjunction, so
+ * a repository nobody recorded is answered where it always was rather than read as nothing to land.
+ * The binding's own URL is read through SR36 as well: that changes nothing for one `bind()` wrote,
+ * which is canonical already, and keeps one written by hand comparable. `workOnProjectRepositorySql`
+ * is the same condition in SQL, where a NULL on either side of its `<>` holds.
  */
 export function workOnProjectRepository(
   repoUrl: string | null | undefined,
   binding: { canonicalRepoUrl?: string | null } | null | undefined,
 ): boolean {
-  if (!binding?.canonicalRepoUrl) return true;
+  const bound = binding?.canonicalRepoUrl ? canonicalRepoUrl(binding.canonicalRepoUrl) : null;
   const repository = repoUrl ? canonicalRepoUrl(repoUrl) : null;
-  return repository !== null && repository === canonicalRepoUrl(binding.canonicalRepoUrl);
+  return bound === null || repository === null || repository === bound;
 }
 
 /** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
@@ -372,8 +376,8 @@ export function taskLandingSql(alias: string): string {
 /**
  * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
  *
- * Its newest work session ran in a worktree on a branch, in the repository the project's line is
- * bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
+ * Its newest work session ran in a worktree on a branch, in no repository known to differ from the
+ * one the project's line is bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
  * middle two disjuncts of `prerequisiteLandedSql`, stated positively because this asks the question
  * the other way round — that one asks "is there nothing left to wait for", this asks "is this the
  * kind of work that lands".
@@ -427,18 +431,19 @@ export function canonicalRepoUrlSql(raw: string): string {
 
 /**
  * `isCodeTask`'s repository condition (revision 29, §10.5 O-L7) as SQL: no binding of the project
- * names a repository other than the one `repoUrl` — a work session's workspace `repo_url` — reads as
- * through SR36. A project with no binding has none to differ from: its first integration binds it to
- * this work's repository (L3). A workspace with no `repo_url` is in no repository anybody can name, so
- * it differs from every binding. The binding's URL is read through SR36 too, as
- * `workOnProjectRepository` reads it.
+ * names a repository KNOWN to differ from the one `repoUrl` — a work session's workspace `repo_url` —
+ * reads as through SR36. A project with no binding has none to differ from: its first integration
+ * binds it to this work's repository (L3). A session with no workspace, or a workspace with no
+ * `repo_url`, names no repository, and `<>` against its NULL is not true, so the condition holds:
+ * only a known, different repository takes work off the line. The binding's URL is read through
+ * SR36 too, as `workOnProjectRepository` reads it.
  */
 export function workOnProjectRepositorySql(projectId: string, repoUrl: string): string {
   return `NOT EXISTS (
         SELECT 1 FROM "project_codebase" work_line
          WHERE work_line."project_id" = ${projectId}
            AND work_line."slot" = 'primary'
-           AND ${canonicalRepoUrlSql('work_line."canonical_repo_url"')} IS DISTINCT FROM ${canonicalRepoUrlSql(repoUrl)}
+           AND ${canonicalRepoUrlSql('work_line."canonical_repo_url"')} <> ${canonicalRepoUrlSql(repoUrl)}
       )`;
 }
 
@@ -748,8 +753,9 @@ export function taskHasNothingToLand(task: LandingServingTask): boolean {
  * session as §1.1 reads it. No commit of such work can ever be on this line, and the task cannot be
  * declared codeless either — it has commits (`TASK_CODELESS_HAS_COMMITS`) — so without this a criterion
  * it serves would wait for a landing that never comes. It leaves the conjunction exactly as codeless
- * work does (§1.4 "有提交可落"). A task with no work session, or in a project with no binding, has no
- * repository to differ from.
+ * work does (§1.4 "有提交可落"). A task with no work session, one whose newest work session names no
+ * repository (no workspace, or no `repo_url`), or one in a project with no binding has none KNOWN to
+ * differ, and stays in.
  */
 export function workInAnotherRepository(task: LandingServingTask): boolean {
   const newest = task.sessions?.[0];

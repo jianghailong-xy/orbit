@@ -64,7 +64,10 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  *      line — no LAND_TASK on a project branch, no candidate on a MAIN line, nothing frozen to observe;
  * (10) O-L7 at §1.4: such work leaves its criterion's landing conjunction as codeless work does —
  *      alone it reads LANDED with the codeless reason, beside an unlanded code task UNKNOWN, beside a
- *      landed one LANDED.
+ *      landed one LANDED;
+ * (11) O-L7: a repository nobody names is not another one — work whose session has no workspace, or
+ *      a workspace with no `repo_url`, stays this line's code task: J9 waits on it, its DONE freezes
+ *      and queues it, and it holds its criterion off LANDED.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -231,7 +234,8 @@ interface WorkSession {
   baseSha?: string | null;
   /** Finished this long ago; omitted, the session is live (AWAITING_INPUT, no finish). */
   finishedMinutesAgo?: number;
-  workspaceId?: string;
+  /** The workspace it ran in: omitted, the world's; null, none at all. */
+  workspaceId?: string | null;
 }
 
 /** A worktree session of the task's work, as the runner's reports left it. */
@@ -240,7 +244,8 @@ async function workSession(stack: Stack, w: World, taskId: string, s: WorkSessio
   const finished = s.finishedMinutesAgo !== undefined;
   await stack.db.session.create({
     data: {
-      id, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: s.workspaceId ?? w.workspaceId,
+      id, ownerId: w.ownerId, creatorId: w.ownerId, taskId,
+      workspaceId: s.workspaceId === undefined ? w.workspaceId : s.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
       status: finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
@@ -309,6 +314,90 @@ async function finalize(stack: Stack, w: World, sessionId: string, branchSha?: s
   } as never);
   const row = await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { finishedAt: true } });
   assert.ok(row.finishedAt, 'CONTROL: the finalize wrote the finish');
+}
+
+/** §1.1 `isCodeTask` in SQL and in TypeScript, and §2.5 J9's SQL spelling, over one task's rows. */
+async function codeTaskReading(stack: Stack, w: World, taskId: string) {
+  const [row] = await stack.db.$queryRaw<Array<{ isCode: boolean; landed: boolean }>>(Prisma.sql`
+    SELECT ${Prisma.raw(isCodeTaskSql('t'))} AS "isCode", ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed"
+      FROM "task" t WHERE t."id" = ${taskId}::uuid`);
+  return { ...row!, isCodeTs: await isCodeTask(stack.db as never, w.ownerId, taskId) };
+}
+
+/** J9 as the start door reads it: what refuses a new dependent of the task, or null when it starts. */
+async function dependentRefusal(stack: Stack, w: World, title: string, prerequisiteId: string): Promise<string | null> {
+  const created = await stack.tasks.create(w.ownerId, {
+    title, projectId: w.projectId, assigneeId: w.workspaceId, autoRunWhenReady: false,
+    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
+    dependsOnTaskIds: [prerequisiteId],
+  } as never);
+  try {
+    await stack.tasks.execute(w.ownerId, created.id);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+/** The routes onto the line a task's DONE was given: landings queued, candidates filed. */
+async function routesOf(stack: Stack, taskId: string) {
+  return {
+    landings: await stack.db.projectIntegrationJob.count({ where: { taskId } }),
+    candidates: await stack.db.projectPromotion.count({ where: { taskId } }),
+  };
+}
+
+/** One criterion the world's project states. */
+async function criterionOf(stack: Stack, w: World, ordinal: number): Promise<string> {
+  const id = randomUUID();
+  await stack.db.projectAcceptanceCriterionDefinition.create({
+    data: {
+      id, projectId: w.projectId, ordinal, text: `criterion ${ordinal}`,
+      verificationMethod: 'delivered-identity.pg.spec.ts reads its landing',
+      // Written by the definition's own BEFORE trigger; the placeholder satisfies the CHECK.
+      contentHash: '0'.repeat(64),
+    },
+  });
+  return id;
+}
+
+/** A DONE task serving the criterion, its work one finished worktree session in `workspaceId`. */
+async function servingTask(
+  stack: Stack, w: World, title: string, criterionId: string, workspaceId: string | null,
+): Promise<{ taskId: string; sessionId: string }> {
+  const task = await stack.db.task.create({
+    data: {
+      ownerId: w.ownerId, creatorType: 'USER', creatorId: w.ownerId, title, projectId: w.projectId,
+      assigneeId: w.workspaceId, status: TaskStatus.DONE, completionCriterion: 'OWNER_CONFIRMED',
+      criterionDefinitionId: criterionId, criterionRevision: 1,
+    },
+    select: { id: true },
+  });
+  const sessionId = await workSession(stack, w, task.id, {
+    createdMinutesAgo: 20, branch: `orbit/${title}`, branchSha: sha('a'), baseSha: sha('b'),
+    finishedMinutesAgo: 2, workspaceId,
+  });
+  return { taskId: task.id, sessionId };
+}
+
+/** Each criterion's landing and the reason beside it, as the project's own reads fold them. */
+async function criterionLandings(stack: Stack, w: World) {
+  const prisma = stack.db as unknown as PrismaService;
+  const answers = criterionLandingWithReasons(
+    await readCriterionLandingReasonFacts(prisma, w.ownerId, w.projectId),
+    await criterionLanding.readLandingBranches(prisma, w.projectId),
+    await readInFlightLandingJobs(prisma, w.projectId),
+  );
+  return (definitionId: string) => {
+    const answer = answers.find((row) => row.definitionId === definitionId);
+    return { landing: answer?.landing, reason: answer?.landingReason };
+  };
+}
+
+/** The same criteria through the plain landing lane — the share link's and the coordinator's read. */
+async function laneLandings(stack: Stack, w: World, definitionIds: string[]) {
+  const lane = await criterionLanding.readCriterionLanding(stack.db as unknown as PrismaService, w.ownerId, w.projectId);
+  return definitionIds.map((id) => lane.find((row) => row.definitionId === id)?.landing);
 }
 
 // ═══ (1) an ordinary task ════════════════════════════════════════════════════════════════════════
@@ -595,13 +684,6 @@ test('(6) O-L7: work in another repository is not this line\'s code task — J9 
           enabled: true, repoUrl: '  git@GIT.invalid:orbit/repository.git/ ', workDir: '/srv/same',
         },
       });
-      const unbound = randomUUID();
-      await stack.db.workspace.create({
-        data: {
-          id: unbound, ownerId: w.ownerId, runnerId: w.runnerId, name: 'no-repository', enabled: true,
-          repoUrl: null, workDir: '/srv/unbound',
-        },
-      });
 
       const prerequisite = async (title: string, workspaceId: string) => {
         const taskId = await ownerTask(stack, w, title);
@@ -613,42 +695,20 @@ test('(6) O-L7: work in another repository is not this line\'s code task — J9 
         return taskId;
       };
       const foreign = await prerequisite('in-another-repository', elsewhere);
-      const nowhere = await prerequisite('in-no-repository', unbound);
       const ours = await prerequisite('in-this-repository', sameRepository);
 
-      const read = async (taskId: string) => {
-        const [row] = await stack.db.$queryRaw<Array<{ isCode: boolean; landed: boolean }>>(Prisma.sql`
-          SELECT ${Prisma.raw(isCodeTaskSql('t'))} AS "isCode", ${Prisma.raw(prerequisiteLandedSql('t'))} AS "landed"
-            FROM "task" t WHERE t."id" = ${taskId}::uuid`);
-        return { ...row!, isCodeTs: await isCodeTask(stack.db as never, w.ownerId, taskId) };
-      };
-      for (const taskId of [foreign, nowhere]) {
-        assert.deepEqual(await read(taskId), { isCode: false, landed: true, isCodeTs: false },
-          'work outside the binding\'s repository is not this line\'s code task');
-        assert.deepEqual(await identityOf(stack, taskId), NOTHING_FROZEN, 'its DONE froze an identity');
-        assert.deepEqual(await landingUnobserved(stack, taskId), [], 'it was handed an item about this line');
-      }
-      assert.deepEqual(await read(ours), { isCode: true, landed: false, isCodeTs: true },
+      assert.deepEqual(await codeTaskReading(stack, w, foreign), { isCode: false, landed: true, isCodeTs: false },
+        'work outside the binding\'s repository is not this line\'s code task');
+      assert.deepEqual(await identityOf(stack, foreign), NOTHING_FROZEN, 'its DONE froze an identity');
+      assert.deepEqual(await landingUnobserved(stack, foreign), [], 'it was handed an item about this line');
+      assert.deepEqual(await codeTaskReading(stack, w, ours), { isCode: true, landed: false, isCodeTs: true },
         'CONTROL: the same repository spelled another way is this line\'s code task');
       assert.equal((await identityOf(stack, ours)).frozen, true, 'CONTROL: and its DONE froze the identity');
 
       // J9 as the start door reads it: the dependent of the foreign task starts, and the control's waits.
-      const dependent = async (title: string, prerequisiteId: string) => {
-        const created = await stack.tasks.create(w.ownerId, {
-          title, projectId: w.projectId, assigneeId: w.workspaceId, autoRunWhenReady: false,
-          completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
-          dependsOnTaskIds: [prerequisiteId],
-        } as never);
-        try {
-          await stack.tasks.execute(w.ownerId, created.id);
-          return null;
-        } catch (error) {
-          return (error as Error).message;
-        }
-      };
-      assert.notEqual(await dependent('after-the-foreign-work', foreign), PREREQUISITE_NOT_LANDED_MESSAGE,
+      assert.notEqual(await dependentRefusal(stack, w, 'after-the-foreign-work', foreign), PREREQUISITE_NOT_LANDED_MESSAGE,
         'J9 held a dependent on work that cannot land on this line');
-      assert.equal(await dependent('after-our-work', ours), PREREQUISITE_NOT_LANDED_MESSAGE,
+      assert.equal(await dependentRefusal(stack, w, 'after-our-work', ours), PREREQUISITE_NOT_LANDED_MESSAGE,
         'CONTROL: J9 holds the dependent of this line\'s code task until its work lands');
     } finally {
       await stack.db.$disconnect();
@@ -758,14 +818,10 @@ test('(9) O-L7, J-T1a: a DONE task whose work is in another repository is given 
         const foreign = await done(`${label}-foreign`, elsewhere);
         const ours = await done(`${label}-ours`, w.workspaceId);
 
-        const routes = async (taskId: string) => ({
-          landings: await stack.db.projectIntegrationJob.count({ where: { taskId } }),
-          candidates: await stack.db.projectPromotion.count({ where: { taskId } }),
-        });
-        assert.deepEqual(await routes(foreign), { landings: 0, candidates: 0 },
+        assert.deepEqual(await routesOf(stack, foreign), { landings: 0, candidates: 0 },
           `${line}: work in another repository was given a route to this line`);
         assert.equal((await identityOf(stack, foreign)).frozen, false, `${line}: an identity was frozen to observe`);
-        assert.deepEqual(await routes(ours), line === 'PROJECT_BRANCH'
+        assert.deepEqual(await routesOf(stack, ours), line === 'PROJECT_BRANCH'
           ? { landings: 1, candidates: 0 }
           : { landings: 0, candidates: 1 },
         `CONTROL ${line}: this line's own work is routed as before`);
@@ -789,44 +845,16 @@ test('(10) O-L7 at §1.4: work in another repository leaves its criterion\'s con
           repoUrl: 'https://git.invalid/orbit/a-different-repository.git', workDir: '/srv/criteria-elsewhere',
         },
       });
-      const criterion = async (ordinal: number) => {
-        const id = randomUUID();
-        await stack.db.projectAcceptanceCriterionDefinition.create({
-          data: {
-            id, projectId: w.projectId, ordinal, text: `criterion ${ordinal}`,
-            verificationMethod: 'delivered-identity.pg.spec.ts reads its landing',
-            // Written by the definition's own BEFORE trigger; the placeholder satisfies the CHECK.
-            contentHash: '0'.repeat(64),
-          },
-        });
-        return id;
-      };
-      const serving = async (title: string, criterionId: string, workspaceId: string) => {
-        const task = await stack.db.task.create({
-          data: {
-            ownerId: w.ownerId, creatorType: 'USER', creatorId: w.ownerId, title, projectId: w.projectId,
-            assigneeId: w.workspaceId, status: TaskStatus.DONE, completionCriterion: 'OWNER_CONFIRMED',
-            criterionDefinitionId: criterionId, criterionRevision: 1,
-          },
-          select: { id: true },
-        });
-        const sessionId = await workSession(stack, w, task.id, {
-          createdMinutesAgo: 20, branch: `orbit/${title}`, branchSha: sha('a'), baseSha: sha('b'),
-          finishedMinutesAgo: 2, workspaceId,
-        });
-        return { taskId: task.id, sessionId };
-      };
+      const alone = await criterionOf(stack, w, 1);
+      await servingTask(stack, w, 'alone-elsewhere', alone, elsewhere);
 
-      const alone = await criterion(1);
-      await serving('alone-elsewhere', alone, elsewhere);
+      const waiting = await criterionOf(stack, w, 2);
+      await servingTask(stack, w, 'waiting-elsewhere', waiting, elsewhere);
+      await servingTask(stack, w, 'waiting-ours', waiting, w.workspaceId);
 
-      const waiting = await criterion(2);
-      await serving('waiting-elsewhere', waiting, elsewhere);
-      await serving('waiting-ours', waiting, w.workspaceId);
-
-      const landed = await criterion(3);
-      await serving('landed-elsewhere', landed, elsewhere);
-      const ours = await serving('landed-ours', landed, w.workspaceId);
+      const landed = await criterionOf(stack, w, 3);
+      await servingTask(stack, w, 'landed-elsewhere', landed, elsewhere);
+      const ours = await servingTask(stack, w, 'landed-ours', landed, w.workspaceId);
       await stack.db.sessionMergeReceipt.create({
         data: {
           ownerId: w.ownerId, sessionId: ours.sessionId, taskId: ours.taskId, projectId: w.projectId,
@@ -836,16 +864,7 @@ test('(10) O-L7 at §1.4: work in another repository leaves its criterion\'s con
         },
       });
 
-      const prisma = stack.db as unknown as PrismaService;
-      const answers = criterionLandingWithReasons(
-        await readCriterionLandingReasonFacts(prisma, w.ownerId, w.projectId),
-        await criterionLanding.readLandingBranches(prisma, w.projectId),
-        await readInFlightLandingJobs(prisma, w.projectId),
-      );
-      const read = (definitionId: string) => {
-        const answer = answers.find((row) => row.definitionId === definitionId);
-        return { landing: answer?.landing, reason: answer?.landingReason };
-      };
+      const read = await criterionLandings(stack, w);
       assert.deepEqual(read(alone), { landing: 'LANDED', reason: 'CODELESS' },
         'a criterion served only by work in another repository waits on it, or reads another reason');
       assert.deepEqual(read(waiting), { landing: 'UNKNOWN', reason: 'NO_RECEIPT' },
@@ -853,11 +872,57 @@ test('(10) O-L7 at §1.4: work in another repository leaves its criterion\'s con
       assert.deepEqual(read(landed), { landing: 'LANDED', reason: null },
         'work in another repository withholds LANDED from a criterion whose own work is on main');
       // The plain landing lane — the share link's and the coordinator's reads — answers the same.
-      const lane = await criterionLanding.readCriterionLanding(prisma, w.ownerId, w.projectId);
-      assert.deepEqual(
-        [alone, waiting, landed].map((id) => lane.find((row) => row.definitionId === id)?.landing),
-        ['LANDED', 'UNKNOWN', 'LANDED'],
-      );
+      assert.deepEqual(await laneLandings(stack, w, [alone, waiting, landed]), ['LANDED', 'UNKNOWN', 'LANDED']);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (11) a repository nobody names ══════════════════════════════════════════════════════════════
+
+test('(11) O-L7: a repository nobody names is not another one — work with no workspace, or in a workspace with no repo_url, stays this line\'s code task: J9 waits on it, its DONE freezes and routes it, and it holds its criterion off LANDED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'unnamed');
+      const unnamed = randomUUID();
+      await stack.db.workspace.create({
+        data: {
+          id: unnamed, ownerId: w.ownerId, runnerId: w.runnerId, name: 'no-repository', enabled: true,
+          repoUrl: null, workDir: '/srv/unnamed',
+        },
+      });
+      const spellings = [['in-a-workspace-with-no-repo-url', unnamed], ['in-no-workspace', null]] as const;
+
+      for (const [title, workspaceId] of spellings) {
+        const taskId = await ownerTask(stack, w, title);
+        await workSession(stack, w, taskId, {
+          createdMinutesAgo: 20, branch: `orbit/${title}`, branchSha: sha('a'), baseSha: sha('b'),
+          finishedMinutesAgo: 2, workspaceId,
+        });
+        await confirm(stack, w, taskId);
+        assert.deepEqual(await codeTaskReading(stack, w, taskId), { isCode: true, landed: false, isCodeTs: true },
+          `${title}: a repository nobody names was read as another one`);
+        assert.equal((await identityOf(stack, taskId)).frozen, true, `${title}: its DONE froze no identity`);
+        assert.deepEqual(await routesOf(stack, taskId), { landings: 1, candidates: 0 },
+          `${title}: its DONE queued no landing`);
+        assert.equal(await dependentRefusal(stack, w, `after-${title}`, taskId), PREREQUISITE_NOT_LANDED_MESSAGE,
+          `${title}: J9 let a dependent start before the work landed`);
+      }
+
+      // §1.4: a criterion served by such work alone waits on it, as on any code task's.
+      const criteria: string[] = [];
+      for (const [title, workspaceId] of spellings) {
+        const criterionId = await criterionOf(stack, w, criteria.length + 1);
+        await servingTask(stack, w, `serving-${title}`, criterionId, workspaceId);
+        criteria.push(criterionId);
+      }
+      const read = await criterionLandings(stack, w);
+      for (const criterionId of criteria) {
+        assert.deepEqual(read(criterionId), { landing: 'UNKNOWN', reason: 'NO_RECEIPT' },
+          'a criterion read LANDED over work nobody can place in another repository');
+      }
+      assert.deepEqual(await laneLandings(stack, w, criteria), ['UNKNOWN', 'UNKNOWN']);
     } finally {
       await stack.db.$disconnect();
     }

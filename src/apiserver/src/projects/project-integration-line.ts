@@ -1720,8 +1720,8 @@ function deliveryModeNeedsMainLine(
 
 /**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch, in the
- * repository the project's line is bound to (O-L7).
+ * project, not codeless, and its latest work session ran in a worktree on a branch, in no
+ * repository known to differ from the one the project's line is bound to (O-L7).
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
