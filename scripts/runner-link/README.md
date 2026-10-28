@@ -28,7 +28,9 @@ be taken for a deployment's.
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
 | `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
 | `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task O3's inputs are `cell-inputs.json`. See [The cell's size](#the-cells-size). |
-| `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
+| `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
+| `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
+| `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, and an apiserver killed and started again. A Compose project of its own, removed at the end; no staging stack needed. |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -68,6 +70,7 @@ else the default:
 | `ORBIT_LINK_STAGING_DB_CPUS` | `0` | With `LOADGEN=1`, the database's CPU allocation (Compose `cpus`), the capacity a load test's database CPU is a share of. `0` is unlimited. |
 | `ORBIT_LINK_STAGING_DB_MEM` | `4g` | With `LOADGEN=1`, the database's memory limit (Compose `mem_limit`): room for the cache a cell-scale run needs. |
 | `ORBIT_LINK_STAGING_INGEST_RATE` | `off` | The link gateway's `LINK_DRILL_INGEST_RATE`: the durable events a second it forwards at most, so that a load test's runners send faster than the events are stored and the gateway's ingest queue fills to its bound ([Durable events and credit](../../src/link-gateway/README.md#durable-events-and-credit)). `off` forwards them as they come. Changing it recreates only the gateway. |
+| `ORBIT_LINK_STAGING_SPREAD` | `0` | `1` adds `staging.spread.compose.yml`: the web gateway mounts `gateway/several-apiservers/`, as a deployment with several apiservers does ([docs/self-hosting.md](../../docs/self-hosting.md#several-apiservers)), and sends session streams, by session, and link tokens to every apiserver. `0` sends every request to the first apiserver, as a deployment with one does, which the relay check relies on. Changing it recreates only the web gateway. |
 | `ORBIT_LINK_STAGING_MERGE_WINDOW` | `default` | The link gateway's `LINK_EVENT_MERGE_WINDOW`: how long an event batch waits for others, from any connection, to go with it in one merged call ([events_merge.go](../../src/link-gateway/events_merge.go)). `default` is the gateway's own (100 ms); `0` forwards every batch alone, as before merging, which is what a load test compares against. Changing it recreates only the gateway. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
@@ -137,7 +140,9 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
   (`db.jsonl`), its statements (`pgss.json`, the 60 with the most time, after `pg_stat_statements_reset()` at the start;
   `pgss-totals.json`, every statement's calls) and sizes; each apiserver's node process every 5 s, its CPU time as a
-  whole and its main thread's (`threads.jsonl`, since task O3); and each container's log over the run (`logs/`).
+  whole and its main thread's (`threads.jsonl`, since task O3); NATS's clients every 5 s, with what each was delivered
+  and the sessions' live streams each apiserver subscribes to (`nats.jsonl`, read into `streams.md`); and each
+  container's log over the run (`logs/`).
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
   gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
@@ -160,6 +165,7 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 | `loadgen-run.sh` | `LOADGEN_MIN_AVAILABLE_MB`: the host memory floor that stops a run | 800 |
 | `loadgen-run.sh` | `--mark-every <seconds>`: move every runner's change count this often, so each beat reconciles in full (see [the heartbeat after task O1](#the-heartbeat-after-task-o1)) | off |
 | `loadgen-run.sh` | `--watch <N>`: a session stream on each of the first N running sessions while the run lasts, which the loadgen's `-live-rate` sends live deltas to (see [the live stream](#the-live-stream)) | off |
+| `loadgen-run.sh` | `LOADGEN_WATCH_STREAMS`: with `--watch`, how many streams each watched session has, as tabs and devices would; the watchers' deltas count each stream's | 1 |
 | `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway, up to 16), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
 
 `node scripts/runner-link/loadgen-report.mjs <run>` writes a run's report again from what it collected.
@@ -407,6 +413,20 @@ A stack runs several apiservers in one of two ways:
 Either way `loadgen-run.sh` samples every apiserver it finds running, `apiserver-*` beside the first, and the report and
 the baseline count them all: "apiserver CPU" is the sum. Each process's main thread is what fills: a process carries
 about a core of the load test's work, less what its other threads take. The figures below say how much.
+
+The web gateway sends every session stream to the first apiserver unless the stack mounts its routes for several
+apiservers (`ORBIT_LINK_STAGING_SPREAD=1`, task 34nb3xgCijTDzQJVXDVT7). Then each session's streams reach one apiserver,
+by session, and so does the relay of its deltas. `streams.md` says, run by run, which apiserver held how many sessions'
+streams, what NATS delivered to each, and each one's main thread: an apiserver that holds no stream of a session is
+delivered none of its deltas.
+
+```bash
+ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 ORBIT_LINK_STAGING_SPREAD=1 \
+  scripts/runner-link/staging-up.sh
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm &&
+  scripts/runner-link/loadgen-run.sh --name spread --watch 400 -- -duration 6m -settle 2m -event-rate 200 -live-rate 8000 -volatile'
+ORBIT_LINK_STAGING_SPREAD=0 scripts/runner-link/staging-up.sh --no-build     # every stream on the first again
+```
 
 ### The cell's size
 
