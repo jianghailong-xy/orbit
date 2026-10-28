@@ -221,8 +221,9 @@ func TestLinkEventsWaitOutAFullIngestQueue(t *testing.T) {
 	}
 }
 
-// A Credit frame can lower the credit too: the gateway shares its ingest queue's bound between its connections while the
-// queue is deep (src/link-gateway/events.go). The batches after it stay within it, and nothing is refused or lost.
+// A Credit frame can lower the credit too: the gateway shares its ingest queue's high-water mark between the connections
+// that send while the queue is deep (src/link-gateway/events.go). The batches after it stay within it, and nothing is
+// refused or lost.
 func TestLinkEventsKeepToALoweredCredit(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	in.ackDelay = 20 * time.Millisecond

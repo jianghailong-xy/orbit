@@ -315,7 +315,8 @@ func TestABatchPastItsConnectionsCreditIsRefusedWithoutACall(t *testing.T) {
 }
 
 // Credit is granted by the depth of the gateway's ingest queue (§5.8): past the high-water mark every connection's
-// credit drops, and below the low-water mark it comes back.
+// credit drops, and below the low-water mark it comes back. (The reduced credit here is within the one sending
+// connection's share of the high-water mark; events_queue_test.go has the share.)
 func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 	release := make(chan struct{})
 	backend := newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -324,7 +325,7 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 	})
 	h := newLinkHarness(t, []*fakeBackend{backend}, func(c *config) {
 		c.link.Credit = creditLevel{Events: 100, Bytes: 64 << 20}
-		c.link.Reduced = creditLevel{Events: 10, Bytes: 8 << 20}
+		c.link.Reduced = creditLevel{Events: 3, Bytes: 8 << 20}
 		c.link.HighWater = creditLevel{Events: 4, Bytes: 512 << 20}
 		c.link.LowWater = creditLevel{Events: 2, Bytes: 256 << 20}
 	})
@@ -332,7 +333,7 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 	b, _ := h.connectLink(runnerB, processB)
 	a.send(eventsFrame(batch(eventSession, 1, 5)))
 	for _, tc := range []*testConn{a, b} {
-		if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 10 || c.GetMaxUnackedBytes() != 8<<20 {
+		if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 3 || c.GetMaxUnackedBytes() != 8<<20 {
 			t.Fatalf("reduced credit %v", c)
 		}
 	}
@@ -341,7 +342,7 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 	}
 	// A connection opened meanwhile starts with the reduced credit.
 	_, w := h.connectLink("0190a0b0-0000-7000-8000-00000000000c", processC)
-	if w.GetCredit().GetMaxUnackedEvents() != 10 {
+	if w.GetCredit().GetMaxUnackedEvents() != 3 {
 		t.Fatalf("Welcome's credit while reduced: %v", w.GetCredit())
 	}
 	close(release)

@@ -115,7 +115,7 @@ type linkTuning struct {
 	// MaxIngestPerConn bounds how many sessions' event batches one connection forwards at once.
 	MaxIngestPerConn int
 	// Credit is what each connection may have unacknowledged while the gateway's ingest queue is short, and Reduced
-	// what it may have once the queue is past HighWater, at most its share of MaxQueued; it is restored below LowWater
+	// what it may have once the queue is past HighWater, at most its share of HighWater; it is restored below LowWater
 	// (events.go).
 	Credit, Reduced     creditLevel
 	HighWater, LowWater creditLevel

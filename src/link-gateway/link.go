@@ -86,13 +86,11 @@ func (l *linkState) greeted(hello *linkpb.Hello) {
 	l.providers = hello.GetSupportedProviders()
 }
 
-// start runs once Welcome is queued: credit is what Welcome granted. From now on the connection has its share of the
-// ingest queue (events.go).
+// start runs once Welcome is queued: credit is what Welcome granted.
 func (l *linkState) start(credit creditLevel) {
 	l.mu.Lock()
 	l.credit = credit
 	l.mu.Unlock()
-	l.c.g.credit.join()
 	go l.heartbeatLoop()
 }
 

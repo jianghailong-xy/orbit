@@ -33,6 +33,7 @@ type queueSim struct {
 	sessions []*simSession
 	stored   []*simSession // taken, oldest first: their batch is stored next
 	maxDepth creditLevel
+	inQueue  map[*linkState]uint32 // each connection's events in the queue
 }
 
 type simSession struct {
@@ -46,7 +47,10 @@ type simSession struct {
 }
 
 func (s *queueSim) send(ss *simSession) {
-	admitted, _ := s.b.admit(ss.l, ss.id, ss.next)
+	if s.inQueue == nil {
+		s.inQueue = map[*linkState]uint32{}
+	}
+	admitted, _ := s.b.admit(ss.l, ss.id, ss.next, s.inQueue[ss.l] == 0)
 	depth := s.b.depth()
 	if !depth.within(s.b.tune.MaxQueued) {
 		s.t.Fatalf("the ingest queue holds %+v, past its bound %+v", depth, s.b.tune.MaxQueued)
@@ -59,6 +63,7 @@ func (s *queueSim) send(ss *simSession) {
 	}
 	ss.queued, ss.waited = true, 0
 	ss.taken++
+	s.inQueue[ss.l] += ss.next.Events
 	s.stored = append(s.stored, ss)
 }
 
@@ -68,7 +73,8 @@ func (s *queueSim) store(n int) {
 		ss := s.stored[0]
 		s.stored = s.stored[1:]
 		ss.queued = false
-		s.b.give(ss.next)
+		s.inQueue[ss.l] -= ss.next.Events
+		s.b.give(ss.next, s.inQueue[ss.l] == 0)
 	}
 }
 
@@ -100,7 +106,6 @@ func TestTheIngestQueueStaysWithinItsBoundHoweverManyConnectionsSend(t *testing.
 	sim := &queueSim{t: t, b: b}
 	for i := 0; i < 1_500; i++ {
 		l := &linkState{}
-		b.join()
 		for j := 0; j < 2; j++ {
 			events := uint32(1 + rng.IntN(40))
 			sim.sessions = append(sim.sessions, &simSession{l: l, id: fmt.Sprintf("s-%d-%d", i, j),
@@ -111,8 +116,8 @@ func TestTheIngestQueueStaysWithinItsBoundHoweverManyConnectionsSend(t *testing.
 	for r := 0; r < 400; r++ {
 		sim.round(rng, 5+rng.IntN(20))
 	}
-	if !b.reduced || b.current().Events != 1 || b.current().Bytes != b.tune.Reduced.Bytes {
-		t.Fatalf("with 1,500 connections each gets %+v of a 2,000-event bound (reduced %v)", b.current(), b.reduced)
+	if got := b.current(); !b.reduced || got.Events > b.tune.HighWater.Events/uint32(b.active)*9/8+1 || got.Bytes != b.tune.Reduced.Bytes {
+		t.Fatalf("with %d connections sending, each gets %+v of a 1,000-event high-water mark (reduced %v)", b.active, got, b.reduced)
 	}
 	if sim.maxDepth.Events < b.tune.MaxQueued.Events*9/10 && sim.maxDepth.Bytes < b.tune.MaxQueued.Bytes*9/10 {
 		t.Fatalf("the queue never filled: at most %+v", sim.maxDepth)
@@ -131,8 +136,9 @@ func TestTheIngestQueueStaysWithinItsBoundHoweverManyConnectionsSend(t *testing.
 		}
 		sim.store(50)
 	}
-	if b.depth() != (creditLevel{}) || b.held != (creditLevel{}) || b.line.Len() != 0 || b.called.Len() != 0 || len(b.waiting) != 0 {
-		t.Fatalf("drained, the queue holds %+v, %+v held, %d in line, %d called", b.depth(), b.held, b.line.Len(), b.called.Len())
+	if b.depth() != (creditLevel{}) || b.held != (creditLevel{}) || b.line.Len() != 0 || b.called.Len() != 0 || len(b.waiting) != 0 || b.active != 0 {
+		t.Fatalf("drained, the queue holds %+v, %+v held, %d in line, %d called, %d connections counted", b.depth(), b.held,
+			b.line.Len(), b.called.Len(), b.active)
 	}
 	if b.current() != b.tune.Credit {
 		t.Fatalf("the credit is %+v once the queue drained, not %+v", b.current(), b.tune.Credit)
@@ -197,7 +203,7 @@ func TestRoomHeldForASessionGoesToTheNextWhenItDoesNotSendAgain(t *testing.T) {
 	amount := func(n uint32) creditLevel { return creditLevel{Events: n, Bytes: uint64(n)} }
 	admit := func(l *linkState, session string, n uint32) bool {
 		t.Helper()
-		ok, _ := b.admit(l, session, amount(n))
+		ok, _ := b.admit(l, session, amount(n), true)
 		return ok
 	}
 	if !admit(l1, "full", 10) {
@@ -206,7 +212,7 @@ func TestRoomHeldForASessionGoesToTheNextWhenItDoesNotSendAgain(t *testing.T) {
 	if admit(l1, "a", 4) || admit(l2, "b", 3) || admit(l3, "c", 2) {
 		t.Fatal("a full queue took a batch")
 	}
-	b.give(amount(10))
+	b.give(amount(10), true)
 	// a, then b, then c have room held: nobody else may take it, not even a batch that fits.
 	if b.called.Len() != 3 || b.held != amount(9) {
 		t.Fatalf("%d called, %+v held", b.called.Len(), b.held)
@@ -239,33 +245,61 @@ func TestRoomHeldForASessionGoesToTheNextWhenItDoesNotSendAgain(t *testing.T) {
 	}
 }
 
-// While the queue is deep, each connection's credit is its share of the bound in events, at most Reduced, so that what
-// all of them may have in flight fits in it; the bytes stay Reduced's, which the largest event needs.
-func TestTheReducedCreditSharesTheBoundBetweenConnections(t *testing.T) {
+// While the queue is deep, each connection's credit is its share of the high-water mark in events among the connections
+// with events in the queue, at most Reduced, so that what they may have in flight together stays about the mark,
+// however many others are idle; the bytes stay Reduced's, which the largest event needs. The share moves only once
+// the count of those connections has moved by more than an eighth.
+func TestTheReducedCreditSharesTheHighWaterMarkBetweenTheConnectionsThatSend(t *testing.T) {
 	b := queueBook(t, func(tune *linkTuning) {
 		tune.MaxQueued = creditLevel{Events: 200_000, Bytes: 128 << 20}
 		tune.HighWater, tune.LowWater = tune.MaxQueued.half(), tune.MaxQueued.half().half()
 	})
-	for i := 0; i < 15_000; i++ {
-		b.join()
-	}
 	if b.current() != b.tune.Credit {
 		t.Fatalf("a short queue grants %+v", b.current())
 	}
-	if ok, reduced := b.admit(&linkState{}, "s", creditLevel{Events: 100_001, Bytes: 1}); !ok || !reduced {
+	one := creditLevel{Events: 1, Bytes: 1}
+	conns := make([]*linkState, 5_000)
+	for i := range conns {
+		conns[i] = &linkState{}
+		if ok, _ := b.admit(conns[i], "s", one, true); !ok {
+			t.Fatal("refused")
+		}
+	}
+	if ok, reduced := b.admit(conns[0], "t", creditLevel{Events: 100_000, Bytes: 1}, false); !ok || !reduced {
 		t.Fatal("the queue did not pass its high-water mark")
 	}
-	if got := b.current(); got.Events != 13 || got.Bytes != b.tune.Reduced.Bytes {
-		t.Fatalf("15,000 connections get %+v each", got)
+	// share is each connection's credit in events, checked to be its share of the high-water mark among n sending
+	// connections, within the eighth the share may lag them by.
+	share := func(n int) uint32 {
+		t.Helper()
+		got := b.current()
+		exact := float64(b.tune.HighWater.Events) / float64(n)
+		if got.Bytes != b.tune.Reduced.Bytes || float64(got.Events) < exact*7/8-1 || float64(got.Events) > exact*9/8 {
+			t.Fatalf("%d sending connections get %+v each, not about %.1f", n, got, exact)
+		}
+		return got.Events
 	}
-	if n := uint64(b.current().Events) * 15_000; n > uint64(b.tune.MaxQueued.Events) {
-		t.Fatalf("what the connections may have in flight, %d events, is past the bound", n)
+	// The C2b fleet: 5,000 of 15,000 runners with a session running get about 20 events each.
+	at5000 := share(5_000)
+	// A connection that starts sending and one that has sent everything: nobody's credit moves.
+	b.admit(&linkState{}, "s", one, true)
+	b.give(one, true)
+	if got := share(5_000); got != at5000 {
+		t.Fatalf("one connection more and one less moved the share from %d to %d", at5000, got)
 	}
-	for i := 0; i < 14_900; i++ {
-		b.leave(&linkState{})
+	// 1,000 more: the share follows.
+	for i := 0; i < 1_000; i++ {
+		b.admit(&linkState{}, "s", one, true)
 	}
-	if got := b.current(); got != b.tune.Reduced {
-		t.Fatalf("100 connections get %+v each, not Reduced", got)
+	if got := share(6_000); got >= at5000 {
+		t.Fatalf("6,000 sending connections get %d each, as 5,000 did", got)
+	}
+	// When all but 50 have sent everything, they get Reduced: 1,000 each, 50,000 together.
+	for i := 0; i < 5_950; i++ {
+		b.give(one, true)
+	}
+	if got := b.current(); got != b.tune.Reduced || b.active != 50 {
+		t.Fatalf("%d sending connections get %+v each", b.active, got)
 	}
 }
 

@@ -28,9 +28,9 @@ import (
 //
 // Credit (§5.8: granted by the depth of the ingest queue). Each connection may have Credit unacknowledged events in
 // flight, and the gateway counts what all of them have queued or in flight to the apiserver. Past a high-water mark
-// every connection's credit drops (a Credit frame) to Reduced, or to the connection's share of MaxQueued when that is
-// less, and below the low-water mark it comes back. A batch past its connection's credit is refused, retryable, without
-// being forwarded.
+// every connection's credit drops (a Credit frame) to Reduced, or to the connection's share of the high-water mark when
+// that is less, and below the low-water mark it comes back. A batch past its connection's credit is refused, retryable,
+// without being forwarded.
 //
 // The queue never holds more than MaxQueued, however many connections there are: a batch it has no room for is refused
 // the same way, and its session waits in line (creditBook.admit). Room the queue frees goes to the sessions in line,
@@ -87,8 +87,8 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 		l.mu.Unlock()
 		return
 	}
-	// The connection's share of the queue moves with the number of connections. It is told so with its next batch,
-	// ahead of that batch's EventAck.
+	// The connection's share of the queue moves with the number of connections that send. It is told so with its next
+	// batch, ahead of that batch's EventAck.
 	if level := book.current(); level != l.credit {
 		l.setCreditLocked(level)
 	}
@@ -108,7 +108,7 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 		m.eventBatches.inc("credit_exceeded")
 	default:
 		var admitted bool
-		if admitted, reduced = book.admit(l, sessionID, amount); !admitted {
+		if admitted, reduced = book.admit(l, sessionID, amount, l.unacked.Events == 0); !admitted {
 			refusal = failure("CREDIT_EXCEEDED", "the gateway's ingest queue is full; the session waits in line for room: send again from durable_seq + 1", true, time.Second)
 			m.eventBatches.inc("queue_full")
 		}
@@ -223,8 +223,9 @@ func (l *linkState) release(batches ...*queuedBatch) {
 	}
 	l.mu.Lock()
 	l.unacked = l.unacked.minus(total)
+	idle := l.unacked.Events == 0
 	l.mu.Unlock()
-	l.c.g.credit.give(total)
+	l.c.g.credit.give(total, idle)
 }
 
 // store forwards one batch: in a merged call when the gateway merges (events_merge.go) and the call takes it, and
@@ -375,8 +376,10 @@ type creditBook struct {
 	mu      sync.Mutex
 	queued  creditLevel
 	reduced bool
-	// conns counts the connections that forward events (MODE_LINK): what MaxQueued is shared between.
-	conns int
+	// active counts the connections with events in the queue; shareOf is the count the reduced credit's share was
+	// last worked out from, which moves only once active is an eighth away from it, so that a connection opened or
+	// closed does not move every connection's credit.
+	active, shareOf int
 	// The sessions whose batch found no room: in line, oldest first, until room is held for them, and then called,
 	// oldest call first. held is the room held for those called, which no other batch may take.
 	line, called list.List
@@ -406,18 +409,28 @@ func (b *creditBook) current() creditLevel {
 }
 
 // levelLocked is the credit a connection gets: Credit while the queue is short; while it is deep, Reduced, and no more
-// events than the connection's share of MaxQueued, so that what every connection may have in flight fits in it. The
-// bytes are not shared: Reduced's are what the largest event a runner sends needs (src/runner-go/link_events.go), and a
-// share below them would hold that event back for good. MaxQueued bounds the bytes alone.
+// events than the connection's share of the high-water mark among those with events in the queue. Then what they may
+// have in flight together stays about the high-water mark, wherever the share of connections that send is, and the
+// rest of MaxQueued is room for what comes before a Credit frame does. The bytes are not shared: Reduced's are what the
+// largest event a runner sends needs (src/runner-go/link_events.go), and a share below them would hold that event back
+// for good. MaxQueued bounds the bytes alone.
 func (b *creditBook) levelLocked() creditLevel {
 	if !b.reduced {
 		return b.tune.Credit
 	}
 	level := b.tune.Reduced
-	if share := b.tune.MaxQueued.Events / uint32(max(b.conns, 1)); share < level.Events {
+	if share := b.tune.HighWater.Events / uint32(max(b.shareOf, 1)); share < level.Events {
 		level.Events = max(share, 1)
 	}
 	return level
+}
+
+// activeLocked counts a connection whose events enter the queue (+1) or have all left it (-1).
+func (b *creditBook) activeLocked(delta int) {
+	b.active += delta
+	if b.active*8 > b.shareOf*9 || b.active*8 < b.shareOf*7 {
+		b.shareOf = b.active
+	}
 }
 
 func (b *creditBook) depth() creditLevel {
@@ -433,17 +446,10 @@ func (b *creditBook) waitingSessions() int {
 	return b.line.Len() + b.called.Len()
 }
 
-// join counts a connection that forwards events; leave lets it go, and its sessions' places in line.
-func (b *creditBook) join() {
-	b.mu.Lock()
-	b.conns++
-	b.mu.Unlock()
-}
-
+// leave takes a closed connection's sessions out of line.
 func (b *creditBook) leave(l *linkState) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.conns--
 	for _, w := range b.waiting[l] {
 		b.dropLocked(w)
 	}
@@ -452,9 +458,10 @@ func (b *creditBook) leave(l *linkState) {
 
 // admit takes a session's batch into the queue when it has room for it: the queue stays within MaxQueued, and the room
 // held for the sessions in line is theirs. A batch it has no room for is not taken, and its session takes its place at
-// the back of the line, unless it has one already; once it has, only room held for it lets its batch in. reduced says
-// the queue has just passed its high-water mark, which the caller announces.
-func (b *creditBook) admit(l *linkState, session string, a creditLevel) (admitted, reduced bool) {
+// the back of the line, unless it has one already; once it has, only room held for it lets its batch in. idle says the
+// connection has nothing in the queue yet. reduced says the queue has just passed its high-water mark, which the caller
+// announces.
+func (b *creditBook) admit(l *linkState, session string, a creditLevel, idle bool) (admitted, reduced bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	now := time.Now()
@@ -495,6 +502,9 @@ func (b *creditBook) admit(l *linkState, session string, a creditLevel) (admitte
 	}
 	if admitted {
 		b.queued = b.queued.plus(a)
+		if idle {
+			b.activeLocked(1)
+		}
 		if !b.reduced && !b.queued.within(b.tune.HighWater) {
 			b.reduced, reduced = true, true
 		}
@@ -502,10 +512,14 @@ func (b *creditBook) admit(l *linkState, session string, a creditLevel) (admitte
 	return admitted, reduced
 }
 
-// give takes batches out of the queue: their room goes to the sessions in line first.
-func (b *creditBook) give(a creditLevel) {
+// give takes batches out of the queue: their room goes to the sessions in line first. idle says they were the last of
+// their connection's.
+func (b *creditBook) give(a creditLevel, idle bool) {
 	b.mu.Lock()
 	b.queued = b.queued.minus(a)
+	if idle {
+		b.activeLocked(-1)
+	}
 	now := time.Now()
 	b.expireLocked(now)
 	b.callLocked(now)

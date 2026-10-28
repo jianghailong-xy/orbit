@@ -73,7 +73,7 @@ It is one static binary with these subcommands:
 These values are fixed by the design: ping every 20s, disconnect after 60s without a pong, heartbeat every 30s, at most
 two connections per runner, frames of at most 256 KiB. Forwarding's bounds are fixed too: 64 calls in flight and 8
 sessions' events being stored at once per connection; a credit of 10,000 events or 64 MiB per connection, a tenth of
-it, or the connection's share of the ingest queue's bound when that is less, while the queue holds more than half its
+it, or the connection's share of the high-water mark when that is less, while the ingest queue holds more than half its
 bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter; room the queue frees held
 15s for a session in line; retries on other backends for up to 5s; a watcher count lapses after 60s; a turn prefix
 request waits 10s for the runner.
@@ -430,12 +430,14 @@ and holds its events in its own buffer, in memory and then on disk (design §5.8
 - **Credit.** Credit is granted by the depth of the queue (§5.8). While it holds more than half its bound (100,000
   events or 64 MiB), every connection's credit drops from 10,000 events or 64 MiB to a tenth of that, in a `Credit`
   frame, and it comes back once the queue holds less than a quarter of its bound. The reduced credit is also at most
-  the connection's share of the bound in events, the bound divided by the connections in `MODE_LINK`: 13 events each
-  for 15,000 connections. So what every connection may have in flight fits in the queue, and runners slow down rather
-  than send what it would refuse. The bytes are not shared: the reduced 8 MiB is what the largest event a runner sends
-  needs, and the bytes bound alone holds them. A connection opened meanwhile gets the reduced credit in its Welcome, and
-  one whose share has moved with the number of connections is sent its new credit with its next batch, ahead of that
-  batch's `EventAck`.
+  the connection's share of the high-water mark in events, among the connections with events in the queue: 20 events
+  each when 5,000 connections send. So what they may have in flight together stays about the high-water mark, however
+  many connections there are and however many of them are idle, and runners slow down rather than send what the queue
+  would refuse; the rest of the bound is room for what comes before a `Credit` frame does. The share moves only once
+  the number of connections that send has moved by more than an eighth. The bytes are not shared: the reduced 8 MiB is
+  what the largest event a runner sends needs, and the bytes bound alone holds them. A connection opened meanwhile gets
+  the reduced credit in its Welcome, and one whose share has moved is sent its new credit with its next batch, ahead
+  of that batch's `EventAck`.
 
 #### Merged calls
 
