@@ -36,7 +36,7 @@ class WikiDocsContractTest {
     private val verdicts = listOf("verified", "not_found", "no_quote", "unresolved")
     private val checkers = setOf("server", "runner")
     private val withdrawReasons = setOf("rejected", "retired", "superseded", "anchor_changed", "anchor_missing")
-    private val blockKinds = setOf("paragraph", "item", "heading", "code")
+    private val blockKinds = setOf("paragraph", "item", "heading", "code", "diagram")
     /** OrbitKit `WikiPlanSectionKind`'s cases. */
     private val sectionKinds = setOf("overview", "concepts", "flow", "interface", "data", "ops", "pitfalls", "decisions", "conventions", "other")
 

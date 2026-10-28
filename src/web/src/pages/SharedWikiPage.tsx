@@ -13,6 +13,7 @@ import {
 import { PublicShell } from '../components/PublicShell';
 import { Drawer } from '../components/ui/Drawer';
 import { Popover } from '../components/ui/Popover';
+import { WikiDiagram } from '../components/WikiDiagram';
 import { WikiDocRow } from '../components/WikiDocList';
 import { WikiDocFootnoteCard, WikiDocFootnoteList } from '../components/WikiDocPage';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
@@ -237,6 +238,7 @@ function SharedWikiDocument({ token, data }: { token: string; data: SharedWikiDo
                     </pre>
                   );
                 }
+                if (run.kind === 'diagram') return <WikiDiagram key={run.at[0]} source={section.blocks[run.at[0]].text ?? ''} />;
                 return <p key={run.at[0]}>{sentences(run.at[0])}</p>;
               })}
             </section>
@@ -265,9 +267,9 @@ function SharedWikiDocument({ token, data }: { token: string; data: SharedWikiDo
   );
 }
 
-/** A run of paragraphs, list items, headings and code, the list items of a row gathered into one list. */
-function blockRuns(blocks: SharedWikiDoc['sections'][number]['blocks']): Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code'; at: number[] }> {
-  const runs: Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code'; at: number[] }> = [];
+/** A run of paragraphs, list items, headings, code and diagrams, the list items of a row gathered into one list. */
+function blockRuns(blocks: SharedWikiDoc['sections'][number]['blocks']): Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code' | 'diagram'; at: number[] }> {
+  const runs: Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code' | 'diagram'; at: number[] }> = [];
   blocks.forEach((block, b) => {
     const kind = block.kind === 'item' ? 'items' : block.kind;
     const last = runs[runs.length - 1];

@@ -24946,6 +24946,10 @@ button.project-open-item-action:disabled {
 .wk-dc-body ul { margin: 0 0 12px; padding-left: 20px; }
 .wk-dc-code { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto;
               font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+/* a section's diagram (WikiDiagram): at its own size, centred, scrolling when it is wider than the text */
+.wk-dc-diagram { margin: 0 0 12px; padding: 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto; }
+.wk-dc-diagram[aria-busy="true"] { min-height: 120px; }
+.wk-dc-diagram svg { display: block; margin: 0 auto; }
 .wk-dc-unwritten { color: var(--text-3); font-size: 14px; }
 .wk-dc-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--fill-muted);
              font-size: 11.5px; font-weight: 500; color: var(--text-2); vertical-align: 3px; letter-spacing: 0; }

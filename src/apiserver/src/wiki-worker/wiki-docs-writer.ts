@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { WIKI_DOC_BUILD_RULES, WIKI_DOC_RULES, WIKI_REPO_OPS, uuidToBase62, type WikiDocMaterialRecord } from '@orbit/shared';
+import { WIKI_DOC_BUILD_RULES, WIKI_DOC_DIAGRAM_RULES, WIKI_DOC_RULES, WIKI_REPO_OPS, uuidToBase62, type WikiDocMaterialRecord } from '@orbit/shared';
 import { collapseWhitespace, cutRunes, goTrimSpace } from './wiki-import-extract';
 
 /**
@@ -301,7 +301,7 @@ export function wikiDocFingerprint(section: WikiDocsPlanSection, pieces: readonl
     fields.push(['text', piece.text]);
     return new GoStruct(fields);
   });
-  return wikiDocDigest({ definition: wikiDocDefinition(section), material: parts });
+  return wikiDocDigest(withDiagram(section.kind, { definition: wikiDocDefinition(section), material: parts }));
 }
 
 /** An overview's fingerprint: its definition and the fingerprints of the sections it sums up, after this run. */
@@ -311,7 +311,20 @@ export function wikiDocOverviewFingerprint(section: WikiDocsPlanSection, doc: Wi
     if (i === index || other.kind === 'overview') return;
     parts.push(new GoStruct([['key', other.key], ['fingerprint', fingerprints[i] ?? '']]));
   });
-  return wikiDocDigest({ definition: wikiDocDefinition(section), sections: parts });
+  return wikiDocDigest(withDiagram(section.kind, { definition: wikiDocDefinition(section), sections: parts }));
+}
+
+/**
+ * A fingerprint's parts with the diagram rule's version beside them, for a section of a kind a diagram is offered to
+ * (contract `docs.diagram.fingerprint`): a section written before the rule, or under an older one, is written again.
+ */
+function withDiagram(kind: string, parts: Record<string, unknown>): Record<string, unknown> {
+  return wikiDocOffersDiagram(kind) ? { ...parts, diagram: WIKI_DOC_DIAGRAM_RULES.version } : parts;
+}
+
+/** Whether the prompt of a section of this kind offers it a diagram (contract `docs.diagram.rules.kinds`). */
+export function wikiDocOffersDiagram(kind: string): boolean {
+  return (WIKI_DOC_DIAGRAM_RULES.kinds as readonly string[]).includes(kind);
 }
 
 export function wikiDocDigest(value: unknown): string {
@@ -787,7 +800,8 @@ function kindWord(kind: string): string {
   return KIND_WORDS[kind] ?? kind;
 }
 
-// The four prompts, word for word as wiki_docs_build.go wrote them (its fmt.Sprintf templates).
+// The four prompts, word for word as wiki_docs_build.go wrote them (its fmt.Sprintf templates) — but for the diagram
+// offered since to the sections of some kinds (contract `docs.diagram`), an empty string for every other section.
 
 const WIKI_DOC_MERGE_TEMPLATE = `# Task: the "merge" for the document «%s», section %d: combine the materials below into the "current state" this section is to write
 
@@ -841,7 +855,7 @@ const WIKI_DOC_WRITE_TEMPLATE = `# Task: write the document «%s», section %d
 - Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.
 - Code names, paths and commands go in backticks, written as in the original. About %d characters long.
 
-## Quotes
+%s## Quotes
 After the body, on a line of its own, write "Quotes:", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.
 [D1] "……"
 [S3] "……"
@@ -873,7 +887,7 @@ const WIKI_DOC_OVERVIEW_TEMPLATE = `# Task: write the document «%s», section %
 - Sum up only what the sections below already say, and bring in no new fact. Every sentence that states a fact ends with the [F<n>] the section below uses for that fact, using only the ids listed above.
 - Write no empty phrases such as "this document will introduce".
 
-## Output format
+%s## Output format
 Output only what follows, with no preamble:
 ### %s
 <body>
@@ -890,6 +904,33 @@ One line an id, and only these:
 [id] "verbatim quote"
 `;
 
+
+/**
+ * What a section of a kind a diagram is offered to is told about it (contract `docs.diagram`), after how to write and
+ * before the quotes: what the diagram may be, the flowchart the server reads, and the check it is kept by.
+ */
+export function wikiDocDiagramOffer(what: string): string {
+  const words = WIKI_DOC_DIAGRAM_RULES.structureWords;
+  return `## Diagram
+${what} Leave it out when your sentences do not give enough for one. Put it in the body, after the paragraph it pictures, as a Mermaid flowchart in a fenced block:
+\`\`\`mermaid
+flowchart LR
+  A["label"] --> B("label")
+  B -->|"label"| C{"label"}
+  subgraph G["label"]
+    C
+  end
+\`\`\`
+- Only \`flowchart LR\` or \`flowchart TB\`: nodes as \`id["label"]\`, \`id("label")\`, \`id[("label")]\` for a store or \`id{"label"}\` for a decision; links as \`-->\`, \`-.->\` or \`-->|"label"|\`; \`subgraph id["label"]\` … \`end\` to group parts. No styles, no classes, no \`&\`, no other kind of diagram.
+- Write the labels in the language your sentences are written in (Chinese sentences, Chinese labels), and take every word of a label from your sentences that carry ids (another ending of the same word, such as "claim" for "claims", is the same word); beyond those, a label may use only ${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}. A label with any other word of three letters or more drops the whole diagram. No ids inside the diagram.
+- A dozen nodes or so, never more than ${WIKI_DOC_DIAGRAM_RULES.nodesMax}; each label a few words.
+
+`;
+}
+
+/** The offer as a section's write prompt makes it, and as an overview's does. */
+const SECTION_DIAGRAM = 'This section may carry one diagram where a picture makes it clearer: the steps of a flow and where it branches, or the parts and what connects them.';
+const OVERVIEW_DIAGRAM = 'This overview may carry one diagram of the whole document: its main parts and what connects them, or its main flow.';
 
 /**
  * A piece's first line as the model reads it (`wikiDocHeader`): what it is, where it is, and — a record — who said
@@ -1004,7 +1045,8 @@ export function wikiDocWritePrompt(doc: WikiDocsPlanDoc, index: number, state: r
   return goSprintf(
     WIKI_DOC_WRITE_TEMPLATE,
     doc.title, index + 1, doc.question, audience(doc), outline(doc, index), section.title, kindWord(section.kind),
-    section.length, section.covers, stateText, materials, section.length, section.title,
+    section.length, section.covers, stateText, materials, section.length,
+    wikiDocOffersDiagram(section.kind) ? wikiDocDiagramOffer(SECTION_DIAGRAM) : '', section.title,
   );
 }
 
@@ -1021,7 +1063,7 @@ export function wikiDocOverviewPrompt(doc: WikiDocsPlanDoc, index: number, secti
   return goSprintf(
     WIKI_DOC_OVERVIEW_TEMPLATE,
     doc.title, index + 1, section.title, section.length, doc.question, audience(doc), section.covers,
-    sections.join('\n\n'), quotes.join('\n'), section.title,
+    sections.join('\n\n'), quotes.join('\n'), wikiDocOffersDiagram(section.kind) ? wikiDocDiagramOffer(OVERVIEW_DIAGRAM) : '', section.title,
   );
 }
 
@@ -1117,10 +1159,36 @@ export interface WikiDocDraft {
   quotes: Map<string, string[]>;
 }
 
-/** The answer up to its quotes. */
+/** The answer up to its quotes, its diagram's backticks taken out (`wikiDocDiagrams`). */
 export function wikiDocBodyOf(text: string): string {
   const at = QUOTES_START.exec(text);
-  return goTrimSpace(at ? text.slice(0, at.index) : text);
+  return goTrimSpace(wikiDocDiagrams(at ? text.slice(0, at.index) : text, 'plain'));
+}
+
+/** A fenced block's first line when the block is a diagram (contract `docs.diagram`): its fence. */
+const DIAGRAM_FENCE = /^[\t ]{0,3}(`{3,}|~{3,})[\t ]*mermaid\b/iu;
+
+/**
+ * A body with its diagrams as `diagrams` says. `out` leaves out each mermaid fence and what is in it. `plain` takes
+ * the backticks out of the lines inside one: a backtick there is the diagram's own, and an odd number of them would
+ * turn every marker after the diagram into code for `wikiDocRewriteMarkers` (the server takes them out of a label).
+ */
+export function wikiDocDiagrams(body: string, diagrams: 'out' | 'plain'): string {
+  const out: string[] = [];
+  let fence: string | null = null;
+  let left = false;
+  for (const line of body.split('\n')) {
+    if (fence === null) {
+      const opens = DIAGRAM_FENCE.exec(line);
+      if (opens) fence = opens[1];
+      if (!opens || diagrams === 'plain') out.push(line);
+      else left = true;
+      continue;
+    }
+    if (line.trim().startsWith(fence)) fence = null;
+    if (diagrams === 'plain') out.push(fence === null ? line : line.replace(/`/gu, ''));
+  }
+  return left ? out.join('\n').replace(/\n{3,}/gu, '\n\n') : out.join('\n');
 }
 
 /** Drop a first line that is a heading: the plan names the section. */
@@ -1452,7 +1520,8 @@ export function wikiDocOverviewMaterial(
     let text = '';
     const mine = written[i];
     if (mine) {
-      text = mine.markdown.replace(ARTICLE_MARKER, (_marker: string, digits: string) => {
+      // Its sentences: a diagram is no fact the overview may cite.
+      text = wikiDocDiagrams(mine.markdown, 'out').replace(ARTICLE_MARKER, (_marker: string, digits: string) => {
         const n = Number(digits);
         if (n < 1 || n > mine.footnotes.length) return '';
         return `[${name(mine.footnotes[n - 1])}]`;
@@ -1466,7 +1535,7 @@ export function wikiDocOverviewMaterial(
           b += `#### ${one.text}\n`;
           continue;
         }
-        if (one.kind === 'code') continue;
+        if (one.kind === 'code' || one.kind === 'diagram') continue;
         for (const sentence of one.sentences ?? []) {
           b += sentence.text;
           for (const n of sentence.notes) {

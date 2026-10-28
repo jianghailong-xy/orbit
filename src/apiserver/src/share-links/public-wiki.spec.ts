@@ -125,6 +125,8 @@ const VIEW: WikiDocView = {
         // Every sentence of it withdrawn: the item goes with them.
         { kind: 'item', text: null, sentences: [sentence(`${SECRETS.withdrawn} Again.`, [3], 'withdrawn')] },
         { kind: 'code', text: 'orbit run --once', sentences: [] },
+        // A diagram holds no sentence, and is shown as it is (docs.diagram).
+        { kind: 'diagram', text: 'flowchart LR\n  n1["Claim a turn"]\n  n2["Run the engine"]\n  n1 --> n2', sentences: [] },
       ],
     },
     { ...section, key: 'unwritten', number: 2, title: 'Not written yet', kind: 'ops', written: false, blocks: [] },
@@ -190,6 +192,7 @@ test('without Footnotes: the text alone — no numbers, no footnotes, nothing wi
       sentences: [{ text: 'A session claims a turn.', notes: [] }, { text: 'It runs the engine.', notes: [] }],
     },
     { kind: 'code', text: 'orbit run --once', sentences: [] },
+    { kind: 'diagram', text: 'flowchart LR\n  n1["Claim a turn"]\n  n2["Run the engine"]\n  n1 --> n2', sentences: [] },
   ]);
   assert.deepEqual(doc.sections[1].blocks, [{ kind: 'paragraph', text: null, sentences: [{ text: 'It finishes.', notes: [] }] }]);
   assertNothingPrivate(doc);

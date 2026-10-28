@@ -15,6 +15,7 @@ import {
   UpOutlined,
 } from '@ant-design/icons';
 import { WikiEmpty } from './WikiCards';
+import { WikiDiagram } from './WikiDiagram';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
 import { Button, LinkButton } from './ui/Button';
@@ -380,9 +381,9 @@ function WikiDocScope({ doc, spaceSlug, phone }: { doc: WikiDocView; spaceSlug: 
   );
 }
 
-/** A run of paragraphs, list items, headings and code, the list items of a row gathered into one list. */
-function blockRuns(section: WikiDocSectionView): Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code'; at: number[] }> {
-  const runs: Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code'; at: number[] }> = [];
+/** A run of paragraphs, list items, headings, code and diagrams, the list items of a row gathered into one list. */
+function blockRuns(section: WikiDocSectionView): Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code' | 'diagram'; at: number[] }> {
+  const runs: Array<{ kind: 'paragraph' | 'items' | 'heading' | 'code' | 'diagram'; at: number[] }> = [];
   section.blocks.forEach((block, b) => {
     const kind = block.kind === 'item' ? 'items' : block.kind;
     const last = runs[runs.length - 1];
@@ -458,6 +459,8 @@ function WikiDocSectionText({
             <pre key={run.at[0]} className="wk-dc-code">
               <code>{section.blocks[run.at[0]].text}</code>
             </pre>
+          ) : run.kind === 'diagram' ? (
+            <WikiDiagram key={run.at[0]} source={section.blocks[run.at[0]].text ?? ''} />
           ) : (
             <p key={run.at[0]}>{sentences(run.at[0])}</p>
           ),

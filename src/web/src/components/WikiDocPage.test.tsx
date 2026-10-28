@@ -9,6 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory, WikiDocsIndexItem, WikiPlanJob, WikiPlanProposal, WikiPlanVersion } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
 
+// A section's diagram is drawn by Mermaid, which jsdom cannot lay out: its two calls are stand-ins.
+const mermaid = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
+vi.mock('mermaid', () => ({ default: mermaid }));
+
 /**
  * The documents (criterion 10 revised 2026-09-28, mocks 23–28), driven through the real routes: a document's
  * page with its marks, footnotes and entries — a footnote's card as a popover on a desktop and a sheet on a
@@ -61,7 +65,7 @@ async function serve(url: string): Promise<Response> {
   if (path === '/api/wiki/spaces') return reply(200, [SPACE]);
   if (path === space) return reply(200, SPACE);
   if (path === `${space}/docs`) return reply(200, SHARED.docs.directory.read);
-  if (path === `${space}/docs/session-runtime`) return reply(200, SHARED.docs.doc.read);
+  if (path === `${space}/docs/session-runtime`) return reply(200, drawn ?? SHARED.docs.doc.read);
   if (path === `${space}/docs/session-search`) return reply(200, SHARED.docs.notWritten.read);
   if (path.startsWith(`${space}/docs/`)) return reply(404, { message: 'the confirmed plan has no such document' });
   if (path === `${space}/doc-index`) return reply(200, { spaceId: SPACE_ID, plan: SHARED.docs.directory.read.plan, items: SHARED.docs.index.items });
@@ -76,12 +80,15 @@ async function serve(url: string): Promise<Response> {
 }
 
 let phone = false;
+/** The document with a diagram in one of its sections, when a case serves one. */
+let drawn: WikiDocView | null = null;
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   phone = false;
+  drawn = null;
   vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} });
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: phone && /max-width/.test(query), media: query, onchange: null, addListener: () => {}, removeListener: () => {},
@@ -239,6 +246,20 @@ describe("a document's page", () => {
     expect(text('.wk-art-entries-h', entries)).toEqual(['Entries the 4 this document’s quotes came through, by kind']);
     expect(text('.wk-sec-h h3', entries)).toEqual(['Principles & conventions', 'Decisions', 'Pitfalls']);
     expect(text('.supby', entries)).toEqual(['Rejected by you · its sentence in §3 is withdrawn']);
+  });
+
+  it("draws a section's diagram where it stands among the section's blocks (docs.diagram)", async () => {
+    const source = 'flowchart LR\n  n1["Turn stored"]\n  n2["Delivered"]\n  n1 --> n2';
+    mermaid.render.mockResolvedValue({ svg: '<svg data-drawn="yes"></svg>' });
+    const doc = structuredClone(SHARED.docs.doc.read);
+    const section = doc.sections.find((one) => one.written && one.blocks.length > 1)!;
+    section.blocks.splice(1, 0, { kind: 'diagram', text: source, sentences: [] });
+    drawn = doc;
+    await open('/wiki/orbit/d/session-runtime');
+    await vi.waitFor(() => expect(page()?.querySelector('figure.wk-dc-diagram svg[data-drawn]')).toBeTruthy());
+    const shown = page().querySelector(`[data-section="${section.key}"]`)!;
+    expect([...shown.children].map((node) => node.tagName.toLowerCase()).indexOf('figure')).toBe(2);
+    expect(mermaid.render).toHaveBeenCalledWith(expect.any(String), source);
   });
 
   it('says a document no run has written is not written yet, and what writes it', async () => {
