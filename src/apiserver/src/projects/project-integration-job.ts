@@ -1352,7 +1352,8 @@ export async function settleDeliveredIdentityAfterFinish(
  * the DONE's, or the one that ended the work the DONE waited for (O-L4 3). An AGENT_PUSH project's
  * work reaches its line by the agent's own push, which nothing of the platform's carries, so the
  * observation is queued here (or folded into the one already queued); a PLATFORM project's DONE has
- * its own route and waits for O-T2 or O-T3 to be looked at.
+ * its own route and waits for O-T2 or O-T3 to be looked at — and on a MAIN line, the candidate that
+ * route made while the work still moved is named by the frozen commit here (O-L5).
  */
 async function deliveredIdentityFrozen(
   tx: Prisma.TransactionClient,
@@ -1360,9 +1361,12 @@ async function deliveredIdentityFrozen(
 ): Promise<void> {
   const binding = await tx.projectCodebase.findFirst({
     where: { projectId: frozen.projectId, slot: 'primary' },
-    select: { deliveryMode: true },
+    select: { deliveryMode: true, integrationRef: true, upstreamRef: true },
   });
-  if (binding?.deliveryMode !== 'AGENT_PUSH') return;
+  if (binding?.deliveryMode !== 'AGENT_PUSH') {
+    if (binding && binding.integrationRef === binding.upstreamRef) await nameCandidatesByDeliveredCommit(tx, frozen);
+    return;
+  }
   await queueLandingObservationIfPending(tx, {
     ownerId: frozen.ownerId, projectId: frozen.projectId, trigger: 'IDENTITY_FROZEN',
   });
@@ -1403,8 +1407,10 @@ export type EnqueueOutcome =
        * ALREADY_QUEUED — J3's index already holds a landing for this task, or the candidate's own
        *   index (§3.2) already holds a live promotion of this task's branch.
        * INTEGRATION_REPOSITORY_UNKNOWN — the caller opens an INTEGRATION_ERROR item (§4.2).
+       * AGENT_PUSH — the project's agents push their own work to the upstream (§10.5 O-L2): no
+       *   candidate; the observation sees the work there.
        */
-      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN';
+      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN' | 'AGENT_PUSH';
       projectId: string | null;
     };
 
@@ -1485,8 +1491,9 @@ export async function doneTaskLandingWork(
  * Which route depends on the line, and that is the whole of the difference: a `PROJECT_BRANCH`
  * project queues a `LAND_TASK` and the platform replays the task onto its own branch (§2.3), while a
  * `MAIN` project — whose integration ref IS its upstream — queues a candidate for a promotion the
- * owner confirms (§3.4 M-F2). Neither is a message to anybody: both are rows, and the platform
- * carries them from there.
+ * owner confirms (§3.4 M-F2), unless its agents push their own work there (AGENT_PUSH, §10.5 O-L2),
+ * when it queues nothing and the observation sees the work. Neither is a message to anybody: both are
+ * rows, and the platform carries them from there.
  *
  * Does nothing for work that has no branch: a codeless task, a task in no project, a task none of
  * whose work sessions took a worktree. Those are the majority of DONE writes, and the check is
@@ -1537,9 +1544,17 @@ async function queueForDoneTask(
 
   const codebase = await tx.projectCodebase.findFirst({
     where: { projectId, slot: 'primary' },
-    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true, deliveryMode: true },
   });
   if (!codebase) return { enqueued: false, reason: 'INTEGRATION_REPOSITORY_UNKNOWN', projectId };
+  // O-L2 (§3.4 M-F2): the owner authorized this project's agents to push their work to the upstream
+  // themselves, so a DONE builds no candidate and queues no check — the observation the frozen identity
+  // queues (O-T1) sees the work there. Nor does the beat that starts the line back-fill candidates. The
+  // reopen marker this DONE answers has no route of the platform's to be consumed by, so it goes here.
+  if (codebase.deliveryMode === 'AGENT_PUSH') {
+    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    return { enqueued: false, reason: 'AGENT_PUSH', projectId };
+  }
 
   const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
   // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself. Asked of the
@@ -1966,10 +1981,13 @@ async function backfillFinishedCodeTasks(
  * `CHECK_PROMOTION` job is queued beside it: nothing here decides whether the merge is any good, and
  * the owner is not asked until a check has said it is.
  *
- * `source_sha` is left NULL on purpose. Where the task's branch points is not a fact any table here
- * holds — the session records the branch and the fork point it came from, not where it has got to —
- * so it is resolved by the runner that fetches the ref, reported on the check's result, and written
- * onto this row then (0293). Everything the owner is shown comes after that.
+ * `source_sha` is the commit the task delivered (revision 29, §10.5 O-L5): the identity its DONE froze
+ * (O-L4), when that identity is the work this candidate offers — the same session, the same branch.
+ * The check and the landing then take that commit out of the source session's runner instead of
+ * fetching a branch nobody was asked to publish. Left NULL otherwise, as it was before (0293): an
+ * identity not frozen yet names the candidate when the finish that freezes it does
+ * (`nameCandidatesByDeliveredCommit`), and a branch the delivered commit is not on is checked by its
+ * branch, whose tip the runner resolves and reports on the check's result.
  *
  * Answers null when the partial unique index already holds a live candidate for this ref: one branch
  * is one question, and the one already standing is the one being asked.
@@ -1993,6 +2011,11 @@ export async function queueTaskBranchCandidate(
 ): Promise<{ promotionId: string; jobId: string } | null> {
   const promotionId = randomUUID();
   const sourceRef = `refs/heads/${input.session.branch}`;
+  const delivered = await tx.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId },
+    select: DELIVERED_WORK_COLUMNS,
+  });
+  const sourceSha = deliveredCommitOffered(delivered, input.session);
   const [created] = await tx.projectPromotion.createManyAndReturn({
     data: [{
       id: promotionId,
@@ -2003,7 +2026,7 @@ export async function queueTaskBranchCandidate(
       taskId: input.taskId,
       sessionId: input.session.id,
       sourceRef,
-      sourceSha: null,
+      sourceSha,
       upstreamRef: input.codebase.upstreamRef,
       // The one task this merge would carry. On a MAIN line a candidate is one task's branch, so
       // there is no set to derive the way M-F1 derives one off the receipts.
@@ -2023,7 +2046,7 @@ export async function queueTaskBranchCandidate(
       ownerId: input.ownerId,
       codebaseId: input.codebase.id,
       sourceRef,
-      sourceSha: null,
+      sourceSha,
       upstreamRef: input.codebase.upstreamRef,
       sessionId: input.session.id,
     },
@@ -2034,6 +2057,78 @@ export async function queueTaskBranchCandidate(
   return { promotionId, jobId };
 }
 
+/** The task columns that name its delivered work (§10.4): the commit, and where it was read. */
+const DELIVERED_WORK_COLUMNS = { deliveredSha: true, deliveredBranch: true, deliveredSessionId: true } as const;
+
+/**
+ * The commit a TASK_BRANCH candidate offering `session`'s `branch` is named by (§10.5 O-L5): the
+ * task's frozen delivered identity, when it is that work — read from that session, on that branch.
+ * Null when nothing is frozen yet, or when the delivered commit is another session's or another
+ * branch's: such a candidate is checked by its branch, as every candidate was before revision 29.
+ */
+function deliveredCommitOffered(
+  task: { deliveredSha: string | null; deliveredBranch: string | null; deliveredSessionId: string | null } | null,
+  session: { id: string | null; branch: string },
+): string | null {
+  if (!task?.deliveredSha) return null;
+  return task.deliveredSessionId === session.id && task.deliveredBranch === session.branch ? task.deliveredSha : null;
+}
+
+/**
+ * O-L5 for a candidate its DONE inserted while the work still moved (O-L4 3): the transaction that
+ * freezes the task's identity names the candidate, and the check queued for it, by the frozen commit.
+ * Nothing has looked at it yet — the claim guard holds a check until the task's work has settled, and
+ * the finish that settles it is this transaction — so the first check is already the one by commit.
+ *
+ * Only a candidate still waiting for that first check (CHECKING, nothing named, its check QUEUED), and
+ * only one that offers the delivered work (`deliveredCommitOffered`). Any other is left as it was
+ * inserted, to be checked by its branch.
+ */
+async function nameCandidatesByDeliveredCommit(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<void> {
+  const task = await tx.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId },
+    select: DELIVERED_WORK_COLUMNS,
+  });
+  if (!task?.deliveredSha) return;
+  const waiting = await tx.projectPromotion.findMany({
+    where: {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+      state: 'CHECKING' satisfies PromotionState,
+      sourceSha: null,
+      checkJobId: { not: null },
+    },
+    select: { id: true, sessionId: true, sourceRef: true, checkJobId: true },
+  });
+  for (const candidate of waiting) {
+    const sourceSha = deliveredCommitOffered(task, {
+      id: candidate.sessionId,
+      branch: shortBranchName(candidate.sourceRef),
+    });
+    if (!sourceSha) continue;
+    // A check already claimed is resolving the branch, and its answer names the candidate.
+    const check = await tx.projectIntegrationJob.findUnique({
+      where: { id: candidate.checkJobId! },
+      select: { state: true, sourceSha: true },
+    });
+    if (check?.state !== 'QUEUED' || check.sourceSha !== null) continue;
+    // The candidate before its check, the order every writer of both takes them in (rank 60).
+    const named = await tx.projectPromotion.updateMany({
+      where: { id: candidate.id, state: 'CHECKING', sourceSha: null },
+      data: { sourceSha },
+    });
+    if (named.count === 0) continue;
+    await tx.projectIntegrationJob.updateMany({
+      where: { id: candidate.checkJobId!, state: 'QUEUED', sourceSha: null },
+      data: { sourceSha },
+    });
+  }
+}
+
 /** What a promotion job needs to exist, whichever of the two it is. */
 export interface PromotionJobSubject {
   id: string;
@@ -2041,7 +2136,7 @@ export interface PromotionJobSubject {
   ownerId: string;
   codebaseId: string;
   sourceRef: string;
-  /** Null only for a `TASK_BRANCH` candidate whose check has not run yet (0293). */
+  /** Null only for a `TASK_BRANCH` candidate no delivered commit names whose check has not run yet (0293). */
   sourceSha: string | null;
   upstreamRef: string;
   sessionId: string | null;
@@ -2057,7 +2152,8 @@ export interface PromotionJobSubject {
  * task's acceptance command from (M-S3).
  *
  * A job whose `source_sha` is null leaves the runner to resolve the source ref itself and report the
- * commit it resolved — the only way a `TASK_BRANCH` candidate's source is knowable (0293).
+ * commit it resolved (0293) — what a `TASK_BRANCH` candidate no delivered commit names still does
+ * (§10.5 O-L5).
  *
  * `confirmedAutomatically` marks a LAND_PROMOTION the project's Automatic setting queued rather than
  * the owner's press (M-T11) — on the job itself, because the job is the record of what was sent out

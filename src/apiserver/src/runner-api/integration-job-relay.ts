@@ -357,7 +357,7 @@ export async function dispatchIntegrationJobs(
     });
   for (const row of silent) {
     taken.push(row.serialKey);
-    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, log, openItems)
+    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, observes, log, openItems)
       .catch((error) => {
         log.warn(`integration job ${row.id} not handed again this beat: ${error?.message ?? error}`);
         return null;
@@ -438,7 +438,7 @@ export async function dispatchIntegrationJobs(
         .catch(() => null);
     }
     await backfillClaimEvent(prisma, row, heartbeat, runnerName ?? null, log);
-    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, log, openItems);
+    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, observes, log, openItems);
     if (command) commands.push(command);
   }
   return commands;
@@ -456,6 +456,8 @@ async function handOut(
   row: HeldClaim,
   leaseOwner: string,
   landsAutomatically: boolean,
+  /** Whether this process declared integration-observe/v1, and so takes a TASK_BRANCH check by its commit. */
+  observes: boolean,
   log: Logger,
   openItems?: Pick<ProjectOpenItemService, 'deliverForItems'>,
 ): Promise<IntegrationJobCommand | null> {
@@ -496,6 +498,15 @@ async function handOut(
   const unknownPushes = row.kind === 'CHECK_PROMOTION'
     ? []
     : await unresolvedUnknownPushes(prisma, row);
+  // §10.5 O-L5: a runner that declared integration-observe/v1 reads a TASK_BRANCH source that names
+  // its commit as that commit, out of its own object store. One that has not is handed the check as it
+  // always was — no commit, so it fetches the branch and resolves it (0293) — and the landing in
+  // today's shape, which already named the commit the owner confirmed.
+  const taskBranchCheck = row.kind === 'CHECK_PROMOTION' && row.promotionSourceKind === 'TASK_BRANCH';
+  if (taskBranchCheck && observes && !row.jobSourceSha) {
+    log.warn(`promotion check ${row.id} names no delivered commit: it is checked by its branch ${row.sourceRef}`);
+  }
+  const sourceSha = taskBranchCheck && !observes ? null : row.jobSourceSha;
   return {
     jobId: row.id,
     kind: row.kind as IntegrationJobCommand['kind'],
@@ -510,8 +521,9 @@ async function handOut(
     ...(row.sessionBaseSha ? { sessionBaseSha: row.sessionBaseSha } : {}),
     // A promotion names the exact commit the owner is being asked about, so the runner works from
     // that rather than from wherever the branch has got to since (§3.4 M-S1). A TASK_BRANCH
-    // candidate's first check has none to name and resolves the ref itself (0293).
-    ...(row.jobSourceSha ? { sourceSha: row.jobSourceSha } : {}),
+    // candidate no delivered commit names, and any for a runner from before O-L5, resolves the ref
+    // itself (0293).
+    ...(sourceSha ? { sourceSha } : {}),
     ...(row.promotionSourceKind
       ? { promotionSourceKind: row.promotionSourceKind as 'PROJECT_BRANCH' | 'TASK_BRANCH' }
       : {}),
@@ -2311,7 +2323,17 @@ export async function applyIntegrationJobResult(
     // candidate's source is resolved by the check itself (M-S1, 0293), and the check is the only
     // thing that ever looks at that branch: freeze a tip while the work can still move and the owner
     // is asked to merge a commit the branch has already moved past, with nothing left to ask again.
-    if (job.kind === 'CHECK_PROMOTION' && job.promotionId && state === 'READY') {
+    //
+    // A TASK_BRANCH check that found the commit already on the upstream is held to the same two
+    // questions (§10.5 O-L6): its answer now writes the receipt that says the task's work is there.
+    const checkedSourceKind = job.kind === 'CHECK_PROMOTION' && job.promotionId
+      ? (await tx.projectPromotion.findUnique({
+        where: { id: job.promotionId },
+        select: { sourceKind: true },
+      }))?.sourceKind ?? null
+      : null;
+    if (job.kind === 'CHECK_PROMOTION' && job.promotionId
+        && (state === 'READY' || (state === 'ALREADY_LANDED' && checkedSourceKind === 'TASK_BRANCH'))) {
       const candidate = await readCandidateWork(tx, job.sessionId);
       if (candidate) {
         if (landingJudgedTooEarly(job.claimedAt, candidate.sessions)) {
@@ -2358,7 +2380,14 @@ export async function applyIntegrationJobResult(
             after: null,
           };
         }
-        if (!checkSawTheFinishedBranch(job, candidate.sessions)) {
+        // A check of the commit the task delivered looked at the work itself (§10.3 O1), whatever the
+        // branch is called: there is no branch for it to have been wrong about.
+        const delivered = await tx.task.findUnique({
+          where: { id: candidate.taskId },
+          select: { deliveredSha: true },
+        });
+        const checkedDeliveredCommit = body.sourceSha != null && body.sourceSha === delivered?.deliveredSha;
+        if (!checkedDeliveredCommit && !checkSawTheFinishedBranch(job, candidate.sessions)) {
           // The check looked at a branch the task's work did not end on, so the tip it resolved is
           // not the work's — and no re-check of that branch would ever make it so. The candidate is
           // retired and the branch the work IS on gets the candidate it was owed, which is what
@@ -2796,6 +2825,8 @@ export async function applyIntegrationJobResult(
         landedTaskId: (jobLanded(effectiveState) || receiptIds.length > 0) && !job.promotionId
           ? job.taskId
           : null,
+        // §10.5 O-L6: a task branch's check that saw the work on the upstream wrote its receipt.
+        ...(promotion?.landedTaskIds?.length ? { landedTaskIds: promotion.landedTaskIds } : {}),
         openItemIds: [openItemId, rearmedItemId].filter((id): id is string => id !== null),
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:

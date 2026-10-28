@@ -2081,6 +2081,15 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 
 **O-L6（检查看到工作已在 main 上）**：`TASK_BRANCH` 候选的检查答 `ALREADY_LANDED`（M-S2：`delivered_sha` 已是 U 的祖先），它本身就是一次观测。结果事务按 O-R1 写回执，M-T13 随之退役候选（`SUPERSEDED`，待办写 `PROMOTION_MOVED_ON`），再按 O-R3 开 owner 待办。不再走 M-T3 写 BLOCKED。
 
+O-L2、O-L5、O-L6 的读法（R29-8）：
+
+- **哪个候选按提交指名**：交付身份已冻结、且就是这个候选给出的工作（`delivered_session_id` 是候选的会话，`delivered_branch` 是候选源分支的短名）时，候选与它的 `CHECK_PROMOTION` 写 `source_sha = delivered_sha`。DONE 写下时工作仍在移动（turnComplete 的 DONE，以及 reaper 在 DONE 之后才结束任务会话的通常情形），身份在写下 `finished_at` 的事务里补冻结（O-L4 3），同一事务给这个 DONE 的候选及其仍 `QUEUED` 的检查补写 `source_sha`（`nameCandidatesByDeliveredCommit`）：认领守卫在工作停下之前不发这条检查，所以第一次检查就按提交。M-F2「在冻结交付身份的那个事务里插入」读作候选仍在 DONE 的事务里插入、在冻结的事务里指名。身份不明，或交付提交不在候选给出的会话与分支上的，候选照旧不带 `source_sha`，检查照旧按分支解析、结果回写（0293 的那一半只留给这种候选）；这种检查交给声明了 `integration-observe/v1` 的 runner 时记一行 warn。
+- **领取与命令形状**：`claimOne` 一向只把作业交给作业会话的 workspace 所在的 runner，候选的会话就是源会话，所以检查与合入本来就由源会话所在的 runner 领取，与 `LAND_TASK` 同一条件，不另加。声明了 `integration-observe/v1` 的 runner 照作业行拿到 `sourceSha`；没声明的旧 runner，`TASK_BRANCH` 的 `CHECK_PROMOTION` 不带 `sourceSha`（照旧 fetch 分支解析，回写候选），`LAND_PROMOTION` 照今天的形状。
+- **O-L6 的回执**：写在候选自己的会话上，`source_branch` 为候选源分支的短名，`source_sha` 为检查所依据的提交（按提交指名时就是 `delivered_sha`，旧 runner 时是它解析出的 tip），其余照 O-R1，`detail = { integrationJobId: <这次检查>, observed: true }`。经 `MergeReceiptService.recordIn` 写；M-T13 退役候选时不叫停这次正在回报的检查（`keepJobIds`），回执早于候选（重放）时由结果事务自己把候选写成 `SUPERSEDED`。任务自己的集成类待办按 J-T5 写成 `RESOLVED / LANDED`，提交后 J10 派发下游。
+- **仍走 M-T3 的情形**：检查被叫停过、任务已不是 DONE、候选的会话已不在、回执门拒绝（checkpoint 门不认可这个提交），或分支没有自己的提交（检查的提交等于分叉点）而任务有会话报告过工作（O-L7：工作在别处）。分支没有自己的提交、也没有会话报告过工作时照 O-R2 写回执，另记 `detail.empty = true`，不开 O-R3。
+- **与 READY 同样的两条守卫**：`TASK_BRANCH` 的 `ALREADY_LANDED` 在工作停下之前得到的退回队列（`landingJudgedTooEarly`），看的是工作没结束在其上的分支时另立候选（`refileCandidateBehindTheWork`）。检查依据的就是 `delivered_sha` 时它看的就是这份工作（O1），两种答案都不再另立候选。
+- **O-L2**：`AGENT_PUSH` 项目的 DONE 在线开始之后返回 `AGENT_PUSH`，不建候选、不入队检查，开始集成那一拍也不补入队；这次 DONE 的重开标记随之删除。
+
 **O-L7（空分支与别的仓库）**：
 
 - `delivered_sha = delivered_base_sha` 表示任务没有自己的提交，照 J8 的 `NOTHING_TO_LAND` 规则：该任务没有任何会话报告过工作时写回执，否则开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`）。

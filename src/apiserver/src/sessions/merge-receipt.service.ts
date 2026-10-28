@@ -381,6 +381,8 @@ export class MergeReceiptService {
     sessionId: string,
     input: RecordMergeReceiptInput,
     recordedBy: MergeReceiptRecorder,
+    /** A check whose answer this transaction is writing (§10.5 O-L6): M-T13 does not ask it to stop. */
+    options: { keepJobIds?: readonly string[] } = {},
   ): Promise<{ receipt: ReturnType<typeof mergeReceiptRow>; created: boolean }> {
     // The closed set a door may record, said here as well as by the DTO now that the table admits a
     // fifth: MATCHED_BY_CONTENT is written by the owner's Done alone, from a check that found it (0432).
@@ -492,7 +494,7 @@ export class MergeReceiptService {
       // standing beside this receipt — by a build older than the rule — is retired by recording
       // the same merge again. Only candidates older than the receipt: a replay never answers a
       // question asked after the merge.
-      await retireCandidatesLandedByReceipt(db, existing);
+      await retireCandidatesLandedByReceipt(db, existing, options.keepJobIds);
       // §10.7: and answers what was open about the work not being on the line, as the first did.
       await resolveLandingUnobservedOnLanding(db, [session.taskId]);
       return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
@@ -554,7 +556,7 @@ export class MergeReceiptService {
 
     // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
     // this branch, so the card stops asking — in the transaction that recorded it.
-    await retireCandidatesLandedByReceipt(db, created);
+    await retireCandidatesLandedByReceipt(db, created, options.keepJobIds);
     // §10.7 O-R1: a receipt that puts the task's work on its line answers the `LANDING_UNOBSERVED`
     // about it, in this same transaction (one on some other branch leaves it open).
     await resolveLandingUnobservedOnLanding(db, [session.taskId]);

@@ -1,11 +1,12 @@
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,7 +28,8 @@ import {
 import { type InFlightStop, stopInFlightJob } from './project-integration-line';
 import { movedMainText } from './project-integration-event';
 import { settleLandingAfterPromotionDecision } from './landing-session';
-import { openItemOwed, resolveLeaseExpiredItems } from './project-open-item';
+import { openItemOwed, resolveIntegrationItemsOnLanding, resolveLeaseExpiredItems } from './project-open-item';
+import { sessionReportedWork } from './landing-source-branch';
 import {
   AUTOMATIC_MERGE_ATTEMPTS,
   PROMOTION_LAND_ATTEMPTS,
@@ -51,6 +53,8 @@ import {
   promotionPrincipalRefusal,
   promotionView,
 } from './project-promotion';
+
+const logger = new Logger('ProjectPromotion');
 
 /** How many finished checks the "typical" a re-check is measured against is taken from (§3.6). */
 const CHECK_TYPICAL_SAMPLE = 5;
@@ -851,6 +855,8 @@ export interface PromotionJobOutcome {
   state: PromotionState;
   /** The receipts M9 wrote, so the job row can keep them beside its own. */
   receiptIds: string[];
+  /** The tasks a check's own receipt put on the upstream (§10.5 O-L6): J10 dispatches their dependents. */
+  landedTaskIds?: string[];
   /**
    * J-T13, the owner-confirmed half: this landing ended on a refused push and the candidate — still
    * the owner's confirmation — has the next generation queued. A failure with nobody to look at it:
@@ -1195,13 +1201,17 @@ const RETIRABLE_BY_RECEIPT: ReadonlyArray<PromotionState> = ['CHECKING', 'READY'
  *
  * Called by the receipt writers that record a merge somebody made outside a promotion — the agent's
  * and the user's door (`MergeReceiptService.record`, also for the replay of a receipt already
- * recorded) and the runner's own merge (`fromRunnerMergeResult`). The receipts a promotion writes for
- * its own landing (M9) are written beside a candidate that is already being merged. Answers the ids
- * it retired.
+ * recorded) and the runner's own merge (`fromRunnerMergeResult`) — and by the receipt a task branch's
+ * own check writes when it finds the work already on the upstream (§10.5 O-L6), which names that check
+ * in `keepJobIds`: its answer is being written, and it is not asked to stop. The receipts a promotion
+ * writes for its own landing (M9) are written beside a candidate that is already being merged. Answers
+ * the ids it retired.
  */
 export async function retireCandidatesLandedByReceipt(
   tx: Prisma.TransactionClient,
   receipt: RecordedMergeFacts,
+  /** Checks this transaction is writing the answer of (§10.5 O-L6), which are not asked to stop. */
+  keepJobIds: readonly string[] = [],
 ): Promise<string[]> {
   if (!receipt.projectId || !receipt.taskId) return [];
   if (!resultLanded(receipt.result as MergeReceiptResult)) return [];
@@ -1226,41 +1236,56 @@ export async function retireCandidatesLandedByReceipt(
   const now = new Date();
   const retired: string[] = [];
   for (const row of answered) {
-    // A CAS on the state it was read in: a landing or an owner's press that moved it first wins.
-    const moved = await tx.projectPromotion.updateMany({
-      where: { id: row.id, state: row.state },
-      data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: now },
-    });
-    if (moved.count === 0) continue;
-    if (row.checkJobId) {
-      // J-T8's one rule, shared with the other doors that stop a generation: a QUEUED check is
-      // ended CANCELLED here and now; a RUNNING one still reporting is asked to stop; one already
-      // silent past its limit is ended as the ERROR it is — asking a dead runner to stop is how a
-      // job holds its serial key forever, and `claimOne` never re-hands a cancel-requested row, so
-      // nobody could ever end it and no later check of the project could be claimed (2026-10-09: a
-      // candidate superseded this way kept `#check:<project>` and blocked the whole project).
-      await stopInFlightJob(tx, {
-        projectId: row.projectId,
-        jobId: row.checkJobId,
-        now,
-        cause: 'M13',
-        actor: { type: 'PLATFORM' },
-      });
-      // §4.6 X-E5: the check's candidate moved on, so its silence is nobody's to abandon.
-      await resolveLeaseExpiredItems(tx, row.checkJobId);
-    }
-    // The owner's card, when the check had already put one in front of them: the merge it asked
-    // about has been made, so there is nothing left to approve.
-    if (row.openItemId) {
-      await tx.projectOpenItem.updateMany({
-        where: { id: row.openItemId, state: 'OPEN' },
-        data: { state: 'RESOLVED', resolution: 'PROMOTION_MOVED_ON', resolvedBy: 'PLATFORM', resolvedAt: now },
-      });
-    }
-    await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
-    retired.push(row.id);
+    if (await retireCandidate(tx, row, now, keepJobIds)) retired.push(row.id);
   }
   return retired;
+}
+
+/**
+ * M-T13's edge for one candidate a recorded merge answered: SUPERSEDED by a compare-and-set on the
+ * state it was read in, its check stopped as J-T8 asks — unless it is one this transaction is writing
+ * the answer of — and the owner's card and the failures about it closed `PROMOTION_MOVED_ON`. False
+ * when a landing or an owner's press moved it first.
+ */
+async function retireCandidate(
+  tx: Prisma.TransactionClient,
+  row: { id: string; projectId: string; state: string; checkJobId: string | null; openItemId: string | null },
+  now: Date,
+  keepJobIds: readonly string[],
+): Promise<boolean> {
+  // A CAS on the state it was read in: a landing or an owner's press that moved it first wins.
+  const moved = await tx.projectPromotion.updateMany({
+    where: { id: row.id, state: row.state },
+    data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: now },
+  });
+  if (moved.count === 0) return false;
+  if (row.checkJobId && !keepJobIds.includes(row.checkJobId)) {
+    // J-T8's one rule, shared with the other doors that stop a generation: a QUEUED check is
+    // ended CANCELLED here and now; a RUNNING one still reporting is asked to stop; one already
+    // silent past its limit is ended as the ERROR it is — asking a dead runner to stop is how a
+    // job holds its serial key forever, and `claimOne` never re-hands a cancel-requested row, so
+    // nobody could ever end it and no later check of the project could be claimed (2026-10-09: a
+    // candidate superseded this way kept `#check:<project>` and blocked the whole project).
+    await stopInFlightJob(tx, {
+      projectId: row.projectId,
+      jobId: row.checkJobId,
+      now,
+      cause: 'M13',
+      actor: { type: 'PLATFORM' },
+    });
+    // §4.6 X-E5: the check's candidate moved on, so its silence is nobody's to abandon.
+    await resolveLeaseExpiredItems(tx, row.checkJobId);
+  }
+  // The owner's card, when the check had already put one in front of them: the merge it asked
+  // about has been made, so there is nothing left to approve.
+  if (row.openItemId) {
+    await tx.projectOpenItem.updateMany({
+      where: { id: row.openItemId, state: 'OPEN' },
+      data: { state: 'RESOLVED', resolution: 'PROMOTION_MOVED_ON', resolvedBy: 'PLATFORM', resolvedAt: now },
+    });
+  }
+  await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
+  return true;
 }
 
 /**
@@ -1412,6 +1437,13 @@ export async function applyPromotionJobResult(
         },
       };
     }
+    // §10.5 O-L6: a task branch's check that found its commit on the upstream has observed the work
+    // there. That is a landing to write down — not M-T3's BLOCKED — unless nothing can say it is the
+    // work's (`recordCheckSawWorkOnUpstream`).
+    if (input.state === 'ALREADY_LANDED' && promotion.sourceKind === 'TASK_BRANCH' && !input.cancelRequested) {
+      const seen = await recordCheckSawWorkOnUpstream(tx, promotion, input);
+      if (seen) return seen;
+    }
     return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
       promotionBlockedReasonFor(input.state));
   }
@@ -1462,6 +1494,98 @@ export async function applyPromotionJobResult(
   }
   return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
     promotionBlockedReasonFor(input.state));
+}
+
+/**
+ * §10.5 O-L6: a TASK_BRANCH candidate's check found the commit it worked from already on the upstream
+ * (M-S2), which is itself an observation of the task's work there. Written in the check's result
+ * transaction: O-R1's receipt through `MergeReceiptService` — whose M-T13 retires the candidate
+ * SUPERSEDED with its items PROMOTION_MOVED_ON, and whose O-R3 opens LANDED_WITHOUT_CONFIRMATION when
+ * owed — and the task's own integration items closed by the landing (J-T5).
+ *
+ * The receipt says what the check verified: the candidate's branch and the commit the runner worked
+ * from — the delivered commit of a candidate named by it (O-L5), the tip a runner from before resolved
+ * for one that was not — against the candidate's own session, the work session the branch was offered
+ * from, with `{ integrationJobId, observed: true }` (O-R1). The check this transaction is answering is
+ * not asked to stop by its own candidate's retirement.
+ *
+ * Null leaves the candidate to M-T3, as before, when no receipt can say the task's work is there: the
+ * task is no longer DONE, the session is gone, the receipt door refuses (a checkpoint the landing gate
+ * does not accept), or the branch carried no commit of its own while a session of the task reported
+ * work — that work is somewhere this branch is not (O-L7, O-R2). A branch with nothing of its own and
+ * no work reported anywhere gets its receipt marked `empty`, which raises nothing (O-R2).
+ *
+ * Locks in rank order before the first write (`common/lock-order.ts`): the session (30), the project
+ * (40) and the task (50) its rows name; the receipt, the candidate and the items are rank 60. The
+ * result transaction has written nothing before this.
+ */
+async function recordCheckSawWorkOnUpstream(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+  input: { jobId: string; sourceSha: string | null; upstreamSha: string | null; targetShaBefore: string | null },
+): Promise<PromotionJobOutcome | null> {
+  const checked = input.sourceSha ?? promotion.sourceSha;
+  if (!checked || !promotion.taskId || !promotion.sessionId) return null;
+  const task = await tx.task.findFirst({
+    where: { id: promotion.taskId, ownerId: promotion.ownerId },
+    select: { status: true, deliveredSha: true, deliveredBaseSha: true },
+  });
+  if (task?.status !== TaskStatus.DONE) return null;
+  const session = await tx.session.findFirst({
+    where: { id: promotion.sessionId, ownerId: promotion.ownerId, taskId: promotion.taskId },
+    select: { id: true, baseSha: true },
+  });
+  if (!session) return null;
+  // O-L7: a branch's fork point is on every line it forked from, so "already there" says nothing
+  // about a branch that never moved off it.
+  const base = checked === task.deliveredSha ? task.deliveredBaseSha : session.baseSha;
+  const empty = base !== null && checked === base;
+  if (empty) {
+    const work = await tx.session.findMany({
+      where: {
+        taskId: promotion.taskId, startsTaskWork: true, deletedAt: null,
+        isolationStatus: 'worktree', branch: { not: null },
+      },
+      select: { changedFiles: true },
+    });
+    if (work.some(sessionReportedWork)) return null;
+  }
+
+  await tx.$queryRaw(Prisma.sql`
+    SELECT "id" FROM "session" WHERE "id" = ${session.id}::uuid FOR NO KEY UPDATE`);
+  await tx.$queryRaw(Prisma.sql`
+    SELECT "id" FROM "project" WHERE "id" = ${promotion.projectId}::uuid FOR KEY SHARE`);
+  await tx.$queryRaw(Prisma.sql`
+    SELECT "id" FROM "task" WHERE "id" = ${promotion.taskId}::uuid FOR KEY SHARE`);
+  let receiptId: string;
+  try {
+    const recorded = await MergeReceiptService.recordIn(tx, promotion.ownerId, session.id, {
+      result: 'ALREADY_MERGED',
+      sourceBranch: shortBranchName(promotion.sourceRef),
+      sourceSha: checked,
+      targetBranch: shortBranchName(promotion.upstreamRef),
+      targetShaBefore: input.targetShaBefore ?? input.upstreamSha,
+      targetShaAfter: null,
+      detail: { integrationJobId: input.jobId, observed: true, ...(empty ? { empty: true } : {}) },
+    }, 'RUNNER', { keepJobIds: [input.jobId] });
+    receiptId = recorded.receipt.id;
+  } catch (error) {
+    // A door's refusal is raised before it writes anything, so the candidate goes on to M-T3.
+    if (!(error instanceof HttpException)) throw error;
+    logger.warn(`promotion check ${input.jobId} wrote no receipt for task ${promotion.taskId}: ${error.message}`);
+    return null;
+  }
+  // M-T13 has retired it in that write — unless the receipt was already on record before the candidate
+  // was made, which a replay answers nothing newer than. It asked the question this check answered.
+  await retireCandidate(tx, promotion, new Date(), [input.jobId]);
+  await resolveIntegrationItemsOnLanding(tx, promotion.taskId);
+  return {
+    promotionId: promotion.id,
+    state: 'SUPERSEDED',
+    receiptIds: [receiptId],
+    landedTaskIds: [promotion.taskId],
+    openApproval: null,
+  };
 }
 
 /**
