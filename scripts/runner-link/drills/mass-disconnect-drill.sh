@@ -37,6 +37,8 @@
 #   ORBIT_MASS_DISCONNECT_GATEWAYS     prepare: link gateway nodes, 1, or 2 behind a TCP balancer for node          1
 #   ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE   prepare: the second node's handshakes a second (LINK_HANDSHAKE_RATE)    200
 #   ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST  prepare: the second node's handshake burst (LINK_HANDSHAKE_BURST)       400
+#   ORBIT_MASS_DISCONNECT_NODE_LATE    node: how many of the runners the first node holds are to find the second's
+#                                      burst spent; the drill spends the rest of it just before the kill            1
 #
 # Run it as root on a stack no other runner works on: each runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, and the partition cuts a runner off with an nftables
@@ -65,6 +67,7 @@ sweep_after="${ORBIT_MASS_DISCONNECT_SWEEP_AFTER:-}"
 gateways="${ORBIT_MASS_DISCONNECT_GATEWAYS:-1}"
 handshake_rate="${ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE:-200}"
 handshake_burst="${ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST:-400}"
+node_late="${ORBIT_MASS_DISCONNECT_NODE_LATE:-1}"
 # The second link gateway node, with ORBIT_MASS_DISCONNECT_GATEWAYS=2 (staging.gateways.compose.yml).
 gateway_b="$project-link-gateway-b"
 # The reaper's own numbers (src/apiserver/src/realtime/reaper.service.ts, src/apiserver/src/runners/runner-presence.ts):
@@ -241,6 +244,23 @@ presence_node() {
 }
 # node_of CONTAINER: the gateway node's id, which the beats it forwards name (X-Orbit-Link-Gateway-Id): its hostname.
 node_of() { docker inspect -f '{{.Config.Hostname}}' "$1"; }
+# spend_node_b RUN LEFT: the second node's handshake burst spent down to LEFT handshakes, by upgrade requests of no runner's
+# straight to the node: its limiter counts a handshake before it looks at the token (src/link-gateway/gateway.go,
+# ServeHTTP), so each one costs a token and is then refused 401. Spent just before the kill, the runners the first node
+# held find LEFT handshakes waiting, and the rest one every 1/ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE seconds. The burst is
+# whole when the second node has admitted nobody for that long times the burst, which a quiet cell's wait gives it.
+spend_node_b() {
+  local run=$1 left=$2 burst ip k code spent=0
+  burst="$(setting STAGING_HANDSHAKE_BURST_B 400)"
+  [ "$left" -lt "$burst" ] || return 0
+  ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$gateway_b")"
+  for k in $(seq 1 $((burst - left))); do
+    code="$(curl -sk --http1.1 -o /dev/null -w '%{http_code}' --max-time 5 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+      -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "https://$ip:8443/")" || true
+    [ "$code" = 401 ] && spent=$((spent + 1))
+  done
+  say "$run: $spent of $gateway_b's $burst handshakes spent by upgrades of no runner's (each answered 401), $left left for the runners the kill sends it"
+}
 # wait_presence I SECONDS: runner I's last beat came over the link; non-zero when it did not within SECONDS.
 wait_presence() {
   local deadline=$((SECONDS + $2))
@@ -539,6 +559,7 @@ outage() {
     [ -n "$CUT" ] || fail "$run: no runner is connected through $gateway ($node_a)"
   fi
   for i in $CUT; do is_cut[$i]=1; done
+  if [ "$phase" = node ]; then spend_node_b "$run" "$(( $(wc -w <<< "$CUT") - node_late ))"; fi
 
   # The cut.
   if [ "$phase" = gateway ] || [ "$phase" = node ]; then kill_gateway; else cut_off $CUT; fi
