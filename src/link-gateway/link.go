@@ -86,25 +86,38 @@ func (l *linkState) greeted(hello *linkpb.Hello) {
 	l.providers = hello.GetSupportedProviders()
 }
 
-// start runs once Welcome is queued: credit is what Welcome granted.
+// start runs once Welcome is queued: credit is what Welcome granted. From now on the connection has its share of the
+// ingest queue (events.go).
 func (l *linkState) start(credit creditLevel) {
 	l.mu.Lock()
 	l.credit = credit
 	l.mu.Unlock()
+	l.c.g.credit.join()
 	go l.heartbeatLoop()
 }
 
 // close lets go of what the connection held: its unacknowledged events no longer count against the gateway's ingest
-// queue once their calls end (events.go), and the turn prefix requests nobody will answer now are answered empty.
+// queue once their calls end (events.go), its sessions leave the queue's line, and the turn prefix requests nobody
+// will answer now are answered empty.
 func (l *linkState) close() {
 	l.mu.Lock()
 	l.closed = true
 	prefixes := l.prefixes
 	l.prefixes = map[string]*pendingPrefix{}
 	l.mu.Unlock()
+	l.c.g.credit.leave(l)
 	for _, p := range prefixes {
 		p.answerEmpty(l.c.g, "closed")
 	}
+}
+
+// setCreditLocked gives the connection a new credit and tells the runner, in a Credit frame. Under l.mu, so that the
+// runner is told each change in the order it is made.
+func (l *linkState) setCreditLocked(level creditLevel) {
+	l.credit = level
+	l.c.send(&linkpb.Frame{Body: &linkpb.Frame_Credit{Credit: &linkpb.Credit{
+		MaxUnackedEvents: level.Events, MaxUnackedBytes: level.Bytes,
+	}}}, true)
 }
 
 // headers are what every call forwarded for this connection carries besides the gateway's own secret: the runner's

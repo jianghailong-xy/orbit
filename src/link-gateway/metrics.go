@@ -265,6 +265,7 @@ type gatewayMetrics struct {
 	mergeHeld         *histogram
 	ingestEvents      *gauge
 	ingestBytes       *gauge
+	ingestWaiting     *gauge
 	creditReduced     *gauge
 	creditChanges     *counter
 	liveEvents        *counter
@@ -335,6 +336,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		mergeHeld:         newHistogram("link_event_merge_held_seconds", "How long a merged ingest call's transaction held its sessions, until its commit, as the apiserver stated it.", mergeDurationBounds...),
 		ingestEvents:      newGauge("link_ingest_queue_events", "Durable events queued for or in flight to the apiserver, across connections: the depth credit is granted by."),
 		ingestBytes:       newGauge("link_ingest_queue_bytes", "The payload bytes of those events."),
+		ingestWaiting:     newGauge("link_ingest_waiting_sessions", "Sessions whose batch found the ingest queue full, waiting in line for its room."),
 		creditReduced:     newGauge("link_credit_reduced", "1 while the ingest queue is past its high-water mark and every connection's credit is reduced."),
 		creditChanges:     newCounter("link_credit_changes_total", "Times every connection's credit was reduced or restored.", "to"),
 		liveEvents:        newCounter("link_live_events_total", "Live stream events, by what became of them: published, no_watchers, nats_down, publish_failed, bad_session.", "result"),
@@ -390,7 +392,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	for _, r := range []string{"forwarded", "want_facts", "failed", "refused", "superseded"} {
 		m.heartbeatForwards.preset(r)
 	}
-	for _, r := range []string{"stored", "credit_exceeded", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
+	for _, r := range []string{"stored", "credit_exceeded", "queue_full", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
 		m.eventBatches.preset(r)
 	}
 	for _, r := range []string{"answered", "failed", "refused", "malformed"} {
@@ -417,7 +419,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
 		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
-		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.creditReduced, m.creditChanges,
+		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.ingestWaiting, m.creditReduced, m.creditChanges,
 		m.mergeCalls, m.mergeFlushes, m.mergeAlone, m.mergeBatches, m.mergeCallDuration, m.mergeHeld,
 		m.liveEvents, m.watchedSessions, m.prefixRequests, m.queueFull,
 	}

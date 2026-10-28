@@ -100,6 +100,9 @@ type config struct {
 	// DrillLoseAnswers is LINK_DRILL_LOSE_ANSWERS: how many answers of each call a staging drill has the gateway lose
 	// (drill.go). Nil, the default, loses none.
 	DrillLoseAnswers map[string]int
+	// DrillIngestRate is LINK_DRILL_INGEST_RATE: the durable events a second a load test has the gateway forward at
+	// most, an ingest slower than what runners send (drill.go). 0, the default, forwards them as they come.
+	DrillIngestRate float64
 
 	// The rest is fixed by the design or by this version; fields only so that tests can shorten them.
 	link linkTuning
@@ -112,9 +115,15 @@ type linkTuning struct {
 	// MaxIngestPerConn bounds how many sessions' event batches one connection forwards at once.
 	MaxIngestPerConn int
 	// Credit is what each connection may have unacknowledged while the gateway's ingest queue is short, and Reduced
-	// what it may have once the queue is past HighWater; it is restored below LowWater (events.go).
+	// what it may have once the queue is past HighWater, at most its share of MaxQueued; it is restored below LowWater
+	// (events.go).
 	Credit, Reduced     creditLevel
 	HighWater, LowWater creditLevel
+	// MaxQueued bounds the ingest queue across every connection (LINK_INGEST_QUEUE_MAX_*): a batch it has no room for
+	// is refused, and its session waits in line for the room the queue frees (events.go).
+	MaxQueued creditLevel
+	// HoldFor is how long room freed for a session in line is held for its runner to send again.
+	HoldFor time.Duration
 	// RetryBudget is how long a call keeps being retried on other backends, and BackendDownFor how long a backend
 	// that could not be dialed is passed over.
 	RetryBudget, BackendDownFor time.Duration
@@ -136,14 +145,37 @@ type creditLevel struct {
 	Bytes  uint64
 }
 
+func (a creditLevel) plus(b creditLevel) creditLevel {
+	return creditLevel{Events: a.Events + b.Events, Bytes: a.Bytes + b.Bytes}
+}
+
+func (a creditLevel) minus(b creditLevel) creditLevel {
+	return creditLevel{Events: a.Events - b.Events, Bytes: a.Bytes - b.Bytes}
+}
+
+func (a creditLevel) half() creditLevel { return creditLevel{Events: a.Events / 2, Bytes: a.Bytes / 2} }
+
+// within says a is no more than limit, in events and in bytes.
+func (a creditLevel) within(limit creditLevel) bool {
+	return a.Events <= limit.Events && a.Bytes <= limit.Bytes
+}
+
+// defaultMaxQueued is the ingest queue's bound (README.md, "Durable events and credit"), about half a GiB of the
+// gateway's memory either way: task C2b measured 2.4 KB for each queued event of 660 payload bytes, so 200,000 of them
+// are about 470 MiB; larger events, which the bytes stop first, take about 4.7 times their payload (held decoded and
+// encoded for their call, and the heap's growth between collections), so 128 MiB of them about 600 MiB.
+var defaultMaxQueued = creditLevel{Events: 200_000, Bytes: 128 << 20}
+
 func defaultLinkTuning() linkTuning {
 	return linkTuning{
 		MaxRPCsInFlight:  64,
 		MaxIngestPerConn: 8,
 		Credit:           creditLevel{Events: 10_000, Bytes: 64 << 20},
 		Reduced:          creditLevel{Events: 1_000, Bytes: 8 << 20},
-		HighWater:        creditLevel{Events: 100_000, Bytes: 512 << 20},
-		LowWater:         creditLevel{Events: 50_000, Bytes: 256 << 20},
+		HighWater:        defaultMaxQueued.half(),
+		LowWater:         defaultMaxQueued.half().half(),
+		MaxQueued:        defaultMaxQueued,
+		HoldFor:          15 * time.Second,
 		RetryBudget:      5 * time.Second,
 		BackendDownFor:   5 * time.Second,
 		WatchersTTL:      60 * time.Second,
@@ -261,6 +293,18 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("LINK_EVENT_MERGE_MAX_BATCHES=%d is more than the %d batches the apiserver takes in one call", c.link.Merge.MaxBatches, maxMergeBatches))
 	}
 	c.link.Merge.MaxBytes = integer("LINK_EVENT_MERGE_MAX_BYTES", c.link.Merge.MaxBytes)
+	// The ingest queue's bound (events.go); the high- and low-water marks of the credit are half and a quarter of it.
+	c.link.MaxQueued = creditLevel{
+		Events: uint32(min(integer("LINK_INGEST_QUEUE_MAX_EVENTS", int(defaultMaxQueued.Events)), 1<<31)),
+		Bytes:  uint64(integer("LINK_INGEST_QUEUE_MAX_BYTES", int(defaultMaxQueued.Bytes))),
+	}
+	if !c.link.Credit.within(c.link.MaxQueued) {
+		problems = append(problems, fmt.Sprintf("LINK_INGEST_QUEUE_MAX_EVENTS and LINK_INGEST_QUEUE_MAX_BYTES must be at least one connection's credit, %d events and %d bytes: a batch within it has to fit the queue",
+			c.link.Credit.Events, c.link.Credit.Bytes))
+	}
+	c.link.HighWater = c.link.MaxQueued.half()
+	c.link.LowWater = c.link.HighWater.half()
+	c.DrillIngestRate = num("LINK_DRILL_INGEST_RATE", 0)
 
 	switch mode := str("LINK_MODE", "http"); mode {
 	case "http":
