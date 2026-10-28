@@ -135,6 +135,8 @@ test('Google account resolution on PostgreSQL: 0392, §5.2 row by row under both
       'claude_oauth_token_set_at timestamp NULL',
       // 0396, after it (§5.5): when an administrator disabled the account.
       'disabled_at timestamp NULL',
+      // 0451: when a `notify` naming no session last rang the account (PushService.notifyAgentMessage).
+      'agent_notified_at timestamp NULL',
     ];
     assert.deepEqual(await columns(), shape);
     const indexes = async () => (await rows(

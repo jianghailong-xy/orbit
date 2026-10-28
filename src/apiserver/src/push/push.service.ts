@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
 import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
@@ -25,6 +26,14 @@ const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent
  * milestone actually occurs at and far below the rate that turns a phone into an alarm.
  */
 const AGENT_NOTIFY_MIN_INTERVAL_MS = 60_000;
+
+/** Whole seconds until a session that last rang at `rang` may ring again; null when it may now. */
+function agentNotifyWait(rang: Date | null, now: Date): number | null {
+  if (rang === null) return null;
+  const left = AGENT_NOTIFY_MIN_INTERVAL_MS - (now.getTime() - rang.getTime());
+  return left > 0 ? Math.ceil(left / 1000) : null;
+}
+
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
 const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
@@ -60,10 +69,6 @@ export class PushService {
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
   private readonly badgeState = new Map<string, BadgeState>();
   private readonly syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  // When each session (or, headless, each owner) last rang its owner's devices via `notify`.
-  // Per-replica like badgeState, and swept on use so a long-lived process doesn't accumulate an
-  // entry per session ever run: an entry older than the interval can no longer refuse anything.
-  private readonly lastAgentNotify = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -116,7 +121,7 @@ export class PushService {
    * Tell the session's owner a tool approval is pending. Fire-and-forget: callers `void` this so a
    * slow/failed APNs round-trip never blocks the runner request that created the approval.
    */
-  async notifyApprovalRequest(sessionId: string, toolName: string): Promise<void> {
+  async notifyApprovalRequest(sessionId: string, approvalId: string, toolName: string): Promise<void> {
     if (!this.enabled) return;
     try {
       const session = await this.prisma.session.findFirst({
@@ -141,15 +146,14 @@ export class PushService {
       if (!ids.includes(sessionId)) return;
       const tokens = await this.targets(session.ownerId);
       if (tokens.length === 0) return;
-      const alreadyFlagged = this.badgeState.get(session.ownerId)?.sessions.has(sessionId) ?? false;
       this.badgeState.set(session.ownerId, { badge: ids.length, sessions: new Set(ids) });
       // A turn asking permission for several tools at once creates an approval apiece, and each one
       // lands here. The badge counts sessions, so it hasn't moved, and the app coalesces them into a
       // single "N pending" row — only the alerts didn't coalesce, so a parallel tool call rang the
       // phone once per tool. Alert on the session's 0 → pending edge, which is the transition the
-      // clients notify on too (SessionDelta.diff). Per-replica and lost on restart: the worst case
-      // is the extra banner we have today.
-      if (alreadyFlagged) return;
+      // clients notify on too (SessionDelta.diff). Decided on the session row, not in this process's
+      // memory: the approvals of one turn can reach different apiservers, and each used to ring once.
+      if (!(await this.claimApprovalAlert(sessionId, approvalId))) return;
       const badge = ids.length;
 
       const body = JSON.stringify({
@@ -168,6 +172,41 @@ export class PushService {
     } catch (err) {
       this.log.warn(`push notify failed: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * Whether this approval is the session's 0 → pending edge and nobody has rung for it yet; true
+   * claims the alert. Decided on the session row, so one turn's approvals ring once between every
+   * apiserver that took them:
+   *
+   *   - The approval opens a stretch of pending approvals when no other approval of the session was
+   *     pending as it was asked: none asked before it (by created_at, then id) is still pending, or
+   *     was answered after it was asked.
+   *   - `alerted_approval_at` is the created_at of the approval the last alert was for, and only
+   *     moves forward. A stretch's first approval is asked after every earlier stretch's, so it is
+   *     past that mark unless its own stretch has rung already. That is what stops a second alert
+   *     when two approvals of one stretch both look like its first: the one asked first had not
+   *     committed yet when the other was decided.
+   *
+   * The row lock comes first and the decision after it, in a statement of its own, so each decision
+   * reads every approval committed before it held the lock: of two approvals asked together,
+   * whichever is decided second sees the other.
+   */
+  private async claimApprovalAlert(sessionId: string, approvalId: string): Promise<boolean> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR NO KEY UPDATE`;
+      const claimed = await tx.$executeRaw`
+        UPDATE "session" AS s SET "alerted_approval_at" = x."created_at"
+          FROM "approval" AS x
+         WHERE s."id" = ${sessionId}::uuid AND x."id" = ${approvalId}::uuid AND x."session_id" = s."id"
+           AND (s."alerted_approval_at" IS NULL OR s."alerted_approval_at" < x."created_at")
+           AND NOT EXISTS (
+             SELECT 1 FROM "approval" AS a
+              WHERE a."session_id" = s."id" AND a."id" <> x."id"
+                AND (a."created_at", a."id") < (x."created_at", x."id")
+                AND (a."status" = 'PENDING' OR a."decided_at" > x."created_at"))`;
+      return claimed === 1;
+    }, loggedRetry(this.log, 'push.claimApprovalAlert'));
   }
 
   /**
@@ -301,7 +340,9 @@ export class PushService {
    * rang within `AGENT_NOTIFY_MIN_INTERVAL_MS`. The rate limit exists because the interrupt budget
    * is per-person while the number of agents running is not — the same reason `settleAlert` is as
    * narrow as it is — and a dropped message is not lost, only unannounced: it stays in the
-   * session's transcript, where the user reads it when they arrive.
+   * session's transcript, where the user reads it when they arrive. The limit is kept on the
+   * session row (on the account's, headless), so it holds whichever door the call came through and
+   * whichever apiserver took it (claimAgentNotify).
    *
    * No badge: that count means "sessions needing your reply", and an agent talking is not one.
    */
@@ -318,35 +359,32 @@ export class PushService {
     if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
     try {
       let title = input.fallbackTitle;
+      // When this session (headless, this account) last rang the owner's devices.
+      let rang: Date | null = null;
       if (input.sessionId) {
         // Scoped to the owner the runner token authenticated: a session id from another account
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true },
+          select: { title: true, agentNotifiedAt: true },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
         title = session.title || input.fallbackTitle;
+        rang = session.agentNotifiedAt ?? null;
       }
       const user = await this.prisma.user.findUnique({
         where: { id: input.ownerId },
-        select: { preferences: true },
+        select: { preferences: true, agentNotifiedAt: true },
       });
       const prefs = (user?.preferences ?? {}) as { notifyAgentMessage?: boolean };
       if (prefs.notifyAgentMessage === false) {
         return { delivered: false, reason: 'this account has turned agent notifications off' };
       }
+      if (!input.sessionId) rang = user?.agentNotifiedAt ?? null;
 
-      const key = input.sessionId ?? `owner:${input.ownerId}`;
-      const now = Date.now();
-      for (const [k, at] of this.lastAgentNotify) {
-        if (now - at >= AGENT_NOTIFY_MIN_INTERVAL_MS) this.lastAgentNotify.delete(k);
-      }
-      const last = this.lastAgentNotify.get(key);
-      if (last !== undefined) {
-        const wait = Math.ceil((AGENT_NOTIFY_MIN_INTERVAL_MS - (now - last)) / 1000);
-        return { delivered: false, reason: `rate limited — try again in ${wait}s` };
-      }
+      const now = new Date();
+      const wait = agentNotifyWait(rang, now);
+      if (wait !== null) return { delivered: false, reason: `rate limited — try again in ${wait}s` };
 
       const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) {
@@ -372,7 +410,11 @@ export class PushService {
 
       // Recorded before the round-trip: an APNs call that is slow or fails still consumed this
       // session's turn to interrupt, and retrying it in a tight loop is exactly what the limit is for.
-      this.lastAgentNotify.set(key, now);
+      // A call another apiserver recorded since the read above wins, and this one is refused.
+      const taken = await this.claimAgentNotify(input, now);
+      if (taken !== null) {
+        return { delivered: false, reason: `rate limited — try again in ${agentNotifyWait(taken, now) ?? 1}s` };
+      }
       const devices = await this.deliver(tokens, body, 'alert', '10');
       if (devices === 0) return { delivered: false, reason: 'no device accepted the notification' };
       return { delivered: true, devices, ...(alert.truncated ? { truncated: true } : {}) };
@@ -381,6 +423,29 @@ export class PushService {
       this.log.warn(`agent notify failed: ${message}`);
       return { delivered: false, reason: `push failed: ${message}` };
     }
+  }
+
+  /**
+   * Take this session's (headless, this account's) once-a-minute turn to ring the owner: one
+   * compare-and-set that records `now` only while the last ring is at least the interval old.
+   * Null when it is taken; otherwise the ring that holds it, recorded by another call since the
+   * caller read the row — on another apiserver, or through the other door (POST /runner/notify,
+   * POST /runner/sessions/:id/notify), all of which reach this one row.
+   */
+  private async claimAgentNotify(input: { ownerId: string; sessionId?: string }, now: Date): Promise<Date | null> {
+    const due = new Date(now.getTime() - AGENT_NOTIFY_MIN_INTERVAL_MS);
+    const free = { OR: [{ agentNotifiedAt: null }, { agentNotifiedAt: { lte: due } }] };
+    const claimed = input.sessionId
+      ? await this.prisma.session.updateMany({
+          where: { id: input.sessionId, ownerId: input.ownerId, ...free },
+          data: { agentNotifiedAt: now },
+        })
+      : await this.prisma.user.updateMany({ where: { id: input.ownerId, ...free }, data: { agentNotifiedAt: now } });
+    if (claimed.count === 1) return null;
+    const holder = input.sessionId
+      ? await this.prisma.session.findFirst({ where: { id: input.sessionId }, select: { agentNotifiedAt: true } })
+      : await this.prisma.user.findUnique({ where: { id: input.ownerId }, select: { agentNotifiedAt: true } });
+    return holder?.agentNotifiedAt ?? now;
   }
 
   /**

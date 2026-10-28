@@ -136,7 +136,8 @@ function notifier(transport: FcmTransport) {
     token: 'apns', environment: 'production', updatedAt: new Date(0) };
   const android = { ...ios, id: 'android', platform: 'android', bundleId: values.FCM_ANDROID_PACKAGE, token: 'fcm' };
   const service = new PushService({
-    user: { findUnique: async () => ({ preferences: {} }) },
+    // A headless notify takes the account's once-a-minute turn (claimAgentNotify): free, every call here.
+    user: { findUnique: async () => ({ preferences: {} }), updateMany: async () => ({ count: 1 }) },
     deviceToken: {
       findMany: async () => [ios, android], findFirst: async () => ({ id: 'current' }),
       deleteMany: async (q: unknown) => { removed.push(q); },
