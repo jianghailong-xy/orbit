@@ -28,7 +28,7 @@ class InfrastructureCopyParityTest {
         val source = listOf("${kit}Infrastructure.swift", "${kit}ProvidersOverview.swift", "${kit}AppSection.swift", "${views}RunnerEnginePage.swift")
             .joinToString("\n") { read(it) }
         val words = constants(Infrastructure)
-        assertTrue("Infrastructure holds no words", words.size >= 27)
+        assertTrue("Infrastructure holds no words", words.size >= 17)
         assertEquals("Infrastructure strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
         // The sentences built around a name keep iOS's words around it.
         listOf("\\(ProviderEngines.cliName(engine.rawValue)) is signed out on \\(machine)\"", "\"\\(machine) is offline\"",

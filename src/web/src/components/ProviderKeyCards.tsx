@@ -27,9 +27,9 @@ function byVendor(rows: ProviderRow[]): Array<{ vendor: string; rows: ProviderRo
 }
 
 /**
- * The engines a key runs on, in the server's order (`engines`, its default first) — the engines the
- * By engine list lists it under. A Claude subscription token, which Anthropic serves to Claude Code
- * alone, says why that is the only one: an Anthropic-protocol key runs on OpenCode too otherwise.
+ * The engines a key runs on, in the server's order (`engines`, its default first). A Claude subscription
+ * token, which Anthropic serves to Claude Code alone, says why that is the only one: an
+ * Anthropic-protocol key runs on OpenCode too otherwise.
  */
 function KeyEngines({ row }: { row: ProviderRow }) {
   const subscription =

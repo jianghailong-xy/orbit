@@ -170,11 +170,9 @@ class RemoveDefaultTest {
         val one = removed(work())
         assertEquals(RunnerCopy.SIGNED_IN to "ok", RunnerPage.engineStatus(health(one), one))
         assertFalse(RunnerPage.needsSignIn(health(one), one))
-        assertEquals(1, Infrastructure.logins(one, "codex"))
         val two = removed(work(), personal("no"))
         assertEquals(RunnerCopy.SIGNED_OUT to "warn", RunnerPage.engineStatus(health(two), two))
         assertTrue("Personal's sign-in", RunnerPage.needsSignIn(health(two), two))
-        assertEquals(1, Infrastructure.logins(two, "codex"))
         assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(two))
         // Every one that remains signed out: Codex is signed out there for Orbit, whatever Default's sign-in on the machine.
         val out = removed(work("no"), personal("no"))

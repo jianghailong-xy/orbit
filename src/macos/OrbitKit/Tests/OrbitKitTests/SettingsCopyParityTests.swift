@@ -26,7 +26,6 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
     private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
     private static let keyCards = "src/web/src/components/ProviderKeyCards.tsx"
-    private static let overview = "src/web/src/components/InfrastructureOverview.tsx"
     private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
     private static let engineNames = "src/shared/src/providerEngines.ts"
@@ -263,9 +262,9 @@ final class SettingsCopyParityTests: XCTestCase {
 
     /// Needs you: each line and what it means, and the press at its end. The web drew the same lines in
     /// `NeedsAttention` until docs/mocks/infrastructure-focus (2026-10-25), which moved a signed-out engine
-    /// onto its machine's card — an amber chip with its Sign in — and left an offline machine and an
-    /// unavailable pool to their own cards; iOS keeps the block until its own page is redrawn. What is
-    /// still the web's: the press, and the machine named as the web names it.
+    /// onto its machine's card — since 2026-10-28 only onto its row, once the card is open — and left an
+    /// offline machine and an unavailable pool to their own cards; iOS keeps the block until its own page
+    /// is redrawn. What is still the web's: the press, and the machine named as the web names it.
     func testNeedsYouSaysWhatTheWebSays() throws {
         XCTAssertEqual(Infrastructure.signedOutLine(engine: .codex, machine: "Mac Studio"), "Codex is signed out on Mac Studio")
         XCTAssertEqual(Infrastructure.signedOutLine(engine: .antigravity, machine: "HPC"), "Antigravity CLI is signed out on HPC")
@@ -275,36 +274,18 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
         XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
                        "No account can run · no session can start on it")
-        // A signed-out engine's chip signs it in with the same word.
-        assertSays(try web(Self.engines), "> \(Infrastructure.signIn) </Button>", in: Self.engines)
-        // The machine named as the web names it: its alias, else its own name.
-        let overview = try web(Self.overview)
-        assertSays(overview, "const machineName = (runner: Runner) => runner.displayName || runner.name;", in: Self.overview)
+        // A signed-out engine's row signs it in with the same word.
+        let engines = try web(Self.engines)
+        assertSays(engines, "> \(Infrastructure.signIn) </Button>", in: Self.engines)
+        // The machine named as the web's card names it: its alias, else its own name.
+        assertSays(engines, "const name = runner.displayName || runner.name;", in: Self.engines)
     }
 
-    /// What your agents can run on: each card's state, its sources' names and how they are joined, and
-    /// what an engine with none says — the web's `EngineOverview`. Its heading and line are iOS's own since
-    /// docs/mocks/infrastructure-focus moved the web's to the end of its page as "By engine".
-    func testWhatYourAgentsCanRunOnSaysWhatTheWebSays() throws {
-        let overview = try web(Self.overview)
-        XCTAssertEqual(Infrastructure.enginesTitle, "What your agents can run on")
-        assertSays(overview, "{ready ? '\(Infrastructure.ready)' : '\(Infrastructure.notSetUp)'}", in: Self.overview)
-        assertSays(overview,
-                   "<b>{engine === AgentProvider.OPENCODE ? '\(Infrastructure.ownSignIn)' : '\(Infrastructure.subscription)'}</b> · {machines.join(', ')}",
-                   in: Self.overview)
-        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.machinesLabel),
-                       ["Subscription", "Subscription", "Subscription", "Subscription", "Own sign-in", "Subscription"])
-        assertSays(overview, "logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)", in: Self.overview)
-        assertSays(overview, "<b>\(Infrastructure.apiKey)</b> ·{' '}", in: Self.overview)
-        assertSays(overview, "{index > 0 && ', '}", in: Self.overview)
-        assertSays(overview, "<b>\(Infrastructure.pool)</b> · {enginePools.map((pool) => pool.label).join(', ')}",
-                   in: Self.overview)
-        assertSays(overview, "\(Infrastructure.nothingCanPay) <Link to={installOn(engine)}>\(Infrastructure.installOnAMachine)</Link>",
-                   in: Self.overview)
-        // Every engine a session can run on, a card each in the pickers' order, by its CLI's name — the
-        // shared table every list on the page names them by.
-        assertSays(overview, "{ALL_ENGINES.map((engine) => {", in: Self.overview)
-        assertSays(overview, "<div className=\"infra-engine-name\"> {ENGINE_CLI_NAMES[engine]}", in: Self.overview)
+    /// The engines, as the web names them: every engine a session can run on, in the pickers' order and by
+    /// its CLI's name, and a machine's sign-in naming them the same.
+    func testTheEnginesAreNamedAsTheWebNamesThem() throws {
+        // Every engine a session can run on, in the pickers' order, by its CLI's name — the shared table
+        // every list on the web names them by.
         let shared = try web(Self.engineNames)
         assertSays(shared, "export const ALL_ENGINES: readonly AgentProvider[] = [ "
                        + ProviderEngines.names.map { "AgentProvider.\($0.engine.uppercased())," }.joined(separator: " "),
@@ -312,16 +293,13 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(shared, ProviderEngines.names.map { "[AgentProvider.\($0.engine.uppercased())]: '\($0.name)'," }
                        .joined(separator: " "),
                    in: Self.engineNames)
-        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.name),
-                       ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
         // A machine's sign-in names the engines it signs in as the web's sign-in does — Cursor CLI by the
         // shared table's name, which the web reads from it rather than writing it out.
         let names = LoginEngine.allCases.filter { $0 != .cursor }.map { "\($0.rawValue): '\($0.displayName)'" }
             .joined(separator: ", ") + ", cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],"
         assertSays(try web("src/web/src/components/RunnerSignIn.tsx"), names, in: "src/web/src/components/RunnerSignIn.tsx")
         XCTAssertEqual(LoginEngine.cursor.displayName, ProviderEngines.cliName("cursor"))
-        // A key keeps the name its owner gave it — a Gemini key's too — under every engine it runs on.
-        assertSays(overview, "{index > 0 && ', '} {key.label}", in: Self.overview)
+        // A key keeps the name its owner gave it, a Gemini key's too.
         XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")
     }
 

@@ -4,14 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -19,7 +17,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
@@ -52,8 +49,8 @@ internal class InfrastructureModel(private val api: ManagementApi) {
     private var poolsAnswered by mutableStateOf(false)
     private var sharedAnswered by mutableStateOf(false)
 
-    /** Every list has had its answer, a failed one included: the two blocks at the top wait for that, as iOS's and the web's do — an
-     * engine called Not set up before its keys arrived would be wrong. */
+    /** Every list has had its answer, a failed one included: Needs you at the top waits for that, as iOS's does, so it doesn't change
+     * under the reader as each list arrives. */
     val settled get() = (machines.loaded || machines.failed) && keysAnswered && poolsAnswered && sharedAnswered
 
     suspend fun loadKeys() {
@@ -90,16 +87,12 @@ internal class InfrastructureModel(private val api: ManagementApi) {
     }
 
     fun attention(runners: List<JsonObject>, nowMs: Long) = Infrastructure.attention(runners, memberPools(nowMs), ownPools(nowMs), nowMs)
-
-    /** Every engine a session can run on, and what can pay for it now — a key under every engine it runs on. */
-    fun engines(nowMs: Long) = Infrastructure.engineCards(machines.runners, keys, memberPools(nowMs) + ownPools(nowMs))
 }
 
 /**
  * The Infrastructure page (iOS RunnersListView, docs/mocks/infrastructure-page/03-ios.png), Settings › Infrastructure: what needs a person,
- * what each engine can run on, the machines (each opening its record; reordered and removed here), Add Runner, then the account pools and
- * the API keys. Every way out stays in the app: an engine is signed in or installed on its page, a machine on its record, a pool on its
- * page, a DeepSeek key on its page.
+ * the machines (each opening its record; reordered and removed here), Add Runner, then the account pools and the API keys. Every way out
+ * stays in the app: an engine is signed in on its page, a machine on its record, a pool on its page, a DeepSeek key on its page.
  */
 @Composable
 internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
@@ -152,11 +145,6 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                         is Infrastructure.Kind.Offline -> runner(kind.runnerId)
                         is Infrastructure.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
                     }
-                }
-                // Install on a machine: that engine's page on the first machine online, where Install is — or, with none online,
-                // registering one.
-                EnginesSection(model.engines(now)) { slug ->
-                    Infrastructure.installTarget(machines.runners)?.let { engine(it.text("id"), slug) } ?: run { adding = true }
                 }
             }
             if (machines.loaded && machines.runners.isNotEmpty()) {
@@ -216,66 +204,6 @@ private fun bold(text: String, names: List<String>): AnnotatedString = buildAnno
         addStyle(SpanStyle(fontWeight = FontWeight.Bold), at, at + name.length)
         from = at + name.length
     }
-}
-
-/** A row per engine — all six, in the pickers' order, each by its CLI's name — Ready with what can pay for it now: its machines (a
- * subscription; OpenCode's own sign-in), every key that runs on it with the model a session there starts on, its pools. Or Not set up,
- * with the way to install it on a machine. */
-@Composable
-private fun EnginesSection(engines: List<Infrastructure.EngineCard>, install: (String) -> Unit) {
-    FormSection(Infrastructure.ENGINES_TITLE, footer = Infrastructure.ENGINES_DETAIL) {
-        engines.forEachIndexed { index, card ->
-            if (index > 0) HorizontalDivider()
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("engine-sources:${card.engine}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(card.name, style = MaterialTheme.typography.titleMedium)
-                    StateChip(card.ready)
-                }
-                if (card.ready) {
-                    if (card.machines.isNotEmpty()) SourceLine(card.machinesLabel, AnnotatedString(card.machines.joinToString(", ")))
-                    if (card.keys.isNotEmpty()) SourceLine(Infrastructure.API_KEY, keys(card.keys))
-                    if (card.pools.isNotEmpty()) SourceLine(Infrastructure.POOL, AnnotatedString(card.pools.joinToString(", ")))
-                } else {
-                    Text(Infrastructure.NOTHING_CAN_PAY, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    TextButton(onClick = { install(card.engine) }, contentPadding = PaddingValues(vertical = 4.dp)) {
-                        Text(Infrastructure.INSTALL_ON_A_MACHINE, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** "DeepSeek DeepSeek V4 Pro, DeepSeek 2 DeepSeek V4 Pro": each key, and its model set apart. */
-@Composable
-private fun keys(keys: List<Infrastructure.EngineCard.Key>): AnnotatedString {
-    val faint = Ink.muted.copy(alpha = .75f)
-    return buildAnnotatedString {
-        keys.forEachIndexed { index, key ->
-            if (index > 0) append(", ")
-            append(key.label)
-            key.model?.let { withStyle(SpanStyle(color = faint)) { append(" $it") } }
-        }
-    }
-}
-
-/** "Subscription · Mac Studio ×2, HPC", its source's name in bold. */
-@Composable
-private fun SourceLine(source: String, names: AnnotatedString) {
-    Text(buildAnnotatedString {
-        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(source) }
-        append(RunnerCopy.SEP)
-        append(names)
-    }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-}
-
-/** Ready in green, Not set up in grey — the web card's tag. */
-@Composable
-private fun StateChip(ready: Boolean) {
-    val ink = if (ready) Ink.green else Ink.muted
-    Text(if (ready) Infrastructure.READY else Infrastructure.NOT_SET_UP, Modifier.clip(RoundedCornerShape(5.dp))
-        .background(ink.copy(alpha = if (ready) .12f else .1f)).padding(horizontal = 6.dp, vertical = 1.dp),
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = ink, maxLines = 1, softWrap = false)
 }
 
 /** The pools the account is in, then its own: a row each, saying where it stands, opening the pool's page. */

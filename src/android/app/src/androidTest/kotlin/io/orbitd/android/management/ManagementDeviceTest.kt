@@ -507,9 +507,9 @@ class ManagementDeviceTest {
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
                 back(); await("Appearance")
-                // The keys end the page, below the engines and machines, which come only once each of its lists has answered
-                // (InfrastructureModel.settled): wait for those, bring the keys up, then read their balances.
-                click(hasText("Machines & models") and hasClickAction()); await("What your agents can run on")
+                // The keys end the page, below the machines: wait for those (their count heads them once they are read), bring the
+                // keys up, then read their balances.
+                click(hasText("Machines & models") and hasClickAction()); await(" slots busy")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
                 await("¥110.00 · $5.00"); await("Unavailable")
                 capture("a13d-infrastructure-keys")
@@ -656,9 +656,9 @@ class ManagementDeviceTest {
     /**
      * A13g (A13-17 with A07-15 ②, iOS 5e75edbde): Settings' one Infrastructure row says how many things need you; the page says each —
      * an engine signed out on a machine online, a machine offline, a pool no session can start on — with its way out in the app, then
-     * what each engine can run on, the machines, Add Runner, the pools and the keys, top to bottom; it installs OpenCode on the first
-     * machine online, which lacks it, and reads the machines again every 15 s while it is up (on the compose rule's clock, which a
-     * test's effects run on) and not while the app is in the background.
+     * the machines, Add Runner, the pools and the keys, top to bottom; it installs OpenCode from the page of the machine that lacks it,
+     * and reads the machines again every 15 s while it is up (on the compose rule's clock, which a test's effects run on) and not while
+     * the app is in the background.
      */
     @Test fun infrastructureSaysWhatNeedsYouAndInstallsOpenCode() {
         start()
@@ -674,11 +674,10 @@ class ManagementDeviceTest {
                 click(hasText("Machines & models") and hasClickAction())
                 await("Codex is signed out on Controlled remote"); await("ThinkPad is offline"); await("Old keys is unavailable")
                 capture("infrastructure-needs-you")
-                val sections = listOf("Needs you", "What your agents can run on", "Machines", "Add Runner", "Account pools", "API keys")
+                val sections = listOf("Needs you", "Machines", "Add Runner", "Account pools", "API keys")
                 // Down the page, on screen or scrolled out of it (boundsInRoot clips to what is on screen).
                 val tops = sections.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
                 assertEquals("top to bottom: $sections", tops.sorted(), tops)
-                compose.onNodeWithText("What your agents can run on").performScrollTo(); capture("infrastructure-engines")
                 compose.onNodeWithText("2 machines · 1 / 4 slots busy").performScrollTo()
                 await("1 / 4 running · 1 engine signed out"); capture("infrastructure-machines")
                 compose.onNodeWithText("API keys").performScrollTo(); await("No keys yet"); capture("infrastructure-pools-keys")
@@ -692,13 +691,16 @@ class ManagementDeviceTest {
                 click(hasText("Manage") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:pool:P3")))
                 await("Account pool"); capture("infrastructure-manage-pool")
                 back(); await("Needs you")
-                // OpenCode: no key and no machine's own sign-in, so Install on a machine opens its page on the first machine online.
-                click(hasText("Install on a machine") and hasClickAction() and hasAnyAncestor(hasTestTag("engine-sources:opencode")))
+                // OpenCode, which the machine lacks: its row on the machine's page opens OpenCode's page, where Install is.
+                click(hasText("Controlled remote") and hasText(" running", substring = true) and hasClickAction())
+                compose.waitUntil(15_000) { compose.onAllNodesWithTag("engine-row:opencode").fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithTag("engine-row:opencode").performScrollTo()
+                click(hasTestTag("engine-row:opencode"))
                 await("Install OpenCode"); capture("infrastructure-opencode-page")
                 click(hasText("Install OpenCode") and hasClickAction())
                 compose.waitUntil(10_000) { installs.contains("opencode") }
                 await("Installing…"); capture("infrastructure-opencode-installing")
-                back(); await("Needs you")
+                back(); back(); await("Needs you")
                 // The machines, read again every 15 s while the page is up — and not while the app is in the background.
                 compose.waitForIdle(); SystemClock.sleep(1_000)
                 val before = pageReads().size

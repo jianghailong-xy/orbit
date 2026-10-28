@@ -165,18 +165,7 @@ class CursorAccountsTest {
 
     // Infrastructure
 
-    @Test fun theSeventhEngineCardCountsSignedInAccountsAndItsKeysRunOnAuto() {
-        val key = json("""{"slug":"cursor-api","label":"Cursor","runtime":"cursor","presetSlug":"cursor-api","engines":["cursor"],"enabled":true,
-            "models":[],"defaultModel":""}""")
-        val card = Infrastructure.engineCards(listOf(hpc()), listOf(key), emptyList()).last()
-        assertEquals("Cursor CLI", card.name)
-        assertEquals(listOf("hpc ×2"), card.machines)
-        assertEquals(listOf(Infrastructure.EngineCard.Key("Cursor", "Auto")), card.keys)
-        assertTrue(card.ready)
-        // A machine that can't run it counts none of its sign-ins.
-        val wrong = single("""{"engine":"cursor","installed":true,"auth":"yes","installationError":"CURSOR_VERSION_INCOMPATIBLE: x"}""", "")
-        assertEquals(0, Infrastructure.logins(wrong, "cursor"))
-        assertEquals(2, Infrastructure.logins(hpc(), "cursor"))
+    @Test fun cursorCliIsCountedWhereverItsRowCanSignItIn() {
         // Counted wherever its row can get it signed in: on hpc, beside the three engines it doesn't have.
         assertEquals("1 of 4 signed in", Infrastructure.summary(hpc(), now))
     }

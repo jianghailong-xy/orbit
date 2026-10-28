@@ -11,10 +11,10 @@ import kotlinx.serialization.json.put
 /**
  * OrbitKit `Infrastructure` and `ProvidersOverview` (iOS 33e0e2e09, 5e75edbde): the Infrastructure page — where the account's agents run
  * and whose model quota they spend, the web's /infrastructure on one page, which Runners and Providers became. Top to bottom: what needs
- * a person, what each engine can run on now, the machines, Add Runner, the account pools and the API keys.
+ * a person, the machines, Add Runner, the account pools and the API keys.
  *
- * The two blocks at its top are the web's own rules (InfrastructureOverview.tsx), read from the same lists — the machines (GET runners),
- * the account's own keys (GET providers/mine) and its pools, its own and the ones it is in — so nothing new is asked of the server.
+ * Needs you, at its top, is iOS's rules (the web drew it too until 2026-10-25), read from the same lists — the machines (GET runners) and
+ * the pools, its own and the ones it is in — so nothing new is asked of the server.
  * Pure, so InfrastructureTest pins it to iOS's cases and InfrastructureCopyParityTest its words to the Swift source.
  */
 internal object Infrastructure {
@@ -24,20 +24,8 @@ internal object Infrastructure {
     /** The page's line: under Settings' Machines & models row. */
     const val SUBTITLE = "Where your agents run, and whose model quota they spend."
     const val NEEDS_YOU = "Needs you"
-    const val ENGINES_TITLE = "What your agents can run on"
-    const val ENGINES_DETAIL = "Every engine, and everything that can pay for it right now."
     const val MACHINES = "Machines"
     const val MACHINES_DETAIL = "Subscriptions signed in here are spent only by sessions on that machine."
-    const val READY = "Ready"
-    const val NOT_SET_UP = "Not set up"
-    const val SUBSCRIPTION = "Subscription"
-    /** OpenCode's sign-in on a machine, which is its own rather than a subscription's. */
-    const val OWN_SIGN_IN = "Own sign-in"
-    const val API_KEY = "API key"
-    const val POOL = "Pool"
-    /** An engine nothing can pay for. The web goes on to offer a key too; adding a key happens on the web. */
-    const val NOTHING_CAN_PAY = "No machine signed in, no key."
-    const val INSTALL_ON_A_MACHINE = "Install on a machine"
     const val SIGN_IN = "Sign in"
     const val DETAILS = "Details"
     const val MANAGE = "Manage"
@@ -137,62 +125,7 @@ internal object Infrastructure {
         return health?.list("accounts").orEmpty().none { it.str("auth") == "yes" }
     }
 
-    // What each engine can run on
-
-    /** One engine and what can pay for it now (web's EngineOverview card), for every engine a session can run on. */
-    data class EngineCard(val engine: String, val machines: List<String>, val keys: List<Key>, val pools: List<String>) {
-        /** A key that runs on the engine, and the model a session on it starts on there. */
-        data class Key(val label: String, val model: String?)
-        /** Its CLI's own name: "Antigravity CLI". */
-        val name get() = ProviderEngines.cliName(engine)
-        /** What its machines are: OpenCode's own sign-in, every other engine's subscription. */
-        val machinesLabel get() = if (engine == ProviderEngines.OPENCODE) OWN_SIGN_IN else SUBSCRIPTION
-        /** Ready with any source at all; Not set up without. */
-        val ready get() = machines.isNotEmpty() || keys.isNotEmpty() || pools.isNotEmpty()
-    }
-
-    /** Every engine, and what can pay for it now: the machines online signed in to it, by how many of their accounts ("Mac Studio ×2");
-     * each enabled key under every engine the server says it runs on (`engines`), with the model a session on it starts on there; its
-     * pools that can start a session (one that is unavailable is in Needs you instead). Cursor CLI once a machine of the account knows it
-     * (ProviderEngines.androidShowsEngine). */
-    fun engineCards(runners: List<JsonObject>, keys: List<JsonObject>, pools: List<Pool>): List<EngineCard> {
-        val online = runners.filter { it.bool("online") == true }
-        val harness = harnessModel(online)
-        val cursor = cursorModel(online)
-        return ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, runners) }.map { engine ->
-            // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
-            val machines = if (engine == ProviderEngines.DSH) emptyList() else online.mapNotNull { runner ->
-                val count = logins(runner, engine)
-                if (count <= 0) null else RunnerPage.displayName(runner).let { if (count > 1) "$it ×$count" else it }
-            }
-            val engineKeys = keys.filter { it.bool("enabled") != false && engine in KeyEngines.engines(it) }.map {
-                EngineCard.Key(it.str("label") ?: it.text("slug"), when (engine) {
-                    ProviderEngines.DSH -> harness
-                    ProviderEngines.CURSOR -> cursor
-                    else -> defaultModel(it)
-                })
-            }
-            val enginePools = pools.filter { it.unavailable == null && (if (ProviderPools.runsCodex(it)) ProviderEngines.CODEX else ProviderEngines.CLAUDE) == engine }
-            EngineCard(engine, machines, engineKeys, enginePools.map { it.label })
-        }
-    }
-
-    /** The machine Install on a machine opens, on that engine's page: the first one online, as the web's does. Null with none online —
-     * the way to one is registering a machine. */
-    fun installTarget(runners: List<JsonObject>): JsonObject? = runners.firstOrNull { it.bool("online") == true }
-
-    /** How many logins of this engine a session on this machine can run on (web's loginsOn): each account signed in, or the engine's own
-     * answer where it reports no accounts — for OpenCode, whether its own sign-in is set up there. Antigravity's Default on the machine's
-     * own Gemini key counts, as it does on the machine's page. */
-    fun logins(runner: JsonObject, engine: String): Int {
-        val health = engineHealth(runner, engine) ?: return 0
-        if (health.bool("installed") != true) return 0
-        if (engine == ProviderEngines.ANTIGRAVITY && runner.obj("antigravity")?.bool("supported") == false) return 0
-        if (engine == ProviderEngines.CURSOR && CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) return 0
-        val accounts = health.list("accounts")
-        if (accounts.isEmpty()) return if (health.str("auth") == "yes") 1 else 0
-        return accounts.count { it.str("auth") == "yes" || RunnerPage.runsOnEnvKey(health, it.text("id"), it.str("auth")) }
-    }
+    // A key's model
 
     /** The model a session on this key starts on, by the name the key's own list gives it (web's defaultModelOf): its default, else its
      * first model. */
@@ -200,19 +133,6 @@ internal object Infrastructure {
         val models = key.list("models")
         val model = listOfNotNull(key.str("defaultModel"), models.firstOrNull()?.str("value")).firstOrNull { it.isNotEmpty() } ?: return null
         return models.firstOrNull { it.str("value") == model }?.str("label")?.takeIf { it.isNotEmpty() } ?: model
-    }
-
-    /** The model a DeepSeek Harness session starts on, by the name its catalogue gives it (web's harnessModelOf): not a key's own —
-     * Harness lists its models on each machine, whichever DeepSeek key it runs on — read off the first machine online that can run it and
-     * has reported them; with none, no name. */
-    private fun harnessModel(online: List<JsonObject>): String? {
-        for (runner in online) {
-            if (DshRuntime.state(runner) != DshRuntime.RunnerState.READY) continue
-            val catalog = runner.obj("modelCatalog")?.list(ProviderEngines.DSH).orEmpty().takeIf { it.isNotEmpty() } ?: continue
-            val model = runner.obj("runtimeDefaultModels")?.str(ProviderEngines.DSH)
-            return catalog.firstOrNull { it.str("value") == model }?.str("label") ?: catalog[0].str("label")
-        }
-        return null
     }
 
     /** The model a Cursor CLI session on a Cursor key starts on (web's cursorModelOf): Auto, Cursor's own default, by the name the
@@ -319,6 +239,16 @@ internal object Infrastructure {
     /** Whether OpenCode's page offers to install it (web's OpenCode row): it signs in per provider, on the machine, so its install is the
      * one press its page has — on a machine that reports it missing, or whose last install of it failed. A runner that never mentions
      * OpenCode gets none, as the web draws it no row. */
+    /** Whether an engine the machine lacks has its page to open from the machine's record (web's Install on its row): that page installs
+     * it — Install, or Retry after an install that failed — or shows the install running. DeepSeek Harness's page installs its pinned CLI
+     * where the machine can run one (OrbitKit `Infrastructure.installsFromPage`). */
+    fun installsFromPage(runner: JsonObject, engine: String): Boolean {
+        if (engine == ProviderEngines.DSH) return DshRuntime.state(runner).installable || runner.obj("install")?.str("engine") == ProviderEngines.DSH
+        val health = runner.list("engines").firstOrNull { it.str("engine") == engine }
+        if (rowKind(health, runner.obj("install"), engine) == RowKind.INSTALLING) return true
+        if (engine == ProviderEngines.OPENCODE) return installsOpenCode(runner)
+        return RunnerPage.isLoginEngine(engine) && installable(runner, engine)
+    }
     fun installsOpenCode(runner: JsonObject): Boolean {
         val health = runner.list("engines").firstOrNull { it.str("engine") == ProviderEngines.OPENCODE } ?: return false
         return rowKind(health, runner.obj("install"), ProviderEngines.OPENCODE).let { it == RowKind.MISSING || it == RowKind.INSTALL_FAILED }
