@@ -334,6 +334,12 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       },
     }),
   },
+  // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
+  // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
+  'POST /runner/sessions/:id/notify': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { message: 'from the census' } }),
+  },
   'POST /runner/sessions/:id/scheduled-wakeup': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { delaySeconds: 120, reason: 'the census' } }),
