@@ -194,25 +194,43 @@ export class WikiModelRequestQueue implements OnApplicationBootstrap, OnModuleDe
    * A call that ends writes its answer or its failure under the claim's generation, and announces itself so
    * the job waiting on it wakes; a call that was aborted by SIGTERM saves its partial and lets its lease
    * out to now, so the next process's sweep takes it over.
+   *
+   * The settlement is the claim's last write. A cancel's release leaves the row running under this generation,
+   * so a renewal or write-back that reached the row after it would hold the lease out again, and the next
+   * process could not take the call over until that lease ran out. When the call ends, both timers stop and
+   * any of their writes still on the way lands first.
    */
   private async execute(claim: ClaimedWikiModelRequest): Promise<void> {
     const controller = new AbortController();
     this.inFlight.set(claim.id, { claim, controller });
     let partial = claim.partial ?? '';
     let written = partial;
+    const writes = new Set<Promise<void>>();
+    const track = (write: Promise<unknown>, what: string) => {
+      const landed: Promise<void> = write
+        .then(() => undefined, (error: unknown) => this.log.warn(`${what} failed: ${this.message(error)}`))
+        .finally(() => writes.delete(landed));
+      writes.add(landed);
+    };
     const renew = setInterval(() => {
-      void renewWikiModelRequestLease(this.prisma, { id: claim.id, generation: claim.leaseGeneration, leaseMs: this.leaseMs })
-        .catch((error: unknown) => this.log.warn(`the lease renewal failed: ${this.message(error)}`));
+      track(renewWikiModelRequestLease(this.prisma, { id: claim.id, generation: claim.leaseGeneration, leaseMs: this.leaseMs }),
+        'the lease renewal');
     }, this.options.renewMs ?? WIKI_MODEL_QUEUE.renewSeconds * 1000);
     renew.unref();
     const flush = setInterval(() => {
       if (partial === written) return;
       written = partial;
-      void writeWikiModelRequestPartial(this.prisma, {
+      track(writeWikiModelRequestPartial(this.prisma, {
         id: claim.id, generation: claim.leaseGeneration, partial, leaseMs: this.leaseMs,
-      }).catch((error: unknown) => this.log.warn(`the partial write-back failed: ${this.message(error)}`));
+      }), 'the partial write-back');
     }, this.options.partialMs ?? WIKI_MODEL_QUEUE.partialSeconds * 1000);
     flush.unref();
+    /** The call has ended: no renewal or write-back of it may reach the row after its settlement. */
+    const ended = async () => {
+      clearInterval(renew);
+      clearInterval(flush);
+      await Promise.all([...writes]);
+    };
     try {
       const answer = await askWikiSystemModel(this.endpoint(), {
         system: claim.request.system,
@@ -225,6 +243,7 @@ export class WikiModelRequestQueue implements OnApplicationBootstrap, OnModuleDe
           partial = text;
         },
       });
+      await ended();
       const settled = await succeedWikiModelRequest(this.prisma, {
         id: claim.id,
         generation: claim.leaseGeneration,
@@ -236,6 +255,7 @@ export class WikiModelRequestQueue implements OnApplicationBootstrap, OnModuleDe
       if (!settled) this.log.warn(`request ${claim.id} answered after its lease was taken over: the answer is dropped`);
       else await this.announce(claim.id);
     } catch (error) {
+      await ended();
       await this.settleFailure(claim, error);
     } finally {
       clearInterval(renew);

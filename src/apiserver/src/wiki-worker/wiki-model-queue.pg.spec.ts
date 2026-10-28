@@ -7,7 +7,7 @@
  *      longest-waiting;
  *   2. a scheduler is stopped mid-call and another takes over: the requests that already answered are not issued
  *      again, the interrupted one keeps its partial, is requeued and finishes, and every unit has one row and one
- *      answer;
+ *      answer; the stop's release is the last write on the lease, so no renewal holds the lease out after it;
  *   3. a 401 pauses the queue and a worker that starts with a good key resumes it; a model that is down is not called
  *      at all until it is up again;
  *   4. a request that waited past its step's limit fails with the wait limit's words, which is the job's cue to fail
@@ -26,6 +26,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { after, afterEach, test } from 'node:test';
 
 import type { PrismaClient } from '@prisma/client';
+import { WIKI_MODEL_QUEUE } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -227,14 +228,18 @@ afterEach(async () => {
   for (const one of live.splice(0)) await one.onModuleDestroy().catch(() => undefined);
 });
 
-/** A scheduler of one spec: fast timings, so a pass is milliseconds of work. */
+/**
+ * A scheduler of one spec: fast timings, so a pass is milliseconds of work — under the deployment's own lease. No
+ * case waits for a lease to run out, and a loaded machine can stall a process for longer than a short one, which
+ * would make a running row read as abandoned; and a lease let out to now must be told from one that was not.
+ */
 function scheduler(h: Harness, probe: WikiModelStatusProbe, concurrency = 2): WikiModelRequestQueue {
   const queue = new WikiModelRequestQueue(
     h.prisma as unknown as PrismaService,
     config(h, { ORBIT_WIKI_MODEL_CONCURRENCY: String(concurrency) }),
     probe,
     undefined,
-    { leaseMs: 400, renewMs: 100, partialMs: 40, pollMs: 30 },
+    { leaseMs: WIKI_MODEL_QUEUE.leaseSeconds * 1000, renewMs: 100, partialMs: 40, pollMs: 30 },
   );
   live.push(queue);
   return queue;
@@ -379,6 +384,8 @@ test('several schedulers claim at once; the deployment\'s concurrency is never p
   // More passes take the rest, still never more than two at once.
   h.model.behaviour.answer = () => ({ kind: 'stream', chunks: ['rest'] });
   await Promise.all([schedulers[0].runOnce(), schedulers[1].runOnce()]);
+  // The two those passes started end before the last pass claims: still in flight, they would leave it no room.
+  await Promise.all(schedulers.map((one) => one.whenIdle()));
   await schedulers[0].runOnce();
   await Promise.all(schedulers.map((one) => one.whenIdle()));
   for (const one of schedulers) await one.onModuleDestroy();
@@ -393,9 +400,11 @@ test('a scheduler stopped mid-call: answered requests are not issued again, the 
   const h = await boot();
   await reset(h);
   const probe = await modelUp(h);
-  const one = await enqueue(h, 'extract', 'one', { prompt: 'done-already' });
-  const two = await enqueue(h, 'extract', 'two', { prompt: 'interrupted' });
-  const three = await enqueue(h, 'extract', 'three', { prompt: 'never-started' });
+  // A second apart, so the first claim takes the first two: enqueued_at keeps milliseconds, and three enqueues in one
+  // millisecond would leave their order to their random ids.
+  const one = await enqueue(h, 'extract', 'one', { prompt: 'done-already', enqueuedAt: new Date(Date.now() - 3_000) });
+  const two = await enqueue(h, 'extract', 'two', { prompt: 'interrupted', enqueuedAt: new Date(Date.now() - 2_000) });
+  const three = await enqueue(h, 'extract', 'three', { prompt: 'never-started', enqueuedAt: new Date(Date.now() - 1_000) });
   // The first call answers at once; the second streams one chunk and then holds until the spec lets go.
   freshGate(h);
   h.model.behaviour.answer = (hit) => (hit.prompt === 'interrupted'
@@ -404,7 +413,8 @@ test('a scheduler stopped mid-call: answered requests are not issued again, the 
 
   const first = scheduler(h, probe);
   const pass = first.runOnce();
-  await waitFor('the interrupted call to have streamed its first chunk', async () => (await request(h, two)).partial === 'Part');
+  await waitFor('the first call to have answered and the interrupted one to have streamed its first chunk', async () =>
+    (await request(h, one)).state === 'succeeded' && (await request(h, two)).partial === 'Part');
   await first.onModuleDestroy();
   await pass;
   // The one that answered is settled and was issued once; the interrupted one kept its partial and let its lease out.
@@ -436,6 +446,45 @@ test('a scheduler stopped mid-call: answered requests are not issued again, the 
   assert.equal(rows.rows[0].n, '3');
   assert.equal(hitsOf(h, 'done-already'), 1);
   assert.equal((await request(h, one)).answer, 'whole');
+});
+
+test('a stop\'s release is the last write on the lease: no renewal lands after it, and the next scheduler takes the call over at once', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const probe = await modelUp(h);
+  const held = await enqueue(h, 'extract', 'held', { prompt: 'held' });
+  freshGate(h);
+  h.model.behaviour.answer = () => ({ kind: 'stream', chunks: ['Part'], holdAfter: 1 });
+  const first = scheduler(h, probe);
+  assert.equal(await first.runOnce(), 1);
+  await waitFor('the call to have streamed its first chunk', async () => (await request(h, held)).partial === 'Part');
+  // A side transaction holds the row through the stop, for three renewal intervals: the release waits on it, and so
+  // would every renewal that fired meanwhile — behind the release, so it would reach the row after it.
+  const side = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });
+  await side.connect();
+  try {
+    await side.query('BEGIN');
+    await side.query('SELECT 1 FROM "wiki_model_request" WHERE "id" = $1 FOR UPDATE', [held]);
+    const stopping = first.onModuleDestroy();
+    await delay(350);
+    await side.query('COMMIT');
+    await stopping;
+  } finally {
+    await side.end().catch(() => undefined);
+  }
+  const released = await request(h, held);
+  assert.equal(released.state, 'running');
+  assert.equal(released.partial, 'Part');
+  assert.ok(released.lease_deadline_at && released.lease_deadline_at.getTime() <= Date.now() + 1_000,
+    `the lease was let out to now, not renewed after (it runs to ${released.lease_deadline_at?.toISOString()})`);
+  h.model.behaviour.answer = () => ({ kind: 'stream', chunks: ['Part', ' done'] });
+  const second = scheduler(h, probe);
+  assert.equal(await second.runOnce(), 1, 'the next scheduler takes the call over at once');
+  await second.whenIdle();
+  await second.onModuleDestroy();
+  const finished = await request(h, held);
+  assert.equal(finished.state, 'succeeded');
+  assert.equal(finished.answer, 'Part done');
 });
 
 test('a 401 pauses the queue, and a worker that starts with a good key resumes it', { skip, timeout: 60_000 }, async () => {
@@ -531,14 +580,18 @@ test('the metrics read the queue\'s rows: depth, in flight, wait and run, tokens
   h.model.behaviour.answer = (hit) => (hit.prompt === 'a 500' ? { kind: 'status', status: 500 }
     : hit.prompt === 'a 404' ? { kind: 'status', status: 404 }
       : { kind: 'stream', chunks: ['ok'] });
+  // One call at a time, each to its end: a pass taken while the calls before it are still in flight can find no room.
+  // The 500 goes last, since its row is due again at once (the first backoff is 0 s) and a later pass would retry it.
   const ok = await enqueue(h, 'extract', 'ok', { prompt: 'counted' });
   await queue.runOnce();
-  const retryable = await enqueue(h, 'extract', 'retryable', { prompt: 'a 500' });
-  await queue.runOnce();
+  await queue.whenIdle();
   const other = await enqueue(h, 'extract', 'other', { prompt: 'a 404' });
   await queue.runOnce();
-  const waiting = await enqueue(h, 'extract', 'waiting', { prompt: 'queued' });
   await queue.whenIdle();
+  const retryable = await enqueue(h, 'extract', 'retryable', { prompt: 'a 500' });
+  await queue.runOnce();
+  await queue.whenIdle();
+  const waiting = await enqueue(h, 'extract', 'waiting', { prompt: 'queued' });
   await queue.onModuleDestroy();
 
   const stats = await readWikiModelQueueStats(h.prisma as unknown as PrismaService);
