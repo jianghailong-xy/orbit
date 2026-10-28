@@ -52,6 +52,7 @@ export const LANDING_LABELS: Record<IntegrationJobState, string> = {
   ERROR: 'Landing error',
   CANCELLED: 'Landing cancelled',
   SUPERSEDED: 'Landing superseded',
+  OBSERVED: 'Observed',
 };
 
 const TONES: Record<IntegrationJobState, Tone> = {
@@ -66,6 +67,7 @@ const TONES: Record<IntegrationJobState, Tone> = {
   ERROR: 'red',
   CANCELLED: 'muted',
   SUPERSEDED: 'muted',
+  OBSERVED: 'muted',
 };
 
 /**

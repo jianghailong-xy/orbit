@@ -861,7 +861,9 @@ export interface ProjectIntegrationBuckets {
  * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), plus
  * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision, and
  * `LANDING_LEASE_EXPIRED`, the owner's item about a landing attempt whose runner stopped reporting
- * (§4.6 X-E5).
+ * (§4.6 X-E5). `LANDING_UNOBSERVED` is a finished task's work not yet seen on its line, and
+ * `LANDED_WITHOUT_CONFIRMATION` the owner's item about work that reached main without their
+ * confirmation (§10.7, 0453).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -875,7 +877,9 @@ export type OpenItemKind =
   | 'START_REQUEST'
   | 'DONE_REQUEST'
   | 'DELIVERY_REVIEW'
-  | 'LANDING_LEASE_EXPIRED';
+  | 'LANDING_LEASE_EXPIRED'
+  | 'LANDING_UNOBSERVED'
+  | 'LANDED_WITHOUT_CONFIRMATION';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only

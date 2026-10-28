@@ -40,8 +40,10 @@ import type { PromotionSourceKind, PromotionState } from './project-promotion';
  * new state is a migration, not a deploy that starts writing a value the database has never seen.
  */
 
-/** What a job is putting where (§2.1). Only LAND_TASK has a producer today; promotions are §3. */
-export const INTEGRATION_JOB_KINDS = ['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const;
+/** What a job is putting where (§2.1). Only LAND_TASK has a producer today; promotions are §3.
+ *  OBSERVE_LANDING puts nothing anywhere: it reads whether delivered commits are on the line
+ *  (§10.6, 0453). */
+export const INTEGRATION_JOB_KINDS = ['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION', 'OBSERVE_LANDING'] as const;
 export type IntegrationJobKind = (typeof INTEGRATION_JOB_KINDS)[number];
 
 /**
@@ -67,6 +69,9 @@ export const INTEGRATION_JOB_STATES = [
   'ERROR',
   'CANCELLED',
   'SUPERSEDED',
+  // How an OBSERVE_LANDING job ends when it has looked (§10.6 O-J3, 0453). Final like every state
+  // but the first two.
+  'OBSERVED',
 ] as const;
 export type IntegrationJobState = (typeof INTEGRATION_JOB_STATES)[number];
 
@@ -79,6 +84,8 @@ export const INTEGRATION_JOB_PHASES = [
   'CHECK',
   'VERIFY',
   'PUSH',
+  // An OBSERVE_LANDING job's step after its fetch (§10.6 O-S2, 0453).
+  'OBSERVE',
 ] as const;
 export type IntegrationJobPhase = (typeof INTEGRATION_JOB_PHASES)[number];
 
@@ -105,6 +112,9 @@ export const INTEGRATION_ERROR_CODES = [
   // (§2.2 J-T4) — never got its answer inside the lease window. The runner does not push in that
   // case, so the job ends here with the target untouched.
   'PUSH_REPORT_UNREACHABLE',
+  // A TASK_BRANCH candidate's check or landing named by its commit (§10.5 O-L5) found that commit
+  // missing from the claiming runner's object store. Nothing is fetched to look for it elsewhere.
+  'WORK_COMMIT_MISSING',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
@@ -115,12 +125,24 @@ export type IntegrationJobStep = (typeof INTEGRATION_JOB_STEPS)[number];
 /** A job the runner is not going to touch again. */
 const TERMINAL_STATES: ReadonlySet<string> = new Set<IntegrationJobState>([
   'LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'READY', 'CONFLICT', 'CHECK_FAILED', 'ERROR',
-  'CANCELLED', 'SUPERSEDED',
+  'CANCELLED', 'SUPERSEDED', 'OBSERVED',
 ]);
 
 export function isTerminalJobState(state: string): boolean {
   return TERMINAL_STATES.has(state);
 }
+
+/**
+ * What a runner may report through the job doors: the closed sets above less the two values only an
+ * OBSERVE_LANDING job reports, its OBSERVE step and its OBSERVED result (§10.6). No runner is handed
+ * an observation yet, so the doors refuse both exactly as they did before 0453 put them in the sets.
+ * Accepted on a landing or a promotion, an OBSERVED would be written down as a job that ended without
+ * a word about its work.
+ */
+export const REPORTABLE_JOB_STATES: readonly IntegrationJobState[] =
+  INTEGRATION_JOB_STATES.filter((state) => state !== 'OBSERVED');
+export const REPORTABLE_JOB_PHASES: readonly IntegrationJobPhase[] =
+  INTEGRATION_JOB_PHASES.filter((phase) => phase !== 'OBSERVE');
 
 /** The two states a receipt is written for (§2.5 J8). */
 export function jobLanded(state: string): state is 'LANDED' | 'ALREADY_LANDED' {

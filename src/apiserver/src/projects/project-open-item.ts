@@ -58,7 +58,12 @@ export interface ProjectOpenItemDelivery {
  *  branch git refused, or a written reason for keeping a completion criterion Orbit questioned —
  *  put to the coordinator first. `LANDING_LEASE_EXPIRED` (0439) is the owner's: the escalation
  *  clock opens it when a RUNNING job's current claim has been LEASE_EXPIRED for fifteen minutes
- *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting. */
+ *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting.
+ *
+ *  0453 lets the database hold §10.7's `LANDING_UNOBSERVED` and `LANDED_WITHOUT_CONFIRMATION`, and
+ *  the shared `OpenItemKind` names them. They are not listed here yet: a kind joins this list
+ *  together with its doors, because the door census (`open-item-doors.spec.ts`) refuses a kind
+ *  that has none. */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -153,6 +158,11 @@ export const OPEN_ITEM_RESOLUTIONS = [
   /** The claim a `LANDING_LEASE_EXPIRED` item was about moved on: it reported, was released, was
    *  taken over, or its job reached any terminal state (§4.6 X-E5). */
   'JOB_MOVED_ON',
+  /** The account owner pressed Accept on a `LANDED_WITHOUT_CONFIRMATION` item (§10.7, 0453). */
+  'ACCEPTED',
+  /** The task a `LANDING_UNOBSERVED` item was about was declared codeless, with a reason (§10.7,
+   *  0453). */
+  'CODELESS',
 ] as const;
 export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 

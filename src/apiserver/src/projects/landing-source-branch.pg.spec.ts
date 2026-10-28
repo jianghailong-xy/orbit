@@ -403,11 +403,11 @@ test('a branch with nothing of the task\'s own on it is not written down as a la
   // API server validates a result against. The two are one set: a state the database refuses is a
   // result the runner reports and this process cannot record.
   const migration = readFileSync(
-    path.resolve(__dirname, '../../prisma/migrations/0300_integration_job_nothing_to_land/migration.sql'),
+    path.resolve(__dirname, '../../prisma/migrations/0453_landing_observation_delivery_mode/migration.sql'),
     'utf8',
   );
   const check = /"state" IN \(([\s\S]*?)\)\)/.exec(migration);
-  assert.ok(check, 'migration 0300 no longer constrains the state column');
+  assert.ok(check, 'migration 0453 no longer constrains the state column');
   assert.deepEqual(
     [...check![1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort(),
     [...INTEGRATION_JOB_STATES].sort(),

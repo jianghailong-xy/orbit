@@ -316,6 +316,7 @@ export const JOB_WORDS = {
   LAND_TASK: 'Landing',
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
+  OBSERVE_LANDING: 'Observation',
 };
 
 /** The two kinds that are about main: a check of a round, and the round's own push. Their rows are
@@ -349,6 +350,7 @@ export const JOB_PHASES = {
   CHECK: 'checking',
   VERIFY: 'verifying',
   PUSH: 'pushing',
+  OBSERVE: 'observing',
 };
 
 /** The phases above for a project whose main branch is `main` by name: the sync takes that branch in. */

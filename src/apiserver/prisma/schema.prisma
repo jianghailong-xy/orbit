@@ -3055,6 +3055,14 @@ model ProjectCodebase {
   mergeCheckCommand        String?   @map("merge_check_command")
   /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.
   mergeCheckTimeoutSeconds Int?      @map("merge_check_timeout_seconds")
+  /// How a finished task's work reaches the upstream (0453, contract §10.4, O4): `PLATFORM` — Orbit
+  /// lands it and the agent does not touch the target branch — or `AGENT_PUSH` — the agent pushes its
+  /// commits to the upstream itself. A CHECK closes the set, and a second one allows `AGENT_PUSH` only
+  /// on a MAIN line (`integrationRef` equal to `upstreamRef`). Not locked once the line has started:
+  /// neither 0270's lock nor 0231's config guard names it, so it moves no ref and no `configRevision`.
+  deliveryMode             String    @default("PLATFORM") @map("delivery_mode")
+  /// When the account owner wrote `deliveryMode` (0453). Null: never chosen.
+  deliveryModeChosenAt     DateTime? @map("delivery_mode_chosen_at") @db.Timestamptz(3)
 
   /// Where a ref → SHA resolution COUNTS: `REMOTE` (against `canonicalRepoUrl`) or `RUNNER_LOCAL`
   /// (against one named machine's checkout). Not "which machine runs it" — authority is what
@@ -3119,7 +3127,9 @@ model ProjectCodebase {
 /// across runners), and the CHECK that a LANDED row's `landedTreeSha` equals its `testedTreeSha` (J2 —
 /// what landed is what was tested). `kind`, `state` and `phase` are closed sets held by CHECKs and
 /// spelled in `projects/project-integration-job.ts`; a finished row is final
-/// (`project_integration_job_terminal_guard`).
+/// (`project_integration_job_terminal_guard`). Another partial unique index, over `serialKey` WHERE
+/// kind = 'OBSERVE_LANDING' AND state = 'QUEUED' (0453, §10.4), keeps a project to at most one queued
+/// observation, so a later trigger folds into the one already queued.
 model ProjectIntegrationJob {
   id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid
@@ -3229,6 +3239,10 @@ model ProjectIntegrationJob {
   /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
   /// carried nothing. NULL is "not measured", read exactly as before the column existed.
   sourceFullyApplied Boolean? @map("source_fully_applied")
+  /// What an OBSERVE_LANDING job saw (0453, contract §10.4, §10.6): one entry per observed task,
+  /// `{ taskId, deliveredSha, baseSha, onUpstream, onIntegrationLine, empty, fullyApplied }`. NULL on
+  /// every other kind. The two tips it observed go in `upstreamSha` and `targetShaBefore`.
+  observations       Json?
 
   /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
   checks      Json     @default("[]")
@@ -5247,6 +5261,23 @@ model Task {
   /// the most recent start was not refused; cleared when another run is put on the task
   /// (`tasks/task-dispatch-refusal.ts`).
   dispatchRefusal    Json?    @map("dispatch_refusal")
+
+  /// The delivery identity (migration 0453, contract §10.4, O1): the pair of commits that names the
+  /// work this task handed over, frozen when it is written DONE. Checks, landings, observations and
+  /// receipts speak about this pair rather than about a branch name. All five are NULL until frozen.
+  ///
+  /// The work commit.
+  deliveredSha       String?   @map("delivered_sha") @db.Char(40)
+  /// The commit it forked from.
+  deliveredBaseSha   String?   @map("delivered_base_sha") @db.Char(40)
+  /// The short name of the branch the work ended on: a receipt's `source_branch`.
+  deliveredBranch    String?   @map("delivered_branch")
+  /// The session the identity was read from. A history reference with no relation, for 0424's
+  /// reason: what a task delivered outlives the session it came from.
+  deliveredSessionId String?   @map("delivered_session_id") @db.Uuid
+  /// When the identity was frozen. NULL: not frozen — not a code task, not DONE, work still moving,
+  /// or an identity that could not be read.
+  deliveredAt        DateTime? @map("delivered_at") @db.Timestamptz(3)
 
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")

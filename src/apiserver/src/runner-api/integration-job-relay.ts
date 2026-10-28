@@ -26,13 +26,14 @@ import {
   INTEGRATION_JOBS_PER_HEARTBEAT,
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_JOB_PHASES,
-  INTEGRATION_JOB_STATES,
   INTEGRATION_JOB_STEPS,
   INTEGRATION_PROGRESS_V2,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
   LandingWorkSessionFacts,
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
+  REPORTABLE_JOB_PHASES,
+  REPORTABLE_JOB_STATES,
   checkSawTheFinishedBranch,
   checksFor,
   enqueueForDoneTask,
@@ -1155,7 +1156,7 @@ function progressReport(body: IntegrationJobProgressRequest): {
       'INVALID_RESULT', 'a progress report names the claim it renews: claimGeneration and leaseOwner',
     );
   }
-  if (!INTEGRATION_JOB_PHASES.includes(body.phase as never)) {
+  if (!REPORTABLE_JOB_PHASES.includes(body.phase as never)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `unknown phase ${body.phase}`);
   }
   const step = body.step ?? null;
@@ -1629,7 +1630,7 @@ export async function applyIntegrationJobResult(
 ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
   let body = input.body;
   const state = body?.state;
-  if (!INTEGRATION_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
+  if (!REPORTABLE_JOB_STATES.includes(state as never) || !isTerminalJobState(state)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
   // J2, said before the database says it, so the runner gets the reason rather than a constraint.
@@ -2179,7 +2180,7 @@ export async function applyIntegrationJobResult(
         // J-T8: the result settles a cancellation that was asked of this claim — unless it landed,
         // or it cannot prove it did not push (§2.6 J12), which the step it stopped at tells.
         cancelRequested,
-        phase: (INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : null) ?? job.phase ?? null,
+        phase: (REPORTABLE_JOB_PHASES.includes(body.phase as never) ? body.phase : null) ?? job.phase ?? null,
         // J12's code, so the promotion can tell a push that lost a race (J-T13) from a failure M-T9
         // blocks for, and whether the runner is one that reports the move at all: an older runner's
         // ERROR / TARGET_MOVED keeps today's path.
@@ -2199,7 +2200,7 @@ export async function applyIntegrationJobResult(
       // conclusion this exists to stop writing, and a row that says so is what a promotion card
       // and a landing lane go on to read.
       state: effectiveState,
-      phase: INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : undefined,
+      phase: REPORTABLE_JOB_PHASES.includes(body.phase as never) ? body.phase : undefined,
       sourceSha: body.sourceSha ?? undefined,
       targetShaBefore: body.targetShaBefore ?? undefined,
       upstreamSha: body.upstreamSha ?? undefined,

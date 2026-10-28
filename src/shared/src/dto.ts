@@ -2708,20 +2708,24 @@ export interface EventSearchResponse {
 
 // ── integration jobs (docs/project-integration-line-contract.md §2) ────────────────────────────
 
-/** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3. */
-export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION';
+/** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3.
+ *  `OBSERVE_LANDING` puts nothing anywhere: it reads whether delivered commits are already on the
+ *  line (§10.6, 0453). */
+export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION' | 'OBSERVE_LANDING';
 
 /** Where a job is, or stopped. The three failures differ because they need different people.
  *  `NOTHING_TO_LAND` is neither: the branch the line was handed carried nothing of the task's, so
  *  there was no landing to make (0300). It is not `ALREADY_LANDED`, which an empty branch reaches
- *  trivially — every branch's fork point is in the target it forked from. */
+ *  trivially — every branch's fork point is in the target it forked from. `OBSERVED` is how an
+ *  `OBSERVE_LANDING` job ends when it has looked (§10.6, 0453). */
 export type IntegrationJobState =
   | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
-  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED';
+  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED';
 
-/** The step the runner is on, or the one it stopped at. */
+/** The step the runner is on, or the one it stopped at. `OBSERVE` is an `OBSERVE_LANDING` job's
+ *  step after its fetch (§10.6, 0453). */
 export type IntegrationJobPhase =
-  'FETCH' | 'MAIN_SYNC' | 'REBASE' | 'MERGE' | 'CHECK' | 'VERIFY' | 'PUSH';
+  'FETCH' | 'MAIN_SYNC' | 'REBASE' | 'MERGE' | 'CHECK' | 'VERIFY' | 'PUSH' | 'OBSERVE';
 
 /** One command run on the combined tree before anything is pushed (§2.4 J-S5). */
 export interface IntegrationCheckSpec {

@@ -85,6 +85,7 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
