@@ -18,6 +18,7 @@ Usage:
   orbit agent list [--json]
   orbit agent create --name NAME [options]
   orbit agent update AGENT_ID [options]
+  orbit agent delete AGENT_ID [--json]
 
 An agent is a machine plus a project directory. It has no provider of its own — pass
 --provider to 'orbit session create' when a session needs a specific one. Session
@@ -74,13 +75,34 @@ Options:
 Existing env values are secret and never returned by 'orbit agent list', so pass the
 complete desired map whenever --env is used at all.
 `,
+	"delete": `orbit agent delete — delete an agent
+
+Usage:
+  orbit agent delete AGENT_ID [--json]
+
+The agent leaves the account's list but is not erased: its sessions and tasks are kept and
+stay linked to it, as when it is deleted from its runner's page in the Orbit app. An agent
+that still coordinates a project is refused, and so is the agent this session runs in.
+
+It first puts the agent — its name, its folder and its runner — on a confirmation card in
+front of the account owner, and waits for their answer: nothing is deleted if they decline.
+Prints what was deleted.
+
+Options:
+  --json                         Emit compact JSON
+`,
 }
 
 var agentCLICapabilities = []cliCapabilitySpec{
 	{Tool: "agent_list", Argv: []string{"orbit", "agent", "list"}, Usage: "orbit agent list [--json]", Arguments: []string{"--json"}},
 	{Tool: "agent_create", Argv: []string{"orbit", "agent", "create"}, Usage: "orbit agent create --name NAME [options]", Arguments: []string{"--name <text> (required)", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
 	{Tool: "agent_update", Argv: []string{"orbit", "agent", "update"}, Usage: "orbit agent update AGENT_ID [options]", Arguments: []string{"[agent-id] (required)", "--name <text>", "--description <text>", "--system-prompt <text>", "--append-system-prompt <text>", "--work-dir <path>", "--runner-id <id>", "--enable-worktree[=true|false]", "--env <KEY=VALUE> (repeatable; replaces all)", "--default-merge-target <branch>", "--json"}, Mutates: true},
+	{Tool: "agent_delete", Argv: []string{"orbit", "agent", "delete"}, Usage: "orbit agent delete AGENT_ID [--json]", Arguments: []string{"[agent-id] (required)", "--json"}, Mutates: true},
 }
+
+// agentDeleteApprovalToolName keys the card an agent delete is asked on. The server matches the delete
+// against it by this name (apiserver runner-api/runner-delete-approval.ts), so both ends spell it alike.
+const agentDeleteApprovalToolName = "orbit_agent_delete"
 
 func cmdAgentCLI(args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
@@ -122,6 +144,8 @@ func cmdAgentCLI(args []string, out io.Writer) error {
 		return cliAgentCreate(args[1:], out, ctx)
 	case "update":
 		return cliAgentUpdate(args[1:], out, ctx)
+	case "delete":
+		return cliAgentDelete(args[1:], out, ctx)
 	default:
 		panic("unreachable agent command")
 	}
@@ -286,6 +310,35 @@ func cliAgentUpdate(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	raw, err := t.updateAgent(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliAgentDelete asks the account owner on a confirmation card, then deletes on their yes. The card names
+// the agent by id alone: what the owner reads about it is the server's to fill in.
+func cliAgentDelete(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit agent delete")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveAgentCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliSessionTransport(ctx)
+	if err != nil {
+		return err
+	}
+	if declined, err := askBeforeCreate(t, ctx.sessionID, agentDeleteApprovalToolName, map[string]interface{}{"agentId": id}); err != nil {
+		return fmt.Errorf("delete agent: %w", err)
+	} else if declined != "" {
+		return fmt.Errorf("delete agent: the human rejected this deletion, and nothing was deleted: %s", declined)
+	}
+	raw, err := t.deleteAgent(ctx.sessionID, ctx.token, id)
+	if err != nil {
+		return fmt.Errorf("delete agent: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

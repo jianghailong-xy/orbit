@@ -70,8 +70,8 @@ Usage:
   orbit task-list <command>         Manage Orbit task lists
   orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
-  orbit agent <command>             Inspect and configure agents (when enabled)
-  orbit runner <command>            List this account's runners and install engine CLIs on them (when enabled)
+  orbit agent <command>             Inspect, configure and delete agents (when enabled)
+  orbit runner <command>            List this account's runners, install engine CLIs on them, delete them (when enabled)
   orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it

@@ -192,7 +192,7 @@ func TestAgentCLIRequiresALiveOrchestrationSession(t *testing.T) {
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
-			for _, args := range [][]string{{"list"}, {"create", "--name", "x"}, {"update", "agent-9", "--name", "x"}} {
+			for _, args := range [][]string{{"list"}, {"create", "--name", "x"}, {"update", "agent-9", "--name", "x"}, {"delete", "agent-9"}} {
 				var out bytes.Buffer
 				err := cmdAgentCLI(args, &out)
 				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
@@ -234,6 +234,9 @@ func TestAgentCLIValidatesArguments(t *testing.T) {
 		{name: "missing agent id", args: []string{"update", "--name", "x"}, wantError: "agent id is required"},
 		{name: "nothing to update", args: []string{"update", "agent-9"}, wantError: "no fields to update"},
 		{name: "unsafe agent id", args: []string{"update", "../sessions", "--name", "x"}, wantError: "agent "},
+		{name: "delete without an agent", args: []string{"delete"}, wantError: "agent id is required"},
+		{name: "delete of an id that is not one", args: []string{"delete", "../sessions"}, wantError: "agent "},
+		{name: "delete of two agents", args: []string{"delete", "agent-9", "agent-10"}, wantError: "unexpected arguments: agent-10"},
 		{name: "unknown command", args: []string{"restart"}, wantError: "unknown command"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -279,7 +282,7 @@ func TestAgentCLICapabilitiesFollowTheOrchestrationGate(t *testing.T) {
 		name, _ := descriptor["name"].(string)
 		descriptors[name] = descriptor
 	}
-	for _, id := range []string{"agent_list", "agent_create", "agent_update"} {
+	for _, id := range []string{"agent_list", "agent_create", "agent_update", "agent_delete"} {
 		capability := sessionCLICapabilityByID(on.Capabilities, id)
 		if capability == nil {
 			t.Fatalf("%s missing with orchestration enabled", id)
@@ -302,7 +305,7 @@ func TestAgentCLICapabilitiesFollowTheOrchestrationGate(t *testing.T) {
 	t.Setenv(envServiceToken, fakeServiceToken(t, []string{"session:create", "session:get"}, "agent-1", time.Hour))
 	headless := buildCLICapabilities("/opt/orbit")
 	for _, doc := range []cliCapabilitiesDocument{off, headless} {
-		for _, id := range []string{"agent_list", "agent_create", "agent_update"} {
+		for _, id := range []string{"agent_list", "agent_create", "agent_update", "agent_delete"} {
 			if capability := sessionCLICapabilityByID(doc.Capabilities, id); capability != nil {
 				t.Fatalf("%s advertised without an orchestration-enabled session", id)
 			}

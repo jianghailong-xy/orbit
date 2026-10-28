@@ -238,6 +238,68 @@ describe('provider write approval', () => {
   });
 });
 
+describe('runner and workspace delete approval', () => {
+  const card = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
+    ({ id: 'd1', toolName, input }) as ApprovalInfo;
+  // As the server files it: its own reading of the runner, never the asker's words.
+  const runner = (over: Record<string, unknown> = {}) =>
+    card('orbit_runner_delete', {
+      runnerId: '019fe1dd-3f39-7610-8e5d-507e36a4ea9b',
+      name: 'instance-20261027-071926',
+      displayName: null,
+      online: false,
+      lastHeartbeatAt: new Date(Date.now() - 6 * 3_600_000 - 60_000).toISOString(),
+      workspaces: [{ id: '019fe1dd-3f39-7610-8e5d-507e36a4ea9c', name: 'c2b-loadtest', workDir: null }],
+      ...over,
+    });
+
+  it('names the runner, where it stands, and every workspace that goes with it', () => {
+    const html = render(runner());
+    expect(html).toContain('Confirm: delete runner “instance-20261027-071926”?');
+    expect(html).toContain('Offline · last seen 6h ago');
+    expect(html).toContain('Deleted with it');
+    expect(html).toContain('c2b-loadtest');
+    expect(html).toContain('This removes the runner and its workspaces from your account. Re-register the machine to add it back.');
+    expect(html).toContain('Delete it');
+    // Declining is "not this, and here is what instead", as it is on Orbit's other asks.
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_runner_delete');
+  });
+
+  it('calls a runner by the name the app shows, and says when nothing goes with it', () => {
+    const html = render(runner({ displayName: 'Build box', online: true, workspaces: [] }));
+    expect(html).toContain('Confirm: delete runner “Build box”?');
+    expect(html).toContain('>Online<');
+    expect(html).toContain('No workspaces are bound to it.');
+    expect(html).not.toContain('Deleted with it');
+  });
+
+  it("names a workspace's runner and folder, and says it is not erased", () => {
+    const html = render(card('orbit_agent_delete', {
+      agentId: '019fe1dd-3f39-7610-8e5d-507e36a4ea9c',
+      name: 'c2b-loadtest',
+      workDir: '/srv/loadtest',
+      runner: { id: '019fe1dd-3f39-7610-8e5d-507e36a4ea9b', name: 'instance-20261027-071926', displayName: null },
+    }));
+    expect(html).toContain('Confirm: delete workspace “c2b-loadtest”?');
+    expect(html).toContain('On instance-20261027-071926');
+    expect(html).toContain('/srv/loadtest');
+    expect(html).toContain('its sessions and tasks are kept and stay linked to it');
+    expect(html).not.toContain('orbit_agent_delete');
+  });
+
+  it('offers no standing yes', () => {
+    // The server deletes only on a card a person answered: a rule would answer nothing.
+    expect(render(runner())).not.toContain('Always allow');
+    expect(render(card('orbit_agent_delete', { name: 'c2b-loadtest' }))).not.toContain('Always allow');
+  });
+
+  it('says what is kept when it is declined', () => {
+    expect(decliningPrefix('orbit_runner_delete')).toBe('Keeping it: ');
+    expect(decliningPrefix('orbit_agent_delete')).toBe('Keeping it: ');
+  });
+});
+
 describe('merge-check skip approval', () => {
   const skip = (over: Record<string, unknown> = {}): ApprovalInfo =>
     ({

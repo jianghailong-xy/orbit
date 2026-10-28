@@ -9,16 +9,18 @@ import (
 )
 
 // `orbit runner` — the CLI half of the MCP runner tools: the account's runners, for the --runner-id
-// that 'orbit agent create' and 'orbit agent update' take, and an engine CLI installed on one of them.
+// that 'orbit agent create' and 'orbit agent update' take, an engine CLI installed on one of them, and
+// one of them deleted on the account owner's confirmation card.
 // Same routes, same gate as the tools: orchestration verbs, like the agent ones, so they need a live
 // session while its account has Session orchestration on, and no service-token scope names them.
 
-const runnerHelp = `orbit runner — list this account's runners, and install engine CLIs on them
+const runnerHelp = `orbit runner — list this account's runners, install engine CLIs on them, and delete them
 
 Usage:
   orbit runner list [--json]
   orbit runner install --runner-id ID --engine ENGINE [--update] [--wait] [--json]
   orbit runner install-status --runner-id ID [--json]
+  orbit runner delete --runner-id ID [--json]
 
 A runner is a machine that runs Orbit sessions. Its id is what --runner-id takes here and in
 'orbit agent create' and 'orbit agent update'.
@@ -89,13 +91,36 @@ Options:
   --runner-id ID                 Runner to read (required); 'orbit runner list' shows the ids
   --json                         Emit compact JSON
 `,
+	"delete": `orbit runner delete — delete one of this account's runners, and the workspaces bound to it
+
+Usage:
+  orbit runner delete --runner-id ID [--json]
+
+Removes the runner from the account with every workspace bound to it, as Delete on the runner's
+page in the Orbit app does. The machine itself is untouched: it can no longer reach Orbit, and
+registering it again adds it back. A rented machine still has to be released where it was rented.
+A managed runner is refused, and so is the runner this session runs on.
+
+It first puts the runner — its name, whether it is online, and the workspaces that go with it —
+on a confirmation card in front of the account owner, and waits for their answer: nothing is
+deleted if they decline. Prints what was deleted.
+
+Options:
+  --runner-id ID                 Runner to delete (required); 'orbit runner list' shows the ids
+  --json                         Emit compact JSON
+`,
 }
 
 var runnerCLICapabilities = []cliCapabilitySpec{
 	{Tool: "runner_list", Argv: []string{"orbit", "runner", "list"}, Usage: "orbit runner list [--json]", Arguments: []string{"--json"}},
 	{Tool: "runner_engine_install", Argv: []string{"orbit", "runner", "install"}, Usage: "orbit runner install --runner-id ID --engine ENGINE [--update] [--wait] [--json]", Arguments: []string{"--runner-id <id> (required)", engineArgument() + " (required)", "--update (every engine CLI on the runner, instead of installing --engine)", "--wait (until the runner reports the outcome)", "--json"}, Mutates: true},
 	{Tool: "runner_engine_install_status", Argv: []string{"orbit", "runner", "install-status"}, Usage: "orbit runner install-status --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}},
+	{Tool: "runner_delete", Argv: []string{"orbit", "runner", "delete"}, Usage: "orbit runner delete --runner-id ID [--json]", Arguments: []string{"--runner-id <id> (required)", "--json"}, Mutates: true},
 }
+
+// runnerDeleteApprovalToolName keys the card a runner delete is asked on. The server matches the delete
+// against it by this name (apiserver runner-api/runner-delete-approval.ts), so both ends spell it alike.
+const runnerDeleteApprovalToolName = "orbit_runner_delete"
 
 func cmdRunnerCLI(args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
@@ -136,6 +161,8 @@ func cmdRunnerCLI(args []string, out io.Writer) error {
 		return cliRunnerInstall(args[1:], out, ctx)
 	case "install-status":
 		return cliRunnerInstallStatus(args[1:], out, ctx)
+	case "delete":
+		return cliRunnerDelete(args[1:], out, ctx)
 	default:
 		panic("unreachable runner command")
 	}
@@ -228,6 +255,41 @@ func cliRunnerInstallStatus(args []string, out io.Writer, ctx cliOrchestrationCo
 	raw, err := t.engineInstallState(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("read the install status: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliRunnerDelete asks the account owner on a confirmation card, then deletes on their yes. The card names
+// the runner by id alone: what the owner reads about it is the server's to fill in.
+func cliRunnerDelete(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	fs := newCLIFlagSet("orbit runner delete")
+	runnerID := fs.String("runner-id", "", "runner to delete")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	id := strings.TrimSpace(*runnerID)
+	if id == "" {
+		return fmt.Errorf("--runner-id is required; 'orbit runner list' shows the ids")
+	}
+	if err := validatePathSegmentID(id); err != nil {
+		return fmt.Errorf("runner %w", err)
+	}
+	t, err := cliSessionTransport(ctx)
+	if err != nil {
+		return err
+	}
+	if declined, err := askBeforeCreate(t, ctx.sessionID, runnerDeleteApprovalToolName, map[string]interface{}{"runnerId": id}); err != nil {
+		return fmt.Errorf("delete runner: %w", err)
+	} else if declined != "" {
+		return fmt.Errorf("delete runner: the human rejected this deletion, and nothing was deleted: %s", declined)
+	}
+	raw, err := t.deleteRunner(ctx.sessionID, ctx.token, id)
+	if err != nil {
+		return fmt.Errorf("delete runner: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

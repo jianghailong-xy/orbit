@@ -43,6 +43,7 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
+import { RUNNER_DELETE_APPROVAL_TOOL_NAME, WORKSPACE_DELETE_APPROVAL_TOOL_NAME } from '../runner-api/runner-delete-approval';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { type Tenant, type TenantRequest } from './tenant-isolation-cases';
 import {
@@ -201,6 +202,16 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const sessionAttachmentId = await fileOf({ sessionId: machineSessionId });
     const allowedApprovalId = randomUUID();
     await db.approval.create({ data: { id: allowedApprovalId, sessionId: machineSessionId, toolName: 'Bash', input: { command: 'true' }, status: 'ALLOWED' } });
+    // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
+    // the cards the delete doors go through on (runner-api/runner-delete-approval.ts).
+    for (const [toolName, input] of [
+      [RUNNER_DELETE_APPROVAL_TOOL_NAME, { runnerId: of.spare.runnerId }],
+      [WORKSPACE_DELETE_APPROVAL_TOOL_NAME, { agentId: of.spare.workspaceId }],
+    ] as const) {
+      await db.approval.create({
+        data: { sessionId: callingSessionId, toolName, input, status: 'ALLOWED', decidedAt: new Date(), decidedById: ownerId },
+      });
+    }
     const artifactRequestId = await turnOf(machineSessionId, {
       kind: 'artifact', status: 'PENDING', content: JSON.stringify({ source: 'worktree', path: 'census.txt' }),
     });

@@ -461,6 +461,7 @@ import {
   type SessionEngineFacts,
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -5506,7 +5507,7 @@ export class RunnerApiController {
           // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
           // agent that waits for a card nobody can ever be shown.
           toolName: stripNul(dto.toolName),
-          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input),
+          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId }),
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
@@ -5569,8 +5570,15 @@ export class RunnerApiController {
     ownerId: string,
     toolName: string,
     raw: unknown,
+    asker: { runnerId: string; sessionId: string },
   ): Promise<Prisma.InputJsonValue> {
     const input = stripNul(raw ?? {}) as Record<string, unknown>;
+    // A delete card says what the server reads, not what the asker sent: the runner or workspace its
+    // id names, under this session's owner (runner-delete-approval.ts). Not best-effort, unlike the
+    // preview below: a card about something that is not the account's, or that is the asking
+    // session's own, is refused before it is filed, since no answer to it could be acted on.
+    const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
+    if (deleting) return deleting as unknown as Prisma.InputJsonValue;
     if (toolName !== RunnerApiController.taskCreateApprovalToolName || input.preview || !this.tasks) {
       return input as Prisma.InputJsonValue;
     }
@@ -5593,7 +5601,7 @@ export class RunnerApiController {
     }
   }
 
-  /** The MCP tool name a single create asks under — the one card this controller enriches. */
+  /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
   private static readonly taskCreateApprovalToolName = 'orbit_task_create';
 
   /**
@@ -5608,6 +5616,9 @@ export class RunnerApiController {
     dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
+    // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
+    // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
+    if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = await sessionEngine(this.prisma, session);

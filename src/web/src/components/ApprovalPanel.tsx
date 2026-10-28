@@ -11,6 +11,8 @@ import { buildBatchGraph, describeShape } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
 import { mainBranchName } from '../lib/projectStart';
+import { RUNNER_OFFLINE, RUNNER_ONLINE, runnerOfflineLastSeen } from '../lib/runnerCopy';
+import { ago } from '../lib/runnerEngines';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMATION_SHOW_LESS,
@@ -67,7 +69,9 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
         ? 'Checking it after all: '
         : toolName === 'orbit_project_update_integration'
           ? 'Leaving the check as it is: '
-          : 'Not creating: ';
+          : toolName === 'orbit_runner_delete' || toolName === 'orbit_agent_delete'
+            ? 'Keeping it: '
+            : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -269,6 +273,56 @@ const isProviderWrite = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_provider_update' ||
   a.toolName === 'orbit_provider_delete';
 
+/**
+ * Orbit's asks before a session deletes one of the account's runners or workspaces (runner_delete,
+ * agent_delete). The asker sends only the id: what the card shows is the server's reading of what
+ * goes, written when the card was filed (`runner-delete-approval.ts`), so it leads with names the
+ * owner knows. The delete goes through only against a card a person answered, so like every ask
+ * Orbit raises for itself it is never waived by a rule.
+ */
+const isRunnerDelete = (a: ApprovalInfo): boolean => a.toolName === 'orbit_runner_delete';
+const isWorkspaceDelete = (a: ApprovalInfo): boolean => a.toolName === 'orbit_agent_delete';
+
+interface DeleteInput {
+  noun: 'runner' | 'workspace';
+  name: string;
+  /** Where it stands: a runner online or last seen, the runner a workspace is on. */
+  status: string;
+  /** A workspace's folder. */
+  workDir: string | null;
+  /** The workspaces that go with a runner. */
+  workspaces: Array<{ name: string; workDir: string | null }>;
+}
+
+function deleteInput(a: ApprovalInfo, now: number): DeleteInput | null {
+  const runner = isRunnerDelete(a);
+  if (!runner && !isWorkspaceDelete(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  if (runner) {
+    const seen = text(obj.lastHeartbeatAt);
+    return {
+      noun: 'runner',
+      name: text(obj.displayName) || text(obj.name),
+      status: obj.online === true ? RUNNER_ONLINE : seen ? runnerOfflineLastSeen(ago(seen, now)) : RUNNER_OFFLINE,
+      workDir: null,
+      workspaces: (Array.isArray(obj.workspaces) ? obj.workspaces : []).map((w) => {
+        const row = (w ?? {}) as Record<string, unknown>;
+        return { name: text(row.name), workDir: text(row.workDir) || null };
+      }),
+    };
+  }
+  const host = (obj.runner ?? {}) as Record<string, unknown>;
+  const hostName = text(host.displayName) || text(host.name);
+  return {
+    noun: 'workspace',
+    name: text(obj.name),
+    status: hostName ? `On ${hostName}` : 'On no runner',
+    workDir: text(obj.workDir) || null,
+    workspaces: [],
+  };
+}
+
 interface BlockerResolveInput {
   projectTitle: string;
   /** What the blocker asks for — the sentence written for a person to act on. */
@@ -360,8 +414,11 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // rule would be a switch that turns the change into a refusal the agent cannot read — the owner
   // believing they had allowed it, and every later proposal coming back as a 403 telling the agent
   // to ask for a card that is already answered.
+  //
+  // Nor a delete, for the same reason: the server deletes only on a card a person answered, so a
+  // standing yes would answer nothing — and each delete is a different runner or workspace anyway.
   if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)
-    || isSkipMergeCheck(a) || isMergeCheckChange(a)) {
+    || isSkipMergeCheck(a) || isMergeCheckChange(a) || isRunnerDelete(a) || isWorkspaceDelete(a)) {
     return [];
   }
   if (a.toolName === 'Bash') {
@@ -464,6 +521,7 @@ export function ApprovalPanel({
   const blocker = blockerResolveInput(approval);
   const skipCheck = skipMergeCheckInput(approval);
   const mergeCheck = mergeCheckChangeInput(approval);
+  const deleting = deleteInput(approval, Date.now());
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -479,6 +537,8 @@ export function ApprovalPanel({
             ? (skipCheck.taskTitle || 'this landing')
           : mergeCheck
             ? `${mergeCheck.projectTitle || 'this project'}'s merge check`
+          : deleting
+            ? (deleting.name || `this ${deleting.noun}`)
             : null;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
@@ -498,7 +558,9 @@ export function ApprovalPanel({
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
                     : mergeCheck
                       ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
-                      : `🔓 Approve tool call: ${approval.toolName}`;
+                      : deleting
+                        ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
+                        : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -509,7 +571,7 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -530,6 +592,8 @@ export function ApprovalPanel({
           <SkipMergeCheckBody input={skipCheck} />
         ) : mergeCheck ? (
           <MergeCheckChangeBody input={mergeCheck} />
+        ) : deleting ? (
+          <DeleteBody input={deleting} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -557,7 +621,9 @@ export function ApprovalPanel({
                       ? 'Land it without the check'
                       : mergeCheck
                         ? 'Change the check'
-                        : 'Approve'}
+                        : deleting
+                          ? 'Delete it'
+                          : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -663,6 +729,41 @@ function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Elem
       <p className="create-criteria-note">
         Once, and only this landing: the project&rsquo;s check command is unchanged, and the next
         landing and every merge into {input.mainBranch} are checked as before.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * What goes, in the server's words: where it stands, then — for a runner — every workspace deleted
+ * with it, by name, since those are what the owner may not have had in mind. Then what deleting
+ * means, in the words the runner page's own Delete uses.
+ */
+function DeleteBody({ input }: { input: DeleteInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      <p className="dag-approval-note">{input.status}</p>
+      {input.workDir && <pre className="approval-input">{input.workDir}</pre>}
+      {input.noun === 'runner' && (input.workspaces.length > 0 ? (
+        <>
+          <p className="dag-approval-caption">Deleted with it</p>
+          <ul className="dag-approval-ops">
+            {input.workspaces.map((w, i) => (
+              <li key={i} className="dag-op dag-op--remove">
+                <span className="dag-op-verb">−</span>
+                <span className="dag-op-text">{w.name}</span>
+                {w.workDir && <span className="dag-op-noop">{w.workDir}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="dag-approval-foot">No workspaces are bound to it.</p>
+      ))}
+      <p className="create-criteria-note">
+        {input.noun === 'runner'
+          ? 'This removes the runner and its workspaces from your account. Re-register the machine to add it back.'
+          : 'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it.'}
       </p>
     </div>
   );
