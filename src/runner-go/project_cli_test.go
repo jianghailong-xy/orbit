@@ -804,6 +804,53 @@ func TestProjectUpdateSendsOnlyTheFlagsGiven(t *testing.T) {
 	}
 }
 
+// The delivery mode (contract §10.5 O-L1) travels inside `integration`, the object the server holds
+// to the owner-only rule, with no session header: typed at a terminal, the owner chose it.
+func TestProjectUpdateSendsTheDeliveryModeAsAnIntegrationSetting(t *testing.T) {
+	var body map[string]interface{}
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"update", "proj-1", "--delivery-mode", "AGENT_PUSH", "--json"},
+		strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project update: %v", err)
+	}
+	want := map[string]interface{}{"integration": map[string]interface{}{"deliveryMode": "AGENT_PUSH"}}
+	if fmt.Sprintf("%v", body) != fmt.Sprintf("%v", want) {
+		t.Fatalf("project update body = %#v", body)
+	}
+	if sawSessionHeader {
+		t.Fatal("`orbit project update --delivery-mode` sent a session header")
+	}
+}
+
+func TestProjectUpdateRefusesAnUnknownDeliveryMode(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"update", "proj-1", "--delivery-mode", "agent_push"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "--delivery-mode must be PLATFORM or AGENT_PUSH") {
+		t.Fatalf("project update with an unknown delivery mode = %v", err)
+	}
+	if called {
+		t.Fatal("an unknown delivery mode reached the server")
+	}
+}
+
 func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

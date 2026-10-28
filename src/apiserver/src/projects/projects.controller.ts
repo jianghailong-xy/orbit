@@ -681,7 +681,9 @@ export class ProjectsController {
    * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.
    *
    * Closed to tokens whole: every field here is the one `PATCH :id` refuses a token as `integration`
-   * (docs/personal-access-token-design.md §5).
+   * (docs/personal-access-token-design.md §5). And to sessions: the header an agent's request
+   * carries, `X-Orbit-Session-Id`, is handed on and refused 403 `INTEGRATION_SETTINGS_OWNER_ONLY`
+   * whatever credential came with it (L5, O-L1).
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Patch(':id/integration')
@@ -689,8 +691,9 @@ export class ProjectsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: UpdateProjectIntegrationDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
-    return this.projects.configureIntegration(user.userId, id, dto);
+    return this.projects.configureIntegration(user.userId, id, dto, actingSessionId);
   }
 
   /**

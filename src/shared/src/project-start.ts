@@ -1,4 +1,4 @@
-import type { IntegrationLine } from './project-progress';
+import type { DeliveryMode, IntegrationLine } from './project-progress';
 
 /**
  * Starting a project: the one write the account owner makes on the "Start this project?" card
@@ -63,10 +63,14 @@ export const PROJECT_START_SETTING_KEYS: readonly ProjectStartSettingKey[] = [
  * each criterion's `definitionId:revision:contentHash`). A seal that is no longer current is a 409
  * and nothing is written: a start carried over an edit would confirm wording nobody read.
  * `requestId` names the coordinator's start request the card answered, when there was one.
+ * `deliveryMode` is how the project's finished work reaches its upstream (§10.5 O-L1), recorded as
+ * the owner's choice; left out, the project keeps the one it has. Unlike the line it is written on a
+ * line that has started too, and `AGENT_PUSH` needs the start to leave the project on `MAIN`.
  */
 export interface StartProjectRequestBody extends ProjectStartSettings {
   criteriaDigest: string;
   requestId?: string | null;
+  deliveryMode?: DeliveryMode;
 }
 
 /**

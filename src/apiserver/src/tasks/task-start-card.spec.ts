@@ -35,7 +35,18 @@ type TaskRow = {
   isForeman: boolean;
   verifiesTaskId: string | null;
   list: { instructions: string | null } | null;
-  project: { id: string; title: string } | null;
+  codeless?: boolean;
+  // The project's binding rides with it, as the reader selects it (`TASK_DELIVERY_SELECT`).
+  project: {
+    id: string;
+    title: string;
+    codebases?: Array<{
+      deliveryMode: string;
+      integrationStartedAt: Date | null;
+      integrationRef: string;
+      remoteName: string;
+    }>;
+  } | null;
 };
 
 function taskRow(overrides: Partial<TaskRow> = {}): TaskRow {
@@ -258,6 +269,37 @@ test('the list\'s instructions ride the card when the brief carried them, and no
   const foremanBrief = buildTaskExecutionPrompt(foreman);
   const run = await ingest({ clientTurnId: OPENING, content: foremanBrief, payload: { text: foremanBrief }, task: foreman });
   assert.equal((run.stored.taskStart as { listInstructions: string | null }).listInstructions, null);
+});
+
+test('O-L3: a brief that says how the project delivers rebuilds into its card; one whose mode moved since gets none', async () => {
+  const binding = {
+    deliveryMode: 'AGENT_PUSH',
+    integrationStartedAt: null,
+    integrationRef: 'refs/heads/feature/v1.1.1',
+    remoteName: 'origin',
+  };
+  const pushing = taskRow({ project: { id: PROJECT, title: 'Codex 多账户：一台机器上登录多个 Codex', codebases: [binding] } });
+  const brief = buildTaskExecutionPrompt(pushing);
+  assert.match(brief, /This project delivers by pushing to feature\/v1\.1\.1\./);
+
+  const { stored } = await ingest({ clientTurnId: OPENING, content: brief, payload: { text: brief }, task: pushing });
+  // The card names the project, never its binding: the brief is what carries the sentence.
+  assert.deepEqual((stored.taskStart as { project: unknown }).project,
+    { id: PROJECT, title: 'Codex 多账户：一台机器上登录多个 Codex' });
+
+  const moved = await ingest({
+    clientTurnId: OPENING,
+    content: brief,
+    payload: { text: brief },
+    task: taskRow({
+      project: {
+        id: PROJECT,
+        title: 'Codex 多账户：一台机器上登录多个 Codex',
+        codebases: [{ ...binding, deliveryMode: 'PLATFORM' }],
+      },
+    }),
+  });
+  assert.equal('taskStart' in moved.stored, false, 'a card for a delivery the agent was not told about was stored');
 });
 
 test('only the control plane records a card: one sent by the runner is dropped, or replaced by the real one', async () => {
