@@ -1,0 +1,8 @@
+# The web gateway's routes for several apiservers (gateway/several-apiservers/; docs/self-hosting.md, "Several
+# apiservers"), on top of staging.compose.yml when ORBIT_LINK_STAGING_SPREAD=1: the session streams by session, and the
+# runners' link tokens, over every apiserver of the stack, as a deployment's docker-compose.override.yml mounts them.
+# Without it the stack's web gateway sends every request to the first apiserver, as a deployment with one does.
+services:
+  gateway:
+    volumes:
+      - ${STAGING_REPO}/gateway/several-apiservers:/etc/nginx/several-apiservers:ro

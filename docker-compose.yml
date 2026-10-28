@@ -254,6 +254,12 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    # A name every apiserver answers to, apiserver-2 and on too, which take it when they extend this service: the web
+    # gateway's routes for several apiservers reach them all by it (gateway/several-apiservers/; docs/self-hosting.md,
+    # "Several apiservers"). gateway/nginx.conf does not use it, so with one apiserver nothing reaches it by this name.
+    networks:
+      default:
+        aliases: [orbit-apiservers]
     healthcheck:
       # Any HTTP response means Nest is up; only a refused connection fails.
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api').then(()=>process.exit(0)).catch(()=>process.exit(1))"]
