@@ -50,7 +50,7 @@ import {
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/engine-session-guard.pg.spec.ts
  *
  * What it holds:
- *   • every door in `ENGINE_SESSION_DOORS` — the 33 user routes and 29 runner routes derived from
+ *   • every door in `ENGINE_SESSION_DOORS` — the 33 user routes and 30 runner routes derived from
  *     the tenant-isolation registries — refuses a LANDING session with 409
  *     SESSION_IS_PLATFORM_DRIVEN, and the six body/query field cases do the same;
  *   • Trash is refused (and the row is untouched);
@@ -327,6 +327,8 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
       wakeId: 'w', jobId: 'j', trigger: 'exit', kind: 'shell', command: 'make', status: 'completed',
       exitCode: 0, outputPath: '/tmp/x', outputOffset: 0, outputSize: 0, outputExcerpt: '',
     } as never),
+  'POST /runner/sessions/:id/notify': (s, w, id) =>
+    s.api.sessionNotify({ id: w.runnerId, ownerId: w.ownerId, name: 'x', displayName: null } as never, id, { message: 'x' }),
   'POST /runner/sessions/:id/scheduled-wakeup': (s, w, id) =>
     s.api.scheduledWakeup({ id: w.runnerId, ownerId: w.ownerId } as never, id, { delaySeconds: 120, reason: 'x' } as never),
   'POST /runner/sessions/:id/naming': (s, w, id) =>

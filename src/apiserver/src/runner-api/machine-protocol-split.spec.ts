@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { lastValueFrom, of } from 'rxjs';
 import { uuidToBase62 } from '@orbit/shared';
 import { MACHINE_PROTOCOL } from '../common/machine-protocol';
@@ -11,7 +13,9 @@ import { RunnerEngineInstallController } from './runner-engine-install.controlle
 import { RunnerLinkEventsController } from './runner-link-events.controller';
 import { RunnerLinkModeController } from './runner-link-required.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
+import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
+import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerRunnersController } from './runner-runners.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
@@ -67,6 +71,8 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerServiceTokensController,
     RunnerWatchesController,
     RunnerTaskProgressController,
+    RunnerProvidersController,
+    RunnerNotifyController,
   ]) {
     assert.equal(
       Reflect.getMetadata(MACHINE_PROTOCOL, controller),
@@ -74,6 +80,41 @@ test('only the machine protocol keeps UUIDs', () => {
       `${controller.name} is read by a model or a person — its ids are addresses`,
     );
   }
+});
+
+/** A controller's routes as Nest mounts them: `METHOD /prefix/path`. */
+function routesOf(controller: { prototype: object }): string[] {
+  const prefix = String(Reflect.getMetadata(PATH_METADATA, controller) ?? '');
+  const routes: string[] = [];
+  for (const name of Object.getOwnPropertyNames(controller.prototype)) {
+    const handler = Object.getOwnPropertyDescriptor(controller.prototype, name)?.value as object | undefined;
+    if (name === 'constructor' || typeof handler !== 'function') continue;
+    const method = Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod | undefined;
+    if (method === undefined) continue;
+    const sub = String(Reflect.getMetadata(PATH_METADATA, handler) ?? '');
+    routes.push(`${RequestMethod[method]} /${[prefix, sub].filter(Boolean).join('/')}`);
+  }
+  return routes;
+}
+
+test('the daemon\'s own calls are the machine protocol\'s, and the agents\' doors beside them stay agent-facing', () => {
+  // The runner daemon sends these itself, never `orbit mcp` or the CLI, so they are served where the runner link serves
+  // the daemon's calls (docs/runner-link-design.md §15.9): RunnerAuthGuard refuses a link call to any other controller.
+  const daemon = routesOf(RunnerApiController);
+  for (const route of [
+    'POST /runner/cursor-key-check-result',
+    'POST /runner/sessions/:id/cursor-key-check',
+    'POST /runner/sessions/:id/notify',
+  ]) {
+    assert.ok(daemon.includes(route), `${route} is not RunnerApiController's`);
+  }
+  assert.deepEqual(routesOf(RunnerProvidersController).sort(), [
+    'DELETE /runner/providers/:slug',
+    'GET /runner/providers',
+    'PATCH /runner/providers/:slug',
+    'POST /runner/providers',
+  ]);
+  assert.deepEqual(routesOf(RunnerNotifyController), ['POST /runner/notify'], '`orbit notify` and the notify MCP tool');
 });
 
 /** The same two controllers through the interceptor itself, so the marker is checked against the

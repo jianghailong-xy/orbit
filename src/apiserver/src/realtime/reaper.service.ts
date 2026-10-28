@@ -40,6 +40,7 @@ import {
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
   runnerLastBeatAt,
+  type CellLosses,
   type RunnerBeats,
 } from '../runners/runner-presence';
 import { ControlPlaneLeader } from './control-plane-leader';
@@ -63,17 +64,101 @@ const OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS; // runner missed ~3 heartbeats
  */
 export const STARTUP_GRACE_MS = 3 * 60_000;
 /**
- * The share of the cell's runners that going quiet together pauses the offline reaping. Machines do
- * not stop a fifth at a time; a link gateway, the network or this control plane does, and the
- * sessions of runners that are only cut off must still be there when they come back.
+ * The share of the cell's runners that losing contact together makes a mass disconnection, whose runners' silence is not
+ * read as their death. Machines do not stop a fifth at a time; a link gateway, the network or this control plane does,
+ * and the sessions of runners that are only cut off must still be there when they come back.
  */
 const MASS_SILENCE_SHARE = 0.2;
 /**
- * "Together": missed a beat (RUNNER_SILENT_AFTER_MS) within this long of each other, and of now. It
- * also bounds how long one such silence holds the reaping: a runner quiet for longer than this past
- * that line leaves the count, and its sessions are reaped as anybody's are.
+ * How far back a sweep looks for runners losing contact, past the silence line (RUNNER_SILENT_AFTER_MS); and how long
+ * past that line a mass disconnection holds each of its runners: one silent for longer than RUNNER_SILENT_AFTER_MS + this
+ * (MASS_DISCONNECT_HOLD_MS) has not come back from it, and its sessions are reaped as anybody's are.
  */
 export const MASS_SILENCE_WINDOW_MS = 10 * 60_000;
+/** How long a mass disconnection holds the silence of each of its runners: past the silence line, the whole window. */
+export const MASS_DISCONNECT_HOLD_MS = RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS;
+/**
+ * "Together": lost contact within this long of each other. Runners cut off at one moment were last heard across one
+ * heartbeat period, each at its own point in it (RunnerPresenceService.cellLosses); half a period more is room for beats
+ * that land late. A heartbeat period and a half, as RUNNER_SILENT_AFTER_MS is.
+ */
+export const MASS_DISCONNECT_SPREAD_MS = RUNNER_SILENT_AFTER_MS;
+
+/**
+ * A mass disconnection as the reaper reads and keeps it (migration 0450): the span of the last beats its runners were
+ * heard with before they lost contact, epoch ms, both ends included; how many runners lost contact in it, and of how many
+ * the cell had heard from.
+ */
+export interface MassDisconnect {
+  from: number;
+  to: number;
+  runners: number;
+  heard: number;
+}
+
+/**
+ * The mass disconnections a reading of the cell shows (RunnerPresenceService.cellLosses), each the span of the last
+ * beats its runners were heard with before they lost contact:
+ *
+ *  - a fifth or more of the runners heard from losing contact within MASS_DISCONNECT_SPREAD_MS of each other — those
+ *    still silent and those already back alike, so that a disconnection most runners return from at once is still one
+ *    when the first of the rest crosses the offline line: each such stretch of losses;
+ *  - a fifth or more of them silent at once, however their silences are spread: the span of every silent runner's last
+ *    beat (a silence spreading across the cell is one too).
+ *
+ * Spans that meet are one.
+ */
+export function massDisconnectsIn(cell: CellLosses): MassDisconnect[] {
+  if (cell.heard === 0) return [];
+  // A share, not a product: exactly a fifth must count however the float rounds (35 * 0.2 > 7).
+  const many = (runners: number) => runners / cell.heard >= MASS_SILENCE_SHARE;
+  const found: MassDisconnect[] = [];
+  if (many(cell.silent) && cell.silentFrom !== null && cell.silentTo !== null) {
+    found.push({ from: cell.silentFrom, to: cell.silentTo, runners: cell.silent, heard: cell.heard });
+  }
+  const spread = MASS_DISCONNECT_SPREAD_MS / 1000;
+  let end = 0;
+  let within = 0;
+  for (const [second, runners] of cell.losses) {
+    while (end < cell.losses.length && cell.losses[end]![0] <= second + spread) within += cell.losses[end++]![1];
+    if (many(within)) {
+      found.push({ from: second * 1000, to: (cell.losses[end - 1]![0] + 1) * 1000 - 1, runners: within, heard: cell.heard });
+    }
+    within -= runners;
+  }
+  const spans: MassDisconnect[] = [];
+  for (const span of found.sort((a, b) => a.from - b.from)) {
+    const last = spans.at(-1);
+    if (last && span.from <= last.to + 1) {
+      last.to = Math.max(last.to, span.to);
+      last.runners = Math.max(last.runners, span.runners);
+    } else {
+      spans.push({ ...span });
+    }
+  }
+  return spans;
+}
+
+/**
+ * The mass disconnection that holds this runner's silence, if one does: its last beat falls in the span, and it has been
+ * silent for no longer than MASS_DISCONNECT_HOLD_MS.
+ */
+function massDisconnectOf(
+  disconnects: readonly MassDisconnect[],
+  runner: RunnerBeats | null | undefined,
+  now: number,
+): MassDisconnect | undefined {
+  const beat = runnerLastBeatAt(runner)?.getTime();
+  if (beat === undefined || now - beat > MASS_DISCONNECT_HOLD_MS) return undefined;
+  return disconnects.find((d) => d.from <= beat && beat <= d.to);
+}
+
+/** Why a runner's silence is held for a mass disconnection it lost contact in, as the sweep logs it. */
+function heldFor(d: MassDisconnect): string {
+  return `its runner lost contact in a mass disconnection (${d.runners} of the ${d.heard} runners heard from, last heard `
+    + `between ${new Date(d.from).toISOString()} and ${new Date(d.to).toISOString()}) and has been silent for less than `
+    + `${Math.round(MASS_DISCONNECT_HOLD_MS / 1000)}s`;
+}
 // A cancel/end a live (online) runner hasn't honored within this window means the
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
@@ -169,11 +254,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private databaseRefusedWorkLastSweep = false;
   /** When the reaper started (onModuleInit): the clock STARTUP_GRACE_MS runs on. */
   private startedAt: number | null = null;
-  /**
-   * Until when the offline reaping stays held for the last mass silence a sweep saw: OFFLINE_AFTER_MS
-   * past that sweep, so the runners whose beats were lost in it get a whole window to be heard again.
-   */
-  private massSilenceHeldUntil = 0;
   /** The instant this process took the singleton sweeps' lock, as the last sweep saw it (`leading`). */
   private ledSince: number | null = null;
 
@@ -183,10 +263,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     /** Hands the exception items this sweep opens to whoever is responsible for them (§4.4). */
     @Optional() private readonly openItems?: ProjectOpenItemService,
     /**
-     * Whether heartbeat writes have been landing, and how much of the cell has gone quiet at once
+     * Whether heartbeat writes have been landing, and how much of the cell has lost contact at once
      * (runners/runner-presence.ts) — two of the reasons a runner's silence is not evidence
-     * (`silenceHold`). RealtimeModule provides it beside this service, so production always has it;
-     * `@Optional()` for the specs that build the reaper by hand about something else.
+     * (`silenceHold`, `massDisconnects`). RealtimeModule provides it beside this service, so production
+     * always has it; `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly presence?: RunnerPresenceService,
     /**
@@ -209,6 +289,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         this.log.error('runner link revocation purge failed: ' + (e as Error).message));
       this.purgeGoneProcesses().catch((e) =>
         this.log.error('apiserver process purge failed: ' + (e as Error).message));
+      this.purgeLapsedMassDisconnects().catch((e) =>
+        this.log.error('mass disconnection purge failed: ' + (e as Error).message));
     }, PURGE_INTERVAL_MS);
     this.purgeTimer.unref();
   }
@@ -225,12 +307,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *
    * Holding the lock since an instant the last sweep did not see is a takeover — from another process,
    * or by this one again after its connection dropped — and a takeover is a start. What this reaper
-   * carried in memory (when it started, the last mass silence it held for, a refusal of the database
-   * it watched) was read by sweeps that may not have been the last ones: the process that held the lock
-   * in between may have been killed in the middle of a mass silence, its hold dying with it. So the
-   * reaper starts again from the instant the lock was taken, inside STARTUP_GRACE_MS, as a reaper that
-   * has just come up does. The grace outlasts everything that state could still have held: a mass
-   * silence holds OFFLINE_AFTER_MS past the last sweep that saw it, and a refusal one sweep.
+   * carried in memory (when it started, a refusal of the database it watched) was read by sweeps that
+   * may not have been the last ones: the process that held the lock in between may have been killed in
+   * the middle of a refusal, or have been cut off from a cell this one never read. So the reaper starts
+   * again from the instant the lock was taken, inside STARTUP_GRACE_MS, as a reaper that has just come up
+   * does; the grace outlasts a refusal, which holds one sweep. A mass disconnection is not in memory: the
+   * sweep that saw it kept it in `runner_mass_disconnect`, whichever process ran it, and the reaper that
+   * takes over holds its runners from there (`massDisconnects`).
    */
   private leading(): boolean {
     if (!this.leader) return true;
@@ -239,7 +322,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (since !== this.ledSince) {
       this.ledSince = since;
       this.startedAt = since;
-      this.massSilenceHeldUntil = 0;
       this.databaseRefusedWorkLastSweep = false;
     }
     return true;
@@ -284,6 +366,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.apiserverProcess.deleteMany({ where: { seenAt: { lt: cutoff } } });
   }
 
+  /**
+   * Delete the mass disconnections that can hold nothing any more (migration 0450): every runner whose last beat falls
+   * in one has been silent for longer than MASS_DISCONNECT_HOLD_MS, or has been heard again. Sweeps read none of them.
+   */
+  private async purgeLapsedMassDisconnects(): Promise<void> {
+    const cutoff = new Date(Date.now() - MASS_DISCONNECT_HOLD_MS);
+    await this.prisma.runnerMassDisconnect.deleteMany({ where: { lostTo: { lt: cutoff } } });
+  }
+
   private async sweep(): Promise<void> {
     const now = Date.now();
     const sessions = await this.prisma.session.findMany({
@@ -321,15 +412,30 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     let databaseRefusedWork = false;
     const heartbeatEvidenceIsDisqualified = () =>
       databaseRefusedWork || this.databaseRefusedWorkLastSweep;
+    // The cell, read for a mass disconnection at every sweep past the startup grace, whatever the sweep finds to reap, and
+    // any it shows kept (`massDisconnects`). A reading the database refused holds every silence this sweep, and fences the
+    // next sweep like any other refusal.
+    let disconnects: MassDisconnect[] = [];
+    let cellUnread: string | null = null;
+    let cellRefused = false;
+    if (!this.inStartupGrace(now)) {
+      try {
+        disconnects = await this.massDisconnects(now);
+      } catch (e) {
+        cellRefused = classifyTransactionFault(e).family === 'RESOURCE';
+        cellUnread = `the cell's presence could not be read (${(e as Error).message})`;
+      }
+    }
     // Whether runner silence is evidence at all this sweep (`silenceHold`). Asked once, and only when
     // some session would be reaped for it: most sweeps find none. A reading the database refused is a
     // hold too, and fences the next sweep like any other refusal.
     let hold: Promise<string | null> | undefined;
     const silenceHeld = () => (hold ??= this.silenceHold(now).catch((e: unknown) => {
       if (classifyTransactionFault(e).family === 'RESOURCE') databaseRefusedWork = true;
-      return `the cell's presence could not be read (${(e as Error).message})`;
+      return `the other apiserver processes could not be read (${(e as Error).message})`;
     }));
-    const held: string[] = [];
+    // The sessions not reaped for their runner's silence, by why: logged once for the sweep, below.
+    const held = new Map<string, string[]>();
     for (const s of sessions) {
       try {
         const offline = runnerLooksOffline(s.assignedRunner, now, s.runClaimedAt);
@@ -398,13 +504,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               );
               continue;
             }
-            // The same rule, widened to the rest of what makes silence ours (`silenceHold`): just
-            // started, heartbeat writes failing, or a fifth of the cell gone quiet at once. Logged
-            // once for the sweep below — a mass silence holds every such session at once. A runner
-            // that signed off said so itself, which is no silence, and is reaped as it always was.
-            if (offlineFromSilence(s.assignedRunner) && await silenceHeld()) {
-              held.push(s.id);
-              continue;
+            // The same rule, widened to the rest of what makes silence ours: just started, heartbeat
+            // writes failing (`silenceHold`) or the cell unread, which hold every silence; or a mass
+            // disconnection this runner lost contact in, which holds its own (`massDisconnectOf`). A
+            // runner that signed off said so itself, which is no silence, and is reaped as it always was.
+            if (offlineFromSilence(s.assignedRunner)) {
+              const disconnect = massDisconnectOf(disconnects, s.assignedRunner, now);
+              const why = (await silenceHeld()) ?? cellUnread ?? (disconnect ? heldFor(disconnect) : null);
+              if (why) {
+                held.set(why, [...(held.get(why) ?? []), s.id]);
+                continue;
+              }
             }
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
               expectedStatuses: [RunStatus.RUNNING],
@@ -524,11 +634,70 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         this.log.error(`reap of ${s.id} failed: ${(e as Error).message}`);
       }
     }
-    this.databaseRefusedWorkLastSweep = databaseRefusedWork;
-    if (held.length > 0) {
-      const named = held.slice(0, 10).join(', ') + (held.length > 10 ? ` and ${held.length - 10} more` : '');
-      this.log.warn(`not reaping ${held.length} session(s) whose runner looks offline (${named}): ${await hold}`);
+    this.databaseRefusedWorkLastSweep = databaseRefusedWork || cellRefused;
+    for (const [why, ids] of held) {
+      const named = ids.slice(0, 10).join(', ') + (ids.length > 10 ? ` and ${ids.length - 10} more` : '');
+      this.log.warn(`not reaping ${ids.length} session(s) whose runner looks offline (${named}): ${why}`);
     }
+  }
+
+  /** Whether the reaper started, or took the sweeps over, less than STARTUP_GRACE_MS ago. */
+  private inStartupGrace(now: number): boolean {
+    return this.startedAt !== null && now - this.startedAt < STARTUP_GRACE_MS;
+  }
+
+  /**
+   * The mass disconnections that may hold a runner's silence at this sweep: every one a sweep has kept that can still
+   * hold (`runner_mass_disconnect`, migration 0450), once this sweep has read the cell and kept, or widened, any it shows
+   * (`massDisconnectsIn`).
+   *
+   * Asked by every sweep past the startup grace, whether or not it finds anything to reap, because what it reads is there
+   * for a while only. A runner back within seconds of a disconnection never misses a beat — one gateway node of three
+   * stops, and its runners connect through the other two — and by the time the first runner still out crosses the
+   * offline line, most of the rest are back: a sweep that counted the runners silent then counted a few, and reaped the
+   * runs of the runners still waiting out their reconnection backoff (task C2b, 2026-10-28: 975 in one load test run, 194
+   * in another). Each runner's loss outlives its return in `runner_presence.lost_at`, until its next one; the
+   * disconnection outlives them all here, for whichever process sweeps next. Not asked inside the grace, which holds every
+   * silence anyway, and in which a presence table a crash emptied reads as a cell gone quiet at once.
+   */
+  private async massDisconnects(now: number): Promise<MassDisconnect[]> {
+    if (!this.presence) return [];
+    const found = massDisconnectsIn(await this.presence.cellLosses(MASS_SILENCE_WINDOW_MS));
+    const rows = await this.prisma.runnerMassDisconnect.findMany({
+      where: { lostTo: { gte: new Date(now - MASS_DISCONNECT_HOLD_MS) } },
+      orderBy: { lostFrom: 'asc' },
+    });
+    const kept = rows.map((row) => ({
+      id: row.id, from: row.lostFrom.getTime(), to: row.lostTo.getTime(), runners: row.runners, heard: row.heard,
+    }));
+    for (const span of found) {
+      const known = kept.find((k) => k.from <= span.to && span.from <= k.to);
+      if (known && known.from <= span.from && span.to <= known.to && span.runners <= known.runners) continue;
+      if (known) {
+        known.from = Math.min(known.from, span.from);
+        known.to = Math.max(known.to, span.to);
+        known.runners = Math.max(known.runners, span.runners);
+        known.heard = span.heard;
+        await this.prisma.runnerMassDisconnect.update({
+          where: { id: known.id },
+          data: {
+            lostFrom: new Date(known.from), lostTo: new Date(known.to), runners: known.runners, heard: known.heard,
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        const row = await this.prisma.runnerMassDisconnect.create({
+          data: { lostFrom: new Date(span.from), lostTo: new Date(span.to), runners: span.runners, heard: span.heard },
+        });
+        kept.push({ id: row.id, ...span });
+      }
+      const d = known ?? span;
+      this.log.warn(`${known ? 'a mass disconnection widened' : 'a mass disconnection'}: ${d.runners} of the ${d.heard} `
+        + `runners heard from lost contact, last heard between ${new Date(d.from).toISOString()} and `
+        + `${new Date(d.to).toISOString()}; their silence is not read as their death until each has been silent for `
+        + `${Math.round(MASS_DISCONNECT_HOLD_MS / 1000)}s`);
+    }
+    return kept;
   }
 
   /**
@@ -536,7 +705,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *
    * "Offline" is read off the ABSENCE of a beat in `runner_presence`, so it says something about the
    * runner only while this control plane could have heard one. The database rule in `sweep`
-   * (`databaseRefusedWorkLastSweep`) is one case of that; these are the rest (docs/runner-link-design.md
+   * (`databaseRefusedWorkLastSweep`) is one case of that, and a mass disconnection another, which holds
+   * the silence of its own runners (`massDisconnects`); these are the rest (docs/runner-link-design.md
    * §6.5), and each holds the offline reaping whole:
    *
    *  - The reaper started less than STARTUP_GRACE_MS ago. The presence table is UNLOGGED, so a crash
@@ -554,31 +724,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *    MASS_SILENCE_WINDOW_MS while it is still connected (it still holds its own lock,
    *    control-plane-leader.ts), which a process that has gone does not. Coming back, it says a beat was
    *    lost then, so the runners whose beats it could not write get a whole window to be heard again.
-   *  - A fifth of the cell's runners missed a beat together (MASS_SILENCE_SHARE, MASS_SILENCE_WINDOW_MS):
-   *    silent for over RUNNER_SILENT_AFTER_MS, a heartbeat period and a half, whether or not they are
-   *    past OFFLINE_AFTER_MS yet. Runners cut off at the same moment cross the offline line one by one
-   *    over a whole period, and a sweep between two of those crossings, counting at that line, reaped
-   *    a run (the C1b drill, 2026-10-26); by the time the first is across, every runner cut off with it
-   *    has missed a beat. Read again every sweep that needs it, and held for OFFLINE_AFTER_MS past the
-   *    last sweep that saw it, so the runners whose beats were lost get a whole window to be heard again
-   *    before their silence counts. Only runners that can lose contact are counted
-   *    (RunnerPresenceService.fleetSilence): one that signed off, or a managed runner its manager is
-   *    putting to sleep, is quiet on purpose. In a cell of one to four runners one crashed runner is
-   *    already a fifth, which holds its sessions for up to MASS_SILENCE_WINDOW_MS past the silence
-   *    line — the price of not reaping a small cell's sessions through a partition on this side, and
-   *    the window in which a restarted runner takes its sessions back.
    *
    * None of them is a latch. The grace ends; a failed write ages out; a process that stays quiet stops
-   * holding MASS_SILENCE_WINDOW_MS past its line at the latest; a silence that does not lift
-   * leaves the count MASS_SILENCE_WINDOW_MS past the silence line, and its sessions are then reaped
-   * like any others. Nothing else here waits on it: a cancel or an end the runner never honored is
-   * still finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since
-   * neither verdict is read from silence.
+   * holding MASS_SILENCE_WINDOW_MS past its line at the latest. Nor is a mass disconnection: a runner of
+   * one still silent MASS_DISCONNECT_HOLD_MS after its last beat is reaped like any other. Nothing else
+   * here waits on them: a cancel or an end the runner never honored is still finalized, and so is the run
+   * of a runner that signed off (`offlineFromSilence`), since neither verdict is read from silence.
    */
   private async silenceHold(now: number): Promise<string | null> {
     const s = (ms: number) => `${Math.round(ms / 1000)}s`;
-    if (this.startedAt !== null && now - this.startedAt < STARTUP_GRACE_MS) {
-      return `the reaper started ${s(now - this.startedAt)} ago, inside its ${s(STARTUP_GRACE_MS)} startup grace`;
+    if (this.inStartupGrace(now)) {
+      return `the reaper started ${s(now - this.startedAt!)} ago, inside its ${s(STARTUP_GRACE_MS)} startup grace`;
     }
     if (!this.presence) return null;
     const lostAt = this.presence.lastBeatNotRecordedAt();
@@ -598,16 +754,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (quiet) {
       return `apiserver process ${quiet.id.slice(0, 8)} has not reported for ${s(quiet.seenAgoMs)}`
         + `${quiet.connected ? ' though it is still connected' : ''}, so the heartbeats it takes may not be landing`;
-    }
-    const fleet = await this.presence.fleetSilence(MASS_SILENCE_WINDOW_MS);
-    if (fleet.heard > 0 && fleet.silent / fleet.heard >= MASS_SILENCE_SHARE) {
-      this.massSilenceHeldUntil = now + OFFLINE_AFTER_MS;
-      return `${fleet.silent} of the ${fleet.heard} runners heard from in the last `
-        + `${s(RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS)} have been silent for over `
-        + `${s(RUNNER_SILENT_AFTER_MS)} at once (each missed a heartbeat)`;
-    }
-    if (now < this.massSilenceHeldUntil) {
-      return `a fifth of the cell's runners went silent together less than ${s(OFFLINE_AFTER_MS)} ago`;
     }
     return null;
   }

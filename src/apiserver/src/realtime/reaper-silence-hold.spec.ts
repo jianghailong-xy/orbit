@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { RunnerPresenceService, type ApiserverProcessReport } from '../runners/runner-presence';
+import {
+  RUNNER_SILENT_AFTER_MS,
+  RunnerPresenceService,
+  type ApiserverProcessReport,
+  type CellLosses,
+} from '../runners/runner-presence';
 import type { ControlPlaneLeader } from './control-plane-leader';
-import { ReaperService } from './reaper.service';
+import { MASS_DISCONNECT_HOLD_MS, MASS_SILENCE_WINDOW_MS, ReaperService, massDisconnectsIn } from './reaper.service';
 
 /**
  * When a runner's silence is not evidence that it died (docs/runner-link-design.md §6.5).
@@ -12,14 +17,18 @@ import { ReaperService } from './reaper.service';
  * The reaper calls a runner offline on 90 s without a beat in `runner_presence`, an UNLOGGED table a
  * crash or a failover of the primary empties. So it reaps nothing as `runner offline`
  *  - for three minutes after it starts,
- *  - while a fifth or more of the cell's runners have gone quiet at once — each missed a beat, 45 s
- *    without one, whether or not it is past the 90 s line yet — and for a window after,
- *  - while heartbeat writes have been failing in this process,
- * and each of those holds only verdicts read from silence: a cancel nobody honored is still finalized,
- * and the run of a runner that signed off (OFFLINE) is reaped as it always was. Which runners count
- * toward "a fifth" — only those that can lose contact — and by which lines is a query, pinned on a
- * real PostgreSQL in runners/runner-presence.pg.spec.ts; the cases here that model the cell runner by
- * runner answer it by the lines it is handed.
+ *  - while heartbeat writes have been failing in this process or another,
+ * and does not reap the run of a runner that lost contact in a mass disconnection — a fifth or more of
+ * the cell's runners losing contact within 45 s of each other, those back already counted with those
+ * still out, or a fifth silent at once — until that runner has been silent for 10 min 45 s. Every
+ * sweep past the grace reads the cell for one and keeps what it finds (`runner_mass_disconnect`), so
+ * that a disconnection most runners came back from at once still holds the few that did not.
+ *
+ * Each of those holds only verdicts read from silence: a cancel nobody honored is still finalized, and
+ * the run of a runner that signed off (OFFLINE) is reaped as it always was. Which runners count — only
+ * those that can lose contact — and by which lines is a query, pinned on a real PostgreSQL in
+ * runners/runner-presence.pg.spec.ts; here the cell is modelled runner by runner and the query answered
+ * from it by the same rules.
  *
  * Every case runs one RUNNING session whose runner was last heard from five minutes ago — offline
  * by any reading — unless the case says otherwise, on a clock the test moves.
@@ -40,9 +49,10 @@ function onTheClock(): void {
   mock.method(Date, 'now', () => clock);
 }
 
-interface Fleet {
-  heard: number;
-  silent: number;
+/** A runner of the cell as presence holds it: its last beat, and the last beat it lost contact after (`lost_at`). */
+interface Heard {
+  beat: number;
+  lostAt?: number | null;
 }
 
 /** A runner still connected, beating every BEAT_EVERY from `phase` on: when it was last heard, at the clock. */
@@ -50,39 +60,82 @@ function connected(phase: number): () => number {
   return () => clock - ((((clock - phase) % BEAT_EVERY) + BEAT_EVERY) % BEAT_EVERY);
 }
 
-/**
- * fleetSilence's query answered from the cell runner by runner, by the two lines the query is handed, in order: how
- * long without a beat a runner has to be to count as silent, and how long ago it may have been heard and still count.
- */
-function readCell(lastBeats: number[], query: { values?: unknown[] }): Fleet {
-  const [silentAfterMs, heardWithinMs, ...rest] = query.values ?? [];
-  assert.ok(
-    typeof silentAfterMs === 'number' && typeof heardWithinMs === 'number' && rest.length === 0,
-    `the cell's query is handed its two lines: ${JSON.stringify(query.values)}`,
+/** `n` runners connected, their beats spread across the period. */
+function beating(n: number): Array<() => Heard> {
+  return Array.from({ length: n }, (_, i) => {
+    const beat = connected(T0 + Math.floor((i * BEAT_EVERY) / Math.max(n, 1)));
+    return () => ({ beat: beat() });
+  });
+}
+
+/** The cell's query answered from the cell runner by runner, as RunnerPresenceService.cellLosses reads it. */
+function readCell(cell: Heard[], query: { values?: unknown[] }): CellLosses {
+  const window = RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS;
+  assert.deepEqual(
+    query.values,
+    [RUNNER_SILENT_AFTER_MS, RUNNER_SILENT_AFTER_MS, window, window],
+    'the cell\'s query is handed its silence line twice and its window twice',
   );
-  const heard = lastBeats.filter((at) => at >= clock - heardWithinMs);
-  return { heard: heard.length, silent: heard.filter((at) => at < clock - silentAfterMs).length };
+  const heard = cell.filter((r) => r.beat >= clock - window);
+  const silent = heard.filter((r) => r.beat < clock - RUNNER_SILENT_AFTER_MS);
+  const seconds = new Map<number, number>();
+  for (const r of heard) {
+    const lost = r.beat < clock - RUNNER_SILENT_AFTER_MS ? r.beat : (r.lostAt ?? null);
+    if (lost === null || lost < clock - window) continue;
+    const second = Math.floor(lost / 1000);
+    seconds.set(second, (seconds.get(second) ?? 0) + 1);
+  }
+  return {
+    heard: heard.length,
+    silent: silent.length,
+    silentFrom: silent.length > 0 ? Math.min(...silent.map((r) => r.beat)) : null,
+    silentTo: silent.length > 0 ? Math.max(...silent.map((r) => r.beat)) : null,
+    losses: [...seconds].sort((a, b) => a[0] - b[0]),
+  };
+}
+
+/** `runner_mass_disconnect`, as the reaper reads and writes it. Shared by reapers on two processes of one cell. */
+type Kept = Array<{ id: bigint; lostFrom: Date; lostTo: Date; runners: number; heard: number; updatedAt?: Date }>;
+function keptTable(kept: Kept) {
+  return {
+    findMany: async ({ where }: { where: { lostTo: { gte: Date } } }) =>
+      kept.filter((k) => k.lostTo >= where.lostTo.gte).sort((a, b) => a.lostFrom.getTime() - b.lostFrom.getTime()).map((k) => ({ ...k })),
+    create: async ({ data }: { data: Omit<Kept[number], 'id'> }) => {
+      const row = { id: BigInt(kept.length + 1), ...data };
+      kept.push(row);
+      return { ...row };
+    },
+    update: async ({ where, data }: { where: { id: bigint }; data: Partial<Kept[number]> }) => {
+      const row = kept.find((k) => k.id === where.id);
+      assert.ok(row, `the disconnection updated is one kept: ${where.id}`);
+      Object.assign(row, data);
+      return { ...row };
+    },
+  };
 }
 
 function world(opts: {
-  fleet?: Fleet | (() => Fleet);
-  /**
-   * The cell runner by runner instead of in totals: when each of its runners that can lose contact was last heard
-   * from. fleetSilence's query is answered from it (`readCell`).
-   */
-  cell?: () => number[];
-  fleetFails?: unknown;
+  /** The cell's other runners that can lose contact, runner by runner. The session's own runner is added unless OFFLINE. */
+  others?: () => Heard[];
+  /** The session's runner's `lost_at`. */
+  lostAt?: number | null;
+  cellFails?: unknown;
   cancelRequestedAgoMs?: number;
   /** What the runner row says: OFFLINE is a runner that signed off. */
   runnerStatus?: string;
   /** When this session's runner was last heard from: five minutes before the clock unless a case says. */
   lastBeatAt?: number;
+  /** The kept disconnections, to share with another world: one cell's table. */
+  kept?: Kept;
 } = {}) {
   const runnerStatus = opts.runnerStatus ?? 'ONLINE';
   const finalized: Array<Record<string, unknown>> = [];
   const warns: string[] = [];
-  const fleetReads: number[] = [];
+  const cellReads: number[] = [];
+  const kept = opts.kept ?? [];
   const lastBeat = () => new Date(opts.lastBeatAt ?? clock - 5 * MINUTE);
+  // Nine runners beating and this session's runner: a quiet cell, unless a case says otherwise.
+  const others = opts.others ?? (() => beating(9).map((r) => r()));
   const tx = {
     session: {
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
@@ -100,7 +153,7 @@ function world(opts: {
   };
   const prisma = {
     session: {
-      findMany: async () => [{
+      findMany: async () => (finalized.length > 0 ? [] : [{
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
@@ -116,20 +169,22 @@ function world(opts: {
         endReason: null,
         startsTaskWork: true,
         task: null,
-        // Its own record of its beats ten minutes old; its presence row five.
-        assignedRunner: { status: runnerStatus, lastHeartbeatAt: new Date(clock - 10 * MINUTE), presence: { lastBeatAt: lastBeat() } },
-      }],
+        // Its own record of its beats five minutes older than its presence row.
+        assignedRunner: {
+          status: runnerStatus, lastHeartbeatAt: new Date(lastBeat().getTime() - 5 * MINUTE), presence: { lastBeatAt: lastBeat() },
+        },
+      }]),
     },
     runEvent: { findFirst: async () => null },
+    runnerMassDisconnect: keptTable(kept),
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const presence = new RunnerPresenceService({
     $queryRaw: async (query: { values?: unknown[] }) => {
-      fleetReads.push(clock);
-      if (opts.fleetFails) throw opts.fleetFails;
-      if (opts.cell) return [readCell(opts.cell(), query)];
-      const fleet = typeof opts.fleet === 'function' ? opts.fleet() : (opts.fleet ?? { heard: 10, silent: 1 });
-      return [fleet];
+      cellReads.push(clock);
+      if (opts.cellFails) throw opts.cellFails;
+      const own = runnerStatus === 'OFFLINE' ? [] : [{ beat: lastBeat().getTime(), lostAt: opts.lostAt ?? null }];
+      return [readCell([...others(), ...own], query)];
     },
   } as never);
   const realtime = {
@@ -150,17 +205,21 @@ function world(opts: {
     sweep: () => (reaper as unknown as { sweep(): Promise<void> }).sweep(),
     finalized,
     warns,
-    fleetReads,
+    cellReads,
+    kept,
   };
 }
 
+const HELD = /not reaping 1 session\(s\) whose runner looks offline \(1{8}-1{4}-4111-8111-1{12}\): /;
+
 test('the control: a runner silent for five minutes in a quiet cell is reaped as offline', async () => {
   onTheClock();
-  const w = world({ fleet: { heard: 10, silent: 1 } });
+  const w = world();
   await w.sweep();
   assert.equal(w.finalized.length, 1);
   assert.equal(w.finalized[0]?.error, 'runner offline');
-  assert.deepEqual(w.fleetReads, [T0], 'the cell was read once, for the one session it would reap');
+  assert.deepEqual(w.cellReads, [T0], 'the cell was read once, at the sweep');
+  assert.deepEqual(w.kept, [], 'one runner of ten is no mass disconnection');
 });
 
 test('nothing is reaped as offline inside the three-minute startup grace', async () => {
@@ -173,7 +232,7 @@ test('nothing is reaped as offline inside the three-minute startup grace', async
     await w.sweep();
     assert.equal(w.finalized.length, 0, 'a reaper that just started has not had the time to hear the fleet again');
     assert.match(w.warns.join('\n'), /not reaping 1 session\(s\) whose runner looks offline \(1{8}-.*startup grace/);
-    assert.deepEqual(w.fleetReads, [], 'the grace holds before the cell is read at all');
+    assert.deepEqual(w.cellReads, [], 'inside the grace the cell is not read at all: a presence table just emptied is no reading');
 
     clock = T0 + 3 * MINUTE;
     await w.sweep();
@@ -184,27 +243,26 @@ test('nothing is reaped as offline inside the three-minute startup grace', async
   }
 });
 
-test('a fifth of the cell gone quiet at once holds the reaping; a tenth does not', async () => {
+test('a fifth of the cell silent at once holds its runners; a tenth does not', async () => {
   onTheClock();
-  const fifth = world({ fleet: { heard: 10, silent: 2 } });
+  // This session's runner and one more, silent four minutes; eight beating.
+  const fifth = world({ others: () => [...beating(8).map((r) => r()), { beat: clock - 4 * MINUTE }] });
   await fifth.sweep();
   assert.deepEqual(fifth.finalized, []);
-  assert.match(
-    fifth.warns.join('\n'),
-    /2 of the 10 runners heard from in the last 645s have been silent for over 45s at once \(each missed a heartbeat\)/,
-  );
+  assert.match(fifth.warns.join('\n'), /a mass disconnection: 2 of the 10 runners heard from lost contact, last heard between 2026-10-25T05:55:00\.000Z and 2026-10-25T05:56:00\.000Z/);
+  assert.match(fifth.warns.join('\n'), new RegExp(HELD.source + /its runner lost contact in a mass disconnection \(2 of the 10 runners heard from/.source));
 
   // Exactly a fifth, where a float product would land a hair above it (35 * 0.2 > 7).
-  const exactly = world({ fleet: { heard: 35, silent: 7 } });
+  const exactly = world({ others: () => [...beating(28).map((r) => r()), ...[1, 2, 3, 4, 5, 6].map((m) => ({ beat: clock - (m + 1) * MINUTE }))] });
   await exactly.sweep();
   assert.deepEqual(exactly.finalized, []);
 
-  const tenth = world({ fleet: { heard: 10, silent: 1 } });
+  const tenth = world({ others: () => beating(9).map((r) => r()) });
   await tenth.sweep();
   assert.equal(tenth.finalized.length, 1);
 
   // A single-runner cell: its one runner going quiet is all of the cell going quiet at once.
-  const alone = world({ fleet: { heard: 1, silent: 1 } });
+  const alone = world({ others: () => [] });
   await alone.sweep();
   assert.deepEqual(alone.finalized, []);
 });
@@ -216,14 +274,11 @@ test('runners cut off together cross the 90 s line one by one: a sweep between t
   // the sweep in between counted one runner of ten past it — a tenth — and reaped its run.
   const firstLastBeat = T0 - 95 * SECOND; // this session's runner: past the line 5 s ago
   const secondLastBeat = firstLastBeat + 25 * SECOND; // quiet for 70 s: past the line 20 s from now
-  const stillConnected = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => connected(T0 + i * 3_700));
-  const w = world({
-    lastBeatAt: firstLastBeat,
-    cell: () => [...stillConnected.map((lastBeat) => lastBeat()), firstLastBeat, secondLastBeat],
-  });
+  const stillConnected = beating(8);
+  const w = world({ lastBeatAt: firstLastBeat, others: () => [...stillConnected.map((r) => r()), { beat: secondLastBeat }] });
   await w.sweep();
-  assert.deepEqual(w.finalized, [], 'both have missed a beat: a fifth of the cell went quiet at once');
-  assert.match(w.warns.join('\n'), /2 of the 10 runners heard from in the last \d+s have been silent for over \d+s at once/);
+  assert.deepEqual(w.finalized, [], 'both have missed a beat: a fifth of the cell lost contact at once');
+  assert.match(w.warns.join('\n'), HELD);
 
   // The second is past the line too: still the same two of ten.
   clock = T0 + 30 * SECOND;
@@ -234,51 +289,169 @@ test('runners cut off together cross the 90 s line one by one: a sweep between t
 test('one runner lost in a cell otherwise heard is reaped once it is past the 90 s line, as it always was', async () => {
   onTheClock();
   // Nine runners beating every 30 s, and this session's runner last heard at T0: a machine that died, not an outage.
-  const stillConnected = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => connected(T0 + i * 3_300));
-  const w = world({ lastBeatAt: T0, cell: () => [...stillConnected.map((lastBeat) => lastBeat()), T0] });
+  const w = world({ lastBeatAt: T0, others: () => beating(9).map((r) => r()) });
   clock = T0 + 90 * SECOND;
   await w.sweep();
   assert.equal(w.finalized.length, 0, 'ninety seconds is not past the line');
-  assert.deepEqual(w.fleetReads, [], 'so nothing is reaped for silence, and the cell is not read');
 
   clock = T0 + 90 * SECOND + 1;
   await w.sweep();
   assert.equal(w.finalized.length, 1, 'one runner of ten silent is no outage');
   assert.equal(w.finalized[0]?.error, 'runner offline');
-  assert.deepEqual(w.fleetReads, [T0 + 90 * SECOND + 1]);
+  assert.deepEqual(w.cellReads, [T0 + 90 * SECOND, T0 + 90 * SECOND + 1], 'the cell is read at every sweep, whatever it finds');
 });
 
-test('the hold outlives the mass silence by a window, then lifts', async () => {
+/**
+ * A link gateway node of three stops 100 s before T0, with ten runners of the thirty on it. Nine connected through the
+ * other two within twelve seconds and have beaten on since: none of them missed a beat, and what is left of their loss
+ * is the last beat each was heard with before its new connection, in the period before the stop (`lost_at`, which the
+ * welcome route keeps). The tenth is this session's runner, still waiting out its reconnection backoff: last heard 5 s
+ * before the stop, 105 s ago, past the offline line. No sweep ever saw more than this one runner silent.
+ */
+const STOP = T0 - 100 * SECOND;
+function gatewayNodeStopped(): () => Heard[] {
+  const stayed = beating(20);
+  const moved = beating(9);
+  return () => [...stayed.map((r) => r()), ...moved.map((r, i) => ({ ...r(), lostAt: STOP - 2 * SECOND - i * 3 * SECOND }))];
+}
+
+/** The same cell once the nine have connected again one at a time, forty seconds apart from T0 on: losses spread. */
+function renewedOneByOne(cell: () => Heard[]): () => Heard[] {
+  return () => {
+    let renewal = 0;
+    return cell().map((r) => (r.lostAt ? { ...r, lostAt: T0 + renewal++ * 40 * SECOND } : r));
+  };
+}
+
+test('a reconnection most runners are back from within seconds holds the runner still out: a gateway node of three stopping', async () => {
   onTheClock();
-  let fleet: Fleet = { heard: 10, silent: 3 };
-  const w = world({ fleet: () => fleet });
+  const w = world({ lastBeatAt: STOP - 5 * SECOND, others: gatewayNodeStopped() });
   await w.sweep();
-  assert.deepEqual(w.finalized, []);
+  assert.deepEqual(w.finalized, [], 'ten runners of thirty lost contact within half a minute: a third of the cell');
+  assert.match(w.warns.join('\n'), /a mass disconnection: 10 of the 30 runners heard from lost contact, last heard between 2026-10-25T05:57:54\.000Z and 2026-10-25T05:58:18\.999Z/);
+  assert.match(w.warns.join('\n'), new RegExp(HELD.source + /its runner lost contact in a mass disconnection \(10 of the 30/.source));
+  assert.equal(w.kept.length, 1, 'and kept');
 
-  // Thirty seconds later most of the cell is back: the runners whose beats were lost in it get a whole
-  // window of their own before their silence counts.
-  clock = T0 + 30 * SECOND;
-  fleet = { heard: 10, silent: 1 };
-  await w.sweep();
-  assert.deepEqual(w.finalized, []);
-  assert.match(w.warns.at(-1) ?? '', /went silent together less than 90s ago/);
+  // The control: the same cell without what the nine left of their loss is one silent runner of thirty.
+  const control = world({ lastBeatAt: STOP - 5 * SECOND, others: () => gatewayNodeStopped()().map((r) => ({ beat: r.beat })) });
+  await control.sweep();
+  assert.equal(control.finalized.length, 1, 'counting the silent alone, the runner still out is reaped');
+});
 
-  clock = T0 + 90 * SECOND;
+test('a kept mass disconnection holds its runners once the cell shows it no more, until each has been silent past the window', async () => {
+  onTheClock();
+  let cell = gatewayNodeStopped();
+  const w = world({ lastBeatAt: STOP - 5 * SECOND, others: () => cell() });
   await w.sweep();
-  assert.equal(w.finalized.length, 1, 'ninety seconds after the last sweep that saw it, the hold is gone');
+  assert.equal(w.finalized.length, 0);
+
+  // The nine connect once more, one at a time over the next minutes (a token's renewal, say): their losses are spread
+  // now, and the cell no longer shows the disconnection. The reaper has it kept.
+  cell = renewedOneByOne(gatewayNodeStopped());
+  clock = T0 + 8 * MINUTE;
+  await w.sweep();
+  assert.equal(w.finalized.length, 0, 'held by the disconnection kept');
+  assert.match(w.warns.at(-1) ?? '', /its runner lost contact in a mass disconnection \(10 of the 30 runners heard from/);
+
+  // Silent for the window and a moment past it: not back from that disconnection, reaped as anybody's runner is.
+  clock = STOP - 5 * SECOND + MASS_DISCONNECT_HOLD_MS;
+  await w.sweep();
+  assert.equal(w.finalized.length, 0, `silent for ${MASS_DISCONNECT_HOLD_MS / 1000}s: still inside the window`);
+  clock += 1;
+  await w.sweep();
+  assert.equal(w.finalized.length, 1);
+  assert.equal(w.finalized[0]?.error, 'runner offline');
+});
+
+test('a mass disconnection one reaper kept holds on the reaper of the process that sweeps after it', async () => {
+  onTheClock();
+  const kept: Kept = [];
+  const a = world({ lastBeatAt: STOP - 5 * SECOND, others: gatewayNodeStopped(), kept });
+  await a.sweep();
+  assert.equal(kept.length, 1);
+  // The process that swept is gone; another, long past its own start, sweeps the same cell, whose runners renewed their
+  // connections in the meantime, so that the cell no longer shows the disconnection.
+  clock = T0 + 5 * MINUTE;
+  const b = world({ lastBeatAt: STOP - 5 * SECOND, others: renewedOneByOne(gatewayNodeStopped()), kept });
+  await b.sweep();
+  assert.deepEqual(b.finalized, [], 'the disconnection is the cell\'s, not the memory of the process that saw it');
+  assert.match(b.warns.join('\n'), /its runner lost contact in a mass disconnection \(10 of the 30/);
+});
+
+test('a runner lost on its own while a mass disconnection is held is reaped once past the 90 s line, as it always was', async () => {
+  onTheClock();
+  const kept: Kept = [];
+  const disconnected = world({ lastBeatAt: STOP - 5 * SECOND, others: gatewayNodeStopped(), kept });
+  await disconnected.sweep();
+  assert.equal(kept.length, 1, 'a disconnection kept, its window running for ten minutes more');
+  // A minute later, a runner of the stayed twenty dies on its own: its last beat at T0 + 60 s, well after the span.
+  const died = T0 + 60 * SECOND;
+  const others = gatewayNodeStopped();
+  const w = world({ lastBeatAt: died, others: () => others(), kept });
+  clock = died + 90 * SECOND + 1;
+  await w.sweep();
+  assert.equal(w.finalized.length, 1, 'its silence began alone, past the disconnection: no hold');
+  assert.equal(w.finalized[0]?.error, 'runner offline');
+});
+
+test('losses spread over minutes are no mass disconnection: connections renewed one by one', async () => {
+  onTheClock();
+  // Thirty runners; eight of them connected again in the last ten minutes, one every seventy seconds, as an hour's token
+  // renewals fall. No 45 s holds two of them.
+  const renewed = beating(29);
+  const w = world({ others: () => renewed.map((r, i) => (i < 8 ? { ...r(), lostAt: clock - (i + 1) * 70 * SECOND } : r())) });
+  await w.sweep();
+  assert.equal(w.finalized.length, 1);
+  assert.deepEqual(w.kept, []);
+});
+
+test('a mass disconnection none of whose runners comes back holds each for the window, then lets it be reaped', async () => {
+  onTheClock();
+  // All ten runners cut off together, last heard across the period before T0, and never heard again.
+  const lastBeats = Array.from({ length: 9 }, (_, i) => T0 - 2 * SECOND - i * 3 * SECOND);
+  const w = world({ lastBeatAt: T0 - 29 * SECOND, others: () => lastBeats.map((beat) => ({ beat })) });
+  for (clock = T0 + 30 * SECOND; clock <= T0 - 29 * SECOND + MASS_DISCONNECT_HOLD_MS; clock += 30 * SECOND) {
+    await w.sweep();
+    assert.deepEqual(w.finalized, [], `held ${(clock - T0) / 1000}s after the cut`);
+  }
+  clock = T0 - 29 * SECOND + MASS_DISCONNECT_HOLD_MS + 1;
+  await w.sweep();
+  assert.equal(w.finalized.length, 1, 'past the window: no runner back from it is coming');
+  assert.equal(w.finalized[0]?.error, 'runner offline');
+});
+
+test('massDisconnectsIn: the spans a reading of the cell shows', () => {
+  const at = (iso: string) => Date.parse(iso);
+  const second = (iso: string) => Math.floor(at(iso) / 1000);
+  // Ten runners heard; three lost contact within 45 s of each other, two of those back already.
+  assert.deepEqual(massDisconnectsIn({
+    heard: 10, silent: 1, silentFrom: at('2026-10-25T06:00:30.250Z'), silentTo: at('2026-10-25T06:00:30.250Z'),
+    losses: [[second('2026-10-25T06:00:00Z'), 1], [second('2026-10-25T06:00:30Z'), 1], [second('2026-10-25T06:00:45Z'), 1]],
+  }), [{ from: at('2026-10-25T06:00:00Z'), to: at('2026-10-25T06:00:45.999Z'), runners: 3, heard: 10 }]);
+  // The same three, 46 s from first to last: two within 45 s are a fifth; the third alone is none.
+  assert.deepEqual(massDisconnectsIn({
+    heard: 10, silent: 0, silentFrom: null, silentTo: null,
+    losses: [[second('2026-10-25T06:00:00Z'), 1], [second('2026-10-25T06:00:01Z'), 1], [second('2026-10-25T06:00:47Z'), 1]],
+  }), [{ from: at('2026-10-25T06:00:00Z'), to: at('2026-10-25T06:00:01.999Z'), runners: 2, heard: 10 }]);
+  // Silent at once, however spread: one span over every silent runner's last beat, though no 45 s holds two of them.
+  assert.deepEqual(massDisconnectsIn({
+    heard: 10, silent: 2, silentFrom: at('2026-10-25T05:50:00Z'), silentTo: at('2026-10-25T05:58:00Z'),
+    losses: [[second('2026-10-25T05:50:00Z'), 1], [second('2026-10-25T05:58:00Z'), 1]],
+  }), [{ from: at('2026-10-25T05:50:00Z'), to: at('2026-10-25T05:58:00Z'), runners: 2, heard: 10 }]);
+  assert.deepEqual(massDisconnectsIn({ heard: 0, silent: 0, silentFrom: null, silentTo: null, losses: [] }), []);
 });
 
 test('a silence older than the window is no mass silence: its runners leave the count', async () => {
   onTheClock();
   // Nothing heard from within the window at all — the cell's runners have been gone for longer.
-  const w = world({ fleet: { heard: 0, silent: 0 } });
+  const w = world({ lastBeatAt: T0 - 11 * MINUTE, others: () => Array.from({ length: 9 }, () => ({ beat: T0 - 20 * MINUTE })) });
   await w.sweep();
   assert.equal(w.finalized.length, 1);
 });
 
 test('a heartbeat write that failed holds the reaping for the window silence is read from', async () => {
   onTheClock();
-  const w = world({ fleet: { heard: 10, silent: 1 } });
+  const w = world();
   w.presence.beatNotRecorded(Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' }));
   clock = T0 + 30 * SECOND;
   await w.sweep();
@@ -292,7 +465,7 @@ test('a heartbeat write that failed holds the reaping for the window silence is 
 
 test('a write the data refused (the runner deleted under it) says nothing about the database', async () => {
   onTheClock();
-  const w = world({ fleet: { heard: 10, silent: 1 } });
+  const w = world();
   w.presence.beatNotRecorded(Object.assign(new Error('Foreign key constraint violated'), { code: 'P2003' }));
   assert.equal(w.presence.lastBeatNotRecordedAt(), null);
   await w.sweep();
@@ -301,7 +474,7 @@ test('a write the data refused (the runner deleted under it) says nothing about 
 
 test('a heartbeat whose presence row cannot be written tells the reaper, which then holds', async () => {
   onTheClock();
-  const w = world({ fleet: { heard: 10, silent: 1 } });
+  const w = world();
   const prisma = {
     runner: { update: async () => ({ maxConcurrent: 4 }), findUnique: async () => null },
     runnerPresence: {
@@ -327,7 +500,7 @@ test('a heartbeat whose presence row cannot be written tells the reaper, which t
 
 test('a cell that cannot be read is no evidence either', async () => {
   onTheClock();
-  const w = world({ fleetFails: Object.assign(new Error('Timed out fetching a new connection'), { code: 'P2024' }) });
+  const w = world({ cellFails: Object.assign(new Error('Timed out fetching a new connection'), { code: 'P2024' }) });
   await w.sweep();
   assert.deepEqual(w.finalized, []);
   assert.match(w.warns.join('\n'), /the cell's presence could not be read/);
@@ -348,19 +521,22 @@ test('a hold covers only what silence decides: a cancel nobody honored is still 
 
 test('a runner that signed off is reaped as it always was, whatever holds silence', async () => {
   onTheClock();
-  // A fifth of the cell silent and a reaper that has only just started: both hold a silent runner's run.
-  const w = world({ runnerStatus: 'OFFLINE', fleet: { heard: 10, silent: 5 } });
+  // Half the cell silent and a reaper that has only just started: both hold a silent runner's run.
+  const halfSilent = () => [...beating(5).map((r) => r()), ...[1, 2, 3, 4, 5].map((m) => ({ beat: clock - (m + 1) * MINUTE }))];
+  const w = world({ runnerStatus: 'OFFLINE', others: halfSilent });
   w.reaper.onModuleInit();
   try {
     await w.sweep();
     assert.equal(w.finalized.length, 1, 'OFFLINE is the runner saying it left: no silence to hold');
     assert.equal(w.finalized[0]?.error, 'runner offline');
-    assert.deepEqual(w.fleetReads, [], 'and the cell is not asked about it');
   } finally {
     w.reaper.onModuleDestroy();
   }
+  const pastGrace = world({ runnerStatus: 'OFFLINE', others: halfSilent });
+  await pastGrace.sweep();
+  assert.equal(pastGrace.finalized.length, 1, 'and past the grace, with the half of the cell silent kept as a disconnection');
 
-  const silent = world({ fleet: { heard: 10, silent: 5 } });
+  const silent = world({ others: halfSilent });
   await silent.sweep();
   assert.deepEqual(silent.finalized, [], 'the control: the same cell holds a runner that only went quiet');
 });
@@ -378,7 +554,7 @@ test('a process that takes the sweeps over starts its reaper again, inside the s
   // Up for an hour as a follower: its own start long past, and nothing swept while another process held the lock.
   (w.reaper as unknown as { startedAt: number }).startedAt = T0 - 60 * MINUTE;
   await w.reaper.tick();
-  assert.deepEqual(w.fleetReads, [], 'a process that does not hold the lock does not sweep');
+  assert.deepEqual(w.cellReads, [], 'a process that does not hold the lock does not sweep');
   since = clock;
   await w.reaper.tick();
   assert.equal(w.finalized.length, 0, 'the takeover is a start: nothing is reaped inside its grace');
@@ -411,4 +587,3 @@ test('another apiserver process that lost a beat, or went quiet, holds the reapi
   await expect(peer({ seenAgoMs: 2 * MINUTE + SECOND, connected: false }), true);
   await expect(peer({ seenAgoMs: 20 * SECOND }), true);
 });
-

@@ -104,7 +104,13 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
   const queue = new QueueService(prisma, realtime);
   const providers = new ProvidersService(prisma, realtime, { snapshot: () => null } as never);
   const runnerProviders = new RunnerProvidersController(providers);
-  const api = new RunnerApiController(prisma, queue, realtime, { notifyEngineSignedOut: async () => undefined } as never, {} as never, {} as never);
+  // ProvidersService is the runner controller's last dependency: the doors of the daemon's Cursor key check answers.
+  const api = new RunnerApiController(
+    prisma, queue, realtime, { notifyEngineSignedOut: async () => undefined } as never, {} as never, {} as never,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    providers,
+  );
 
   /** Every answer a door gave, as its caller reads it — refusals included. */
   const responses: string[] = [];
@@ -173,7 +179,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
   }
   /** The runner's answer about a check it was handed (POST /runner/cursor-key-check-result). */
   const answer = async (at: Machine, check: { checkId: string; apiKey: string }, state: string, about = check.apiKey) =>
-    answered(await runnerProviders.cursorKeyCheckResult(at as never, { checkId: check.checkId, state, keyFingerprint: fingerprint(about) }));
+    answered(await api.cursorKeyCheckResult(at, { checkId: check.checkId, state, keyFingerprint: fingerprint(about) }));
   /** Connects `apiKey` as `ownerId` (POST /providers/test). */
   const connect = async (ownerId: string, apiKey: string) =>
     answered(await providers.testConnection({ baseUrl: CURSOR_API, apiKey, runtime: 'cursor' }, ownerId)) as CursorKeyCheckAnswer;

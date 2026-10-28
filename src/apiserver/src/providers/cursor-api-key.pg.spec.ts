@@ -25,6 +25,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
@@ -112,6 +113,13 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
   const tasks = new TasksService(prisma, sessions, realtime);
   const providers = new ProvidersService(prisma, realtime, { snapshot: () => null } as never);
   const runnerProviders = new RunnerProvidersController(providers);
+  // A session's own key check is the daemon's call, served by the runner controller; ProvidersService is its last dependency.
+  const runnerApi = new RunnerApiController(
+    prisma, queue, realtime, {} as never, {} as never, {} as never,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    providers,
+  );
   // The orchestration credential's check is the door's own concern (runner-orchestration-authorizer.ts);
   // here it vouches for the parent session it is shown.
   const mcp = new RunnerSessionsController(
@@ -337,7 +345,7 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
 
   await t.test('P2 a runner’s check of a Cursor key is kept on the key, an invalid one plainly, and a replaced key is unchecked', async () => {
     const report = (runner: { id: string; ownerId: string }, sessionId: string, state: string, keyText: string) =>
-      runnerProviders.cursorKeyCheck(runner as never, sessionId, { state, keyFingerprint: fingerprint(keyText) } as never);
+      runnerApi.cursorKeyCheck(runner as never, sessionId, { state, keyFingerprint: fingerprint(keyText) } as never);
     const checkOf = async () => {
       const row = (await providers.listMine(owner) as unknown as Array<{ id: string; keyCheckState: string | null; keyCheckedAt: Date | null }>)
         .find((candidate) => candidate.id === key.id)!;

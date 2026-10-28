@@ -125,7 +125,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
   └──HTTPS（经 Cloudflare）──▶ API：注册、领取连接令牌、自更新与 /dl、agent 工具 API、附件
 ```
 
-**被替换的**：runner-api 主控制器里的全部守护进程路由（2026-10-25 统计为 49 个），包括领会话、取消息、wake、心跳、事件、租约、各类结果回报等。
+**被替换的**：runner-api 主控制器里的全部守护进程路由（2026-10-25 统计为 49 个，2026-10-28 起为 52 个，见 §15.9），包括领会话、取消息、wake、心跳、事件、租约、各类结果回报等。
 
 **继续走 HTTPS 的**（D14）：
 
@@ -310,7 +310,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - **新表 `runner_presence`（UNLOGGED）。** 字段包括 `runner_id`、`process_id`、`gateway_id`、`last_beat_at`、`link_state`、事实哈希、对账哈希。每次心跳 upsert 一行，每单元约 500 次/秒。
 - **读取统一收口。** 现在有约 69 处（分布在 23 个文件里，2026-10-25 统计）直接读 `lastHeartbeatAt`，统一改成调用在线状态接口；`runner.last_heartbeat_at` 降为低频记录，例如每 5 分钟写一次。
 - **启动宽限期。** UNLOGGED 表在主库崩溃或主备切换后会被清空，所以 reaper 启动后有一段宽限期（例如 3 分钟），期间不回收任何会话。
-- **大面积断线时暂停回收。** 如果单元内短时间有超过一定比例（例如 20%）的 runner 同时失联，或者在线状态写入出现异常，reaper 就暂停回收。这是把现有"数据库出问题时不把沉默当证据"的规则（`transaction-retry.ts:129`）推广开。实现上按"漏了一次心跳"计数，而不是按 90 秒离线线计数，见 §15.6。
+- **大面积断线时，断线的那一批 runner 不因静默被回收。** 单元内两成以上的 runner 在 45 秒内先后失联（已经重连回来的也算），或者两成以上同时静默，就是一次大面积断线。这一批 runner 的会话不因静默被回收，直到各自静默超过 10 分 45 秒（45 秒静默线加 10 分钟窗口）；不在这一批里的 runner 照旧 90 秒后回收。断线一被看到就记进数据库，所以保护不取决于哪个 apiserver 进程在清扫，也不取决于那一刻还有多少 runner 在静默。在线状态写入出现异常时，reaper 暂停全部回收。这是把现有"数据库出问题时不把沉默当证据"的规则（`transaction-retry.ts:129`）推广开。静默怎么计、失联怎么认、保护多久，以及和这里原来写法的差别，见 §15.6。
 
 ### 6.6 事件入库
 
@@ -369,10 +369,10 @@ apiserver 进程数和数据库规格按 O3 的测量补齐，见 §15.3。
 
 | 故障 | 应对 |
 |---|---|
-| 网关节点宕机 | runner 带全抖动退避，重连到其他节点并续传；大面积断线时暂停回收，避免误判 |
+| 网关节点宕机 | runner 带全抖动退避，重连到其他节点并续传；断线的那一批 runner 不因静默被回收（§6.5），避免误判 |
 | 后端发布或宕机 | 网关重试幂等请求，runner 不断线 |
 | NATS 故障 | 提示和实时流降级，由心跳兜底；持久事件不受影响 |
-| Postgres 主库切换 | 写库返回可重试错误，runner 先缓冲在内存、满了落盘；在线状态有宽限期，配合"大面积断线时暂停回收"；主备切换不能丢已确认的提交，见 §15.5 |
+| Postgres 主库切换 | 写库返回可重试错误，runner 先缓冲在内存、满了落盘；在线状态有宽限期，配合大面积断线时的保护（§6.5）；主备切换不能丢已确认的提交，见 §15.5 |
 | 在线状态写入异常 | reaper 暂停 |
 | 在途响应丢失 | 带同一个 `request_id` 重发，拿回同一个结果 |
 | 大量 runner 同时重连 | 全抖动退避 + 网关握手限速；`Welcome` 直接带上"有活的会话列表"，避免每个会话都去查一遍 |
@@ -412,7 +412,7 @@ apiserver 进程数和数据库规格按 O3 的测量补齐，见 §15.3。
 
 1. 确认生产上的 runner 都已是支持链路模式的版本；切换步骤先在 staging 复验。
 2. 打开"暂停派发"，等所有正在运行的 turn、集成任务、merge/commit 跑完（D8）。看板上列出剩余项和各自已运行的时长。
-3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。实现上开关是运行时的，用 `PUT /api/admin/runner-link-required` 打开，1 秒内生效，不用部署；返回 `UPGRADE_REQUIRED` 的是其中 44 个，见 §15.1。
+3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。实现上开关是运行时的，用 `PUT /api/admin/runner-link-required` 打开，1 秒内生效，不用部署；返回 `UPGRADE_REQUIRED` 的是 47 个，见 §15.1、§15.9。
 4. runner 的处理：
    - 支持链路的 runner 收到 `UPGRADE_REQUIRED` 后，立即切到链路模式；
    - 还不支持的版本会触发自更新，升级后再切换。自更新最长等 10 分钟，此时没有 turn 在跑，`updateWhenNoTurnInFlight` 不会拦住；也可以手动执行 `orbit upgrade`。
@@ -495,7 +495,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - 开关是数据库里的一行（表 `runner_link_switch`，迁移 0446），不是部署时设的环境变量。登录的管理员用 `GET` / `PUT /api/admin/runner-link-required` 查询和翻转（不接受访问令牌），不用重新构建，也不用重启或部署。
 - 1 秒内生效：处理 `PUT` 的 apiserver 进程立即按新值应答，其他进程最多 1 秒后重读。网关每秒读一次 `GET /api/runner/link/mode`，之后的 `Welcome` 和每个 `HeartbeatAck` 都带新模式：连着网关的 runner（包括影子连接）在下一次心跳时得知；打开时，走 HTTPS 的 runner 也会在下一次守护进程调用被拒时得知。
 - 读不到时保持上一次的值：数据库或路由不可用时，各 apiserver 进程和网关都按上一次读到的值应答，不来回切换。进程启动后还没读到过时，按关闭处理（网关告诉 runner `MODE_HTTP`）。
-- 打开时，runner-api 主控制器的 49 个路由（2026-10-25 统计）里，44 个守护进程路由对 HTTPS 调用返回 426 `UPGRADE_REQUIRED`，并提示执行 `orbit upgrade`；注册的 3 个（register、device/start、device/poll）和附件的 2 个按 D14 留在 HTTPS，照常应答。§11.3 第 3 步说"全部旧守护进程路由（当前 49 个）"统一返回 `UPGRADE_REQUIRED`，实际返回的是这 44 个。带 `X-Orbit-Runner-Caller` 标记的调用（`orbit mcp`、Antigravity 审批钩子、CLI 命令）也照常处理，守护进程从不带这个标记。
+- 打开时，runner-api 主控制器的 52 个路由（2026-10-25 统计为 49 个，2026-10-28 又挪进来 3 个，见 §15.9）里，47 个守护进程路由对 HTTPS 调用返回 426 `UPGRADE_REQUIRED`，并提示执行 `orbit upgrade`；注册的 3 个（register、device/start、device/poll）和附件的 2 个按 D14 留在 HTTPS，照常应答。§11.3 第 3 步说"全部旧守护进程路由（当前 49 个）"统一返回 `UPGRADE_REQUIRED`，实际返回的是这 47 个。带 `X-Orbit-Runner-Caller` 标记的调用（`orbit mcp`、Antigravity 审批钩子、CLI 命令）也照常处理，守护进程从不带这个标记。
 - 网关的 `LINK_MODE=link` 会不看开关，一直告诉 runner `MODE_LINK`。生产网关要保持默认的 `http`（跟随开关），否则关开关时 runner 不会退回 HTTP。
 
 ### 15.2 大载荷没有按引用传输
@@ -547,14 +547,45 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - 所以单元数据库用同步备库（`synchronous_commit = on`，并在 `synchronous_standby_names` 里写明备库），或两个备库加法定数（`ANY 1 (...)`），或切换时不丢已确认提交的托管数据库。备库要放得近：每个写事件的提交都要等它。见 [self-hosting.md 的 "The cell's size"](./self-hosting.md#the-cells-size)。
 - C1a 在 staging 演练的是同步备库的切换，没有丢事件；异步备库的情形没有演练。
 
-### 15.6 reaper 按"漏了一次心跳"计大面积静默
+### 15.6 reaper 怎么认大面积断线：静默按"漏了一次心跳"计，失联按时刻认，只保护断线的那一批 runner
 
-出处：B3 的修复（34mY701NpkuzCFNg9VoiV）；问题由 C1b（34bsPllNT0PRG032Ejecc）的演练发现，修复后由它复验。涉及 §6.5。
+出处：
+- 静默按"漏了一次心跳"计：B3 的修复（34mY701NpkuzCFNg9VoiV）。问题由 C1b（34bsPllNT0PRG032Ejecc）的演练发现，修复后由它复验。
+- 失联按时刻认、只保护断线的那一批、断线写进数据库：34nb3xhlRA03P4rMmfcpO。问题由 C2b（34m88i6i8CQeU4dSuw7HM）的压测发现，方案经协调者 2026-10-28 批准。
+
+涉及 §6.5、§10。
+
+**静默按"漏了一次心跳"计（B3）**
 
 - 最初的实现按 90 秒离线线数静默的 runner。同时断开的 runner，最后一次心跳本来就分散在一个心跳周期里，会在 30 秒内一台台越过 90 秒线；头一台越线之后、占比到 20% 之前的扫描，会把已越线 runner 的会话回收掉。C1b 隔离 10 台中的 2 台时，就有一个会话这样被回收。
-- 现在（`src/apiserver/src/runners/runner-presence.ts` 的 `fleetSilence`）：runner 超过 1.5 个心跳周期没有心跳（30 秒周期下是 45 秒，由 `RUNNER_HEARTBEAT_EVERY_MS` 推导）就算静默。分母是最近 645 秒（45 秒加 10 分钟窗口）内有过心跳的 runner，不算标记为 OFFLINE 的，也不算被管理器排空或休眠的托管 runner。静默的占到 20% 时暂停回收，最后一次看到之后再暂停 90 秒。
-- 不变：单个 runner 按 90 秒判离线并回收、20% 的门槛、reaper 启动后 3 分钟的宽限期、心跳写入失败时"沉默不算死亡"的保护（这一条只看本进程，见 §15.3 的前置 (a)）。
+- 所以 runner 超过 1.5 个心跳周期没有心跳就算静默（30 秒周期下是 45 秒，由 `RUNNER_HEARTBEAT_EVERY_MS` 推导）。分母是最近 645 秒（45 秒加 10 分钟窗口）内有过心跳的 runner，不算标记为 OFFLINE 的，也不算被管理器排空或休眠的托管 runner。现在由 `src/apiserver/src/runners/runner-presence.ts` 的 `cellLosses` 计数，原来叫 `fleetSilence`。
 - C1b 在修复后复验了 10 次断线（2 次停网关节点、8 次隔离 10 台中的 2 台），都没有回收会话。
+
+**失联按时刻认，只保护断线的那一批（34nb3xhlRA03P4rMmfcpO）**
+
+- 问题：B3 之后，reaper 仍然只数清扫那一刻还在静默的 runner，而且只在有会话要回收时才数。
+  - 网关重启后 1.5 万个 runner 按指数退避陆续重连，九成 78 秒内回来。等第一台越过 90 秒线，还在静默的已不到两成，还在退避的尾巴就被当成普通离线回收了：判定那次回收了 975 个会话，强杀网关那次 194 个。
+  - 生产单元有 3 个网关节点，坏一个，它的 runner 十几秒就连到另外两个上，几乎没有 runner 漏心跳，保护根本不会启动。
+- 现在（`src/apiserver/src/realtime/reaper.service.ts` 的 `massDisconnects` 和 `massDisconnectsIn`，`runner-presence.ts` 的 `cellLosses`，迁移 0450）：
+  - 每台 runner 最近一次失联的时刻，在它回来以后也留着：`runner_presence.lost_at`，即失联前的最后一次心跳。两种时候记下来：网关为它新开连接时（welcome 路由）；一次链路心跳离上一次超过 45 秒时。还在静默的 runner，失联时刻就是它的最后一次心跳。
+  - 启动宽限期之外，每次清扫都读一遍全单元，不管有没有会话要回收。最近 645 秒内听到过的 runner 里，下面两种情况都算一次大面积断线：两成以上在 45 秒内先后失联（已经回来的也算）；两成以上此刻静默（失联时刻分散也算）。
+  - 读到的断线记进 `runner_mass_disconnect`：这一批 runner 失联前最后一次心跳所在的时间区间，以及人数。以后的清扫只会扩大区间，接手的进程过了宽限期照样读得到。每小时清掉已经保护不了任何 runner 的记录。
+  - 只保护这一批：会话的 runner 因静默被判离线时，如果它的最后一次心跳落在某次断线的区间里，并且静默还不到 10 分 45 秒（45 秒加 10 分钟窗口），就不回收。不在区间里的 runner（断线前后独自坏掉的那台）照旧 90 秒后回收。一直不回来的，静默满 10 分 45 秒后的下一次清扫回收。
+  - 日志：一次断线第一次被看到、以及区间扩大或人数增加时，各写一行（人数、区间）。某次清扫因为某一批断线不回收时，这一批写一行：会话 id（最多列 10 个）、这批断线的区间和人数。不是每个会话一行。
+  - 不变的：单台 runner 失联照旧 90 秒后回收；两成的门槛；reaper 启动后 3 分钟的宽限期；心跳写入失败、其他 apiserver 进程失联时仍然暂停全部回收；runner 主动下线（OFFLINE）、托管 runner 休眠或排空，都不算静默。
+- 和 §6.5 原文、B3 做法的偏离，以及理由：
+  1. **只保护断线的那一批 runner，不再整个 reaper 暂停回收。** 断线期间独自坏掉的 runner 照样 90 秒回收；网关反复重启时（C2b 里每 132 秒一次），回收不会被无限推迟；误判（见下）只影响恰好同一时段坏掉的 runner。
+  2. **"同时失联"按失联时刻计，已经重连回来的 runner 也算。** 快速重连时，此刻没有 runner 在静默，按清扫那一刻数，怎么采样都看不出来。
+  3. **去掉"最后一次看到之后再暂停 90 秒"，每台 runner 从自己的静默线起保护 10 分钟。** 断线已经写进数据库，不需要再被看到一次。一直不恢复的大面积失联，原来约 12 分 15 秒后回收，现在约 10 分 45 秒（再加不超过一个清扫间隔）。
+  4. **每次清扫都判断，不再只在有会话要回收时才判断。** 等到有会话要回收时，大部分 runner 已经回来了。启动宽限期内不判断：UNLOGGED 表可能刚被清空，读数不可信；宽限期过后，证据还在表里。
+  5. **断线写进数据库，不放在进程内存里。** 选主换了进程以后，接手的进程照样保护，不取决于哪个进程在清扫。
+- 代价（只会推迟回收，不会误回收）：
+  - 令牌续期（每台每小时一次）和 runner 重启也会开新连接，也算失联。1.5 万台的单元每分钟约 1.8%，远低于两成。10 台、几个网关节点的小单元里，两台恰好在同一个 45 秒里续期，就会被算成一次断线，只会推迟同一时段里恰好坏掉的 runner 被回收。
+  - 1 到 5 台的单元，一台失联就占五分之一，保护 10 分 45 秒，和以前一样。
+  - HTTPS 心跳（以及走完整对账的托管 runner 心跳）不记 `lost_at`，没漏心跳就回来的 runner 在那里不留痕迹。HTTPS 下没有握手限速，不会拖出长尾；心跳失败的 runner 要等下一个 tick，静默时会被清扫看到。
+- 测试：
+  - `src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts` 起两个 apiserver 进程，模拟网关的调用，按真实时间注入断线。
+  - staging 演练是 `scripts/runner-link/drills/mass-disconnect-drill.sh` 的 `node` 场景：两个网关节点，前面一个四层转发，停掉一个，另一个限速。
 
 ### 15.7 同一 seq 上来了不同的事件：照常确认，但记错误日志并计数
 
@@ -581,3 +612,20 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   - runner 启动时，交回给它的空闲会话的暂存事件马上发出，不再等下一次领取；
   - 暂存分段读进内存后留在磁盘上，直到其中的事件全部存好；发送途中被强杀，下一个进程重发，服务端每个 seq 只存一次。
 - 回滚和降级时怎么处理这些文件，见 §11.4。
+
+### 15.9 守护进程漏在链路外的三个调用，已挪到链路上；runner 调用普查
+
+出处：34nb3xeq1s4tHra7apUWD（(b) 34mNe8DOyUq2wlk81EGlZ 测试时发现）。涉及 §4、§11.3、D14。
+
+- 2026-10-25 统计的 49 个路由只数了 runner-api 主控制器（RunnerApiController）。守护进程还发三个调用，由给 agent 工具用的控制器提供：链路不转（`RUNNER_LINK_ROUTE_NOT_ON_LINK`），runner 也一直走 HTTPS 发，开关打开后照样走 HTTPS。
+  - `POST /runner/cursor-key-check-result`：回报心跳交来的 Cursor 密钥检查。
+  - `POST /runner/sessions/:id/cursor-key-check`：会话启动前检查派发来的 Cursor 密钥，回报结果。
+  - 会话的后台任务在没有引擎时结束，提醒账号所有者：原来走 `POST /runner/notify`（`orbit notify` 和 MCP 的 notify 工具也走它），会话 id 放在 `X-Orbit-Session-Id` 头里，而链路调用不带请求头。
+- 现在三个都由 RunnerApiController 提供，runner 的 `linkDaemonRoutes` 也列了它们。前两个路径不变。后台任务的提醒改走守护进程自己的 `POST /runner/sessions/:id/notify`，会话 id 在路径里，和 `background-wake` 一样只接受分给这台 runner 的会话。`POST /runner/notify` 留给 agent 和 CLI，照旧走 HTTPS。
+- RunnerApiController 现在有 52 个路由：`RUNNER_LINK_REQUIRED` 打开时 47 个对 HTTPS 返回 426，注册的 3 个和附件的 2 个照常应答（§15.1）。
+- 开关关闭时：两个 Cursor 调用的请求和应答都和以前一样（同一路径、守卫和校验，应答里没有 id）。后台任务的提醒换了路由，推送的内容、标题和频率限制不变；只有会话已经不归这台 runner 时，以前照样推送，现在返回 403。
+- 部署顺序：apiserver 先于这一版 runner 上线，否则新 runner 的后台任务提醒会得到 404。打开开关之前，runner 要升级到这一版：更早的支持链路的版本仍走 HTTPS 发两个 Cursor 调用，开关打开后会收到 426，回报丢失。
+- 普查（runner-go 发出的每个 HTTPS 调用，2026-10-28，项目分支 54a61ed32）：
+  - 守护进程的控制面调用，链路在用时全部走链路。例外只有 D14 列的几项：取连接令牌（`POST /runner/link-token`，在链路建立之前）；自更新（`GET /runner/release`，链路下发了版本时不再调用；`/dl` 下的 `version.json` 和二进制）；附件（`GET /runner/sessions/:id/attachments/:id`、`POST /runner/sessions/:id/attachments`）。
+  - `orbit mcp`、CLI 和 Antigravity 审批钩子不是守护进程，没有自己的链路，都走 HTTPS，并用 `X-Orbit-Runner-Caller` 标明身份。它们用到的守护进程路由（审批、编排凭证续期、`GET /runner/me`、会话 meta 等），开关不拒绝（§15.1）。`orbit doctor` 检查开关时有意不带这个标记。
+  - 守护进程直接访问的外部服务不是控制面，不归链路管：Cursor、Kimi、Claude 的用量接口，Kimi 的令牌刷新，引擎版本检查，Cursor CLI 和 dsh 的下载。

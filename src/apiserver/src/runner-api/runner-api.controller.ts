@@ -241,6 +241,7 @@ import {
   recordDispatchRefusal,
 } from '../tasks/task-dispatch-refusal';
 import { CurrentManagedRunnerInstance, CurrentRunner } from './current-runner.decorator';
+import { NotifyDto } from './runner-notify.controller';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
   RUNTIME_STARTED_EVENT_TYPES,
@@ -447,6 +448,8 @@ import {
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
 import { CURSOR_KEY_CHECK_V1, cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
+import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
+import { ProvidersService } from '../providers/providers.service';
 import { accountDisabled } from '../auth/disabled-accounts';
 import {
   recordedEngine,
@@ -1470,6 +1473,11 @@ export class RunnerApiController {
      * GET /runner/release over HTTPS as it always has.
      */
     @Optional() private readonly releases?: RunnerReleaseFeed,
+    /**
+     * Where a runner's answers about Cursor keys are kept (cursorKeyCheck, cursorKeyCheckResult). `@Optional()` for the
+     * same reason as the rest of this list: a control plane built without it refuses those two answers.
+     */
+    @Optional() private readonly providers?: ProvidersService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -3296,6 +3304,20 @@ export class RunnerApiController {
     // `login_code` above: an Antigravity code waits in memory, never in the row (login-code-relay.ts).
     if (count > 0) loginCodeRelay.drop(runner.id);
     return { ok: true, applied: count > 0 };
+  }
+
+  /**
+   * What Cursor CLI on this runner answered `agent models` with, asked with a Cursor key the runner was
+   * handed on a heartbeat to check (`cursorKeyChecks`): settles the check somebody is waiting on — a key
+   * being connected, or a saved one checked again (ProvidersService.answerCursorKeyCheck). Only a check
+   * handed to this runner, about the key it was handed, and once: anything else is `accepted: false`.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('cursor-key-check-result')
+  @HttpCode(200)
+  cursorKeyCheckResult(@CurrentRunner() runner: { id: string }, @Body() dto: CursorKeyCheckResultDto) {
+    if (!this.providers) throw new Error('Cursor key checks are kept by ProvidersService, which this controller was built without');
+    return this.providers.answerCursorKeyCheck(runner.id, dto);
   }
 
   /**
@@ -5690,6 +5712,30 @@ export class RunnerApiController {
   }
 
   /**
+   * The runner's push to the person a session works for, when one of the session's background jobs ended while no
+   * engine was there to read it (src/runner-go/background_job.go, alertIfNobodyIsWatching): the alert `orbit notify` and
+   * the `notify` MCP tool send through POST /runner/notify (PushService.notifyAgentMessage), rate limit and all, titled
+   * with this session. The daemon's own door, with the session in its path rather than in the X-Orbit-Session-Id header
+   * the agents' door reads, which a link call does not carry. Only for a session of this runner's.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/notify')
+  @HttpCode(200)
+  async sessionNotify(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: NotifyDto,
+  ) {
+    await this.assertSessionOwnership(sessionId, runner.id, runner.ownerId);
+    return this.push.notifyAgentMessage({
+      ownerId: runner.ownerId,
+      sessionId,
+      fallbackTitle: runner.displayName || runner.name || 'Orbit',
+      message: dto.message,
+    });
+  }
+
+  /**
    * The agent in this session asks to be woken later — or, with `stop`, no longer (runner-go
    * `schedule_wakeup`). Claude Code's own ScheduleWakeup keeps that timer inside the engine process,
    * which Orbit recycles and a runner restart kills; held here instead, the wakeup outlives both. When
@@ -5729,6 +5775,23 @@ export class RunnerApiController {
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('SessionsService is unavailable');
     return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
+  }
+
+  /**
+   * What Cursor CLI on this runner answered `agent models` with, asked with the Cursor API key the
+   * session was dispatched on (docs/cursor-runtime-contract.md §9): the key's last check, which a
+   * person sees on the key (ProvidersService.recordCursorKeyCheck). Only for a session of this runner's.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/cursor-key-check')
+  @HttpCode(200)
+  cursorKeyCheck(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: CursorKeyCheckDto,
+  ) {
+    if (!this.providers) throw new Error('Cursor key checks are kept by ProvidersService, which this controller was built without');
+    return this.providers.recordCursorKeyCheck(runner.id, sessionId, dto, runner.ownerId);
   }
 
   /**
