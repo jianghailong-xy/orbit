@@ -53,7 +53,7 @@ func (l *linkState) welcome(hello *linkpb.Hello) ([]*linkpb.SessionState, *linkp
 	defer cancel()
 	answer, err := c.g.backends.do(ctx, backendCall{
 		kind: "welcome", method: http.MethodPost, path: "/api/runner/link/welcome", body: body, header: l.headers(),
-		// It writes nothing.
+		// Safe to send again: all it writes is the runner's last beat before this connection, the same each time.
 		idempotent: true,
 	})
 	var a welcomeAnswer

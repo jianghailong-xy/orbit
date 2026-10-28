@@ -41,6 +41,9 @@ compose_files() {
   if [ "$(setting STAGING_LOADGEN 0)" = 1 ]; then
     printf '%s\n' -f "$here/staging.loadgen.compose.yml"
   fi
+  if [ "$(setting STAGING_GATEWAYS 1)" = 2 ]; then
+    printf '%s\n' -f "$here/staging.gateways.compose.yml"
+  fi
   if [ "$(setting STAGING_SPREAD 0)" = 1 ]; then
     printf '%s\n' -f "$here/staging.spread.compose.yml"
   fi

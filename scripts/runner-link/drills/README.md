@@ -433,11 +433,13 @@ phase: its session goes `FAILED` once one release has failed for 10 s.
 A runner's silence is the reaper's only evidence that it died: a session whose runner has not beaten for 90 s is
 finalized `runner offline` (src/apiserver/src/realtime/reaper.service.ts). When a link gateway node stops, or a network
 cuts a share of the cell off, many runners go quiet together while they work on, and a reaper that took that for their
-death would fail every turn they were running. The design's answer (docs/runner-link-design.md §6.5, §10; task B3): while
-a fifth of the cell's runners have gone silent at once, the reaper holds the offline reaping. A runner counts as silent
-once it has missed a beat: no beat for 45 s, a heartbeat interval and a half, whether or not it is past the 90 s line
-yet (src/apiserver/src/runners/runner-presence.ts, `RUNNER_SILENT_AFTER_MS`). `mass-disconnect-drill.sh` beside this
-file drills that on a staging stack with real runners (task C1b).
+death would fail every turn they were running. The design's answer (docs/runner-link-design.md §6.5, §10, §15.6; tasks
+B3 and 34nb3xhlRA03P4rMmfcpO): when a fifth of the cell's runners lose contact within 45 s of each other — those already
+back counted with those still out — or a fifth are silent at once, that is a mass disconnection, and the reaper does
+not reap the runs of its runners until each has been silent for 10¾ minutes. A runner counts as silent once it has
+missed a beat: no beat for 45 s, a heartbeat interval and a half, whether or not it is past the 90 s line yet
+(src/apiserver/src/runners/runner-presence.ts, `RUNNER_SILENT_AFTER_MS`). `mass-disconnect-drill.sh` beside this file
+drills that on a staging stack with real runners (task C1b).
 
 ```bash
 export ORBIT_LINK_STAGING_PROJECT=orbit-link-c1b ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c1b
@@ -451,21 +453,33 @@ scripts/runner-link/drills/mass-disconnect-drill.sh stop
 scripts/runner-link/staging-down.sh
 ```
 
+A link gateway node of two stopping, with the reconnections slowed down so that the last runners back are out past the
+90 s line: a stack of two nodes behind a TCP balancer (`staging.gateways.compose.yml`), the second letting four
+handshakes through at once and one every 150 s after. Of the runners the first node held, four are back through the
+second within seconds and the rest after 150 s or more.
+
+```bash
+ORBIT_MASS_DISCONNECT_GATEWAYS=2 ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE=0.00667 ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST=4 \
+scripts/runner-link/drills/mass-disconnect-drill.sh prepare
+scripts/runner-link/drills/mass-disconnect-drill.sh node
+```
+
 | Phase | What it does | What must hold |
 | --- | --- | --- |
 | `prepare` | Starts the stack in the cut-over state, built from this checkout: the link gateway following the server's switch and `RUNNER_LINK_REQUIRED` on, so HTTPS refuses every runner's daemon calls and only the link carries them, as in production after the cut-over. Builds the runner and the scripted claude from this checkout, registers `ORBIT_MASS_DISCONNECT_RUNNERS` (10) runners, each with a configuration directory (`ORBIT_HOME`) and a systemd unit of its own, and starts them across one heartbeat interval. | Every runner logs `runner link mode: on`, and its presence says `LINK`. |
 | `gateway` | Every runner's session runs a turn its engine holds open. Kills the link gateway node (`docker kill`, as a crash ends it) for `ORBIT_MASS_DISCONNECT_SECONDS` (180), then starts it again. Every runner loses the link. | See below. |
 | `partition` | The same, with `ORBIT_MASS_DISCONNECT_CUT` (2) runners, a fifth of them, cut off instead: an nftables rule drops every packet the processes of their units send, the link's and HTTPS's alike. The others stay connected. With `ORBIT_MASS_DISCONNECT_SWEEP_AFTER` set, the runners cut off and the moment are chosen so that the reaper's first sweep after the first of them crosses the 90 s line falls that many seconds after the crossing (below). | See below. The runners still connected end their turns during the outage. |
+| `node` | On a stack prepared with `ORBIT_MASS_DISCONNECT_GATEWAYS=2`: every runner's session runs a turn its engine holds open, and the first link gateway node is killed for `ORBIT_MASS_DISCONNECT_SECONDS`. The runners it held — those whose presence names it as their `gateway_id` — connect again through the second, at the pace its handshake limiter allows (`ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE`, `_BURST`), then the first is started again. | See below, except that the runners the node held come back one by one, so only those out past the 90 s line for longer than a sweep interval must have been held, and there must be one. |
 | `all` | `prepare`, `gateway`, `partition`. | |
 
 What must hold in each outage:
 
 - **Nothing reaped.** Every session stays `RUNNING` while its runner is out of reach, and the apiserver logs no
   `reaped session` for any of them.
-- **The outage reached the reaper.** Every runner cut off was silent past the 90 s line, and the reaper logged that it
-  held their sessions (`not reaping N session(s) whose runner looks offline (…): X of the Y runners heard from in the
-  last 645s have been silent for over 45s at once (each missed a heartbeat)`), for the mass silence and not for its
-  startup grace or a failed heartbeat write.
+- **The outage reached the reaper.** Every runner cut off was silent past the 90 s line (in `node`, some of them), and
+  the reaper logged that it held their sessions (`not reaping N session(s) whose runner looks offline (…): its runner
+  lost contact in a mass disconnection (X of the Y runners heard from, last heard between … and …) and has been silent
+  for less than 645s`), for the mass disconnection and not for its startup grace or a failed heartbeat write.
 - **Held from the first crossing on.** The first sweep after the first runner cut off crosses the 90 s line holds, and
   names that runner's session; so does every sweep after it until the control plane is back. Each held sweep comes no
   more than a sweep interval (30 s, and 5 s for the sweep's own work) after that crossing or the sweep before it, and
@@ -486,8 +500,7 @@ How an outage is set up, and why:
   heartbeat interval, as a fleet's runners do, rather than in the same second. The phase opens its sessions one interval
   before the cut, since the hint of a new session makes a runner beat at once.
 - **A quiet cell first.** Before each cut the drill waits until the apiserver is past its 3-minute startup grace by a
-  sweep, any hold an earlier outage left has lapsed (the reaper keeps one for 90 s past the last sweep that saw it), and
-  the reaper counts no runner silent: whatever holds during the outage is then the outage's doing. The cell it hears is
+  sweep and a while past the last sweep that held, and the reaper counts no runner silent: whatever holds during the outage is then the outage's doing. The cell it hears is
   then the drill's runners and no more, so the runners cut off are the share of it the drill says. On a new stack that
   takes up to 11 minutes: the probe runner `staging-up.sh` registers never beats, and stays in the reaper's count until
   it is past its window (645 s).
