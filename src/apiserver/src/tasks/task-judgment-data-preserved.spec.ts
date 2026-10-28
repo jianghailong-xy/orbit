@@ -2538,7 +2538,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // so the 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger or type is
       // created, replaced or dropped, so it names none of the six preserved objects and is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: `lost_at` reads NULL and the table starts empty.
-      '0450_runner_mass_disconnect'],
+      '0450_runner_mass_disconnect',
+      // What each apiserver kept in its memory, kept on the rows instead (0451, sessions/recap.ts, push/push.service.ts):
+      // three nullable TIMESTAMP(3) columns on `session` (`recap_claimed_at`, `alerted_approval_at`, `agent_notified_at`)
+      // and one on `user` (`agent_notified_at`), each added with IF NOT EXISTS, no default and no constraint — catalog-only.
+      // Only those two tables are altered, and neither is a preserved relation: no `task`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger,
+      // type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: every stored session and account reads NULL.
+      '0451_recap_alert_notify_claims'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

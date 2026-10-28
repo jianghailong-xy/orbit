@@ -291,6 +291,9 @@ model User {
   // Per-account UI preferences (theme, new-agent defaults). Shape: UserPreferences
   // (@orbit/shared). JSON so new keys need no migration; missing keys fall back.
   preferences           Json      @default("{}")
+  // When a `notify` naming no session last rang this account's devices (0451, PushService.notifyAgentMessage): the
+  // once-a-minute limit those calls share, held whichever apiserver took the call.
+  agentNotifiedAt       DateTime? @map("agent_notified_at")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
   role                  String    @default("MEMBER")
   // When an administrator disabled the account; null while it is enabled (docs/google-sign-in-design.md
@@ -1754,6 +1757,18 @@ model Session {
   recapText            String?   @map("recap_text")
   recapAt              DateTime? @map("recap_at")
   recapEventSeq        Int?      @map("recap_event_seq")
+  // When the newest pass that obeys the recap's two-minute window claimed it (0451, sessions/recap.ts): set just
+  // before the pass asks a model, and only while neither this nor recapAt is inside the window, so passes on
+  // several apiservers make one model call a window between them. Equal to recapAt once the pass writes; cleared
+  // by a pass that writes nothing.
+  recapClaimedAt       DateTime? @map("recap_claimed_at")
+  // The createdAt of the approval the owner's phone was last alerted for (0451, PushService.notifyApprovalRequest):
+  // the first approval of a stretch in which the session has approvals pending. Set under this row's lock and only
+  // ever forward, so one stretch rings once whichever apiserver took its approvals.
+  alertedApprovalAt    DateTime? @map("alerted_approval_at")
+  // When an agent in this session last rang its owner's devices through `notify` (0451,
+  // PushService.notifyAgentMessage): the once-a-minute limit, held whichever apiserver took the call.
+  agentNotifiedAt      DateTime? @map("agent_notified_at")
   // Denormalized "frontier" activity for the sidebar's live status line: the tool
   // name when a tool_use is the latest durable event (in flight, no tool_result yet),
   // cleared back to null on any other frontier (assistant text, tool_result, turn end).

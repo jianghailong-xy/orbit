@@ -12,6 +12,7 @@ import {
   recapAfterSettle,
   recapEnabled,
   recapSkipReason,
+  recapWindowStart,
   RECAP_CONCURRENCY,
   RECAP_EVENT_CHARS,
   RECAP_INPUT_TOKEN_BUDGET,
@@ -45,6 +46,7 @@ interface StoredSession {
   recapText: string | null;
   recapAt: Date | null;
   recapEventSeq: number | null;
+  recapClaimedAt: Date | null;
   provider: string;
   providerBuiltin: boolean;
   ownerId: string;
@@ -55,17 +57,40 @@ interface FakeDbInit {
   session?: Partial<StoredSession>;
   events?: Array<{ seq: number; type: string; payload: unknown }>;
   providerRow?: unknown;
+  /** Runs as a pass sends its claim, before the row is read for it: where another apiserver's pass lands. */
+  beforeClaim?: (stored: StoredSession) => void;
+}
+
+/**
+ * Prisma's own reading of the clauses a pass sends: a column equal to a value (null matching null,
+ * a Date by its instant), `lte`, and AND/OR of those. A column the clause does not name is no
+ * filter at all; the id is the one session the fake holds.
+ */
+function matches(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
+  return Object.entries(where).every(([key, clause]) => {
+    if (key === 'id') return true;
+    if (key === 'AND') return (clause as Array<Record<string, unknown>>).every((part) => matches(row, part));
+    if (key === 'OR') return (clause as Array<Record<string, unknown>>).some((part) => matches(row, part));
+    const value = row[key];
+    if (clause instanceof Date) return value instanceof Date && value.getTime() === clause.getTime();
+    if (clause !== null && typeof clause === 'object' && 'lte' in clause) {
+      return value instanceof Date && value.getTime() <= (clause as { lte: Date }).lte.getTime();
+    }
+    return value === clause;
+  });
 }
 
 /**
  * The two tables a recap pass touches, with the CAS the write is: `updateMany` updates only a row
- * still at the cursor the pass read, exactly as the `where` Prisma builds would.
+ * still at the cursor the pass read, exactly as the `where` Prisma builds would. `writes` are the
+ * recap's own writes; `window` the claims of the two-minute window and their giving back.
  */
 function fakeDb(init: FakeDbInit = {}) {
   const stored: StoredSession = {
     recapText: null,
     recapAt: null,
     recapEventSeq: null,
+    recapClaimedAt: null,
     provider: 'claude',
     providerBuiltin: true,
     ownerId: 'owner-1',
@@ -74,6 +99,8 @@ function fakeDb(init: FakeDbInit = {}) {
   };
   const rows = init.events ?? [];
   const writes: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+  const window: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+  let claims = 0;
   const db = {
     session: {
       findFirst: async ({ select }: { select: Record<string, boolean> }) => {
@@ -82,10 +109,9 @@ function fakeDb(init: FakeDbInit = {}) {
         return out;
       },
       updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-        writes.push({ where, data });
-        // Prisma's own reading of the clause: a cursor the write did not name is no filter at all,
-        // and a named one matches only a row still at it (null matching null).
-        if (where.recapEventSeq !== undefined && stored.recapEventSeq !== where.recapEventSeq) return { count: 0 };
+        ('recapText' in data ? writes : window).push({ where, data });
+        if (data.recapClaimedAt instanceof Date && claims++ === 0) init.beforeClaim?.(stored);
+        if (!matches(stored as unknown as Record<string, unknown>, where)) return { count: 0 };
         Object.assign(stored, data);
         return { count: 1 };
       },
@@ -103,7 +129,7 @@ function fakeDb(init: FakeDbInit = {}) {
     modelProvider: { findFirst: async () => init.providerRow ?? null },
     user: { findUnique: async () => ({ role: 'USER' }) },
   };
-  return { db: db as never, stored, writes };
+  return { db: db as never, stored, writes, window };
 }
 
 /** An Anthropic endpoint row whose key a pass may spend, with the model a session runs it on. */
@@ -569,6 +595,161 @@ test('a settle the window skipped asks once more when the window closes', async 
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.equal(calls, 1, 'one pass for both skipped settles');
     assert.equal(told, 1, 'and the late pass tells the clients itself: no settle is left to carry it');
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('the window opens at the last recap or at a pass\'s claim since, whichever is later', () => {
+  const earlier = new Date(NOW.getTime() - 90_000);
+  assert.equal(recapWindowStart({ recapAt: null, recapClaimedAt: null }), null);
+  assert.equal(recapWindowStart({ recapAt: earlier }), earlier, 'a row read without the claim is its recap');
+  assert.equal(recapWindowStart({ recapAt: null, recapClaimedAt: NOW }), NOW);
+  assert.equal(recapWindowStart({ recapAt: earlier, recapClaimedAt: NOW }), NOW, 'a pass still asking holds it');
+  assert.equal(recapWindowStart({ recapAt: NOW, recapClaimedAt: earlier }), NOW);
+  assert.equal(recapSkipReason({ recapAt: null, recapClaimedAt: new Date(NOW.getTime() - 30_000) }, 10, { now: NOW }),
+    'throttled', 'a claim inside the window throttles a settle as a recap does');
+  assert.equal(recapSkipReason({ recapAt: null, recapClaimedAt: new Date(NOW.getTime() - RECAP_MIN_INTERVAL_MS) }, 10,
+    { now: NOW }), null, 'and one two minutes old does not');
+});
+
+test('a pass that obeys the window claims it before it asks, and the recap it writes keeps the claim', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  let claimedWhenAsked: Date | null | undefined;
+  const { db, stored, window } = fakeDb({ session: { recapAt: new Date(NOW.getTime() - RECAP_MIN_INTERVAL_MS) }, events: events(10) });
+  globalThis.fetch = (() => {
+    claimedWhenAsked = stored.recapClaimedAt;
+    return Promise.resolve(textResponse('Claimed, then written.'));
+  }) as typeof fetch;
+  try {
+    const outcome = await generateRecap({ db, sessionId: 's1' }, { now: NOW, retries: 0 });
+
+    assert.equal(outcome.written, true);
+    assert.equal(claimedWhenAsked, NOW, 'the window was claimed before the model was asked');
+    assert.deepEqual(window.map((w) => w.data), [{ recapClaimedAt: NOW }], 'one claim, and nothing given back');
+    assert.equal(stored.recapClaimedAt, NOW);
+    assert.equal(stored.recapAt, NOW, 'so the window opens where it always did: at the recap written');
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('a pass whose window another pass claimed asks nobody, whether it read the claim or met it', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(textResponse('should never be asked'));
+  }) as typeof fetch;
+  try {
+    // Read: another apiserver's pass claimed the window 30 s ago and is still asking.
+    const read = fakeDb({ session: { recapClaimedAt: new Date(NOW.getTime() - 30_000) }, events: events(10) });
+    assert.deepEqual(await generateRecap({ db: read.db, sessionId: 's1' }, { now: NOW }), { written: false, reason: 'throttled' });
+    assert.equal(read.window.length, 0, 'a claim it read is not even tried');
+
+    // Met: the other pass claims between this pass's read and its own claim.
+    const met = fakeDb({
+      events: events(10),
+      beforeClaim: (row) => {
+        row.recapClaimedAt = new Date(NOW.getTime() - 1_000);
+      },
+    });
+    assert.deepEqual(await generateRecap({ db: met.db, sessionId: 's1' }, { now: NOW }), { written: false, reason: 'throttled' });
+    assert.equal(calls, 0, 'neither asked a model');
+    assert.equal(met.stored.recapClaimedAt?.getTime(), NOW.getTime() - 1_000, 'and the other pass keeps its claim');
+    assert.equal(met.writes.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('a pass that writes nothing gives its claim back, so the window stands where the last recap left it', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  const recapAt = new Date(NOW.getTime() - 5 * 60_000);
+  try {
+    globalThis.fetch = (() => Promise.resolve({ ok: false, body: { cancel: async () => undefined } } as unknown as Response)) as typeof fetch;
+    const failed = fakeDb({ session: { recapAt, recapEventSeq: 2 }, events: events(10) });
+    assert.deepEqual(await generateRecap({ db: failed.db, sessionId: 's1' }, { now: NOW, retries: 0 }), {
+      written: false,
+      reason: 'llm-failed',
+    });
+    assert.deepEqual(failed.window.map((w) => w.data), [{ recapClaimedAt: NOW }, { recapClaimedAt: null }]);
+    assert.deepEqual(failed.window[1].where, { id: 's1', recapClaimedAt: NOW }, 'only its own claim');
+    assert.equal(failed.stored.recapClaimedAt, null);
+    assert.equal(recapSkipReason(failed.stored, 10, { now: NOW }), null, 'the next settle may ask at once, as before');
+
+    // Lost the cursor to a pass that ignores the window (a finalize): given back as well.
+    const lost = fakeDb({ session: { recapAt, recapEventSeq: 2 }, events: events(10) });
+    globalThis.fetch = (() => {
+      lost.stored.recapEventSeq = 10;
+      return Promise.resolve(textResponse('Stale by construction.'));
+    }) as typeof fetch;
+    assert.deepEqual(await generateRecap({ db: lost.db, sessionId: 's1' }, { now: NOW, retries: 0 }), {
+      written: false,
+      reason: 'cas-lost',
+    });
+    assert.equal(lost.stored.recapClaimedAt, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('a finalize and a person\'s refresh neither obey a claim nor take one', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  globalThis.fetch = (() => Promise.resolve(textResponse('The recap the session keeps.'))) as typeof fetch;
+  try {
+    const held = new Date(NOW.getTime() - 10_000);
+    for (const flags of [{ finalize: true }, { force: true }]) {
+      const { db, stored, window } = fakeDb({ session: { recapClaimedAt: held }, events: events(10) });
+      assert.equal((await generateRecap({ db, sessionId: 's1', ...flags }, { now: NOW, retries: 0 })).written, true);
+      assert.equal(window.length, 0);
+      assert.equal(stored.recapClaimedAt, held, 'the other pass\'s claim is still its own to give back');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('a settle whose pass meets another pass\'s claim asks once more when that window closes', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(textResponse('Caught up after the other pass.'));
+  }) as typeof fetch;
+  try {
+    // The window is open when the settle reads it, and another apiserver's pass claims it just
+    // before this one does — with the claim two minutes old less 200 ms, so it closes in a moment.
+    const { db, stored } = fakeDb({
+      events: events(10),
+      beforeClaim: (row) => {
+        row.recapClaimedAt = new Date(Date.now() - (RECAP_MIN_INTERVAL_MS - 200));
+      },
+    });
+    await recapAfterSettle({ db, sessionId: 's-met' });
+    assert.equal(calls, 0, 'the pass that met the claim asked nobody');
+
+    const deadline = Date.now() + 5_000;
+    while (stored.recapText === null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(stored.recapText, 'Caught up after the other pass.', 'its settle is covered once that window closes');
+    assert.equal(calls, 1);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
