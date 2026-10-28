@@ -137,6 +137,8 @@ interface Sim {
   connected: boolean;
   nextBeatAt: number;
   inFlight: boolean;
+  /** Beats answered so far. */
+  beats: number;
 }
 
 test('a mass disconnection reaps no run whose runner comes back, on a cell of two apiservers', {
@@ -258,6 +260,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
       // The fleet's beats spread across the period, as runners started at different times beat.
       nextBeatAt: Date.now() + Math.floor((i * RUNNER_HEARTBEAT_EVERY_MS) / total),
       inFlight: false,
+      beats: 0,
     });
   }
   const fleet = everyone.slice(0, FLEET);
@@ -279,6 +282,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
       status: 'ONLINE', idleCapacity: 1, leaseOwner: r.process, supervisedSessionIds: [r.sessionId],
     });
     if (answer.status !== 201) failures.push(`${r.name}'s beat through ${door.name}: ${answer.status} ${JSON.stringify(answer.body)}`);
+    else r.beats += 1;
   };
   const welcome = async (r: Sim) => {
     const door = anyDoor();
@@ -318,8 +322,8 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   };
   /** Cut off just after its next beat landed, so that its silence starts from a beat this run saw: that beat's instant. */
   const cutAfterItsNextBeat = async (r: Sim): Promise<number> => {
-    const due = r.nextBeatAt;
-    while (Date.now() < due || r.inFlight) await sleep(20);
+    const answered = r.beats;
+    while (r.beats === answered) await sleep(20);
     await cut(r);
     return lastBeatAt(r);
   };
@@ -379,9 +383,12 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
       await comeBack(r);
       return { r, silentMs: Date.now() - lastBeats[i]! };
     });
-    const during = meanwhile?.(cutAt);
+    // What runs meanwhile is waited for once every runner is back, its failure with it: the returns run their course
+    // whatever it found, so that no runner of this case comes back in the next.
+    const during = meanwhile?.(cutAt).then(() => null, (error: unknown) => error);
     const back = await Promise.all(returns);
-    await during;
+    const failedMeanwhile = await during;
+    if (failedMeanwhile) throw failedMeanwhile;
     const longest = back.reduce((most, b) => (b.silentMs > most.silentMs ? b : most));
     t.diagnostic(`${label}: every runner back; the longest silence ${(longest.silentMs / SECOND).toFixed(1)} s (${longest.r.name})`);
     // Two sweeps after the last runner came back, and its first beats: whatever the reaper was to do, it has done.

@@ -44,10 +44,6 @@ services:
       # How long an event batch waits for others to go with it in one merged call (src/link-gateway/events_merge.go), as
       # ORBIT_LINK_STAGING_MERGE_WINDOW says: empty is the gateway's own default, 0 forwards every batch alone.
       LINK_EVENT_MERGE_WINDOW: ${STAGING_MERGE_WINDOW:-}
-      # The node's handshake limiter (src/link-gateway/ratelimit.go), as ORBIT_LINK_STAGING_HANDSHAKE_RATE and _BURST say:
-      # the gateway's own defaults unless a drill slows reconnections down.
-      LINK_HANDSHAKE_RATE: ${STAGING_HANDSHAKE_RATE:-200}
-      LINK_HANDSHAKE_BURST: ${STAGING_HANDSHAKE_BURST:-400}
     ports: !override
       - ${STAGING_BIND}:${STAGING_LINK_PORT}:8443
       - 127.0.0.1:${STAGING_METRICS_PORT}:9464

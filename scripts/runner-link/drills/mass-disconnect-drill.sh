@@ -20,9 +20,9 @@
 #                                       (ORBIT_MASS_DISCONNECT_GATEWAYS=2): every runner's session runs a turn held open,
 #                                       and the first node is killed for ORBIT_MASS_DISCONNECT_SECONDS. The runners it held
 #                                       connect again through the second, whose handshake limiter lets a burst through
-#                                       and the rest one at a time (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE and _BURST), so
-#                                       that most are back within seconds and the last only past the reaper's offline
-#                                       line. Then the first node is started again.
+#                                       and the rest one at a time (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE and _BURST, the
+#                                       second node's alone), so that most are back within seconds and the last only
+#                                       past the reaper's offline line. Then the first node is started again.
 #   mass-disconnect-drill.sh all        prepare, gateway, partition.
 #   mass-disconnect-drill.sh stop       Stop the drill runners.
 #
@@ -35,8 +35,8 @@
 #                                      and the moment are chosen for it (README.md). Unset, the partition cuts off
 #                                      runners spread across the fleet, whenever it gets to the cut.
 #   ORBIT_MASS_DISCONNECT_GATEWAYS     prepare: link gateway nodes, 1, or 2 behind a TCP balancer for node          1
-#   ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE   prepare: each node's handshakes a second (LINK_HANDSHAKE_RATE)          200
-#   ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST  prepare: each node's handshake burst (LINK_HANDSHAKE_BURST)             400
+#   ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE   prepare: the second node's handshakes a second (LINK_HANDSHAKE_RATE)    200
+#   ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST  prepare: the second node's handshake burst (LINK_HANDSHAKE_BURST)       400
 #
 # Run it as root on a stack no other runner works on: each runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, and the partition cuts a runner off with an nftables
@@ -505,7 +505,7 @@ outage() {
   local held_count=0 most_held=0 reaped=0 passed=0 n verdict lead released=0 mid ends deadline
   local status_during final_status during_at turn_at ran_seqs rows distinct first last runtime starts told
   local kind a b c d e f first_past="" first_after="" past_then="" wrong=""
-  local node_a="" node_b="" g at last_back="" late=""
+  local node_a="" node_b="" g at last_back="" late="" seen_late=""
   local -a why=() verdicts=() log_from=()
   local -A is_cut=() process0=() beat_cut=() crossing=() back=() reconnected=() before_cut=() is_late=()
   # Each run of a phase has a number: its sessions' release gates and texts, and its records, are its own.
@@ -553,7 +553,7 @@ outage() {
       read -r g at <<< "$(presence_node "$i")"
       if [ "$g" = "$node_a" ]; then beat_cut[$i]="$at"; else beat_cut[$i]="${before_cut[$i]}"; fi
     done
-    say "$run: $gateway ($node_a) killed: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)($(wc -w <<< "$CUT") of $count) lost the link and connect again through $gateway_b ($node_b), whose limiter lets $(setting STAGING_HANDSHAKE_BURST 400) handshakes through at once and $(setting STAGING_HANDSHAKE_RATE 200) a second after"
+    say "$run: $gateway ($node_a) killed: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)($(wc -w <<< "$CUT") of $count) lost the link and connect again through $gateway_b ($node_b), whose limiter lets $(setting STAGING_HANDSHAKE_BURST_B 400) handshakes through at once and $(setting STAGING_HANDSHAKE_RATE_B 200) a second after"
   else
     say "$run: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)cut off, $(wc -w <<< "$CUT") of $count: every packet their processes send is dropped (nft table inet $nft_table)"
   fi
@@ -760,10 +760,22 @@ outage() {
   done
 
   [ "$reaped" = 0 ] || verdicts+=("$reaped session(s) reaped")
-  [ "$phase" != node ] || [ -n "$late" ] || verdicts+=("no runner the node held was out past the reaper's offline line")
   [ "$held_count" -gt 0 ] || verdicts+=("the reaper held no sweep: the outage did not reach its offline line")
-  [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass silence: $reason")
-  [ "$wrong" = none ] || verdicts+=("the reaper did not hold from the first crossing on: ${wrong:-the sweeps could not be read}")
+  [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass disconnection: $reason")
+  if [ "$phase" = node ]; then
+    # The runners the node held come back one by one, so a late one may be back between two sweeps, unseen: what must
+    # hold is that some runner was out past the line for longer than a sweep interval, which a sweep then read as
+    # offline, and that each such runner's session was held (its own account, below).
+    seen_late=""
+    for i in $CUT; do
+      if awk -v s="${silence_max[$i]:-0}" -v l="$((offline_after + sweep_every + 5))" 'BEGIN { exit !(s > l) }'; then seen_late+="r$i "; fi
+    done
+    say "$run: out past the offline line for longer than a sweep interval: ${seen_late:-no runner}"
+    [ -n "$seen_late" ] ||
+      verdicts+=("no runner the node held was out past the reaper's offline line for a whole sweep interval: slow the second node's handshakes (ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE, _BURST)")
+  else
+    [ "$wrong" = none ] || verdicts+=("the reaper did not hold from the first crossing on: ${wrong:-the sweeps could not be read}")
+  fi
   [ "$passed" = "$count" ] || verdicts+=("$((count - passed)) of $count sessions did not hold")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
@@ -781,11 +793,11 @@ outage() {
 prepare() {
   local i name token answer spacing
   rm -f "$timeline" "$outages" "$sessions_table"
-  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD); $count runners; $gateways link gateway node(s), handshakes $handshake_rate/s after a burst of $handshake_burst"
+  say "prepare: the stack $project in the cut-over state, built from $(git -C "$repo" rev-parse --short HEAD); $count runners; $gateways link gateway node(s)$([ "$gateways" = 1 ] || echo ", the second letting $handshake_burst handshakes through at once and $handshake_rate a second after")"
   stop_runners
   reconnect
   ORBIT_LINK_STAGING_MODE=http ORBIT_LINK_STAGING_BACKENDS=1 ORBIT_LINK_STAGING_GATEWAYS="$gateways" \
-    ORBIT_LINK_STAGING_HANDSHAKE_RATE="$handshake_rate" ORBIT_LINK_STAGING_HANDSHAKE_BURST="$handshake_burst" \
+    ORBIT_LINK_STAGING_HANDSHAKE_RATE_B="$handshake_rate" ORBIT_LINK_STAGING_HANDSHAKE_BURST_B="$handshake_burst" \
     "$here/staging-up.sh" > "$out/prepare-staging-up.log" 2>&1 ||
     fail "staging-up.sh (see $out/prepare-staging-up.log)"
   stack_settings

@@ -454,12 +454,12 @@ scripts/runner-link/staging-down.sh
 ```
 
 A link gateway node of two stopping, with the reconnections slowed down so that the last runners back are out past the
-90 s line: a stack of two nodes behind a TCP balancer (`staging.gateways.compose.yml`), each letting four handshakes
-through at once and one a minute after. Most of the runners the stopped node held are back through the other within
-seconds; no sweep ever counts a fifth of the cell silent.
+90 s line: a stack of two nodes behind a TCP balancer (`staging.gateways.compose.yml`), the second letting four
+handshakes through at once and one every 150 s after. Of the runners the first node held, four are back through the
+second within seconds and the rest after 150 s or more.
 
 ```bash
-ORBIT_MASS_DISCONNECT_GATEWAYS=2 ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE=0.0167 ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST=4 \
+ORBIT_MASS_DISCONNECT_GATEWAYS=2 ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE=0.00667 ORBIT_MASS_DISCONNECT_HANDSHAKE_BURST=4 \
 scripts/runner-link/drills/mass-disconnect-drill.sh prepare
 scripts/runner-link/drills/mass-disconnect-drill.sh node
 ```
@@ -469,7 +469,7 @@ scripts/runner-link/drills/mass-disconnect-drill.sh node
 | `prepare` | Starts the stack in the cut-over state, built from this checkout: the link gateway following the server's switch and `RUNNER_LINK_REQUIRED` on, so HTTPS refuses every runner's daemon calls and only the link carries them, as in production after the cut-over. Builds the runner and the scripted claude from this checkout, registers `ORBIT_MASS_DISCONNECT_RUNNERS` (10) runners, each with a configuration directory (`ORBIT_HOME`) and a systemd unit of its own, and starts them across one heartbeat interval. | Every runner logs `runner link mode: on`, and its presence says `LINK`. |
 | `gateway` | Every runner's session runs a turn its engine holds open. Kills the link gateway node (`docker kill`, as a crash ends it) for `ORBIT_MASS_DISCONNECT_SECONDS` (180), then starts it again. Every runner loses the link. | See below. |
 | `partition` | The same, with `ORBIT_MASS_DISCONNECT_CUT` (2) runners, a fifth of them, cut off instead: an nftables rule drops every packet the processes of their units send, the link's and HTTPS's alike. The others stay connected. With `ORBIT_MASS_DISCONNECT_SWEEP_AFTER` set, the runners cut off and the moment are chosen so that the reaper's first sweep after the first of them crosses the 90 s line falls that many seconds after the crossing (below). | See below. The runners still connected end their turns during the outage. |
-| `node` | On a stack prepared with `ORBIT_MASS_DISCONNECT_GATEWAYS=2`: every runner's session runs a turn its engine holds open, and the first link gateway node is killed for `ORBIT_MASS_DISCONNECT_SECONDS`. The runners it held — those whose presence names it as their `gateway_id` — connect again through the second, at the pace its handshake limiter allows (`ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE`, `_BURST`), then the first is started again. | See below; only the runners back past the 90 s line need to have been held, and some must have been. |
+| `node` | On a stack prepared with `ORBIT_MASS_DISCONNECT_GATEWAYS=2`: every runner's session runs a turn its engine holds open, and the first link gateway node is killed for `ORBIT_MASS_DISCONNECT_SECONDS`. The runners it held — those whose presence names it as their `gateway_id` — connect again through the second, at the pace its handshake limiter allows (`ORBIT_MASS_DISCONNECT_HANDSHAKE_RATE`, `_BURST`), then the first is started again. | See below, except that the runners the node held come back one by one, so only those out past the 90 s line for longer than a sweep interval must have been held, and there must be one. |
 | `all` | `prepare`, `gateway`, `partition`. | |
 
 What must hold in each outage:
