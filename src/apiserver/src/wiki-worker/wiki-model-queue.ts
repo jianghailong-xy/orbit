@@ -389,6 +389,10 @@ export async function failWikiModelRequestsPastWaitLimit(
  * deadline becomes now, in one statement, so the next process's sweep takes the row over at once and
  * re-issues the call with what had arrived. The call itself is aborted by the executor's own signal.
  * Ends nothing: state stays running until the takeover's generation rewrites it.
+ *
+ * The deadline is set a second before now: the column keeps milliseconds and would round now() itself half up,
+ * to as much as half a millisecond after the next statement's now(), and a sweep that ran at once would read
+ * the lease as live.
  */
 export async function releaseWikiModelRequestLease(
   prisma: PrismaService,
@@ -399,7 +403,7 @@ export async function releaseWikiModelRequestLease(
     UPDATE "wiki_model_request"
     SET "partial" = COALESCE(${partial?.content ?? null}, "partial"),
         "partial_encoding" = COALESCE(${partial?.encoding ?? null}, "partial_encoding"),
-        "lease_deadline_at" = now(),
+        "lease_deadline_at" = now() - interval '1 second',
         "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
   return updated > 0;
