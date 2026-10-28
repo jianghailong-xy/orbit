@@ -394,12 +394,12 @@ describe('the "On your runners" section', () => {
       { open: false },
     );
 
-    // The card is there and says how it's doing — what it runs on, and the engine signed out there, with
-    // its Sign in — it just isn't unpacked into a row per engine.
+    // The card is there and says what it runs on — the engine signed out there has no chip, its row says
+    // so once the card is open — it just isn't unpacked into a row per engine.
     expect(html).toContain('mac-studio');
     // (Static markup marks where one text node ends and the next begins with an empty comment.)
     expect(html).toMatch(/<span class="mc-chip">(?:(?!<\/span>).)*Claude Code(?:<!-- -->)? <\/span>/);
-    expect(html).toMatch(/<span class="mc-chip out">(?:(?!mc-out).)*Codex(?:<!-- -->)? <span class="mc-out">signed out<\/span><\/span><button/);
+    expect(html).not.toContain('Codex');
     expect(html).not.toContain('class="re-row');
     expect(html).not.toContain('Signed out');
   });

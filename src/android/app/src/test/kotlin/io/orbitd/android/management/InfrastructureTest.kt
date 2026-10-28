@@ -6,9 +6,9 @@ import org.junit.Test
 import java.time.Instant
 
 /**
- * OrbitKit InfrastructureTests (iOS 5e75edbde), case for case: the top of the Infrastructure page — what needs a person, and what each
- * engine can run on — out of the same three machines, keys and pool as the web's own cases; then a machine's row in the list, and what an
- * engine's page offers to install.
+ * OrbitKit InfrastructureTests (iOS 5e75edbde), case for case: the top of the Infrastructure page — what needs a person — out of the same
+ * three machines and pool as the web's own cases; then a key's row, a machine's row in the list, and what an engine's page offers to
+ * install.
  */
 class InfrastructureTest {
     private val now = Instant.parse("2026-10-07T09:00:00.000Z").toEpochMilli()
@@ -51,15 +51,7 @@ class InfrastructureTest {
             put("engines", JsonArray(engines.map(::JsonPrimitive)))
         }
 
-    private val anthropic = key("Anthropic (Claude)")
     private val anthropicWork = key("Anthropic · Work", defaultModel = "claude-sonnet-5")
-    private fun deepseek(label: String = "DeepSeek") = key(label, preset = "deepseek",
-        models = listOf("deepseek-v4-pro" to "DeepSeek V4 Pro", "deepseek-v4-flash" to "DeepSeek V4 Flash"), defaultModel = "deepseek-v4-pro",
-        engines = listOf("claude", "opencode", "dsh"))
-    private val moonshot = key("Kimi (Moonshot)", runtime = "kimi", preset = "moonshot", models = listOf("kimi-k2.7-code" to "Kimi K2.7 Code"),
-        defaultModel = "kimi-k2.7-code", engines = listOf("kimi", "opencode"))
-    private val openAIOff = key("OpenAI", runtime = "codex", preset = "openai", models = listOf("gpt-5.6-sol" to "GPT-5.6 Sol"),
-        defaultModel = "gpt-5.6-sol", enabled = false, engines = listOf("codex", "opencode"))
 
     private fun claudePool(unavailable: String? = null) = Pool("pool", "claude-keys", "Claude keys", "claude",
         listOf(PoolMember("m1", "Anthropic (Claude)", "NO_QUOTA", next = true, pausedUntil = null, resetsAt = null, planUsage = null)),
@@ -70,7 +62,6 @@ class InfrastructureTest {
     private fun attention(runners: List<JsonObject>, own: List<Pool> = emptyList(), member: List<Pool> = emptyList()) =
         Infrastructure.attention(runners, member, own, now)
     private fun says(line: Infrastructure.Attention) = "${line.line} · ${line.detail}"
-    private fun card(label: String, model: String?) = Infrastructure.EngineCard.Key(label, model)
 
     // Needs you
 
@@ -129,119 +120,27 @@ class InfrastructureTest {
         assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(box("unsupported_platform")))
     }
 
-    // What your agents can run on
-
-    /** An engine to a card, each Ready with what can pay for it now — online machines by how many of their accounts, keys beside their
-     * models, pools — and Antigravity, with none, Not set up. */
-    @Test fun eachEngineIsReadyWithWhatCanPayForItNow() {
-        val engines = Infrastructure.engineCards(fleet, listOf(anthropic, anthropicWork, deepseek()), listOf(claudePool()))
-        assertEquals(listOf("claude", "codex", "kimi", "antigravity", "opencode", "dsh"), engines.map { it.engine })
-        assertEquals(listOf(true, true, true, false, true, true), engines.map { it.ready })
-        assertEquals(listOf("Mac Studio ×2", "HPC"), engines[0].machines)
-        assertEquals(listOf(card("Anthropic (Claude)", "Claude Opus 5"), card("Anthropic · Work", "Claude Sonnet 5"), card("DeepSeek", "DeepSeek V4 Pro")),
-            engines[0].keys)
-        assertEquals(listOf("Claude keys"), engines[0].pools)
-        // Mac Studio's Codex is signed out, and ThinkPad's is on a machine that is offline.
-        assertEquals(listOf("HPC ×2"), engines[1].machines)
-        assertEquals(emptyList<Infrastructure.EngineCard.Key>(), engines[1].keys)
-        assertEquals(listOf("HPC"), engines[2].machines)
-        assertEquals(Infrastructure.EngineCard("antigravity", emptyList(), emptyList(), emptyList()), engines[3])
-    }
-
-    /** Every engine a session can run on is a card, by its CLI's name in the pickers' order — the same keys again under each engine they
-     * run on: OpenCode runs every one of them, DeepSeek Harness the DeepSeek key. */
-    @Test fun everyEngineIsACardWithEveryKeyThatRunsOnIt() {
-        val cards = Infrastructure.engineCards(fleet, listOf(anthropic, anthropicWork, deepseek()), listOf(claudePool()))
-        assertEquals(listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"), cards.map { it.name })
-        assertEquals(listOf(true, true, true, false, true, true), cards.map { it.ready })
-        val three = listOf(card("Anthropic (Claude)", "Claude Opus 5"), card("Anthropic · Work", "Claude Sonnet 5"), card("DeepSeek", "DeepSeek V4 Pro"))
-        assertEquals(three, cards[0].keys)
-        assertEquals(Infrastructure.EngineCard("opencode", emptyList(), three, emptyList()), cards[4])
-        // Harness lists its models on each machine, and none here has reported them: the key, and no model.
-        assertEquals(Infrastructure.EngineCard("dsh", emptyList(), listOf(card("DeepSeek", null)), emptyList()), cards[5])
-    }
-
-    /** A key is listed under every engine it runs on, beside the model it starts on there; one switched off is nothing any engine can run
-     * on. */
-    @Test fun aKeyIsUnderEveryEngineItRunsOn() {
-        val cards = Infrastructure.engineCards(emptyList(), listOf(deepseek(), moonshot, openAIOff), emptyList())
-        assertEquals(listOf(card("DeepSeek", "DeepSeek V4 Pro")), cards[0].keys)
-        assertEquals(listOf(card("Kimi (Moonshot)", "Kimi K2.7 Code")), cards[2].keys)
-        assertEquals(listOf(card("DeepSeek", "DeepSeek V4 Pro"), card("Kimi (Moonshot)", "Kimi K2.7 Code")), cards[4].keys)
-        assertEquals(listOf(card("DeepSeek", null)), cards[5].keys)
-        assertFalse("an OpenAI key switched off", cards[1].ready)
-    }
-
-    /** A DeepSeek Harness session's model is a machine's Harness catalogue's — the same for every DeepSeek key — where Claude Code and
-     * OpenCode start each key on its own list's default. */
-    @Test fun aHarnessSessionsModelIsFromAMachinesCatalogue() {
-        val box = obj("""{"id":"hpc","name":"HPC","online":true,"capabilities":["provider:dsh"],
-         "engines":[{"engine":"dsh","installed":true,"auth":"unknown","version":"0.2.0-rc.2"}],
-         "modelCatalog":{"dsh":[{"value":"[\"deepseek\", \"deepseek-v4-pro\"]","label":"DeepSeek V4 Pro"},
-                                {"value":"[\"deepseek\", \"deepseek-v4-flash\"]","label":"DeepSeek V4 Flash"}]},
-         "runtimeDefaultModels":{"dsh":"[\"deepseek\", \"deepseek-v4-flash\"]"}}""")
-        val cards = Infrastructure.engineCards(listOf(box), listOf(deepseek(), deepseek("DeepSeek 2")), emptyList())
-        assertEquals(listOf(card("DeepSeek", "DeepSeek V4 Flash"), card("DeepSeek 2", "DeepSeek V4 Flash")), cards[5].keys)
-        assertEquals(listOf("DeepSeek V4 Pro", "DeepSeek V4 Pro"), cards[0].keys.map { it.model })
-        assertEquals(listOf("DeepSeek V4 Pro", "DeepSeek V4 Pro"), cards[4].keys.map { it.model })
-    }
-
-    /** A Claude subscription token is under Claude Code alone, as the server answers for it, and its line says what it is; OpenCode runs
-     * the API key beside it. */
-    @Test fun aSubscriptionTokenIsUnderClaudeCodeAlone() {
-        val max = key("Claude Max", engines = listOf("claude"))
-        val cards = Infrastructure.engineCards(emptyList(), listOf(max, anthropicWork), emptyList())
-        assertEquals(listOf("Claude Max", "Anthropic · Work"), cards[0].keys.map { it.label })
-        assertEquals(listOf("Anthropic · Work"), cards[4].keys.map { it.label })
-        assertEquals("Claude Code · subscription token", KeyEngines.line(max))
-        assertEquals("Claude Code · OpenCode", KeyEngines.line(anthropicWork))
-    }
-
-    /** OpenCode's machines are the ones its own sign-in is set up on, beside the keys it runs. */
-    @Test fun openCodesOwnSignInIsWhereItIsSetUp() {
-        val on = obj("""{"id":"hpc","name":"HPC","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"yes","version":"1.18.35"}]}""")
-        val off = obj("""{"id":"mac","name":"Mac Studio","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"no","version":"1.18.35"}]}""")
-        val openCode = Infrastructure.engineCards(listOf(on, off), listOf(moonshot), emptyList())[4]
-        assertEquals("Own sign-in", openCode.machinesLabel)
-        assertEquals(listOf("HPC"), openCode.machines)
-        assertEquals(listOf(card("Kimi (Moonshot)", "Kimi K2.7 Code")), openCode.keys)
-    }
-
-    /** Not set up on what cannot be used now: a machine offline, a key switched off, a pool nothing can start on — and with no machine
-     * online, Install on a machine has nothing to open but registering one. */
-    @Test fun whatCannotBeUsedNowIsNotSetUp() {
-        val offline = obj("""{"id":"t","name":"ThinkPad","online":false,"engines":[{"engine":"codex","installed":true,"auth":"yes"}]}""")
-        val engines = Infrastructure.engineCards(listOf(offline), listOf(openAIOff), listOf(codexPool("c", "My Codex", unavailable = "Not signed in")))
-        assertEquals(Infrastructure.EngineCard("codex", emptyList(), emptyList(), emptyList()), engines[1])
-        assertNull(Infrastructure.installTarget(listOf(offline)))
-        assertEquals("the first machine online", "mac", Infrastructure.installTarget(fleet)?.text("id"))
-    }
-
-    /** A pool is its engine's: a shared or ChatGPT pool Codex's, any other Claude Code's. */
-    @Test fun aPoolIsItsEnginesSource() {
-        val engines = Infrastructure.engineCards(emptyList(), emptyList(), listOf(claudePool(), codexPool("s", "Team keys")))
-        assertEquals(listOf("Claude keys"), engines[0].pools)
-        assertEquals(listOf("Team keys"), engines[1].pools)
-    }
-
     /** Antigravity on a machine's own Gemini key: the server's answer stands for its install and its credential, and Default on that key
-     * counts as a login. */
-    @Test fun antigravityOnTheMachinesOwnKeyIsASubscription() {
+     * is no engine signed out. */
+    @Test fun antigravityOnTheMachinesOwnKeyIsNotSignedOut() {
         val box = obj("""{"id":"r","name":"Box","online":true,
          "antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"googleLogin":"available"},
          "engines":[{"engine":"antigravity","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"no"}]}]}""")
-        assertEquals(listOf("Box"), Infrastructure.engineCards(listOf(box), emptyList(), emptyList())[3].machines)
         assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(box))
     }
 
+    // A key's row
+
     /** The model a key starts on, by the name its own list gives it; its first model without a default; the id itself when the list
-     * doesn't name it. */
+     * doesn't name it. A Claude subscription token's line says what it is. */
     @Test fun aKeysModelIsNamedAsItsListNamesIt() {
         assertEquals("Claude Sonnet 5", Infrastructure.defaultModel(anthropicWork))
         assertEquals("Claude Opus 5", Infrastructure.defaultModel(key("A", defaultModel = null)))
         assertEquals("Claude Opus 5", Infrastructure.defaultModel(key("A", defaultModel = "")))
         assertEquals("claude-haiku-5", Infrastructure.defaultModel(key("A", defaultModel = "claude-haiku-5")))
         assertNull(Infrastructure.defaultModel(key("A", models = emptyList(), defaultModel = null)))
+        assertEquals("Claude Code · subscription token", KeyEngines.line(key("Claude Max", engines = listOf("claude"))))
+        assertEquals("Claude Code · OpenCode", KeyEngines.line(anthropicWork))
     }
 
     // A machine's row (03-ios.png)
@@ -313,6 +212,25 @@ class InfrastructureTest {
          "install":{"status":"failed","engine":"opencode"}}""")
         assertEquals(Infrastructure.RowKind.INSTALL_FAILED, Infrastructure.rowKind(failed.list("engines").first(), failed.obj("install"), "opencode"))
         assertTrue(Infrastructure.installsOpenCode(failed))
+    }
+
+    /** A machine's row for an engine it lacks opens that engine's page where the page installs it — Install, Retry, or the install
+     * running — as the web's row offers Install itself: never for an Antigravity the runner can't run, OpenCode on a runner that never
+     * mentions it, or a DeepSeek Harness that is there. */
+    @Test fun aMissingEnginesRowOpensThePageThatInstallsIt() {
+        assertTrue(Infrastructure.installsFromPage(macStudio, "kimi"))
+        assertFalse(Infrastructure.installsFromPage(macStudio, "claude"))
+        assertFalse("a runner that never mentions it", Infrastructure.installsFromPage(macStudio, "opencode"))
+        val installing = obj("""{"id":"r","name":"r","online":true,"engines":[],"install":{"status":"installing","engine":"kimi"}}""")
+        assertTrue("its page says how the install is going", Infrastructure.installsFromPage(installing, "kimi"))
+        val unsupported = obj("""{"id":"r","name":"r","online":true,"antigravity":{"supported":false,"envKeyAvailable":false}}""")
+        assertFalse(Infrastructure.installsFromPage(unsupported, "antigravity"))
+        val openCode = obj("""{"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}]}""")
+        assertTrue(Infrastructure.installsFromPage(openCode, "opencode"))
+        fun harness(installed: Boolean) = obj("""{"id":"r","name":"r","online":true,"capabilities":["provider:dsh"],
+         "engines":[{"engine":"dsh","installed":$installed,"auth":"unknown"}]}""")
+        assertTrue(Infrastructure.installsFromPage(harness(false), "dsh"))
+        assertFalse(Infrastructure.installsFromPage(harness(true), "dsh"))
     }
 
     // Settings' row

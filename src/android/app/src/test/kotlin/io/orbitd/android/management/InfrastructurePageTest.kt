@@ -65,31 +65,23 @@ class InfrastructurePageTest {
         fixture.runnerEngines = """[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"no"}]"""
     }
 
-    @Test fun theSixSectionsComeInIosOrderWithIosWords() {
+    @Test fun theFiveSectionsComeInIosOrderWithIosWords() {
         codexSignedOut()
         fixture.providersMine = """[{"id":"${fixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai",
             "hasApiKey":true,"enabled":false,"defaultModel":"gpt-5","models":[{"value":"gpt-5","label":"GPT-5"}],"engines":["codex","opencode"]}]"""
         page()
         await(Infrastructure.NEEDS_YOU)
-        val sections = listOf(Infrastructure.NEEDS_YOU, Infrastructure.ENGINES_TITLE, Infrastructure.MACHINES, RunnerCopy.ADD,
-            Infrastructure.ACCOUNT_POOLS, Infrastructure.API_KEYS)
+        val sections = listOf(Infrastructure.NEEDS_YOU, Infrastructure.MACHINES, RunnerCopy.ADD, Infrastructure.ACCOUNT_POOLS,
+            Infrastructure.API_KEYS)
         sections.forEach { compose.onAllNodesWithText(it).assertCountEquals(1) }
         val tops = sections.map(::top)
         assertEquals("top to bottom: $sections", tops.sorted(), tops)
         // Each block's words, as iOS says them.
-        listOf(Infrastructure.ENGINES_DETAIL, Infrastructure.MACHINES_DETAIL, RunnerCopy.ADD_FOOTER, Infrastructure.ACCOUNT_POOLS_DETAIL,
+        listOf(Infrastructure.MACHINES_DETAIL, RunnerCopy.ADD_FOOTER, Infrastructure.ACCOUNT_POOLS_DETAIL,
             "${Infrastructure.API_KEYS_DETAIL} ${DeepSeekBalance.EDIT_ON_WEB}").forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("1 machine · 0 / 2 slots busy").assertExists()
         // The machine's row: its slots and its engine signed out, Needs you's rule.
         compose.onNodeWithText("0 / 2 running · 1 engine signed out", useUnmergedTree = true).assertExists()
-        // What each engine runs on now: Claude Code on the machine's subscription; Codex on the pool, its key switched off.
-        fun card(engine: String, vararg texts: String) = texts.forEach {
-            compose.onNode(hasText(it) and hasAnyAncestor(hasTestTag("engine-sources:$engine"))).assertExists()
-        }
-        card("claude", "Claude Code", Infrastructure.READY, "Subscription · Old alias")
-        card("codex", "Codex", Infrastructure.READY, "Pool · Team Codex")
-        card("kimi", "Kimi Code", Infrastructure.NOT_SET_UP, Infrastructure.NOTHING_CAN_PAY, Infrastructure.INSTALL_ON_A_MACHINE)
-        compose.onAllNodes(hasText("API key", substring = true) and hasAnyAncestor(hasTestTag("engine-sources:codex"))).assertCountEquals(0)
         // A key switched off says so, beside its model and the engines it runs on.
         compose.onNodeWithText("GPT-5", useUnmergedTree = true).assertExists()
         compose.onNodeWithText(Infrastructure.DISABLED, useUnmergedTree = true).assertExists()
@@ -119,21 +111,6 @@ class InfrastructurePageTest {
             assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER, recordId = "engine:codex"), OrbitRoute(Destination.RUNNER, fixture.RUNNER_TWO),
                 OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "own:${fixture.POOL}")), opened)
         }
-    }
-
-    @Test fun installOnAMachineOpensTheEnginesPageOnTheFirstMachineOnlineOrAddsOne() {
-        page()
-        val kimi = hasText(Infrastructure.INSTALL_ON_A_MACHINE) and hasClickAction() and hasAnyAncestor(hasTestTag("engine-sources:kimi"))
-        compose.waitUntil(60_000) { compose.onAllNodes(kimi).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(kimi).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER, recordId = "engine:kimi")), opened) }
-        // With no machine online, the way to one is registering it.
-        fixture.removedRunners = setOf(fixture.RUNNER)
-        revision++
-        compose.waitUntil(60_000) { compose.onAllNodesWithText("Old alias").fetchSemanticsNodes().isEmpty() }
-        compose.onNode(kimi).performScrollTo().performClick()
-        await(RunnerCopy.ADD_LEAD)
-        assertEquals(1, opened.size)
     }
 
     /** The machines are read again every 15 s while the page is in front — what needs you moves with them — and not while the app is in

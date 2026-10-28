@@ -704,11 +704,12 @@ test.describe('P4.2 runners', () => {
     trace.push(await observe(page, fixtures, 'deleted'));
 
     fixtures.state.runners = [];
-    await page.reload();
     // Main 33e0e2e09: with no machine the Machines section invites one to be registered (the Runners page said "No
-    // runners yet" beside Register Runner). By engine, at the page's end, is drawn once every list on the page has
-    // answered, so the invitation is read after the empty list arrived, not while it is being read.
-    await expect(page.getByRole('heading', { name: 'By engine', exact: true })).toBeVisible();
+    // runners yet" beside Register Runner). The section draws the invitation while the list is still being read too,
+    // so it is read once the empty list has arrived.
+    const answered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/runners');
+    await page.reload();
+    await answered;
     await expect(machines.getByRole('heading', { name: 'Already pay for Claude, Codex or Kimi?', exact: true })).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'no runners'));

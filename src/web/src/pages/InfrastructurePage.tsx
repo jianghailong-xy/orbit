@@ -11,7 +11,6 @@ import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/prov
 import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '../lib/runnerAttention';
 import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
-import { EngineOverview } from '../components/InfrastructureOverview';
 import { KeyImpact } from '../components/KeyImpact';
 import { ProviderGallery, ProviderPills } from '../components/ProviderGallery';
 import { ProviderKeyCards } from '../components/ProviderKeyCards';
@@ -39,10 +38,8 @@ import type { Runner } from '../components/TasksSidePanel';
  * (KeyImpact). Before there is an account pool, the list opens with the offer to make one — but only
  * when at least two keys could join, since a pool of one is the key.
  *
- * Then the account pools (AccountPools): several of those keys' Claude subscriptions dispatched under
+ * Last, the account pools (AccountPools): several of those keys' Claude subscriptions dispatched under
  * one name, a Codex pool of the user's ChatGPT accounts, and the shared pools they are in.
- *
- * Last, what each engine can run on (EngineOverview), read from the three lists above it.
  *
  * The head's Add makes any of the three. `/runners` and `/providers` land here (App.tsx), and
  * `#keys` / `#pools` bring that section into view.
@@ -91,11 +88,9 @@ export function InfrastructurePage() {
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
   const [creatingPool, setCreatingPool] = useState(false);
-  // What each engine can run on is read from every list on the page, so it waits for all of them: an
-  // engine called Not set up before its keys arrived would be wrong.
-  const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
 
   // A section named in the address comes into view once everything above it has its height.
+  const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
   const target = hash === '#keys' ? keySection : hash === '#pools' ? poolSection : null;
   const arrived = target !== null && settled;
   useEffect(() => {
@@ -240,14 +235,10 @@ export function InfrastructurePage() {
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
           leave sessions dispatching to something the page no longer lets you see or delete. The
-          section stands with none too: its head is where a pool is made. */}
+          section stands with none too, saying what one is; the head's Add makes one. */}
       <div ref={poolSection} id="pools">
-        {!pools.isPending && !shared.isPending && (
-          <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
-        )}
+        {!pools.isPending && !shared.isPending && <AccountPools pools={poolList} refusals={refusals} />}
       </div>
-
-      {settled && <EngineOverview runners={machines} keys={providers.data ?? []} pools={poolList} />}
 
       {creatingPool && <NewPoolModal rows={providers.data ?? []} onClose={() => setCreatingPool(false)} />}
       {confirmHolder}
