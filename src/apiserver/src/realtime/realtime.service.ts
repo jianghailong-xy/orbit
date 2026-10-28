@@ -28,7 +28,7 @@ import {
   SourceRefusalCode,
   SourceState,
 } from '@orbit/shared';
-import { Observable, Subject, filter, map, merge, mergeMap } from 'rxjs';
+import { Observable, Subject, defer, filter, finalize, map, merge, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
@@ -44,6 +44,7 @@ import { readSessionProjectMembership } from '../sessions/session-project-member
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
+import { ControlPlaneLeader } from './control-plane-leader';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
@@ -59,7 +60,7 @@ import {
   errorPayloadOf,
   isUserScopedType,
 } from './control-events';
-import { markRunnersChanged, RUNNER_BEATS } from '../runners/runner-presence';
+import { APISERVER_PROCESS_QUIET_AFTER_MS, markRunnersChanged, RUNNER_BEATS } from '../runners/runner-presence';
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
@@ -270,7 +271,8 @@ export function runEventBatchNotice(
  * (publishBatch) — and a dedicated listener connection re-emits notifications from OTHER
  * instances into the local hub/inbox. The own-instance tag means single-replica
  * behaviour is unchanged (a process ignores its own notifications; clients also dedup
- * by seq as a backstop).
+ * by seq as a backstop). What is announced while that connection is down is lost, so
+ * once it is back the sessions streamed here re-fetch (listenerBack).
  *
  * Cancellation is durable on TaskRun.cancelRequestedAt and drained from the DB on
  * heartbeat, so it also works across replicas and survives a restart.
@@ -295,6 +297,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  /** When the listener was lost, by a connection error or a connect that failed; undefined while it listens. */
+  private listenerLostAt?: number;
+  /** sessionId → how many of this replica's streams of the session are open (streamForRun), for listenerBack. */
+  private readonly openStreams = new Map<string, number>();
   /** sessionId → {ownerId, workspaceId}, for scoping the user-stream (GET /api/events) without a
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; workspaceId: string | null }>();
@@ -324,6 +330,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     /** The runner link's hints, published beside the wakes below (runner-hints.ts); absent in the specs that build
      *  this service by hand. */
     @Optional() private readonly hints?: RunnerHints,
+    /** This process's id among the apiservers (control-plane-leader.ts), for listenerBack; absent in the specs that
+     *  build this service by hand, where it is the only apiserver there is. */
+    @Optional() private readonly leader?: ControlPlaneLeader,
   ) {
     this.inbox.setMaxListeners(0);
     this.runnerWake.setMaxListeners(0);
@@ -361,10 +370,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
+      const lostAt = this.listenerLostAt;
+      this.listenerLostAt = undefined;
+      if (lostAt !== undefined) void this.listenerBack(Date.now() - lostAt);
     } catch (e) {
       this.log.error('listener connect failed: ' + (e as Error).message);
       client.removeAllListeners('error');
       await client.end().catch(() => undefined);
+      this.listenerLostAt ??= Date.now();
       this.scheduleReconnect();
     } finally {
       this.connecting = false;
@@ -373,6 +386,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private reconnect(): void {
     if (this.stopped) return;
+    this.listenerLostAt ??= Date.now();
     const old = this.listener;
     this.listener = undefined;
     if (old) {
@@ -388,6 +402,60 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       this.reconnectTimer = undefined;
       void this.startListener();
     }, 2000);
+  }
+
+  /**
+   * The listener is back, `downMs` after it was lost. What the other apiservers announced meanwhile never reached this
+   * one, and PostgreSQL kept none of it: among it the batches they stored of the sessions streamed here, which those
+   * streams would go without until the client reloads. So when another apiserver ran meanwhile, every session with a
+   * stream open here is handled as a read-back given up (readBack): its streams here are told to re-fetch, and its
+   * owner's lists here to re-read its row (resyncHere). An apiserver ran when it wrote its row in `apiserver_process`
+   * within the gap or the APISERVER_PROCESS_QUIET_AFTER_MS before it, as one that stored anything then did; one that
+   * stopped in that time counts too, for one re-fetch too many. When that cannot be read, the streams re-fetch as well:
+   * a re-fetch costs a tail page, a missed batch a hole nobody sees.
+   *
+   * Alone, an apiserver hands its streams its own events itself and ignores its own notices, so they missed nothing,
+   * and nothing is sent, as before. One line is logged either way: how long, and how many sessions; never an event.
+   *
+   * The inbox and wake notices missed meanwhile need nothing here. Over HTTPS an inbox poll looks again within five
+   * seconds, and a wake lost costs the runner what it always could, its next heartbeat; over the runner link the
+   * apiserver that asks hints the runner over NATS itself (notifyInbox, notifyRunnerWake). A wake written in a
+   * transaction (runner-wake.ts) is marked by every apiserver that hears it; one that none heard, every listener down at
+   * its commit as on a database restart, reaches the runner with its next full reconcile, as a change count that could
+   * not be moved does (markRunnerChanged).
+   */
+  private async listenerBack(downMs: number): Promise<void> {
+    const back = `LISTEN/NOTIFY back after ${downMs} ms without it`;
+    let others: number | undefined;
+    let unread: unknown;
+    try {
+      others = await this.otherApiserversSeen(downMs + APISERVER_PROCESS_QUIET_AFTER_MS);
+    } catch (error) {
+      unread = error;
+    }
+    if (this.stopped) return;
+    if (others === 0) {
+      this.log.log(`${back}: no other apiserver ran meanwhile, so nothing was missed and no stream was told to re-fetch`);
+      return;
+    }
+    const sessions = [...this.openStreams.keys()];
+    for (const runId of sessions) this.resyncHere(runId);
+    const told = `this apiserver's streams of ${sessions.length} session(s) were told to re-fetch`;
+    if (others === undefined) {
+      this.log.warn(`${back}: could not read whether another apiserver ran meanwhile (${describeError(unread)}), so ${told}`);
+    } else {
+      this.log.log(`${back}: ${others} other apiserver(s) ran meanwhile and what they announced did not reach this one, so ${told}`);
+    }
+  }
+
+  /** How many other apiserver processes wrote their row in `apiserver_process` (runner-presence.ts) within the last
+   *  `withinMs`, on the database's clock. None for a process built without a leader: it is the only one there is. */
+  private async otherApiserversSeen(withinMs: number): Promise<number> {
+    if (!this.leader) return 0;
+    const [row] = await this.prisma.$queryRaw<Array<{ others: number }>>`
+      SELECT count(*)::int AS "others" FROM "apiserver_process"
+       WHERE "id" <> ${this.leader.processId}::uuid AND "seen_at" >= now() - (${withinMs} * interval '1 millisecond')`;
+    return row?.others ?? 0;
   }
 
   private onNotify(channel: string, payload?: string): void {
@@ -513,9 +581,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           this.log.error(
             `session ${runId}: gave up reading back ${seqs}, stored by another apiserver, after ${attempt} attempt(s) in ${Date.now() - heardAt} ms (${describeError(error)}); told this apiserver's streams of the session to re-fetch`,
           );
-          const ts = new Date().toISOString();
-          this.hub.next({ runId, event: { seq: 0, type: RunEventType.RESYNC, payload: {}, ts } });
-          this.hub.next({ runId, event: { seq: 0, type: RunEventType.SESSION_UPDATED, payload: {}, ts } });
+          this.resyncHere(runId);
           return false;
         }
         this.log.warn(
@@ -524,6 +590,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         await new Promise<void>((resolve) => setTimeout(resolve, wait).unref?.());
       }
     }
+  }
+
+  /**
+   * This replica's streams of the session are told to re-fetch (`resync`, seq 0: never stored, never announced over
+   * NOTIFY), and its owner's lists here to re-read the session's row (a session_updated of this replica's alone).
+   */
+  private resyncHere(runId: string): void {
+    const ts = new Date().toISOString();
+    this.hub.next({ runId, event: { seq: 0, type: RunEventType.RESYNC, payload: {}, ts } });
+    this.hub.next({ runId, event: { seq: 0, type: RunEventType.SESSION_UPDATED, payload: {}, ts } });
   }
 
   private notifyRaw(channel: string, payload: string): void {
@@ -770,8 +846,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       map((m) => m.event),
     );
     // Without the runner link the stream is the hub alone, exactly as before.
-    if (!this.hints?.enabled) return hub$;
-    return merge(hub$, this.linkStream(this.hints, runId));
+    const stream$ = this.hints?.enabled ? merge(hub$, this.linkStream(this.hints, runId)) : hub$;
+    // Counted while it is open: a listener that comes back tells the sessions streamed here to re-fetch (listenerBack).
+    return defer(() => {
+      this.openStreams.set(runId, (this.openStreams.get(runId) ?? 0) + 1);
+      return stream$.pipe(
+        finalize(() => {
+          const left = (this.openStreams.get(runId) ?? 1) - 1;
+          if (left > 0) this.openStreams.set(runId, left);
+          else this.openStreams.delete(runId);
+        }),
+      );
+    });
   }
 
   /**
