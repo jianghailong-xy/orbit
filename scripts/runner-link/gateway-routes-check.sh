@@ -15,6 +15,9 @@
 #   4. One apiserver killed: the streams of its sessions open on the others, none reaches it once the gateway has
 #      resolved the name again (10 s), the other sessions stay where they were until then, and once it is started
 #      again it takes sessions again.
+#   5. The gateway started while no apiserver answers to their shared name: the two routes answer 502 until nginx
+#      looks the name up again, within 12 s. A deployment's gateway starts once the first apiserver is healthy
+#      (docker-compose.yml), as every start here does but this one.
 #
 # Exits 0 when every check holds. --keep leaves the stand-ins running.
 set -euo pipefail
@@ -30,7 +33,7 @@ while [ $# -gt 0 ]; do
     --image) image="$2"; shift 2 ;;
     --old-image) old_image="$2"; shift 2 ;;
     --keep) keep=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -116,18 +119,15 @@ cp "$work/compose.yml" "$work/compose.first.yml"
   echo "      - $repo/gateway/several-apiservers:/etc/nginx/several-apiservers:ro"
 } > "$work/compose.spread.yml"
 
+apiservers=(apiserver)
+for i in $(seq 2 "$n"); do apiservers+=("apiserver-$i"); done
 origin=""
+# up first|spread: the apiservers, then the gateway, as a deployment's gateway starts once an apiserver is healthy.
 up() {
   cp "$work/compose.$1.yml" "$work/compose.yml"
-  dc up -d --wait --force-recreate >/dev/null 2>&1 || { dc logs gateway | tail -20; echo "the stand-ins did not start" >&2; exit 1; }
+  { dc up -d --wait --force-recreate "${apiservers[@]}" && dc up -d --wait --force-recreate gateway; } >/dev/null 2>&1 ||
+    { dc logs gateway | tail -20; echo "the stand-ins did not start" >&2; exit 1; }
   origin="http://$(dc port gateway 80)"
-  # nginx resolves the alias in the background once it has started: wait until every apiserver answers.
-  local seen i
-  for _ in $(seq 1 50); do
-    seen="$(for i in $(seq 1 40); do curl -s "$origin/api/runner/link-token" -X POST; done | sort -u | wc -l)"
-    [ "$1" = first ] || [ "$seen" -ge "$n" ] && return 0
-    sleep 0.2
-  done
 }
 # who PATH [METHOD]: the apiserver that answered, or the HTTP status when none did.
 who() {
@@ -136,6 +136,7 @@ who() {
   code="${body##*$'\n'}"
   [ "$code" = 200 ] && echo "${body%%$'\n'*}" || echo "status-$code"
 }
+is_apiserver() { [[ " ${apiservers[*]} " == *" $1 "* ]]; }
 sessions=()
 for i in $(seq 1 120); do sessions+=("$(printf 's%03d-%s' "$i" "$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')")"); done
 
@@ -152,6 +153,8 @@ fi
 # --- 3. With it. ------------------------------------------------------------------------------------------------------
 log "3. with gateway/several-apiservers/ mounted"
 up spread
+first_answer="$(who "/api/sessions/${sessions[0]}/events")"
+if is_apiserver "$first_answer"; then ok "the routes answer as soon as the gateway is up: $first_answer"; else fail "the first stream right after the gateway started: $first_answer"; fi
 declare -A home
 split=0
 for s in "${sessions[@]}"; do
@@ -159,7 +162,7 @@ for s in "${sessions[@]}"; do
   b="$(who "/api/sessions/$s/events?sinceSeq=12")"
   c="$(who "/api/sessions/$s/events")"
   home[$s]="$a"
-  [ "$a" = "$b" ] && [ "$b" = "$c" ] || { split=$((split + 1)); echo "    $s: $a $b $c"; }
+  is_apiserver "$a" && [ "$a" = "$b" ] && [ "$b" = "$c" ] || { split=$((split + 1)); echo "    $s: $a $b $c"; }
 done
 if [ "$split" = 0 ]; then ok "each of ${#sessions[@]} sessions' streams reached one apiserver, three times out of three"; else fail "$split sessions' streams reached more than one apiserver"; fi
 spread="$(for s in "${sessions[@]}"; do echo "${home[$s]}"; done | sort | uniq -c)"
@@ -219,6 +222,27 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 if grep -q "$victim" <<<"$back" && ! grep -q status- <<<"$back"; then ok "$victim takes sessions again: $(tr -s ' \n' ' ' <<<"$back")"; else fail "$victim took no session back: $back"; fi
+
+# --- 5. The gateway started before any apiserver. ---------------------------------------------------------------------
+log "5. the gateway started while no apiserver runs"
+dc stop "${apiservers[@]}" >/dev/null 2>&1
+dc up -d --wait --force-recreate --no-deps gateway >/dev/null 2>&1
+origin="http://$(dc port gateway 80)"
+before="$(who "/api/sessions/${sessions[0]}/events")"
+dc start "${apiservers[@]}" >/dev/null 2>&1
+started=$(date +%s%N)
+after=""
+while [ $(( ($(date +%s%N) - started) / 1000000000 )) -lt 15 ]; do
+  after="$(who "/api/sessions/${sessions[0]}/events")"
+  is_apiserver "$after" && break
+  sleep 0.2
+done
+took=$(( ($(date +%s%N) - started) / 1000000 ))
+if [ "$before" = status-502 ] && is_apiserver "$after" && [ "$took" -le 12000 ]; then
+  ok "502 until nginx looked the name up again: answered by $after ${took} ms after the apiservers started"
+else
+  fail "before the apiservers: $before; after them: $after, ${took} ms on"
+fi
 
 if [ "$failures" = 0 ]; then
   echo "all checks hold"

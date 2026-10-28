@@ -721,6 +721,9 @@ docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls 
 - **When an apiserver stops.** Its streams end, and the clients open them again on the others: the web gateway gives up
   on the stopped one after 2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and
   the deltas go on.
+- **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
+  healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
+  later.
 - **Who watches.** Each apiserver tells the link gateway how many streams it has of each session, and the gateway adds
   the counts up. The count of an apiserver that stopped lapses after 60 seconds.
 
