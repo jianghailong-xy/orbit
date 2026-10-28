@@ -48,6 +48,9 @@ import (
 //	         from the durable_seq its Welcome states (client_resume.go).
 //	switch   against a gateway that follows the server's RUNNER_LINK_REQUIRED switch: an administrator (the owner)
 //	         flips it on, then off in the middle of a session's event stream (client_switch.go).
+//	relay    an Antigravity code and a Cursor key a person's request left in one apiserver process, handed to this
+//	         runner by heartbeats forwarded to another; relay-begin and relay-finish split the sign-in around what the
+//	         script does to the processes in between (client_relay.go).
 
 // drillOptions are the client's flags for drills.
 type drillOptions struct {
@@ -61,6 +64,10 @@ type drillOptions struct {
 	cancelAfter       time.Duration
 	workDir           string
 	session           string
+	relaySecrets      string
+	relayAttempt      string
+	relaySlowHolder   bool
+	relayHandshake    string
 }
 
 type drillStep struct {
@@ -139,6 +146,12 @@ func runDrill(ctx context.Context, cl *client, o drillOptions) int {
 		d.resumeDrill(ctx, o)
 	case "switch":
 		d.switchDrill(ctx, o)
+	case "relay":
+		d.relayDrill(ctx, o)
+	case "relay-begin":
+		d.relayBeginDrill(ctx, o)
+	case "relay-finish":
+		d.relayFinishDrill(ctx, o)
 	default:
 		d.record("drill", false, time.Now(), "unknown drill "+o.name)
 	}
@@ -155,6 +168,9 @@ func dialDriver(ctx context.Context, cl *client, r *drillReport, resume ...*link
 	}
 	cl.hello = drillHello(cl.o.processID)
 	cl.hello.Sessions = resume
+	if strings.HasPrefix(r.Drill, "relay") {
+		cl.hello.Capabilities = relayCapabilities
+	}
 	cl.onRaw = d.noteRaw
 	cc, err := cl.connect(ctx)
 	if err != nil {

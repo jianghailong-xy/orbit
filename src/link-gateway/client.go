@@ -59,7 +59,7 @@ func clientMain(args []string) int {
 	fs.StringVar(&o.summaryFile, "summary", "", "write the JSON summary here as well as to standard output")
 	fs.StringVar(&o.captureFile, "capture", "", "append every frame sent and received to this file, length-delimited, for link-gateway dump")
 	var d drillOptions
-	fs.StringVar(&d.name, "drill", "", "run a drill instead: link, cancel, retry, slow or resume against a gateway in MODE_LINK, or switch against one that follows RUNNER_LINK_REQUIRED (client_link.go)")
+	fs.StringVar(&d.name, "drill", "", "run a drill instead: link, cancel, retry, slow, resume, relay, relay-begin or relay-finish against a gateway in MODE_LINK, or switch against one that follows RUNNER_LINK_REQUIRED (client_link.go)")
 	fs.StringVar(&d.ownerEmail, "owner-email", "", "drills: the account that owns the runner, which creates and watches sessions")
 	fs.StringVar(&d.ownerPasswordFile, "owner-password-file", "", "drills: a file holding that account's password")
 	fs.StringVar(&d.natsURL, "nats-url", "", "drills: NATS, to read a session's live subject as the apiserver does")
@@ -69,6 +69,10 @@ func clientMain(args []string) int {
 	fs.DurationVar(&d.cancelAfter, "cancel-after", 2*time.Second, "the cancel drill: how long a claim is left waiting before the connection drops")
 	fs.StringVar(&d.workDir, "work-dir", "/srv/link-drill", "drills: the working directory of the workspace sessions are created in")
 	fs.StringVar(&d.session, "session", "", "the retry and slow drills: a session this runner holds, as the link drill reports it")
+	fs.StringVar(&d.relaySecrets, "relay-secrets", "", "the relay drills: a JSON file {\"code\", \"key\"} naming the Antigravity code and the Cursor key to hand over (client_relay.go)")
+	fs.StringVar(&d.relayAttempt, "relay-attempt", "", "the relay-finish drill: the sign-in attempt relay-begin reported")
+	fs.BoolVar(&d.relaySlowHolder, "relay-slow-holder", false, "the relay-finish drill: the process holding the code is paused when it starts")
+	fs.StringVar(&d.relayHandshake, "relay-handshake", "", "the relay-finish drill: once connected, create PATH.ready and wait for PATH.go before the first heartbeat")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
