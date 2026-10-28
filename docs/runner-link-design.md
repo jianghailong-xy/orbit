@@ -422,6 +422,7 @@ apiserver 进程数和数据库规格按 O3 的测量补齐，见 §15.3。
 ### 11.4 回滚
 
 - **首选：关闭切换开关。** 旧路由恢复，runner 按 `Welcome` / `HeartbeatAck` 里的模式退回 HTTP。开关是运行时的，用 `PUT /api/admin/runner-link-required` 关，1 秒内生效，不用部署，见 §15.1。
+  - **有多个 apiserver 时，关开关之前先让会话流都回到第一个 apiserver。** 退回 HTTPS 的 runner 把增量发到第一个 apiserver，只有那个进程上的流看得到（§15.3）。二选一：从 `docker-compose.override.yml` 去掉 web 网关挂载 `gateway/several-apiservers/` 的那一行，执行 `docker compose up -d gateway`；或者停掉多出来的 apiserver（`docker compose stop apiserver-2` 等）。然后再关开关。见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)。
 - **第二道退路：版本回滚。** 服务端回到 vN-1，`/runner/release` 指定 vN-1 并标记回滚（`src/runner-go/selfupdate.go:420`），runner 降级后重新走 HTTP。
 - 两种回滚都要在 staging 完整演练一次。
 
@@ -520,12 +521,30 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 
 另外：
 
-- 起多个 apiserver 的做法（在 `docker-compose.override.yml` 里加 `apiserver-2` 等，网关的 `LINK_INTERNAL_API_URLS` 列出全部 apiserver，web 网关的请求仍只到第一个）见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)。
-- 多个 apiserver 上生产之前，要先完成三项前置。2026-10-27 三项都还没完成，在此之前多个 apiserver 只用于压测和 staging。
-  - (a) 34mNe88onMT6k23kHz7ce：reaper、任务定时扫描和自动重试同一时刻只在一个进程上跑；心跳写入失败的保护所有进程都看得到。
-  - (b) 34mNe8DOyUq2wlk81EGlZ：Antigravity 的登录码和 Cursor 的密钥检查，不管心跳落在哪个进程都能送到 runner。
-  - (c) 34mNe8H0YZ4Qkwd0t6jPJ：默认升级流程同时重建 apiserver 副本。
-- 待定：会话实时流要不要分散到所有 apiserver。现在会话流都到第一个 apiserver。按 O3 的估算，第一个 apiserver 加上实时流的转发，高峰时主线程约 87% 忙，超过 60% 的上限；分散到所有 apiserver 时约 52%（坏一个时 70%），但要给 web 网关加一条路由。实时流的开销 O3 只有数量级估算（每条约 0.04 ms），等 C2b（34m88i6i8CQeU4dSuw7HM）在专用机器上测量后再定。
+- 起多个 apiserver 的做法见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)：在 `docker-compose.override.yml` 里加 `apiserver-2` 等；链路网关的 `LINK_INTERNAL_API_URLS` 列出全部 apiserver；web 网关挂载 `gateway/several-apiservers/` 后，会话流和 link-token 分到所有 apiserver，人的其余请求仍只到第一个。
+- 多个 apiserver 上生产之前，要先完成下面的前置。2026-10-28 时 (a)、(b)、(c) 已在项目分支落地，(d)、34nb3xgCijTDzQJVXDVT7 和 (e) 还没有完成；全部完成之前，多个 apiserver 只用于压测和 staging。
+  - (a) 34mNe88onMT6k23kHz7ce：reaper、任务定时扫描和自动重试同一时刻只在一个进程上跑；心跳写入失败的保护所有进程都看得到。已落地：任务分支 703e3dd52 由合并提交 54a61ed32 合入项目分支。
+  - (b) 34mNe8DOyUq2wlk81EGlZ：Antigravity 的登录码和 Cursor 的密钥检查，不管心跳落在哪个进程都能送到 runner。已落地：4752cf40e 到 3c04ae110 这 5 个提交，项目分支从 3a001854e 前进到 3c04ae110。
+  - (c) 34mNe8H0YZ4Qkwd0t6jPJ：默认升级流程同时重建 apiserver 副本。已落地：任务分支 34eff2714（改动在 0707981e1）由合并提交 43fd969a9 合入项目分支。
+  - (d) 34nb3xlT50n4F2ALdUAtB：会话总结、iOS 审批提醒和通知限频跨进程有效。
+  - 34nb3xgCijTDzQJVXDVT7：会话实时流和 link-token 签发分散到所有 apiserver，见下一条。
+  - (e) `RUNNER_LINK_REQUIRED` 已打开，runner 都经链路工作。原因见下一条的“限制”。
+- 已定：会话实时流分散到所有 apiserver，link-token 签发也分散。协调者 2026-10-28 根据 C2b（34m88i6i8CQeU4dSuw7HM）的实测定下，34nb3xgCijTDzQJVXDVT7 实现。
+  - **依据（C2b 证据 9、11，单元规模，4 个 apiserver）。**
+    - 会话流都在第一个 apiserver 上、实时增量按单元速率（每秒 1 万条）时：第一个 apiserver 的主线程均值 0.976（10 秒峰值 0.997），另外三个 0.38–0.39。增量照样全部送达，但同一进程上的其他工作被挤掉。
+    - link-token 只由第一个进程签发，超时 9,768 次，连接只连上 6,020 条（目标 1.5 万）；心跳确认 p99 60 秒。
+    - 按 O3 的规则（峰值时主线程不超过 60%），只在第一个进程上放不下，加进程也分不掉。
+    - 网关发布式重启（drain）时 runner 集中重签 link-token，web 网关出了 968 个 502、4,572 个 499。查清是压测工具造成的，见下面的“drain 时的重签”。
+  - **做法：web 网关的两条路由，多 apiserver 的部署才挂载。**
+    - 路由在 `gateway/several-apiservers/` 的两个文件里。`gateway/nginx.conf` 只加了两条 include，用 glob 引用这两个文件；没挂载这个目录时什么也不匹配，所有请求照旧到第一个 apiserver。部署在 `docker-compose.override.yml` 里给 web 网关挂上这个目录才启用。
+    - 会话流（`GET /api/sessions/:id/events`）按地址里的会话 id 做 hash，分到所有 apiserver；link-token（`POST /api/runner/link-token`）给在途请求最少的 apiserver（`least_conn`）。人的其余请求照旧到第一个，因为 Codex 的 "Sign in with ChatGPT" 在发起它的进程里跑。
+    - 所有 apiserver 用同一个网络别名 `orbit-apiservers`：`docker-compose.yml` 给 apiserver 加上，`apiserver-2` 等 extends 时一起继承。nginx 的 upstream 用 `resolve` 每 10 秒重新解析这个名字，apiserver 重建或增减时自动跟上。
+    - 用不带 `consistent` 的 `hash`：nginx 的一致性哈希按 server 的名字放点，同一个名字解析出的几个地址共用这些点，结果是轮流使用，同一个会话的流会落到不同进程上（实测 nginx 1.31.6）。普通 hash 按地址在列表里的位置选，apiserver 集合不变时，同一个会话的流始终落在同一个进程；集合变化时，一部分会话在下次重连时换进程，已经开着的流不动。
+    - 一个 apiserver 停掉时，它上面的流断开，客户端重连：web 网关连它 2 秒不通就转到别的进程（`proxy_connect_timeout`），之后 10 秒不再选它，其间重新解析也会去掉它。客户端带着最后收到的持久事件的 seq（sinceSeq）重连，补上缺的，增量接着送达。
+    - 观看人数：每个进程只为本进程有流的会话订阅 `ses.<id>.live`，并以自己的实例名报各自的人数（变化时发 WatchersHint，非零的每 20 秒重发；心跳应答里带本进程的人数），链路网关按实例相加。停掉的进程的人数 60 秒后过期（WatchersTTL）；其间多算的人数只会让 runner 多发一会儿增量。
+  - **为什么默认配置不用 `resolve`。** upstream 的 `resolve` 是 nginx 1.27.3 才有的。部署沿用第一次拉下来的 `nginx:alpine`，升级默认不刷新基础镜像（`/upgrade` 要加 `--pull-base`），所以可能早于 1.27.3；而 nginx 读不了配置就起不来，网关整个不可用。所以默认的 `gateway/nginx.conf` 不用它，任何版本都能加载（实测 nginx 1.25.5），要求只落在挂载 `gateway/several-apiservers/` 的部署上：挂载前用 `docker compose exec gateway nginx -v` 确认版本，旧的先 `docker compose pull gateway`。1.25.5 加载这两个文件会报 `"resolver" directive is not allowed here`，起不来。
+  - **限制：只用于链路承载 runner 工作的单元，即前置 (e)。** 走 HTTPS 的 runner 把增量发到第一个 apiserver（经 web 网关），那个进程只交给自己的流，不经 NOTIFY 转给别的进程（§6.7）。会话流落在别的 apiserver 上时，这个 runner 的回答只在每条消息存进去时整条出现，中途打开的流也拿不到前缀。开关打开之前网关处于影子期，不转发任何调用，多出来的 apiserver 本来也不承担 runner 的调用。关开关回滚之前，先让流都回到第一个进程，见 §11.4。
+  - **drain 时的重签。** 真 runner 不会集中重签：`linkClient.token()`（`src/runner-go/link_client.go`，工作连接和影子连接都经过它）在 token 离过期还有 5 分钟以上时沿用原 token，drain 后的重连也一样（`TestLinkReplacesADrainedConnectionWithTheTokenInHand` 钉住这一点，runner 代码不用改）。C2b 看到的集中重签是 loadgen 造成的：它把 Drain 当成 token 续期，重连时一律重签。34nb3xgCijTDzQJVXDVT7 改了 loadgen（`src/link-gateway/cmd/loadgen/runner.go`）：drain 后的重连，token 离过期还有 `-renew-before`（5 分钟）以上就沿用。签发仍然分散，因为 runner 首次连接和约每小时一次的续期都要签发，全量发版后 runner 一起重启时，签发仍会集中。
 - 数据库连接池只能用会话模式：心跳语句是命名预编译语句，不能放在事务模式的 pgbouncer 后面，见 [self-hosting.md 的 "Database connections"](./self-hosting.md#database-connections)。
 
 ### 15.4 取消息和领会话：没拿到应答就沿用原来的 request id
