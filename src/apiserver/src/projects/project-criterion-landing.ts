@@ -328,10 +328,11 @@ export function taskLandingSql(alias: string): string {
 /**
  * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
  *
- * Its newest work session ran in a worktree on a branch, and the row is not declared codeless. The
- * negation of the middle two disjuncts of `prerequisiteLandedSql`, stated positively because this
- * asks the question the other way round — that one asks "is there nothing left to wait for", this
- * asks "is this the kind of work that lands".
+ * Its newest work session ran in a worktree on a branch, in the repository the project's line is
+ * bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
+ * middle two disjuncts of `prerequisiteLandedSql`, stated positively because this asks the question
+ * the other way round — that one asks "is there nothing left to wait for", this asks "is this the
+ * kind of work that lands".
  */
 export function isCodeTaskSql(alias: string): string {
   return `(
@@ -339,6 +340,7 @@ export function isCodeTaskSql(alias: string): string {
       AND ${alias}."codeless" = false
       AND EXISTS (
         SELECT 1 FROM "session" code_work
+          LEFT JOIN "workspace" code_workspace ON code_workspace."id" = code_work."workspace_id"
          WHERE code_work."id" = (
                  SELECT newest_work."id" FROM "session" newest_work
                   WHERE newest_work."task_id" = ${alias}."id"
@@ -349,8 +351,50 @@ export function isCodeTaskSql(alias: string): string {
                )
            AND code_work."isolation_status" = 'worktree'
            AND code_work."branch" IS NOT NULL
+           AND ${workOnProjectRepositorySql(`${alias}."project_id"`, 'code_workspace."repo_url"')}
       )
     )`;
+}
+
+/**
+ * `canonicalRepoUrl` (PSC SR36, `project-integration-line.ts`) as one SQL expression over `raw`, step
+ * for step: trimmed; the scp form `git@host:owner/repo` spelled `ssh://host/owner/repo`; scheme and
+ * host lower-cased and any `user@` dropped; every trailing `/` and `.git` taken off; NULL when
+ * nothing is left. The two are held to one corpus by `delivered-identity.pg.spec.ts`, because a
+ * predicate that compares repositories in the database has to reach the answer the TypeScript does.
+ */
+export function canonicalRepoUrlSql(raw: string): string {
+  // No CASE: the scp spelling is skipped by a lookahead for a scheme, and a URL with no scheme to
+  // lower-case falls through COALESCE as it is — a `WHEN` here would land inside the readiness arms
+  // that embed this, which their own readers delimit by `WHEN`.
+  return `(SELECT NULLIF(regexp_replace(repo_lowered."url", '(/|\\.git)+$', ''), '')
+      FROM (SELECT COALESCE(lower(repo_parts."parts"[1]) || '://' || lower(repo_parts."parts"[2])
+                              || repo_parts."parts"[3],
+                            repo_parts."url") AS "url"
+              FROM (SELECT repo_spelled."url",
+                           regexp_match(repo_spelled."url",
+                                        '^([a-z][a-z0-9+.-]*)://(?:[^@/]*@)?([^/]*)(.*)$', 'i') AS "parts"
+                      FROM (SELECT regexp_replace(repo_trimmed."url",
+                                     '^(?![a-z][a-z0-9+.-]*://)(?:[^@/[:space:]]+@)?([^:/[:space:]]+):(?!/)([^[:space:]]+)$',
+                                     'ssh://\\1/\\2', 'i') AS "url"
+                              FROM (SELECT regexp_replace(${raw}, '^[[:space:]]+|[[:space:]]+$', '', 'g') AS "url")
+                                   repo_trimmed) repo_spelled) repo_parts) repo_lowered)`;
+}
+
+/**
+ * `isCodeTask`'s repository condition (revision 29, §10.5 O-L7) as SQL: no binding of the project
+ * names a repository other than the one `repoUrl` — a work session's workspace `repo_url` — reads as
+ * through SR36. A project with no binding has none to differ from: its first integration binds it to
+ * this work's repository (L3). A workspace with no `repo_url` is in no repository anybody can name, so
+ * it differs from every binding.
+ */
+export function workOnProjectRepositorySql(projectId: string, repoUrl: string): string {
+  return `NOT EXISTS (
+        SELECT 1 FROM "project_codebase" work_line
+         WHERE work_line."project_id" = ${projectId}
+           AND work_line."slot" = 'primary'
+           AND work_line."canonical_repo_url" IS DISTINCT FROM ${canonicalRepoUrlSql(repoUrl)}
+      )`;
 }
 
 /** `lineStarted` (§1.1) as SQL: this task's project has a binding that has begun integrating. */

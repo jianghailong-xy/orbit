@@ -8,7 +8,9 @@ import {
   LandingReceiptFacts,
   landingBranchesFor,
   taskLanding,
+  workOnProjectRepositorySql,
 } from '../projects/project-criterion-landing';
+import { workOnProjectRepository } from '../projects/project-integration-line';
 import { successorChain, TASK_SUPERSESSION_MAX_HOPS, taskNotRetiredSql } from './task-supersession';
 import {
   VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN,
@@ -540,8 +542,10 @@ export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
  *     project at all. Nothing lands work on a line that does not exist yet, so requiring a landing
  *     would hold every dependent of every project in this repository for ever.
  *  2. **It is not code work** (§1.1 `isCodeTask`): declared codeless, or its newest work session did
- *     not run in a worktree on a branch. A documentation prerequisite has no commit to land, and
- *     SR27 says the same thing one contract over.
+ *     not run in a worktree on a branch, or ran in a repository other than the one the project's
+ *     line is bound to (revision 29, §10.5 O-L7). A documentation prerequisite has no commit to land,
+ *     and SR27 says the same thing one contract over; work in another repository has none to land on
+ *     this line.
  *  3. **A receipt says it landed** on the project's integration line or on its upstream (§1.4
  *     `taskLanding` ∈ {ON_INTEGRATION_LINE, ON_UPSTREAM}) — the upstream counts because work on main
  *     is also everywhere the project branch will ever take it.
@@ -562,6 +566,7 @@ export function prerequisiteLandedSql(alias = 'chain_task'): string {
       OR ${alias}."codeless" = true
       OR NOT EXISTS (
         SELECT 1 FROM "session" landing_work
+          LEFT JOIN "workspace" landing_workspace ON landing_workspace."id" = landing_work."workspace_id"
          WHERE landing_work."id" = (
                  SELECT newest_work."id" FROM "session" newest_work
                   WHERE newest_work."task_id" = ${alias}."id"
@@ -572,6 +577,7 @@ export function prerequisiteLandedSql(alias = 'chain_task'): string {
                )
            AND landing_work."isolation_status" = 'worktree'
            AND landing_work."branch" IS NOT NULL
+           AND ${workOnProjectRepositorySql(`${alias}."project_id"`, 'landing_workspace."repo_url"')}
       )
       OR EXISTS (
         SELECT 1 FROM "session_merge_receipt" landing_receipt
@@ -593,9 +599,15 @@ export interface PrerequisiteLandingFacts {
   codeless: boolean;
   projectId: string | null;
   /** The project's primary binding, or null when it has none. */
-  codebase: { upstreamRef: string; integrationRef: string; integrationStartedAt: Date | null } | null;
-  /** Its newest work session — §1.1's whole evidence that a task is code work. */
-  work: { isolationStatus: string | null; branch: string | null } | null;
+  codebase: {
+    upstreamRef: string;
+    integrationRef: string;
+    integrationStartedAt: Date | null;
+    canonicalRepoUrl?: string | null;
+  } | null;
+  /** Its newest work session — §1.1's whole evidence that a task is code work — and the `repo_url`
+   *  of the workspace it ran in. */
+  work: { isolationStatus: string | null; branch: string | null; repoUrl?: string | null } | null;
   receipts: readonly LandingReceiptFacts[];
 }
 
@@ -608,6 +620,7 @@ export function prerequisiteLanded(facts: PrerequisiteLandingFacts): boolean {
   if (!facts.codebase?.integrationStartedAt) return true;
   if (facts.codeless || facts.projectId === null) return true;
   if (facts.work?.isolationStatus !== 'worktree' || !facts.work.branch) return true;
+  if (!workOnProjectRepository(facts.work.repoUrl, facts.codebase)) return true;
   return taskLanding(facts.receipts, landingBranchesFor(facts.codebase)) !== 'NOT_KNOWN';
 }
 

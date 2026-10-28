@@ -35,7 +35,7 @@ import {
   type OwnerDecisionValue,
 } from './task-owner-confirmation';
 import { TasksService } from './tasks.service';
-import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -293,7 +293,11 @@ export class TaskOwnerConfirmationService {
             completionCriterion: 'OWNER_CONFIRMED',
             status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
           },
-          data: { status: completed },
+          // The DONE states the delivered identity it freezes in its own statement (§10.5 O-L4).
+          data: {
+            status: completed,
+            ...(completed === TaskStatus.DONE ? await deliveredIdentityAtDone(tx, ownerId, taskId) : {}),
+          },
         });
         settled = changed.count > 0;
       }

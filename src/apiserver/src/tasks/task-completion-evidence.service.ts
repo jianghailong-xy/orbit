@@ -38,7 +38,7 @@ import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
-import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -814,7 +814,11 @@ export class TaskCompletionEvidenceService {
             completionCriterion: 'EVIDENCE_JUDGMENT',
             status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
           },
-          data: { status: completed },
+          // The DONE states the delivered identity it freezes in its own statement (§10.5 O-L4).
+          data: {
+            status: completed,
+            ...(completed === TaskStatus.DONE ? await deliveredIdentityAtDone(tx, ownerId, taskId) : {}),
+          },
         });
         settled = changed.count > 0;
       }

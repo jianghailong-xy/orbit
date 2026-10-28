@@ -24,6 +24,9 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
         return { count: 1 };
       },
       count: async () => 0,
+      // The finish settles a DONE task's delivered identity (§10.5 O-L4 3) from the session's own
+      // row; this fixture's task is not DONE, so there is nothing for it to read further.
+      findUnique: async () => null,
     },
     // Still silent when the finalize runs, which is what the sweep's snapshot said too. The
     // reaper re-asks here before writing, so this row is what decides these two cases; a runner

@@ -9,7 +9,8 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { startOnFirstIntegration } from './project-integration-line';
+import { taskLandingSql } from './project-criterion-landing';
+import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
   enqueuedText,
@@ -19,9 +20,11 @@ import {
 import {
   INTEGRATION_ITEM_KINDS,
   markOpenItemsHandling,
+  recordLandingUnobserved,
   resolveLeaseExpiredItems,
   type OpenItemHandlingStart,
 } from './project-open-item';
+import { checkpointLandingGate, latestAcceptedCheckpoint } from './task-checkpoint.service';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
@@ -1034,6 +1037,287 @@ export async function queueLandingRetry(
   };
 }
 
+// ── the delivered identity (§10.5 O-L4) ────────────────────────────────────────────────────────
+
+/** The five columns of a task's delivered identity (§10.4, O1), as one write states them. */
+export interface DeliveredIdentityColumns {
+  deliveredSha: string | null;
+  deliveredBaseSha: string | null;
+  deliveredBranch: string | null;
+  deliveredSessionId: string | null;
+  deliveredAt: Date | null;
+}
+
+/**
+ * The five columns with nothing frozen in them: what `task_reopen` writes (O-L4), what every other
+ * write that takes a task out of DONE writes too — a task that is not DONE has delivered nothing
+ * (§10.4) — and what a DONE whose work is still moving, or whose identity is unknown, writes.
+ */
+export const DELIVERED_IDENTITY_CLEARED: DeliveredIdentityColumns = {
+  deliveredSha: null,
+  deliveredBaseSha: null,
+  deliveredBranch: null,
+  deliveredSessionId: null,
+  deliveredAt: null,
+};
+
+/** The commit a code task's work is named by (O1), the commit it forked from, and where both were read. */
+export interface DeliveredIdentity {
+  sha: string;
+  baseSha: string | null;
+  /** A short branch name, as a receipt's `source_branch` spells it. */
+  branch: string;
+  sessionId: string | null;
+}
+
+/**
+ * What O-L4 can say about a task's delivered identity, from committed rows:
+ *
+ *   * NOT_A_CODE_TASK — §1.1 `isCodeTask` is false, the repository condition (O-L7) included; there
+ *     is nothing to freeze.
+ *   * WORK_MOVING — a work session of the task has not finished (`landingWorkHasSettled`, J-T1e), so
+ *     the commit it will end on is not known yet; the finish freezes it (O-L4 3).
+ *   * UNKNOWN — the work has settled and still names no commit: under convergence management no
+ *     checkpoint is one `checkpointLandingGate` accepts; otherwise the session the work ended on
+ *     reported no tip (`branch_sha`). The runner reports that tip for the branch its checkout is on,
+ *     in the report that names the branch (`worktree_branch`), so a `branch_sha` beside a
+ *     `worktree_branch` other than `branch` is that branch's tip, and "its tip was not reported" is a
+ *     missing `branch_sha`.
+ *   * KNOWN — the identity.
+ */
+export type DeliveredIdentityReading =
+  | { kind: 'NOT_A_CODE_TASK' }
+  | { kind: 'WORK_MOVING' }
+  | {
+      kind: 'UNKNOWN';
+      projectId: string;
+      sessionId: string | null;
+      branch: string | null;
+      baseSha: string | null;
+    }
+  | { kind: 'KNOWN'; projectId: string; identity: DeliveredIdentity };
+
+/** A commit id the identity can hold: 40 lowercase hex characters, the shape every SHA column keeps. */
+function deliveredShaOf(value: string | null | undefined): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/.test(value) ? value : null;
+}
+
+/**
+ * O-L4's reading of a task's delivered identity. Reads only; `deliveredIdentityAtDone` and
+ * `settleDeliveredIdentity` write what it says.
+ *
+ * 1. Under convergence management (the task has a `task_checkpoint`): the checkpoint the DONE rests
+ *    on, which is the latest ACCEPTED one when `checkpointLandingGate` accepts its commit — the
+ *    commit, its base and its branch, read from the session that recorded it.
+ * 2. Otherwise: the session the work ended on (`workBranchEndedOn`) — its `branch_sha` and
+ *    `base_sha`, on `worktree_branch`, else `branch`.
+ */
+export async function readDeliveredIdentity(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+): Promise<DeliveredIdentityReading> {
+  const task = await db.task.findFirst({ where: { id: taskId, ownerId }, select: { projectId: true } });
+  if (!task?.projectId || !(await isCodeTask(db, ownerId, taskId))) return { kind: 'NOT_A_CODE_TASK' };
+  const projectId = task.projectId;
+  const sessions = await db.session.findMany({
+    where: { taskId, startsTaskWork: true, deletedAt: null },
+    select: {
+      id: true, branch: true, worktreeBranch: true, finishedAt: true, assignedRunnerId: true,
+      branchSha: true, baseSha: true,
+    },
+  });
+  const work = sessions.map((row) => ({
+    sessionId: row.id,
+    branch: row.branch,
+    worktreeBranch: row.worktreeBranch,
+    finishedAt: row.finishedAt,
+    runnerId: row.assignedRunnerId,
+  }));
+  if (!landingWorkHasSettled(work)) return { kind: 'WORK_MOVING' };
+
+  const [managed] = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id" FROM "task_checkpoint"
+     WHERE "task_id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+     LIMIT 1`);
+  if (managed) {
+    const checkpoint = await latestAcceptedCheckpoint(db, ownerId, taskId);
+    const gate = checkpoint
+      ? await checkpointLandingGate(db, { ownerId, taskId, sourceSha: checkpoint.commitSha })
+      : null;
+    if (!checkpoint || (gate !== null && gate.decision !== 'ALLOWED')) {
+      return { kind: 'UNKNOWN', projectId, sessionId: null, branch: null, baseSha: null };
+    }
+    return {
+      kind: 'KNOWN',
+      projectId,
+      identity: {
+        sha: checkpoint.commitSha,
+        baseSha: deliveredShaOf(checkpoint.baseSha),
+        branch: shortBranchName(checkpoint.branch),
+        sessionId: checkpoint.sessionId,
+      },
+    };
+  }
+
+  const ended = workBranchEndedOn(work);
+  const session = ended ? sessions.find((row) => row.id === ended.sessionId) : undefined;
+  const sha = deliveredShaOf(session?.branchSha);
+  if (!ended || !session || !sha) {
+    return {
+      kind: 'UNKNOWN',
+      projectId,
+      sessionId: ended?.sessionId ?? null,
+      branch: ended?.branch ?? null,
+      baseSha: deliveredShaOf(session?.baseSha),
+    };
+  }
+  return {
+    kind: 'KNOWN',
+    projectId,
+    identity: { sha, baseSha: deliveredShaOf(session.baseSha), branch: ended.branch, sessionId: session.id },
+  };
+}
+
+/** The columns an identity is frozen as, at this instant. */
+function frozenColumns(identity: DeliveredIdentity): DeliveredIdentityColumns {
+  return {
+    deliveredSha: identity.sha,
+    deliveredBaseSha: identity.baseSha,
+    deliveredBranch: identity.branch,
+    deliveredSessionId: identity.sessionId,
+    deliveredAt: new Date(),
+  };
+}
+
+/**
+ * The five columns a DONE write states (O-L4), for the door to put in the statement that writes the
+ * DONE: the identity when the work has settled and names its commit, and nothing otherwise, which is
+ * left for `settleDeliveredIdentity` — the finish of the work still moving, or the item an unknown
+ * identity owes.
+ *
+ * In the DONE's own statement rather than in a second one, because a second write of a row this
+ * transaction already wrote re-runs every foreign key of `task` (`common/lock-order.ts` I3, said of
+ * `session` there): FOR KEY SHARE on the owner, the creator session, the project and the rest, taken
+ * after the task's own rank-50 lock. Read before the DONE is written, from committed rows; the
+ * statement that writes it is the compare-and-set that decides whether any of it lands.
+ */
+export async function deliveredIdentityAtDone(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+): Promise<DeliveredIdentityColumns> {
+  const reading = await readDeliveredIdentity(db, ownerId, taskId);
+  return reading.kind === 'KNOWN' ? frozenColumns(reading.identity) : DELIVERED_IDENTITY_CLEARED;
+}
+
+/** What `settleDeliveredIdentity` found, so a caller knows whether an item waits to be delivered. */
+export type DeliveredIdentitySettlement =
+  | 'FROZEN'
+  | 'STANDING'
+  | 'WORK_MOVING'
+  | 'IDENTITY_UNKNOWN'
+  | 'NOT_A_CODE_TASK'
+  | 'NOT_DONE';
+
+/**
+ * O-L4's freeze, and what an identity that cannot be frozen owes, in the caller's transaction.
+ *
+ * Two kinds of caller, told apart by `after`:
+ *
+ *   * `DONE` — `enqueueForDoneTask`, in the transaction that wrote the DONE. The DONE's statement has
+ *     already stated the identity (`deliveredIdentityAtDone`); a standing one is announced
+ *     (`deliveredIdentityFrozen`, O-T1). A door that wrote DONE without stating it gets the freeze
+ *     here, as a second write of the row — the one door that does not state it (turnComplete) writes
+ *     DONE while the session that ran the acceptance is still live, so its work has not settled.
+ *   * `WORK_FINISHED` — a transaction that wrote a work session's `finished_at` (O-L4 3): the runner's
+ *     finalize, a turn that failed the session, the reaper's forced finalize, the end of a session
+ *     that never ran, a refused start. A DONE task whose identity was left unfrozen because that work
+ *     was still moving is frozen here; one already standing is left as the DONE froze it.
+ *
+ * An identity that the settled work cannot name (O-L4's second case) opens `LANDING_UNOBSERVED`
+ * (`IDENTITY_UNKNOWN`) in an AGENT_PUSH project (O-T1) — nobody else will see that work on the line —
+ * unless a receipt already says the work landed; a PLATFORM project leaves `delivered_at` NULL and
+ * its own landing goes on by branch. The caller delivers the item after the commit
+ * (`ProjectOpenItemService.deliverForTasks`).
+ */
+export async function settleDeliveredIdentity(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' },
+): Promise<DeliveredIdentitySettlement> {
+  const { ownerId, taskId } = input;
+  const task = await tx.task.findFirst({
+    where: { id: taskId, ownerId },
+    select: { status: true, projectId: true, deliveredAt: true },
+  });
+  if (task?.status !== TaskStatus.DONE) return 'NOT_DONE';
+  if (task.deliveredAt) {
+    if (input.after === 'DONE' && task.projectId) {
+      await deliveredIdentityFrozen(tx, { ownerId, projectId: task.projectId, taskId });
+    }
+    return 'STANDING';
+  }
+  const reading = await readDeliveredIdentity(tx, ownerId, taskId);
+  if (reading.kind === 'NOT_A_CODE_TASK' || reading.kind === 'WORK_MOVING') return reading.kind;
+  if (reading.kind === 'KNOWN') {
+    const frozen = await tx.task.updateMany({
+      where: { id: taskId, ownerId, status: TaskStatus.DONE, deliveredAt: null },
+      data: frozenColumns(reading.identity),
+    });
+    if (frozen.count > 0) {
+      await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
+    }
+    return 'FROZEN';
+  }
+  const binding = await tx.projectCodebase.findFirst({
+    where: { projectId: reading.projectId, slot: 'primary' },
+    select: { deliveryMode: true },
+  });
+  if (binding?.deliveryMode === 'AGENT_PUSH') {
+    const [landing] = await tx.$queryRaw<Array<{ landing: string }>>(Prisma.sql`
+      SELECT (${Prisma.raw(taskLandingSql('landed_task'))}) AS "landing"
+        FROM "task" landed_task
+       WHERE landed_task."id" = ${taskId}::uuid`);
+    if (landing?.landing === 'NOT_KNOWN') {
+      await recordLandingUnobserved(tx, {
+        taskId,
+        reason: 'IDENTITY_UNKNOWN',
+        deliveredSha: null,
+        baseSha: reading.baseSha,
+        branch: reading.branch,
+        sessionId: reading.sessionId,
+      });
+    }
+  }
+  return 'IDENTITY_UNKNOWN';
+}
+
+/**
+ * O-L4 3 in a transaction that has just written a session's `finished_at`: when the session is work
+ * of a task, its finish may be the one that task's DONE was waiting for. Null for any other session,
+ * which reads nothing.
+ */
+export async function settleDeliveredIdentityAfterFinish(
+  tx: Prisma.TransactionClient,
+  session: { ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
+): Promise<DeliveredIdentitySettlement | null> {
+  if (!session?.taskId || !session.startsTaskWork) return null;
+  return settleDeliveredIdentity(tx, {
+    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED',
+  });
+}
+
+/**
+ * O-T1's call point (§10.6): a code task's delivered identity stands frozen, in the transaction that
+ * froze it — the DONE's, or the one that ended the work the DONE waited for (O-L4 3). Queuing the
+ * observation of an AGENT_PUSH project lands with OBSERVE_LANDING itself; until then this writes
+ * nothing.
+ */
+async function deliveredIdentityFrozen(
+  _tx: Prisma.TransactionClient,
+  _frozen: { ownerId: string; projectId: string; taskId: string },
+): Promise<void> {}
+
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1158,8 +1442,25 @@ export async function doneTaskLandingWork(
  * lands decides it here, once, and the same transaction back-queues the project's other finished
  * code tasks — without that, they would have landed nowhere and their dependents would wait on J9
  * for a landing that was never going to be queued.
+ *
+ * And the DONE's delivered identity (revision 29, §10.5 O-L4): once the route is queued, with the line
+ * bound, `settleDeliveredIdentity` announces the identity the DONE's statement froze, freezes one the
+ * door did not state, or opens what an unknown one owes (O-T1). Whatever the route's outcome — a task
+ * already queued, or whose repository is unknown, still has the commit its work is named by.
  */
 export async function enqueueForDoneTask(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+  doneSource?: DoneTaskSource | null,
+): Promise<EnqueueOutcome> {
+  const outcome = await queueForDoneTask(tx, ownerId, taskId, doneSource);
+  await settleDeliveredIdentity(tx, { ownerId, taskId, after: 'DONE' });
+  return outcome;
+}
+
+/** `enqueueForDoneTask`'s route: the landing or the candidate, and the line it starts (J-T1a, L3). */
+async function queueForDoneTask(
   tx: Prisma.TransactionClient,
   ownerId: string,
   taskId: string,
