@@ -44,6 +44,9 @@ services:
       # How long an event batch waits for others to go with it in one merged call (src/link-gateway/events_merge.go), as
       # ORBIT_LINK_STAGING_MERGE_WINDOW says: empty is the gateway's own default, 0 forwards every batch alone.
       LINK_EVENT_MERGE_WINDOW: ${STAGING_MERGE_WINDOW:-}
+      # A load test's slow ingest (LINK_DRILL_INGEST_RATE, src/link-gateway/drill.go), as ORBIT_LINK_STAGING_INGEST_RATE
+      # says: empty forwards durable events as they come.
+      LINK_DRILL_INGEST_RATE: ${STAGING_INGEST_RATE:-}
     ports: !override
       - ${STAGING_BIND}:${STAGING_LINK_PORT}:8443
       - 127.0.0.1:${STAGING_METRICS_PORT}:9464

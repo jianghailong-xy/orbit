@@ -34,6 +34,8 @@
 #   ORBIT_LINK_STAGING_DB_MEM        with LOADGEN=1, the database's memory limit (Compose mem_limit)  4g
 #   ORBIT_LINK_STAGING_MERGE_WINDOW  the link gateway's LINK_EVENT_MERGE_WINDOW: 0 forwards each event
 #                                    batch alone; "default" is the gateway's own                         default
+#   ORBIT_LINK_STAGING_INGEST_RATE   the link gateway's LINK_DRILL_INGEST_RATE: the durable events a second it
+#                                    forwards at most, for a load test of a slow ingest; off forwards them as they come  off
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -44,7 +46,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -73,6 +75,7 @@ gateways="${ORBIT_LINK_STAGING_GATEWAYS:-$(setting STAGING_GATEWAYS 1)}"
 metrics_port_b="${ORBIT_LINK_STAGING_METRICS_PORT_B:-$(setting STAGING_METRICS_PORT_B 19465)}"
 handshake_rate="${ORBIT_LINK_STAGING_HANDSHAKE_RATE_B:-$(setting STAGING_HANDSHAKE_RATE_B 200)}"
 handshake_burst="${ORBIT_LINK_STAGING_HANDSHAKE_BURST_B:-$(setting STAGING_HANDSHAKE_BURST_B 400)}"
+ingest_rate="${ORBIT_LINK_STAGING_INGEST_RATE:-$(setting STAGING_INGEST_RATE_SETTING off)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
@@ -82,6 +85,9 @@ case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, no
 [[ "$merge_window" =~ ^(default|0|[0-9]+ms)$ ]] || die "ORBIT_LINK_STAGING_MERGE_WINDOW must be default, 0 or a window such as 100ms, not $merge_window"
 gateway_merge_window="$merge_window"
 [ "$merge_window" = default ] && gateway_merge_window=""
+[[ "$ingest_rate" =~ ^(off|[1-9][0-9]*)$ ]] || die "ORBIT_LINK_STAGING_INGEST_RATE must be off or events a second such as 300, not $ingest_rate"
+gateway_ingest_rate="$ingest_rate"
+[ "$ingest_rate" = off ] && gateway_ingest_rate=""
 [[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
 case "$gateways" in 1|2) ;; *) die "ORBIT_LINK_STAGING_GATEWAYS must be 1 or 2, not $gateways" ;; esac
 [[ "$handshake_rate" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_HANDSHAKE_RATE_B must be handshakes a second, not $handshake_rate"
@@ -233,6 +239,8 @@ STAGING_GATEWAYS=$gateways
 STAGING_METRICS_PORT_B=$metrics_port_b
 STAGING_HANDSHAKE_RATE_B=$handshake_rate
 STAGING_HANDSHAKE_BURST_B=$handshake_burst
+STAGING_INGEST_RATE_SETTING=$ingest_rate
+STAGING_INGEST_RATE=$gateway_ingest_rate
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
 RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
@@ -294,7 +302,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst")"
+log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst")"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------
