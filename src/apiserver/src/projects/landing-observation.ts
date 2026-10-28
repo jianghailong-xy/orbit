@@ -57,6 +57,15 @@ export type ObservationTrigger =
 /** How many failed observations of a project in a row open its INTEGRATION_ERROR (§10.6 O-J4). */
 export const OBSERVATION_FAILURE_LIMIT = 3;
 
+/** `integration_observe`'s refusals (§10.8, R29-7): a reason missing, blank or over its limit. */
+export const INTEGRATION_OBSERVE_REASON_REQUIRED = 'INTEGRATION_OBSERVE_REASON_REQUIRED';
+/** The runner door asked by a session that is not the project's current coordinator, or by none. */
+export const INTEGRATION_OBSERVE_COORDINATOR_ONLY = 'INTEGRATION_OBSERVE_COORDINATOR_ONLY';
+/** The owner's door asked with an acting session: a coordinator asks through `integration_observe`. */
+export const INTEGRATION_OBSERVE_OWNER_CHANNEL_ONLY = 'INTEGRATION_OBSERVE_OWNER_CHANNEL_ONLY';
+/** The longest reason the door keeps, the same bound as every other integration door's. */
+export const MAX_INTEGRATION_OBSERVE_REASON = 2_000;
+
 /** The one INTEGRATION_ERROR a project's failing observations open (§10.6 O-J4). */
 export function observationErrorDedupeKey(projectId: string): string {
   return `IE:observe:${projectId}`;
@@ -110,6 +119,31 @@ export async function hasPendingObservation(
          AND ${Prisma.raw(landingPendingObservationSql('t'))}
     ) AS "pending"`);
   return row?.pending === true;
+}
+
+/**
+ * The OPEN `LANDING_UNOBSERVED` items of the project held by `assignee` that an observation can answer
+ * — their task is waiting to be observed, so the observation looks at its delivered commit — oldest
+ * first. They are what `integration_observe` marks as being handled (§10.8, §4.7 H1): an item whose
+ * task has no frozen identity (IDENTITY_UNKNOWN) is not, since no observation will look at it.
+ */
+export async function observableUnobservedItems(
+  db: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  projectId: string,
+  assignee: 'COORDINATOR' | 'OWNER',
+): Promise<string[]> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT item."id"
+      FROM "project_open_item" item
+      JOIN "task" t ON t."id" = item."task_id"
+     WHERE item."project_id" = ${projectId}::uuid
+       AND item."kind" = 'LANDING_UNOBSERVED'
+       AND item."state" = 'OPEN'
+       AND item."assignee" = ${assignee}
+       AND t."project_id" = item."project_id"
+       AND ${Prisma.raw(landingPendingObservationSql('t'))}
+     ORDER BY item."waiting_since", item."id"`);
+  return rows.map((row) => row.id);
 }
 
 /** What an enqueue did: wrote a QUEUED row, or folded into the one already queued (§10.4). */

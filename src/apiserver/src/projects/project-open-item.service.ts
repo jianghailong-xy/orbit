@@ -118,6 +118,13 @@ import {
   notAnApprovalId,
 } from './project-integration-skip-check';
 import { requeuePromotionCheck } from './project-promotion.service';
+import {
+  INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+  INTEGRATION_OBSERVE_REASON_REQUIRED,
+  MAX_INTEGRATION_OBSERVE_REASON,
+  observableUnobservedItems,
+  queueLandingObservation,
+} from './landing-observation';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
   START_REQUEST_COORDINATOR_ONLY,
@@ -314,6 +321,7 @@ export interface OpenItemRow {
     | 'OPEN_LANDING'
     | 'ABANDON'
     | 'ACCEPT'
+    | 'OBSERVE'
   >;
   /** The server's one-sentence next step, optional for rolling-version readers. */
   requiredAction?: string;
@@ -329,7 +337,8 @@ export interface OpenItemRow {
     | 'ANSWER'
     | 'OPEN_LANDING'
     | 'ABANDON'
-    | 'ACCEPT';
+    | 'ACCEPT'
+    | 'OBSERVE';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -415,6 +424,21 @@ export interface IntegrationRetried {
   /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
+  handlingItemIds: string[];
+}
+
+/** The project's line looked at again (§10.8, O-T5), as `integration_observe` answers it. */
+export interface IntegrationObserved {
+  projectId: string;
+  /** The OBSERVE_LANDING that will look: the one this press queued, or the one already queued. */
+  jobId: string;
+  generation: number;
+  /** False when the press folded into the observation already queued (§10.4). */
+  queued: boolean;
+  reason: string;
+  /** The asker's OPEN `LANDING_UNOBSERVED` items that observation can answer, now being handled by
+   *  it (§4.7 H1): OPEN until it reports, closed LANDED by the receipt it writes when it sees the
+   *  commit, and left as they were when it does not. */
   handlingItemIds: string[];
 }
 
@@ -1853,6 +1877,81 @@ export class ProjectOpenItemService {
        RETURNING item."id"`);
     if (!accepted) throw notOpen();
     return { itemId, state: 'RESOLVED', resolution: 'ACCEPTED' };
+  }
+
+  /**
+   * Look at the project's line again (`integration_observe`, §10.8; §10.6 O-T5): queue one
+   * OBSERVE_LANDING, or fold into the one already queued, as the conversation the project is
+   * coordinated from or as the account owner.
+   *
+   * WHO MAY ASK. The project's current coordinator conversation, named by the acting session, and
+   * nothing else on the runner door — a missing or blank header is not read as the account owner,
+   * whose own press is the user door (`{ kind: 'OWNER' }`, which the owner's controller sends only
+   * without an acting session). A reason is required, as on every integration door: it stays on the
+   * items the observation handles.
+   *
+   * WHAT IT WRITES. One transaction. `queueLandingObservation` under the binding's lock (rank 55) —
+   * the observation's own enqueue, which also ends a silent RUNNING one (J-T9) — then, by §4.7 H1,
+   * the asker's OPEN `LANDING_UNOBSERVED` items whose task that observation will look at, marked as
+   * being handled by it. They stay OPEN: the observation that sees a task's commit writes its landing
+   * receipt, which closes the item LANDED (O-R1), and one that does not leaves it as it was. An
+   * observation queues even with nothing waiting (O-T5); a project with no repository bound has no
+   * line to look at and is refused, with nothing written.
+   */
+  async observeIntegration(
+    ownerId: string,
+    projectId: string,
+    given: { reason?: unknown } | undefined,
+    actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  ): Promise<IntegrationObserved> {
+    const reason = observeReason(given);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actor.kind === 'SESSION' ? actor.sessionId.trim() : null;
+    if (actor.kind === 'SESSION' && (!asking || asking !== project.coordinatorSessionId)) {
+      throw observeCoordinatorOnly();
+    }
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const queued = await queueLandingObservation(tx, { ownerId, projectId, trigger: 'OBSERVE_DOOR' });
+      if (!queued) {
+        throw new ConflictException({
+          code: 'INTEGRATION_REPOSITORY_UNKNOWN',
+          message: 'this project has no repository bound yet, so there is no line to look at. Its first '
+            + 'landing binds one.',
+        });
+      }
+      if (asking) {
+        // Read again inside the transaction: the pointer can rotate while the call was on its way.
+        const current = await tx.project.findUniqueOrThrow({
+          where: { id: projectId },
+          select: { coordinatorSessionId: true },
+        });
+        if (current.coordinatorSessionId !== asking) throw observeCoordinatorOnly();
+      }
+      const handle = await observableUnobservedItems(tx, projectId, asking ? 'COORDINATOR' : 'OWNER');
+      await markOpenItemsHandling(tx, handle, {
+        jobId: queued.jobId,
+        sessionId: asking,
+        userId: asking ? null : ownerId,
+        reason,
+      });
+      const job = await tx.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: queued.jobId },
+        select: { generation: true },
+      });
+      return {
+        projectId,
+        jobId: queued.jobId,
+        generation: job.generation,
+        queued: queued.queued,
+        reason,
+        handlingItemIds: handle,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.observeIntegration'));
   }
 
   /**
@@ -3546,6 +3645,36 @@ function rerunReason(given: { reason?: string } | undefined): string {
     });
   }
   return reason;
+}
+
+/** The reason `integration_observe` keeps (§10.8), trimmed and bounded — or its one 400. */
+function observeReason(given: { reason?: unknown } | undefined): string {
+  const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
+  if (!reason) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message:
+        'a reason is required: say why the work may be on the line now — what changed since Orbit '
+        + 'last looked. It stays on the items the observation handles.',
+    });
+  }
+  if (reason.length > MAX_INTEGRATION_OBSERVE_REASON) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message: `a reason is at most ${MAX_INTEGRATION_OBSERVE_REASON} characters`,
+    });
+  }
+  return reason;
+}
+
+/** Only the conversation the project is coordinated from asks for its line to be looked at. */
+function observeCoordinatorOnly(): ForbiddenException {
+  return new ForbiddenException({
+    code: INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+    message:
+      'only the conversation this project is coordinated from may ask for its line to be looked at '
+      + 'again; the account owner asks on their own door.',
+  });
 }
 
 /** Only the conversation the project is coordinated from reruns any of its integrations. */

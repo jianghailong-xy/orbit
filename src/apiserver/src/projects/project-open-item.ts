@@ -457,6 +457,13 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
     return `This work reached ${target ?? main} without your confirmation — accept it, or use Chat about this `
       + 'to have the coordinator file a task that reverts it.';
   }
+  // §10.6 O-J4 · §10.8: the project's observations failing — about its line, not a task — and the door
+  // both holders' cells have is the observation itself.
+  if (sourceJob === 'OBSERVE_LANDING') {
+    const targetRef = filled((row.payload as { targetRef?: unknown } | null | undefined)?.targetRef);
+    return `Finished work is not recorded as landed until an observation of ${targetRef ? branchName(targetRef) : main} `
+      + 'succeeds — let a runner reach the repository, then look again.';
+  }
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
     return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
   }
@@ -2436,9 +2443,14 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
   const head = `From Orbit · fix landed: ${fixes.length === 1 ? 'the fix task attached to this item has' : 'the fix tasks attached to this item have'} landed:\n${landedLines.join('\n')}\n`;
   const aboutTask = item.taskId ? uuidToBase62(item.taskId) : null;
   if (!aboutTask || !(INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+    // An item whose cell has no hand-close ends by its own door: the observation failures' (§10.6
+    // O-J4) by an observation that succeeds.
+    const ending = doors.resolveMcp == null && doors.observeMcp != null
+      ? `if it has, look again with ${doors.observeMcp} (projectId: ${projectId}, reason: the fix has landed) — the item closes by itself when that observation succeeds`
+      : `if it has, close it with ${resolve}, giving your reason`;
     return head + lines(
       'The platform does not close this item just because a fix landed. It is yours to judge whether the fix has answered it: '
-        + `if it has, close it with ${resolve}, giving your reason; if it has not, handle it as its original content below says.`
+        + `${ending}; if it has not, handle it as its original content below says.`
         + (ask == null ? '' : ` ${ask}`),
       'Below is this item’s original content.',
     );
@@ -2463,9 +2475,9 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
 
 /**
  * §10.6 O-J4: the project's observation failed three times in a row. It names only the doors the
- * item's cell holds (`openItemDoorMessageNames`) — none until the observation door that ends it is one
- * (`integration_observe`, §10.8) — and says what closes it without anybody: the next observation that
- * succeeds.
+ * item's cell holds (`openItemDoorMessageNames`): the observation that ends it (`integration_observe`,
+ * §10.8), a fix task, the question to the owner and the hand-over — no hand-close, which the cell does
+ * not hold — and says what closes it without anybody: the next observation that succeeds.
  */
 function observationFailureMessage(
   item: OpenItemMessageSource,
@@ -2475,12 +2487,16 @@ function observationFailureMessage(
   doorNames: ReturnType<typeof openItemDoorMessageNames>,
 ): string {
   const failures = typeof payload.failures === 'number' ? payload.failures : null;
+  const observe = doorNames.observeMcp == null ? null
+    : `Once a runner can reach the repository again, look again with ${doorNames.observeMcp} (projectId: ${projectId}, `
+      + 'reason: what you changed): the item closes by itself when that observation succeeds.';
   const fix = doorNames.taskCreateMcp == null ? null
     : `If the repository needs work before it can be fetched, file it with ${doorNames.taskCreateMcp}.`;
   const ask = doorNames.askOwnerMcp == null ? null
-    : `If only the account owner can give a runner access, ask with ${doorNames.askOwnerMcp}; the item stays with you.`;
-  const close = doorNames.resolveMcp == null ? null
-    : `Once you have dealt with it some other way, close it with ${doorNames.resolveMcp}, giving your reason.`;
+    : `If the account owner has to decide something first, ask with ${doorNames.askOwnerMcp}; the item stays with you.`;
+  const handOver = doorNames.handOverMcp == null ? null
+    : `If only the account owner can give a runner access (their account or keys), hand the item to them with ${doorNames.handOverMcp} `
+      + `(projectId: ${projectId}, itemId: ${uuidToBase62(item.id)}, note: why).`;
   return `From Orbit · exception item: ${item.title}\n\n`
     + `The observation that looks for project ${projectId}'s finished work on its integration line `
     + `${failures == null ? 'keeps failing' : `has failed ${failures} times in a row`}:\n`
@@ -2490,7 +2506,7 @@ function observationFailureMessage(
     + 'integration-observe/v1 has a checkout of this repository it can fetch from. The platform looks again at the '
     + 'next fact that may have moved the line — a work session’s turn, a recorded receipt — and closes this item '
     + 'by itself when an observation succeeds.\n'
-    + [fix, ask, close].filter((line): line is string => line !== null).join('\n')
+    + [observe, fix, ask, handOver].filter((line): line is string => line !== null).join('\n')
     + `\n\n${notice}`;
 }
 
@@ -2634,6 +2650,10 @@ function landingUnobservedMessage(
       : `The work is on ${line} as other commits: record the commit on ${line} that carries it with ${doors.mergeReceiptMcp} `
         + `(result: ALREADY_MERGED, sessionId: the task’s work session, sourceSha: that commit, targetBranch: ${line}). `
         + 'The item closes as landed, and the tasks waiting on it start.',
+    doors.observeMcp == null ? null
+      : `The commit may have reached ${line} since Orbit looked — pushed after the task finished, or carried there by a later task: `
+        + `look again with ${doors.observeMcp} (projectId: ${projectId}, reason: why it may be there now). The item reads as being `
+        + 'handled until that observation reports; if it sees the commit, the item closes as landed and the tasks waiting on it start.',
     doors.taskReopenMcp == null ? null
       : `The work never reached ${line}: send the task back with ${doors.taskReopenMcp} (taskId: ${taskId}), saying `
         + (row.reason === 'WORK_ELSEWHERE'

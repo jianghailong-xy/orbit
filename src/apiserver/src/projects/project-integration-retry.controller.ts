@@ -20,7 +20,8 @@ import {
   integrationAbandonHttpError,
 } from '../runner-api/integration-job-relay';
 import { INTEGRATION_ABANDON_OWNER_CHANNEL_ONLY } from './project-integration-abandon';
-import { RetryIntegrationDto, SkipMergeCheckAsOwnerDto } from './dto';
+import { INTEGRATION_OBSERVE_OWNER_CHANNEL_ONLY } from './landing-observation';
+import { ObserveIntegrationDto, RetryIntegrationDto, SkipMergeCheckAsOwnerDto } from './dto';
 import { ProjectOpenItemService } from './project-open-item.service';
 
 /**
@@ -144,6 +145,36 @@ export class ProjectIntegrationRetryController {
     } catch (error) {
       throw integrationAbandonHttpError(error);
     }
+  }
+
+  /**
+   * Look at the project's line again (§10.8, §10.6 O-T5): one OBSERVE_LANDING queued, or the one
+   * already queued joined, and the owner's own OPEN `LANDING_UNOBSERVED` items that observation can
+   * answer marked as being handled by it, with the owner as the one who asked (§4.7 H1).
+   *
+   * The owner's own door, annotated and registered as the abandon door is: the account owner's
+   * credential, and an acting session is refused whole — a coordinator asks through its own door
+   * (`integration_observe`), which checks the session against the project's current coordinator.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/integration/observe')
+  @HttpCode(200)
+  observeIntegration(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) projectId: string,
+    @Body() dto: ObserveIntegrationDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        code: INTEGRATION_OBSERVE_OWNER_CHANNEL_ONLY,
+        message:
+          'the owner\'s observation door does not take an acting session. A coordinator asks through '
+          + 'its own door (integration_observe), which the server checks against the project\'s current '
+          + 'coordinator conversation.',
+      });
+    }
+    return this.openItems.observeIntegration(user.userId, projectId, dto, { kind: 'OWNER' });
   }
 
   /**

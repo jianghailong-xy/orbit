@@ -373,6 +373,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
     nested: ['taskId'],
   },
+  // §10.8's "look again", the owner's door: another account's project is a 404; on the owner's own
+  // project an observation is queued.
+  'POST /projects/:id/integration/observe': {
+    request: (of) => ({ params: { id: of.projectId }, body: { reason: 'the census' } }),
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],
