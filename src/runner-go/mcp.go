@@ -260,7 +260,9 @@ func (s *mcpServer) err(id json.RawMessage, code int, msg string) rpcResponse {
 
 const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID unset)"
 
-const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration)"
+// Where the switch is: its own card on the web's and the Mac's Settings, and a row of the Sessions page
+// on the phones (docs/mocks/ios-settings-order).
+const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
 
 // How many tasks one task_create_batch call may create. Mirrors the server's
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
