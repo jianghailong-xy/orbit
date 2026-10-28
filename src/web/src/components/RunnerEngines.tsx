@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, HolderOutlined, KeyOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningFilled, WarningOutlined } from '@ant-design/icons';
@@ -1478,8 +1478,8 @@ export function summaryOf(runner: Runner): string | null {
     return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;
   }
   // Who is signed in is the head's chips' to say (MachineChips), folded or open. The count is left for a
-  // machine they have nothing to draw on: one with nothing signed in, or out, yet.
-  if (machineChipsOf(runner).length > 0) return null;
+  // machine they have nothing to draw on: one with nothing signed in yet.
+  if (machineChipsOf(runner).some((chip) => !chip.signedOut)) return null;
   return `${shown.filter(signedIn).length} of ${engines.length} signed in`;
 }
 
@@ -1529,9 +1529,9 @@ export interface MachineChip {
 
 /**
  * What a session on this machine can run on, in the order its rows come (docs/mocks/infrastructure-focus):
- * each engine signed in here, with how many of its logins, and each one signed out, which its chip signs
- * in again — and DeepSeek Harness once it can run here. An engine not installed, or whose CLI wouldn't
- * say, has nothing to show on the head: its row says what it is.
+ * each engine signed in here, with how many of its logins, and each one signed out — which the card
+ * draws no chip for, and Settings counts as needing you — and DeepSeek Harness once it can run here. An
+ * engine not installed, or whose CLI wouldn't say, has nothing to show on the head: its row says what it is.
  */
 export function machineChipsOf(runner: Runner): MachineChip[] {
   if (!runner.engines) return [];
@@ -1556,43 +1556,28 @@ export function machineChipsOf(runner: Runner): MachineChip[] {
 
 /**
  * A machine card's engines, on a line of their own under its name (docs/mocks/infrastructure-focus):
- * what its sessions can run on, a chip each — ×N for several accounts — and an engine signed out there in
- * amber, beside the Sign in its row offers, which opens the card on that sign-in. An engine still running
- * on one account while another is out is amber too, with how many of them are in: a folded card never
- * calls a machine signed in over an account that isn't, and that account's own row has its Sign in. An
- * offline machine's are what it last said, with nothing to press until it is back.
+ * what its sessions can run on, a chip each — ×N for several accounts. An engine signed out there has
+ * no chip: its row, once the card is open, says so and signs it in. An engine still running on one
+ * account while another is out is amber, with how many of them are in: a folded card never calls a
+ * machine signed in over an account that isn't, and that account's own row has its Sign in. An offline
+ * machine's are what it last said.
  */
-function MachineChips({ runner, onSignIn }: { runner: Runner; onSignIn: (engine: LoginEngine) => void }) {
-  const chips = machineChipsOf(runner);
+function MachineChips({ runner }: { runner: Runner }) {
+  const chips = machineChipsOf(runner).filter((chip) => !chip.signedOut);
   if (chips.length === 0) return null;
-  const name = runner.displayName || runner.name;
   return (
     <div className="mc-row">
       {chips.map((chip) => {
-        const partly = !chip.signedOut && chip.logins < chip.accounts;
+        const partly = chip.logins < chip.accounts;
         return (
-          <span className="mc-pair" key={chip.engine}>
-            <span className={`mc-chip${chip.signedOut || partly ? ' out' : ''}`}>
-              <EngineTile engine={chip.engine} size={14} />
-              {ENGINE_CLI_NAMES[chip.engine]}{' '}
-              {!partly && chip.logins > 1 && <span className="mc-n">×{chip.logins}</span>}
-              {partly && (
-                <span className="mc-out">
-                  {chip.logins} of {chip.accounts} signed in
-                </span>
-              )}
-              {chip.signedOut && <span className="mc-out">signed out</span>}
-            </span>
-            {chip.signedOut && runner.online && (
-              <Button
-                size="small"
-                variant="primary"
-                className="mc-signin"
-                aria-label={`Sign in to ${ENGINE_CLI_NAMES[chip.engine]} on ${name}`}
-                onClick={() => onSignIn(chip.engine as LoginEngine)}
-              >
-                Sign in
-              </Button>
+          <span className={`mc-chip${partly ? ' out' : ''}`} key={chip.engine}>
+            <EngineTile engine={chip.engine} size={14} />
+            {ENGINE_CLI_NAMES[chip.engine]}{' '}
+            {!partly && chip.logins > 1 && <span className="mc-n">×{chip.logins}</span>}
+            {partly && (
+              <span className="mc-out">
+                {chip.logins} of {chip.accounts} signed in
+              </span>
             )}
           </span>
         );
@@ -1637,28 +1622,6 @@ function RunnerEngineCard({
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
   const kebab = useRef<HTMLButtonElement>(null);
-  const card = useRef<HTMLDivElement | null>(null);
-  const cardRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      setNodeRef(node);
-      card.current = node;
-    },
-    [setNodeRef],
-  );
-  // A chip's Sign in opens the card on that engine's own sign-in — Default's row for an engine with
-  // accounts, which only an open group draws — and brings it into view, since it can open below the
-  // window's edge.
-  const [revealSignIn, setRevealSignIn] = useState(0);
-  useEffect(() => {
-    if (revealSignIn > 0) card.current?.querySelector('.rsi')?.closest('.re-panel')?.scrollIntoView({ block: 'nearest' });
-  }, [revealSignIn]);
-  const signInFromChip = (engine: LoginEngine) => {
-    const panel = ownSignInPanel(runner, engine);
-    if (collapsed) onToggle();
-    if (panel !== engine) onFoldAccounts(engine, true);
-    setSignIn(panel);
-    setRevealSignIn((count) => count + 1);
-  };
   const name = runner.displayName || runner.name;
   // How many of its slots are taken, ahead of where it is: an offline machine takes none, and its
   // header says Offline instead.
@@ -1683,7 +1646,7 @@ function RunnerEngineCard({
 
   return (
     <div
-      ref={cardRef}
+      ref={setNodeRef}
       // Translate, not Transform: an open card is many times a folded one's height, and the scale a
       // transform carries would stretch one into the other's slot while it is dragged past.
       style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 1 : undefined }}
@@ -1776,7 +1739,7 @@ function RunnerEngineCard({
             />
           }
         />
-        <MachineChips runner={runner} onSignIn={signInFromChip} />
+        <MachineChips runner={runner} />
       </div>
       {!collapsed && (
         <MachineEngines

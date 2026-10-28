@@ -71,6 +71,8 @@ const MAC = '33zx0JhRhJo8rd25d3qAM';
 const HPC = '33zx0JhRhJo8rd25d3qAN';
 const MAC_WORKSPACE = '33zx0JhRhJo8rd25d3qAP';
 const SESSION = '33zx0JhRhJo8rd25d3qAQ';
+const PROJECT = '33zx0JhRhJo8rd25d3qAR';
+const LONE_PROJECT = '33zx0JhRhJo8rd25d3qAS';
 
 const runner = (id: string, name: string, online: boolean) => ({ id, name, online, activeSessions: 0, maxConcurrent: 2 });
 const workspace = (id: string, runnerId: string, createdAt: string, position: number | null = null) => ({
@@ -109,6 +111,9 @@ beforeEach(() => {
     if (path === '/managed-runner/ensure') return state('preparing: requested');
     if (path === '/runners') return server.runners;
     if (path === '/workspaces') return server.workspaces;
+    // A project's Landings window names no workspace: its coordinator's workspace decides the console.
+    if (path === `/projects/${PROJECT}`) return { id: PROJECT, title: 'Wiki server', coordinatorWorkspaceId: MAC_WORKSPACE };
+    if (path === `/projects/${LONE_PROJECT}`) return { id: LONE_PROJECT, title: 'No coordinator yet', coordinatorWorkspaceId: null };
     throw new Error(`unexpected ${path}`);
   }) as typeof api);
   vi.mocked(getSession).mockImplementation((async (id: string) => {
@@ -234,6 +239,32 @@ describe('without the capability, every landing and deep link is what it was', (
       expect(asked('/managed-runner')).toBe(false);
     });
   }
+});
+
+/**
+ * A project's Landings window (owner 2026-10-27) has an address of its own, /projects/<id>/landings,
+ * that names no workspace and no session: the console resolves its runner from the project's
+ * coordinator workspace, or — for a project whose coordinator has none — from the first runner, and
+ * never sits on its loading spinner.
+ */
+describe('a project’s Landings window opens its console', () => {
+  const missing = capability('a server from before the feature');
+  const runners = [runner(HPC, 'HPC', true), runner(MAC, 'Mac', true)];
+  const workspaces = [workspace(MAC_WORKSPACE, MAC, '2026-09-01T00:00:00Z', 0)];
+
+  it('on its coordinator workspace’s runner', async () => {
+    server = { capabilities: missing, runners, workspaces };
+    await visit(`/projects/${PROJECT}/landings`);
+    expect(addressBar()).toBe(`/projects/${PROJECT}/landings`);
+    await vi.waitFor(() => expect(consoleShows()).toBe('Mac|no managed state'));
+  });
+
+  it('on the first runner when the project names no coordinator workspace', async () => {
+    server = { capabilities: missing, runners, workspaces };
+    await visit(`/projects/${LONE_PROJECT}/landings`);
+    expect(addressBar()).toBe(`/projects/${LONE_PROJECT}/landings`);
+    await vi.waitFor(() => expect(consoleShows()).toBe('HPC|no managed state'));
+  });
 });
 
 describe('with the capability switched on', () => {

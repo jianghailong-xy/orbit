@@ -5,8 +5,10 @@ import { RunnerStatus, type LoginCommand, type RunnerLoginState } from '@orbit/s
 import type { AuthUser } from '../common/current-user.decorator';
 import { ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { MemoryNats } from '../test-support/memory-nats';
 import { StartLoginDto } from './dto';
-import { loginCodeRelay } from './login-code-relay';
+import { LoginCodeRelay, loginCodeRelay } from './login-code-relay';
+import { RelayPeers, relayPeers } from './relay-peers';
 import { RunnersController } from './runners.controller';
 import { RunnersService } from './runners.service';
 
@@ -101,13 +103,16 @@ function harness(storedCapabilities: string[] = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'o
     code: (code: string) => runners.submitLoginCode(USER, RUNNER_ID, { code }),
     /** The `loginRequest` of the runner's next heartbeat, sent with these capabilities and OS
      *  headers (`null` sends none). */
-    async beat(capabilities: string | null = CAPABLE, os: string | null = 'linux'): Promise<LoginCommand | undefined> {
+    async beat(capabilities: string | null = CAPABLE, os: string | null = 'linux', overLink = false): Promise<LoginCommand | undefined> {
       const response = await runnerApi.heartbeat(
         { id: RUNNER_ID, version: null },
         { status: RunnerStatus.ONLINE, idleCapacity: 1 },
         capabilities ?? undefined,
         undefined,
         os ?? undefined,
+        undefined,
+        // As the link gateway forwards a beat to any apiserver process.
+        overLink ? { leaseOwner: 'link-process', requestId: null, afterSeq: null } : undefined,
       );
       return response.loginRequest;
     },
@@ -345,4 +350,50 @@ test('a runner that names no OS but cannot sign in on its platform refuses it, a
     status: 'failed', engine: 'antigravity', userCode: null, url: null, message: ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, account: null,
   });
   assert.equal(await h.beat(CAPABLE, null), undefined, 'a refused start is not handed over again');
+});
+
+test('over the runner link, a code pasted on another apiserver process reaches the runner through this one, for its attempt alone', async () => {
+  const h = harness();
+  // This process and the main one, where the person's requests go behind nginx, on one NATS (relay-peers.ts).
+  const nats = new MemoryNats();
+  relayPeers.connect(nats.connect('this'), 'this-process');
+  const main = new RelayPeers();
+  main.connect(nats.connect('main'), 'main-process');
+  const mainRelay = new LoginCodeRelay(main);
+  const heardOfIt = async () => {
+    for (let i = 0; i < 400 && relayPeers.holders('login-code', RUNNER_ID).length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(relayPeers.holders('login-code', RUNNER_ID).length, 1, 'this process never heard the main one holds a code');
+  };
+  try {
+    const logs = await logsDuring(async () => {
+      const attempt = await awaitingCode(h);
+      mainRelay.hold(RUNNER_ID, attempt, CODE, Date.now() + 60_000);
+      await heardOfIt();
+      // An HTTPS runner beats on the main process alone: its path asks no other process.
+      assert.equal(await h.beat(), undefined);
+      assert.equal(mainRelay.holds(RUNNER_ID), true);
+
+      assert.deepEqual(await h.beat(CAPABLE, 'linux', true), { action: 'code', engine: 'antigravity', code: CODE, attempt });
+      assert.equal(mainRelay.holds(RUNNER_ID), false, 'handed over from the main process once');
+      assert.equal(await h.beat(CAPABLE, 'linux', true), undefined, 'never twice');
+
+      // A paste for a sign-in since replaced is never handed to its successor.
+      mainRelay.hold(RUNNER_ID, '2026-10-01T00:00:00.000Z', `${CODE}-stale`, Date.now() + 60_000);
+      await heardOfIt();
+      assert.equal(await h.beat(CAPABLE, 'linux', true), undefined);
+
+      // The runner's report on the sign-in, forwarded to this process, drops the code the main process holds.
+      mainRelay.hold(RUNNER_ID, attempt, `${CODE}-again`, Date.now() + 60_000);
+      await heardOfIt();
+      await h.report({ status: 'failed', message: 'agy exited', attempt });
+      for (let i = 0; i < 400 && mainRelay.holds(RUNNER_ID); i++) await new Promise((r) => setTimeout(r, 5));
+      assert.equal(mainRelay.holds(RUNNER_ID), false, 'the report did not settle the code held elsewhere');
+    });
+    assert.equal(logs.includes(CODE), false, 'no log line carries the code');
+    assert.equal(h.writes.some((data) => JSON.stringify(data).includes(CODE)), false, 'no write carried the code');
+    for (const { subject, message } of nats.sent) assert.equal(message.includes(CODE), false, `${subject} carried the code`);
+  } finally {
+    relayPeers.disconnect();
+    main.disconnect();
+  }
 });

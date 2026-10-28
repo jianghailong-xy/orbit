@@ -3,6 +3,7 @@ package io.orbitd.android.reader
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -74,11 +75,12 @@ class LandingSessionDeviceTest {
                 // The link, as Android delivers one to the running Activity.
                 openLink()
 
-                // ① Checking: the landing page, not the reader — no composer, no session menu, no event stream.
-                await { exists(hasTestTag("landing-page")) }
+                // ① Checking: the project's Landings window focused on the landing (owner 2026-10-27), not the reader — no composer,
+                // no session menu, no event stream.
+                await { exists(hasTestTag("landings-window")) }
                 await { text("landing-head:right")?.matches(Regex("1m 5\\ds? of 60m")) == true }
-                assertEquals("Land · Wire the page", text("landing:title"))
-                assertEquals("Run by Orbit · runner wikova", text("landing:sub"))
+                assertEquals("Wire the page", text("landing:task-name"))
+                await { text("page-bar-subtitle")?.startsWith("Run by Orbit") == true }
                 assertTrue(text("landing:budget")!!.startsWith("Task acceptance "))
                 assertTrue(text("landing:live")!!.startsWith("Output "))
                 assertFalse(exists(hasTestTag("transcript-list")))
@@ -88,7 +90,7 @@ class LandingSessionDeviceTest {
                 record("checking", "head=${text("landing-head:right")} | ${text("landing-head:detail")}")
                 capture("01-checking")
 
-                // ② The server judges the claim timed out: the page follows its poll into the amber card (J12's sentence, Retry, Abandon).
+                // ② The server judges the claim timed out: the card follows its poll into the amber card (J12's sentence, Retry, Abandon).
                 landingView = view(state = "RUNNING", liveness = "LEASE_EXPIRED", timedOut = true, retryable = true, step = 1380, heartbeat = 1380)
                 await { exists(hasTestTag("landing:retry")) && exists(hasTestTag("landing:abandon")) }
                 assertEquals("No report for 23m · limit 10m", text("landing-head:detail"))
@@ -115,11 +117,10 @@ class LandingSessionDeviceTest {
                 await { calls.any { it.startsWith("POST /api/projects/$launch/integration/jobs/j-1/abandon") } }
                 capture("04-abandoned")
 
-                // ⑤ The ⋮ menu over the card: the ways to look at the work and the doors, and no Copy Link.
+                // ⑤ The card's menu, by a long-press: the ways to look at the work and the doors, and no Copy Link.
                 landingView = view(state = "RUNNING", liveness = "LIVE")
                 await { text("landing-head:right")?.matches(Regex("1m 5\\ds? of 60m")) == true }
-                await { exists(hasTestTag("landing-more")) }
-                compose.onNodeWithTag("landing-more").performClick()
+                compose.onNode(hasTestTag("landing-status-card")).performTouchInput { longClick(Offset(width / 2f, 24f)) }
                 await { compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
                 val menu = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()
                     .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
@@ -158,17 +159,16 @@ class LandingSessionDeviceTest {
                 else assertTrue("dark ink on the light theme: $light light, $dark dark", dark > 50)
                 capture("08-log-open")
 
-                // ⑨ A11-20 e: the server cannot be read. The link still opens the landing page, drawn from the job this page's own
-                // integration reads kept — its clock frozen at that read, `Update unavailable`, how long ago, and no door.
-                // A page of its own: leave this one, so the page that draws is one no read has answered.
+                // ⑨ A11-20 e: the server cannot be read. The link still opens the landing's window, its card drawn from the job the
+                // card's own integration reads kept — its clock frozen at that read, `Update unavailable`, how long ago, and no door.
+                // A window of its own: leave this one, so the card that draws is one no read has answered.
                 compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-                await { !exists(hasTestTag("landing-page")) }
+                await { !exists(hasTestTag("landings-window")) }
                 detailStatus = 503
                 openLink()
-                await { exists(hasTestTag("landing-page")) && text("landing-head:detail") == "Update unavailable" }
-                assertFalse("nothing was read: no timeline, no footer", exists(hasTestTag("landing:section:j-1")) || exists(hasTestTag("landing:footer")))
+                await { exists(hasTestTag("landings-window")) && text("landing-head:detail") == "Update unavailable" }
+                assertFalse("nothing was read: no timeline", exists(hasTestTag("landing:section:j-1")))
                 val frozen = text("landing-head:right")
-                assertFalse(exists(hasTestTag("landing-more")))
                 assertFalse(exists(hasTestTag("landing:retry")) || exists(hasTestTag("landing:abandon")))
                 assertTrue(text("landing:live")!!.startsWith("Updated "))
                 SystemClock.sleep(2_500)

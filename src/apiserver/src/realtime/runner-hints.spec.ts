@@ -5,7 +5,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { RunEventType } from '@orbit/shared';
 import { QueueService } from '../queue/queue.service';
+import { HELD_SUBJECT, RelayPeers, peerSubject } from '../runners/relay-peers';
 import { SessionsService } from '../sessions/sessions.service';
+import { MemoryNats } from '../test-support/memory-nats';
 import { RealtimeService } from './realtime.service';
 import {
   INSTANCE_HEADER,
@@ -425,4 +427,26 @@ test('a card collected as ABANDONED is no decision: its APPROVAL_RESOLVED is not
   await settle();
   assert.deepEqual(bus.sent, []);
   await hints.onModuleDestroy();
+});
+
+test('the apiserver processes reach each other on the hints\' connection, while hints are on, and a nudge is a commands hint', async () => {
+  const nats = new MemoryNats();
+  const conn = nats.connect('this');
+  const peers = new RelayPeers();
+  const hints = new RunnerHints(sessionsTable().prisma as never, 'nats://nats.test:4222', () => conn, Date.now, true, peers);
+  hints.onModuleInit();
+  assert.equal(nats.listeners(HELD_SUBJECT), 1, 'not listening for what the other processes hold');
+  assert.equal(nats.listeners(peerSubject(hints.instanceId)), 1, 'not answering on its own instance');
+  peers.nudge(RUNNER_A);
+  assert.deepEqual(nats.sent.map((m) => [m.subject, m.message]), [[runnerHintSubject(RUNNER_A), runnerHintMessage({ commands: {} })]]);
+  await hints.onModuleDestroy();
+  assert.equal(nats.listeners(HELD_SUBJECT) + nats.listeners(peerSubject(hints.instanceId)), 0);
+
+  // Off without NATS: nothing is connected, and holding something says nothing anywhere.
+  const off = new RunnerHints(sessionsTable().prisma as never, null, () => nats.connect('never'), Date.now, true, peers);
+  off.onModuleInit();
+  peers.hold('login-code', RUNNER_A, 'attempt', 60_000);
+  assert.equal(nats.listeners(HELD_SUBJECT), 0);
+  assert.equal(nats.sent.length, 1);
+  await off.onModuleDestroy();
 });

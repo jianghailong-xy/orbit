@@ -316,6 +316,10 @@ private struct CompactSections: View {
                                 .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
                                 .navigationBarBackButtonHidden()
                                 .drawerToggle(open: openDrawer)
+                            // The project's Landings window its sessions page's Landings row pushes over
+                            // it, at its bottom: back returns to the page.
+                            case .landings(let projectID):
+                                ProjectLandingsWindowView(projectID: projectID)
                             // The one place the phone's console is told that what it opens goes on
                             // this stack (`opensPagesOverConsole`): its links, its Watching card, its
                             // Tasks created here card — so the back swipe returns to the conversation

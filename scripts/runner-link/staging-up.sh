@@ -22,6 +22,8 @@
 #   ORBIT_LINK_STAGING_NATS_MONITOR_PORT  NATS's monitoring, on 127.0.0.1         18222
 #   ORBIT_LINK_STAGING_MODE          http (shadow) or link (forwarding)           http
 #   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 to 16  1
+#   ORBIT_LINK_STAGING_LINK_BACKENDS which of them it forwards to: all, or names  all
+#                                    such as apiserver-b, comma-separated (the web's requests reach apiserver)
 #   ORBIT_LINK_STAGING_LOADGEN       1: the load test's settings (staging.loadgen.compose.yml)   0
 #   ORBIT_LINK_STAGING_DB_CPUS       with LOADGEN=1, the database's CPU allocation; 0 is unlimited   0
 #   ORBIT_LINK_STAGING_DB_MEM        with LOADGEN=1, the database's memory limit (Compose mem_limit)  4g
@@ -37,7 +39,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -57,6 +59,7 @@ nats_monitor_port="${ORBIT_LINK_STAGING_NATS_MONITOR_PORT:-$(setting STAGING_NAT
 pebble_port="${ORBIT_LINK_STAGING_PEBBLE_PORT:-$(setting STAGING_PEBBLE_MGMT_PORT 15000)}"
 mode="${ORBIT_LINK_STAGING_MODE:-$(setting STAGING_MODE http)}"
 backends="${ORBIT_LINK_STAGING_BACKENDS:-$(setting STAGING_BACKENDS 1)}"
+link_backends="${ORBIT_LINK_STAGING_LINK_BACKENDS:-$(setting STAGING_LINK_BACKENDS all)}"
 loadgen="${ORBIT_LINK_STAGING_LOADGEN:-$(setting STAGING_LOADGEN 0)}"
 db_cpus="${ORBIT_LINK_STAGING_DB_CPUS:-$(setting STAGING_DB_CPUS 0)}"
 db_mem="${ORBIT_LINK_STAGING_DB_MEM:-$(setting STAGING_DB_MEM 4g)}"
@@ -72,11 +75,20 @@ gateway_merge_window="$merge_window"
 [ "$merge_window" = default ] && gateway_merge_window=""
 [[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
 # The first apiserver, then apiserver-b, apiserver-c and on (extra_backends), each the first one's whole definition on
-# the same database; the link gateway forwards to all of them, round robin.
+# the same database; the link gateway forwards to all of them, round robin, or to those ORBIT_LINK_STAGING_LINK_BACKENDS
+# names: with apiserver-b alone, every call of a runner lands on a process the web's requests never reach
+# (staging-check-relay.sh).
 extras=()
 mapfile -t extras < <(extra_backends "$backends")
-backend_urls="http://apiserver:3001"
-for b in "${extras[@]}"; do backend_urls+=",http://$b:3001"; done
+linked=(apiserver "${extras[@]}")
+if [ "$link_backends" != all ]; then
+  IFS=, read -r -a linked <<<"$link_backends"
+  for b in "${linked[@]}"; do
+    [[ " apiserver ${extras[*]} " == *" $b "* ]] || die "ORBIT_LINK_STAGING_LINK_BACKENDS names $b, which is not one of the stack's apiservers: apiserver ${extras[*]}"
+  done
+fi
+backend_urls=""
+for b in "${linked[@]}"; do backend_urls+="${backend_urls:+,}http://$b:3001"; done
 
 # --- Secrets: made once and kept, so a rerun keeps the database's tokens valid. -----------------------------------
 secrets="$state/secrets"
@@ -198,6 +210,7 @@ RUNNER_LINK_ACME_DOMAINS=$acme_domains
 STAGING_REPO=$repo
 STAGING_MODE=$mode
 STAGING_BACKENDS=$backends
+STAGING_LINK_BACKENDS=$link_backends
 STAGING_BACKEND_URLS=$backend_urls
 STAGING_LOADGEN=$loadgen
 STAGING_DB_CPUS=$db_cpus

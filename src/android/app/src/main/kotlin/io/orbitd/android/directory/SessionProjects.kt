@@ -278,7 +278,7 @@ object SessionProjectMembers {
     const val completedRefreshMs = 60_000L
 
     /** [projectId]'s members out of [sessions], in either spelling of the id, never Trash and never a LANDING row — those are the
-     * page's Landings group, not its timeline (§2.9 LS6). The first copy of a session wins, so the freshest list goes first; newest
+     * project's Landings row and window, not the page's timeline (§2.9 LS6). The first copy of a session wins, so the freshest list goes first; newest
      * activity first. */
     fun members(projectId: String, sessions: List<DirectorySession>): List<DirectorySession> {
         val key = SessionProjectGrouping.key(projectId)

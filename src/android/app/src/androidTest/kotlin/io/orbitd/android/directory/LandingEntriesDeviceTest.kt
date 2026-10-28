@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 /**
  * A-2 on a device over a controlled HTTP fixture (not a deployment): the four ways into the project's landing session — the Landing
  * card's foot, the jobs list's row, the merge check card's head row, and the waiting card's Open landing in the coordinator's
- * conversation — each opening the landing page and coming back. The theme is the device's (the script runs it light and dark); every
+ * conversation — each opening the landing's project's Landings window focused on it (owner 2026-10-27), and coming back. The theme is the device's (the script runs it light and dark); every
  * step leaves a screenshot in files/a2/<theme>, and every request the app made is kept beside them.
  */
 @RunWith(AndroidJUnit4::class)
@@ -70,8 +70,8 @@ class LandingEntriesDeviceTest {
                 await { exists(hasTestTag("landing-card:open-landing")) }
                 capture("01-landing-card")
                 compose.onNodeWithTag("landing-card:open-landing").performClick()
-                await { exists(hasTestTag("landing-page")) }
-                compose.onNodeWithTag("landing:title", useUnmergedTree = true).assertExists()
+                await { exists(hasTestTag("landings-window")) }
+                compose.onNodeWithTag("landing:task-name", useUnmergedTree = true).assertExists()
                 capture("02-landing-from-card")
                 back(); await { exists(hasTestTag("project-sessions")) }
 
@@ -80,7 +80,7 @@ class LandingEntriesDeviceTest {
                 await { exists(hasTestTag("landing-jobs-sheet")) && exists(hasTestTag("landing-job:j-1:open-landing")) }
                 capture("03-jobs-list")
                 compose.onNodeWithTag("landing-job:j-1:open-landing").performClick()
-                await { exists(hasTestTag("landing-page")) }
+                await { exists(hasTestTag("landings-window")) }
                 capture("04-landing-from-jobs")
                 back(); await { exists(hasTestTag("project-sessions")) }
 
@@ -89,7 +89,7 @@ class LandingEntriesDeviceTest {
                 await { exists(hasTestTag("project-merge-card:checking")) && exists(hasTestTag("project-merge-card:landing")) }
                 capture("05-merge-card")
                 compose.onNodeWithTag("project-merge-card:landing").performClick()
-                await { exists(hasTestTag("landing-page")) }
+                await { exists(hasTestTag("landings-window")) }
                 capture("06-landing-from-merge")
                 back(); await { exists(hasTestTag("project-sessions")) }
 
@@ -102,7 +102,7 @@ class LandingEntriesDeviceTest {
                 capture("07-xe5-card")
                 compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("item:item-xe5:OPEN_LANDING"))
                 compose.onNodeWithTag("item:item-xe5:OPEN_LANDING").performClick()
-                await { exists(hasTestTag("landing-page")) }
+                await { exists(hasTestTag("landings-window")) }
                 capture("08-landing-from-waiting-card")
                 File(evidence, "result.txt").writeText("PASS\n")
             } catch (failure: Throwable) {

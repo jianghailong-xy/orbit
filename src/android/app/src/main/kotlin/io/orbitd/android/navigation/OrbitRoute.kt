@@ -8,6 +8,10 @@ import kotlinx.serialization.Serializable
 enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD,
     /** A project's sessions page (A05-7): `id` the project, `workspaceId` the workspace it was entered over. */
     PROJECT_SESSIONS,
+    /** A project's Landings window (owner 2026-10-27, contract §2.9 LS6 revision 28): `id` the project, `recordId` the landing session it
+     *  is focused on, if any. The sessions page's Landings row opens it at its bottom; a landing session id opens it focused, through
+     *  `SESSION` (reader/LandingSessionPage.kt's `SessionDestination`). */
+    LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }

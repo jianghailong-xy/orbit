@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api';
+import { openDialog } from '../components/RunnerEngines.test-helpers';
 import type { CodexLogin, CodexLoginPoll } from '../lib/codexLogin';
 import { encodeId } from '../lib/idCodec';
 import { formatResetTime, type ProviderPool } from '../lib/providerPools';
@@ -233,6 +234,21 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   const addAccount = async () => {
     await click(button('Add account'));
     await click(button('Continue', dialog()!));
+  };
+  /** Add › New account pool, the page's one way to a new pool; resolves once its dialog is open. */
+  const newPool = async () => {
+    await click(button('Add'));
+    let item: HTMLElement | undefined;
+    await act(async () => {
+      await vi.waitFor(() => {
+        item = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')).find((el) =>
+          el.textContent?.startsWith('New account pool'),
+        );
+        if (!item) throw new Error('no menu is open');
+      }, { timeout: 20_000, interval: 20 });
+    });
+    await click(item);
+    await openDialog('New account pool');
   };
 
   beforeEach(() => {
@@ -737,7 +753,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   it('makes a "Just me" Codex pool one of these, and opens it straight to signing in', async () => {
     pools = [];
     await mount('/infrastructure');
-    await click(button('New pool'));
+    await newPool();
     const modal = dialog()!;
     expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');
     expect(modal.querySelector<HTMLInputElement>('input[type="radio"][value="me"]')?.checked).toBe(true);

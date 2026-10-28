@@ -3,7 +3,7 @@ import XCTest
 
 /// The merge into main on the project's sessions page (owner decision 2026-10-06): the card under
 /// the progress card, the merge check's line moving into it, the coordinator conversation's one
-/// line, and the merges drawn on the page's timeline.
+/// line, and the page's timeline of sessions.
 final class ProjectMergeCardTests: XCTestCase {
     private var utc: Calendar {
         var c = Calendar(identifier: .gregorian)
@@ -26,13 +26,6 @@ final class ProjectMergeCardTests: XCTestCase {
                              upstreamRef: "refs/heads/main", commitsAhead: commits, filesChanged: files,
                              taskIds: taskIds, conflicts: conflicts, askedAt: "2026-10-06T03:31:00Z",
                              merged: merged, execution: execution, onPass: onPass)
-    }
-
-    private func merge(_ id: String, at: String, automatic: Bool? = nil) -> PromotionCards.Receipt {
-        PromotionCards.Receipt(promotion: ProjectPromotionView(
-            promotionId: id, state: .merged, sourceRef: "refs/heads/project/p", sourceSha: "abc",
-            upstreamRef: "refs/heads/main", taskIds: ["t1"],
-            merged: .init(sha: "8d5a868e90df", at: at, automatic: automatic)))!
     }
 
     private func session(_ id: String, at: String?) -> Session {
@@ -251,31 +244,19 @@ final class ProjectMergeCardTests: XCTestCase {
 
     // MARK: the timeline
 
-    func testMergesSitAmongTheSessionsAtTheirOwnInstant() {
+    /// The page's timeline is its sessions alone (owner 2026-10-27): the merges into main are rows of
+    /// the project's Landings window, and the sections are the session grouping's own.
+    func testTheTimelineIsTheSessionGroupingWithoutPinned() {
         let sessions = [session("s-now", at: "2026-10-06T03:58:00Z"),
-                        session("s-p6", at: "2026-10-06T03:45:00Z"),
                         session("s-log", at: "2026-10-06T03:12:00Z"),
-                        session("s-old", at: "2026-10-03T08:00:00Z")]
-        let merges = [merge("m-old", at: "2026-10-04T10:00:00Z"), merge("m-today", at: "2026-10-06T03:42:00Z")]
-        let out = ProjectTimeline.sections(sessions: sessions, merges: merges,
-                                           now: date("2026-10-06T04:01:00Z"), calendar: utc)
-        XCTAssertEqual(out.map(\.title), ["Today", "2–7 days ago"])
-        XCTAssertEqual(out[0].items.map(\.id), ["s-now", "s-p6", merges[1].id, "s-log"])
-        XCTAssertEqual(out[1].items.map(\.id), [merges[0].id, "s-old"])
-    }
-
-    func testAMergeOlderThanEverySessionStillShowsAndNoMergesIsTheSessionGrouping() {
-        let sessions = [session("a", at: "2026-10-06T03:00:00Z")]
-        let out = ProjectTimeline.sections(sessions: sessions, merges: [merge("m", at: "2026-09-01T00:00:00Z")],
-                                           now: date("2026-10-06T04:00:00Z"), calendar: utc)
-        XCTAssertEqual(out.map(\.title), ["Today", "Older"])
-        XCTAssertEqual(out[1].items.count, 1)
-
-        let plain = ProjectTimeline.sections(sessions: sessions, merges: [], now: date("2026-10-06T04:00:00Z"),
-                                             calendar: utc)
-        let grouping = SessionTimeGrouping.sections(sessions, pinnedFirst: false, now: date("2026-10-06T04:00:00Z"),
+                        session("s-old", at: "2026-10-03T08:00:00Z"),
+                        session("s-ancient", at: "2026-09-01T00:00:00Z")]
+        let out = ProjectTimeline.sections(sessions: sessions, now: date("2026-10-06T04:01:00Z"), calendar: utc)
+        XCTAssertEqual(out.map(\.title), ["Today", "2–7 days ago", "Older"])
+        XCTAssertEqual(out[0].sessions.map(\.id), ["s-now", "s-log"])
+        let grouping = SessionTimeGrouping.sections(sessions, pinnedFirst: false, now: date("2026-10-06T04:01:00Z"),
                                                     calendar: utc)
-        XCTAssertEqual(plain.map(\.title), grouping.map(\.title))
-        XCTAssertEqual(plain.flatMap { $0.items.map(\.id) }, grouping.flatMap { $0.sessions.map(\.id) })
+        XCTAssertEqual(out.map(\.title), grouping.map(\.title))
+        XCTAssertEqual(out.flatMap { $0.sessions.map(\.id) }, grouping.flatMap { $0.sessions.map(\.id) })
     }
 }

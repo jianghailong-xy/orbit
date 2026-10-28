@@ -71,15 +71,13 @@ class CursorEngineTest {
         assertEquals(ProviderEngines.ALL_ENGINES, ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, listOf(runner(claude, cursor))) })
     }
 
-    /** While no runner knows Cursor CLI, a key that runs it changes no list of engines: the New Session's, Infrastructure's cards, a
-     * runner's Engines rows and both attention lists read as they do without it. */
+    /** While no runner knows Cursor CLI, a key that runs it changes no list of engines: the New Session's, a runner's Engines rows and both
+     * attention lists read as they do without it. */
     @Test fun noListOffersCursorCliWhileNoRunnerKnowsIt() {
         val without = older(claude)
         val catalog = ComposerCatalog(without, listOf(cursorKey, glm))
         assertEquals(ComposerCatalog(without, listOf(glm)).engines(), catalog.engines())
         assertEquals(listOf("claude", "opencode"), catalog.engines().map { it.engine })
-        assertEquals(listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"),
-            Infrastructure.engineCards(listOf(without), listOf(cursorKey, glm), emptyList()).map { it.name })
         fun rows(runner: JsonObject, fleet: List<JsonObject>? = null) = RunnerPage.engines(runner, fleet).map { it["engine"]!!.jsonPrimitive.content }
         assertEquals(listOf("claude", "antigravity"), rows(without))
         // An engine this build doesn't know yet is still drawn, after the rest.
@@ -95,10 +93,6 @@ class CursorEngineTest {
         val catalog = ComposerCatalog(withCursor, listOf(cursorKey, glm))
         assertEquals(listOf("claude", "opencode", "cursor"), catalog.engines().map { it.engine })
         assertEquals("Cursor CLI", catalog.engines().last().label)
-        assertEquals(listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness", "Cursor CLI"),
-            Infrastructure.engineCards(listOf(withCursor), listOf(cursorKey, glm), emptyList()).map { it.name })
-        assertEquals(listOf(Infrastructure.EngineCard.Key("Cursor key", "Auto")),
-            Infrastructure.engineCards(listOf(withCursor), listOf(cursorKey, glm), emptyList()).last().keys)
         fun rows(runner: JsonObject, fleet: List<JsonObject>? = null) = RunnerPage.engines(runner, fleet).map { it["engine"]!!.jsonPrimitive.content }
         assertEquals(listOf("claude", "antigravity", "cursor"), rows(withCursor))
         // A machine that predates it has a row too, with the fleet in view: nothing reported, so it says to update the runner.

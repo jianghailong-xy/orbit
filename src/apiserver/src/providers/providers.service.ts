@@ -826,9 +826,13 @@ export class ProvidersService {
   }
 
   /** A runner's answer to a Cursor key it was handed to check (POST /runner/cursor-key-check-result):
-   *  settles the check somebody is waiting on, when it is that runner's and about that key. */
-  answerCursorKeyCheck(runnerId: string, result: { checkId: string; state: string; keyFingerprint: string }): { accepted: boolean } {
-    return { accepted: cursorKeyCheckRelay.answer(runnerId, result) };
+   *  settles the check somebody is waiting on, when it is that runner's and about that key — here, or in the
+   *  apiserver process that waits on it when the gateway forwarded the answer to another (answerAnywhere). */
+  async answerCursorKeyCheck(
+    runnerId: string,
+    result: { checkId: string; state: string; keyFingerprint: string },
+  ): Promise<{ accepted: boolean }> {
+    return { accepted: await cursorKeyCheckRelay.answerAnywhere(runnerId, result) };
   }
 
   /**

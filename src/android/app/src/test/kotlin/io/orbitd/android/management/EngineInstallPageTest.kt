@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -45,10 +47,33 @@ class EngineInstallPageTest {
         compose.setContent { RunnerScreen(api, fixture.RUNNER, "engine:$engine", 0, {}, {}, {}) }
         compose.waitForIdle()
     }
+    /** The fixture runner's own page, each press of its rows handed to [open]. */
+    private fun record(open: (OrbitRoute) -> Unit) {
+        val session = fixture.session()
+        runBlocking { fixture.signIn(session) }
+        val api = ManagementApi(session, (session.state.value as AuthState.SignedIn).handle)
+        compose.setContent { RunnerScreen(api, fixture.RUNNER, null, 0, open, {}, {}) }
+        compose.waitForIdle()
+    }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun shown(text: String) = compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().size
     private fun press(label: String) = hasText(label) and hasClickAction()
     private val openCodeMissing = """[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"opencode","installed":false,"auth":"unknown"}]"""
+
+    /** The machine's page opens a missing engine's page from its row, where Install is — a sign-in engine's and OpenCode's alike. */
+    @Test fun aMissingEnginesRowOpensThePageThatInstallsIt() {
+        fixture.runnerEngines = """[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"kimi","installed":false,"auth":"unknown"},
+            {"engine":"opencode","installed":false,"auth":"unknown"}]"""
+        val opened = mutableListOf<OrbitRoute>()
+        record { opened += it }
+        for (engine in listOf("kimi", "opencode")) {
+            compose.waitUntil(60_000) { compose.onAllNodesWithTag("engine-row:$engine").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("engine-row:$engine").performScrollTo().performClick()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf("engine:kimi", "engine:opencode").map { OrbitRoute(Destination.RUNNER, fixture.RUNNER, recordId = it) }, opened)
+        }
+    }
 
     @Test fun openCodeMissingIsInstalledFromItsPage() {
         fixture.runnerEngines = openCodeMissing

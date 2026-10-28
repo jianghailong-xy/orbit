@@ -211,13 +211,13 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('with no pool, the section is its head alone — New pool — and offers no Claude pool while fewer than two keys could join one', async () => {
+  it('with no pool, the section is its head alone, and offers no Claude pool while fewer than two keys could join one', async () => {
     keys = [WORK, METERED, GATEWAY];
     pools = [];
     await mount('/infrastructure');
     expect(heading('API keys')).not.toBeNull();
-    // Where any pool is made, a Codex one included, so it stands before there is one.
-    expect(button('New pool', section()!)).not.toBeNull();
+    // It stands before there is a pool, saying what one is; the page's Add makes one, a Codex one included.
+    expect(section()!.querySelector('button')).toBeNull();
     expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
 

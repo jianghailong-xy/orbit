@@ -668,22 +668,12 @@ function PoolCard({
  * that runs on their ChatGPT account — and the shared pools they are in, several people's OpenAI keys
  * under one name (sharedPoolAsProviderPool). Below the machines' engines (one machine's login) and the
  * API keys (what an account pool is made of), whose verdicts say which accounts a pool would no
- * longer admit (`refusals`, poolRefusals). Its head makes another pool of any kind (NewPoolModal); a key
- * OpenAI refused is replaced from its card, and an account OpenAI signed out is signed in again from
- * it — each taken out on the pool's own page.
+ * longer admit (`refusals`, poolRefusals). Another pool is made from the page's Add, as a machine and a
+ * key are (NewPoolModal); a key OpenAI refused is replaced from its card, and an account OpenAI signed
+ * out is signed in again from it — each taken out on the pool's own page.
  */
-export function AccountPools({
-  pools,
-  refusals,
-  rows,
-}: {
-  pools: ProviderPool[];
-  refusals: PoolRefusals;
-  /** The user's own keys: what a new Claude pool is made of. */
-  rows: ProviderRow[];
-}) {
+export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refusals: PoolRefusals }) {
   const isMobile = useIsMobile();
-  const [creating, setCreating] = useState(false);
   const [replacing, setReplacing] = useState<{ pool: SharedPool; key: SharedPoolKey } | null>(null);
   /** The dialog for one of these pools: adding an account, or putting back one OpenAI signed out. */
   const [signingIn, setSigningIn] = useState<{ pool: ProviderPool; login: CodexLogin | null } | null>(null);
@@ -701,14 +691,11 @@ export function AccountPools({
 
   return (
     <div className="re-sec pool-sec">
-      <div className="re-sec-head pool-sec-head">
+      <div className="re-sec-head">
         <h3>Account pools</h3>
         <span className="re-sec-sub">
           Several accounts under one name.
         </span>
-        <Button size="small" className="pool-new" onClick={() => setCreating(true)}>
-          New pool
-        </Button>
       </div>
       {pools.map((pool) => {
         const open = fold[pool.id] ?? !isMobile;
@@ -725,7 +712,6 @@ export function AccountPools({
           />
         );
       })}
-      {creating && <NewPoolModal rows={rows} onClose={() => setCreating(false)} />}
       {replacing && (
         <ReplaceKeyModal pool={replacing.pool} poolKey={replacing.key} onClose={() => setReplacing(null)} />
       )}

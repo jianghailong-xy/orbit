@@ -82,10 +82,10 @@ class ManagementIncrementsDeviceTest : IncrementDeviceTest() {
     /** A01b I-PROVIDERS-COPY: the page's footers say what the web says now, and the old Providers words are gone. */
     @Test fun machinesAndModelsFootersSayWhatTheWebSays() = journey {
         machinesAndModels()
+        // No engine list footer ("Every engine, and everything…"): main c1fad6e68 took the engine list off every client.
         val footers = listOf("Subscriptions signed in here are spent only by sessions on that machine.",
             "Several accounts under one name.",
-            "On your account and usable from every machine — billed per token. Adding or changing a key happens on the web.",
-            "Every engine, and everything that can pay for it right now.")
+            "On your account and usable from every machine — billed per token. Adding or changing a key happens on the web.")
         for (footer in footers) {
             scrollTo(footer)
             await("the footer “$footer”") { exists(hasText(footer, substring = true), unmerged = true) }

@@ -6,8 +6,14 @@ import {
   type CursorKeyCheckState,
 } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { relayPeers, type RelayPeers } from '../runners/relay-peers';
 import { runnerIsOnline, runnerLastBeatAt, type RunnerBeats } from '../runners/runner-presence';
 import { keyFingerprint } from './provider-engine-resolution';
+
+/** What one process asks another of the checks it holds (runners/relay-peers.ts): hand their keys over, or take an
+ *  answer to one. */
+const TAKE_CURSOR_KEY_CHECKS = 'take-cursor-key-checks';
+const ANSWER_CURSOR_KEY_CHECK = 'answer-cursor-key-check';
 
 /**
  * A Cursor API key checked on a runner while somebody waits for the answer — the key typed into the
@@ -26,10 +32,15 @@ import { keyFingerprint } from './provider-engine-resolution';
  * its fingerprint, which is all that is kept until it comes. Nothing writes the key down — no row, no log
  * line, no event — and nothing here puts it in an error.
  *
- * ONE PROCESS, as LoginCodeRelay. A check is handed over only by a heartbeat that reaches this process,
- * and settled only by an answer that reaches it. With several API replicas behind a gateway that does not
- * pin a runner to one of them, a check can go unanswered and is settled as no answer when its wait is up:
- * the price of never passing the key through the database, the one channel the replicas share.
+ * SEVERAL PROCESSES, as LoginCodeRelay. The person's request reached one apiserver process, and over the
+ * runner link the gateway hands the runner's heartbeat and its answer to any of them. The process that asked
+ * says so to the others (runners/relay-peers.ts) — the runner and the check's id, never the key — until the
+ * check settles. A link heartbeat that reaches another process takes the key from it (takeAnywhere), over
+ * NATS, in the one reply that hands it over, for the check ids it was told of and no other; an answer that
+ * reaches another process is taken to it (answerAnywhere), which settles the check as if the answer had come
+ * here. A key handed over after the heartbeat that asked stopped waiting is held by the process that asked,
+ * for what is left of the wait, and handed on from there. Never through the database, the one channel the
+ * processes share besides.
  */
 
 /** What a runner declares before it is handed a Cursor key to check. */
@@ -77,13 +88,32 @@ interface HeldCheck {
   apiKey: string | null;
   /** The key's fingerprint, which the answer has to name. */
   fingerprint: string;
-  settle: (state: CursorKeyCheckState | null) => void;
+  /** When the wait for its answer ends (epoch ms). */
+  until: number;
+  /** Settles the wait: null for a key another process handed over late, which is only handed on from here (adopt). */
+  settle: ((state: CursorKeyCheckState | null) => void) | null;
 }
 
 export class CursorKeyCheckRelay {
   /** How long ask() waits for an answer. */
   waitMs = CURSOR_KEY_CHECK_WAIT_MS;
   private readonly held = new Map<string, HeldCheck>();
+  /** The timers of the keys handed on from here (adopt); a check this process waits on keeps its own in `settle`. */
+  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** `peers` reach the other apiserver processes (relayPeers); without them this process's checks are its own alone. */
+  constructor(private readonly peers?: RelayPeers) {
+    peers?.serve(TAKE_CURSOR_KEY_CHECKS, (request) => ({
+      checks: this.handOver(request.runnerId, Array.isArray(request.checkIds) ? request.checkIds : []),
+    }));
+    peers?.serve(ANSWER_CURSOR_KEY_CHECK, (request) => ({
+      accepted: this.answer(request.runnerId, {
+        checkId: String(request.checkId ?? ''),
+        state: String(request.state ?? ''),
+        keyFingerprint: String(request.keyFingerprint ?? ''),
+      }),
+    }));
+  }
 
   /** Whether this runner may be asked one more check. */
   hasRoom(runnerId: string): boolean {
@@ -104,22 +134,41 @@ export class CursorKeyCheckRelay {
         runnerId,
         apiKey,
         fingerprint: keyFingerprint(apiKey),
+        until: Date.now() + this.waitMs,
         settle: (state) => {
           clearTimeout(timer);
           resolve(state);
         },
       });
+      this.peers?.hold('cursor-key-check', runnerId, checkId, this.waitMs);
     });
   }
 
   /** The checks held for this runner that no heartbeat has taken yet, each handed over once: their keys
    *  are gone from here when this returns. */
   take(runnerId: string): CursorKeyCheckCommand[] {
-    const commands: CursorKeyCheckCommand[] = [];
-    for (const [checkId, check] of this.held) {
-      if (check.runnerId !== runnerId || check.apiKey === null) continue;
-      commands.push({ checkId, apiKey: check.apiKey });
-      check.apiKey = null;
+    return this.handOver(runnerId).map(({ checkId, apiKey }) => ({ checkId, apiKey }));
+  }
+
+  /**
+   * take, here and from every process that said it holds a check for this runner: a link heartbeat's, which
+   * any process may answer. Each is asked for the check ids it named, waited for a second at most
+   * (RelayPeers.ask), and nothing rather than a failure when it does not answer; the keys one hands over
+   * after that are held here and handed on (adopt).
+   */
+  async takeAnywhere(runnerId: string): Promise<CursorKeyCheckCommand[]> {
+    const commands = this.take(runnerId);
+    const peers = this.peers;
+    if (!peers) return commands;
+    const answers = await Promise.all(
+      peers.holders('cursor-key-check', runnerId).map((holder) =>
+        peers.ask(holder.instance, { type: TAKE_CURSOR_KEY_CHECKS, runnerId, checkIds: holder.items }, (late) =>
+          this.adopt(runnerId, late),
+        ),
+      ),
+    );
+    for (const answer of answers) {
+      for (const check of handedOver(answer)) commands.push({ checkId: check.checkId, apiKey: check.apiKey });
     }
     return commands;
   }
@@ -128,7 +177,7 @@ export class CursorKeyCheckRelay {
    *  runner and is about the key it names by fingerprint. Whether it did. */
   answer(runnerId: string, result: { checkId: string; state: string; keyFingerprint: string }): boolean {
     const check = this.held.get(result.checkId);
-    if (!check || check.runnerId !== runnerId || check.apiKey !== null || check.fingerprint !== result.keyFingerprint) {
+    if (!check?.settle || check.runnerId !== runnerId || check.apiKey !== null || check.fingerprint !== result.keyFingerprint) {
       return false;
     }
     if (!CURSOR_KEY_CHECK_STATES.includes(result.state as CursorKeyCheckState)) return false;
@@ -136,14 +185,88 @@ export class CursorKeyCheckRelay {
     return true;
   }
 
+  /** answer, here or in the process that said it waits on this check: a runner's answer, which the gateway may
+   *  have forwarded to any process. Whether it settled the check. */
+  async answerAnywhere(runnerId: string, result: { checkId: string; state: string; keyFingerprint: string }): Promise<boolean> {
+    if (this.answer(runnerId, result)) return true;
+    const peers = this.peers;
+    if (!peers) return false;
+    const answers = await Promise.all(
+      peers
+        .holders('cursor-key-check', runnerId)
+        .filter((holder) => holder.items.includes(result.checkId))
+        .map((holder) =>
+          peers.ask(holder.instance, {
+            type: ANSWER_CURSOR_KEY_CHECK,
+            runnerId,
+            checkId: result.checkId,
+            state: result.state,
+            keyFingerprint: result.keyFingerprint,
+          }),
+        ),
+    );
+    return answers.some((answer) => answer?.accepted === true);
+  }
+
+  /** The untaken checks held for this runner — of these ids, when named — with what is left of their wait, each
+   *  handed over once. A check this process waits on keeps its fingerprint for the answer; one it only handed on goes. */
+  private handOver(runnerId: string, only?: readonly unknown[]): Array<CursorKeyCheckCommand & { ttlMs: number }> {
+    const out: Array<CursorKeyCheckCommand & { ttlMs: number }> = [];
+    const now = Date.now();
+    for (const [checkId, check] of this.held) {
+      if (check.runnerId !== runnerId || check.apiKey === null || (only && !only.includes(checkId))) continue;
+      out.push({ checkId, apiKey: check.apiKey, ttlMs: check.until - now });
+      check.apiKey = null;
+      if (!check.settle) this.settle(checkId, null);
+    }
+    return out;
+  }
+
+  /** Keys another process handed over after the heartbeat that asked had stopped waiting: held here for what is left
+   *  of their wait, said to be, and the runner has its next heartbeat now. Their answers settle where they were asked. */
+  private adopt(runnerId: string, answer: Record<string, unknown>): void {
+    let adopted = false;
+    for (const check of handedOver(answer)) {
+      if (!(check.ttlMs > 0) || this.held.has(check.checkId)) continue;
+      const timer = setTimeout(() => this.settle(check.checkId, null), check.ttlMs);
+      timer.unref?.();
+      this.held.set(check.checkId, {
+        runnerId,
+        apiKey: check.apiKey,
+        fingerprint: keyFingerprint(check.apiKey),
+        until: Date.now() + check.ttlMs,
+        settle: null,
+      });
+      this.timers.set(check.checkId, timer);
+      this.peers?.hold('cursor-key-check', runnerId, check.checkId, check.ttlMs);
+      adopted = true;
+    }
+    if (adopted) this.peers?.nudge(runnerId);
+  }
+
   private settle(checkId: string, state: CursorKeyCheckState | null): void {
     const check = this.held.get(checkId);
     if (!check) return;
     this.held.delete(checkId);
-    check.settle(state);
+    const timer = this.timers.get(checkId);
+    if (timer) clearTimeout(timer);
+    this.timers.delete(checkId);
+    this.peers?.release('cursor-key-check', check.runnerId, checkId);
+    check.settle?.(state);
   }
 }
 
+/** The checks one process handed over (the answer to TAKE_CURSOR_KEY_CHECKS), each as it must read. */
+function handedOver(answer: Record<string, unknown> | null): Array<CursorKeyCheckCommand & { ttlMs: number }> {
+  const checks = Array.isArray(answer?.checks) ? (answer.checks as unknown[]) : [];
+  return checks.flatMap((check) => {
+    const c = check as Record<string, unknown> | null;
+    return c && typeof c.checkId === 'string' && typeof c.apiKey === 'string' && c.apiKey !== ''
+      ? [{ checkId: c.checkId, apiKey: c.apiKey, ttlMs: Number(c.ttlMs) || 0 }]
+      : [];
+  });
+}
+
 /** This process's relay: ProvidersService asks, the runner's heartbeat takes (RunnerApiController), and
- *  its answer settles (RunnerProvidersController). */
-export const cursorKeyCheckRelay = new CursorKeyCheckRelay();
+ *  its answer settles (RunnerProvidersController), whichever process the gateway forwarded them to. */
+export const cursorKeyCheckRelay = new CursorKeyCheckRelay(relayPeers);

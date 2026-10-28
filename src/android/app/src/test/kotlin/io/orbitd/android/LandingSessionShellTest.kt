@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -26,10 +27,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * A-1 in the production shell: a session the server calls LANDING is drawn as the landing page — never the reader (no
- * composer, no session menu, no `sessions/:id/events`), its status card, the server's timeline and the ⋮ menu's doors — and
- * a link reaches it even before its session row exists (contract §2.9 LS1/LS6; mockups v4 07). A conversation still opens
- * the reader; every door sends the server's route, and a refusal is said in the server's own words.
+ * A-1 in the production shell, since revision 28 (owner 2026-10-27, docs/mocks/landings-one-window): a session the server calls
+ * LANDING opens its project's Landings window focused on it — never the reader (no composer, no session menu, no
+ * `sessions/:id/events`) — where it is a card (its status card, its record under it, the long-press menu's doors) or, settled, a
+ * row; and a link reaches it even before its session row exists (contract §2.9 LS1/LS6; mockups v4 07). A conversation still
+ * opens the reader; every door sends the server's route, and a refusal is said in the server's own words.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w411dp-h1800dp")
@@ -70,18 +72,32 @@ class LandingSessionShellTest {
     private fun timeline(entry: String) = """{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK","generation":1,
         "state":"RUNNING","entries":[$entry]}],"facts":[]}"""
 
-    @Test fun aLandingLinkDrawsTheLandingPageAndNeverTheReader() {
+    @Test fun aLandingLinkOpensItsProjectsLandingsWindowFocusedOnItAndNeverTheReader() {
         ProjectShell.landing = view(); ProjectShell.landingTitle = "Land · Wire the page"
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-page")) }
-        assertEquals("Land · Wire the page", text("landing:title"))
-        assertEquals("Landing", text("landing:chip"))
-        assertEquals("Run by Orbit · runner wikova", text("landing:sub"))
+        await { exists(hasTestTag("landings-window")) }
+        // The window's shell: its title, the project it runs for, and the read-only footer — no composer.
+        await { text("page-bar-subtitle") == "Run by Orbit · Launch" }
+        assertTrue(exists(hasText("Landings") and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true))
+        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
+        // The landing it was opened on: a card under Now, named by its task, opened in place and outlined for a moment.
+        await { text("landing:task-name") == "Wire the page" }
+        assertTrue(exists(hasTestTag("landings:day:Now")))
         assertEquals("Landing", text("landing-head:title"))
         assertTrue(text("landing-head:detail")!!.startsWith("checking · output "))
-        // The page's own reads: the detail it draws from, and the project's facts beside it.
+        await { exists(hasTestTag("landing:outlined"), unmerged = true) && exists(hasTestTag("landing:open-arrow"), unmerged = true) }
+        compose.mainClock.advanceTimeBy(1_600)
+        await { !exists(hasTestTag("landing:outlined"), unmerged = true) }
+        assertTrue("it stays open once the outline goes", exists(hasTestTag("landing:open-arrow"), unmerged = true))
+        // The window's reads: the project's two lists with their landings, its merges into main and its coordinator — and the card's
+        // own detail, with the project's facts beside it.
         await { ProjectShell.calls.count { it == "GET sessions/$landing" } >= 1 }
         await { ProjectShell.calls.contains("GET projects/$launch/integration") }
+        for (view in listOf("open", "completed")) {
+            assertTrue(ProjectShell.calls.any { it.startsWith("GET sessions?view=$view&projectId=") && it.endsWith("includeLanding=1") })
+        }
+        assertTrue(ProjectShell.calls.contains("GET projects/$launch/promotions/merged"))
+        assertTrue(ProjectShell.calls.contains("GET projects/$launch/coordinator/status"))
         // Nothing of the conversation: no transcript, no composer, no session menu — and no session event stream.
         assertFalse(exists(hasTestTag("transcript-list")))
         assertFalse(exists(hasContentDescription("Session actions")))
@@ -92,25 +108,23 @@ class LandingSessionShellTest {
     @Test fun aConversationStillOpensTheReader() {
         signIn(); open("orbit-session:${ProjectShell.COORD}")
         await { exists(hasTestTag("transcript-list")) }
-        assertFalse(exists(hasTestTag("landing-page")))
+        assertFalse(exists(hasTestTag("landings-window")))
     }
 
-    /** LS1: the row is inserted only after the first claim commits; the pre-generated id still draws the page, titling
-     *  the subject from its task. */
+    /** LS1: the row is inserted only after the first claim commits; the pre-generated id still has its card in the window, named by
+     *  the subject's task. */
     @Test fun aLandingWhoseRowIsNotInsertedStillDraws() {
         ProjectShell.landing = view(); ProjectShell.landingTitle = null
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-page")) }
-        await { text("landing:title") == "Land · Wire the page" }
+        await { exists(hasTestTag("landings-window")) }
+        await { text("landing:task-name") == "Wire the page" }
         await { ProjectShell.calls.contains("GET tasks/t-landing") }
-        assertEquals("Land · Wire the page", text("landing:title"))
     }
 
     @Test fun theMenuListsTheWaysToLookThenTheStopAndTheStopSendsItsRoute() {
         ProjectShell.landing = view()
         ProjectShell.coordinatorStatus = """{"state":"LIVE","coordination":{"session":{"id":"${ProjectShell.COORD}"}}}"""
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-more")) }
         menu()
         assertEquals(listOf("Open task", "Open source session", "Open coordinator", "Stop landing"), items())
         item("Stop landing").performClick()
@@ -122,7 +136,7 @@ class LandingSessionShellTest {
     @Test fun theStopGoesAwayPastThePushBoundary() {
         ProjectShell.landing = view(pastPush = true)
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-page")) }
+        await { exists(hasTestTag("landings-window")) }
         menu()
         assertEquals(listOf("Open task", "Open source session"), items())
     }
@@ -167,9 +181,8 @@ class LandingSessionShellTest {
         assertEquals("Retry failed — The job is no longer running.", text("landing:refusal"))
     }
 
-    /** A15 F-22's kind on this page (A11k): a door holds the page until the page has read the press back. Pressed before then, a door
-     *  would go out over the claim the press has just moved on, and the server refuses it. Once the read lands, the doors are the new
-     *  claim's. */
+    /** A15 F-22's kind on a card (A11k): a door holds the card until it has read the press back. Pressed before then, a door would go
+     *  out over the claim the press has just moved on, and the server refuses it. Once the read lands, the doors are the new claim's. */
     @Test fun noDoorIsPressedAgainUntilThePageHasReadThePressBack() {
         ProjectShell.landing = view(timedOut = true, liveness = "LEASE_EXPIRED", retryable = true)
         // Retry hands the job its next claim, which runs; a door on the claim that timed out is refused from then on.
@@ -181,8 +194,8 @@ class LandingSessionShellTest {
         compose.onNodeWithTag("landing:retry").performClick()
         await { jobDoors("retry") == 1 && landingReads() > reads }
         compose.waitForIdle()
-        // The server has moved the job on; the page still draws the claim that timed out, and none of its doors can be pressed, on
-        // the card or in the menu.
+        // The server has moved the job on; the card still draws the claim that timed out, and none of its doors can be pressed, on
+        // the card or in its menu.
         compose.onNodeWithTag("landing:retry").assertIsNotEnabled()
         compose.onNodeWithTag("landing:abandon").assertIsNotEnabled().performClick()
         menu(); item("Abandon").performClick()
@@ -203,7 +216,7 @@ class LandingSessionShellTest {
         assertEquals(1, jobDoors("retry"))
     }
 
-    /** The page's poll that leaves while a press is out carries the page as it was then, press and all. Landing after the press has
+    /** The card's poll that leaves while a press is out carries the card as it was then, press and all. Landing after the press has
      *  read itself back, it must not put the doors down again — every later poll would carry them down, and none would come back. */
     @Test fun aPollThatLeftDuringAPressDoesNotHoldTheDoorsDownAfterIt() {
         ProjectShell.landing = view(timedOut = true, liveness = "LEASE_EXPIRED", retryable = true)
@@ -236,15 +249,24 @@ class LandingSessionShellTest {
         assertEquals("Task acceptance 1m 50s of 60m", text("landing:budget"))
     }
 
-    /** A settled subject draws its outcome and its read-only footer, and polls nothing more (§2.7a). */
-    @Test fun aSettledLandingDrawsItsOutcomeAndStops() {
-        ProjectShell.landing = view(state = "RUNNING", settledAt = ago(60), settledAs = "LANDED")
+    /** A settled landing is a row in the day it settled, opened in place to its record, and polls nothing (§2.7a): it is read once. */
+    @Test fun aSettledLandingIsARowInItsDayAndStops() {
+        ProjectShell.landing = view(state = "RUNNING", settledAt = ago(60), settledAs = "LANDED", timeline = timeline(
+            """{"kind":"RESULT","at":"${ago(60)}","claim":1,"data":{"state":"LANDED"},"text":"Landed on project/launch · 8ed0ea7"}"""))
+        ProjectShell.landingTitle = "Land · Wire the page"
         signIn(); open("orbit-session:$landing")
-        await { exists(hasText("Landed") and hasAnyAncestor(hasTestTag("landing-status-card")), unmerged = true) }
-        assertEquals("This landing is complete — nothing to type here.", text("landing:footer-line"))
+        await { exists(hasTestTag("landing-row:title") and hasText("Wire the page"), unmerged = true) }
+        assertEquals("Landed", text("landing-row:detail"))
+        assertEquals("✓", text("landing-row:mark"))
+        assertTrue(exists(hasTestTag("landings:day:Today")))
+        assertFalse("nothing in hand: no Now", exists(hasTestTag("landings:day:Now")))
+        assertFalse("a settled landing is no card", exists(hasTestTag("landing-status-card"), unmerged = true))
+        // Opened where it was focused: its record, read off the detail the link already read.
+        await { exists(hasText("Landed on project/launch · 8ed0ea7"), unmerged = true) }
+        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
         val reads = ProjectShell.calls.count { it == "GET sessions/$landing" }
-        Thread.sleep(5_500)
-        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(20_000)
+        settle()
         assertEquals("a settled landing is not polled", reads, ProjectShell.calls.count { it == "GET sessions/$landing" })
     }
 
@@ -380,8 +402,9 @@ class LandingSessionShellTest {
         "check":{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(200)}"},
         "stepStartedAt":"${ago(200)}","outputMovedAt":"${ago(6)}","typicalMs":null,"liveness":"LIVE","landingSessionId":"$landing"}]"""
 
-    /** The project sessions page's poll read the landing's job; then the server cannot be read. The link still opens the landing
-     *  page — the read that would say its kind failed, and that job names this id — and the card is the job frozen. */
+    /** The project sessions page's poll read the landing's job; then the server cannot be read. The link still opens the project's
+     *  Landings window — the read that would say its kind failed, and that job names this id — and the landing's card is the job
+     *  frozen. */
     @Test fun aLinkTheServerCannotAnswerOpensTheLandingFrozenFromTheSessionsPagesRead() {
         ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
         signIn(); openSessionsPage()
@@ -401,13 +424,13 @@ class LandingSessionShellTest {
         assertFrozen()
     }
 
-    /** And so does the landing page's own read: opened again once the server cannot be read, it draws what it last read. */
-    @Test fun theLandingPagesOwnReadKeepsTheJobForALaterVisit() {
+    /** And so does the card's own read: opened again once the server cannot be read, the window draws what it last read. */
+    @Test fun theCardsOwnReadKeepsTheJobForALaterVisit() {
         ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
         signIn(); open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-more")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
+        await { exists(hasTestTag("landing-head")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        await { !exists(hasTestTag("landing-page")) }
+        await { !exists(hasTestTag("landings-window")) }
         ProjectShell.landingStatus = 503
         open("orbit-session:$landing")
         assertFrozen()
@@ -418,20 +441,20 @@ class LandingSessionShellTest {
         ProjectShell.landing = view(); ProjectShell.landingStatus = 503
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("transcript-list")) }
-        assertFalse(exists(hasTestTag("landing-page")))
+        assertFalse(exists(hasTestTag("landings-window")))
     }
 
-    /** The frozen page: the job's word and its clock where the read left it, `Update unavailable`, how long ago that read was, no
-     *  door and no menu, and nothing of the conversation. */
+    /** The frozen card: the job's word and its clock where the read left it, `Update unavailable`, how long ago that read was, no
+     *  door, and nothing of the conversation. */
     private fun assertFrozen() {
-        await { exists(hasTestTag("landing-page")) && text("landing-head:detail") == "Update unavailable" }
+        await { exists(hasTestTag("landings-window")) && text("landing-head:detail") == "Update unavailable" }
         assertTrue(ProjectShell.calls.contains("GET sessions/$landing"))
         assertEquals("Landing", text("landing-head:title"))
         val clock = text("landing-head:right")!!
         assertTrue("$clock is the step's clock at the read, 200 s or more into it", clock.matches(Regex("[3-9]m \\d{1,2}s")))
         assertTrue(text("landing:live")!!.matches(Regex("Updated \\d+m ago")))
         assertFalse(exists(hasTestTag("landing:status-note"), unmerged = true))
-        listOf("landing-more", "landing:retry", "landing:rerun", "landing:abandon", "landing:footer", "transcript-list").forEach {
+        listOf("landing:retry", "landing:rerun", "landing:abandon", "landing:wait:open_coordinator", "transcript-list").forEach {
             assertFalse(it, exists(hasTestTag(it), unmerged = true))
         }
         settle()
@@ -468,11 +491,11 @@ class LandingSessionShellTest {
         }
         compose.waitForIdle()
     }
-    private fun menuOpen() = exists(hasTestTag("landing-menu"))
+    /** The landing's menu: a long-press on its card (the old page's ⋯), once the card has read its view. */
     private fun menu() {
-        await { exists(hasTestTag("landing-more")) }
-        compose.onNodeWithTag("landing-more").performClick()
-        await { menuOpen() || items().isNotEmpty() }
+        await { exists(hasTestTag("landing-head")) }
+        compose.onNode(hasTestTag("landing-status-card")).performSemanticsAction(SemanticsActions.OnLongClick)
+        await { items().isNotEmpty() }
         compose.waitForIdle()
     }
     private fun items() = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()

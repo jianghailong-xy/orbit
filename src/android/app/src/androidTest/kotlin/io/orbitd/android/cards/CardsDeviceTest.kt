@@ -286,7 +286,13 @@ class CardsDeviceTest {
         press(resolve)
         compose.onNodeWithTag(confirm).assertIsNotEnabled()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Reviewed the second assignment")
-        press(confirm); await("Request accepted")
+        press(confirm)
+        // Either line confirms it (A15 F-52): the re-read after the write can bring the item back closed in the frame "Request
+        // accepted" would have been drawn in, and a closed card draws only that it is no longer open. The re-read's terminal state
+        // legitimately replaces the transient confirmation; the journal below still says the resolve was written once.
+        compose.waitUntil(15_000) {
+            listOf("This exception is no longer open.", "Request accepted").any { compose.onAllNodesWithText(it, substring = true).fetchSemanticsNodes().isNotEmpty() }
+        }
         val stats = http("/__stats")
         assertEquals(before + 3, stats.objects("journal").size)
         assertFalse(stats.flag("pending")); assertEquals("RESOLVED", stats.obj("final")?.text("state"))
@@ -486,6 +492,9 @@ class CardsDeviceTest {
     /** A08-8: a merge-check change offers no standing yes, and saying no is a conversation the server records with its words. */
     @Test fun aMergeCheckChangeAsksWithNoStandingYes() = journey("merge-check") {
         login("a9")
+        // The conversation reads the session again as it opens, and the card's buttons stay disabled until that read lands
+        // (`enabled = fresh && …`, A08k/A15d): ALLOW is asserted once it can be pressed.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("approval:a9:ALLOW") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("approval:a9:ALLOW").performScrollTo().assertIsEnabled()
         assertFalse(exists("approval:a9:REMEMBER")); assertFalse(exists("approval:a9:DENY"))
         capture("merge-check-card")

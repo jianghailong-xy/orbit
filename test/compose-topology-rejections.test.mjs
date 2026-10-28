@@ -175,7 +175,17 @@ const cases = [
   ['a gateway allowed to publish hints', "the runner link's NATS configuration is exactly the one task B4 added",
     replaceConf('publish: { allow: ["ses.*.live"] }', 'publish: { allow: ["ses.*.live", "rnr.>"] }')],
   ['an apiserver allowed to publish live streams', "the runner link's NATS configuration is exactly the one task B4 added",
-    replaceConf('publish: { allow: ["rnr.>"] }', 'publish: { allow: ["rnr.>", "ses.*.live"] }')],
+    replaceConf('publish: { allow: ["rnr.>", "api.>"] }', 'publish: { allow: ["rnr.>", "api.>", "ses.*.live"] }')],
+  // Several apiservers behind the link, 2026-10-28: what their processes hand each other on api.>, in replies to their
+  // inboxes, is theirs alone, and nothing NATS logs prints it.
+  ["a gateway allowed to read what the apiservers hand each other", "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('subscribe: { allow: ["rnr.>"] }', 'subscribe: { allow: ["rnr.>", "api.>"] }')],
+  ["a gateway allowed to read the apiservers' inboxes", "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('subscribe: { allow: ["rnr.>"] }', 'subscribe: { allow: ["rnr.>", "_INBOX.>"] }')],
+  ['trace logging in the NATS configuration', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('http_port: 8222\n', 'http_port: 8222\ntrace: true\n')],
+  ['NATS run with trace logging', "the runner link's NATS is exactly the service",
+    replace('    command: ["--config", "/etc/orbit-nats/nats.conf"]\n', '    command: ["--config", "/etc/orbit-nats/nats.conf", "-V"]\n')],
   ['NATS on another listener', "the runner link's NATS configuration is exactly the one task B4 added",
     replaceConf('port: 4222\n', 'port: 4222\nwebsocket { port: 8080, no_tls: true }\n')],
 ];
