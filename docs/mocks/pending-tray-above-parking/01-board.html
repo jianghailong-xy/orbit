@@ -1,0 +1,159 @@
+<!doctype html>
+<!-- Design board: the unread-messages tray (PendingTray) moves above the parking strip (owner, 2026-10-28:
+     "消息排队在停车条上面，先出效果图"). Every frame is a screenshot of the real session page (WorkspaceView +
+     Transcript + index.css on vite, Chromium, 1280-wide desktop at 2x / 390-wide phone at 3x), fed by
+     src/web/ui-migration's fixtures plus data shaped like the owner's screenshot. "现在" is main e6a9e479c; the
+     proposal frames are the same tree with the change written as code (patch/apply.py: WorkspaceView.tsx moves
+     <PendingTray> to the band's top, index.css makes .pending-tray a free-standing card); ⑦ is the proposal with one
+     <style> on top (the 10-16 tab look, tucked behind the next card). Dashed outlines are drawn on top.
+     Kit: /var/tmp/qap-mock (lib.mjs, capture.mjs inside run-ns.sh, gen.py, render.mjs). Decided 2026-10-28: as recommended,
+     every client together; the implementation's web frames (capture-wt.mjs) are pixel-identical to ② ③ ④ ⑥. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 未读的消息挪到停车条上面</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .b-ref { margin: 0 0 14px; background: #f5f6f8; border-radius: 10px; padding: 10px 12px 12px; }
+  .b-ref .b-lbl { margin-bottom: 8px; }
+  .b-ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .b-src { margin: 0 0 18px; font-size: 12px; line-height: 1.75; color: var(--text-3); }
+  .b-pair { display: grid; grid-template-columns: 681px 681px; gap: 26px; align-items: end; }
+  .b-row-side { display: grid; grid-template-columns: 681px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .b-phones { display: grid; grid-template-columns: 390px 390px minmax(0, 1fr); gap: 26px; align-items: end; }
+  .b-alt { display: grid; grid-template-columns: 681px 390px minmax(0, 1fr); gap: 26px; align-items: end; }
+  .b-fig { min-width: 0; }
+  .b-frame { position: relative; }
+  .b-lbl { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 2px; display: flex; align-items: center; gap: 8px; }
+  .b-shot { display: block; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .b-cap { font-size: 12.5px; line-height: 1.8; color: var(--text-2); margin: 10px 2px 0; }
+  .b-cap b { color: var(--text-1); }
+  .b-side { align-self: start; padding-top: 28px; font-size: 12.5px; line-height: 1.85; color: var(--text-2); }
+  .b-side p { margin: 0; }
+  .b-side p + p { margin-top: 10px; }
+  .b-side b { color: var(--text-1); }
+  .b-ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .b-mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 12px; pointer-events: none; }
+  .b-mk-l { position: absolute; top: -10px; right: 14px; white-space: nowrap; font-size: 11.5px; font-weight: 700; color: #fff;
+            background: var(--warning-solid); border-radius: 5px; padding: 0 6px; line-height: 18px; }
+  .b-mk-strip { border-color: #8a94a6; }
+  .b-mk-strip .b-mk-l { top: auto; bottom: -10px; right: auto; left: 14px; background: #8a94a6; }
+  .m-k.b-rec { background: #e8f7ee; color: #16833a; }
+  .m-k.b-no { background: #fff1e8; color: #c2410c; }
+  .b-rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.7; width: 100%; }
+  .b-rules th, .b-rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .b-rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .b-rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .b-same { color: var(--text-3); }
+  .b-rules code, .b-files code { font-size: 11.5px; }
+  .b-bottom { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .b-files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+             font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .b-files li + li { margin-top: 8px; }
+  .b-files b { color: var(--text-1); }
+  .b-ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+           font-size: 12.5px; line-height: 1.85; color: #5c4210; }
+  .b-ask b { color: #3d2b08; }
+  .b-ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .b-ask li + li { margin-top: 6px; }
+  .b-ask .b-pick { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet zh">
+  <h1 class="m-h1">未读的消息挪到停车条上面</h1>
+  <p class="m-sub" style="line-height:1.8;margin-bottom:14px">Web 会话页，输入框上方那一组。你说<b>「消息排队在停车条上面」</b>：现在还没被读的消息（托盘）压在输入框上沿后面，
+    停车条（Watching、Background processes、Tasks、分支条）在它上面；改后托盘排到这一组最上面，紧接对话，停车条贴着输入框。<br><b>已定（2026-10-28）：按推荐落地，② 独立卡片，Web、iOS / macOS、Android 一起改。</b></p>
+  <div class="b-ref"><p class="b-lbl"><span class="m-k">参考</span>你的截图</p><img src="00-your-screenshot.png" alt=""></div>
+  <p class="b-src">下面每张都是真实页面：本分支的 Web 代码在 Chromium 里渲染（桌面 1280 宽、2x；手机 390 宽、3x），数据照你的截图搭（同一个任务、<span class="b-ui">1 running · 15 total</span>、两条 <span class="b-ui">Waiting to be read</span>）。
+    「现在」是 main e6a9e479c；「效果图」是同一棵树把这次的改动写成代码后渲染的（WorkspaceView.tsx 挪一处、index.css 改托盘的样子），不是手画的。虚线框是后加的。<b>落地后的 Web 代码渲染出来，和 ② ③ ④ ⑥ 的效果图逐像素一致。</b></p>
+
+  <div class="m-stage">
+    <p class="m-stage-l"><span class="m-k">桌面 Web</span>你截图里那一刻：回合在跑，中途发了两条</p>
+    <div class="b-pair">
+      <div class="b-fig"><p class="b-lbl"><span class="m-k">现在</span>① 托盘压在输入框后面</p><div class="b-frame" style="width:681px"><img class="b-shot" src="01a-today.png" width="681" height="457" alt=""><div class="b-mk b-mk-strip" style="left:18.0px;top:186.0px;width:647.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:36.0px;top:266.0px;width:611.0px;height:96.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-fig"><p class="b-lbl"><span class="m-k b-rec">效果图 · 推荐</span>② 托盘在停车条上面，紧接对话</p><div class="b-frame" style="width:681px"><img class="b-shot" src="01b-new.png" width="681" height="469" alt=""><div class="b-mk b-mk-strip" style="left:18.0px;top:286.0px;width:647.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:18.0px;top:186.0px;width:647.0px;height:100.0px"><span class="b-mk-l">托盘</span></div></div></div>
+    </div>
+    <div class="b-pair" style="align-items:start">
+      <p class="b-cap">① 托盘压在输入框上沿后面：左右各收进 18px，只有上面两个圆角，底边藏进输入框 22px，和输入框读成一叠。停车条在它上面，离对话更近。</p>
+      <p class="b-cap">② 托盘排到最上面，紧接对话，从上往下就是时间顺序：<b>对话 → 你刚发、模型还没读的话 → 这个会话在跑的东西（后台进程、建的任务、分支）→ 输入框</b>。
+        托盘不再压在输入框后面，改成一张独立卡片：和停车条同宽，白底（同现在），12px 圆角，下面隔 8px。iOS / macOS 的托盘本来就是这样一张独立卡片（12pt 圆角，下面隔 8pt）。
+        行一点没变：↳、文字、<span class="b-ui">Waiting to be read</span>、<span class="b-ui">Steer</span>、撤回。</p>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <p class="m-stage-l"><span class="m-k state">情况</span>改后的两种情况</p>
+    <div class="b-pair">
+      <div class="b-fig"><p class="b-lbl"><span class="m-k">现在</span>③ 停车条空着</p><div class="b-frame" style="width:681px"><img class="b-shot" src="02a-empty-today.png" width="681" height="307" alt=""><div class="b-mk b-mk-tray" style="left:36.0px;top:116.0px;width:611.0px;height:96.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-fig"><p class="b-lbl"><span class="m-k b-rec">效果图</span>③ 停车条空着</p><div class="b-frame" style="width:681px"><img class="b-shot" src="02b-empty-new.png" width="681" height="319" alt=""><div class="b-mk b-mk-tray" style="left:18.0px;top:116.0px;width:647.0px;height:100.0px"><span class="b-mk-l">托盘</span></div></div></div>
+    </div>
+    <p class="b-cap" style="max-width:1100px">③ 没有后台进程、没建任务、没有分支条时，托盘下面直接就是输入框。现在它压在输入框后面；改后还是那张独立卡片，隔 8px。
+      托盘只有一个样子，不跟着下面是什么变。</p>
+    <div class="b-row-side" style="margin-top:22px">
+      <div class="b-fig"><p class="b-lbl"><span class="m-k b-rec">效果图</span>④ 点开 Background processes</p><div class="b-frame" style="width:681px"><img class="b-shot" src="02c-open-new.png" width="681" height="659" alt=""><div class="b-mk b-mk-strip" style="left:18.0px;top:156.0px;width:647.0px;height:400.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:18.0px;top:56.0px;width:647.0px;height:100.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-side">
+        <p>④ 停车条里的一张点开了（这里是 Background processes 的 15 个进程，最高 320px，里面滚动）：<b>列表在托盘下面展开，托盘留在最上面</b>，贴着对话，被往上推。</p>
+        <p>现在点开时正相反：托盘留在输入框上，列表在它上面展开。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <p class="m-stage-l"><span class="m-k">手机 Web</span>同一刻</p>
+    <div class="b-phones">
+      <div class="b-fig"><p class="b-lbl"><span class="m-k">现在</span>⑤</p><div class="b-frame" style="width:390px"><img class="b-shot" src="03a-phone-today.png" width="390" height="427" alt=""><div class="b-mk b-mk-strip" style="left:10.0px;top:146.0px;width:370.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:22.0px;top:226.0px;width:346.0px;height:112.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-fig"><p class="b-lbl"><span class="m-k b-rec">效果图</span>⑥</p><div class="b-frame" style="width:390px"><img class="b-shot" src="03b-phone-new.png" width="390" height="439" alt=""><div class="b-mk b-mk-strip" style="left:10.0px;top:262.0px;width:370.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:10.0px;top:146.0px;width:370.0px;height:116.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-side">
+        <p>⑥ 手机上同样的顺序。托盘和停车条同宽（现在左右各收进 12px）；每行的状态在文字下面、按钮 36px 见方，都不变。</p>
+        <p>iPhone 和 Android 的 App 打字时会收起停车条（已有），托盘不收。所以<b>打字的时候托盘仍然直接在输入框上面</b>，和现在一样；不打字时才是 ⑥ 的顺序。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <p class="m-stage-l"><span class="m-k b-no">另一个样子 · 不推荐</span>⑦ 照旧「压在后面」，换成压在停车条第一张后面</p>
+    <div class="b-alt">
+      <div class="b-fig"><p class="b-lbl">⑦ 桌面</p><div class="b-frame" style="width:681px"><img class="b-shot" src="04a-tucked.png" width="681" height="457" alt=""><div class="b-mk b-mk-strip" style="left:18.0px;top:274.0px;width:647.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:36.0px;top:186.0px;width:611.0px;height:96.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-fig"><p class="b-lbl">⑦ 手机</p><div class="b-frame" style="width:390px"><img class="b-shot" src="04b-tucked-phone.png" width="390" height="427" alt=""><div class="b-mk b-mk-strip" style="left:10.0px;top:250.0px;width:370.0px;height:80.0px"><span class="b-mk-l">停车条</span></div><div class="b-mk b-mk-tray" style="left:22.0px;top:146.0px;width:346.0px;height:112.0px"><span class="b-mk-l">托盘</span></div></div></div>
+      <div class="b-side">
+        <p>保留 10-16 定的样子：只有上圆角 16px、左右收进、底边藏进下面那张 22px，只是从输入框后面换到停车条第一张后面。</p>
+        <p><b>不推荐：</b>下面那张会换（Watching、Background processes、Tasks、分支条，都没有时是输入框），压在一条 30px 高的灰条后面，像夹进去的一张纸；也和 iOS / macOS 的独立卡片对不上。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <p class="m-stage-l"><span class="m-k">规则</span>改了什么，没改什么</p>
+    <div class="b-bottom">
+      <table class="b-rules">
+        <tr><th></th><th>现在</th><th>改后</th></tr>
+        <tr><td>位置</td><td>输入框上方这一组的最下面，压在输入框后面</td>
+          <td>这一组的<b>最上面</b>，紧接对话。停车条和其他提示（托管 runner 的状态、回复谁、任务运行交接、provider 说明）之间的顺序不变</td></tr>
+        <tr><td>样子</td><td>左右收进 18px（手机 12px），只有上圆角 16px，底边藏进输入框 22px</td>
+          <td>独立卡片：和停车条同宽，白底，1px 边，12px 圆角，下面隔 8px</td></tr>
+        <tr><td>行</td><td colspan="2">↳ 插进当前回合 / ≡ 排到下一轮；文字一行，点开看全文；状态；<span class="b-ui">Steer</span>；撤回（文字回到输入框）；Cursor 会话的说明。<span class="b-same">不变</span></td></tr>
+        <tr><td>好几条</td><td colspan="2">按发出的顺序往下排，最新的在最下面；超过 4 行在托盘里滚动。<span class="b-same">不变</span></td></tr>
+        <tr><td>App 打字时</td><td colspan="2">停车条收起，托盘不收，所以打字时托盘贴着输入框。<span class="b-same">不变</span></td></tr>
+      </table>
+      <div>
+        <ul class="b-files">
+          <li><b>Web</b>：WorkspaceView.tsx 把 <code>&lt;PendingTray&gt;</code> 挪成 <code>.workspace-composer</code> 的第一个；index.css 的 <code>.pending-tray</code> 去掉负 margin、上圆角和 22px 垫底，改成独立卡片，删掉手机的 12px 内缩。上面的效果图就是这两处渲染出来的。</li>
+          <li><b>iOS / macOS</b>：ConsoleView 里把 <code>PendingTrayView</code> 挪成 <code>ComposerBand</code> 的第一个；样子不用改。</li>
+          <li><b>Android</b>：<code>PendingTrayCard</code> 现在画在 <code>SessionComposer</code> 里、输入框正上方；挪到 <code>SessionReader</code> 的停车条上面，去掉 24dp 内缩，和停车条同宽。</li>
+        </ul>
+        <div class="b-ask">
+          <b>已定（2026-10-28）：按推荐落地，各端一起改。</b>
+          <ol>
+            <li>样子：<span class="b-pick">② 独立卡片</span>（⑦ 照旧压在后面，没选）</li>
+            <li>范围：<span class="b-pick">Web、iOS / macOS、Android 一起改</span></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
