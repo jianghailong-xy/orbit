@@ -264,6 +264,31 @@ export async function reapApprovalsOfReturnedCalls(
 }
 
 /**
+ * reapApprovalsOfReturnedCalls for the sessions of a merged runner link call at once, in one statement
+ * (RunnerApiController.ingestLinkEventCall): the same cards, each session's from its own returned calls. Returns the ids
+ * collected, by session.
+ */
+export async function reapApprovalsOfReturnedCallsIn(
+  tx: Prisma.TransactionClient,
+  returned: ReadonlyArray<{ sessionId: string; toolUseIds: readonly string[] }>,
+): Promise<Map<string, string[]>> {
+  const collected = new Map<string, string[]>();
+  const asked = returned.filter((r) => r.toolUseIds.length > 0);
+  if (asked.length === 0) return collected;
+  const rows = await tx.approval.updateManyAndReturn({
+    where: {
+      status: 'PENDING',
+      backgroundJobId: null,
+      OR: asked.map((r) => ({ sessionId: r.sessionId, toolUseId: { in: [...r.toolUseIds] } })),
+    },
+    data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
+    select: { id: true, sessionId: true },
+  });
+  for (const row of rows) collected.set(row.sessionId, [...(collected.get(row.sessionId) ?? []), row.id]);
+  return collected;
+}
+
+/**
  * Whether the runner-hosted job a card names is still there to read an answer.
  *
  * The read side of the rule the reaper above collects on, and the same expression on purpose: a

@@ -107,10 +107,15 @@ var (
 // do sends call and returns the first answer a backend gives. ctx is the runner's connection: when it ends, the call
 // is aborted at once, so the route sees its request close, as it sees a runner hang up over HTTPS (§6.4).
 func (p *backendPool) do(ctx context.Context, call backendCall) (*backendAnswer, error) {
+	return p.doFrom(ctx, call, int(p.next.Add(1)-1))
+}
+
+// doFrom is do with its first attempt on backend first, the round robin going on from there: the merged calls choose
+// their backend themselves (events_merge.go).
+func (p *backendPool) doFrom(ctx context.Context, call backendCall, first int) (*backendAnswer, error) {
 	started := p.now()
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
-	first := int(p.next.Add(1) - 1)
 	retryUntil := started.Add(p.tune.RetryBudget)
 	wait := 100 * time.Millisecond
 	for attempt := 0; ; attempt++ {
@@ -179,6 +184,11 @@ func (p *backendPool) pick(n int) int {
 		}
 	}
 	return n % len(p.urls)
+}
+
+// passedOver says whether pick passes over backend i: it could not be dialed a moment ago.
+func (p *backendPool) passedOver(i int) bool {
+	return p.down[i].Load() > p.now().UnixNano()
 }
 
 // attempt sends the call to backend i once. delivered says whether the request was written in full, after which a
