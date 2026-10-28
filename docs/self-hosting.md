@@ -687,7 +687,7 @@ their image is the one it rebuilt. So does `/upgrade`'s script. It finds them am
 their names (`apiserver-` and a number), and recreates them once the first apiserver has applied the migrations and is
 healthy. Until then they run the old code against the schema the first apiserver has just migrated.
 
-**Before production.** Most background jobs run in every apiserver. They coordinate through the database, so with
+**Background jobs.** Most background jobs run in every apiserver. They coordinate through the database, so with
 several processes they repeat work but do nothing twice:
 
 - watches, open items and managed runners;
@@ -706,11 +706,9 @@ several processes they repeat work but do nothing twice:
   row. So it reaps no session for a silent runner while another apiserver's heartbeat writes are failing, or while
   another apiserver has stopped reporting.
 
-One thing still assumes one process. Until it is fixed, run more than one apiserver for load tests and staging only:
-
-- **Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the process that took them.
-  They reach the runner only through a heartbeat that lands on that same process. The link gateway spreads heartbeats
-  over every apiserver, so a code waits several beats, and a key check mostly times out.
+**Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the apiserver that took them.
+The apiserver a runner's heartbeat lands on asks that one for them over the runner link's NATS, so they reach the runner
+whichever apiserver the link gateway hands its heartbeats to.
 
 ### Database connections
 
