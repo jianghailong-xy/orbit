@@ -264,6 +264,27 @@ func TestLinkFollowsADrain(t *testing.T) {
 	}
 }
 
+// A drained connection is replaced with the token in hand, which has most of its hour to go: the gateway the next
+// connection reaches verifies it as the drained one did. So a gateway's drain sends its runners to reconnect and none to
+// POST /api/runner/link-token (linkClient.token keeps a token until linkRenewBefore ahead of its expiry; task
+// 34nb3xgCijTDzQJVXDVT7).
+func TestLinkReplacesADrainedConnectionWithTheTokenInHand(t *testing.T) {
+	r := newLinkWorkRig(t)
+	first := r.useLink(t)
+	first.send(&linkpb.Frame{Body: &linkpb.Frame_Drain{Drain: &linkpb.Drain{ReconnectAfterMs: 50}}})
+	second := r.g.waitWelcomed(t, 2)
+	linkWaitFor(t, 5*time.Second, "the next connection to be adopted", func() bool {
+		cur := r.m.work.current()
+		return cur != nil && cur.id == second.id
+	})
+	if second.token != first.token {
+		t.Error("the connection after the drain was opened with a new token")
+	}
+	if n := len(r.cp.requests("/api/runner/link-token")); n != 1 {
+		t.Errorf("%d link tokens for a connection and its drain's replacement, want the first one's alone", n)
+	}
+}
+
 // A drain on a gateway with one node: the next connection is refused while the drained one keeps carrying the work,
 // and the time that counts as without a link is only from the drained one's end to the next one's Welcome.
 func TestLinkDrainOnOneNodeCountsOnlyTheTimeWithoutAConnection(t *testing.T) {
