@@ -31,6 +31,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/open-items/:itemId/answer',
   'POST /projects/:id/open-items/:itemId/return-to-coordinator',
   'POST /projects/:id/open-items/:itemId/resolve',
+  // §10.8's Accept: work that reached the branch without the owner's confirmation, accepted by them.
+  'POST /projects/:id/open-items/:itemId/accept',
   // The integration line: every field of this route is the one `PATCH /projects/:id` refuses a token
   // as `integration`, and an agent session as INTEGRATION_SETTINGS_OWNER_ONLY. That last one is
   // this route's rule and no longer the update route's: a session may propose a project's MERGE

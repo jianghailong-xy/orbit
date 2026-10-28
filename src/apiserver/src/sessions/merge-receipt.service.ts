@@ -43,6 +43,7 @@ import {
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
+import { resolveLandingUnobservedOnLanding } from '../projects/project-open-item';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 
 /**
@@ -431,6 +432,8 @@ export class MergeReceiptService {
         // the same merge again. Only candidates older than the receipt: a replay never answers a
         // question asked after the merge.
         await retireCandidatesLandedByReceipt(db, existing);
+        // §10.7: and answers what was open about the work not being on the line, as the first did.
+        await resolveLandingUnobservedOnLanding(db, [session.taskId]);
         return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
       }
 
@@ -491,6 +494,9 @@ export class MergeReceiptService {
       // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
       // this branch, so the card stops asking — in the transaction that recorded it.
       await retireCandidatesLandedByReceipt(db, created);
+      // §10.7 O-R1: a receipt that puts the task's work on its line answers the `LANDING_UNOBSERVED`
+      // about it, in this same transaction (one on some other branch leaves it open).
+      await resolveLandingUnobservedOnLanding(db, [session.taskId]);
 
       return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
     };
@@ -630,6 +636,9 @@ export class MergeReceiptService {
         },
       });
       if (recorded) await retireCandidatesLandedByReceipt(tx, recorded);
+      // §10.7 O-R1: the Merge button put the work on a branch; on the project's line, that is the
+      // landing a `LANDING_UNOBSERVED` waits for.
+      await resolveLandingUnobservedOnLanding(tx, [args.taskId]);
     }
   }
 
@@ -728,6 +737,9 @@ export class MergeReceiptService {
       skipDuplicates: true,
       select: { id: true },
     });
+    // §10.7 O-R1: the platform's landing is the task's landing (J-T5 writes its receipt here), and
+    // what was open about its work not being on the line is answered in the same transaction.
+    await resolveLandingUnobservedOnLanding(tx, [args.taskId]);
     return created.map((row) => row.id);
   }
 

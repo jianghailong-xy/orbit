@@ -330,6 +330,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId }, body: { note: 'the census' } }),
     nested: ['itemId'],
   },
+  // The fixture's item is a question, which Accept does not answer: the owner is told 409, which is
+  // the door answering — another account's request finds no item at all.
+  'POST /projects/:id/open-items/:itemId/accept': {
+    request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId } }),
+    nested: ['itemId'],
+  },
   'POST /projects/:id/done-requests/:itemId/decline': {
     request: (of) => ({ params: { id: of.projectId, itemId: of.doneRequestItemId }, body: { note: 'not yet' } }),
     nested: ['itemId'],

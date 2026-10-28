@@ -16,7 +16,13 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 
-import { landingBranchesFor, mainBranchOf, taskLanding } from './project-criterion-landing';
+import {
+  branchName,
+  landingBranchesFor,
+  mainBranchOf,
+  taskLanding,
+  taskLandingSql,
+} from './project-criterion-landing';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
@@ -59,11 +65,9 @@ export interface ProjectOpenItemDelivery {
  *  put to the coordinator first. `LANDING_LEASE_EXPIRED` (0439) is the owner's: the escalation
  *  clock opens it when a RUNNING job's current claim has been LEASE_EXPIRED for fifteen minutes
  *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting.
- *
- *  0453 lets the database hold §10.7's `LANDING_UNOBSERVED` and `LANDED_WITHOUT_CONFIRMATION`, and
- *  the shared `OpenItemKind` names them. They are not listed here yet: a kind joins this list
- *  together with its doors, because the door census (`open-item-doors.spec.ts`) refuses a kind
- *  that has none. */
+ *  `LANDING_UNOBSERVED` (0453) is a finished task's work not yet seen on its line, put to the
+ *  coordinator first; `LANDED_WITHOUT_CONFIRMATION` (0453) is the owner's item about work that
+ *  reached main without their confirmation (§10.7). */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -76,6 +80,8 @@ export const OPEN_ITEM_KINDS = [
   'DONE_REQUEST',
   'DELIVERY_REVIEW',
   'LANDING_LEASE_EXPIRED',
+  'LANDING_UNOBSERVED',
+  'LANDED_WITHOUT_CONFIRMATION',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -328,6 +334,8 @@ export function ownerItemNeed(kind: OpenItemKind | string): string {
     case 'DONE_REQUEST': return 'Ready to close';
     case 'DELIVERY_REVIEW': return 'Delivery review';
     case 'LANDING_LEASE_EXPIRED': return 'Runner stopped reporting';
+    case 'LANDING_UNOBSERVED': return 'Not on the line yet';
+    case 'LANDED_WITHOUT_CONFIRMATION': return 'Landed without your confirmation';
     default: return 'Exception';
   }
 }
@@ -338,6 +346,8 @@ export const openItemNeed = ownerItemNeed;
 function primaryActionPreference(row: OpenItemDecisionRow): OpenItemAction[] {
   const sourceJob = sourceJobForOpenItem(doorInputForRow(row));
   const owner = row.assignee === 'OWNER';
+  // §10.8: what this item asks the owner for is the Accept.
+  if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') return ['ACCEPT'];
   if (owner) return ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'REVIEW', 'ANSWER', 'RESUME'];
   if (row.kind === 'TASK_FAILED') return ['RETRY', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
   if (row.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
@@ -435,6 +445,17 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   // §4.6 X-E5's card: the one sentence the contract spells for this kind, byte for byte.
   if (row.kind === 'LANDING_LEASE_EXPIRED') {
     return 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.';
+  }
+  // §10.7: the branch is the one the item's title names — its line, from the payload it was opened
+  // with — and the doors are the ones both holders' cells have.
+  if (row.kind === 'LANDING_UNOBSERVED') {
+    return `This task’s work is not on ${landingLineOf(row.payload) ?? main} yet — record the commit that carries it, `
+      + 'or send the task back to push it.';
+  }
+  if (row.kind === 'LANDED_WITHOUT_CONFIRMATION') {
+    const target = filled((row.payload as { targetBranch?: unknown } | null | undefined)?.targetBranch);
+    return `This work reached ${target ?? main} without your confirmation — accept it, or use Chat about this `
+      + 'to have the coordinator file a task that reverts it.';
   }
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
     return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
@@ -826,6 +847,12 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    four facts `resolveByFact`'s first statement answers a failure with — `TASK_DONE`,
  *    `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` — read off the same rows, so a failure whose task
  *    moved on is owed by nobody and an edge that missed it leaves nothing in front of anybody;
+ *  - a `LANDING_UNOBSERVED` (§10.7), while its task is still DONE, not replaced, not declared
+ *    codeless and still NOT_KNOWN (§1.4, `taskLandingSql`): the complement of the endings
+ *    `resolveByFact` and the landing edge write — `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED`,
+ *    `CODELESS`, `LANDED`;
+ *  - a `LANDED_WITHOUT_CONFIRMATION` (§10.7), always — until the owner presses Accept — unless its
+ *    task was cancelled or replaced, the two facts `resolveByFact` answers it with;
  *  - anything else — a question, a pause, a request — while it is open: what answers those is a
  *    person, or a fact this predicate has no row for.
  *
@@ -838,7 +865,20 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
   const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
+  const notKnown = Prisma.raw(`(${taskLandingSql('owed_task')}) = 'NOT_KNOWN'`);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" = 'DONE'
+           AND owed_task."superseded_by_task_id" IS NULL
+           AND owed_task."codeless" = false
+           AND ${notKnown})
+      WHEN ${item}."kind" = 'LANDED_WITHOUT_CONFIRMATION' THEN (${item}."task_id" IS NULL OR EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" <> 'CANCELLED'
+           AND owed_task."superseded_by_task_id" IS NULL))
       WHEN ${item}."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
         SELECT 1 FROM "project_integration_job" owed_job
          WHERE owed_job."id" = ${item}."integration_job_id"
@@ -1298,6 +1338,249 @@ export async function recordDeliveryReview(
   });
   if (!created) return null;
   return { itemId: created.id, projectId: review.projectId, taskId: review.taskId, assignee };
+}
+
+/** A finished task's work not yet seen on its line (§10.7, 0453). */
+export const LANDING_UNOBSERVED_KIND = 'LANDING_UNOBSERVED' satisfies OpenItemKind;
+
+/** Work that reached main without the owner's confirmation (§10.7, 0453). */
+export const LANDED_WITHOUT_CONFIRMATION_KIND = 'LANDED_WITHOUT_CONFIRMATION' satisfies OpenItemKind;
+
+/**
+ * Why a `LANDING_UNOBSERVED` was opened (§10.7's payload `reason`): the observation did not see the
+ * delivered commit on the line (O-R4, `NOT_ON_LINE`), or saw its changes there as other commits
+ * (`APPLIED_AS_OTHER_COMMITS`); the branch carried no commits of its own while a session reported
+ * work (O-L7, `WORK_ELSEWHERE`); or the delivered identity could not be frozen (O-T1,
+ * `IDENTITY_UNKNOWN`).
+ */
+export const LANDING_UNOBSERVED_REASONS = [
+  'NOT_ON_LINE',
+  'APPLIED_AS_OTHER_COMMITS',
+  'WORK_ELSEWHERE',
+  'IDENTITY_UNKNOWN',
+] as const;
+export type LandingUnobservedReason = (typeof LANDING_UNOBSERVED_REASONS)[number];
+
+/** What the transaction that saw a finished task's work missing from its line knows about it. */
+export interface LandingUnobserved {
+  taskId: string;
+  reason: LandingUnobservedReason;
+  /** The delivered commit (`task.delivered_sha`); null only when the identity is unknown, which
+   *  keys the item by `identity` instead. */
+  deliveredSha: string | null;
+  /** Its fork point (`delivered_base_sha`). */
+  baseSha?: string | null;
+  /** The branch the work ended on (`delivered_branch`). */
+  branch?: string | null;
+  /** The work session the identity was taken from; the task's `delivered_session_id` when omitted. */
+  sessionId?: string | null;
+  /** The two tips the observation read (`upstream_sha`, `target_sha_before`), and when. */
+  observedUpstreamSha?: string | null;
+  observedLineSha?: string | null;
+  observedAt?: Date | null;
+  /** The OBSERVE_LANDING job whose result opened it, when one did. */
+  jobId?: string | null;
+}
+
+/** One item per delivered commit of a task (§10.7): `LU:<taskId>:<deliveredSha>`, or
+ *  `LU:<taskId>:identity` while there is no commit to name. */
+export function landingUnobservedKey(taskId: string, deliveredSha: string | null): string {
+  return `LU:${taskId}:${deliveredSha ?? 'identity'}`;
+}
+
+/** The line a `LANDING_UNOBSERVED` names, by its short name: its payload's integration ref. */
+export function landingLineOf(payload: unknown): string | null {
+  const ref = filled((payload as { integrationRef?: unknown } | null | undefined)?.integrationRef);
+  return ref ? branchName(ref) : null;
+}
+
+/**
+ * Open the item for a finished task whose work is not on its line, in the transaction that found it
+ * so (§10.7): the observation's result (O-R4, O-R2 / O-L7) or the DONE that could not freeze the
+ * identity (O-T1).
+ *
+ * Its assignee is `DELIVERY_REVIEW`'s rule: the coordinator, when the project is Automatic and has a
+ * conversation that is not over (`conversationIsOver` — one that is only down keeps it); otherwise the
+ * owner, from birth. A coordinator's item escalates on the project's window like every other; the
+ * caller delivers it after the commit (`ProjectOpenItemService.deliverForTasks`), which is also what
+ * tells the owner when it is theirs.
+ *
+ * Its title names the line by its short name — the integration line, which is upstream on a `MAIN`
+ * line — and its payload is §10.7's, every key written. Returns null when the partial unique index
+ * already holds the key (the same delivered commit seen again), and when there is nothing to open:
+ * a task no project owns, or a project with no line for work to be on.
+ */
+export async function recordLandingUnobserved(
+  tx: Prisma.TransactionClient,
+  input: LandingUnobserved,
+): Promise<RecordedOpenItem | null> {
+  const task = await tx.task.findUnique({
+    where: { id: input.taskId },
+    select: { ownerId: true, projectId: true, title: true, deliveredSessionId: true },
+  });
+  if (!task?.projectId) return null;
+  const project = await tx.project.findUnique({
+    where: { id: task.projectId },
+    select: {
+      coordinatorEnabled: true,
+      coordinatorSessionId: true,
+      exceptionEscalationSeconds: true,
+      coordinatorSession: { select: SESSION_ENDING_SELECT },
+    },
+  });
+  const codebase = await tx.projectCodebase.findFirst({
+    where: { projectId: task.projectId, slot: 'primary' },
+    select: { upstreamRef: true, integrationRef: true },
+  });
+  if (!project || !codebase) return null;
+
+  const coordinator = project.coordinatorEnabled && project.coordinatorSessionId
+    ? project.coordinatorSession
+    : null;
+  const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
+    !coordinator ? ['OWNER', 'NO_COORDINATOR']
+      : conversationIsOver(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+        : ['COORDINATOR', 'DEFAULT'];
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: task.projectId,
+      ownerId: task.ownerId,
+      kind: LANDING_UNOBSERVED_KIND,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee,
+      assigneeReason,
+      taskId: input.taskId,
+      sessionId: input.sessionId ?? task.deliveredSessionId ?? null,
+      dedupeKey: landingUnobservedKey(input.taskId, input.deliveredSha),
+      title: `Not on ${branchName(codebase.integrationRef)} yet: ${task.title}`,
+      payload: {
+        reason: input.reason,
+        deliveredSha: input.deliveredSha,
+        baseSha: input.baseSha ?? null,
+        branch: input.branch ?? null,
+        upstreamRef: codebase.upstreamRef,
+        integrationRef: codebase.integrationRef,
+        observedUpstreamSha: input.observedUpstreamSha ?? null,
+        observedLineSha: input.observedLineSha ?? null,
+        observedAt: input.observedAt?.toISOString() ?? null,
+        jobId: input.jobId ?? null,
+      },
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: assignee === 'COORDINATOR'
+        ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
+        : null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+  return { itemId: created.id, projectId: task.projectId, taskId: input.taskId, assignee };
+}
+
+/**
+ * §10.7 O-R1's ending for `LANDING_UNOBSERVED`: these tasks now have a landing receipt, so what was
+ * open about their work not being on the line is answered — RESOLVED / LANDED, by the platform, in
+ * the transaction that wrote the receipt.
+ *
+ * Called by every writer of a receipt (`MergeReceiptService`: the agent's and the owner's
+ * `merge_receipt`, the Merge button's result, and the platform's landing, which is J-T5's), after
+ * the receipt. Only an item whose task's landing is now known (§1.4, `taskLandingSql`) is closed: a
+ * receipt on some branch that is not this project's line says nothing about it, and the item stays.
+ * Returns how many it closed.
+ */
+export async function resolveLandingUnobservedOnLanding(
+  tx: Pick<Prisma.TransactionClient, '$executeRaw'>,
+  taskIds: ReadonlyArray<string | null | undefined>,
+): Promise<number> {
+  const ids = [...new Set(taskIds.filter((id): id is string => !!id))];
+  if (ids.length === 0) return 0;
+  return tx.$executeRaw(Prisma.sql`
+    UPDATE "project_open_item" item
+       SET "state" = 'RESOLVED',
+           "resolution" = 'LANDED',
+           "resolved_at" = now(),
+           "resolved_by" = 'PLATFORM',
+           "updated_at" = now()
+      FROM "task" landed_task
+     WHERE item."task_id" = landed_task."id"
+       AND item."kind" = ${LANDING_UNOBSERVED_KIND}
+       AND item."state" = 'OPEN'
+       AND landed_task."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+       AND (${Prisma.raw(taskLandingSql('landed_task'))}) <> 'NOT_KNOWN'`);
+}
+
+/** The receipt a `LANDED_WITHOUT_CONFIRMATION` is about (§10.6 O-R3). */
+export interface LandedWithoutConfirmation {
+  taskId: string;
+  receiptId: string;
+}
+
+/** One item per receipt of a task (§10.7): `UL:<taskId>:<receiptId>`. */
+export function landedWithoutConfirmationKey(taskId: string, receiptId: string): string {
+  return `UL:${taskId}:${receiptId}`;
+}
+
+/**
+ * Open the owner's item about work that reached main without their confirmation, in the transaction
+ * that recorded it (§10.6 O-R3, §10.5 O-L6): which receipts qualify is the caller's to judge.
+ *
+ * The owner's from birth (`assignee_reason = DEFAULT`), like a merge card and for the same reason —
+ * it is a question of authority, and no conversation can answer it for them — so it has no clock
+ * (`escalate_at`, `remind_at` NULL) and is never delivered to a coordinator. It is not one of the
+ * four things the owner's phone, badge and project list count (§7.6 V12/V13, `ownerItemKind`): it
+ * is drawn among their open items, where Accept ends it (`ProjectOpenItemService.acceptOpenItem`).
+ *
+ * Its payload is that receipt's facts (§10.7), its title the branch the receipt landed on. Returns
+ * null when the key is already held, and when the receipt is not this task's or the task is in no
+ * project.
+ */
+export async function recordLandedWithoutConfirmation(
+  tx: Prisma.TransactionClient,
+  input: LandedWithoutConfirmation,
+): Promise<RecordedOpenItem | null> {
+  const receipt = await tx.sessionMergeReceipt.findUnique({
+    where: { id: input.receiptId },
+    select: { taskId: true, sessionId: true, recordedBy: true, targetBranch: true, sourceSha: true, detail: true },
+  });
+  const task = await tx.task.findUnique({
+    where: { id: input.taskId },
+    select: { ownerId: true, projectId: true, title: true },
+  });
+  if (!receipt || receipt.taskId !== input.taskId || !task?.projectId) return null;
+  const detail = receipt.detail && typeof receipt.detail === 'object' && !Array.isArray(receipt.detail)
+    ? receipt.detail as { observed?: unknown }
+    : {};
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: task.projectId,
+      ownerId: task.ownerId,
+      kind: LANDED_WITHOUT_CONFIRMATION_KIND,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee: 'OWNER' satisfies OpenItemAssignee,
+      assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+      taskId: input.taskId,
+      sessionId: receipt.sessionId,
+      dedupeKey: landedWithoutConfirmationKey(input.taskId, input.receiptId),
+      title: `Reached ${branchName(receipt.targetBranch)} without your confirmation: ${task.title}`,
+      payload: {
+        receiptId: input.receiptId,
+        recordedBy: receipt.recordedBy,
+        targetBranch: receipt.targetBranch,
+        sourceSha: receipt.sourceSha,
+        observed: detail.observed === true,
+      },
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+  return { itemId: created.id, projectId: task.projectId, taskId: input.taskId, assignee: 'OWNER' };
 }
 
 /** What the coordinator's rerun of a failure carries onto the items it is handling (§4.7 H1). */
@@ -2232,6 +2515,9 @@ function openItemBody(item: OpenItemMessageSource): string {
   if (item.kind === DELIVERY_REVIEW_KIND && item.taskId) {
     return deliveryReviewMessage(item, projectId, payload, notice, doorNames);
   }
+  if (item.kind === LANDING_UNOBSERVED_KIND && item.taskId) {
+    return landingUnobservedMessage(item, projectId, payload, notice, doorNames);
+  }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
     return `From Orbit · exception item: ${item.title}\n\n`
       + `Project ${projectId} has an exception for you to handle. Item id: ${uuidToBase62(item.id)}.\n\n`
@@ -2256,6 +2542,85 @@ function openItemBody(item: OpenItemMessageSource): string {
     + `For why it failed, first read the task’s comments and its session with ${doorNames.taskGetMcp} (taskId: ${taskId}); do not guess from this message.\n`
     + 'When the task runs again, is superseded, is cancelled or is done, the platform closes this item itself; you do not need to report back. '
     + `${handClose}\n\n`
+    + notice;
+}
+
+/** What each reading of a `LANDING_UNOBSERVED` says happened (§10.7's `reason`). */
+const LANDING_UNOBSERVED_READING: Readonly<Record<LandingUnobservedReason, string>> = {
+  NOT_ON_LINE: 'Orbit looked at the line and did not find the commit it delivered there.',
+  APPLIED_AS_OTHER_COMMITS: 'Orbit looked at the line and did not find the commit it delivered, but every change '
+    + 'that commit makes is already there: the work went in as other commits (rebased, squashed or cherry-picked).',
+  WORK_ELSEWHERE: 'The branch it delivered carries no commits of its own, yet a session of it reported work: '
+    + 'the work is somewhere other than that branch.',
+  IDENTITY_UNKNOWN: 'Orbit could not tell which commit it delivered: the session it finished in did not report '
+    + 'the tip of the branch the work ended on.',
+};
+
+/**
+ * What the coordinator is told about a finished task's work that is not on its line (§10.7, §10.8).
+ *
+ * It says what was seen, and that the item ends with a fact about the task rather than by hand. Every
+ * executable it names is one of this cell's own doors, read from the table like the rest of the prose:
+ * the receipt that names the commit carrying the work, the send-back, the codeless declaration, the
+ * cancel and the supersession, and the hand-over and the question to the owner. Read only from columns
+ * that never change, so the same key words the same text (G6).
+ */
+function landingUnobservedMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: unknown,
+  notice: string,
+  doors: OpenItemDoorMessageNames,
+): string {
+  const row = (payload ?? {}) as {
+    reason?: string; deliveredSha?: string | null; baseSha?: string | null; branch?: string | null;
+    upstreamRef?: string | null; observedUpstreamSha?: string | null; observedLineSha?: string | null;
+    observedAt?: string | null;
+  };
+  const taskId = uuidToBase62(item.taskId!);
+  const line = landingLineOf(payload) ?? 'the line';
+  const upstream = filled(row.upstreamRef) ? branchName(row.upstreamRef!) : null;
+  const reading = LANDING_UNOBSERVED_READING[row.reason as LandingUnobservedReason]
+    ?? 'Orbit has not seen its work on the line.';
+  const delivered = filled(row.deliveredSha)
+    ? `It delivered ${row.deliveredSha}${filled(row.baseSha) ? ` (forked from ${row.baseSha})` : ''}`
+      + `${filled(row.branch) ? ` on ${row.branch}` : ''}.`
+    : null;
+  const tips = [
+    upstream && upstream !== line && filled(row.observedUpstreamSha) ? `${upstream} at ${row.observedUpstreamSha!.slice(0, 12)}` : null,
+    filled(row.observedLineSha) ? `${line} at ${row.observedLineSha!.slice(0, 12)}` : null,
+  ].filter((tip): tip is string => tip != null);
+  const observed = filled(row.observedAt) && tips.length > 0
+    ? `When Orbit looked (${row.observedAt}), it saw ${tips.join(' and ')}.`
+    : null;
+  const answers = [
+    doors.mergeReceiptMcp == null ? null
+      : `The work is on ${line} as other commits: record the commit on ${line} that carries it with ${doors.mergeReceiptMcp} `
+        + `(result: ALREADY_MERGED, sessionId: the task’s work session, sourceSha: that commit, targetBranch: ${line}). `
+        + 'The item closes as landed, and the tasks waiting on it start.',
+    doors.taskReopenMcp == null ? null
+      : `The work never reached ${line}: send the task back with ${doors.taskReopenMcp} (taskId: ${taskId}), saying `
+        + (row.reason === 'WORK_ELSEWHERE'
+          ? 'its work has to be committed on the branch it delivers'
+          : `it has to push its commits to ${line}`)
+        + '. The item closes, and the next DONE freezes the work again and looks for it.',
+    doors.taskUpdateMcp == null ? null
+      : `The task produces no code after all: declare it codeless with ${doors.taskUpdateMcp} (codeless: true, `
+        + 'codelessReason: why). A task with commits of its own is refused, and its commits land the ordinary way.',
+    doors.taskUpdateMcp == null || doors.taskCreateMcp == null ? null
+      : `The work should not land: cancel the task (${doors.taskUpdateMcp} to CANCELLED), or file a task that supersedes it `
+        + `(${doors.taskCreateMcp} with supersedesTaskId).`,
+  ].filter((answer): answer is string => answer != null);
+  return `From Orbit · exception item: ${item.title}\n\n`
+    + `Task ${taskId} in project ${projectId} is DONE, but its work is not on ${line} yet. ${reading}\n`
+    + lines(delivered, observed)
+    + `${delivered || observed ? '\n' : ''}`
+    + `Tasks that depend on it do not start until its landing is recorded.\n\n`
+    + 'This item is yours. It ends with a fact about the task, never by hand: the platform refuses to close it as handled '
+    + `while the work is not on the line.${doors.taskGetMcp == null ? '' : ` Read the task first (${doors.taskGetMcp}, taskId: ${taskId}).`} `
+    + 'Then choose one:\n'
+    + `${answers.map((answer) => `- ${answer}`).join('\n')}\n`
+    + `${askOwnerFirst(projectId, uuidToBase62(item.id), doors) ?? ''}\n\n`
     + notice;
 }
 
