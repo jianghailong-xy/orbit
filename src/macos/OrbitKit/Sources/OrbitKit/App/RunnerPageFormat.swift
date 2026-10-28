@@ -908,4 +908,15 @@ public enum RunnerPageFormat {
         guard characters.count == 10, characters.allSatisfy({ $0.isASCII }) else { return nil }
         return "\(characters.prefix(5))-\(characters.suffix(5))"
     }
+
+    /// The notice under a request whose name a runner of this account already has, as the web's
+    /// /enroll page words it: when that runner was last online, if the server says, then what
+    /// re-registering does.
+    public static func deviceNameTakenDetail(_ device: DeviceInfo, now: Date) -> String {
+        guard let seen = device.existingLastSeenAt, !seen.isEmpty else {
+            return RunnerPageCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL
+        }
+        let lastOnline = RunnerPageCopy.runnerDeviceLastOnline(when: RunnerAttention.ago(seen, nowMs: nowMs(now)))
+        return "\(lastOnline) \(RunnerPageCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL)"
+    }
 }

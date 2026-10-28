@@ -117,6 +117,26 @@ public enum RunnerPageCopy {
         "orbit register prints a code there. Enter it to approve the machine from this phone — its "
         + "name and hostname show before you confirm."
     public static let RUNNER_APPROVE = "Approve"
+    /// Approve, for a request whose name a runner of this account already has.
+    public static let RUNNER_REREGISTER = "Re-register"
+    public static let RUNNER_DENY = "Deny"
+
+    // What became of a request looked up by its code, and a runner already of its name: the web
+    // /enroll page's words.
+    public static let RUNNER_DEVICE_APPROVED = "Machine registered"
+    public static func runnerDeviceApprovedDetail(name: String) -> String {
+        "\(name) is on your account. Go back to the terminal — it finishes setting up by itself."
+    }
+    public static let RUNNER_DEVICE_DENIED = "Request denied"
+    public static let RUNNER_DEVICE_DENIED_DETAIL =
+        "Nothing was added to your account. orbit register in that terminal stops and says the request "
+        + "was denied."
+    public static func runnerDeviceNameTaken(name: String) -> String { "\"\(name)\" is already on your account" }
+    /// When the runner already of that name last checked in: `3d ago`.
+    public static func runnerDeviceLastOnline(when: String) -> String { "Last online \(when)." }
+    public static let RUNNER_DEVICE_NAME_TAKEN_DETAIL =
+        "Approving gives it a new credential and the old one stops working; its workspaces and history "
+        + "stay. A different computer with the same name? Deny, then run orbit register --name <new-name> on it."
 
     public static func runnerInstallCommandUnix(origin: String) -> String {
         "curl -fsSL \(origin)/install.sh | bash"

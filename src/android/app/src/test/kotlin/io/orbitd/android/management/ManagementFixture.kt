@@ -95,6 +95,14 @@ object ManagementFixture {
      * as a runner's answer kept on the key would. */
     @Volatile var keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
     @Volatile var onKeyCheck: () -> Unit = {}
+    /** GET runners/device/:code for [DEVICE_CODE], the request `orbit register` made, as the server reads it. POST …/approve and …/deny
+     * decide a PENDING one; deciding one already decided the other way is refused 409 in the server's words. [deviceGate], while set,
+     * holds a decision until it completes. */
+    const val DEVICE_CODE = "ABCDE-FGH23"
+    @Volatile var deviceStatus = "PENDING"
+    @Volatile var deviceConflict = false
+    @Volatile var deviceLastSeen: String? = null
+    @Volatile var deviceGate: CompletableDeferred<Unit>? = null
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -107,6 +115,7 @@ object ManagementFixture {
         runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
         defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
+        deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
@@ -167,6 +176,20 @@ object ManagementFixture {
         "keys":[{"id":"K1","label":"Team key","fingerprint":"sk-…9XYZ","state":"ACTIVE","enabled":true,"contributor":{"userId":"$ME","name":"Fixture","you":true},
           "usage":{"inputTokens":0,"outputTokens":0,"costUsd":0}}]}"""
 
+    private fun device() = """{"userCode":"$DEVICE_CODE","name":"devbox","hostname":"vmi3337007","labels":[],"maxConcurrent":16,
+        "status":"$deviceStatus","nameConflict":$deviceConflict,"existingLastSeenAt":${deviceLastSeen?.let { "\"$it\"" } ?: "null"},
+        "runnerId":${if (deviceStatus == "APPROVED") "\"$RUNNER_TWO\"" else "null"},"createdAt":"${now.minusSeconds(19)}","expiresAt":"${now.plusSeconds(581)}"}"""
+    /** runners.service.ts `deviceDecidedAlready`: the same decision again is answered as it stands; the other way is a 409. */
+    private suspend fun decide(wanted: String): ApiResponse {
+        deviceGate?.await()
+        if (deviceStatus == "PENDING") deviceStatus = wanted
+        return when (deviceStatus) {
+            wanted -> ok(if (wanted == "APPROVED") """{"ok":true,"name":"devbox","replaced":$deviceConflict,"runnerId":"$RUNNER_TWO"}""" else """{"ok":true,"name":"devbox"}""")
+            "DENIED" -> fail(409, "This registration request was denied — run `orbit register` again")
+            else -> fail(409, "This registration request was already approved")
+        }
+    }
+
     private fun ok(body: String) = ApiResponse(200, body.encodeToByteArray())
     private fun fail(status: Int, message: String) = ApiResponse(status, """{"statusCode":$status,"message":"$message"}""".encodeToByteArray())
 
@@ -212,6 +235,9 @@ object ManagementFixture {
             "runners/$RUNNER/login/code" -> { loginBodies += body(); loginRelay = codeSent; onCode(); ok(loginRelay) }
             "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
             "runners/$RUNNER/install" -> { installBodies += body(); ok("""{"status":"pending","engine":${body()["engine"]},"mode":"install"}""") }
+            "runners/device/$DEVICE_CODE" -> ok(device())
+            "runners/device/$DEVICE_CODE/approve" -> decide("APPROVED")
+            "runners/device/$DEVICE_CODE/deny" -> decide("DENIED")
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
                 shareFails -> fail(503, "share read failed")

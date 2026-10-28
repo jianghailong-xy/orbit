@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type DeviceEnrollment } from '../api';
 import { meQuery } from '../lib/queries';
+import * as runnerCopy from '../lib/runnerCopy';
 
 /**
  * /enroll?code= — the browser half of `orbit register`, in a real document over what
@@ -262,6 +263,43 @@ describe('/enroll', { timeout: 30_000 }, () => {
       const page = await open(`?code=${CODE}`);
       expect(page.querySelector('h1')?.textContent, status).toBe(says);
       expect(button(page, 'Approve'), status).toBeUndefined();
+      await close();
+    }
+  });
+
+  // The native Add Runner dialogs approve and deny by code with this page's words, which they hold one to
+  // one with runnerCopy.ts (OrbitKit's RunnerPageCopy, Android's RunnerCopy): this holds runnerCopy.ts to
+  // what the page says.
+  it('says what runnerCopy.ts gives the native Add Runner dialogs, word for word', async () => {
+    const said = (element: Element | null | undefined) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment());
+    const pending = await open(`?code=${CODE}`);
+    expect(button(pending, runnerCopy.RUNNER_APPROVE)).toBeTruthy();
+    expect(button(pending, runnerCopy.RUNNER_DENY)).toBeTruthy();
+    await close();
+
+    for (const [status, title, detail] of [
+      ['APPROVED', runnerCopy.RUNNER_DEVICE_APPROVED, runnerCopy.runnerDeviceApprovedDetail('devbox')],
+      ['DENIED', runnerCopy.RUNNER_DEVICE_DENIED, runnerCopy.RUNNER_DEVICE_DENIED_DETAIL],
+    ] as const) {
+      vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment({ status, runnerId: status === 'APPROVED' ? RUNNER_ID : null }));
+      const page = await open(`?code=${CODE}`);
+      expect(said(page.querySelector('h1')), status).toBe(title);
+      expect(said(page.querySelector('.login-subtitle')), status).toBe(detail);
+      await close();
+    }
+
+    for (const lastSeen of [new Date(Date.now() - 3 * 86_400_000).toISOString(), null]) {
+      vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment({ nameConflict: true, existingLastSeenAt: lastSeen }));
+      const page = await open(`?code=${CODE}`);
+      expect(said(page.querySelector('.orbit-alert-title'))).toBe(runnerCopy.runnerDeviceNameTaken('devbox'));
+      expect(said(page.querySelector('.orbit-alert-description'))).toBe(
+        lastSeen
+          ? `${runnerCopy.runnerDeviceLastOnline('3d ago')} ${runnerCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL}`
+          : runnerCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL,
+      );
+      expect(button(page, runnerCopy.RUNNER_REREGISTER)).toBeTruthy();
+      expect(button(page, runnerCopy.RUNNER_DENY)).toBeTruthy();
       await close();
     }
   });

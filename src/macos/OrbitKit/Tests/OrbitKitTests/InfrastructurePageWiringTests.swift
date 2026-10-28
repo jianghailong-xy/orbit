@@ -247,13 +247,50 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "let result = await runners.device(userCode)",
                       "LabeledContent(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, value: host)",
                       "if device.nameConflict == true {",
-                      "let failure = await runners.approveDevice(userCode)"] {
+                      "failure = await runners.approveDevice(userCode)"] {
             XCTAssertTrue(sheet.contains(piece), "the sheet lost \(piece)")
         }
         try assertInOrder(sheet, ["commandSection", "waitSection", "deviceSection"], "the sheet's order")
         let model = code(try appSource("RunnersModel.swift"))
         XCTAssertTrue(model.contains("api.deviceEnrollment(userCode: userCode)"))
         XCTAssertTrue(model.contains("self.api.approveDevice(userCode: userCode)"))
+    }
+
+    /// The web /enroll page's Deny and its words: a request still to decide offers Deny beside Approve,
+    /// both wait while either press is in flight, and a request approved or denied — read so, or decided
+    /// here — says what became of it in place of the presses. A refusal is said where failures show.
+    func testTheAddRunnerSheetDeniesAndSaysWhatBecameOfTheRequest() throws {
+        let sheet = code(try appSource("Views/AddRunnerSheet.swift"))
+        let rows = try slice(sheet, from: "@ViewBuilder private func deviceRows(", to: "private var command: String {")
+        try assertInOrder(rows, ["if approved {",
+                                 "Label(RunnerPageCopy.RUNNER_DEVICE_APPROVED, systemImage: \"checkmark.circle.fill\")",
+                                 "Text(RunnerPageCopy.runnerDeviceApprovedDetail(name: name))",
+                                 "} else if denied {",
+                                 "Label(RunnerPageCopy.RUNNER_DEVICE_DENIED, systemImage: \"xmark.circle.fill\")",
+                                 "runnerStyledText(RunnerPageCopy.RUNNER_DEVICE_DENIED_DETAIL, code: [\"orbit register\"])",
+                                 "} else {",
+                                 "Text(RunnerPageCopy.runnerDeviceNameTaken(name: name))",
+                                 "RunnerPageFormat.deviceNameTakenDetail(device, now: Date())",
+                                 "decide(approve: true)",
+                                 "RunnerPageCopy.RUNNER_REREGISTER : RunnerPageCopy.RUNNER_APPROVE",
+                                 ".disabled(deciding)",
+                                 "Button(RunnerPageCopy.RUNNER_DENY) { decide(approve: false) }",
+                                 ".disabled(deciding)"],
+                          "the request's rows")
+        for old in ["is now registered", "Re-register machine", "re-issues its credential", "already registered on your account"] {
+            XCTAssertFalse(sheet.contains(old), "the sheet still says the old page's \(old)")
+        }
+        let decide = try slice(sheet, from: "private func decide(approve: Bool) {", to: "private func open(_ runner: Runner) {")
+        try assertInOrder(decide, ["deciding = true", "message = nil",
+                                   "failure = await runners.approveDevice(userCode)",
+                                   "failure = await runners.denyDevice(userCode)",
+                                   "deciding = false", "guard lookedUp == userCode else { return }",
+                                   "message = failure", "approved = true", "denied = true"],
+                          "a press")
+        let lookUp = try slice(sheet, from: "private func lookUp(_ userCode: String) {", to: "private func decide(")
+        try assertInOrder(lookUp, ["denied = false", "approved = info.status == \"APPROVED\"",
+                                   "denied = info.status == \"DENIED\""], "a lookup")
+        XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("self.api.denyDevice(userCode: userCode)"))
     }
 
     /// The list's own move and delete, a move saved as the web list's drag order is, and a delete
