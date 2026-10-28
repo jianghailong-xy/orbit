@@ -2529,7 +2529,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger or type is
       // created, replaced or dropped, so it names none of the six preserved objects and is not another writer of the
       // DONE fence. No INSERT, UPDATE or DELETE: the table starts empty, and each process writes its own row once it runs.
-      '0449_apiserver_process'],
+      '0449_apiserver_process',
+      // What a mass disconnection of runners leaves behind (0450, realtime/reaper.service.ts, runners/runner-presence.ts):
+      // one nullable TIMESTAMP(3) column on the UNLOGGED `runner_presence`, `lost_at`, added with IF NOT EXISTS and no
+      // default, and one new table, `runner_mass_disconnect`, created with IF NOT EXISTS — a BIGSERIAL key, two TIMESTAMP(3)
+      // ends of a span, two counts, two timestamps, an index on `lost_to`, no foreign key — written and read by the reaper
+      // alone. Read against every claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it names none of the six preserved objects and is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: `lost_at` reads NULL and the table starts empty.
+      '0450_runner_mass_disconnect'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
