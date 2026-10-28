@@ -95,6 +95,8 @@ final class EngineErrorsTests: XCTestCase {
     func testUsageLimitMustOpenTheReply() {
         XCTAssertTrue(EngineErrors.isUsageLimitErrorText(
             "You've hit your session limit · resets 6:20pm (Europe/Berlin)"))
+        XCTAssertTrue(EngineErrors.isUsageLimitErrorText(
+            "You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)"))
         XCTAssertTrue(EngineErrors.isUsageLimitErrorText("You've hit your weekly limit · resets 1pm (UTC)"))
         XCTAssertTrue(EngineErrors.isUsageLimitErrorText(
             "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage"))

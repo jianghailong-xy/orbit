@@ -14,6 +14,7 @@ export type QuotaWindowKind = 'FIVE_HOUR' | 'WEEKLY' | 'OTHER';
 export function quotaWindowKind(message: string): QuotaWindowKind {
   const m = message.toLowerCase();
   if (m.includes('hit your session limit')) return 'FIVE_HOUR';
+  if (m.includes('hit your 5-hour limit')) return 'FIVE_HOUR';
   if (m.includes('hit your weekly limit')) return 'WEEKLY';
   return 'OTHER';
 }

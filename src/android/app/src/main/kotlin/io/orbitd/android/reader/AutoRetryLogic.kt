@@ -159,7 +159,7 @@ internal object AutoRetryLogic {
      * limit on the Orbit session). Codex names no window and falls through. */
     fun quotaWindow(message: String): Pair<String, String> {
         val m = message.lowercase()
-        if ("hit your session limit" in m) return "5-hour limit reached" to "The 5-hour quota"
+        if ("hit your session limit" in m || "hit your 5-hour limit" in m) return "5-hour limit reached" to "The 5-hour quota"
         if ("hit your weekly limit" in m) return "Weekly limit reached" to "The weekly quota"
         return "Usage limit reached" to "The quota"
     }

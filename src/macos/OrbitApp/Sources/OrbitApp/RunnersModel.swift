@@ -198,6 +198,12 @@ final class RunnersModel {
         await press { try await self.api.approveDevice(userCode: userCode) }
     }
 
+    /// Nothing is added, and `orbit register` on that machine stops.
+    @discardableResult
+    func denyDevice(_ userCode: String) async -> String? {
+        await press { try await self.api.denyDevice(userCode: userCode) }
+    }
+
     private func press(_ op: @escaping () async throws -> Void) async -> String? {
         do {
             try await op()

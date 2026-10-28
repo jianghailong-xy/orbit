@@ -16,6 +16,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   StreamableFile,
   UploadedFile as UploadedFileParam,
@@ -23,7 +24,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
@@ -377,6 +378,7 @@ import {
 import { AdmitsLinkCallItself, readAdmittedLinkRunner, RunnerAuthGuard, runnerLinkTokenRevoked } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
+import { visitorAddress } from '../shared/public-surface.guard';
 import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
 import {
   heartbeatAnswerHandsOut,
@@ -1533,13 +1535,16 @@ export class RunnerApiController {
     return { runnerId: runner.id, runnerToken, name: runner.name };
   }
 
-  /** `orbit register` (no token) — open a device-login session for browser approval. */
+  /**
+   * `orbit register` (no token) — open a device-login session for browser approval, noting the
+   * address it came from for the approval page.
+   */
   @StaysOnHttps()
   @Post('device/start')
-  async deviceStart(@Body() dto: DeviceStartRequest): Promise<DeviceStartResponse> {
+  async deviceStart(@Body() dto: DeviceStartRequest, @Req() req: Request): Promise<DeviceStartResponse> {
     if (!dto?.name) throw new BadRequestException('name is required');
     const deviceCode = generateToken(32);
-    const userCode = await this.createDeviceSession(dto, deviceCode);
+    const userCode = await this.createDeviceSession(dto, deviceCode, visitorAddress(req) || null);
     return {
       deviceCode,
       userCode,
@@ -1579,7 +1584,7 @@ export class RunnerApiController {
   }
 
   /** Insert a device session, regenerating the short code on the rare collision. */
-  private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string): Promise<string> {
+  private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string, requesterIp: string | null): Promise<string> {
     const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
       const userCode = generateUserCode();
@@ -1595,6 +1600,7 @@ export class RunnerApiController {
             version: dto.version,
             agents: [],
             workDir: dto.workDir,
+            requesterIp,
             expiresAt,
           },
         });

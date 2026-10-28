@@ -2567,7 +2567,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object nor any of the six preserved triggers/functions is named, and no function, trigger, type, index or
       // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE
       // or DELETE: every stored session reads NULL.
-      '0454_session_merge_requested_by'],
+      '0454_session_merge_requested_by',
+      // Where an `orbit register` came from (0455, runner-api/runner-api.controller.ts deviceStart, runners/runners.service.ts
+      // getDeviceEnrollment): one nullable TEXT column on `device_enrollment`, `requester_ip`, added with IF NOT EXISTS, no
+      // default and no constraint — catalog-only. Only that table is altered, and it is not a preserved relation: no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
+      // named, and no function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored enrollment reads NULL.
+      '0455_device_enrollment_requester_ip'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

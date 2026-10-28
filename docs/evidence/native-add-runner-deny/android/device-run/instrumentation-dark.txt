@@ -1,0 +1,23 @@
+INSTRUMENTATION_STATUS: class=io.orbitd.android.management.AddRunnerDenyShotsTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+io.orbitd.android.management.AddRunnerDenyShotsTest:
+INSTRUMENTATION_STATUS: test=denyTheRequestAndTheDialogsOtherWords
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=io.orbitd.android.management.AddRunnerDenyShotsTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=denyTheRequestAndTheDialogsOtherWords
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 13.411
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1

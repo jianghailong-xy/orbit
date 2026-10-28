@@ -614,8 +614,14 @@ public struct DeviceInfo: Codable, Equatable, Sendable {
     public let hostname: String?
     public let labels: [String]?
     public let maxConcurrent: Int?
+    /// `PENDING`, `APPROVED` or `DENIED`.
     public let status: String?
     public let nameConflict: Bool?
+    /// When the runner already of that name last checked in; nil when there is none, or it never has.
+    public let existingLastSeenAt: String?
+    /// The runner an approval minted; nil until one did.
+    public let runnerId: String?
+    public let expiresAt: String?
 }
 
 /// POST /runners/:id/refresh-models acknowledges when the refresh was requested.

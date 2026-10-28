@@ -196,6 +196,11 @@ services:
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
       # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
+      # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),
+      # as addresses and CIDR ranges separated by commas or spaces (docs/configuration.md). The apiserver reads a
+      # visitor's own address through them from X-Forwarded-For, as the register approval page shows it; unset, a visitor
+      # is the address that connected to the gateway, which behind a proxy is the proxy's.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
       # session titles and filing the session under a few semantic tags. Session creation and
       # worktree branch generation never wait on it.

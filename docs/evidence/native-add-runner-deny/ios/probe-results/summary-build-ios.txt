@@ -1,0 +1,12 @@
+Test Case '-[ArdProbeUITests.ArdShotTests test1APendingRequestOffersDenyAndDenyingSaysNothingWasAdded]' started.
+Test Case '-[ArdProbeUITests.ArdShotTests test1APendingRequestOffersDenyAndDenyingSaysNothingWasAdded]' passed (158.718 seconds).
+Test Case '-[ArdProbeUITests.ArdShotTests test2ARequestAlreadyDeniedOpensDeniedWithNoApprove]' started.
+Test Case '-[ArdProbeUITests.ArdShotTests test2ARequestAlreadyDeniedOpensDeniedWithNoApprove]' passed (103.935 seconds).
+Test Case '-[ArdProbeUITests.ArdShotTests test3ARefusedApprovalSaysTheServersWords]' started.
+Test Case '-[ArdProbeUITests.ArdShotTests test3ARefusedApprovalSaysTheServersWords]' passed (66.042 seconds).
+Test Case '-[ArdProbeUITests.ArdShotTests test4ARunnerOfTheSameNameThenApproving]' started.
+Test Case '-[ArdProbeUITests.ArdShotTests test4ARunnerOfTheSameNameThenApproving]' passed (65.859 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 394.555 (394.564) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 394.555 (394.565) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 394.555 (394.567) seconds
+** TEST SUCCEEDED **

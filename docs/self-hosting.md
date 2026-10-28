@@ -122,6 +122,8 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 - terminate TLS in a reverse proxy or load balancer;
 - redirect HTTP to HTTPS;
 - forward the original host and protocol headers;
+- list the proxy's addresses (a CDN's published ranges) in `TRUSTED_PROXIES`, so Orbit sees each visitor's own address
+  rather than the proxy's ([configuration](configuration.md));
 - allow long-lived SSE responses without proxy buffering or a short idle timeout;
 - restrict database and control-plane ports so only the gateway can reach them;
 - set `PUBLIC_ORIGIN` to the exact external HTTPS origin and rebuild the web image.

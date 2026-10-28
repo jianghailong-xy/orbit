@@ -1305,6 +1305,10 @@ export interface DeviceEnrollment {
   labels: string[];
   maxConcurrent: number;
   status: 'PENDING' | 'APPROVED' | 'DENIED';
+  /** The address `orbit register` ran from, as the server reads it behind its proxies; null if not recorded. */
+  requesterIp: string | null;
+  /** This page was read from that same address, and it is a public one. */
+  sameNetwork: boolean;
   /** A runner of this name is already on the account, so approving re-issues its credential. */
   nameConflict: boolean;
   /** When that runner was last heard from; null without one, or before its first heartbeat. */

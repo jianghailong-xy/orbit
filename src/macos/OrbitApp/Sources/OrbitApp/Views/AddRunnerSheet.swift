@@ -5,8 +5,8 @@ import OrbitKit
 // — the web's RunnerRegisterGuide, built from this instance's own origin — to copy or share over to
 // that machine; then a wait on the runner list, as the web's guide waits, until a runner that wasn't
 // online comes online, and a way straight to it. Under that, for a machine with no browser: the code
-// `orbit register` prints there, looked up so its name and hostname show before it is approved from
-// here (the web's /enroll page, the same two routes).
+// `orbit register` prints there, looked up so its name and hostname show before it is approved or
+// denied from here (the web's /enroll page, the same three routes).
 
 struct AddRunnerSheet: View {
     @Environment(AppModel.self) private var model
@@ -24,9 +24,11 @@ struct AddRunnerSheet: View {
     @State private var lookedUp: String?
     @State private var device: DeviceInfo?
     @State private var looking = false
-    @State private var approving = false
+    /// Approve's or Deny's press is in flight: both wait for it.
+    @State private var deciding = false
     @State private var approved = false
-    /// Why the last lookup or approval didn't go through (`APIClient.failureReason`).
+    @State private var denied = false
+    /// Why the last lookup, approval or denial didn't go through (`APIClient.failureReason`).
     @State private var message: String?
 
     var body: some View {
@@ -140,7 +142,7 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// A machine with no browser: its code, what it asked to register as, and Approve.
+    /// A machine with no browser: its code, what it asked to register as, and Approve or Deny.
     @ViewBuilder private var deviceSection: some View {
         Section {
             LabeledContent(RunnerPageCopy.RUNNER_DEVICE_CODE) {
@@ -174,7 +176,7 @@ struct AddRunnerSheet: View {
     }
 
     /// The machine a code belongs to — its name, and its hostname when that says something else — and
-    /// the press that registers it (the web's /enroll page, in its words).
+    /// the presses that decide it, or what became of it (the web's /enroll page, in its words).
     @ViewBuilder private func deviceRows(_ device: DeviceInfo) -> some View {
         let name = device.name ?? ""
         LabeledContent("Runner", value: name)
@@ -185,25 +187,40 @@ struct AddRunnerSheet: View {
             LabeledContent("Labels", value: labels.joined(separator: ", "))
         }
         if approved {
-            Label("“\(name)” is now registered. Return to your terminal — it will continue automatically.",
-                  systemImage: "checkmark.circle.fill")
-                .foregroundStyle(RunnerInk.green)
+            VStack(alignment: .leading, spacing: 3) {
+                Label(RunnerPageCopy.RUNNER_DEVICE_APPROVED, systemImage: "checkmark.circle.fill")
+                    .font(.orbitListSubtitle.weight(.semibold))
+                Text(RunnerPageCopy.runnerDeviceApprovedDetail(name: name))
+                    .font(.orbitLabel)
+            }
+            .foregroundStyle(RunnerInk.green)
+        } else if denied {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(RunnerPageCopy.RUNNER_DEVICE_DENIED, systemImage: "xmark.circle.fill")
+                    .font(.orbitListSubtitle.weight(.semibold))
+                Text(runnerStyledText(RunnerPageCopy.RUNNER_DEVICE_DENIED_DETAIL, code: ["orbit register"]))
+                    .font(.orbitLabel)
+            }
+            .foregroundStyle(.secondary)
         } else {
             if device.nameConflict == true {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("This runner (“\(name)”) is already registered on your account.")
+                    Text(RunnerPageCopy.runnerDeviceNameTaken(name: name))
                         .font(.orbitListSubtitle.weight(.semibold))
-                    Text("Approving re-issues its credential. The old credential stops working; no duplicate runner is created.")
+                    Text(runnerStyledText(RunnerPageFormat.deviceNameTakenDetail(device, now: Date()),
+                                          code: ["orbit register --name <new-name>"]))
                         .font(.orbitLabel)
                 }
                 .foregroundStyle(RunnerInk.amber)
             }
             Button(role: device.nameConflict == true ? .destructive : nil) {
-                approve()
+                decide(approve: true)
             } label: {
-                Text(device.nameConflict == true ? "Re-register machine" : RunnerPageCopy.RUNNER_APPROVE)
+                Text(device.nameConflict == true ? RunnerPageCopy.RUNNER_REREGISTER : RunnerPageCopy.RUNNER_APPROVE)
             }
-            .disabled(approving)
+            .disabled(deciding)
+            Button(RunnerPageCopy.RUNNER_DENY) { decide(approve: false) }
+                .disabled(deciding)
         }
     }
 
@@ -265,6 +282,7 @@ struct AddRunnerSheet: View {
         lookedUp = userCode
         device = nil
         approved = false
+        denied = false
         message = nil
         looking = true
         Task {
@@ -275,23 +293,34 @@ struct AddRunnerSheet: View {
             case .success(let info):
                 device = info
                 approved = info.status == "APPROVED"
+                denied = info.status == "DENIED"
             case .failure(let failure):
                 message = failure.reason
             }
         }
     }
 
-    private func approve() {
+    /// Approve (or Re-register) or Deny. A refusal — the request decided the other way already — is
+    /// said in the server's words, and the request stays to decide.
+    private func decide(approve: Bool) {
         guard let runners = model.runners, let userCode = lookedUp else { return }
-        approving = true
+        deciding = true
         message = nil
         Task {
-            let failure = await runners.approveDevice(userCode)
-            approving = false
+            let failure: String?
+            if approve {
+                failure = await runners.approveDevice(userCode)
+            } else {
+                failure = await runners.denyDevice(userCode)
+            }
+            deciding = false
+            guard lookedUp == userCode else { return }
             if let failure {
                 message = failure
-            } else {
+            } else if approve {
                 approved = true
+            } else {
+                denied = true
             }
         }
     }

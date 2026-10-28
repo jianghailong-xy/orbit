@@ -1623,6 +1623,12 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("runners/device/\(userCode)/approve", body: Optional<Empty>.none)
     }
 
+    /// Deny it instead: nothing is added, and `orbit register` on that machine stops at its next poll.
+    /// Deciding a request already decided the other way is refused (409 `DEVICE_ENROLLMENT_DECIDED`).
+    public func denyDevice(userCode: String) async throws {
+        _ = try await postRaw("runners/device/\(userCode)/deny", body: Optional<Empty>.none)
+    }
+
     public func deviceEnrollment(userCode: String) async throws -> DeviceInfo {
         try await get("runners/device/\(userCode)")
     }

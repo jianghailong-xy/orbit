@@ -1,0 +1,6 @@
+    POST /api/runners/device/ABCDE-FGH23/deny body: 
+16:50:41 "POST /api/runners/device/ABCDE-FGH23/deny HTTP/1.1" 201 -
+    POST /api/runners/device/ABCDE-FGH23/approve body: 
+16:53:20 "POST /api/runners/device/ABCDE-FGH23/approve HTTP/1.1" 409 -
+    POST /api/runners/device/ABCDE-FGH23/approve body: 
+16:54:37 "POST /api/runners/device/ABCDE-FGH23/approve HTTP/1.1" 201 -

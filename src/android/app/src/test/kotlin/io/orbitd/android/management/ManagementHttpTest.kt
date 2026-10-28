@@ -59,6 +59,22 @@ class ManagementHttpTest {
         }
     }
 
+    /** Deny is Approve's sibling route, as iOS's `denyDevice` sends it; deciding a request already decided the other way is refused 409
+     * DEVICE_ENROLLMENT_DECIDED, and the dialog says the server's sentence. */
+    @Test fun denyingAMachineIsApprovesSiblingRouteAndARefusalKeepsTheServersWords() = runBlocking {
+        MockWebServer().use { server ->
+            val api = start(server)
+            server.enqueue(json("""{"ok":true,"name":"ci"}"""))
+            api.post("runners/device/ABCDE-FGH23/deny")
+            assertEquals("POST /api/runners/device/ABCDE-FGH23/deny {}", server.takeRequest().let { "${it.method} ${it.path} ${it.body.readUtf8()}" })
+            server.enqueue(json("""{"code":"DEVICE_ENROLLMENT_DECIDED","message":"This registration request was denied — run `orbit register` again"}""")
+                .setResponseCode(409))
+            val refused = runCatching { api.post("runners/device/ABCDE-FGH23/approve") }.exceptionOrNull()
+            assertEquals("POST /api/runners/device/ABCDE-FGH23/approve", server.takeRequest().let { "${it.method} ${it.path}" })
+            assertEquals("This registration request was denied — run `orbit register` again", refused?.let(::personalFailure))
+        }
+    }
+
     @Test fun releaseVersionIsReadWithoutTheAccountsCredential() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(json("""{"version":" 0.1.197 "}"""))

@@ -215,6 +215,16 @@ describe('spent quota card', () => {
     expect(html).not.toContain('Weekly limit');
   });
 
+  // Claude Code 2.1.312 calls the same window "5-hour limit".
+  it('names the rolling window by the runtime’s newer name for it too', () => {
+    const html = render("You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)");
+
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('5-hour limit reached');
+    expect(html).toContain('The 5-hour quota');
+    expect(html).not.toContain('chat-error');
+  });
+
   it('names the weekly window only when the runtime does', () => {
     const html = render("You've hit your weekly limit · resets Aug 3, 1pm (Europe/Berlin)");
 

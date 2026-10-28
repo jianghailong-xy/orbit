@@ -1636,17 +1636,29 @@ func ownerLanding(r *integrationRepo, sourceSha string, checked integrationResul
 }
 
 // moveOriginMainAhead moves main at the origin WITHOUT moving this checkout's remote-tracking ref:
-// a push by URL updates no `refs/remotes/*`. The next fetch in this repository therefore has a ref
-// update to perform — which is what a competing fetch takes the lock for — rather than nothing to
-// do.
+// the commit is another landing's, pushed from a clone of its own. The next fetch in this repository
+// therefore has a ref update to perform — which is what a competing fetch takes the lock for —
+// rather than nothing to do.
+//
+// It used to push from this checkout by URL, which updated no `refs/remotes/*` until git 2.56.0:
+// since then a push to a URL that exactly one configured remote has updates that remote's tracking
+// refs (git 93775e35b7ed). On CI's runners with that git, origin/main already named the moved tip,
+// the landing's fetch had nothing to write and never met the lock, and the ref-lock tests below met
+// it in VERIFY instead (2026-10-27).
 func moveOriginMainAhead(t *testing.T, r *integrationRepo) string {
 	t.Helper()
-	r.checkoutNew("moved-main", "main")
-	r.write("upstream-moved.txt", "another landing\n")
-	moved := r.commit("main moved")
-	mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/main")
-	r.checkout("main")
-	mustRun(t, r.work, "git", "branch", "-D", "moved-main")
+	other := t.TempDir()
+	mustRun(t, other, "git", "clone", "--quiet", r.origin, ".")
+	if err := os.WriteFile(filepath.Join(other, "upstream-moved.txt"), []byte("another landing\n"), 0o644); err != nil {
+		t.Fatalf("write upstream-moved.txt: %v", err)
+	}
+	mustRun(t, other, "git", "add", "-A")
+	mustRun(t, other, "git", "commit", "--quiet", "-m", "main moved")
+	mustRun(t, other, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
+	moved := mustGit(t, other, "rev-parse", "HEAD")
+	if tracking := r.rev("refs/remotes/origin/main"); tracking == moved {
+		t.Fatalf("this checkout's origin/main is already at the moved tip %s: the landing's fetch has nothing to write and never meets the ref lock", moved)
+	}
 	return moved
 }
 

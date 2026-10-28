@@ -244,7 +244,7 @@ class ManagementLiveTest {
         await("a13-box")
         capture("live-add-runner-code")
         click(hasText("Approve") and hasClickAction())
-        await("is now registered")
+        await("Machine registered")
         eventually("server: a13-box is one of the owner's runners") { runners(owner).any { it.s("name") == "a13-box" } }
         eventually("server: a13-box checks in", timeoutMs = 120_000) { runner(owner).b("online") == true }
         await("Runner online", timeoutMs = 60_000)

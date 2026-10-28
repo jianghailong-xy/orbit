@@ -346,6 +346,7 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
             "src/web/src/lib/quotaWindow.ts"), encoding: .utf8)
         let phrases: [(String, String, AutoRetryLogic.QuotaWindow)] = [
             ("hit your session limit", "FIVE_HOUR", .fiveHour),
+            ("hit your 5-hour limit", "FIVE_HOUR", .fiveHour),
             ("hit your weekly limit", "WEEKLY", .weekly),
         ]
         for (phrase, kind, swift) in phrases {
