@@ -543,6 +543,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
     - 重连成功后，查 `apiserver_process`：断开期间或断开前 30 秒内有别的进程写过自己那一行，就算期间有别的 apiserver 在跑。有的话，给本进程所有开着流的会话各发一条 `resync`，并在本进程发一条只在本地的 session_updated，和 (f) 放弃读回时一样。读不到 `apiserver_process` 时也照发：多拉一页 tail 的代价，比悄悄漏掉几批事件小。
     - 只有一个 apiserver 时，进程自己的事件不经 NOTIFY 交给自己的流，什么也没漏，什么也不发，行为不变。
     - 记一行日志，写断开了多久、补发给了多少个会话，不写事件内容。
+    - 数据库重启会让所有 apiserver 的 LISTEN 连接同时断开，所以之后几秒内单元里所有的流都要重新拉取，每条流一页 tail；第一个 apiserver 上，每个 owner 的控制流还会收到这些会话从库里重建的列表行。没有按单元规模测过。
     - inbox 和 wake 的通知漏掉了不用补。走 HTTPS 时，inbox 长轮询最多 5 秒自己再查一次库；wake 漏了，runner 等下一次心跳（30 秒内），和原来丢一次唤醒一样。走链路时，发起的 apiserver 自己经 NATS 提示 runner，不经 LISTEN。
     - 走链路时，事务里写的唤醒（`notifyRunnerWakeOnCommit`：排队的落地、晋升检查、wiki 仓库操作）由每个收到通知的 apiserver 各自标记 runner，只断一个 apiserver 的 LISTEN 不影响。所有 apiserver 同时漏掉时（例如数据库重启），runner 在下一次完整对账时拿到，最多晚 5 分钟，和改动计数没写成时一样。只有一个 apiserver 时现在也是这样，不是多 apiserver 的前置。
     - 还没覆盖的：本进程没有流的会话，owner 的列表行不重建。别的 apiserver 在这几秒里改了这些会话，列表要等这个会话下一次变化，或者重新加载时才更新。

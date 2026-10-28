@@ -750,6 +750,8 @@ from the database instead.
   - It logs one line, with how long and how many sessions:
     `LISTEN/NOTIFY back after 2345 ms without it: 1 other apiserver(s) ran meanwhile and what they announced did not reach this one, so this apiserver's streams of 3 session(s) were told to re-fetch`.
   - An apiserver that is alone missed nothing. It logs that no other apiserver ran, and sends nothing.
+  - A database restart drops every apiserver's listener at once, so afterwards every session stream in the deployment
+    loads its newest page again, within a few seconds.
   - The owner's lists are not re-read for the sessions it has no stream of. If another apiserver changed one of them in
     those seconds, the change shows at the session's next change, or when the list is next loaded.
 

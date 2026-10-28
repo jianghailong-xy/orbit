@@ -605,6 +605,9 @@ standby was synchronous. A cell's database needs a synchronous standby (`synchro
   - One line is logged, with how long and how many sessions, never an event:
     `LISTEN/NOTIFY back after 2345 ms without it: 1 other apiserver(s) ran meanwhile and what they announced did not
     reach this one, so this apiserver's streams of 3 session(s) were told to re-fetch`.
+  - A database restart drops every listener at once, so every stream in the cell re-fetches within seconds: a tail
+    page each. On the first apiserver, which holds people's control streams, each session streamed there also has its
+    row rebuilt from the database for its owner's lists. Not measured at the cell's scale.
   - The inbox and wake notices lost meanwhile need nothing. Over HTTPS an inbox poll looks again within 5 s, and a
     lost wake costs the runner what it always could: its next heartbeat, 30 s away. Over the link, the apiserver that
     asks hints the runner over NATS itself.
