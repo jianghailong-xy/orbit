@@ -197,6 +197,7 @@ import {
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
   reapApprovalsOfReturnedCalls,
+  reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
 import {
   CURRENT_WORK_INTERRUPTED,
@@ -558,7 +559,9 @@ interface IngestOutcome {
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
  * session's row and stored seqs, read for every session of the call at once under the locks the call took, and the
  * call's run_event rows, which the ingest adds its own to rather than inserting them, for the call to insert every
- * session's in one statement once all are derived. Absent, it inserts them itself.
+ * session's in one statement once all are derived. With them, the ingest also hands the call its tool_call writes and
+ * its Session write rather than issuing them (IngestWrite), for the call to issue each for every batch at once. Absent,
+ * it writes everything itself.
  */
 interface MergedIngest {
   tx: Prisma.TransactionClient;
@@ -566,6 +569,33 @@ interface MergedIngest {
   stored: Set<number>;
   runEvents?: Prisma.RunEventCreateManyInput[];
 }
+/** A tool_result's outcome, for the rows of the call it names (writeToolCalls). */
+interface ToolCallResult {
+  toolUseId: string;
+  output: Prisma.InputJsonValue | Prisma.NullTypes.JsonNull;
+  isError: boolean;
+  finishedAt: Date;
+}
+/** A batch's tool_call writes (ingestSteps), and the ids of the calls whose launch rows it reads back once they are written. */
+interface ToolCallWrites {
+  sessionId: string;
+  /** A row for each tool_use. */
+  uses: Prisma.ToolCallCreateManyInput[];
+  /** The outcome of each tool_result that names its call, in the order of the batch. */
+  results: ToolCallResult[];
+  launchCandidates: string[];
+}
+/** What a batch reads back once its tool_call writes are written: the launch rows, and the cards its returned calls collected. */
+interface ToolCallReads {
+  launchRows: Array<{ toolUseId: string | null; name: string; input: Prisma.JsonValue; output: Prisma.JsonValue }>;
+  abandonedApprovals: string[];
+}
+/** What a batch's ingest hands the merged link call collecting its writes (MergedIngest.runEvents), in this order. */
+type IngestWrite =
+  | { step: 'tools'; writes: ToolCallWrites }
+  | { step: 'session'; data: Prisma.SessionUpdateInput };
+/** A batch's ingest, as steps (ingestSteps): it yields its writes, and is answered the reads of the tool_call ones. */
+type IngestSteps = AsyncGenerator<IngestWrite, IngestOutcome, ToolCallReads | undefined>;
 // A merged link call's transaction is run again without a batch whose ingest failed, at most this many times: past
 // that, every batch it still holds is sent alone. So a call of many batches the database refuses values of costs three
 // runs of it, never one per batch. A failure of its one run_event insert, which names no batch, spends one of them.
@@ -630,6 +660,180 @@ async function chunkedCreateMany(
     inserted = inserted !== null && typeof count === 'number' ? inserted + count : null;
   }
   return inserted;
+}
+
+/** A batch's ingest on its own (ingestSteps), which issues every write itself and so never yields. */
+async function ingestAlone(steps: IngestSteps): Promise<IngestOutcome> {
+  const step = await steps.next();
+  if (!step.done) throw new Error(`an ingest on its own handed over its ${step.value.step} write`);
+  return step.value;
+}
+
+/**
+ * A batch's tool_call writes on its own, and what it reads back of them: a row for each tool_use, each result's outcome
+ * on the rows of its call, the cards the returned calls collect, then the launch rows, read under this transaction so
+ * that the rows just written are visible.
+ */
+async function writeToolCalls(tx: Prisma.TransactionClient, writes: ToolCallWrites): Promise<ToolCallReads> {
+  const { sessionId } = writes;
+  if (writes.uses.length > 0) await chunkedCreateMany((data) => tx.toolCall.createMany({ data }), writes.uses as never[]);
+  if (writes.results.length > 0) {
+    await Promise.all(writes.results.map((result) => tx.toolCall.updateMany({
+      where: { sessionId, toolUseId: result.toolUseId },
+      data: { output: result.output, isError: result.isError, finishedAt: result.finishedAt },
+    })));
+  }
+  const abandonedApprovals = await reapApprovalsOfReturnedCalls(tx, sessionId, writes.results.map((result) => result.toolUseId));
+  const launchRows = writes.launchCandidates.length > 0
+    ? await tx.toolCall.findMany({
+        where: { sessionId, toolUseId: { in: writes.launchCandidates } },
+        select: { toolUseId: true, name: true, input: true, output: true },
+      })
+    : [];
+  return { launchRows, abandonedApprovals };
+}
+
+/**
+ * Every batch's tool_call writes of a merged link call (ingestLinkEventCall) and what each reads back of them, as
+ * writeToolCalls writes and reads them for a batch alone but in one statement each, where alone each batch issues one
+ * per result: the time of a merged transaction goes to the database rather than to a round trip, and to the apiserver's
+ * event loop in between, for each statement (task C2b found 72% of it there). A result's outcome goes on every row of
+ * its call, and of two results of one call the later one stays, as two statements one after the other left it.
+ */
+async function writeCallToolCalls(tx: Prisma.TransactionClient, writes: readonly ToolCallWrites[]): Promise<ToolCallReads[]> {
+  const uses = writes.flatMap((w) => w.uses);
+  if (uses.length > 0) await chunkedCreateMany((data) => tx.toolCall.createMany({ data }), uses as never[]);
+  const results = new Map<string, ToolCallResult & { sessionId: string }>();
+  for (const w of writes) {
+    for (const result of w.results) {
+      const call = `${w.sessionId}/${result.toolUseId}`;
+      results.delete(call);
+      results.set(call, { sessionId: w.sessionId, ...result });
+    }
+  }
+  if (results.size > 0) {
+    const rows = [...results.values()];
+    // Each value as text, read back as its column's type: an outcome is JSON (JSON null for none, as Prisma writes it),
+    // and a time the UTC wall time a timestamp(3) column holds, as Prisma writes one.
+    await tx.$executeRaw`
+      UPDATE "tool_call" AS t
+         SET "output" = r.output::jsonb, "is_error" = r.is_error::boolean, "finished_at" = r.finished_at::timestamp(3)
+        FROM unnest(
+               ${rows.map((r) => r.sessionId)}::uuid[],
+               ${rows.map((r) => r.toolUseId)}::text[],
+               ${rows.map((r) => JSON.stringify(r.output === Prisma.JsonNull ? null : r.output))}::text[],
+               ${rows.map((r) => String(r.isError))}::text[],
+               ${rows.map((r) => r.finishedAt.toISOString())}::text[]
+             ) AS r(session_id, tool_use_id, output, is_error, finished_at)
+       WHERE t."session_id" = r.session_id AND t."tool_use_id" = r.tool_use_id
+    `;
+  }
+  const collected = await reapApprovalsOfReturnedCallsIn(tx, writes.map((w) => ({
+    sessionId: w.sessionId,
+    toolUseIds: w.results.map((result) => result.toolUseId),
+  })));
+  const asked = writes.filter((w) => w.launchCandidates.length > 0);
+  const launches = new Map<string, ToolCallReads['launchRows']>();
+  if (asked.length > 0) {
+    const rows = await tx.toolCall.findMany({
+      where: { OR: asked.map((w) => ({ sessionId: w.sessionId, toolUseId: { in: w.launchCandidates } })) },
+      select: { sessionId: true, toolUseId: true, name: true, input: true, output: true },
+    });
+    for (const { sessionId, ...row } of rows) launches.set(sessionId, [...(launches.get(sessionId) ?? []), row]);
+  }
+  return writes.map((w) => ({ launchRows: launches.get(w.sessionId) ?? [], abandonedApprovals: collected.get(w.sessionId) ?? [] }));
+}
+
+/**
+ * The Session columns an ingest writes (ingestSteps' `sessionData`), as writeCallSessions carries them: the column, and
+ * how a value of it, sent as text, is read back as the column's type.
+ */
+const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 'integer' | 'boolean' | 'timestamp' | 'text[]' | 'jsonb' }> = {
+  coordinatorContextEpoch: { column: 'coordinator_context_epoch', type: 'integer' },
+  coordinatorContextAckKey: { column: 'coordinator_context_ack_key', type: 'text' },
+  poolSwitchNotice: { column: 'pool_switch_notice', type: 'text' },
+  lastTurnAt: { column: 'last_turn_at', type: 'timestamp' },
+  runtimeSessionId: { column: 'runtime_session_id', type: 'text' },
+  engineStartedAt: { column: 'engine_started_at', type: 'timestamp' },
+  lastAssistantText: { column: 'last_assistant_text', type: 'text' },
+  lastToolUse: { column: 'last_tool_use', type: 'text' },
+  contextTokens: { column: 'context_tokens', type: 'integer' },
+  contextWindow: { column: 'context_window', type: 'integer' },
+  engineTurnActive: { column: 'engine_turn_active', type: 'boolean' },
+  enginePhase: { column: 'engine_phase', type: 'text' },
+  enginePhaseSince: { column: 'engine_phase_since', type: 'timestamp' },
+  lastUserText: { column: 'last_user_text', type: 'text' },
+  retryAt: { column: 'retry_at', type: 'timestamp' },
+  retryAttempts: { column: 'retry_attempts', type: 'integer' },
+  claudeAccount: { column: 'claude_account', type: 'text' },
+  claudeAccountPinned: { column: 'claude_account_pinned', type: 'boolean' },
+  runningBgShells: { column: 'running_bg_shells', type: 'text[]' },
+  runningBgJobs: { column: 'running_bg_jobs', type: 'text[]' },
+  runningSubagents: { column: 'running_subagents', type: 'text[]' },
+  runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
+};
+
+/** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
+function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['type'], value: unknown): string | null | undefined {
+  switch (type) {
+    case 'text':
+      return value === null || typeof value === 'string' ? value : undefined;
+    case 'integer':
+      return value === null || Number.isSafeInteger(value) ? (value === null ? null : String(value)) : undefined;
+    case 'boolean':
+      return typeof value === 'boolean' ? String(value) : undefined;
+    case 'timestamp':
+      return value === null ? null : value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString() : undefined;
+    case 'text[]':
+      return Array.isArray(value) && value.every((v) => typeof v === 'string') ? JSON.stringify(value) : undefined;
+    case 'jsonb':
+      return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype ? JSON.stringify(value) : undefined;
+  }
+}
+
+/**
+ * Every session's one write of a merged link call (ingestLinkEventCall), where alone each is its own statement
+ * (ingestSteps): one UPDATE for each set of columns the sessions write, for the reason writeCallToolCalls gives. Each
+ * session is in exactly one of them, so its row is still written once (common/lock-order.ts, I3), and each one's SET
+ * list is the columns its own write would have set, so a trigger on a column fires for it as it did. `updated_at` is
+ * set as Prisma sets an `@updatedAt` column. A write of a field this does not carry is issued on its own, as alone.
+ */
+async function writeCallSessions(
+  tx: Prisma.TransactionClient,
+  writes: ReadonlyArray<{ sessionId: string; data: Prisma.SessionUpdateInput }>,
+): Promise<void> {
+  const sets = new Map<string, Array<{ sessionId: string; values: Array<string | null> }>>();
+  for (const { sessionId, data } of writes) {
+    const fields = Object.keys(data).sort();
+    const values = fields.map((field) => {
+      const column = INGESTED_SESSION_COLUMNS[field];
+      return column ? ingestedSessionValue(column.type, (data as Record<string, unknown>)[field]) : undefined;
+    });
+    if (values.some((value) => value === undefined)) {
+      await tx.session.update({ where: { id: sessionId }, data, select: { id: true } });
+      continue;
+    }
+    const key = fields.join(',');
+    sets.set(key, [...(sets.get(key) ?? []), { sessionId, values: values as Array<string | null> }]);
+  }
+  const updatedAt = new Date().toISOString();
+  for (const [key, rows] of sets) {
+    const columns = key.split(',').map((field, i) => {
+      const { column, type } = INGESTED_SESSION_COLUMNS[field];
+      const value = `u.v${i}`;
+      const read = type === 'text' ? value
+        : type === 'text[]' ? `ARRAY(SELECT e FROM jsonb_array_elements_text(${value}::jsonb) WITH ORDINALITY AS a(e, n) ORDER BY n)`
+        : `${value}::${type === 'timestamp' ? 'timestamp(3)' : type}`;
+      return { set: Prisma.raw(`"${column}" = ${read}`), values: Prisma.sql`${rows.map((row) => row.values[i])}::text[]` };
+    });
+    await tx.$executeRaw`
+      UPDATE "session" AS s
+         SET "updated_at" = ${updatedAt}::timestamp(3), ${Prisma.join(columns.map((c) => c.set))}
+        FROM unnest(${rows.map((row) => row.sessionId)}::uuid[], ${Prisma.join(columns.map((c) => c.values))})
+             AS u(id, ${Prisma.raw(columns.map((_, i) => `v${i}`).join(', '))})
+       WHERE s."id" = u.id
+    `;
+  }
 }
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
@@ -7064,7 +7268,11 @@ export class RunnerApiController {
    *     in one statement (admitLinkCallConnections);
    *   - the sessions: all of them locked in one statement, sorted by id, under lockSessionLeaseOwner's fence
    *     (lockLinkCallSessions), and their rows and stored seqs read in one statement each;
-   *   - their run_event rows, inserted in one statement once every batch is derived;
+   *   - their writes: every batch's tool_call rows, outcomes, collected cards and launch rows read back, each in one
+   *     statement (writeCallToolCalls), every session's one write in one statement for each set of columns written
+   *     (writeCallSessions), and their run_event rows in one statement once every batch is derived. Alone a batch
+   *     issues one or more of each, and in a merged call each one was a round trip the transaction waited on the
+   *     apiserver's event loop for: task C2b measured 72% of a merged transaction's time spent so;
    *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
    *     its commit (§6.7).
    *
@@ -7072,8 +7280,9 @@ export class RunnerApiController {
    * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
    * alone. So is every batch of a call its transaction's own timeouts cut short. The gateway forwards such a batch to
    * the events route on its own, which refuses or stores it exactly as it always has, tombstones and EVENT_UNSTORABLE
-   * included. Nothing of a batch answered `sendAlone` was written. When the one run_event insert fails, which cannot
-   * say whose rows it refused, the next run has each batch insert its own, so that the batch is found as above.
+   * included. Nothing of a batch answered `sendAlone` was written. When one of the statements written for every batch
+   * fails, which cannot say whose rows it refused, the next run has each batch write its own, as alone, so that the
+   * batch is found as above.
    */
   async ingestLinkEventCall(call: LinkEventCall, publicKey: KeyObject): Promise<LinkEventCallAnswer> {
     const results: LinkEventCallResult[] = call.batches.map(() => ({ sendAlone: true }));
@@ -7099,14 +7308,14 @@ export class RunnerApiController {
       }
       candidates.push({ index, connection: batch.connection, sessionId, read });
     });
-    // Whether each batch inserts its own run_event rows, as alone, rather than the call all of them in one statement:
-    // from the run after that one statement failed, which cannot say whose rows it refused.
-    let insertEach = false;
+    // Whether each batch writes its own rows, as alone, rather than the call every batch's at once: from the run after
+    // one of the call's own statements failed, which cannot say whose rows it refused.
+    let writeEach = false;
     // One run of the call's transaction: what of the call it took, and when it began to hold its sessions.
     const instance = this.realtime.instance;
     const ingestCall = async (tx: Prisma.TransactionClient) => {
       const ingested: Array<{ batch: LinkCallBatch; outcome: IngestOutcome; coordinator: boolean }> = [];
-      const runEvents: Prisma.RunEventCreateManyInput[] | undefined = insertEach ? undefined : [];
+      const runEvents: Prisma.RunEventCreateManyInput[] | undefined = writeEach ? undefined : [];
       // It holds every session of the call, so what it would wait on, and any statement of it that runs long, is cut
       // short, and the call sends every batch alone instead.
       await tx.$queryRaw`
@@ -7155,33 +7364,72 @@ export class RunnerApiController {
         firstSeq: batch.read.firstSeq,
         lastSeq: batch.read.lastSeq,
       })));
-      for (const { batch, runnerId, leaseOwner } of open) {
+      // Each batch is ingested as linkEvents ingests it alone, every batch in step: each to its tool_call writes, which
+      // the call writes for all of them at once, then each to its Session write, the same, then each to its end. Writing
+      // each its own, a batch goes to its end at once.
+      const steps = open.map(({ batch, runnerId, leaseOwner }) => ({
+        batch,
+        steps: this.ingestSteps(
+          tx,
+          { id: runnerId },
+          batch.sessionId,
+          leaseOwner,
+          batch.read.events,
+          { tombstones: batch.read.tombstones },
+          { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)!, runEvents },
+        ),
+      }));
+      // Anything but the call's own failure is the batch's, a value the database refuses among it: the call is run again
+      // without it.
+      const advance = async (batch: LinkCallBatch, ingest: IngestSteps, reads?: ToolCallReads) => {
         try {
-          const outcome = await this.ingestEvents(
-            { id: runnerId },
-            batch.sessionId,
-            leaseOwner,
-            batch.read.events,
-            { tombstones: batch.read.tombstones },
-            { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)!, runEvents },
-          );
-          ingested.push({ batch, outcome, coordinator: locked.get(batch.sessionId)!.coordinator });
+          return await ingest.next(reads);
         } catch (error) {
-          // Anything but the call's own failure is this batch's, a value the database refuses among it: the call is run
-          // again without it.
           if (linkCallFault(error)) throw error;
           throw new LinkCallBatchFailed(batch, error);
         }
-      }
-      // Every session's run_event rows in one statement, session by session as the ingests built them: nothing in an
-      // ingest reads them back, and every session they belong to is held (rank 60 after rank 30).
-      if (runEvents) {
+      };
+      // A statement of the call's own names no batch: the call is run again with each batch writing its own.
+      const callWrite = async (write: () => Promise<unknown>) => {
         try {
-          await chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]);
+          await write();
         } catch (error) {
           if (linkCallFault(error)) throw error;
           throw new LinkCallBatchFailed(null, error);
         }
+      };
+      const outcomes = new Map<LinkCallBatch, IngestOutcome>();
+      const atTools: Array<{ batch: LinkCallBatch; ingest: IngestSteps; writes: ToolCallWrites }> = [];
+      for (const { batch, steps: ingest } of steps) {
+        const step = await advance(batch, ingest);
+        if (step.done) outcomes.set(batch, step.value);
+        else if (step.value.step === 'tools') atTools.push({ batch, ingest, writes: step.value.writes });
+        else throw new Error(`session ${batch.sessionId}: its ingest handed over its Session write before its tool calls`);
+      }
+      let reads: ToolCallReads[] = [];
+      if (atTools.length > 0) await callWrite(async () => (reads = await writeCallToolCalls(tx, atTools.map((at) => at.writes))));
+      const atSession: Array<{ batch: LinkCallBatch; ingest: IngestSteps; data: Prisma.SessionUpdateInput }> = [];
+      for (const [i, { batch, ingest }] of atTools.entries()) {
+        const step = await advance(batch, ingest, reads[i]);
+        if (step.done) outcomes.set(batch, step.value);
+        else if (step.value.step === 'session') atSession.push({ batch, ingest, data: step.value.data });
+        else throw new Error(`session ${batch.sessionId}: its ingest handed over its tool calls twice`);
+      }
+      if (atSession.length > 0) {
+        await callWrite(() => writeCallSessions(tx, atSession.map(({ batch, data }) => ({ sessionId: batch.sessionId, data }))));
+      }
+      for (const { batch, ingest } of atSession) {
+        const step = await advance(batch, ingest);
+        if (!step.done) throw new Error(`session ${batch.sessionId}: its ingest handed over a write after its Session write`);
+        outcomes.set(batch, step.value);
+      }
+      for (const { batch } of steps) {
+        ingested.push({ batch, outcome: outcomes.get(batch)!, coordinator: locked.get(batch.sessionId)!.coordinator });
+      }
+      // Every session's run_event rows in one statement, session by session as the ingests built them: nothing in an
+      // ingest reads them back, and every session they belong to is held (rank 60 after rank 30).
+      if (runEvents) {
+        await callWrite(() => chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]));
       }
       // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
       // publishBatch tells them after an ingest of its own.
@@ -7214,9 +7462,9 @@ export class RunnerApiController {
         if (error instanceof LinkCallBatchFailed) {
           const { evidence } = classifyTransactionFault(error.failure);
           if (error.batch === null) {
-            this.logger.warn(`the run_event insert of a merged runner link call of ${candidates.length} batches failed `
-              + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); run again with each batch inserting its own`);
-            insertEach = true;
+            this.logger.warn(`a statement of a merged runner link call of ${candidates.length} batches, written for all of them, `
+              + `failed (${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); run again with each batch writing its own`);
+            writeEach = true;
             continue;
           }
           this.logger.warn(`session ${error.batch.sessionId}: its batch failed inside a merged runner link call `
@@ -7257,10 +7505,6 @@ export class RunnerApiController {
    * HTTPS (`events`) and the runner link (`linkEvents`). A link batch also carries the tombstones of the events it
    * refused, and is stored once per seq with everything derived from it (`link`). Says how many of the batch's seqs
    * were already stored.
-   *
-   * Inside a merged link call (`merged`, ingestLinkEventCall) it is the same ingest in the call's transaction: the
-   * call has locked the session under the same fence and read its row and stored seqs, and it announces the batch
-   * once it has committed.
    */
   private async ingestEvents(
     runner: { id: string },
@@ -7268,7 +7512,6 @@ export class RunnerApiController {
     leaseOwner: string | null,
     batch: NormalizedRunEvent[],
     link?: { tombstones: readonly LinkTombstone[] },
-    merged?: MergedIngest,
   ): Promise<IngestOutcome> {
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
     // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
@@ -7277,7 +7520,31 @@ export class RunnerApiController {
     // Session write is accumulated from a row re-read under its lock on every attempt. The live
     // broadcast below is outside the loop, so a retried batch is published once, after the attempt
     // that committed.
-    const ingest = async (tx: Prisma.TransactionClient): Promise<IngestOutcome> => {
+    const ingest = (tx: Prisma.TransactionClient) => ingestAlone(this.ingestSteps(tx, runner, sessionId, leaseOwner, batch, link));
+    const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    await this.announceIngest(sessionId, eventOutcome);
+    return eventOutcome;
+  }
+
+  /**
+   * One batch's ingest in `tx` (ingestEvents), as steps. On its own it issues every write itself and never yields.
+   *
+   * Inside a merged link call (`merged`, ingestLinkEventCall) it is the same ingest in the call's transaction: the call
+   * has locked the session under the same fence and read its row and stored seqs, and it announces the batch once it
+   * has committed. A call that collects its batches' writes (MergedIngest.runEvents) is handed this batch's tool_call
+   * writes, and answers with what is read back of them, and then its one Session write: it issues each for every batch
+   * at once, and resumes each batch once they are written.
+   */
+  private ingestSteps(
+    tx: Prisma.TransactionClient,
+    runner: { id: string },
+    sessionId: string,
+    leaseOwner: string | null,
+    batch: NormalizedRunEvent[],
+    link?: { tombstones: readonly LinkTombstone[] },
+    merged?: MergedIngest,
+  ): IngestSteps {
+    const ingest = async function* (this: RunnerApiController): IngestSteps {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
       // outside the transaction and later deadlocking when they touch Session. A merged call
@@ -7648,52 +7915,17 @@ export class RunnerApiController {
       });
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
-      if (toolUses.length > 0) {
-        await chunkedCreateMany(
-          (data) => tx.toolCall.createMany({ data }),
-          toolUses.map((e) => ({
-            sessionId,
-            name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
-            toolUseId: String((e.payload as { id?: unknown }).id ?? '') || null,
-            input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-            startedAt: new Date(e.ts),
-          })) as never[],
-        );
-      }
 
       // Pair each tool_result back to the row its tool_use created, so the outcome columns
       // (output / is_error / finished_at) stop being dead. The tool_use is always persisted
-      // before its result — same batch (createMany ran just above) or an earlier one (durable,
-      // idempotent by seq) — so the row exists by now. Matching on (sessionId, toolUseId) with a
+      // before its result — same batch (its row is written first) or an earlier one (durable,
+      // idempotent by seq) — so the row exists by then. Matching on (sessionId, toolUseId) with a
       // non-empty id keeps a result from smearing across the id-less rows old runtimes produced.
       // finished_at is derived from the event ts, so replaying a retried batch rewrites identical
       // values — idempotent without a guard. A runtime that streams incremental results for one id
       // (rare) collapses to its last write, which is the outcome a reader wants.
       const toolResults = events.filter(
         (e) => e.type === RunEventType.TOOL_RESULT && String((e.payload as { toolUseId?: unknown }).toolUseId ?? '') !== '',
-      );
-      if (toolResults.length > 0) {
-        await Promise.all(
-          toolResults.map((e) => {
-            const p = e.payload as { toolUseId?: unknown; content?: unknown; isError?: unknown };
-            return tx.toolCall.updateMany({
-              where: { sessionId, toolUseId: String(p.toolUseId) },
-              data: {
-                output: (p.content ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-                isError: !!p.isError,
-                finishedAt: new Date(e.ts),
-              },
-            });
-          }),
-        );
-      }
-      // A card whose call has now returned can never be answered, and a self-driven stretch never
-      // reaches /turn-complete, where the other collections run — so it is collected here, by the
-      // write that records the return (see reapApprovalsOfReturnedCalls).
-      const abandonedApprovals = await reapApprovalsOfReturnedCalls(
-        tx,
-        sessionId,
-        toolResults.map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId)),
       );
 
       // Maintain the running background-shell set (Session.runningBgShells), which drives the
@@ -7730,15 +7962,36 @@ export class RunnerApiController {
         );
         if (id) batchToolIds.add(id);
       }
-      // Read under this transaction, so the rows written just above for this batch are visible.
-      const launchCandidates = new Set<string>([...batchToolIds, ...session.runningBgShells]);
-      const launchRows =
-        launchCandidates.size > 0
-          ? await tx.toolCall.findMany({
-              where: { sessionId, toolUseId: { in: [...launchCandidates] } },
-              select: { toolUseId: true, name: true, input: true, output: true },
-            })
-          : [];
+      // The batch's tool_call writes, and what is read back of them once they are written: the
+      // launch rows of the batch's own calls and of the shells the set already holds, and the cards
+      // the returned calls collected. A card whose call has now returned can never be answered, and
+      // a self-driven stretch never reaches /turn-complete, where the other collections run — so it
+      // is collected here, by the write that records the return (see reapApprovalsOfReturnedCalls).
+      // On its own the batch writes them (writeToolCalls); a merged link call collecting its writes
+      // writes every batch's at once (writeCallToolCalls) and hands back this batch's reads.
+      const toolCalls: ToolCallWrites = {
+        sessionId,
+        uses: toolUses.map((e) => ({
+          sessionId,
+          name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
+          toolUseId: String((e.payload as { id?: unknown }).id ?? '') || null,
+          input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          startedAt: new Date(e.ts),
+        })),
+        results: toolResults.map((e) => {
+          const p = e.payload as { toolUseId?: unknown; content?: unknown; isError?: unknown };
+          return {
+            toolUseId: String(p.toolUseId),
+            output: (p.content ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+            isError: !!p.isError,
+            finishedAt: new Date(e.ts),
+          };
+        }),
+        launchCandidates: [...new Set<string>([...batchToolIds, ...session.runningBgShells])],
+      };
+      const { launchRows, abandonedApprovals } = merged?.runEvents
+        ? ((yield { step: 'tools', writes: toolCalls }) as ToolCallReads)
+        : await writeToolCalls(tx, toolCalls);
       const bgConfirmed = new Set<string>();
       const bgRefused = new Set<string>();
       for (const row of launchRows) {
@@ -7924,8 +8177,10 @@ export class RunnerApiController {
 
       if (Object.keys(sessionData).length > 0) {
         // The row comes back as its id alone: nothing here reads it, and all 140 of its columns, returned, made this
-        // the batch's costliest statement for both the database and Prisma (task O2's measurement).
-        await tx.session.update({ where: { id: sessionId }, data: sessionData, select: { id: true } });
+        // the batch's costliest statement for both the database and Prisma (task O2's measurement). A merged link call
+        // collecting its writes writes every session's at once (writeCallSessions).
+        if (merged?.runEvents) yield { step: 'session', data: sessionData };
+        else await tx.session.update({ where: { id: sessionId }, data: sessionData, select: { id: true } });
       }
       // A Claude session its account's usage limit just moved (retryPlanFor) still has its engine up on
       // the old account. A reload naming the provider re-spawns it with the new account's
@@ -7953,10 +8208,7 @@ export class RunnerApiController {
         seqConflicts, door: link ? 'link' : 'https',
       };
     };
-    if (merged) return ingest(merged.tx);
-    const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
-    await this.announceIngest(sessionId, eventOutcome);
-    return eventOutcome;
+    return ingest.call(this);
   }
 
   /**
