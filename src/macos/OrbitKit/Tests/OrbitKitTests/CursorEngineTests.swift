@@ -103,16 +103,13 @@ final class CursorEngineTests: XCTestCase {
     }
 
     /// Until a runner knows Cursor CLI, a key that runs it changes no list of engines: the new-session
-    /// hero's, Infrastructure's cards, a machine's Engines rows and both attention lists read as they do
-    /// without it. Once one does, Cursor CLI is the last of each — on a machine that predates it too,
-    /// whose row says so.
+    /// hero's, a machine's Engines rows and both attention lists read as they do without it. Once one
+    /// does, Cursor CLI is the last of each — on a machine that predates it too, whose row says so.
     func testCursorCLIJoinsEveryListOfEnginesLastOnceARunnerKnowsIt() throws {
         let older = try olderRunner(claude)
         let hero = SessionProviderChoices.engines(sources: ChoiceSources(configured: [cursorKey, glm], engines: older.engines))
         XCTAssertEqual(hero, SessionProviderChoices.engines(sources: ChoiceSources(configured: [glm], engines: older.engines)))
         XCTAssertFalse(hero.contains { $0.slug == "cursor" })
-        let cards = Infrastructure.engineCards(runners: [older], keys: [cursorKey, glm], pools: [])
-        XCTAssertEqual(cards.map(\.name), ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
         XCTAssertEqual(RunnerPageFormat.engines(older).map(\.engine), ["claude", "antigravity"])
 
         let withCursor = try runner(claude, cursor)
@@ -121,8 +118,6 @@ final class CursorEngineTests: XCTestCase {
             cursorState: CursorRuntime.state(of: withCursor), showsCursor: true))
         XCTAssertEqual(shown.last?.slug, "cursor")
         XCTAssertEqual(shown.last?.label, "Cursor CLI")
-        XCTAssertEqual(Infrastructure.engineCards(runners: [withCursor, older], keys: [cursorKey, glm], pools: []).last?.name,
-                       "Cursor CLI")
         // A machine's rows: Cursor CLI last, after an engine this build doesn't know yet — and on the machine
         // that predates it, beside a fleet that knows it, a row of its own to say it needs an update.
         XCTAssertEqual(RunnerPageFormat.engines(try runner(cursor, claude, #"{"engine":"next-cli","installed":true}"#)).map(\.engine),

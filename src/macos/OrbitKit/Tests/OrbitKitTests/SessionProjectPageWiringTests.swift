@@ -350,8 +350,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("$0.projectMembership?.role != .coordinator"))
         let sections = try slice(page, from: "private var timeSections: [ProjectTimelineSection] {", to: "\n    }")
         XCTAssertTrue(sections.contains("ProjectTimeline.sections(sessions: sessions.filter"),
-                      "the page's recency sections are the session grouping's, merges drawn among them")
-        XCTAssertTrue(sections.contains("merges: merge?.receipts ?? []"))
+                      "the page's recency sections are the session grouping's")
+        XCTAssertFalse(sections.contains("merges:"),
+                       "the merges into main are rows of the Landings window, not the timeline (owner 2026-10-27)")
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
         let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
@@ -529,8 +530,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
-    /// progress card, its records on the timeline, and both sheets hosted by the page itself.
-    func testThePageCarriesTheMergeIntoMainUnderTheProgressCardAndOnItsTimeline() throws {
+    /// progress card, its review hosted by the page itself. Its records are rows of the project's
+    /// Landings window (owner 2026-10-27), which the page's Landings row opens.
+    func testThePageCarriesTheMergeIntoMainUnderTheProgressCard() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let order = try [
@@ -546,11 +548,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("ProjectMergeCard.shape(promotion: merge.current,"))
         XCTAssertTrue(card.contains("ProjectMergeCard.mergeLandingLine($0, now: context.date,"))
         XCTAssertTrue(card.contains("promotionReview = PromotionReviewTarget(id: $0)"))
-        XCTAssertTrue(page.contains("case .merge(let receipt): mergeRow(receipt)"))
-        XCTAssertTrue(page.contains("case .session(let session): sessionRow(session)"))
+        XCTAssertTrue(page.contains("ForEach(section.sessions) { session in sessionRow(session) }"),
+                      "the timeline is the project's sessions alone")
+        XCTAssertFalse(page.contains("mergeRow("), "no merge row on the timeline")
+        XCTAssertFalse(source.contains("ProjectMergeTimelineRow"), "the timeline's merge row is gone")
         XCTAssertTrue(page.contains("PromotionReviewSheet(source: merge, promotionID: target.id)"),
                       "the page opens the conversation's own review, reading the page's model")
-        XCTAssertTrue(page.contains(".sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }"))
         let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
         XCTAssertEqual(task.components(separatedBy: "await app.loadProjectMerge(address)").count - 1, 2,
                        "the merge is read on arrival and on every poll")
@@ -815,10 +818,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectStart(_ address: SessionProjectAddress) async {",
                              to: "\n    }")
-        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false || landingWaits else {"),
-                      "a started project's page reads nothing more than before — unless a landing waits")
-        XCTAssertTrue(load.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
-                      "the Landings group's holder is the same read the start row already makes")
+        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false else {"),
+                      "a started project's page reads nothing more than before")
+        XCTAssertFalse(load.contains("AWAITING_DECISION"),
+                       "the Landings group's holders are gone with the group (owner 2026-10-27)")
         XCTAssertTrue(load.contains("api.projectOpenItems(projectID: address.projectID)"))
         XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"))
         XCTAssertFalse(load.contains("async let"))

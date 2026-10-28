@@ -209,12 +209,13 @@ class TaskLandingDeviceTest {
             awaitLanding()
             assertTrue(exists(hasTestTag("task-landing-open")))
             compose.onNodeWithTag("task-landing-open").performScrollTo().performClick()
-            // `SessionDestination` asks the server what the id is before choosing a page; a landing gets its own.
+            // `SessionDestination` asks the server what the id is before choosing a page; a landing opens its project's Landings window,
+            // focused on it.
             await { calls.any { it.matches(Regex("GET /api/sessions/[^/?]+")) } }
-            await { exists(hasTestTag("landing-page")) }
-            // The page's own read draws the header: the destination is a landing page, not the reader.
-            await { exists(hasTestTag("landing:title")) }
-            record("open landing", "title=${text("landing:title")} | sub=${text("landing:sub")}")
+            await { exists(hasTestTag("landings-window")) }
+            // The card's own read draws its head: the destination is the landing, not the reader.
+            await { exists(hasTestTag("landing-head"), unmerged = true) }
+            record("open landing", "task=${text("landing:task-name")} | sub=${text("page-bar-subtitle")}")
             capture("05-open-landing")
             tree("05-open-landing")
         }

@@ -259,25 +259,27 @@ class ProjectMergeShellTest {
         compose.onNodeWithTag("project-merge-card:details").assertExists()
     }
 
-    /** A merge already made is a row on the timeline at its own instant, and opens its receipt: the tasks it put on main by name. */
-    @Test fun aMergeAlreadyMadeIsATimelineRowThatOpensItsReceipt() {
+    /** A merge already made is no row of the page's timeline (owner 2026-10-27, docs/mocks/landings-one-window): the page's Landings
+     *  row counts it, and it is a row of the project's Landings window, which opens in place to its receipt — the tasks it put on main
+     *  by name, and the check that passed on the combined tree. */
+    @Test fun aMergeAlreadyMadeIsARowOfTheLandingsWindowNotOfTheTimeline() {
         ProjectShell.merged = """[${candidate("MERGED").replace("\"merged\":null",
             "\"merged\":{\"sha\":\"8d5a868e90df\",\"at\":\"${ago(7)}\",\"automatic\":false,\"revert\":null}")}]"""
         openPage()
-        await { exists(hasTestTag("project-merge-row:pr-1")) }
+        await { exists(hasTestTag("landings-row")) }
         assertNull("a merge already made draws no card", compose.onAllNodes(hasTestTag("project-merge-card:asking")).fetchSemanticsNodes().firstOrNull())
-        // Today: the members by recency, and the merge in front of the first one older than it.
-        assertEquals(listOf("Today", "Wire tests", "MERGE", "Quota retry", "2–7 days ago", "Shipped docs"), timeline())
-        compose.onNode(hasTestTag("project-merge-row:pr-1")).assert(hasText("Merged into main", substring = true))
-            .assert(hasText("8d5a868 · 4 tasks · by you", substring = true)).assert(hasText("m ago", substring = true)).performClick()
-        await { exists(hasTestTag("promotion-receipt")) }
-        compose.onNodeWithTag("promotion-receipt:title").assert(hasText("✓ Merged into main"))
-        await { exists(hasText("8d5a868 · merge of project/launch · by you · ", substring = true) and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
-        for (line in listOf("FROM ORBIT", "4 tasks", "Fix D1", "P7 rehearsal",
-                "✓ Passed on the combined tree · npm test · 6m 12s", "exactly the tested tree 5e5bfca · as a merge commit", "7 commits · 10 files")) {
-            await { exists(hasText(line) and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
+        // Today: the members by recency, and no merge among them.
+        assertEquals(listOf("Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), timeline())
+        compose.onNodeWithTag("landings-row").performClick()
+        await { exists(hasTestTag("landing-row:merge:pr-1")) }
+        compose.onNode(hasTestTag("landing-row:merge:pr-1")).assert(hasText("Merged into main", substring = true))
+            .assert(hasText("8d5a868 · 4 tasks · by you", substring = true)).performClick()
+        await { exists(hasTestTag("landing:receipt")) }
+        for (line in listOf("Now on main · 4 tasks", "Fix D1", "P7 rehearsal", "✓ Passed on the combined tree · 6m 12s")) {
+            await { exists(hasText(line) and hasAnyAncestor(hasTestTag("landing:receipt")), unmerged = true) }
         }
-        compose.onAllNodes(hasText("Undo") and hasAnyAncestor(hasTestTag("promotion-receipt"))).assertCountEquals(0)
+        // A merge older than landing sessions has no landing of its own to read: its receipt is all there is.
+        assertTrue(ProjectShell.calls.none { it.startsWith("GET sessions/merge") })
     }
 
     /** Details opens the conversation's own review over the page, read off the page's model and pressed there. */
@@ -424,12 +426,10 @@ class ProjectMergeShellTest {
         return listOfNotNull("progress" to progress, landing?.let { "landing" to it }, "merge" to merge, "coordinator" to coordinator)
             .sortedBy { it.second }.map { it.first }
     }
-    /** The timeline under the coordinator: section titles, members, and MERGE for a merge's row. */
-    private fun timeline(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions-list")) or hasTestTagPrefix("project-merge-row:"))
+    /** The timeline under the coordinator: section titles and members. */
+    private fun timeline(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions-list")))
         .fetchSemanticsNodes().mapNotNull { node ->
-            val tag = node.config.getOrNull(SemanticsProperties.TestTag)
-            if (tag?.startsWith("project-merge-row:") == true) "MERGE"
-            else node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text
+            node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text
                 ?.takeIf { it in setOf("Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Wire tests", "Quota retry", "Shipped docs") }
         }
     private fun openPage() {

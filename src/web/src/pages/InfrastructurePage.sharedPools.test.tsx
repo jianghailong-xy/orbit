@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../api';
+import { openDialog } from '../components/RunnerEngines.test-helpers';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderPool } from '../lib/providerPools';
 import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedPools';
@@ -210,6 +211,21 @@ describe('a shared pool on /infrastructure and on its own page', { timeout: 30_0
     await click(radio('Paste an OpenAI API key', choose));
     await click(button('Continue', choose));
   };
+  /** Add › New account pool, the page's one way to a new pool; resolves once its dialog is open. */
+  const newPool = async () => {
+    await click(button('Add'));
+    let item: HTMLElement | undefined;
+    await act(async () => {
+      await vi.waitFor(() => {
+        item = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')).find((el) =>
+          el.textContent?.startsWith('New account pool'),
+        );
+        if (!item) throw new Error('no menu is open');
+      }, { timeout: 20_000, interval: 20 });
+    });
+    await click(item);
+    await openDialog('New account pool');
+  };
 
   const click = async (el: Element | null | undefined) => {
     if (!el) throw new Error('nothing to click');
@@ -297,8 +313,8 @@ describe('a shared pool on /infrastructure and on its own page', { timeout: 30_0
     expect(claude.querySelector('.re-runner')?.textContent).toBe('Claude accounts');
     expect(claude.querySelector('.pool-shared-chip')).toBeNull();
     expect(claude.querySelector('.pool-people')).toBeNull();
-    // Where another pool is made.
-    expect(button('New pool', container.querySelector('.pool-sec-head')!)).not.toBeNull();
+    // A head like the other sections', with nothing to press: the page's Add makes another pool.
+    expect(container.querySelector('.pool-sec .re-sec-head button')).toBeNull();
     expect(container.querySelector('.pool-sec .re-sec-sub')?.textContent).toBe(
       'Several accounts under one name.',
     );
@@ -402,7 +418,7 @@ describe('a shared pool on /infrastructure and on its own page', { timeout: 30_0
 
   it('makes a shared Codex pool with the people it names, and opens it', async () => {
     await mount('/infrastructure');
-    await click(button('New pool'));
+    await newPool();
     const modal = dialog()!;
     expect(nameOf(modal)).toBe('New account pool');
     expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');

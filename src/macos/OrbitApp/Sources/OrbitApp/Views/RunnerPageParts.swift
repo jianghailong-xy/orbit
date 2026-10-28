@@ -346,11 +346,13 @@ struct RunnerEngineRow: View {
         .padding(.vertical, 2)
     }
 
-    /// Whether the row opens the engine's page: an engine the machine has — and Cursor CLI where the fix
-    /// is on its page, its Install (board iOS 2, the four states).
+    /// Whether the row opens the engine's page: an engine the machine has, one it lacks whose page installs
+    /// it (`Infrastructure.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
+    /// (board iOS 2, the four states).
     static func opensPage(_ health: RunnerEngineHealth, runner: Runner) -> Bool {
-        health.installed == true
-            || (health.engine == CursorRuntime.engine && CursorRuntime.state(of: runner) == .notInstalled)
+        if health.installed == true { return true }
+        if health.engine == CursorRuntime.engine { return CursorRuntime.state(of: runner) == .notInstalled }
+        return Infrastructure.installsFromPage(runner, engine: health.engine)
     }
 
     /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,

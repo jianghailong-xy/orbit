@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The landing page's words, the Landings group's, the entrances', the X-E5 card's and the task
-/// page's Landing section, looked up one by one in the web source they were ported from. The web
+/// A landing's words in the Landings window, the Landings row's and window's own, the entrances', the
+/// X-E5 card's and the task page's Landing section, looked up one by one in the web source they were ported from. The web
 /// defines them; OrbitKit reads the same sentences to the same readers. A missing counterpart is a
 /// FAILURE, never an `XCTSkip`.
 final class LandingCopyParityTests: XCTestCase {
@@ -49,7 +49,6 @@ final class LandingCopyParityTests: XCTestCase {
         let constants: [(String, String)] = [
             ("CHIP", LandingPageCopy.chip),
             ("RUN_BY_ORBIT", LandingPageCopy.runByOrbit),
-            ("SETTLED", LandingPageCopy.settled),
             ("LAND", LandingPageCopy.land),
             ("MERGE_ROUND", LandingPageCopy.mergeRound),
             ("INTO_MAIN", LandingPageCopy.intoMain),
@@ -126,8 +125,6 @@ final class LandingCopyParityTests: XCTestCase {
             ("ABANDON_END", LandingPageCopy.abandonEnd),
             ("NO_RETRY_MERGE", LandingPageCopy.noRetryMerge),
             ("LEGACY_PUSH_VARIANT", LandingPageCopy.legacyPushVariant),
-            ("ORBIT_RUNS_THIS_LANDING", LandingPageCopy.orbitRunsThisLanding),
-            ("THIS_LANDING_IS_COMPLETE", LandingPageCopy.thisLandingIsComplete),
             ("LOADING_LANDING", LandingPageCopy.loadingLanding),
             ("LOADING_LOG", LandingPageCopy.loadingLog),
             ("LOG_UNAVAILABLE", LandingPageCopy.logUnavailable),
@@ -136,8 +133,6 @@ final class LandingCopyParityTests: XCTestCase {
             ("LOG", LandingPageCopy.log),
             ("OLDER_ATTEMPTS_HIDDEN", LandingPageCopy.olderAttemptsHidden),
             ("DECISIONS_THE_COORDINATOR", LandingPageCopy.decisionsTheCoordinator),
-            ("A_CLEAN_PASS_MERGES_ON_ITS_OWN", LandingPageCopy.aCleanPassMergesOnItsOwn),
-            ("MERGING_IS_DECIDED_ON_THE_CARD", LandingPageCopy.mergingIsDecidedOnTheCard),
         ]
         for (key, copy) in constants {
             assertSays(web, "\(key): '\(copy)',", in: Self.landingPage)
@@ -148,28 +143,27 @@ final class LandingCopyParityTests: XCTestCase {
         assertSays(web, "`May have been pushed — it reported starting the push at ${time}, then went silent.`",
                    in: Self.landingPage)
         assertSays(web, "`${bytes} bytes omitted`", in: Self.landingPage)
-        assertSays(web, "`The next merge into main opens a new landing (#${next}).`",
-                   in: Self.landingPage)
         // §2.7a: a RUNNING attempt four seconds, a queued one fifteen, and nothing once settled.
         assertSays(web, "return landing.currentAttempt?.state === 'RUNNING' ? 4_000 : 15_000;",
                    in: Self.landingPage)
         XCTAssertEqual(LandingPageCopy.taskAcceptanceExited("1", expected: "0"),
                        "Task acceptance exited 1 (expected 0) on the combined tree")
-        XCTAssertEqual(LandingPageCopy.nextMergeOpens(10),
-                       "The next merge into main opens a new landing (#10).")
         XCTAssertEqual(LandingPageCopy.bytesOmitted(4_096), "4096 bytes omitted")
     }
 
-    /// The Landings group's words and the source session's derived label.
-    func testTheLandingsGroupsAndSourceLabelsWordsAreTheWebsOwn() throws {
+    /// The Landings row's and window's words (owner 2026-10-27, board docs/mocks/landings-one-window)
+    /// and the source session's derived label.
+    func testTheLandingsRowsAndWindowsAndSourceLabelsWordsAreTheWebsOwn() throws {
         let web = try source(Self.sessionProjects)
         for (key, copy) in [("TITLE", SessionLandingsCopy.title),
-                            ("EARLIER", SessionLandingsCopy.earlier),
+                            ("WAITING", SessionLandingsCopy.waiting),
+                            ("IN_FLIGHT", SessionLandingsCopy.inFlight),
                             ("LANDED", SessionLandingsCopy.landed),
-                            ("NOTHING_TO_LAND", SessionLandingsCopy.nothingToLand),
-                            ("WITH_YOU", SessionLandingsCopy.withYou),
-                            ("WITH_COORDINATOR", SessionLandingsCopy.withCoordinator),
-                            ("WAITING", SessionLandingsCopy.waiting)] {
+                            ("MERGED_INTO", SessionLandingsCopy.mergedInto),
+                            ("TODAY", SessionLandingsCopy.today),
+                            ("NOTHING_LANDED_TODAY", SessionLandingsCopy.nothingLandedToday),
+                            ("NOW", SessionLandingsCopy.now),
+                            ("ORBIT_RUNS_THESE_LANDINGS", SessionLandingsCopy.orbitRunsTheseLandings)] {
             assertSays(web, "\(key): '\(copy)',", in: Self.sessionProjects)
         }
         for (key, copy) in [("LANDING", SessionLandingsCopy.landing),
@@ -182,33 +176,32 @@ final class LandingCopyParityTests: XCTestCase {
                             ("RUNNING", SessionLandingsCopy.running)] {
             assertSays(web, "\(key): '\(copy)',", in: Self.sessionProjects)
         }
-        // The 24-hour window, and the fold's one line.
-        assertSays(web, "export const LANDINGS_SETTLED_WINDOW_MS = 24 * 60 * 60 * 1_000;",
-                   in: Self.sessionProjects)
-        XCTAssertEqual(landingsSettledWindow, 24 * 60 * 60)
-        // A segment whose count is 0 is left out, on both sides.
-        assertSays(web, "return [ SESSION_LANDINGS_COPY.EARLIER, "
-                   + "earlier.landed > 0 ? `${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null, "
-                   + "earlier.nothing > 0 ? `${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}` : null, "
+        // The row's count sentence: a count of 0 is left out, today's two share one `today`, and all
+        // four at 0 is `Nothing landed today` — the web's own expression, and the same sentences here.
+        assertSays(web, "const today = [ "
+                   + "counts.landed > 0 ? `${counts.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null, "
+                   + "counts.merged > 0 ? `${counts.merged} ${SESSION_LANDINGS_COPY.MERGED_INTO} ${main}` : null, "
                    + "].filter(Boolean).join(' · ');",
                    in: Self.sessionProjects)
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 31, nothing: 3),
-                       "Earlier · 31 landed · 3 nothing to land")
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 31, nothing: 0), "Earlier · 31 landed")
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 3),
-                       "Earlier · 3 nothing to land")
-        // …and with both at 0 the fold is still there whenever something older is, a bare
-        // `Earlier` that opens to every older row; with nothing older there is none.
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 0), "Earlier")
-        assertSays(web, "if (waiting.length === 0 && settled.length === 0 && older === 0) return null;",
+        assertSays(web, "today ? `${today} ${SESSION_LANDINGS_COPY.TODAY}` : null,", in: Self.sessionProjects)
+        assertSays(web, "return parts.length > 0 ? parts.join(' · ') : SESSION_LANDINGS_COPY.NOTHING_LANDED_TODAY;",
                    in: Self.sessionProjects)
-        assertSays(web, "earlier: older > 0 ? { landed, nothing } : null, "
-                   + "older: before.map(({ at: _at, ...row }) => row),",
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 1, inFlight: 1, landed: 3, merged: 1),
+                       "1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 0, landed: 0, merged: 0),
+                       "Nothing landed today")
+        // The window's days are the session list's own sections, and a merge is joined with its
+        // round's landing session by `landingSessionId`.
+        assertSays(web, "const days = sessionTimeSections(settled, { pinnedFirst: false, now: opts.now })",
                    in: Self.sessionProjects)
-        // The item reasons the group's rows print.
-        for reason in ["Merge conflict", "Checks failed", "Integration error", "Task failed",
-                       "Delivery review", "No report from the runner"] {
-            assertSays(web, "'\(reason)'", in: Self.sessionProjects)
+        assertSays(web, "const record = bySession.get(row.id) ?? null;", in: Self.sessionProjects)
+        XCTAssertEqual(SessionTimeGrouping.bucketTitles, ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"])
+        // A task segment is named by its task: the server's `Land · ` comes off.
+        assertSays(web, "const prefix = `${LANDING_PAGE_COPY.LAND} · `;", in: Self.sessionProjects)
+        XCTAssertEqual(SessionProjectLandings.taskName("Land · Ledger migration order"), "Ledger migration order")
+        // The Landings group, its Earlier fold and its 24-hour window are gone from the web too.
+        for gone in ["landingGroup(", "LANDINGS_SETTLED_WINDOW_MS", "landingEarlierLine(", "EARLIER: 'Earlier'"] {
+            XCTAssertFalse(web.contains(gone), "\(Self.sessionProjects) still has \(gone)")
         }
     }
 
@@ -335,6 +328,20 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: ""), "round 1")
     }
 
+    /// The results that give the status card its red ✕ head are the web's three, read from the
+    /// attempt's state; and the budget bar is the same fraction on both (the step's milliseconds over
+    /// the budget's, which the web writes with the budget times 1000).
+    func testTheFailureStatesAndTheBudgetFractionAreTheWebsOwn() throws {
+        let web = try source(Self.landingPage)
+        let states = LandingPageCopy.failureStates.map { "'\($0)'" }.joined(separator: ", ")
+        assertSays(web, "export const LANDING_FAILURE_STATES: readonly string[] = [\(states)];", in: Self.landingPage)
+        assertSays(web, "stoppedOnFailure: LANDING_FAILURE_STATES.includes(attempt.state),", in: Self.landingPage)
+        assertSays(web, "Math.max(0, Math.min(1, (elapsedAt - stepStart) / (attempt.check.budgetSeconds * 1_000)))",
+                   in: Self.landingPage)
+        let panorama = try source(Self.panorama)
+        assertSays(panorama, "failed ? 'cross' : 'spinner'", in: Self.panorama)
+    }
+
     /// The delivery card's third link.
     func testTheDeliveryCardsLandingLinkIsTheWebsOwn() throws {
         let web = try source(Self.deliveryCard)
@@ -342,8 +349,8 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(OpenItemDeliveryCard.openLanding, "Open the landing ↗")
     }
 
-    /// The group's 24-hour window and the page's 90-second read guard are the same numbers as the
-    /// web's; a cadence that drifted would poll a page the other client leaves alone.
+    /// The window's 90-second read guard and its cards' cadence are the same numbers as the web's; a
+    /// cadence that drifted would poll a landing the other client leaves alone.
     func testTheCadencesAndReadGuardsMatchTheWeb() throws {
         let web = try source(Self.landingPage)
         assertSays(web, "const LEASE_STALE_MS = 90_000;", in: Self.landingPage)

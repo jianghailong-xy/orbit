@@ -2,7 +2,6 @@ import type { ProjectIntegrationInFlight, ProjectLandTask, ProjectPromotionView 
 import { api } from '../api';
 import { jobPhases } from '../components/ProjectPanoramaHeader';
 import { mainBranchName } from './projectStart';
-import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 /**
  * The merge into main on the project's sessions view (owner decision 2026-10-06): the card under the
@@ -367,51 +366,4 @@ export function promotionChangesLine(promotion: ProjectPromotionView): string | 
     promotion.filesChanged != null ? plural(promotion.filesChanged, 'file') : null,
   ].filter((part): part is string => part !== null);
   return parts.length > 0 ? parts.join(' · ') : null;
-}
-
-export type ProjectTimelineItem<T> =
-  | { kind: 'session'; id: string; session: T }
-  | { kind: 'merge'; id: string; promotion: ProjectPromotionView };
-
-/**
- * The sessions view's recency sections with every merge already made drawn among the sessions at
- * its own instant: each merge goes in front of the first session older than it, so within a bucket
- * the newest thing leads whichever kind it is. The buckets are `sessionTimeSections`' own, so a
- * merge lands in the section its time says.
- */
-export function projectTimelineSections<T extends GroupableSession>(
-  sessions: readonly T[],
-  merges: readonly ProjectPromotionView[],
-  now: Date = new Date(),
-): Array<{ title: string; items: ProjectTimelineItem<T>[] }> {
-  const instant = (iso: string | null | undefined): number => {
-    const at = iso ? Date.parse(iso) : Number.NaN;
-    return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
-  };
-  const records = merges
-    .filter((promotion) => promotion.merged != null)
-    .sort((a, b) => instant(b.merged?.at) - instant(a.merged?.at));
-  // One list in time order, then bucketed by the session grouper (which only buckets, never
-  // reorders) — so the two kinds share one set of section titles and day boundaries.
-  type Entry = GroupableSession & { item: ProjectTimelineItem<T> };
-  const entries: Entry[] = [];
-  let next = 0;
-  for (const session of sessions) {
-    const at = instant(session.lastTurnAt ?? session.createdAt);
-    while (next < records.length && instant(records[next].merged?.at) >= at) {
-      const promotion = records[next++];
-      entries.push({ id: `merge-${promotion.promotionId}`, lastTurnAt: promotion.merged?.at ?? null,
-        item: { kind: 'merge', id: `merge-${promotion.promotionId}`, promotion } });
-    }
-    entries.push({ id: session.id, createdAt: session.createdAt, lastTurnAt: session.lastTurnAt,
-      item: { kind: 'session', id: session.id, session } });
-  }
-  for (const promotion of records.slice(next)) {
-    entries.push({ id: `merge-${promotion.promotionId}`, lastTurnAt: promotion.merged?.at ?? null,
-      item: { kind: 'merge', id: `merge-${promotion.promotionId}`, promotion } });
-  }
-  return sessionTimeSections(entries, { pinnedFirst: false, now }).map((section) => ({
-    title: section.title,
-    items: section.sessions.map((entry) => entry.item),
-  }));
 }

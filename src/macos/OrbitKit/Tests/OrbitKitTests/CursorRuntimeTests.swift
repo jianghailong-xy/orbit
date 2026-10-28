@@ -234,13 +234,8 @@ final class CursorRuntimeTests: XCTestCase {
 
     // MARK: - Infrastructure (board iOS 2 ①)
 
-    func testTheSeventhEngineCardAndWhatNeedsAPerson() throws {
+    func testWhatNeedsAPersonAndAMachinesLine() throws {
         let ready = try readyRunner()
-        let card = try XCTUnwrap(Infrastructure.engineCards(runners: [ready], keys: [cursorKey], pools: []).last)
-        XCTAssertEqual(card.name, "Cursor CLI")
-        XCTAssertTrue(card.ready)
-        XCTAssertEqual(card.machines, ["hpc ×2"])
-        XCTAssertEqual(card.keys, [Infrastructure.EngineCard.Key(label: "Cursor", model: "Auto")])
         // Counted beside the other engines this machine signs in (Claude Code, Codex and Kimi Code here).
         XCTAssertEqual(Infrastructure.machineLine(ready, now: now), "2 of 4 signed in")
 

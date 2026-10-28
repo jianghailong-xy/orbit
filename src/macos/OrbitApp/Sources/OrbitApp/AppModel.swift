@@ -2580,8 +2580,8 @@ final class AppModel {
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
         do {
-            // `includeLanding=1` is the page's own widening (§2.9 LS6): its Landings group is
-            // folded from the landing rows the same read carries, and no other list sees them.
+            // `includeLanding=1` is the page's own widening (§2.9 LS6): its Landings row is
+            // summed up from the landing rows the same read carries, and no other list sees them.
             let openRead = Task {
                 try await api.listSessions(view: .open, projectId: address.projectID,
                                            includeLanding: true)
@@ -2599,8 +2599,8 @@ final class AppModel {
             // An older server may ignore projectId. It must never put unrelated sessions here, nor a
             // row on its way to Trash (`trashingSessions`).
             let kept = SessionFilter.removing(trashingSessions, from: rows)
-            // The page holds its members AND the landing rows its Landings group folds from
-            // (§2.9 LS6). A landing has a membership too, so it is kept out of the member list —
+            // The page holds its members AND the landing rows its Landings row sums up (§2.9
+            // LS6). A landing has a membership too, so it is kept out of the member list —
             // otherwise every landing row would be drawn both as a member and as a landing.
             let members = SessionProjectMembers.members(of: address.projectID, in: kept)
                 .filter { !$0.isLanding }
@@ -2732,13 +2732,8 @@ final class AppModel {
         guard let api else { return }
         let key = PublicID.storageKey(address.projectID)
         let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        // The start row needs the items only on a project nobody has started; the Landings group
-        // needs them on any project with a landing waiting on a decision (§2.9 LS6) — its rows say
-        // what stopped the landing and which side holds it. One read serves both.
-        let landingWaits = (projectSessionsAddress == address ? projectSessions : []).contains {
-            $0.isLanding && $0.landing?.state == "AWAITING_DECISION"
-        }
-        guard row?.status == .open, row?.started == false || landingWaits else {
+        // The start row needs the items only on a project nobody has started.
+        guard row?.status == .open, row?.started == false else {
             projectSessionsOpenItems = nil
             return
         }

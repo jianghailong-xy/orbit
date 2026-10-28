@@ -16,9 +16,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The landing session page's model (contract §2.9 LS1/LS6/LS7, §7.2 V6; mockups v4 05 and 07): the decode with every
- * optional slot, the status card's five liveness readings across the three job kinds, the timeline's sections, the menu's
- * doors and their J12 sentences, §2.7a's cadence, and a failed read opening nothing.
+ * A landing's model, as each landing in a project's Landings window draws it (contract §2.9 LS1/LS6/LS7, §7.2 V6; mockups v4 05
+ * and 07; since revision 28 docs/mocks/landings-one-window): the decode with every optional slot, the status card's five liveness
+ * readings across the three job kinds, the timeline's sections, the menu's doors and their J12 sentences, a merge row's receipt,
+ * §2.7a's cadence, and a failed read opening nothing.
  */
 class LandingSessionModelTest {
     private val now = Instant.parse("2026-10-20T17:36:00Z")
@@ -100,7 +101,7 @@ class LandingSessionModelTest {
         assertNull(LandingSessionModel.attemptCard(view.copy(currentAttempt = null), now))
     }
 
-    /** LS1: before the session row exists the same view answers under the pre-generated id, without a title — the page
+    /** LS1: before the session row exists the same view answers under the pre-generated id, without a title — the window
      *  spells one from the subject and, for a task, its title. */
     @Test fun aLandingWithoutItsRowStillTitlesItself() {
         val task = LandingSessionModel.read(landingJson())
@@ -110,10 +111,6 @@ class LandingSessionModelTest {
         assertEquals("The row's own title", LandingSessionModel.headerTitle(task, "The row's own title"))
         val round = LandingSessionModel.read(landingJson(subject = "PROMOTION", taskId = null, promotionId = "p-1", kind = "CHECK_PROMOTION"))
         assertEquals("Merge project ${ObjectId.toPublic(project)} → main · #4", LandingSessionModel.headerTitle(round, null))
-        assertEquals("Run by Orbit · runner wikova", LandingSessionModel.headerSub(task))
-        val settled = LandingSessionModel.read(landingJson(settledAt = "2026-10-20T17:31:00Z", settledAs = "LANDED"))
-        assertEquals("Run by Orbit · settled 17:31", LandingSessionModel.headerSub(settled, ZoneOffset.UTC))
-        assertEquals("Run by Orbit", LandingSessionModel.headerSub(null))
     }
 
     @Test fun theLogPageDecodesItsChunksAndCursor() {
@@ -280,6 +277,30 @@ class LandingSessionModelTest {
         val check = ended(kind = "CHECK_PROMOTION", state = "CANCELLED")
         assertEquals("Not merged", check.right)
         assertEquals("Stopped · not landed", check.failure)
+    }
+
+    /** An attempt that stopped on a failure — a check that failed, a conflict, an error — wears the red ✕ head (board 02 d), read from its
+     *  state alone; a stop, a READY and work in hand keep the quiet head (web `landingSession.test.ts`, iOS `LandingSessionPageTests`, the
+     *  same cases). */
+    @Test fun anAttemptThatStoppedOnAFailureWearsTheRedHead() {
+        assertEquals(listOf("CHECK_FAILED", "CONFLICT", "ERROR"), LandingSessionModel.FAILURE_STATES)
+        for (state in listOf("CHECK_FAILED", "CONFLICT", "ERROR")) assertTrue(state, ended(state = state).stoppedOnFailure)
+        assertTrue(ended(kind = "CHECK_PROMOTION", state = "CHECK_FAILED").stoppedOnFailure)
+        // Never the sentence: a failed attempt with no check record says only `Stopped · not landed` and is still a failure.
+        assertEquals("Stopped · not landed", ended(state = "CHECK_FAILED").detail)
+        assertFalse(ended(state = "CANCELLED").stoppedOnFailure)
+        assertFalse(ended(kind = "CHECK_PROMOTION", state = "READY").stoppedOnFailure)
+        assertFalse(card(view())!!.stoppedOnFailure)
+        assertFalse(card(view(timedOut = true, liveness = "LEASE_EXPIRED"))!!.stoppedOnFailure)
+    }
+
+    /** The budget bar is the step's share of its budget: 6m 15s of 30m fills about a fifth, the fraction iOS now draws too. */
+    @Test fun theBudgetBarIsTheStepsShareOfItsBudget() {
+        val running = card(view(step = 375, check = checkJson(375, budget = 1800, name = "MERGE_CHECK", count = 1)),
+            facts = LandingFacts(typicalMs = 540_000))!!
+        assertEquals("6m 15s of 30m", running.right)
+        assertEquals(375f / 1800f, running.progress!!, 0.0001f)
+        assertEquals(0.3f, running.usualProgress!!, 0.0001f)
     }
 
     /** The takeover: claim 2 of the same section, and the section's first claim is where `first started` comes from. */
@@ -608,7 +629,7 @@ class LandingSessionModelTest {
         assertTrue(LandingSessionModel.timeoutLine(unnamed, zone = ZoneOffset.UTC).startsWith("The runner took it at"))
     }
 
-    // MARK: the outcome and the footer
+    // MARK: the outcome
 
     @Test fun aSettledTaskSegmentDrawsItsOutcome() {
         val landed = view(settledAt = "2026-10-20T17:31:00Z", settledAs = "LANDED", state = "RUNNING",
@@ -641,24 +662,43 @@ class LandingSessionModelTest {
         assertTrue(outcome.ok)
     }
 
-    @Test fun theFooterNamesTheWayOutThatMatters() {
-        val task = LandingSessionModel.footer(view(), null)
-        assertEquals("Orbit runs this landing — nothing to type here.", task.line)
-        assertEquals("Decisions: the coordinator", task.detail)
-        assertEquals(LandingFooterLink.COORDINATOR, task.link)
-        val round = LandingSessionModel.footer(view(subject = "PROMOTION", taskId = null, promotionId = "p-1"), "MERGE")
-        assertEquals("A clean pass merges on its own", round.detail)
-        assertEquals(LandingFooterLink.REVIEW_CARD, round.link)
-        assertEquals("Merging is decided on the merge card", LandingSessionModel.footer(view(subject = "PROMOTION", taskId = null), "ASK").detail)
-        val settled = LandingSessionModel.footer(view(subject = "PROMOTION", taskId = null, settledAt = "2026-10-20T17:31:00Z", settledAs = "MERGED"), null)
-        assertEquals("This landing is complete — nothing to type here.", settled.line)
-        assertEquals("The next merge into main opens a new landing (#5).", settled.next)
-        assertNull(settled.link)
+    // MARK: a merge row's receipt in the Landings window (board 03 e; OrbitKit `LandingPageCopy.mergeReceipt`)
+
+    /** OrbitKit's `testAMergeRowsReceiptSaysWhatIsOnMainTheCheckThatPassedAndTheTreeThatLanded`, the same three shapes: a round with
+     *  its record, a round past the read's 20 records (its landing view alone), and a merge older than landing sessions (its record
+     *  alone, whose checks it reads first). */
+    @Test fun aMergeRowsReceiptSaysWhatIsOnMainTheCheckThatPassedAndTheTreeThatLanded() {
+        val round = view(subject = "PROMOTION", taskId = null, promotionId = "promo-1", kind = "LAND_PROMOTION", state = "MERGED",
+            settledAt = "2026-09-25T09:51:00Z", settledAs = "MERGED",
+            checks = """[{"name":"MERGE_CHECK","exitCode":0,"expectedExitCode":0,"timedOut":false,"durationMs":${17 * 60_000 + 41_000}}]""")
+        val promotion = json("""{"promotionId":"promo-1","state":"MERGED","sourceRef":"refs/heads/project/p1","sourceSha":"${"a".repeat(40)}",
+            "upstreamRef":"refs/heads/main","commitsAhead":2,"filesChanged":3,"taskIds":["task-1","task-2"],
+            "tasks":[{"taskId":"task-1","title":"Ledger migration order"},{"taskId":"task-2","title":"Payout retry budget"}],
+            "checks":[],"conflicts":[],"landsAs":"MERGE_COMMIT",
+            "merged":{"sha":"8ed0ea7${"0".repeat(33)}","at":"2026-09-25T09:51:00Z","automatic":true,"revert":null},
+            "landsTreeSha":"5e5bfca${"0".repeat(33)}"}""")
+        assertEquals(LandingMergeReceipt("Now on main · 2 tasks", listOf("Ledger migration order", "Payout retry budget"),
+            "✓ Passed on the combined tree · 17m 41s", "Landed exactly the tested tree 5e5bfca · as a merge commit"),
+            LandingSessionModel.mergeReceipt(promotion, round))
+        // A round past the read's 20 records keeps to what its landing view has.
+        assertEquals(LandingMergeReceipt("Now on main", emptyList(), "✓ Passed on the combined tree · 17m 41s", null),
+            LandingSessionModel.mergeReceipt(null, round))
+        // A merge older than landing sessions has its record alone, whose checks it reads first.
+        val recorded = json("""{"promotionId":"promo-0","state":"MERGED","sourceRef":"refs/heads/project/p1","sourceSha":"a",
+            "upstreamRef":"refs/heads/main","taskIds":["task-1"],"tasks":[{"taskId":"task-1","title":"Ledger migration order"}],
+            "checks":[{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":${9 * 60_000}}],
+            "landsAs":"FAST_FORWARD","landsTreeSha":"5e5bfca${"0".repeat(33)}"}""")
+        assertEquals(LandingMergeReceipt("Now on main · 1 task", listOf("Ledger migration order"), "✓ Passed on the combined tree · 9m 00s",
+            "Landed exactly the tested tree 5e5bfca · by fast-forward"), LandingSessionModel.mergeReceipt(recorded, null))
+        // The record's own checks win over the round's; a check that failed, or timed out, passes nothing.
+        val failing = json("""{"promotionId":"promo-2","upstreamRef":"refs/heads/master","taskIds":[],"checks":[
+            {"name":"MERGE_CHECK","expectedExitCode":0,"exitCode":1,"timedOut":false,"durationMs":1000}]}""")
+        assertEquals(LandingMergeReceipt("Now on master · 0 tasks"), LandingSessionModel.mergeReceipt(failing, round))
     }
 
     // MARK: §2.7a's cadence
 
-    @Test fun thePagePollsRunningEveryFourSecondsQueuedEveryFifteenAndStopsWhenSettled() {
+    @Test fun aCardPollsRunningEveryFourSecondsQueuedEveryFifteenAndStopsWhenSettled() {
         assertEquals(4_000L, LandingSessionModel.nextReadMs(view()))
         assertEquals(4_000L, LandingSessionModel.nextReadMs(view(timedOut = true)))
         assertEquals(15_000L, LandingSessionModel.nextReadMs(view(state = "QUEUED", check = null)))

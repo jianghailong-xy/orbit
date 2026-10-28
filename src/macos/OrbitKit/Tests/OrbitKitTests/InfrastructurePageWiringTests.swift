@@ -81,14 +81,13 @@ final class InfrastructurePageWiringTests: XCTestCase {
 
     // MARK: the page (03-ios.png)
 
-    /// Top to bottom: Needs you — only while something does — and what each engine can run on, both once
-    /// every list has answered; the machines, Add Runner, the account pools, the API keys. Its title is
-    /// the section's, and it reads each of its lists side by side.
+    /// Top to bottom: Needs you — only while something does, once every list has answered; the machines,
+    /// Add Runner, the account pools, the API keys. Its title is the section's, and it reads each of its
+    /// lists side by side.
     func testThePageHoldsTheMocksBlocksInOrder() throws {
         let page = try XCTUnwrap(try lists().first?.code)
         let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
         try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "InfrastructureNeedsYouSection(",
-                                 "InfrastructureEnginesSection(engines: lists.engines, install: install)",
                                  "ForEach(runners.runners)", "RunnerSectionHeader(Infrastructure.machines,",
                                  "Text(Infrastructure.machinesDetail)", "RunnerAddSection { addingRunner = true }",
                                  "InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
@@ -130,15 +129,14 @@ final class InfrastructurePageWiringTests: XCTestCase {
         }
     }
 
-    /// The two blocks at the top are OrbitKit's rules over the page's own lists — the account's own keys
-    /// (GET /providers/mine) among them — and wait for every list's answer, as the web's do.
-    func testTheTopBlocksAreTheWebsRulesOverThePagesLists() throws {
+    /// Needs you at the top is OrbitKit's rules over the page's own lists — the account's own keys
+    /// (GET /providers/mine) among them — and waits for every list's answer.
+    func testNeedsYouIsOrbitKitsRulesOverThePagesLists() throws {
         let sections = code(try appSource(Self.sectionsFile))
         let read = try slice(sections, from: "struct InfrastructureLists {", to: "struct InfrastructureNeedsYouSection: View {")
         for piece in ["keys = model.agents?.ownKeys ?? []", "SharedPools.ownPoolWithAccess(pool, access)",
                       "settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }",
-                      "Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),",
-                      "Infrastructure.engineCards(runners: runners, keys: keys,"] {
+                      "Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),"] {
             XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
         }
         let agents = code(try appSource("AgentsModel.swift"))
@@ -150,9 +148,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
                                 to: "model.push(.runnerEngine(runnerID: runnerID, engine: engine))")
         for piece in ["openEngine(runnerID, engine.rawValue)", "model.selectedRunnerID = runnerID",
                       "model.push(.runnerDetail(runnerID: runnerID))",
-                      "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))",
-                      "guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {",
-                      "addingRunner = true", "openEngine(runner.id, engine)"] {
+                      "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))"] {
             XCTAssertTrue(presses.contains(piece), "the page's presses lost \(piece)")
         }
         XCTAssertFalse(page.contains("openURL"), "nothing on the page opens the web")

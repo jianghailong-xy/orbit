@@ -59,8 +59,8 @@ public enum SessionTimeGrouping {
         bucketIndex(at: s.lastTurnAt ?? s.createdAt, today: today, calendar: calendar)
     }
 
-    /// The same buckets for any instant, so a row that is not a session (a merge on the project's
-    /// timeline) lands in the section its time says.
+    /// The same buckets for any instant, so a row that is not a session (a landing in the project's
+    /// Landings window) lands in the section its time says.
     static func bucketIndex(at iso: String?, today: Date, calendar: Calendar) -> Int {
         guard let iso, let date = RelativeTime.parse(iso) else { return 4 }
         let day = calendar.startOfDay(for: date)

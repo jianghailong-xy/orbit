@@ -2,21 +2,23 @@ package io.orbitd.android.directory
 
 import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The Landings group says the Swift's words (project rule: Kotlin ⊆ Swift). Every fixed word of [SessionLandingsCopy] is a literal in
- * OrbitKit's `SessionProjectLandings.swift` (the settled words it takes from `LandingSessionPage.swift`), and every built sentence is
- * one literal there or in the page's own `earlierLine`/`sourceLabel`. A missing counterpart is a failure, never a skip.
+ * The Landings row and the Landings window say the Swift's words (project rule: Kotlin ⊆ Swift; owner 2026-10-27,
+ * docs/mocks/landings-one-window). Every fixed word of [SessionLandingsCopy] is a literal in OrbitKit's `SessionProjectLandings.swift`
+ * (the settled words it takes from `LandingSessionPage.swift`), and every built sentence is the Swift's own expression there: the row's
+ * count sentence, the task's name, the source session's label. A missing counterpart is a failure, never a skip.
  */
 class SessionLandingsCopyParityTest {
     private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
         .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
     private val kit = "src/macos/OrbitKit/Sources/OrbitKit/App/"
     private val views = "src/macos/OrbitApp/Sources/OrbitApp/Views/"
-    private val group = File(root, "${kit}SessionProjectLandings.swift").readText()
+    private val landings = File(root, "${kit}SessionProjectLandings.swift").readText()
+    private val grouping = File(root, "${kit}SessionTimeGrouping.swift").readText()
     private val source = listOf("${kit}SessionProjectLandings.swift", "${kit}LandingSessionPage.swift",
         "${views}SessionProjectPage.swift", "${kit}ProjectPage.swift").joinToString("\n") { File(root, it).readText() }
         .replace(Regex("\"\\s*\\+\\s*\""), "")
@@ -31,28 +33,69 @@ class SessionLandingsCopyParityTest {
             }
         }.toMap()
 
+    private fun swiftSays(vararg expressions: String) = expressions.forEach {
+        assertTrue("SessionProjectLandings.swift no longer says $it", landings.contains(it))
+    }
+
     @Test fun everyWordIsTheSwifts() {
         val missing = strings(SessionLandingsCopy).filterValues { !source.contains("\"$it\"") }
         assertTrue("SessionLandingsCopy strings not in the Swift source: $missing", missing.isEmpty())
     }
 
-    @Test fun everyBuiltSentenceIsOneSwiftExpression() {
-        // `Earlier · 31 landed · 3 nothing to land` — the Swift's `earlierLine`, sentinel-rendered: a segment whose count is 0 is
-        // left out, on both sides.
-        assertEquals("Earlier · 31 landed · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(31, 3)))
-        assertEquals("Earlier · 31 landed", SessionProjectLandings.earlierLine(LandingEarlier(31, 0)))
-        assertEquals("Earlier · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(0, 3)))
-        assertEquals("both at 0: the bare word", "Earlier", SessionProjectLandings.earlierLine(LandingEarlier(0, 0)))
-        listOf("var parts = [SessionLandingsCopy.earlier]",
-            "if landed > 0 { parts.append(\"\\(landed) \\(SessionLandingsCopy.landed)\") }",
-            "if nothing > 0 { parts.append(\"\\(nothing) \\(SessionLandingsCopy.nothingToLand)\") }",
-            "parts.joined(separator: \" · \")").forEach {
-            assertTrue("SessionProjectLandings.swift no longer builds the fold with $it", group.contains(it))
-        }
-        // A settled merge is named by the landing page's own two words, in the order the Swift's `settledWord` names them.
-        assertEquals("Merged into main" to LandingGroupTone.MERGE, SessionProjectLandings.settledWord("MERGED"))
-        assertTrue("SessionProjectLandings.swift no longer says \"Merged into main\"", group.contains("\"Merged into main\""))
-        // The source label: where the work went, and what the platform is doing while it is open.
+    /** `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` — the Swift's `countLine`, expression for
+     *  expression: a count of 0 is left out, today's two share one `today` at the end, and all four at 0 is `Nothing landed today`. */
+    @Test fun theRowsCountSentenceIsTheSwiftsExpression() {
+        swiftSays("""landed > 0 ? "\(landed) \(SessionLandingsCopy.landed)" : nil,""",
+            """merged > 0 ? "\(merged) \(SessionLandingsCopy.mergedInto) \(main)" : nil,""",
+            """].compactMap { $0 }.joined(separator: " · ")""",
+            """waiting > 0 ? "\(waiting) \(SessionLandingsCopy.waiting)" : nil,""",
+            """inFlight > 0 ? "\(inFlight) \(SessionLandingsCopy.inFlight)" : nil,""",
+            """today.isEmpty ? nil : "\(today) \(SessionLandingsCopy.today)",""",
+            """return parts.isEmpty ? SessionLandingsCopy.nothingLandedToday : parts.joined(separator: " · ")""")
+        assertEquals("1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today",
+            SessionProjectLandings.countLine(waiting = 1, inFlight = 1, landed = 3, merged = 1))
+        assertEquals("2 in flight", SessionProjectLandings.countLine(0, 2, 0, 0))
+        assertEquals("2 landed today", SessionProjectLandings.countLine(0, 0, 2, 0))
+        assertEquals("1 merged into master today", SessionProjectLandings.countLine(0, 0, 0, 1, main = "master"))
+        assertEquals("2 waiting for a decision · 1 landed · 2 merged into main today", SessionProjectLandings.countLine(2, 0, 1, 2))
+        assertEquals("all four at 0", "Nothing landed today", SessionProjectLandings.countLine(0, 0, 0, 0))
+    }
+
+    /** The window's rows name what the Swift's do: a task by its name (the server's `Land · ` comes off), a merge round past the read's
+     *  20 records `Merged into main`, a settlement this build has no word for the Swift's own fallback, and a merge older than landing
+     *  sessions by its record's key. */
+    @Test fun theWindowsRowsAreNamedAsTheSwiftNamesThem() {
+        swiftSays("""let prefix = "\(LandingPageCopy.land) · """",
+            """title: record.map(PromotionCards.timelineTitle) ?? SessionLandingsCopy.mergedIntoMain,""",
+            """detail: record.map(PromotionCards.timelineDetail) ?? name,""",
+            """default: return (settledAs ?? "Settled", .quiet)""",
+            """key: session ?? "merge:\(record.promotionId)"""")
+        assertEquals("Ledger migration order", SessionProjectLandings.taskName("Land · Ledger migration order"))
+        assertEquals("Merged into main", SessionLandingsCopy.mergedIntoMain)
+        assertEquals("Settled" to LandingsWindowTone.QUIET, SessionProjectLandings.settledWord(null))
+        assertEquals("SOMETHING_NEW" to LandingsWindowTone.QUIET, SessionProjectLandings.settledWord("SOMETHING_NEW"))
+        // A merged round is the merge branch's, never a settled word: the Swift's `settledWord` has no MERGED case either.
+        assertFalse(landings.contains("""case "MERGED": return"""))
+        assertEquals("MERGED" to LandingsWindowTone.QUIET, SessionProjectLandings.settledWord("MERGED"))
+    }
+
+    /** The window files a landing where the Swift does: the session list's own day sections, oldest first and oldest row first, a
+     *  merge joined with its round's session by `landingSessionId`, `Now` in the order it started — and the row is no row for a
+     *  project that never had a landing, marked by the most urgent one. */
+    @Test fun theWindowFilesWhatTheSwiftFiles() {
+        swiftSays("""if let id = record.landingSessionId, !id.isEmpty, bySession[id] == nil { bySession[id] = record }""",
+            """$0.row.at != $1.row.at ? $0.row.at < $1.row.at : $0.row.key > $1.row.key""",
+            """let days = buckets.enumerated().reversed().compactMap { index, rows in""",
+            """cards.sort { $0.at != $1.at ? $0.at < $1.at : $0.sessionId < $1.sessionId }""",
+            """if landings.isEmpty && !merges.contains(where: { $0.merged != nil }) { return nil }""",
+            """mark: !waiting.isEmpty ? .fail : !inFlight.isEmpty ? .running : .ok,""",
+            """let today = window.days.first { $0.title == SessionTimeGrouping.bucketTitles[0] }?.rows ?? []""")
+        assertTrue(grouping.contains("""static let bucketTitles = ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"]"""))
+        assertEquals(listOf("Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"), SessionProjectLandings.dayTitles)
+    }
+
+    /** The source label: where the work went, and what the platform is doing while it is open — the Swift's three compositions. */
+    @Test fun theSourceLabelIsTheSwiftsComposition() {
         fun label(state: String, phase: String? = null, settledAs: String? = null, target: String? = "refs/heads/project/x") =
             SessionProjectLandings.sourceLabel(SessionProjectLandings.LandingSummary("s", state = state, phase = phase, settledAs = settledAs, targetRef = target))
         assertEquals(SourceLandingLabel("On project/x ✓", "landed"), label("SETTLED", settledAs = "LANDED"))
@@ -60,82 +103,21 @@ class SessionLandingsCopyParityTest {
         assertEquals(SourceLandingLabel("Landing · checks failed", "failed"), label("CHECK_FAILED"))
         assertEquals(SourceLandingLabel("Nothing to land", "quiet"), label("SETTLED", settledAs = "NOTHING_TO_LAND"))
         assertEquals(SourceLandingLabel("Landing · cancelled", "quiet"), label("SETTLED", settledAs = "CANCELLED"))
-        listOf("\"\\(SessionLandingsCopy.on) \\(branch) ✓\"", "\"\\(SessionLandingsCopy.landing) · \\(stopped)\"",
-            "\"\\(SessionLandingsCopy.landing) · \\(step)\"").forEach {
-            assertTrue("SessionProjectLandings.swift no longer composes $it", group.contains(it))
-        }
+        swiftSays(""""\(SessionLandingsCopy.on) \(branch) ✓"""", """"\(SessionLandingsCopy.landing) · \(stopped)"""",
+            """"\(SessionLandingsCopy.landing) · \(step)"""")
     }
 
-    /** The group's own rules: an in-flight landing is absent, a merged round is the timeline's, and everything older folds. */
-    @Test fun theGroupFoldsWhatTheSwiftDoes() {
-        val now = java.time.Instant.parse("2026-10-19T12:00:00Z")
-        fun row(id: String, title: String, at: String, subject: String = "TASK", state: String, settledAs: String? = null, settledAt: String? = null) =
-            DirectorySession(id, title, createdAt = at, sessionKind = "LANDING",
-                landing = SessionLandingSummary(subject, state, settledAs, settledAt))
-        val rows = listOf(
-            row("in-flight", "Land · moving", "2026-10-19T11:00:00Z", state = "IN_FLIGHT"),
-            row("waiting", "Land · stopped", "2026-10-19T11:55:00Z", state = "AWAITING_DECISION"),
-            row("just-landed", "Land · done", "2026-10-19T08:00:00Z", state = "SETTLED", settledAs = "LANDED", settledAt = "2026-10-19T11:00:00Z"),
-            row("merged-round", "Merge → main", "2026-10-19T10:00:00Z", subject = "PROMOTION", state = "SETTLED", settledAs = "MERGED",
-                settledAt = "2026-10-19T10:00:00Z"),
-            row("old-a", "Land · old", "2026-10-17T08:00:00Z", state = "SETTLED", settledAs = "LANDED", settledAt = "2026-10-17T09:00:00Z"),
-            row("old-b", "Land · nothing", "2026-10-16T08:00:00Z", state = "SETTLED", settledAs = "NOTHING_TO_LAND", settledAt = "2026-10-16T09:00:00Z"))
-        val group = SessionProjectLandings.group(rows, now, mapOf("waiting" to LandingHolder("Checks failed", "COORDINATOR")))!!
-        assertEquals(listOf("waiting"), group.waiting.map { it.id })
-        assertEquals("Checks failed · with the coordinator", group.waiting.single().detail)
-        assertEquals(LandingGroupTone.FAIL, group.waiting.single().tone)
-        assertEquals("an in-flight landing is the Landing card's, and a merged round the timeline's", listOf("just-landed"), group.settled.map { it.id })
-        assertEquals(LandingEarlier(landed = 1, nothing = 1), group.earlier)
-        assertEquals(listOf("old-a", "old-b"), group.older.map { it.id })
-        assertTrue(SessionProjectLandings.group(rows.filter { it.id == "in-flight" }, now) == null)
-    }
-
-    /** The fold names only what landed and what had nothing to land: a zero segment is left out, and with both at 0 it is a bare
-     *  `Earlier` that still opens to every older row. With nothing older there is no fold, and — with nothing else to list — no
-     *  group. The Swift's own gate and fold, line for line. */
-    @Test fun theFoldLeavesOutWhatItDoesNotCount() {
-        listOf("if waiting.isEmpty && settled.isEmpty && older == 0 { return nil }",
-            "earlier: older > 0 ? LandingEarlier(landed: landed, nothing: nothing) : nil,",
-            "older: before.map(\\.row))").forEach {
-            assertTrue("SessionProjectLandings.swift no longer folds with $it", group.contains(it))
+    /** The Landings group, its `Earlier` fold and its 24-hour window are gone (owner 2026-10-27), from the Swift and from here: no
+     *  word of theirs is left in [SessionLandingsCopy], and no function of theirs in [SessionProjectLandings]. */
+    @Test fun theGroupItsFoldAndItsWindowAreGone() {
+        listOf("landingsSettledWindow", "earlierLine(", "LandingGroup", "static let earlier", "static let withYou").forEach {
+            assertFalse("SessionProjectLandings.swift still has $it", landings.contains(it))
         }
-        val now = java.time.Instant.parse("2026-10-19T12:00:00Z")
-        fun row(id: String, state: String, settledAs: String? = null, settledAt: String? = null) =
-            DirectorySession(id, id, createdAt = "2026-10-15T08:00:00Z", sessionKind = "LANDING",
-                landing = SessionLandingSummary("TASK", state, settledAs, settledAt))
-        val landedOnly = SessionProjectLandings.group(listOf(
-            row("old-landed", "SETTLED", "LANDED", "2026-10-18T09:00:00Z"),
-            row("old-again", "SETTLED", "ALREADY_LANDED", "2026-10-17T09:00:00Z"),
-            row("old-cancelled", "SETTLED", "CANCELLED", "2026-10-16T09:00:00Z")), now)!!
-        assertEquals(LandingEarlier(landed = 2, nothing = 0), landedOnly.earlier)
-        assertEquals("Earlier · 2 landed", SessionProjectLandings.earlierLine(landedOnly.earlier!!))
-        assertEquals("the fold still opens to every older row", listOf("old-landed", "old-again", "old-cancelled"), landedOnly.older.map { it.id })
-        val nothingOnly = SessionProjectLandings.group(listOf(row("old-nothing", "SETTLED", "NOTHING_TO_LAND", "2026-10-18T09:00:00Z")), now)!!
-        assertEquals("Earlier · 1 nothing to land", SessionProjectLandings.earlierLine(nothingOnly.earlier!!))
-
-        // Both at 0: older rows neither count names still fold, under the bare word, and the fold opens to them.
-        val old = listOf(
-            row("old-cancelled", "SETTLED", "CANCELLED", "2026-10-18T09:00:00Z"),
-            row("old-handled", "SETTLED", "HANDLED", "2026-10-17T09:00:00Z"),
-            row("old-declined", "SETTLED", "DECLINED", "2026-10-17T08:00:00Z"),
-            row("no-instant", "SETTLED", "CANCELLED"))
-        val waiting = SessionProjectLandings.group(listOf(row("waiting", "AWAITING_DECISION")) + old, now)!!
-        assertEquals(listOf("waiting"), waiting.waiting.map { it.id })
-        assertEquals(LandingEarlier(landed = 0, nothing = 0), waiting.earlier)
-        assertEquals("Earlier", SessionProjectLandings.earlierLine(waiting.earlier!!))
-        assertEquals(listOf("old-cancelled", "old-handled", "old-declined", "no-instant"), waiting.older.map { it.id })
-        assertEquals(listOf("Cancelled", "Handled", "Declined", "Cancelled"), waiting.older.map { it.detail })
-        val alone = SessionProjectLandings.group(old, now)!!
-        assertEquals("the fold is the group's one row", emptyList<LandingGroupRow>(), alone.waiting + alone.settled)
-        assertEquals(LandingEarlier(landed = 0, nothing = 0), alone.earlier)
-        assertEquals(listOf("old-cancelled", "old-handled", "old-declined", "no-instant"), alone.older.map { it.id })
-
-        // Nothing older: no fold, nor rows under it; and with nothing else to list, no group.
-        val recent = SessionProjectLandings.group(listOf(row("waiting", "AWAITING_DECISION"),
-            row("cancelled-now", "SETTLED", "CANCELLED", "2026-10-19T11:00:00Z")), now)!!
-        assertEquals(listOf("cancelled-now"), recent.settled.map { it.id })
-        assertNull(recent.earlier)
-        assertEquals(emptyList<LandingGroupRow>(), recent.older)
-        assertNull("no bare Landings heading", SessionProjectLandings.group(listOf(row("moving", "IN_FLIGHT")), now))
+        val words = strings(SessionLandingsCopy)
+        listOf("Earlier", "nothing to land", "with you", "with the coordinator", "Waiting for a decision").forEach {
+            assertFalse("SessionLandingsCopy still says \"$it\"", words.containsValue(it))
+        }
+        val functions = SessionProjectLandings::class.java.declaredMethods.map { it.name }.toSet()
+        listOf("group", "earlierLine", "holders", "itemReason").forEach { assertFalse("SessionProjectLandings.$it is still here", it in functions) }
     }
 }

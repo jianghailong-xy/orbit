@@ -223,13 +223,13 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance for the human review face; decides nothing',
   'src/web/src/pages/JudgmentReviewPage.test.tsx':
     'asserts completion-evidence source provenance is rendered for human review',
-  // §2.9 LS6's landing page reads the same `sourceSessionId` spelling for the landing attempt's
+  // §2.9 LS6's Landings window reads the same `sourceSessionId` spelling for the landing attempt's
   // work session — a read face (the menu's "Open Source Session"), never a gate.
-  'src/web/src/components/LandingSessionView.tsx':
+  'src/web/src/components/ProjectLandingsWindow.tsx':
     'opens the landing attempt’s source session from the view; decides nothing',
   'src/web/src/lib/landingSession.ts':
     'lists the landing attempt’s source session as a menu row; decides nothing',
-  'src/web/src/components/LandingSessionView.test.tsx':
+  'src/web/src/components/ProjectLandingsWindow.test.tsx':
     'asserts the landing menu draws the source-session row',
   'src/web/src/lib/landingSession.test.ts':
     'asserts the landing menu lists the source-session row',

@@ -12,10 +12,10 @@ import { InfrastructurePage } from './InfrastructurePage';
 
 /**
  * Cursor CLI on /infrastructure (the owner's board, docs/mocks/cursor-engine Web 2 and Web 4): nothing of
- * it while no runner of the account knows it; once one does, a seventh engine card — the machines and
- * accounts signed in to it, and the Cursor keys with the model a session on one starts on (Auto) — a line
- * in Needs attention when it is signed out, a Cursor card in the vendor gallery, and on a Cursor key's
- * row what Cursor answered the last check: refused, or out of reach, which is asked again from there.
+ * it while no runner of the account knows it; once one does, the machines and accounts signed in to it,
+ * and the Cursor keys with the model a session on one starts on (Auto) — nothing on a machine's card where
+ * it is signed out — a Cursor card in the vendor gallery, and on a Cursor key's row what Cursor answered
+ * the last check: refused, or out of reach, which is asked again from there.
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -137,40 +137,29 @@ async function mount() {
 }
 
 const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-const engineCard = (name: string) =>
-  [...document.body.querySelectorAll<HTMLElement>('.infra-engine')].find((card) => text(card.querySelector('.infra-engine-name')).startsWith(name)) ?? null;
 
 describe('Cursor CLI on the Machines & models page', () => {
   it('is nowhere while no runner of the account knows it', async () => {
     runners = [hpc(null, [])];
     keys = [];
     await mount();
-    expect(engineCard('Cursor CLI')).toBeNull();
     expect(document.body.querySelector('[data-engine="cursor"]')).toBeNull();
     expect(document.body.querySelector('a[href="/providers/new/cursor-api"]')).toBeNull();
   });
 
-  it('gets the seventh engine row: the machines and accounts signed in, and its keys — each starting on Auto', async () => {
+  it('chips the accounts signed in to it on the machine’s card, and starts each of its keys on Auto', async () => {
     await mount();
-    const card = engineCard('Cursor CLI')!;
-    expect(text(card.querySelector('.infra-engine-state'))).toBe('Ready');
-    expect([...card.querySelectorAll('.infra-engine-src > div')].map((line) => text(line))).toEqual([
-      'Subscription · HPC ×2',
-      'API key · Cursor',
-    ]);
     // The machine's card chips both accounts, and the key's row says what a session on it starts on.
     expect(text(document.body.querySelector('.re-runner-card .mc-row'))).toContain('Cursor CLI ×2');
     expect(text(document.body.querySelector('.vk-row .vk-model'))).toBe('Starts on Auto');
   });
 
-  it('says on the machine’s card that Cursor CLI is signed out there, with its sign-in', async () => {
+  it('draws no chip on the machine’s card for Cursor CLI signed out there: its row, once open, says so', async () => {
     runners = [hpc(cursor({ auth: 'no', accounts: [{ id: 'default', home: '/root/.orbit/cursor/default', auth: 'no' }] }))];
     await mount();
-    const pair = [...document.body.querySelectorAll<HTMLElement>('.re-runner-card .mc-pair')].find((el) =>
-      text(el.querySelector('.mc-chip')).startsWith('Cursor CLI'),
-    )!;
-    expect(text(pair.querySelector('.mc-chip'))).toBe('Cursor CLI signed out');
-    expect(pair.querySelector('button')?.getAttribute('aria-label')).toBe('Sign in to Cursor CLI on HPC');
+    const head = document.body.querySelector<HTMLElement>('.re-runner-card .re-head')!;
+    expect([...head.querySelectorAll('.mc-chip')].map((chip) => text(chip))).toEqual(['Claude Code']);
+    expect(head.querySelector('button[aria-label="Sign in to Cursor CLI on HPC"]')).toBeNull();
   });
 
   it('offers Cursor in the vendor gallery, on its own connect page, as already signed in on the machine', async () => {

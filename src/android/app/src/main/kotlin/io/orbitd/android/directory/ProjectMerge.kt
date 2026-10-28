@@ -18,8 +18,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
 
-// A11-9 (iOS 6b4bef713, 39adc7561): the merge into main lives on the project's sessions page — its card under the progress card, the
-// merges already made on the page's timeline — and the coordinator conversation keeps one line per moment.
+// A11-9 (iOS 6b4bef713, 39adc7561): the merge into main lives on the project's sessions page — its card under the progress card; the
+// merges already made are rows of the project's Landings window (owner 2026-10-27) — and the coordinator conversation keeps one line
+// per moment.
 
 /** What the project's sessions page draws under its progress card about main (OrbitKit `ProjectMergeCard`): the candidate's own card
  * while it asks, merges or is blocked, and the merge check's live line before any of that. Nothing at all when none applies. */
@@ -87,40 +88,23 @@ object ProjectMergeCard {
     }
 }
 
-/** One recency section of a project's sessions page: its member sessions, with the merges into main made in the same bucket drawn
- * among them at their own instant (OrbitKit `ProjectTimelineSection`). A merge is a row of its own kind — never a session. */
-data class ProjectTimelineSection(val id: String, val title: String, val items: List<Item>) {
-    sealed interface Item {
-        val key: String
-        data class Session(val session: DirectorySession) : Item { override val key get() = session.id }
-        data class Merge(val receipt: PromotionReceipt) : Item { override val key get() = receipt.id }
-    }
-}
+/** One recency section of a project's sessions page: its member sessions (OrbitKit `ProjectTimelineSection`). The merges into main the
+ * project has made are not on this timeline any more: they are rows of the project's Landings window, which the page's Landings row
+ * opens (owner 2026-10-27, contract §2.9 LS6 and §3.6, revision 28). */
+data class ProjectTimelineSection(val id: String, val title: String, val sessions: List<DirectorySession>)
 
 object ProjectTimeline {
-    /** The sessions keep the order they are given in (newest activity first) and each merge goes in front of the first session older
-     * than it, so within a bucket the newest thing leads whichever kind it is. The buckets and their titles are the list's own,
-     * without Pinned: the project's page has none. */
-    fun sections(sessions: List<DirectorySession>, merges: List<PromotionReceipt>, now: Instant = Instant.now(),
-        zone: ZoneId = ZoneId.systemDefault()): List<ProjectTimelineSection> {
+    /** The sessions keep the order they are given in (the page's load sorts them by last activity, newest first). The buckets and their
+     * titles are the list's own, without Pinned: the project's page has none. */
+    fun sections(sessions: List<DirectorySession>, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<ProjectTimelineSection> {
         val today = now.atZone(zone).toLocalDate()
-        val buckets = List(recencyTitles.size) { mutableListOf<ProjectTimelineSection.Item>() }
-        fun bucket(at: String?) = recencyBucket(at?.let { runCatching { Instant.parse(it) }.getOrNull() }, today, zone)
-        val pending = ArrayDeque(merges.sortedByDescending { instant(it.moment) })
+        val buckets = List(recencyTitles.size) { mutableListOf<DirectorySession>() }
         for (session in sessions) {
-            val at = session.lastTurnAt ?: session.createdAt
-            while (pending.isNotEmpty() && instant(pending.first().moment) >= instant(at)) {
-                val merge = pending.removeFirst()
-                buckets[bucket(merge.moment)] += ProjectTimelineSection.Item.Merge(merge)
-            }
-            buckets[bucket(at)] += ProjectTimelineSection.Item.Session(session)
+            val at = (session.lastTurnAt ?: session.createdAt)?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            buckets[recencyBucket(at, today, zone)] += session
         }
-        pending.forEach { buckets[bucket(it.moment)] += ProjectTimelineSection.Item.Merge(it) }
-        return buckets.mapIndexedNotNull { i, items -> if (items.isEmpty()) null else ProjectTimelineSection("time:$i", recencyTitles[i], items) }
+        return buckets.mapIndexedNotNull { i, rows -> if (rows.isEmpty()) null else ProjectTimelineSection("time:$i", recencyTitles[i], rows) }
     }
-
-    /** An instant this clock cannot read sorts after every one it can, as the list files it under Older. */
-    private fun instant(iso: String?): Long = iso?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: Long.MIN_VALUE
 }
 
 /** Which of the merge's side reads one poll makes (iOS `ProjectMergeModel.load`): the candidate every time, since it is what the card
@@ -140,7 +124,7 @@ object ProjectMergePolls {
 
 /**
  * The merge into main as the project's sessions page shows it (iOS `ProjectMergeModel`): the candidate on offer, for the card under
- * the progress card; the merges already made, for the timeline; and the three presses. The page polls it beside its sessions every
+ * the progress card; the merges already made, which the Landings row counts; and the three presses. The page polls it beside its sessions every
  * 4 s, and the review the card's Details opens reads it. A read that fails leaves what it last read: the card says what it last read,
  * not that the merge vanished.
  */
@@ -148,7 +132,7 @@ object ProjectMergePolls {
 class ProjectMergeModel(private val api: ProjectApi, val projectId: String, private val clock: () -> Instant = Instant::now) {
     /** The candidate on offer, or null while the project is asking nothing. */
     var current by mutableStateOf<JsonObject?>(null); private set
-    /** The merges already made, newest first — the timeline's rows. */
+    /** The merges already made, newest first — what the Landings row counts today's of. */
     var merged by mutableStateOf<List<JsonObject>>(emptyList()); private set
     /** The project's open items, or null until read: a blocked candidate's holder is one of them. */
     var openItems by mutableStateOf<JsonObject?>(null); private set
@@ -160,7 +144,6 @@ class ProjectMergeModel(private val api: ProjectApi, val projectId: String, priv
      * candidate out of. */
     private var generation = 0
 
-    val receipts: List<PromotionReceipt> get() = PromotionCards.receipts(merged)
     /** Null until the criteria have been read — "0 of 0 met" would be a claim nobody checked. */
     val criteriaMet: Pair<Int, Int>? get() = criteria.takeIf { it.isNotEmpty() }?.let { items -> items.count { ProjectDoc.satisfied(it) == true } to items.size }
     /** The candidate a review was opened on, while it is still the one on offer. */

@@ -13,7 +13,7 @@ import org.junit.runner.RunWith
 /**
  * A11 increments on a device, over the test's own fixture: a project "Launch" in workspace Alpha whose pages draw what each row needs
  * — its ending once it is DONE (A11-14), the project page's coordinator card in each of its states (A11-16), the merge check card's
- * pass line (A11-17), a task page's Run hint (A11-18), the sessions page's Landings group with its Earlier fold (A11-21), and the
+ * pass line (A11-17), a task page's Run hint (A11-18), the sessions page's Landings row and the window it opens (A11-21), and the
  * project page's card for a lone merge job (A11-22). The shapes are the ones the JVM tests serve (ProjectShellFixture, ProjectPageTest,
  * ProjectMergeCopyTest, LandingEntriesShellTest, ProjectLandingCardViewTest, TaskLogicTest).
  */
@@ -138,6 +138,9 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
     }
 
     private fun scrollProject(matcher: SemanticsMatcher) {
+        // The page's cards come with the reads after its first frame, and performScrollToNode does not wait for them: one pass down
+        // the list and it gives up (A15 F-53). Both cards scrolled to here start on the page's first screen: wait for the card itself.
+        await("${matcher.description} on the project page") { exists(matcher) }
         compose.onNode(hasTestTag("project-detail") and hasScrollAction()).performScrollToNode(matcher)
         settle()
     }
@@ -193,6 +196,9 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
             "tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}],"conflicts":[],"askedAt":"${ago(9)}","merged":null}"""
         promotion = candidate("MERGE")
         openSessionsPage()
+        // The card comes with the page's landing and promotion reads, after its first frame; performScrollToNode gives up at once on
+        // a list that cannot scroll, and on API 36 this page fits whole, card and all (A15 F-51).
+        await("the merge check's card") { exists(hasTestTag("project-merge-card:checking")) }
         compose.onNodeWithTag("project-sessions-list").performScrollToNode(hasTestTag("project-merge-card:checking"))
         await("the pass line of an automatic merge") {
             exists(hasText("Merges on its own when it passes.") and hasAnyAncestor(hasTestTag("project-merge-card:checking")), unmerged = true)
@@ -223,40 +229,36 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
         capture("02-no-hint-with-a-prerequisite")
     }
 
-    /** A11-21: the sessions page draws its landings once, as one group, with older ones in an Earlier fold that counts them. */
-    @Test fun theLandingsGroupIsDrawnOnceWithItsEarlierFold() = journey {
+    /** A11-21, since revision 28 (owner 2026-10-27, docs/mocks/landings-one-window): the sessions page sums its landings up in one
+     *  Landings row, which opens the project's Landings window — every settled one kept, in its day, and the waiting one under Now; a
+     *  settled row opens in place to its record, read once. */
+    @Test fun theLandingsRowOpensTheWindowWithEveryLandingInItsDay() = journey {
         landings = true
         openSessionsPage()
         val list = compose.onNodeWithTag("project-sessions-list")
-        list.performScrollToNode(hasText("Landings") and isHeading())
+        // The page opens on the app's own lists, which carry no landing: the row comes with the page's member read, after its first
+        // frame, and performScrollToNode does not wait for it (the race of A15 F-51 above).
+        await("the Landings row") { exists(hasTestTag("landings-row")) }
+        list.performScrollToNode(hasTestTag("landings-row"))
         verify("one Landings heading", count(hasText("Landings") and isHeading()) == 1)
-        list.performScrollToNode(hasTestTag("landing-row:$landingAwait"))
-        verify("the waiting landing is drawn once", count(hasTestTag("landing-row:$landingAwait")) == 1)
-        await("it says what holds it (read off the open items every 4 s)") { says("landing-row:$landingAwait", "Checks failed · with the coordinator", substring = true) }
-        verify("the older landings are folded away", !exists(hasTestTag("landing-row:$landingOld")) && !exists(hasTestTag("landing-row:$landingCancelled")))
-        list.performScrollToNode(hasTestTag("landings:earlier"))
-        val fold = compose.onAllNodesWithTag("landings:earlier").fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.Text)
-            ?.joinToString("") { it.text }.orEmpty().ifEmpty {
-                compose.onAllNodes(hasAnyAncestor(hasTestTag("landings:earlier")), useUnmergedTree = true).fetchSemanticsNodes()
-                    .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }.joinToString(" ")
-            }
-        verify("the fold counts what landed and leaves the cancelled one uncounted (“$fold”)", fold.contains("Earlier · 1 landed") && !fold.contains("cancelled"))
+        verify("one Landings row", count(hasTestTag("landings-row")) == 1)
+        await("the row says what waits") { textOf("landings-row:line").startsWith("1 waiting for a decision") }
+        verify("one waits: the red ✕", exists(hasTestTag("landings-row:mark:fail"), unmerged = true))
+        verify("no landing is a row of the page", !exists(hasTestTag("landing-row:$landingAwait")) && !exists(hasTestTag("landing-row:$landingOld")))
         verify("no landing is a member of the project's conversations", !exists(hasText("Land · stopped") and hasAnyAncestor(hasTestTag("project-row:$launch"))))
-        capture("01-landings-folded")
-        compose.onNodeWithTag("landings:earlier").performClick()
-        await("the fold opens on the older rows") {
-            runCatching { list.performScrollToNode(hasTestTag("landing-row:$landingOld")) }
-            exists(hasTestTag("landing-row:$landingOld"))
-        }
-        list.performScrollToNode(hasTestTag("landing-row:$landingCancelled"))
-        verify("both older rows, each once", count(hasTestTag("landing-row:$landingOld")) == 1 && count(hasTestTag("landing-row:$landingCancelled")) == 1)
-        verify("the cancelled one says so", says("landing-row:$landingCancelled", "Cancelled", substring = true))
-        capture("02-landings-earlier-open")
-        list.performScrollToNode(hasTestTag("landing-row:$landingOld"))
+        capture("01-landings-row")
+        compose.onNodeWithTag("landings-row").performClick()
+        await("the window, the waiting landing under Now") { exists(hasTestTag("landings-window")) && exists(hasTestTag("landing-entry:$landingAwait")) }
+        val window = compose.onNodeWithTag("landings-window-list")
+        window.performScrollToNode(hasTestTag("landing-row:$landingCancelled"))
+        verify("the cancelled one is kept, and says so", says("landing-row:$landingCancelled", "Cancelled", substring = true))
+        window.performScrollToNode(hasTestTag("landing-row:$landingOld"))
+        verify("each settled landing once", count(hasTestTag("landing-row:$landingOld")) == 1 && count(hasTestTag("landing-row:$landingCancelled")) == 1)
+        capture("02-landings-window")
         compose.onNodeWithTag("landing-row:$landingOld").performClick()
-        await("the whole row opens its landing") { exists(hasTestTag("landing-page")) }
-        verify("the landing was read by its id", calls.any { it == "GET sessions/$landingOld" })
-        capture("03-landing-opened-from-row")
+        await("the row opens in place to its record") { calls.any { it == "GET sessions/$landingOld" } && exists(hasTestTag("landing:open-arrow"), unmerged = true) }
+        verify("read once", calls.count { it == "GET sessions/$landingOld" } == 1)
+        capture("03-landing-opened-in-place")
     }
 
     /** A11-22: the project page's card for a lone merge job says nothing under its head — no “Nothing to do”. */

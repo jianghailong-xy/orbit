@@ -70,8 +70,8 @@ data class DirectorySession(
     }
 }
 /** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
- * it stands, so the project's page can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
- * one into "Earlier · n landed". Every slot optional, so a server that sends less still decodes. */
+ * it stands, so the project's Landings window can put a landing still in hand under `Now` and a settled one in the day it settled, and
+ * the page's Landings row can count them. Every slot optional, so a server that sends less still decodes. */
 @Serializable
 data class SessionLandingSummary(val subject: String? = null, val state: String? = null,
     val settledAs: String? = null, val settledAt: String? = null)

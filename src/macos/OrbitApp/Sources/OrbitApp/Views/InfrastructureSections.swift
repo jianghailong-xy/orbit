@@ -1,11 +1,11 @@
 import SwiftUI
 import OrbitKit
 
-// The Infrastructure page's own sections (docs/mocks/infrastructure-page/03-ios.png) — Needs you, What
-// your agents can run on, Account pools and API keys — around the machines `RunnersListView` lists between
-// them. Each draws what it is handed and says what a press means through the closure it is given, so the
-// page a phone pushes from Settings and the Mac's section column share them. What the two blocks at the
-// top say, and when, is OrbitKit's (`Infrastructure`) — the web's rules, tested there.
+// The Infrastructure page's own sections (docs/mocks/infrastructure-page/03-ios.png) — Needs you, Account
+// pools and API keys — around the machines `RunnersListView` lists between them. Each draws what it is
+// handed and says what a press means through the closure it is given, so the page a phone pushes from
+// Settings and the Mac's section column share them. What the block at the top says, and when, is
+// OrbitKit's (`Infrastructure`), tested there.
 
 /// The lists the page is read from, as `AppModel` holds them: the machines, the pools the account is in
 /// and its own — a Codex one with its people and keys read beside its accounts, once they are — and the
@@ -15,8 +15,8 @@ struct InfrastructureLists {
     let memberPools: [SharedPool]
     let ownPools: [ProviderPool]
     let keys: [ConfiguredProvider]
-    /// Every list has had its answer, a failed one included: the two blocks at the top wait for that, as
-    /// the web's do — an engine called Not set up before its keys arrived would be wrong.
+    /// Every list has had its answer, a failed one included: Needs you at the top waits for that, so it
+    /// doesn't change under the reader as each list arrives.
     let settled: Bool
 
     @MainActor init(_ model: AppModel) {
@@ -36,13 +36,6 @@ struct InfrastructureLists {
     var attention: [Infrastructure.Attention] {
         Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),
                                  ownPools: ownPools)
-    }
-
-    /// Every engine a session can run on, and what can pay for it now — a key under every engine it
-    /// runs on (board iOS 1 ①).
-    var engines: [Infrastructure.EngineCard] {
-        Infrastructure.engineCards(runners: runners, keys: keys,
-                                   pools: memberPools.map(SharedPools.asProviderPool) + ownPools)
     }
 
     /// The account's own Codex pools, whose people and keys are read one by one.
@@ -134,112 +127,6 @@ func infrastructureBold(_ text: String, _ names: [String]) -> AttributedString {
         from = range.upperBound
     }
     return out
-}
-
-// MARK: - What your agents can run on
-
-/// A row per engine — all six, in the pickers' order, each by its CLI's name — Ready with what can pay for
-/// it now: its machines (a subscription; OpenCode's own sign-in), every key that runs on it with the
-/// model a session there starts on, its pools. Or Not set up, with the way to install it on a machine.
-struct InfrastructureEnginesSection: View {
-    let engines: [Infrastructure.EngineCard]
-    /// Install on a machine: that engine's page on the first machine online, or registering one.
-    let install: (String) -> Void
-
-    var body: some View {
-        Section {
-            ForEach(engines) { sources in
-                InfrastructureEngineRow(sources: sources) { install(sources.engine) }
-            }
-        } header: {
-            RunnerSectionHeader(Infrastructure.enginesTitle)
-        } footer: {
-            Text(Infrastructure.enginesDetail)
-        }
-    }
-}
-
-private struct InfrastructureEngineRow: View {
-    let sources: Infrastructure.EngineCard
-    let install: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ProviderMark(provider: sources.engine, size: 28,
-                         brandKey: SessionProviderChoices.enginePreset[sources.engine], label: sources.name)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(sources.name)
-                        .font(.headline)
-                    InfrastructureStateChip(ready: sources.ready)
-                }
-                if sources.ready {
-                    if !sources.machines.isEmpty {
-                        line(sources.machinesLabel, sources.machines.joined(separator: ", "))
-                    }
-                    if !sources.keys.isEmpty {
-                        line(Infrastructure.apiKey, keys)
-                    }
-                    if !sources.pools.isEmpty {
-                        line(Infrastructure.pool, sources.pools.joined(separator: ", "))
-                    }
-                } else {
-                    Text(Infrastructure.nothingCanPay)
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(Color.secondary)
-                    Button(Infrastructure.installOnAMachine, action: install)
-                        .font(.orbitListSubtitle)
-                        .buttonStyle(.borderless)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 2)
-    }
-
-    /// "DeepSeek DeepSeek V4 Pro, DeepSeek 2 DeepSeek V4 Pro": each key, and its model set apart.
-    private var keys: AttributedString {
-        typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
-        var out = AttributedString()
-        for (index, key) in sources.keys.enumerated() {
-            if index > 0 { out += AttributedString(", ") }
-            out += AttributedString(key.label)
-            if let model = key.model {
-                var tag = AttributedString(" " + model)
-                tag[Colour.self] = Color.secondary.opacity(0.75)
-                out += tag
-            }
-        }
-        return out
-    }
-
-    /// "Subscription · Mac Studio ×2, HPC", its source's name in bold.
-    private func line(_ source: String, _ names: String) -> some View {
-        line(source, AttributedString(names))
-    }
-
-    private func line(_ source: String, _ names: AttributedString) -> some View {
-        var lead = AttributedString(source)
-        lead.inlinePresentationIntent = .stronglyEmphasized
-        return Text(lead + AttributedString(" · ") + names)
-            .font(.orbitListSubtitle)
-            .foregroundStyle(Color.secondary)
-    }
-}
-
-/// Ready in green, Not set up in grey — the web card's tag.
-private struct InfrastructureStateChip: View {
-    let ready: Bool
-
-    var body: some View {
-        Text(ready ? Infrastructure.ready : Infrastructure.notSetUp)
-            .font(.orbitMeta.weight(.semibold))
-            .foregroundStyle(ready ? RunnerInk.green : Color.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(ready ? RunnerInk.green.opacity(0.12) : Color.primary.opacity(0.065),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
 }
 
 // MARK: - Account pools
