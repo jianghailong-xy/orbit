@@ -2044,7 +2044,7 @@ SELECT resolution_note, count(*)
 - 串行键（J1）：`canonical_repo_url || '#observe:' || project_id`，不占任何分支的串行位。新部分唯一索引 `(serial_key) WHERE kind = 'OBSERVE_LANDING' AND state = 'QUEUED'`：一个项目至多一条排队的观测。入队一律 `INSERT … ON CONFLICT DO NOTHING`，后来的触发并进已排队的那一条，因为要观测哪些任务在领取时才算（§10.6）。
 - `idempotency_key = ij:v1:OBSERVE_LANDING:<projectId>:<generation>`，`generation` 在代码库行锁下取本项目观测作业的 max+1。
 
-**`project_open_item`**：kind 加两个（§10.7），resolution 加 `ACCEPTED`、`CODELESS`，同一迁移扩 `project_open_item_kind_chk` 与 `project_open_item_resolution_chk`。
+**`project_open_item`**：kind 加两个（§10.7），resolution 加 `ACCEPTED`、`CODELESS`，同一迁移扩 `project_open_item_kind_chk` 与 `project_open_item_resolution_chk`；同一迁移还把 `LANDED_WITHOUT_CONFIRMATION` 加进 `project_open_item_owner_only_chk`（它生来归 owner，不投递协调会话，§10.7），把 `LANDING_UNOBSERVED` 加进 `project_open_item_handling_kind_chk`（`integration_observe` 照 H1 在这条待办上记处理中，§10.8）。
 
 G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 画的「project_blocker」在本契约里落成例外待办（§10.7），因为 blocker kind 是闭集（PSC SR50/SR51）。
 
@@ -2166,7 +2166,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 
 **迁移**：只加列和约束，不改历史行，不伪造回执。
 
-- 列、kind、state、phase、resolution、错误码与两个索引放在同一迁移里；已有行的 `delivery_mode` 全部写 `PLATFORM`。
+- 列、CHECK 与 §10.4 的那一个部分唯一索引放在同一迁移里；已有行的 `delivery_mode` 全部写 `PLATFORM`。`error_code` 没有 CHECK（J12），所以 `WORK_COMMIT_MISSING` 只进 `INTEGRATION_ERROR_CODES`，不进迁移。
 - 部署后的一次性入队，由启动时一个幂等的任务执行，每个项目至多一条 `OBSERVE_LANDING`：对每个 `lineStarted`、且有「DONE、代码任务、`NOT_KNOWN`」任务的项目，先按 O-L4 从现有行冻结身份（只冻结工作已停止移动、身份明确的），再入队观测。看到的写回执，M-T13 退役它们 BLOCKED 的候选，J10 放行下游。这一轮在 `PLATFORM` 项目上看到的「没走确认就进了 main」按项目合成一条 `LANDED_WITHOUT_CONFIRMATION`（`UL:backfill:<projectId>`，payload 列出任务与回执），不逐任务开。没看到的：`AGENT_PUSH` 项目开 `LANDING_UNOBSERVED`；`PLATFORM` 项目留给它自己的流水线，候选可经 `integration_retry` 按 O-L5 重检。
 - 2026-10-28 那个项目：推上去的就是 worktree tip 的任务会在这一轮被看到，下游自己开工；不是的，如果 owner 把项目改成 `AGENT_PUSH`，会落成 `LANDING_UNOBSERVED`，交给它的协调会话。
 

@@ -1432,7 +1432,9 @@ describe('the project’s main branch, by name', () => {
 
   it('names the branch a merge goes into and a sync takes in, and nothing else', () => {
     expect(jobWords()).toEqual(JOB_WORDS);
-    expect(jobWords('main')).toEqual({ LAND_TASK: 'Landing', CHECK_PROMOTION: 'Merge check', LAND_PROMOTION: 'Merge to main' });
+    expect(jobWords('main')).toEqual({
+      LAND_TASK: 'Landing', CHECK_PROMOTION: 'Merge check', LAND_PROMOTION: 'Merge to main', OBSERVE_LANDING: 'Observation',
+    });
     expect(jobWords('master')).toEqual({ ...JOB_WORDS, LAND_PROMOTION: 'Merge to master' });
     expect(jobPhases()).toEqual(JOB_PHASES);
     expect(jobPhases('main').MAIN_SYNC).toBe('syncing main');

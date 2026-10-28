@@ -2546,7 +2546,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function, trigger,
       // type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: every stored session and account reads NULL.
-      '0451_recap_alert_notify_claims'],
+      '0451_recap_alert_notify_claims',
+      // The data layer of landing observation and delivery mode (0453, docs/project-integration-line-contract.md
+      // §10.4): five nullable columns on `task` (`delivered_sha` and `delivered_base_sha` CHAR(40), `delivered_branch`
+      // TEXT, `delivered_session_id` UUID with no foreign key, `delivered_at` TIMESTAMPTZ(3)), each added with IF NOT
+      // EXISTS, no default and no constraint — so, like 0298 and 0346, it ALTERs the table the 0177 pair lives on and
+      // reaches no stored row, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. On `project_codebase`,
+      // `delivery_mode` (TEXT NOT NULL with a constant default) and `delivery_mode_chosen_at`, and two new CHECKs; on
+      // `project_integration_job`, `observations` (JSONB), its kind, state and phase CHECKs rewritten wider, and one
+      // partial unique index; on `project_open_item`, its kind, resolution, owner-only and handling-kind CHECKs
+      // rewritten wider. Every widened set admits every stored value, and the two new CHECKs hold on every stored
+      // binding, which reads PLATFORM. No function, trigger or type is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; `session`, `project` and every
+      // `project_acceptance_*` object are named nowhere. No INSERT, UPDATE or DELETE.
+      '0453_landing_observation_delivery_mode'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
