@@ -57,6 +57,8 @@ type gateway struct {
 
 	// drill is what LINK_DRILL_LOSE_ANSWERS armed (drill.go); nil, as it is unless a drill sets it.
 	drill *drillFaults
+	// pace holds forwarded events to LINK_DRILL_INGEST_RATE (drill.go); nil, as it is unless a load test sets it.
+	pace *pacer
 }
 
 func newGateway(cfg config, logger *slog.Logger) *gateway {
@@ -89,6 +91,10 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	if len(cfg.DrillLoseAnswers) > 0 {
 		g.drill = newDrillFaults(cfg.DrillLoseAnswers)
 	}
+	if cfg.DrillIngestRate > 0 {
+		g.pace = newPacer(cfg.DrillIngestRate)
+	}
+	g.metrics.ingestWaiting.fn = func() float64 { return float64(g.credit.waitingSessions()) }
 	g.metrics.mode.set(modeGauge(g.mode()))
 	return g
 }
@@ -363,6 +369,10 @@ func serveMain(args []string) int {
 	if g.drill != nil {
 		logger.Warn("LINK_DRILL_LOSE_ANSWERS is set: answers are lost on purpose, for a drill", "lose", g.drill.String())
 	}
+	if g.pace != nil {
+		logger.Warn("LINK_DRILL_INGEST_RATE is set: durable events are forwarded slower than they may come, for a load test", "events_per_second", cfg.DrillIngestRate)
+	}
+	logger.Info("the ingest queue is bounded", "max_events", cfg.link.MaxQueued.Events, "max_bytes", cfg.link.MaxQueued.Bytes)
 
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -167,6 +168,104 @@ func TestLinkEventsStayWithinTheConnectionsCredit(t *testing.T) {
 	if n := last[len(last)-1].n; n <= 5 {
 		t.Errorf("with a credit of 1000 the batch carried %d events", n)
 	}
+}
+
+// The gateway's ingest queue full (src/link-gateway/events.go: CREDIT_EXCEEDED, retryable after 1s, while the
+// session waits in line for room): the session keeps every event it holds, and those handed over meanwhile, sends again
+// from durable_seq + 1 no sooner than the gateway asked, and once there is room every event is stored once, in order.
+func TestLinkEventsWaitOutAFullIngestQueue(t *testing.T) {
+	r, in := newLinkEventsRig(t)
+	var full atomic.Bool
+	full.Store(true)
+	in.refuseBatch = func(eb *linkpb.EventBatch) *linkpb.Failure {
+		if full.Load() {
+			return fakeIngestFailure("CREDIT_EXCEEDED", true, 1000)
+		}
+		return nil
+	}
+	r.useLink(t)
+	s := r.m.events.open("session-q")
+	defer s.release()
+	if err := s.submit(linkTestRunEvents(1, 10, 10)); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.urgent = true
+	s.mu.Unlock()
+	r.m.events.poke()
+	linkWaitFor(t, 10*time.Second, "two batches refused for the full queue", func() bool { return len(in.refusalCodes()) >= 2 })
+	// Handing events over never waits for room: they are held behind the refused ones.
+	if err := s.submit(linkTestRunEvents(11, 20, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if held, tail := s.holding(); held != 30 || tail != 30 {
+		t.Fatalf("the session holds %d events through seq %d, not all 30", held, tail)
+	}
+	full.Store(false)
+	linkWaitStored(t, s, 20*time.Second)
+	in.assertContiguous(t, "session-q", 1, 30)
+	batches := in.batchesOf("session-q")
+	for i := 1; i < len(batches); i++ {
+		if batches[i-1].result != "CREDIT_EXCEEDED" {
+			continue
+		}
+		if gap := batches[i].at.Sub(batches[i-1].at); gap < 950*time.Millisecond {
+			t.Errorf("batch %d went %s after a refusal that asked for 1s", i, gap)
+		}
+		if batches[i].first != 1 {
+			t.Errorf("batch %d after a refusal started at seq %d, not durable_seq + 1", i, batches[i].first)
+		}
+	}
+	if held, _ := s.holding(); held != 0 {
+		t.Fatalf("%d events still held once stored", held)
+	}
+}
+
+// A Credit frame can lower the credit too: the gateway shares its ingest queue's high-water mark between the connections
+// that send while the queue is deep (src/link-gateway/events.go). The batches after it stay within it, and nothing is
+// refused or lost.
+func TestLinkEventsKeepToALoweredCredit(t *testing.T) {
+	r, in := newLinkEventsRig(t)
+	in.ackDelay = 20 * time.Millisecond
+	r.useLink(t)
+	s := r.m.events.open("session-l")
+	defer s.release()
+	first := linkTestRunEvents(1, 20, 10)
+	for i := range first {
+		first[i].Type = evTurnEnd // at once
+	}
+	if err := s.submit(first); err != nil {
+		t.Fatal(err)
+	}
+	linkWaitStored(t, s, 10*time.Second)
+	c := r.g.open()[0]
+	in.mu.Lock()
+	in.conns[c].maxUnacked = linkCredit{events: 3, bytes: 1 << 20}
+	in.mu.Unlock()
+	c.send(&linkpb.Frame{Body: &linkpb.Frame_Credit{Credit: &linkpb.Credit{MaxUnackedEvents: 3, MaxUnackedBytes: 1 << 20}}})
+	linkWaitFor(t, 5*time.Second, "the lowered credit", func() bool {
+		r.m.events.mu.Lock()
+		defer r.m.events.mu.Unlock()
+		return r.m.events.credit.events == 3
+	})
+	before := len(in.batchesOf("session-l"))
+	more := linkTestRunEvents(21, 40, 10)
+	for i := range more {
+		more[i].Type = evTurnEnd
+	}
+	if err := s.submit(more); err != nil {
+		t.Fatal(err)
+	}
+	linkWaitStored(t, s, 20*time.Second)
+	for _, b := range in.batchesOf("session-l")[before:] {
+		if b.n > 3 {
+			t.Errorf("a batch of %d events after the credit fell to 3", b.n)
+		}
+	}
+	for _, code := range in.refusalCodes() {
+		t.Errorf("the gateway refused a batch: %s", code)
+	}
+	in.assertContiguous(t, "session-l", 1, 60)
 }
 
 // A batch the ingest could not store, retryably, goes again after the wait it names, from the first event the
