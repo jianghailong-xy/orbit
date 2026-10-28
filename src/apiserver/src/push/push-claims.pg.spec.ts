@@ -11,15 +11,21 @@
  *   Approvals (claimApprovalAlert):
  *     1. Four approvals of one turn, notified through two apiservers at once: one alert.
  *     2. The approval asked first commits last: the one decided first rings, the other finds its stretch rung.
- *     3. Answered, the next approval rings again through the other apiserver; one asked while another was pending,
- *        whose alert is decided after that one was answered, does not.
- *     4. One apiserver, as before: a turn's approvals ring once, the next stretch rings again; an approval of another
- *        session is no edge of this one.
+ *     3. One asked while another was pending, whose alert is decided after that one was answered: no second ring.
+ *     4. Answered through one apiserver (which reconciles its badge, as the one an answer reaches does), the next
+ *        approval rings once through the other.
+ *     5. One apiserver, as before: a turn's approvals ring once, and the next stretch once again.
+ *     6. An approval of another session claims no edge.
  *   The agent notification limit (claimAgentNotify):
- *     5. A ring on one apiserver refuses the same session on the other for the rest of the minute, and only that session.
- *     6. Both at the same moment, five times: one rings each time.
- *     7. A `notify` naming no session: one turn per account, apart from every session's.
- *     8. A minute later the other apiserver rings; one apiserver alone, as before.
+ *     7. A ring on one apiserver refuses the same session on the other for the rest of the minute, and only that session.
+ *     8. Both at the same moment, five times: one rings each time.
+ *     9. A `notify` naming no session: one turn per account, apart from every session's.
+ *    10. One apiserver alone, as before.
+ *    11. A minute later the other apiserver rings.
+ *
+ * Cases 5 and 10 are what one apiserver did before, and pass against the code before this change as well. Against
+ * that code the others fail: 6 and 11 because it took no approval id and had no column to set, the rest because
+ * each apiserver answered from its own memory.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/push/push-claims.pg.spec.ts
  *
@@ -126,12 +132,17 @@ test('the approval alert and the agent notification limit hold across two apiser
       data: { sessionId, toolName: tool, input: { command: 'true' }, toolUseId: `tu-${randomUUID()}` },
       select: { id: true },
     })).id;
-  /** Every approval of the session answered, as the owner answers one. */
-  const answerAll = async (sessionId: string) => {
+  /**
+   * The owner's answer to every pending approval of the session, as the apiserver that took the answer records it: the
+   * rows answered, then that apiserver's badge reconciled, which RealtimeService.publish has done on the replica the
+   * answer reached (scheduleBadgeSync, debounced there and called straight here).
+   */
+  const answerOn = async (server: { push: PushService }, sessionId: string) => {
     await sql.query(
       `UPDATE "approval" SET "status" = 'ALLOWED', "decided_at" = now() WHERE "session_id" = $1::uuid AND "status" = 'PENDING'`,
       [sessionId],
     );
+    await (server.push as unknown as { reconcileBadge(ownerId: string): Promise<void> }).reconcileBadge(ownerId);
     // Strictly after, so the next approval is asked once the stretch is over and not within its last millisecond.
     await sleep(20);
   };
@@ -177,49 +188,57 @@ test('the approval alert and the agent notification limit hold across two apiser
     assert.equal(alertsFor(s).length, 1, 'the first approval of the stretch finds the stretch already rung');
   });
 
-  await t.test('(3) answered, the next approval rings again through the other apiserver; one asked meanwhile does not', async () => {
-    const s = await session('two stretches');
+  await t.test('(3) asked while another was pending, its alert decided after that one was answered: no second ring', async () => {
+    const s = await session('one stretch');
     const a1 = await ask(s);
     await alert(one, s, a1, 'Bash');
     assert.equal(alertsFor(s).length, 1);
-    // Asked while the first is pending, and its alert decided only after the first was answered: same stretch.
     const a2 = await ask(s, 'Write');
     await sleep(20);
     await sql.query(`UPDATE "approval" SET "status" = 'ALLOWED', "decided_at" = now() WHERE "id" = $1::uuid`, [a1]);
     await alert(two, s, a2, 'Write');
-    assert.equal(alertsFor(s).length, 1, 'an approval asked while another was pending is no new edge');
-
-    await answerAll(s);
-    const a3 = await ask(s, 'Edit');
-    await alert(two, s, a3, 'Edit');
-    assert.equal(alertsFor(s).length, 2, 'the next stretch rings, through the apiserver that had seen the first');
-    assert.deepEqual(alertsFor(s).map((a) => a.by), ['one', 'two']);
-    const a4 = await ask(s, 'Read');
-    await alert(one, s, a4, 'Read');
-    assert.equal(alertsFor(s).length, 2, 'and once');
+    assert.equal(alertsFor(s).length, 1, 'the session never stopped needing a reply: no new edge');
   });
 
-  await t.test('(4) one apiserver, as before: a turn\'s approvals ring once, the next stretch again; another session\'s is no edge', async () => {
+  await t.test('(4) answered through one apiserver, the next approval rings once through the other', async () => {
+    const s = await session('two stretches');
+    // A turn whose approvals reached both apiservers (case 1 counts its alerts).
+    const a1 = await ask(s);
+    const a2 = await ask(s, 'Write');
+    await alert(one, s, a1, 'Bash');
+    await alert(two, s, a2, 'Write');
+    await answerOn(one, s);
+    const before = alertsFor(s).length;
+    const a3 = await ask(s, 'Edit');
+    await alert(two, s, a3, 'Edit');
+    assert.equal(alertsFor(s).length - before, 1, 'the next stretch rings on the apiserver that had seen the last one');
+    const a4 = await ask(s, 'Read');
+    await alert(one, s, a4, 'Read');
+    assert.equal(alertsFor(s).length - before, 1, 'and once');
+  });
+
+  await t.test('(5) one apiserver, as before: a turn\'s approvals ring once, and the next stretch once again', async () => {
     const s = await session('one apiserver');
     for (const tool of ['Bash', 'Write', 'Edit']) await alert(one, s, await ask(s, tool), tool);
     assert.equal(alertsFor(s).length, 1);
-    await answerAll(s);
+    await answerOn(one, s);
     for (const tool of ['Bash', 'Write']) await alert(one, s, await ask(s, tool), tool);
     assert.equal(alertsFor(s).length, 2);
+  });
 
-    const other = await session('another session');
-    const theirs = await ask(other);
+  await t.test('(6) an approval of another session claims no edge here', async () => {
+    const theirs = await ask(await session('another session'));
     const mine = await session('this session');
     await ask(mine);
     await alert(one, mine, theirs, 'Bash');
-    assert.equal(alertsFor(mine).length, 0, 'an approval of another session claims nothing here');
+    assert.equal(alertsFor(mine).length, 0);
   });
 
   // ── the agent notification limit ──────────────────────────────────────────────────────────────────────────────────
   const notify = (server: { push: PushService }, sessionId?: string) =>
     server.push.notifyAgentMessage({ ownerId, sessionId, fallbackTitle: `runner-${RUN}`, message: 'Need the staging password' });
 
-  await t.test('(5) a ring on one apiserver refuses the same session on the other for the rest of the minute', async () => {
+  await t.test('(7) a ring on one apiserver refuses the same session on the other for the rest of the minute', async () => {
     const s = await session('an agent that asks');
     const before = ringsOf('agent-message');
     assert.deepEqual(await notify(one, s), { delivered: true, devices: 1 });
@@ -233,7 +252,7 @@ test('the approval alert and the agent notification limit hold across two apiser
     assert.equal(ringsOf('agent-message') - before, 2);
   });
 
-  await t.test('(6) both apiservers at the same moment, five times: one rings each time', async () => {
+  await t.test('(8) both apiservers at the same moment, five times: one rings each time', async () => {
     for (let round = 0; round < 5; round += 1) {
       const s = await session(`a race ${round}`);
       const results = await Promise.all([notify(one, s), notify(two, s)]);
@@ -242,7 +261,7 @@ test('the approval alert and the agent notification limit hold across two apiser
     }
   });
 
-  await t.test('(7) a notify naming no session: one turn per account, apart from every session\'s', async () => {
+  await t.test('(9) a notify naming no session: one turn per account, apart from every session\'s', async () => {
     assert.deepEqual(await notify(one), { delivered: true, devices: 1 });
     const refused = await notify(two);
     assert.equal(refused.delivered, false);
@@ -252,16 +271,18 @@ test('the approval alert and the agent notification limit hold across two apiser
     assert.equal((await notify(two, await session('a session meanwhile'))).delivered, true);
   });
 
-  await t.test('(8) a minute later the other apiserver rings; one apiserver alone, as before', async () => {
-    const s = await session('a minute later');
-    assert.equal((await notify(one, s)).delivered, true);
-    await sql.query(`UPDATE "session" SET "agent_notified_at" = "agent_notified_at" - interval '60 seconds' WHERE "id" = $1::uuid`, [s]);
-    assert.equal((await notify(two, s)).delivered, true, 'a ring a minute old holds nothing');
-
+  await t.test('(10) one apiserver alone, as before: the same session again within the minute is refused', async () => {
     const alone = await session('one apiserver');
     assert.equal((await notify(one, alone)).delivered, true);
     const again = await notify(one, alone);
     assert.equal(again.delivered, false);
     assert.match(again.reason ?? '', /^rate limited — try again in (59|60)s$/);
+  });
+
+  await t.test('(11) a minute later the other apiserver rings', async () => {
+    const s = await session('a minute later');
+    assert.equal((await notify(one, s)).delivered, true);
+    await sql.query(`UPDATE "session" SET "agent_notified_at" = "agent_notified_at" - interval '60 seconds' WHERE "id" = $1::uuid`, [s]);
+    assert.equal((await notify(two, s)).delivered, true, 'a ring a minute old holds nothing');
   });
 });

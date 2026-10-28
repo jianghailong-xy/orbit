@@ -10,8 +10,11 @@
  *      apiserver, leave a trailing timer on each, and both fire as the window closes: one model call between them.
  *   2. The same window open: two settles of one session at once, one on each apiserver: one model call.
  *   3. The iOS approval alert (push/push.service.ts). Four approvals of one turn, two through each apiserver at once,
- *      ring the phone once; all of them answered, the next approval rings it once more, whichever apiserver takes it.
- *   4. The agent notification limit (push/push.service.ts). An agent's `notify` through POST /runner/notify on one
+ *      ring the phone once.
+ *   4. The owner answers them through the first apiserver, whose badge is reconciled as an answer's apiserver's is;
+ *      the next approval, through the second, rings once.
+ *   5. Answered again, the next approval through the first rings once: what one apiserver did before.
+ *   6. The agent notification limit (push/push.service.ts). An agent's `notify` through POST /runner/notify on one
  *      apiserver, then the runner daemon's alert for the same session through POST /runner/sessions/:id/notify over
  *      the link on the other: the second is refused for the rest of the minute. A `notify` naming no session, once on
  *      each apiserver: the second is refused.
@@ -39,7 +42,7 @@ import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
-import { sha256 } from '../common/crypto.util';
+import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RECAP_MIN_INTERVAL_MS } from '../sessions/recap';
@@ -174,8 +177,9 @@ test('the recap window, the approval alert and the notification limit hold acros
 
   // ── the owner, their iPhone, and their machine ────────────────────────────────────────────────────────────────────
   const ownerId = randomUUID();
+  const owner = { email: `owner-${RUN}@cross-apiserver-claims.invalid`, password: `pw-${RUN}` };
   await prisma.user.create({
-    data: { id: ownerId, email: `owner-${RUN}@cross-apiserver-claims.invalid`, name: 'The owner', passwordHash: 'x' },
+    data: { id: ownerId, email: owner.email, name: 'The owner', passwordHash: hashPassword(owner.password) },
   });
   await prisma.deviceToken.create({
     data: { userId: ownerId, token: `apns-${RUN}`, platform: 'ios', bundleId: 'io.orbitd.app', environment: 'sandbox' },
@@ -334,33 +338,55 @@ test('the recap window, the approval alert and the notification limit hold acros
     return alertsFor(sessionId);
   };
 
-  await t.test('(3) four approvals of one turn, two through each apiserver: one alert; answered, the next rings once more', async () => {
-    const s = await session('asking');
-    const ask = (server: Apiserver, n: number) =>
-      overHttps(server, 'POST', `/api/runner/sessions/${s}/approvals`, {
-        toolName: 'Bash', input: { command: `make step-${n}` }, toolUseId: `tu-${RUN}-${n}`,
-      });
-    const replies = await Promise.all([ask(one, 1), ask(two, 2), ask(one, 3), ask(two, 4)]);
-    for (const reply of replies) assert.ok(reply.status === 200 || reply.status === 201, `an approval: ${reply.status} ${reply.text}`);
-    const firstStretch = await settledAlerts(s, 1);
-    assert.equal(firstStretch.length, 1, `one alert for the turn between both apiservers: ${JSON.stringify(firstStretch)}`);
+  // The owner, signed in through the first apiserver, where the web gateway sends people's requests.
+  const signedIn = await call(one, 'POST', '/api/auth/login', undefined, owner);
+  assert.equal(signedIn.status, 201, `the owner signs in: ${signedIn.text}`);
+  const ownerToken = signedIn.json.accessToken as string;
+  const asking = await session('asking');
+  let asked = 0;
+  /** The agent's next tool call asks: an approval, through the apiserver the gateway hands it to. */
+  const ask = async (server: Apiserver) => {
+    asked += 1;
+    const reply = await overHttps(server, 'POST', `/api/runner/sessions/${asking}/approvals`, {
+      toolName: 'Bash', input: { command: `make step-${asked}` }, toolUseId: `tu-${RUN}-${asked}`,
+    });
+    assert.ok(reply.status === 200 || reply.status === 201, `an approval: ${reply.status} ${reply.text}`);
+    return reply.json.id as string;
+  };
+  const pending: string[] = [];
+  /** The owner answers every pending approval through the first apiserver, which reconciles its badge after them. */
+  const answerAll = async () => {
+    for (const id of pending.splice(0)) {
+      const answered = await call(one, 'POST', `/api/sessions/${asking}/approvals/${id}/decision`, ownerToken, { behavior: 'allow' });
+      assert.ok(answered.status === 200 || answered.status === 201, `the owner's answer: ${answered.status} ${answered.text}`);
+    }
+    // The badge reconcile the answers asked for runs on the first apiserver, debounced there (SYNC_DEBOUNCE_MS, 300 ms).
+    await sleep(1_500);
+  };
 
-    // The owner answers all four; the agent's next ask opens a new stretch, through each apiserver in turn.
-    await sql.query(`UPDATE "approval" SET "status" = 'ALLOWED', "decided_at" = now() WHERE "session_id" = $1::uuid`, [s]);
-    await sleep(20);
-    const next = await ask(two, 5);
-    assert.ok(next.status === 200 || next.status === 201, next.text);
-    const secondStretch = await settledAlerts(s, 2);
-    assert.equal(secondStretch.length - firstStretch.length, 1, `the next stretch rings once: ${JSON.stringify(secondStretch)}`);
-    await sql.query(`UPDATE "approval" SET "status" = 'DENIED', "decided_at" = now() WHERE "session_id" = $1::uuid AND "status" = 'PENDING'`, [s]);
-    await sleep(20);
-    const third = await ask(one, 6);
-    assert.ok(third.status === 200 || third.status === 201, third.text);
-    const thirdStretch = await settledAlerts(s, 3);
-    assert.equal(thirdStretch.length - secondStretch.length, 1, `and the one after it: ${JSON.stringify(thirdStretch)}`);
+  await t.test('(3) four approvals of one turn, two through each apiserver at once: one alert', async () => {
+    pending.push(...await Promise.all([ask(one), ask(two), ask(one), ask(two)]));
+    const alerts = await settledAlerts(asking, 1);
+    assert.equal(alerts.length, 1, `one alert for the turn between both apiservers: ${JSON.stringify(alerts)}`);
   });
 
-  await t.test('(4) the agents\' door on one apiserver, the daemon\'s over the link on the other: one ring a minute', async () => {
+  await t.test('(4) answered through the first apiserver, the next approval rings once through the second', async () => {
+    await answerAll();
+    const before = alertsFor(asking).length;
+    pending.push(await ask(two));
+    const alerts = await settledAlerts(asking, before + 1);
+    assert.equal(alerts.length - before, 1, `the next stretch rings once: ${JSON.stringify(alerts)}`);
+  });
+
+  await t.test('(5) answered again, the next approval through the first apiserver rings once, as one apiserver did', async () => {
+    await answerAll();
+    const before = alertsFor(asking).length;
+    pending.push(await ask(one));
+    const alerts = await settledAlerts(asking, before + 1);
+    assert.equal(alerts.length - before, 1, `and the one after it: ${JSON.stringify(alerts)}`);
+  });
+
+  await t.test('(6) the agents\' door on one apiserver, the daemon\'s over the link on the other: one ring a minute', async () => {
     const s = await session('notifying');
     const asAgent = await overHttps(one, 'POST', '/api/runner/notify', { message: `Need the staging password (${RUN})` },
       { 'x-orbit-session-id': s });
