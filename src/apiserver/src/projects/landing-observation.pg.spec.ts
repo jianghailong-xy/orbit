@@ -52,8 +52,8 @@ import * as integrationJob from './project-integration-job';
  *
  *  (1) §10.9 1, O-T1 O-J2 O-R1: an AGENT_PUSH task pushed straight to main, its task branch never
  *      published — its DONE queues the observation, the claim hands it the frozen identity, the
- *      OBSERVED result writes one ALREADY_MERGED receipt, J10 dispatches what it released and J9 lets
- *      the dependent start; the task reads AWAITING_OBSERVATION with its delivered sha, then ON_UPSTREAM; a replay and
+ *      OBSERVED result writes one ALREADY_MERGED receipt, and in the started project J9 releases the
+ *      dependent and J10 starts it by itself, with no item opened; the task reads AWAITING_OBSERVATION with its delivered sha, then ON_UPSTREAM; a replay and
  *      a second observation of the same task leave one receipt;
  *  (2) J-T9, the late answer: a silent observation is ended ERROR · RUNNER_LOST by the next trigger,
  *      the one queued behind it is claimed and answers, and the silent claim's answer is refused —
@@ -211,6 +211,8 @@ async function world(
     line?: 'MAIN' | 'PROJECT_BRANCH';
     deliveryMode?: 'PLATFORM' | 'AGENT_PUSH';
     runnerLocal?: boolean;
+    /** The owner started the project, so a released dependent starts by itself (J10). */
+    started?: boolean;
   } = {},
 ): Promise<World> {
   const db = stack.db;
@@ -244,6 +246,7 @@ async function world(
     data: {
       id: projectId, ownerId, title: `${label} project`, goal: 'finished work is seen where it is',
       coordinatorEnabled: true, coordinatorWorkspaceId: workspaceId, coordinatorSessionId,
+      ...(options.started ? { startedAt: new Date() } : {}),
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
@@ -266,7 +269,7 @@ async function world(
 async function runner(stack: Stack, ownerId: string, id: string, name: string, capabilities: string[]): Promise<void> {
   await stack.db.runner.create({
     data: {
-      id, ownerId, name, tokenHash: `hash-${id}`, status: RunnerStatus.ONLINE, capabilities,
+      id, ownerId, name, tokenHash: `hash-${id}`, status: RunnerStatus.ONLINE, capabilities, maxConcurrent: 4,
       capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(), heartbeatLeaseOwner: randomUUID(),
     },
   });
@@ -418,12 +421,12 @@ function observeAgain(stack: Stack, w: World) {
 
 // ═══ (1) §10.9 1 ═══════════════════════════════════════════════════════════════════════════════
 
-test('(1) §10.9 1, O-T1 O-J2 O-R1: a task pushed straight to main, its branch never published — the observation\'s receipt lets J9 start the dependent and J10 dispatch it; a replay and a second observation leave one receipt',
+test('(1) §10.9 1, O-T1 O-J2 O-R1: a task pushed straight to main, its branch never published — the observation\'s receipt lets J9 release the dependent and J10 start it by itself; a replay and a second observation leave one receipt',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
       observeCapability();
-      const w = await world(stack, 'pushed', { line: 'MAIN', deliveryMode: 'AGENT_PUSH' });
+      const w = await world(stack, 'pushed', { line: 'MAIN', deliveryMode: 'AGENT_PUSH', started: true });
       const pushed = await ownerTask(stack, w, 'pushed straight to main');
       const workSessionId = await workSession(stack, w, pushed, {
         branch: 'orbit/pushed', branchSha: sha('a'), baseSha: sha('b'), finishedMinutesAgo: 2,
@@ -509,9 +512,8 @@ test('(1) §10.9 1, O-T1 O-J2 O-R1: a task pushed straight to main, its branch n
       // AGENT_PUSH is the owner's standing authorization (O-L2): nothing is put in front of them.
       assert.deepEqual(await openItems(stack, w, 'LANDED_WITHOUT_CONFIRMATION'), []);
 
-      // J10, after the commit: the landing's dependents are dispatched — through the real dispatcher,
-      // which leaves a dependent of a project that does not move by itself to a decision — and J9 now
-      // lets the dependent start.
+      // J10, after the commit: the landing's dependents are dispatched through the real dispatcher, and
+      // in a project that moves by itself the dependent J9 now lets through starts on its own.
       const dispatched: string[] = [];
       const j10 = new MergeReceiptService(stack.prisma, undefined, {
         dispatchDependentsOf: (ownerId: string, doneTaskId: string) => {
@@ -522,9 +524,10 @@ test('(1) §10.9 1, O-T1 O-J2 O-R1: a task pushed straight to main, its branch n
       await (j10.deliverProjectFactsAfterCommit as (...args: unknown[]) => Promise<void>)
         .call(j10, after!.projectId, after!.landedTaskIds, { observed: true });
       assert.deepEqual(dispatched, [pushed], 'J10 dispatched what the receipt released');
-      await stack.tasks.execute(w.ownerId, dependent.id);
       assert.equal(await stack.db.session.count({ where: { taskId: dependent.id } }), 1,
-        'J9 let the dependent start');
+        'J10 started the dependent by itself: nobody recorded a receipt, retried or answered an item');
+      assert.deepEqual(await stack.db.projectOpenItem.findMany({ where: { projectId: w.projectId } }), [],
+        'no item was opened on the way');
       assert.deepEqual((await observations(stack, w)).map((job) => job.state), ['OBSERVED'],
         'O-T3: the observation\'s own receipts queue no second look');
 
