@@ -27,8 +27,10 @@ import (
 //
 // A call goes when its window closes, at once when it is full (the batches its transaction may hold, the bytes its
 // body may carry), and at once when a batch in it carries a turn_end: the turn's completion is handled only once its
-// events are stored (Rpc.after_seq), so a window would hold the turn up. At most MaxCalls calls are out at once;
-// batches collect behind them meanwhile, and go when one returns.
+// events are stored (Rpc.after_seq), so a window would hold the turn up. At most CallsPerBackend calls are out at once
+// to each backend, so the calls out grow with the apiservers LINK_INTERNAL_API_URLS names; a call goes to the backend
+// with the fewest out, passing over one that could not be dialed a moment ago. Batches collect behind them meanwhile,
+// and go when one returns.
 
 // mergeTuning is what merged calls are bound by (LINK_EVENT_MERGE_*, README.md "Configuration").
 type mergeTuning struct {
@@ -39,17 +41,22 @@ type mergeTuning struct {
 	MaxBytes   int
 	// AloneBytes: a batch whose events take this much JSON or more is forwarded alone.
 	AloneBytes int
-	// MaxCalls bounds the merged calls out at once.
-	MaxCalls int
+	// CallsPerBackend bounds the merged calls out at once to each backend.
+	CallsPerBackend int
 }
 
 func defaultMergeTuning() mergeTuning {
-	return mergeTuning{Window: 100 * time.Millisecond, MaxBatches: 64, MaxBytes: 2 << 20, AloneBytes: 256 << 10, MaxCalls: 4}
+	return mergeTuning{Window: 100 * time.Millisecond, MaxBatches: 64, MaxBytes: 2 << 20, AloneBytes: 256 << 10, CallsPerBackend: 4}
 }
 
 // mergeMaxWindow bounds LINK_EVENT_MERGE_WINDOW: a batch's acknowledgement is held under a second at p99 (§9), and the
 // window is spent before its call even starts.
 const mergeMaxWindow = 500 * time.Millisecond
+
+// mergeMaxCallsPerBackend bounds LINK_EVENT_MERGE_CALLS_PER_BACKEND: a merged call holds one of its apiserver's
+// database connections for its whole transaction, an apiserver has ten (pg's pool default,
+// src/apiserver/src/prisma/prisma-client.ts), and its heartbeats and every other call need the rest.
+const mergeMaxCallsPerBackend = 8
 
 // eventMerger collects batches into merged calls.
 type eventMerger struct {
@@ -61,8 +68,11 @@ type eventMerger struct {
 	bytes   int
 	timer   *time.Timer
 	// due: what is pending goes as soon as a call slot is free.
-	due   bool
-	calls int
+	due bool
+	// out is the calls out to each backend, by its place in LINK_INTERNAL_API_URLS; next is where the search for the
+	// next call's backend starts, so that backends with as many out take turns.
+	out  []int
+	next int
 }
 
 // mergeEntry is one batch waiting in a merged call.
@@ -82,7 +92,7 @@ type mergeResult struct {
 }
 
 func newEventMerger(g *gateway, tune mergeTuning) *eventMerger {
-	return &eventMerger{g: g, tune: tune}
+	return &eventMerger{g: g, tune: tune, out: make([]int, len(g.backends.urls))}
 }
 
 // store forwards eb in a merged call and waits for what became of it. merged is false for a batch to be forwarded
@@ -142,7 +152,8 @@ func (m *eventMerger) flushLocked(reason string) {
 		m.timer = nil
 	}
 	for len(m.pending) > 0 {
-		if m.calls >= m.tune.MaxCalls {
+		backend := m.backendLocked()
+		if backend < 0 {
 			m.due = true
 			return
 		}
@@ -154,17 +165,44 @@ func (m *eventMerger) flushLocked(reason string) {
 		entries := m.pending[:n:n]
 		m.pending = append([]*mergeEntry(nil), m.pending[n:]...)
 		m.bytes -= bytes
-		m.calls++
+		m.out[backend]++
 		m.g.metrics.mergeFlushes.inc(reason)
-		go m.call(entries)
+		go m.call(entries, backend)
 	}
 	m.due = false
 }
 
-func (m *eventMerger) callDone() {
+// backendLocked is the backend the next call goes to: of those with a call slot free, the one with the fewest calls
+// out; -1 when no slot is free. A backend that could not be dialed a moment ago is passed over, as the pool passes it
+// over (pick), unless every one could not: its slots would be taken by calls the pool sends to the others.
+func (m *eventMerger) backendLocked() int {
+	reachable := false
+	for i := range m.out {
+		if !m.g.backends.passedOver(i) {
+			reachable = true
+			break
+		}
+	}
+	best := -1
+	for k := range m.out {
+		i := (m.next + k) % len(m.out)
+		if m.out[i] >= m.tune.CallsPerBackend || (reachable && m.g.backends.passedOver(i)) {
+			continue
+		}
+		if best < 0 || m.out[i] < m.out[best] {
+			best = i
+		}
+	}
+	if best >= 0 {
+		m.next = (best + 1) % len(m.out)
+	}
+	return best
+}
+
+func (m *eventMerger) callDone(backend int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.calls--
+	m.out[backend]--
 	if m.due {
 		m.flushLocked("due")
 	}
@@ -190,9 +228,9 @@ type mergedBatch struct {
 	Events     json.RawMessage `json:"events"`
 }
 
-// call sends one merged call and hands each batch what became of it.
-func (m *eventMerger) call(entries []*mergeEntry) {
-	defer m.callDone()
+// call sends one merged call, to backend first, and hands each batch what became of it.
+func (m *eventMerger) call(entries []*mergeEntry, first int) {
+	defer m.callDone(first)
 	g := m.g
 	// A batch whose connection ended has nobody left to acknowledge it: the runner sends it again on its next one.
 	live := make([]*mergeEntry, 0, len(entries))
@@ -222,11 +260,11 @@ func (m *eventMerger) call(entries []*mergeEntry) {
 	}
 	g.metrics.mergeBatches.observeCount(len(live))
 	started := time.Now()
-	answer, err := g.backends.do(context.Background(), backendCall{
+	answer, err := g.backends.doFrom(context.Background(), backendCall{
 		kind: "events_merged", method: http.MethodPost, path: "/api/runner/link/events", body: data,
 		// Each batch is stored once per seq, so the call is too: one that reached a backend twice stores nothing twice.
 		idempotent: true,
-	})
+	}, first)
 	g.metrics.mergeCallDuration.observe(time.Since(started))
 	switch {
 	case err != nil && errors.Is(err, errAnswerTooLarge):

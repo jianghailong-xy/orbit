@@ -36,6 +36,10 @@
  *       is answered as it always was.
  *   (9) A batch at a seq the session holds another event at is answered as alone, the row there left as it was, and the
  *       event logged as an error and counted (run-event-seq-conflicts.ts); the same event sent again is neither.
+ *  (10) Where the call writes for every batch at once (writeCallToolCalls, writeCallSessions), merged and alone still
+ *       leave the same: of two results of one call the later stays, a returned call's card is collected, a retry is
+ *       armed, and the times written are the UTC wall times Prisma writes.
+ *  (11) The call's statements do not grow with its batches: twelve batches take as many as three.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -76,11 +80,13 @@ import { ProjectFuseService } from '../projects/project-fuse.service';
 import { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { APPROVAL_ABANDONED_STATUS } from '../sessions/abandoned-approvals';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
+import { countingPrismaClientFor } from '../test-support/counting-prisma-client';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { listenForRunnerLinkCalls } from './runner-link-call';
@@ -919,5 +925,109 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
     assert.deepEqual(answersOf(again), [{ ok: true, durableSeq: 2, rejected: [] }]);
     assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 1 });
     assert.equal(errors.length, 1);
+  });
+
+  await t.test('(10) where the call writes for every batch at once, merged and alone leave the same: a call\'s last result, its card, a retry, UTC times', async () => {
+    const pairs = await Promise.all([0, 1, 2].map(async (i) => ({
+      alone: await liveSession(a, `write pair ${i}, alone`),
+      merged: await liveSession(a, `write pair ${i}, merged`),
+    })));
+    // A card each session's call asked, which its batch then returns.
+    for (const pair of pairs) {
+      for (const { sessionId } of [pair.alone, pair.merged]) {
+        await prisma.approval.create({ data: { sessionId, toolName: 'Bash', input: { command: 'rm -rf build' }, toolUseId: 'toolu_asked' } });
+      }
+    }
+    const T0 = Date.parse('2026-10-26T02:00:00.000Z');
+    const at = (n: number) => new Date(T0 + n * 1_000).toISOString();
+    const batchesOf = (turnId: string, i: number): unknown[][] => [
+      [
+        ev(1, RunEventType.TOOL_USE, { id: 'toolu_twice', name: 'Bash', input: { command: `ls ${i}` } }, turnId, at(1)),
+        ev(2, RunEventType.TOOL_RESULT, { toolUseId: 'toolu_twice', content: 'the first result' }, turnId, at(2)),
+        ev(3, RunEventType.TOOL_RESULT, { toolUseId: 'toolu_twice', content: `the last result ${i}`, isError: true }, turnId, at(3)),
+        ev(4, RunEventType.TOOL_USE, { id: 'toolu_asked', name: 'Bash', input: { command: 'rm -rf build' } }, turnId, at(4)),
+      ],
+      [
+        ev(5, RunEventType.TOOL_RESULT, { toolUseId: 'toolu_asked', content: 'removed' }, turnId, at(5)),
+        ev(6, RunEventType.ASSISTANT, { text: 'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}' }, turnId, at(6)),
+      ],
+    ];
+    const sentAt = Date.now();
+    for (const round of [0, 1]) {
+      for (const [i, pair] of pairs.entries()) {
+        const answer = await alone(door.linkPort, a, pair.alone.sessionId, batchesOf(pair.alone.turnId, i)[round]);
+        assert.equal(answer.status, 202, JSON.stringify(answer.body));
+      }
+      const answer = await merged(door.linkPort, pairs.map((pair, i) => ({
+        of: a, sessionId: pair.merged.sessionId, events: batchesOf(pair.merged.turnId, i)[round],
+      })));
+      assert.deepEqual(answersOf(answer), pairs.map(() => ({ ok: true, durableSeq: round === 0 ? 4 : 6, rejected: [] })));
+    }
+    for (const [i, pair] of pairs.entries()) {
+      const calls = await toolCallRows(pair.merged.sessionId);
+      assert.deepEqual(calls, await toolCallRows(pair.alone.sessionId), `pair ${i}: the same tool calls`);
+      const twice = calls.find((c) => c.tool_use_id === 'toolu_twice');
+      assert.deepEqual([twice?.output, twice?.is_error], [`the last result ${i}`, true], 'the later result of a call stays');
+      const { rows: cards } = await sql.query<{ session: string; status: string; message: string | null }>(
+        `SELECT session_id::text AS session, status, message FROM "approval" WHERE session_id = ANY($1::uuid[])`,
+        [[pair.merged.sessionId, pair.alone.sessionId]],
+      );
+      assert.equal(cards.length, 2);
+      assert.deepEqual(cards.map((c) => c.status), [APPROVAL_ABANDONED_STATUS, APPROVAL_ABANDONED_STATUS], 'the returned call\'s card collected');
+      assert.equal(cards[0].message, cards[1].message);
+      const { retry_at: mergedRetry, ...merged } = await derivedState(pair.merged.sessionId);
+      const { retry_at: singleRetry, ...single } = await derivedState(pair.alone.sessionId);
+      assert.deepEqual(merged, single, `pair ${i}: the same derived state`);
+      assert.ok(mergedRetry !== null && singleRetry !== null, 'a retry armed for the overloaded API');
+      // The times written now, as instants (epoch of a timestamp column is its UTC wall time): each where the other is,
+      // and where now is, so that neither is a local time.
+      const { rows: times } = await sql.query<{ id: string; last_turn_at: number; retry_at: number; updated_at: number }>(
+        `SELECT id::text AS id, extract(epoch FROM last_turn_at)::float8 * 1000 AS last_turn_at,
+                extract(epoch FROM retry_at)::float8 * 1000 AS retry_at, extract(epoch FROM updated_at)::float8 * 1000 AS updated_at
+           FROM "session" WHERE id = ANY($1::uuid[])`,
+        [[pair.merged.sessionId, pair.alone.sessionId]],
+      );
+      const byId = new Map(times.map((row) => [row.id, row]));
+      const m = byId.get(pair.merged.sessionId)!;
+      const o = byId.get(pair.alone.sessionId)!;
+      for (const column of ['last_turn_at', 'retry_at', 'updated_at'] as const) {
+        assert.ok(Math.abs(m[column] - o[column]) < 60_000, `pair ${i}: ${column} merged ${new Date(m[column]).toISOString()}, alone ${new Date(o[column]).toISOString()}`);
+      }
+      for (const column of ['last_turn_at', 'updated_at'] as const) {
+        assert.ok(m[column] >= sentAt - 1_000 && m[column] <= Date.now() + 1_000, `pair ${i}: ${column} ${new Date(m[column]).toISOString()} is not now`);
+      }
+    }
+  });
+
+  await t.test('(11) a merged call takes as many statements for twelve batches as for three', async () => {
+    const counting = countingPrismaClientFor(url);
+    const countedRealtime = new RealtimeService(counting.prisma as unknown as PrismaService, push as unknown as PushService);
+    const countedDoor = await bootDoor(counting.prisma, link, countedRealtime, push, fuse);
+    try {
+      /** The statements of one call of n batches, each a step of an engine: a thought, a message, a call and its result. */
+      const statementsOf = async (n: number) => {
+        const sessions = await Promise.all(Array.from({ length: n }, (_, i) => liveSession(a, `counted ${n}, ${i}`)));
+        counting.statements.reset();
+        const answer = await merged(countedDoor.linkPort, sessions.map((s, i) => ({ of: a, sessionId: s.sessionId, events: [
+          ev(1, RunEventType.THINKING, { text: 'let me see' }, s.turnId),
+          ev(2, RunEventType.ASSISTANT, { text: `step ${i}` }, s.turnId),
+          ev(3, RunEventType.TOOL_USE, { id: `toolu_counted_${i}`, name: 'Bash', input: { command: 'ls' } }, s.turnId),
+          ev(4, RunEventType.TOOL_RESULT, { toolUseId: `toolu_counted_${i}`, content: 'a.txt' }, s.turnId),
+        ] })));
+        assert.deepEqual(answersOf(answer), sessions.map(() => ({ ok: true, durableSeq: 4, rejected: [] })));
+        for (const s of sessions) await assertContiguous(s.sessionId, 4);
+        return [...counting.statements.sql];
+      };
+      const three = await statementsOf(3);
+      const twelve = await statementsOf(12);
+      assert.equal(twelve.length, three.length,
+        `twelve batches took ${twelve.length} statements, three took ${three.length}:\n${twelve.map((q) => q.replace(/\s+/g, ' ').slice(0, 100)).join('\n')}`);
+      assert.equal(twelve.filter((q) => /UPDATE "session"/.test(q)).length, 1, 'every session written in one statement');
+      assert.equal(twelve.filter((q) => /UPDATE "tool_call"/.test(q)).length, 1, 'every result in one statement');
+    } finally {
+      await countedDoor.close();
+      countedRealtime.onModuleDestroy();
+      await counting.prisma.$disconnect();
+    }
   });
 });

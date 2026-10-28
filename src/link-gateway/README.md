@@ -57,6 +57,7 @@ It is one static binary with these subcommands:
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
 | `LINK_EVENT_MERGE_WINDOW` | `100ms` | How long an event batch waits for others, from any connection, to go with it in one [merged call](#merged-calls), up to `500ms`. `0` forwards every batch alone. |
 | `LINK_EVENT_MERGE_MAX_BATCHES`, `LINK_EVENT_MERGE_MAX_BYTES` | `64`, `2097152` | What one merged call may carry: the sessions its transaction holds at once (at most the apiserver's 256), and the bytes of its events. A full call goes at once. |
+| `LINK_EVENT_MERGE_CALLS_PER_BACKEND` | `4` | How many merged calls may be out at once to each apiserver `LINK_INTERNAL_API_URLS` names, from 1 to 8. The gateway's calls out at once are this many times the apiservers: 4 with one, 16 with four (see [Merged calls](#merged-calls)). At most 8, because a call holds one of its apiserver's 10 database connections for its whole transaction, and its heartbeats and other calls need the rest. |
 | `LINK_INGEST_QUEUE_MAX_EVENTS`, `LINK_INGEST_QUEUE_MAX_BYTES` | `200000`, `134217728` | The most durable events, and payload bytes, the [ingest queue](#durable-events-and-credit) holds across all connections, however many there are. At the defaults that is about half a gigabyte of the gateway's memory: 200,000 events of 660 bytes are about 470 MiB, at the 2.4 KB each that task C2b measured, and 128 MiB of larger events, which the bytes bound stops first, about 600 MiB. Size it to the gateway's memory beside its connections (about 158 KiB each: 2.3 GiB for 15,000). Each must be at least one connection's credit, 10,000 events and 64 MiB. The credit's high- and low-water marks are half and a quarter of it. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
@@ -445,8 +446,13 @@ Every connection's batches go to the apiserver in merged calls (§6.6, `events_m
 `LINK_EVENT_MERGE_WINDOW` for others, from any connection, and they go as one `POST /runner/link/events`, which the
 apiserver stores in one transaction (`src/apiserver/src/runner-api/link-events.ts`). Each batch's answer in it is the
 one the events route would give it alone, and it is acknowledged on its own connection as the table above says. A call
-goes at once when it is full or when a batch carries a `turn_end` (a turn completion waits for its events: `after_seq`);
-at most four calls are out at once, and batches collect behind them.
+goes at once when it is full or when a batch carries a `turn_end` (a turn completion waits for its events: `after_seq`).
+
+How many calls are out at once grows with the apiservers: at most `LINK_EVENT_MERGE_CALLS_PER_BACKEND` (4) to each one
+`LINK_INTERNAL_API_URLS` names, so 4 with one apiserver and 16 with four. A call goes to the apiserver with the fewest
+out. One that could not be dialed a moment ago is passed over, and its slots are not lent to the others, so no apiserver
+holds more than its share. While every slot is taken, batches collect behind the calls out and go as soon as one
+returns.
 
 | What happens | The batch |
 | --- | --- |

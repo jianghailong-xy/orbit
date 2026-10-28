@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +27,7 @@ const (
 	mergeSession3 = "0190a0b0-0000-7000-8000-0000000000c3"
 	mergeSession4 = "0190a0b0-0000-7000-8000-0000000000c4"
 	processB2     = "0190a0b0-0000-4000-8000-0000000000b1"
+	runnerC       = "0190a0b0-0000-7000-8000-00000000000c"
 )
 
 // mergedCallSeen is a merged call as the apiserver reads it (link-events.ts LinkEventCall).
@@ -379,7 +382,7 @@ func TestAFullCallGoesAtOnceAndCallsInFlightAreBounded(t *testing.T) {
 	h := mergingHarness(t, backend, func(m *mergeTuning) {
 		m.Window = 5 * time.Second
 		m.MaxBatches = 2
-		m.MaxCalls = 1
+		m.CallsPerBackend = 1
 	})
 	tc, _ := h.connectLink(runnerA, processA)
 	tc.send(eventsFrame(batch(mergeSession1, 1, 1)))
@@ -402,6 +405,155 @@ func TestAFullCallGoesAtOnceAndCallsInFlightAreBounded(t *testing.T) {
 	}
 	if h.g.metrics.mergeFlushes.get("batches") != 1 || h.g.metrics.mergeFlushes.get("due") != 1 {
 		t.Fatalf("flushes: batches %v, due %v", h.g.metrics.mergeFlushes.get("batches"), h.g.metrics.mergeFlushes.get("due"))
+	}
+}
+
+// holdingBackends are backends that answer merged calls as the apiserver does once released, and count the calls each
+// holds until then.
+type holdingBackends struct {
+	backends []*fakeBackend
+	release  chan struct{}
+	freed    sync.Once
+	mu       sync.Mutex
+	out      []int
+	calls    int
+}
+
+func newHoldingBackends(t *testing.T, n int) *holdingBackends {
+	hb := &holdingBackends{release: make(chan struct{}), out: make([]int, n)}
+	answer := mergedRoute(t, nil)
+	for i := 0; i < n; i++ {
+		b := newFakeBackend(t, nil)
+		b.setHandler(func(w http.ResponseWriter, r *http.Request, body []byte) {
+			if r.URL.Path == mergePath {
+				hb.mu.Lock()
+				hb.out[i]++
+				hb.calls++
+				hb.mu.Unlock()
+				<-hb.release
+				hb.mu.Lock()
+				hb.out[i]--
+				hb.mu.Unlock()
+			}
+			answer(w, r, body)
+		})
+		hb.backends = append(hb.backends, b)
+	}
+	// Before the backends close, which waits for the calls they hold: a test that failed holding some.
+	t.Cleanup(hb.free)
+	return hb
+}
+
+// free answers every call held, and every call from now on at once.
+func (hb *holdingBackends) free() { hb.freed.Do(func() { close(hb.release) }) }
+
+// held is the merged calls each backend holds now.
+func (hb *holdingBackends) held() []int {
+	hb.mu.Lock()
+	defer hb.mu.Unlock()
+	return slices.Clone(hb.out)
+}
+
+func (hb *holdingBackends) total() int {
+	total := 0
+	for _, n := range hb.held() {
+		total += n
+	}
+	return total
+}
+
+// mergeSessionN is the nth of many sessions.
+func mergeSessionN(n int) string { return fmt.Sprintf("0190a0b0-0000-7000-8000-0000000002%02x", n) }
+
+func TestTheMergedCallsOutAtOnceGrowWithTheApiservers(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		backends   int
+		perBackend int // 0: the default
+		want       int
+	}{
+		// One apiserver: four calls out at once, as before the calls grew with the apiservers.
+		{"one apiserver", 1, 0, 4},
+		{"three apiservers", 3, 0, 12},
+		{"two apiservers, LINK_EVENT_MERGE_CALLS_PER_BACKEND=2", 2, 2, 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hb := newHoldingBackends(t, tc.backends)
+			h := newLinkHarness(t, hb.backends, func(c *config) {
+				c.link.Merge = defaultMergeTuning()
+				// Every batch a full call of its own, which goes at once.
+				c.link.Merge.Window = 5 * time.Second
+				c.link.Merge.MaxBatches = 1
+				if tc.perBackend > 0 {
+					c.link.Merge.CallsPerBackend = tc.perBackend
+				}
+			})
+			if tc.perBackend == 0 && h.g.cfg.link.Merge.CallsPerBackend != 4 {
+				t.Fatalf("the default is %d calls a backend, want 4", h.g.cfg.link.Merge.CallsPerBackend)
+			}
+			// More batches than there are slots, from three connections (each forwards eight sessions' at most).
+			conns := []*testConn{}
+			for i, runner := range []string{runnerA, runnerB, runnerC} {
+				c, _ := h.connectLink(runner, []string{processA, processB2, processC}[i])
+				conns = append(conns, c)
+			}
+			batches := tc.want + 6
+			for n := 0; n < batches; n++ {
+				conns[n%len(conns)].send(eventsFrame(batch(mergeSessionN(n), 1, 1)))
+			}
+			eventually(t, 5*time.Second, fmt.Sprintf("%d merged calls out", tc.want), func() bool { return hb.total() >= tc.want })
+			time.Sleep(300 * time.Millisecond)
+			held := hb.held()
+			for _, n := range held {
+				if n != tc.want/tc.backends {
+					t.Fatalf("the backends hold %v merged calls, want %d each and %d in all", held, tc.want/tc.backends, tc.want)
+				}
+			}
+			hb.free()
+			acked := 0
+			for i, c := range conns {
+				acked += len(c.acks((batches-i+len(conns)-1)/len(conns), 5*time.Second))
+			}
+			hb.mu.Lock()
+			calls := hb.calls
+			hb.mu.Unlock()
+			if acked != batches || calls != batches {
+				t.Fatalf("%d batches acknowledged and %d merged calls, want %d of each", acked, calls, batches)
+			}
+			if due := h.g.metrics.mergeFlushes.get("due"); due < 1 {
+				t.Fatalf("no batch waited for a call slot: flushes{due} %v", due)
+			}
+		})
+	}
+}
+
+func TestAnApiserverThatCannotBeDialedLendsNoCallSlotsToTheOthers(t *testing.T) {
+	gone := newFakeBackend(t, nil)
+	gone.srv.Close()
+	hb := newHoldingBackends(t, 1)
+	h := newLinkHarness(t, []*fakeBackend{gone, hb.backends[0]}, func(c *config) {
+		c.link.Merge = defaultMergeTuning()
+		c.link.Merge.Window = 5 * time.Second
+		c.link.Merge.MaxBatches = 1
+		c.link.BackendDownFor = time.Minute
+	})
+	// The first call of all, the first connection's welcome, tries the first backend, which refuses the dial.
+	a, _ := h.connectLink(runnerA, processA)
+	b, _ := h.connectLink(runnerB, processB2)
+	if !h.g.backends.passedOver(0) {
+		t.Fatalf("the backend that refuses every dial is not passed over")
+	}
+	for n := 0; n < 10; n++ {
+		[]*testConn{a, b}[n%2].send(eventsFrame(batch(mergeSessionN(n), 1, 1)))
+	}
+	eventually(t, 5*time.Second, "four merged calls out", func() bool { return hb.total() >= 4 })
+	time.Sleep(300 * time.Millisecond)
+	if n := hb.total(); n != 4 {
+		t.Fatalf("the one backend that answers holds %d merged calls: the other's four slots went to it", n)
+	}
+	hb.free()
+	if got := len(a.acks(5, 5*time.Second)) + len(b.acks(5, 5*time.Second)); got != 10 {
+		t.Fatalf("%d batches acknowledged", got)
 	}
 }
 
@@ -475,5 +627,18 @@ func TestTheMergeWindowIsReadFromTheEnvironment(t *testing.T) {
 	}
 	if _, err := configFromEnv(env(map[string]string{"LINK_EVENT_MERGE_MAX_BATCHES": "300"})); err == nil {
 		t.Fatalf("a call of more batches than the apiserver takes was accepted")
+	}
+	for value, want := range map[string]int{"": 4, "1": 1, "8": 8} {
+		cfg, err := configFromEnv(env(map[string]string{"LINK_EVENT_MERGE_CALLS_PER_BACKEND": value}))
+		if err != nil || cfg.link.Merge.CallsPerBackend != want {
+			t.Fatalf("LINK_EVENT_MERGE_CALLS_PER_BACKEND=%q: %d, %v", value, cfg.link.Merge.CallsPerBackend, err)
+		}
+	}
+	// More than the apiserver's database connections leave room for, or none at all.
+	for _, value := range []string{"9", "0", "-1", "four"} {
+		if _, err := configFromEnv(env(map[string]string{"LINK_EVENT_MERGE_CALLS_PER_BACKEND": value})); err == nil ||
+			!strings.Contains(err.Error(), "LINK_EVENT_MERGE_CALLS_PER_BACKEND") {
+			t.Fatalf("LINK_EVENT_MERGE_CALLS_PER_BACKEND=%q accepted: %v", value, err)
+		}
 	}
 }
