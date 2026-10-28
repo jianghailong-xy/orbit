@@ -80,7 +80,7 @@ let open = 0;
 let stopping = false;
 const controllers = new Set();
 
-// sessionId -> what its streams received (watch.json's `sessions`).
+// sessionId -> what its streams received (watch.json's `bySession`).
 const perSession = new Map();
 const sessionStats = (id) => {
   let st = perSession.get(id);
