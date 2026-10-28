@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css"><script src="kit.js"></script></head>
+<body><div class="board">
+  <h1 class="title">进 main 的路有五条，门禁只认会写回执的那三条</h1>
+  <p class="subtitle">「已落地」被定义成「有回执」<span class="badge">1</span>。绕过流水线的路只能靠一条条补丁去对齐，漏掉一条，下游就死等。</p>
+  <div style="margin-top:26px">
+  <table class="grid">
+    <tr><th style="width:38%">代码怎么进的 main</th><th style="width:13%">git 里</th><th style="width:22%">有没有回执</th><th>J9 门禁 / 项目 DONE 看到的</th></tr>
+    <tr><td><b>A</b> · Orbit 自己合入<br><span class="mono" style="color:#59636e">LAND_PROMOTION / LAND_TASK</span></td><td class="ok">✓ 在线上</td><td class="ok">✓ 平台写</td><td class="ok">已落地 ✓</td></tr>
+    <tr><td><b>B</b> · 会话的 Merge 按钮</td><td class="ok">✓ 在线上</td><td class="ok">✓ runner 回报</td><td class="ok">已落地 ✓</td></tr>
+    <tr><td><b>C</b> · agent 自己合并，再调 <span class="mono">merge_receipt</span></td><td class="ok">✓ 在线上</td><td><span class="ok">✓</span> 要 agent 记得调<br><span style="color:#59636e;font-size:15px">本项目只有 #2 调了</span></td><td class="ok">已落地 ✓</td></tr>
+    <tr class="hl"><td><b>D</b> · agent 直接 <span class="mono">git push</span> 到目标分支<br><span style="color:#59636e;font-size:15px">本项目说明要求的就是这种做法</span></td><td class="ok">✓ 在线上</td><td class="no">✗ 没有</td><td><span class="no">没落地 ✗</span><br>实际早已落地：#1 #3 #4 #7 #9 #10</td></tr>
+    <tr class="hl"><td><b>E</b> · coordinator 手动快进 main</td><td class="ok">✓ 在线上</td><td><span class="no">✗</span> 除非手动记</td><td><span class="no">没落地 ✗</span><br>10-09 项目 34b78EQP… 就卡在这里</td></tr>
+  </table>
+  </div>
+  <div style="margin-top:30px;font-weight:650;font-size:19px">同一个洞上的补丁</div>
+  <div class="canvas" style="height:194px;margin-top:14px">
+    <div class="node orbit" id="t1" style="left:0;top:10px;width:262px;height:112px"><div class="h">10-09 · M-T13</div><div class="s">记回执时，顺手退役同任务的候选</div></div>
+    <div class="node orbit" id="t2" style="left:300px;top:10px;width:262px;height:112px"><div class="h">10-09 · 迁移 0411</div><div class="s">一次性退役生产上 5 条卡在 BLOCKED 的候选</div></div>
+    <div class="node orbit" id="t3" style="left:600px;top:10px;width:262px;height:112px"><div class="h">10-28 · PR #146</div><div class="s">检查发现提交已在 main 上：写回执，候选记 SUPERSEDED</div></div>
+    <div class="node warn" id="t4" style="left:900px;top:10px;width:268px;height:112px;border-style:dashed"><div class="h">下一次？</div><div class="s">cherry-pick 推送 · 检查跑在推送之前 · 代码由后面的任务推……</div></div>
+    <div class="node note" id="t5" style="left:0;top:142px;width:1168px">每多一条绕过流水线的路，就要多一条对齐规则：回执、候选状态、集成作业、落地会话四份记录要互相追平，而真正的事实一直在 git 里。</div>
+  </div>
+</div>
+<script>drawWires([
+  {from:'t1',to:'t2',color:'gray'},{from:'t2',to:'t3',color:'gray'},{from:'t3',to:'t4',color:'amber',dash:true},
+]);</script>
+</body></html>
