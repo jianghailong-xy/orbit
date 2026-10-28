@@ -8,10 +8,11 @@
  *       the reaper's, the task sweep's and the auto-retry sweep's ticks sweep on that one and on no other; when its
  *       coordination connection is cut as a killed process's is, it stops at once, the other takes the lock within
  *       LEADER_POLL_MS and its ticks sweep from then on, and the first, connected again, waits;
- *   (2) a takeover is a start: the reaper of a process that takes over in the middle of a mass silence the reaper before
- *       it was holding for — the silence lifting, the runner of the session not heard from again yet — reaps nothing at
- *       its first sweep, where a reaper that had been up for an hour and swept on as soon as it held the lock reaps that
- *       session at once; and past its grace, the reaper that took over reaps as any reaper does;
+ *   (2) a takeover is a start, and a mass disconnection is the cell's: the reaper of a process that takes over in the
+ *       middle of one the reaper before it kept — the silence lifted, the runner of the session not heard from again yet
+ *       — reaps nothing inside its grace, and past its grace still holds that runner by the disconnection kept
+ *       (`runner_mass_disconnect`), though nothing of it shows in the cell any more; it reaps the run of a runner gone
+ *       quiet on its own since, and the held one's once its runner has been silent for longer than the window;
  *   (3) a heartbeat write that failed on process A holds the reaper on process B: a silent runner's run is reaped in a
  *       quiet cell (the control), then not while A's row says a beat it took failed within RUNNER_OFFLINE_AFTER_MS —
  *       B's own record of failures empty all along — and reaped again once that has aged out;
@@ -58,7 +59,7 @@ import {
   SINGLETON_SWEEPS_LOCK,
 } from './control-plane-leader';
 import type { RealtimeService } from './realtime.service';
-import { MASS_SILENCE_WINDOW_MS, ReaperService, STARTUP_GRACE_MS } from './reaper.service';
+import { MASS_DISCONNECT_HOLD_MS, MASS_SILENCE_WINDOW_MS, ReaperService, STARTUP_GRACE_MS } from './reaper.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -266,27 +267,28 @@ test('several apiserver processes over one database: one runs the singleton swee
     await lockFree();
   });
 
-  await t.test('(2) a process that takes the sweeps over in the middle of a mass silence reaps nothing at once', async () => {
+  await t.test('(2) a process that takes the sweeps over in the middle of a mass disconnection holds the runners the one before it kept', async () => {
     await forgetProcesses();
     const presence = new RunnerPresenceService(db as unknown as PrismaService);
     const silent = await silentRunner();
     const session = await running(silent, 'its runner went quiet in a mass silence');
 
     // The process that held the lock until now, sweeping through a silence of the whole cell — a link gateway gone,
-    // say — and holding, then holding on as the cell is heard again, for the runners whose beats were lost in it.
+    // say — and holding, which keeps it as a mass disconnection; then holding on as the cell is heard again, though the
+    // cell shows nothing of it any more, for the runner still out.
     let sinceA: number | null = Date.now() - 60 * MINUTE;
     const leaderA = { leads: () => sinceA !== null, leadingSince: () => sinceA } as unknown as ControlPlaneLeader;
     const a = reaperOf(presence, leaderA);
     await crowdBeats(2 * MINUTE);
     await a.reaper.tick();
     assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'held through the mass silence');
-    assert.match(a.warns.join('\n'), /have been silent for over 45s at once/);
+    assert.match(a.warns.join('\n'), /a mass disconnection: 31 of the 31 runners heard from lost contact/);
     await crowdBeats();
     await a.reaper.tick();
     assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'and held on as the silence lifts');
-    assert.match(a.warns.at(-1)!, /a fifth of the cell's runners went silent together less than 90s ago/);
+    assert.match(a.warns.at(-1)!, /its runner lost contact in a mass disconnection \(31 of the 31 runners heard from/);
 
-    // That process is killed, its hold with it. Another, up as a follower for an hour, takes the lock.
+    // That process is killed. Another, up as a follower for an hour, takes the lock: inside its grace it reaps nothing.
     sinceA = null;
     let sinceB: number | null = null;
     const leaderB = { leads: () => sinceB !== null, leadingSince: () => sinceB } as unknown as ControlPlaneLeader;
@@ -300,19 +302,31 @@ test('several apiserver processes over one database: one runs the singleton swee
     assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'the reaper that took over reaps nothing at once');
     assert.match(b.warns.join('\n'), /the reaper started \d+s ago, inside its 180s startup grace/);
 
-    // The control: a reaper up for an hour that sweeps as soon as it holds the lock, with nothing of the hold it took
-    // over, reads a quiet cell and a runner two minutes silent, and reaps the session at its first sweep.
-    const naive = reaperOf(presence);
-    naive.upFor(60 * MINUTE);
-    await naive.sweep();
-    assert.deepEqual(await stateOf(session), REAPED, 'without the takeover rule the session is reaped at once');
-
-    // Past its grace, the reaper that took over reaps as any reaper does.
-    const later = await running(silent, 'its runner is still quiet after the grace');
+    // Past its grace, it reads the disconnection the other process kept, and holds the runner still out in it.
     sinceB = Date.now() - STARTUP_GRACE_MS - MINUTE;
+    await crowdBeats();
     await b.reaper.tick();
-    assert.deepEqual(await stateOf(later), REAPED);
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'the disconnection is the cell\'s, not the memory of the process that kept it');
+    assert.match(b.warns.at(-1)!, /its runner lost contact in a mass disconnection \(31 of the 31/);
+
+    // A runner gone quiet on its own since — last heard 100 s ago, well after the disconnection — is no runner of it.
+    const alone = await runner('alone', 100 * SECOND);
+    const ofAlone = await running(alone, 'its runner went quiet on its own');
+    await crowdBeats();
+    await b.reaper.tick();
+    assert.deepEqual(await stateOf(ofAlone), REAPED);
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING);
+
+    // Silent past the window, the runner held has not come back from the disconnection: its run is reaped too.
+    const pastTheWindow = new Date(Date.now() - MASS_DISCONNECT_HOLD_MS - 30 * SECOND);
+    await db.runner.update({ where: { id: silent }, data: { lastHeartbeatAt: pastTheWindow } });
+    await db.runnerPresence.update({ where: { runnerId: silent }, data: { lastBeatAt: pastTheWindow } });
+    await crowdBeats();
+    await b.reaper.tick();
+    assert.deepEqual(await stateOf(session), REAPED);
     await signOff(silent);
+    await signOff(alone);
+    await db.runnerMassDisconnect.deleteMany();
   });
 
   await t.test('(3) a heartbeat write that failed on process A holds the reaper on process B', async () => {

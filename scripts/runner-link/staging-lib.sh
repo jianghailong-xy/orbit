@@ -40,6 +40,9 @@ compose_files() {
   if [ "$(setting STAGING_LOADGEN 0)" = 1 ]; then
     printf '%s\n' -f "$here/staging.loadgen.compose.yml"
   fi
+  if [ "$(setting STAGING_GATEWAYS 1)" = 2 ]; then
+    printf '%s\n' -f "$here/staging.gateways.compose.yml"
+  fi
   # The apiservers past apiserver-b (extra_backends), which staging-up.sh writes for ORBIT_LINK_STAGING_BACKENDS of 3 or
   # more.
   if [ -f "$state/backends.compose.yml" ]; then
