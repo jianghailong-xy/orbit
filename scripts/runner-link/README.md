@@ -543,14 +543,35 @@ drill). A runner drops its copy of events once their EventAck arrives, so C1a he
 standby was synchronous. A cell's database needs a synchronous standby (`synchronous_commit = on`, the standby in
 `synchronous_standby_names`, or a quorum of two), or an equivalent that keeps every acknowledged commit.
 
-**Before production with more than one apiserver** (the coordinator filed these tasks on 2026-10-26):
+**Before production with more than one apiserver** (the coordinator filed (a) to (c) on 2026-10-26, the rest on
+2026-10-28; docs/runner-link-design.md §15.3 keeps the same list). All but (e) are on the project branch:
 
 - **(a) The singleton jobs on one process** (task 34mNe88onMT6k23kHz7ce): the reaper, with a heartbeat-write-failure
-  hold every process sees; the task sweep; auto-retry.
+  hold every process sees; the task sweep; auto-retry. Landed: task branch 703e3dd52, merge 54a61ed32.
 - **(b) The runner-relayed sign-in state carried across processes** over NATS, without persistence (task
-  34mNe8DOyUq2wlk81EGlZ): Antigravity's pasted code and the Cursor key check.
-- **(c) The default upgrade recreating the replicas** (task 34mNe8H0YZ4Qkwd0t6jPJ). Until then, the manual step in
-  docs/self-hosting.md applies.
+  34mNe8DOyUq2wlk81EGlZ): Antigravity's pasted code and the Cursor key check. Landed: 4752cf40e to 3c04ae110.
+- **(c) The default upgrade recreating the replicas** (task 34mNe8H0YZ4Qkwd0t6jPJ). Landed: task branch 34eff2714,
+  merge 43fd969a9.
+- **(d) Recaps, iOS approval alerts and the agents' notification limit held across processes**, decided on the
+  database rows they are about (task 34nb3xlT50n4F2ALdUAtB). Landed: task branch c14937af8, merge 15179a12c.
+- **The session streams and link tokens spread over every apiserver** (task 34nb3xgCijTDzQJVXDVT7; "Several
+  apiservers" above). Landed: task branch 1d6c5a10a, merge e8fae2b28.
+- **(e) `RUNNER_LINK_REQUIRED` on**, every runner working over the link: a runner on HTTPS posts its deltas to the
+  first apiserver alone, so a stream on another one shows its replies only as each is stored. Not done yet.
+- **(f) A batch another apiserver stored reaching the streams when reading it back fails** (task
+  34njIJN86oqVMVzqtaPQ4). In first-live above, one stream missed two stored events of one session while the host
+  swapped, most likely a failed read-back, which the holder of the streams used to drop without a word.
+  - A batch too big for its notification is read back from run_event by the apiserver holding the session's streams.
+    A failed read is tried again after 250 ms, 1 s and 3 s, within 10 s of the notice. Meanwhile the session's later
+    events wait behind it, so the streams receive seqs in order.
+  - Each failure is logged with the session, the seqs and the error, never the events, as
+    `could not read back seq 3-14, stored by another apiserver (attempt 1 of 4: ...)`. The outcome is logged too:
+    `read back ... on attempt 2 of 4`, or `gave up reading back ...`.
+  - Given up, the session's streams on that apiserver get `resync`, and the web, iOS/macOS and Android clients re-seed
+    from a tail page. The owner's lists there get a session_updated of that apiserver's alone and re-read the row.
+  - `src/apiserver/src/realtime/relay-read-back.pg.spec.ts` holds it on two production apiservers over one database,
+    with a preload that fails the read once, twice or every time.
+  - Not covered: notifications sent while an apiserver's LISTEN connection is down, for the 2 s before it reconnects.
 
 **Open items** of the spec:
 

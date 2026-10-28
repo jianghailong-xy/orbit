@@ -522,13 +522,20 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 另外：
 
 - 起多个 apiserver 的做法见 [self-hosting.md 的 "Several apiservers"](./self-hosting.md#several-apiservers)：在 `docker-compose.override.yml` 里加 `apiserver-2` 等；链路网关的 `LINK_INTERNAL_API_URLS` 列出全部 apiserver；web 网关挂载 `gateway/several-apiservers/` 后，会话流和 link-token 分到所有 apiserver，人的其余请求仍只到第一个。
-- 多个 apiserver 上生产之前，要先完成下面的前置。2026-10-28 时 (a)、(b)、(c) 已在项目分支落地，(d)、34nb3xgCijTDzQJVXDVT7 和 (e) 还没有完成；全部完成之前，多个 apiserver 只用于压测和 staging。
+- 多个 apiserver 上生产之前，要先完成下面的前置。2026-10-28 时 (a)、(b)、(c)、(d) 和 34nb3xgCijTDzQJVXDVT7 已在项目分支落地，(f) 随 34njIJN86oqVMVzqtaPQ4 落地，(e) 还没有完成；全部完成之前，多个 apiserver 只用于压测和 staging。
   - (a) 34mNe88onMT6k23kHz7ce：reaper、任务定时扫描和自动重试同一时刻只在一个进程上跑；心跳写入失败的保护所有进程都看得到。已落地：任务分支 703e3dd52 由合并提交 54a61ed32 合入项目分支。
   - (b) 34mNe8DOyUq2wlk81EGlZ：Antigravity 的登录码和 Cursor 的密钥检查，不管心跳落在哪个进程都能送到 runner。已落地：4752cf40e 到 3c04ae110 这 5 个提交，项目分支从 3a001854e 前进到 3c04ae110。
   - (c) 34mNe8H0YZ4Qkwd0t6jPJ：默认升级流程同时重建 apiserver 副本。已落地：任务分支 34eff2714（改动在 0707981e1）由合并提交 43fd969a9 合入项目分支。
-  - (d) 34nb3xlT50n4F2ALdUAtB：会话总结、iOS 审批提醒和通知限频跨进程有效。
-  - 34nb3xgCijTDzQJVXDVT7：会话实时流和 link-token 签发分散到所有 apiserver，见下一条。
+  - (d) 34nb3xlT50n4F2ALdUAtB：会话总结、iOS 审批提醒和通知限频跨进程有效。已落地：任务分支 c14937af8 由合并提交 15179a12c 合入项目分支。
+  - 34nb3xgCijTDzQJVXDVT7：会话实时流和 link-token 签发分散到所有 apiserver，见下一条。已落地：任务分支 1d6c5a10a 由合并提交 e8fae2b28 合入项目分支。
   - (e) `RUNNER_LINK_REQUIRED` 已打开，runner 都经链路工作。原因见下一条的“限制”。
+  - (f) 34njIJN86oqVMVzqtaPQ4：别的进程入库的持久事件，读回失败时不丢。一批事件太大、通知里放不下时，通知只带 seq 范围，持有会话流的 apiserver 从 run_event 把它读回来（`realtime.service.ts` 的 `readBack`）。
+    - 读回失败时，隔 250 ms、1 s、3 s 再读，最多读 4 次；从收到通知算起最多等 10 s。
+    - 读回完成之前，这个会话在本进程后到的事件（别的进程的通知，以及本进程自己入库的）都排在它后面，所以流收到的 seq 是按顺序的。
+    - 每次失败记一行日志，写会话、seq 范围和错误，不写事件内容。
+    - 放弃时，给本进程这个会话的流发 `resync`：web、iOS/macOS、Android 收到后都丢掉已载入的窗口，重取一页 tail，再从它最新的 seq 接着连。同时在本进程发一条只在本地的 session_updated，owner 的列表行从库里重建摘要。排在后面还没读的读回不再去读，客户端重新拉取时会一并拿到。
+    - 只有一个 apiserver 时，进程不读回自己入库的批次，行为不变。
+    - 还没覆盖的：apiserver 的 LISTEN 连接断开后要 2 秒才重连，这期间别的进程发来的通知它收不到，那几批事件同样到不了它的流。
 - 已定：会话实时流分散到所有 apiserver，link-token 签发也分散。协调者 2026-10-28 根据 C2b（34m88i6i8CQeU4dSuw7HM）的实测定下，34nb3xgCijTDzQJVXDVT7 实现。
   - **依据（C2b 证据 9、11，单元规模，4 个 apiserver）。**
     - 会话流都在第一个 apiserver 上、实时增量按单元速率（每秒 1 万条）时：第一个 apiserver 的主线程均值 0.976（10 秒峰值 0.997），另外三个 0.38–0.39。增量照样全部送达，但同一进程上的其他工作被挤掉。
