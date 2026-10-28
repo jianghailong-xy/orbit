@@ -118,6 +118,28 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 - **Logs and frames.** `docker logs <project>-link-gateway` summarizes every frame in both directions; staging sets
   `LINK_FRAME_LOG=all`. `link-gateway dump` decodes a frame from its log line.
 
+## The reaper's mass disconnections, in real time
+
+`src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts` cuts runners off from a cell of two production apiservers
+over one database, on the clock (design §15.6). It needs no staging stack. Its header lists the cases.
+
+- **The default run is case (1) alone**, a smoke of about 5 minutes, most of it the reaper's startup grace. That fits
+  the 600 s a spec gets from `scripts/run-pg-spec.sh` and from CI's pg shards, so CI runs the smoke alone.
+- **The mass disconnections, cases (2) to (5),** take about 20 minutes more and run only when
+  `REAPER_MASS_DISCONNECT_CASES` names them. Every case, about 25 minutes:
+
+  ```bash
+  REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 \
+    bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts
+  ```
+
+  Without `RUN_PG_SPEC_TIMEOUT` the run is killed at 600 s (`TIMEOUT/KILLED rc=124`).
+- **`REAPER_MASS_DISCONNECT_CASES`** takes any of the cases, comma-separated. `2,3` is the control against a reaper
+  that reaps the late runners of a reconnection.
+- **`REAPER_MASS_DISCONNECT_SEED`** repeats a run's return times. Every run prints its seed.
+- **On a stack**, with real runners, `drills/mass-disconnect-drill.sh` kills the link gateway or one of its nodes, or
+  cuts runners off ([drills/README.md](drills/README.md)).
+
 ## Load test
 
 The cell-scale load test (task C2, design §9) runs on a stack in MODE_LINK with the load test's settings. A private
