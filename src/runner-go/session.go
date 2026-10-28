@@ -1177,13 +1177,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
 	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
 	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all.
+	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
+	// own route (sessionNotify).
 	bg.notifyWhenCold(
 		func() bool { return pool.engineResident(live) },
-		func(message string) error {
-			_, err := t.notify(job.SessionID, message)
-			return err
-		},
+		func(message string) error { return t.sessionNotify(job.SessionID, message) },
 	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that

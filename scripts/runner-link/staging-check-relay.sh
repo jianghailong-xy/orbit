@@ -12,9 +12,8 @@
 #   2. The relay drill: the owner starts an Antigravity sign-in and pastes its code through the web API; the runner's
 #      heartbeat hands it over, once, for its attempt. The owner checks a Cursor key through the web API; a heartbeat
 #      hands it over, once, and the runner's answer settles the check the owner waits on. A runner sends that answer
-#      over HTTPS (it is not a daemon route, D14), which reaches the first apiserver: the round robin runs do so. With
-#      the gateway on the second apiserver alone, this script posts it to the second apiserver's own listener instead,
-#      as the runner, so that it too lands where the check is not waited on.
+#      over the link (a daemon call, docs/runner-link-design.md §15.9), so it lands where the gateway forwards it: with
+#      the gateway on the second apiserver alone, on the process that does not wait on the check.
 #
 # With the gateway forwarding to the second apiserver alone (ORBIT_LINK_STAGING_LINK_BACKENDS=apiserver-b), every call of
 # the runner lands on a process that holds neither, and two more steps run:
@@ -117,20 +116,6 @@ paste_code() {
   ! grep -qF "$(json_field "$1" code)" "$out/$2-paste.json" || fail "the paste's answer carries the code"
   echo "    pasted through $api: $(cat "$out/$2-paste.status")" >&2
 }
-# answer_on FILE CONTAINER: the runner's answer to a Cursor check, as FILE holds it (its check id and the key's
-# fingerprint, never the key), posted with the runner's token to CONTAINER's own listener; prints the status and body.
-answer_on() {
-  docker exec -i -e RUNNER_TOKEN="$(cat "$secrets/runner_token")" "$2" node -e '
-    let body = "";
-    process.stdin.on("data", (chunk) => (body += chunk)).on("end", async () => {
-      const res = await fetch("http://127.0.0.1:3000/api/runner/cursor-key-check-result", {
-        method: "POST",
-        headers: { authorization: `Bearer ${process.env.RUNNER_TOKEN}`, "content-type": "application/json" },
-        body,
-      });
-      console.log(res.status, await res.text());
-    });' < "$1"
-}
 paused=0
 cleanup() { [ "$paused" = 1 ] && docker unpause "$first" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
@@ -161,22 +146,7 @@ runs=(relay)
 [ "$placement" = round-robin ] && runs=(relay-1 relay-2 relay-3)
 for run in "${runs[@]}"; do
   step "2. the relay drill ($run, the gateway forwarding to $(setting STAGING_BACKEND_URLS '')): a code and a key held by the first apiserver, handed to the runner"
-  if [ "$placement" = round-robin ]; then
-    drill "$run" -drill relay "${owner[@]}" -relay-secrets "$(secrets_for "$run")"
-    continue
-  fi
-  drill "$run" -drill relay "${owner[@]}" -relay-secrets "$(secrets_for "$run")" -relay-handshake "$out/$run" &
-  relay=$!
-  for _ in $(seq 1 900); do
-    [ -e "$out/$run.answer" ] && break
-    kill -0 "$relay" 2>/dev/null || break
-    sleep 0.1
-  done
-  [ -e "$out/$run.answer" ] || { wait "$relay" || true; fail "the relay drill never got to the Cursor check's answer"; }
-  answer_on "$out/$run.answer" "$second" > "$out/$run-answer-on-b.txt" 2>&1 || fail "posting the answer to $second"
-  echo "    the runner's answer, posted to $second's own listener: $(cat "$out/$run-answer-on-b.txt")" >&2
-  grep -qx '200 {"accepted":true}' "$out/$run-answer-on-b.txt" || fail "$second did not take the answer to the apiserver that waits on it"
-  wait "$relay" || fail "the relay drill"
+  drill "$run" -drill relay "${owner[@]}" -relay-secrets "$(secrets_for "$run")"
 done
 
 if [ "$placement" = b-only ]; then

@@ -1321,6 +1321,13 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 	return out, err
 }
 
+// sessionNotify is notify's alert sent by the daemon itself, about one of its own sessions: a background job that
+// ended while no engine was there to read it (session.go). The daemon's own route names the session in its path, so
+// the runner link carries it, which cannot carry notify's X-Orbit-Session-Id header (linkMode.call).
+func (t *Transport) sessionNotify(sessionID, message string) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/notify", map[string]string{"message": message}, nil, taskOpTimeout)
+}
+
 // backgroundWakeReceipt is what the control plane did with a wake: filed it as a new turn of the
 // session, or written into the turn it is running (ENQUEUED), onto a wake turn nobody has been handed
 // yet (MERGED), or nowhere (DROPPED) — because the session has ended, or because it is output its
