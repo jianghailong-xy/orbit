@@ -138,6 +138,7 @@ class AutoRetryLogicTest {
         assertEquals("in 3 hr", AutoRetryLogic.countdownText(3 * 3600.0))
         assertEquals("in 3 days", AutoRetryLogic.countdownText(3 * 86_400.0))
         assertEquals("5-hour limit reached", AutoRetryLogic.quotaWindow("You've hit your session limit · resets 6pm (UTC)").first)
+        assertEquals("5-hour limit reached", AutoRetryLogic.quotaWindow("You've hit your 5-hour limit · resets 6pm (UTC)").first)
         assertEquals("Weekly limit reached", AutoRetryLogic.quotaWindow("You've hit your weekly limit · resets 1pm (UTC)").first)
         assertEquals("Usage limit reached", AutoRetryLogic.quotaWindow("You've hit your usage limit.").first)
     }

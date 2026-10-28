@@ -46,7 +46,7 @@ internal object EngineErrors {
         return retryableMarkers.any { lower.contains(it) }
     }
 
-    internal val usageLimitMarkers = listOf("hit your usage limit", "hit your session limit", "hit your weekly limit")
+    internal val usageLimitMarkers = listOf("hit your usage limit", "hit your session limit", "hit your 5-hour limit", "hit your weekly limit")
 
     /** How far in the quota sentence may begin; past it the reply is quoting one, not being one. */
     internal const val USAGE_LIMIT_MAX_OFFSET = 40
@@ -109,7 +109,7 @@ internal object EngineErrors {
     fun quotaWindow(message: String): String {
         val m = message.lowercase()
         return when {
-            m.contains("hit your session limit") -> "5-hour limit"
+            m.contains("hit your session limit") || m.contains("hit your 5-hour limit") -> "5-hour limit"
             m.contains("hit your weekly limit") -> "weekly limit"
             else -> "usage limit"
         }
