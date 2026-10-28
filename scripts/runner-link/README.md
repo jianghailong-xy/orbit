@@ -428,6 +428,29 @@ flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm
 ORBIT_LINK_STAGING_SPREAD=0 scripts/runner-link/staging-up.sh --no-build     # every stream on the first again
 ```
 
+On HPC (task 34nb3xgCijTDzQJVXDVT7, 2026-10-28) a stack of four apiservers, 1,000 runners, 500 running sessions and
+200 durable events a second (`-volatile`), with its containers on the P-cores, ran five times, each with a 6-minute
+steady window after 2 minutes' settle:
+
+| Run | Web gateway | Watched sessions, deltas a second | Main thread of apiserver, -b, -c, -d (cores) | NATS messages delivered to each a second | Deltas received |
+| --- | --- | --- | --- | --- | --- |
+| spread-live | `SPREAD=1` | 400, 8,000 | 0.119, 0.123, 0.125, 0.113 | 997, 1,028, 1,094, 903 | 8,004.1 of the 8,004.9 sent, p99 113 ms |
+| first-live | `SPREAD=0` | 400, 8,000 | 0.264, 0.040, 0.042, 0.042 | 4,020, 0, 0, 0 | 8,004.8 of 8,005.1, p99 3,502 ms: the host swapped for 15 s |
+| first-nolive | `SPREAD=0` | none | 0.039, 0.038, 0.038, 0.038 | 0, 0, 0, 0 | — |
+| first-throttled | `SPREAD=0`, the first apiserver capped at 0.2 CPU | 400, 8,000 | 0.179, 0.037, 0.038, 0.038 | 4,022, 0, 0, 0 | 8,007.2 of 8,008.2, p99 620 ms |
+| spread-failover | `SPREAD=1`, `apiserver-d` killed for 2 minutes | 200 with 2 streams each, 4,000 | 0.105, 0.102, 0.099, 0.100 | 576, 662, 584, 179 | 7,992.9: each delta twice |
+
+- **Spread**, the 400 sessions' streams were held 99, 102, 109 and 90 to an apiserver, none by two at once, and their
+  main threads were within 6% of their mean. No error anywhere; no stream missed a stored event.
+- **Together the four apiservers took 0.563 cores spread and 0.462 with every stream on the first**: a relayed delta
+  cost about 0.044 ms spread over four processes and 0.031 ms in one, against 0.211 cores without the live stream.
+- **An apiserver with no stream of a session is delivered none of its deltas**: with every stream on the first, NATS
+  delivered the other three nothing. Each of them took 0.052–0.053 cores without the live stream, 0.056–0.059 while the
+  first relayed 8,000 deltas a second, and 0.052–0.054 while the first, saturated, was throttled in 65% of its periods.
+- **Killed**, `apiserver-d` held 48 sessions' 96 streams. They opened again on the other three, both streams of a
+  session on the same one, each with its next delta 1.1–1.4 s after it ended, from the last stored event it had and
+  missing none. The link gateway sent the 26 calls it had for `apiserver-d` to the others; the runners saw no error.
+
 ### The cell's size
 
 Task O3 (2026-10-26) measured what each operation costs once tasks O1 and O2 were in, and projected the cell's size

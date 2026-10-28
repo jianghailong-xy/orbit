@@ -544,6 +544,14 @@ runner 本地的两种暂存，回滚和降级时这样处理：
     - 观看人数：每个进程只为本进程有流的会话订阅 `ses.<id>.live`，并以自己的实例名报各自的人数（变化时发 WatchersHint，非零的每 20 秒重发；心跳应答里带本进程的人数），链路网关按实例相加。停掉的进程的人数 60 秒后过期（WatchersTTL）；其间多算的人数只会让 runner 多发一会儿增量。
   - **为什么默认配置不用 `resolve`。** upstream 的 `resolve` 是 nginx 1.27.3 才有的。部署沿用第一次拉下来的 `nginx:alpine`，升级默认不刷新基础镜像（`/upgrade` 要加 `--pull-base`），所以可能早于 1.27.3；而 nginx 读不了配置就起不来，网关整个不可用。所以默认的 `gateway/nginx.conf` 不用它，任何版本都能加载（实测 nginx 1.25.5），要求只落在挂载 `gateway/several-apiservers/` 的部署上：挂载前用 `docker compose exec gateway nginx -v` 确认版本，旧的先 `docker compose pull gateway`。1.25.5 加载这两个文件会报 `"resolver" directive is not allowed here`，起不来。
   - **限制：只用于链路承载 runner 工作的单元，即前置 (e)。** 走 HTTPS 的 runner 把增量发到第一个 apiserver（经 web 网关），那个进程只交给自己的流，不经 NOTIFY 转给别的进程（§6.7）。会话流落在别的 apiserver 上时，这个 runner 的回答只在每条消息存进去时整条出现，中途打开的流也拿不到前缀。开关打开之前网关处于影子期，不转发任何调用，多出来的 apiserver 本来也不承担 runner 的调用。关开关回滚之前，先让流都回到第一个进程，见 §11.4。
+  - **HPC 上的小规模实测（34nb3xgCijTDzQJVXDVT7）。** 4 个 apiserver，1,000 个 runner，500 个运行中会话，每秒 200 条持久事件，容器都在 P 核上，每次稳态 6 分钟。详见 [scripts/runner-link/README.md](../scripts/runner-link/README.md#several-apiservers) 的 "Several apiservers"。
+    - 分散（400 个会话有人看，每秒 8,000 条增量）：会话流按 99、102、109、90 分在 4 个进程上，没有会话同时落在两个进程上；4 个主线程 0.113–0.125 核，和均值相差不到 6%；增量每秒发 8,004.9 条、收到 8,004.1 条，延迟 p99 113 ms；没有错误，流也没有漏掉持久事件。
+    - 同样的负载、会话流都在第一个进程上：它的主线程 0.264 核，另外三个 0.040–0.042。4 个进程合计，分散时 0.563 核，集中时 0.462 核：一条增量的转发，分在 4 个进程上约 0.044 ms，集中在一个进程上约 0.031 ms（没有实时流时合计 0.211 核）。
+    - 一个进程挂掉（每个会话两条流，apiserver-d 被 SIGKILL，2 分钟后再起来）：它上面 48 个会话的 96 条流都在另外三个进程上重开，同一个会话的两条流落在同一个进程；每条流结束后 1.1–1.4 秒收到下一条增量，从最后收到的持久事件续上，没有漏。链路网关把发给它的 26 个调用改发给别的进程，runner 没有看到错误。
+  - **另外三个 apiserver 每条增量约 0.085 ms 花在哪（C2b 证据 6、9）。** 不是每个进程都收到了所有会话的增量，所以这一项没有要改的。
+    - 代码：apiserver 只为本进程有流的会话订阅 `ses.<id>.live`，链路网关只在有人看时往那个主题上发；HTTPS 入库的增量也不经 NOTIFY 转给别的进程（§6.7）。
+    - 实测：会话流都在第一个进程上时，NATS 每秒给它送 4,020 条消息，给另外三个 0 条。另外三个每个进程的 CPU，没有实时流时 0.052–0.053 核，第一个进程每秒转发 8,000 条增量时 0.056–0.059 核（合每条每个进程不到 0.001 ms），把第一个进程限到 0.2 核、让它饱和（65% 的周期被限流）时 0.052–0.054 核。
+    - 所以在 HPC 上，另外三个进程既不做和增量有关的工作，也没有被饱和的第一个进程拖慢。C2b 那 0.085 ms 更可能来自那台机器的超线程：e2-standard-32 的 32 个 vCPU 是 16 个物理核的超线程，实时转发让主机多忙了约 1.1 核，请求组合不变时数据库多用了 32% 的执行时间，另外三个 apiserver 各多用 7.5% 的 CPU。HPC 没有超线程，这一点在这里复现不了，也没有在 C2b 那种机器上单独验证。
   - **drain 时的重签。** 真 runner 不会集中重签：`linkClient.token()`（`src/runner-go/link_client.go`，工作连接和影子连接都经过它）在 token 离过期还有 5 分钟以上时沿用原 token，drain 后的重连也一样（`TestLinkReplacesADrainedConnectionWithTheTokenInHand` 钉住这一点，runner 代码不用改）。C2b 看到的集中重签是 loadgen 造成的：它把 Drain 当成 token 续期，重连时一律重签。34nb3xgCijTDzQJVXDVT7 改了 loadgen（`src/link-gateway/cmd/loadgen/runner.go`）：drain 后的重连，token 离过期还有 `-renew-before`（5 分钟）以上就沿用。签发仍然分散，因为 runner 首次连接和约每小时一次的续期都要签发，全量发版后 runner 一起重启时，签发仍会集中。
 - 数据库连接池只能用会话模式：心跳语句是命名预编译语句，不能放在事务模式的 pgbouncer 后面，见 [self-hosting.md 的 "Database connections"](./self-hosting.md#database-connections)。
 
