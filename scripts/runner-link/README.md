@@ -594,7 +594,30 @@ standby was synchronous. A cell's database needs a synchronous standby (`synchro
     from a tail page. The owner's lists there get a session_updated of that apiserver's alone and re-read the row.
   - `src/apiserver/src/realtime/relay-read-back.pg.spec.ts` holds it on two production apiservers over one database,
     with a preload that fails the read once, twice or every time.
-  - Not covered: notifications sent while an apiserver's LISTEN connection is down, for the 2 s before it reconnects.
+  - Notifications sent while an apiserver's LISTEN connection is down, for the 2 s before it reconnects, are (g)'s.
+- **(g) The streams of an apiserver whose LISTEN connection was down** (task 34o01B4w5NYAczPEChHz2), found by (f).
+  What another apiserver announces in the 2 s before the connection is back never reaches it, and PostgreSQL keeps
+  none of it, so the batches it announced never reach the streams there.
+  - Once the connection is back (`listenerBack` in realtime.service.ts), the apiserver checks `apiserver_process` for
+    another apiserver that wrote its row during the gap or in the 30 s before it. If there is one, or the read fails,
+    every session with a stream open there is handled as a read-back given up: `resync` on each of its streams, and a
+    session_updated of that apiserver's alone. An apiserver alone missed nothing and sends nothing.
+  - One line is logged, with how long and how many sessions, never an event:
+    `LISTEN/NOTIFY back after 2345 ms without it: 1 other apiserver(s) ran meanwhile and what they announced did not
+    reach this one, so this apiserver's streams of 3 session(s) were told to re-fetch`.
+  - The inbox and wake notices lost meanwhile need nothing. Over HTTPS an inbox poll looks again within 5 s, and a
+    lost wake costs the runner what it always could: its next heartbeat, 30 s away. Over the link, the apiserver that
+    asks hints the runner over NATS itself.
+  - Over the link, a wake written in a transaction (a queued landing, a promotion check, a wiki repository operation)
+    is marked by every apiserver that hears it, so one dropped listener costs nothing. One that every listener missed,
+    as on a database restart, reaches the runner at its next full reconcile, at most 5 minutes later, as a change
+    count that cannot be moved does. One apiserver alone has the same gap today: it is not a multi-apiserver
+    prerequisite.
+  - `src/apiserver/src/realtime/listener-reconnect.pg.spec.ts` holds it on two production apiservers over one
+    database. It ends the holder's listener with `pg_terminate_backend`, and a preload holds the listener's LISTEN
+    until the other apiserver has stored its batches.
+  - Not covered: the owner's lists of sessions that have no stream on that apiserver. A change another apiserver made
+    to one of them in those seconds shows at the session's next change, or when the list is next loaded.
 
 **Open items** of the spec:
 
