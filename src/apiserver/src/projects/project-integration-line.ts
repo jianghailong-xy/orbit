@@ -146,15 +146,17 @@ export function canonicalRepoUrl(raw: string): string | null {
  * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): the workspace a work session
  * ran in names, through SR36, the repository the project's line is bound to. A project with no
  * binding has none to differ from — its first integration binds it to this work's repository (L3) —
- * and a workspace with no `repo_url` differs from every binding. `workOnProjectRepositorySql` is the
- * same condition in SQL.
+ * and a workspace with no `repo_url` differs from every binding. The binding's own URL is read
+ * through SR36 as well: that changes nothing for one `bind()` wrote, which is canonical already, and
+ * keeps one written by hand comparable. `workOnProjectRepositorySql` is the same condition in SQL.
  */
 export function workOnProjectRepository(
   repoUrl: string | null | undefined,
   binding: { canonicalRepoUrl?: string | null } | null | undefined,
 ): boolean {
   if (!binding?.canonicalRepoUrl) return true;
-  return (repoUrl ? canonicalRepoUrl(repoUrl) : null) === binding.canonicalRepoUrl;
+  const repository = repoUrl ? canonicalRepoUrl(repoUrl) : null;
+  return repository !== null && repository === canonicalRepoUrl(binding.canonicalRepoUrl);
 }
 
 /**

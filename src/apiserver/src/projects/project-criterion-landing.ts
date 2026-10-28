@@ -386,14 +386,15 @@ export function canonicalRepoUrlSql(raw: string): string {
  * names a repository other than the one `repoUrl` — a work session's workspace `repo_url` — reads as
  * through SR36. A project with no binding has none to differ from: its first integration binds it to
  * this work's repository (L3). A workspace with no `repo_url` is in no repository anybody can name, so
- * it differs from every binding.
+ * it differs from every binding. The binding's URL is read through SR36 too, as
+ * `workOnProjectRepository` reads it.
  */
 export function workOnProjectRepositorySql(projectId: string, repoUrl: string): string {
   return `NOT EXISTS (
         SELECT 1 FROM "project_codebase" work_line
          WHERE work_line."project_id" = ${projectId}
            AND work_line."slot" = 'primary'
-           AND work_line."canonical_repo_url" IS DISTINCT FROM ${canonicalRepoUrlSql(repoUrl)}
+           AND ${canonicalRepoUrlSql('work_line."canonical_repo_url"')} IS DISTINCT FROM ${canonicalRepoUrlSql(repoUrl)}
       )`;
 }
 

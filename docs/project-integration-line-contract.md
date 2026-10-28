@@ -2083,7 +2083,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 **O-L7（空分支与别的仓库）**：
 
 - `delivered_sha = delivered_base_sha` 表示任务没有自己的提交，照 J8 的 `NOTHING_TO_LAND` 规则：该任务没有任何会话报告过工作时写回执，否则开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`）。
-- `isCodeTask` 的后半加一个条件：工作会话所在 workspace 的 `repo_url`，经 SR36 规范化后等于项目代码库的 `canonical_repo_url`。不等的不是本线的代码任务：J9 豁免，不冻结，不观测。还没有代码库行的项目无从比较，条件成立：第一次集成按 L3 把它绑到这份工作的仓库。workspace 没有 `repo_url` 的算不等。SQL 里的规范化是 `canonicalRepoUrlSql`，与 TypeScript 的 `canonicalRepoUrl` 逐步对应。
+- `isCodeTask` 的后半加一个条件：工作会话所在 workspace 的 `repo_url`，经 SR36 规范化后等于项目代码库的 `canonical_repo_url`。不等的不是本线的代码任务：J9 豁免，不冻结，不观测。还没有代码库行的项目无从比较，条件成立：第一次集成按 L3 把它绑到这份工作的仓库。workspace 没有 `repo_url` 的算不等。代码库这一侧同样过一遍 SR36：`bind()` 写下的行本来就是规范形，这一步对它不改变任何东西。SQL 里的规范化是 `canonicalRepoUrlSql`，与 TypeScript 的 `canonicalRepoUrl` 逐步对应。
 
 ### 10.6 观测作业 `OBSERVE_LANDING`
 
