@@ -826,7 +826,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#finalize',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then session_diff and conversation_turn (rank 60). A finish that ends the last unfinished work session of a DONE task freezes that task\'s delivered identity in the same transaction (projects/project-integration-job.ts#settleDeliveredIdentity, §10.5 O-L4 3): one UPDATE of the rank-50 task row, its only write in this transaction, and — for an unknown identity in an AGENT_PUSH project — one project_open_item (rank 60).',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30) — its one write carries the tip the runner reports after its finalize commit (branch_sha), when it reports one — then session_diff and conversation_turn (rank 60). A finish that ends the last unfinished work session of a DONE task freezes that task\'s delivered identity in the same transaction (projects/project-integration-job.ts#settleDeliveredIdentity, §10.5 O-L4 3): one UPDATE of the rank-50 task row, its only write in this transaction, and — for an unknown identity in an AGENT_PUSH project — one project_open_item (rank 60).',
     identity: 'The lease owner and the terminal status in the request.',
     isolation: '',
     attempts: 4,

@@ -8482,6 +8482,10 @@ export class RunnerApiController {
           // The worktree's actual HEAD branch at completion → the bar flags divergence from the
           // tracked `branch` / offers Adopt for a session that finished on a checkout -b branch.
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+          // And that branch's tip after the finalize commit, which the delivered identity of a DONE
+          // task is frozen from below (§10.5 O-L4). Written when reported: an older runner, and a park
+          // checkpoint the next resume undoes, leave the tip the last live report gave.
+          ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? {

@@ -897,6 +897,43 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	return files, buildFilePatches(files, splitPatch(patchOut)), nil
 }
 
+// finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
+// worktree half of its finalize report from the checkout as finalization leaves it.
+//
+// A finalize that could not put the work on the branch reports no diff — which is
+// indistinguishable on the wire from a session that changed nothing, and is why no checkout
+// may be dropped on the server's say-so alone. Logged here; enforced where the removal
+// actually happens, by removeWorktree re-checking that the work reached the branch.
+func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Worktree, status string) {
+	req.Branch = wt.Branch
+	// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
+	// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
+	// it / offer Adopt.
+	req.WorktreeBranch = currentBranch(wt)
+	var captureErr error
+	req.ChangedFiles, req.ChangedDiff, captureErr = finalizeWorktree(wt, status == stCancelled)
+	if captureErr != nil {
+		logln("worktree finalization failed for", sessionID+":", captureErr)
+		// Say it on the wire too. A log line on whichever machine happened to run this is not
+		// somewhere anybody looks, and it is the only thing that distinguishes a session that
+		// produced nothing from one whose entire output is still uncommitted in a checkout.
+		req.CaptureError = clip(captureErr.Error(), 1000)
+	}
+	// Measured, not assumed: this is the checkout as it actually stands once finalization is
+	// done with it, and it is what tells the control plane the work still needs committing.
+	req.WorktreeDirty = worktreeIsDirty(wt)
+	// finalizeWorktree may heal a stale fork point while computing this snapshot.
+	req.BaseSha = wt.baseSha()
+	// Candidate merge targets for the ended session's "Merge to…" dropdown.
+	req.MergeTargets = mergeTargetsForWT(wt)
+	// The tip the work ends on, the finalize commit included: what the control plane freezes as a
+	// finished task's delivered commit (contract §10.5 O-L4). Not for a park checkpoint, which the
+	// next resume undoes — the tip the last live report gave stands for that session.
+	if status != stCancelled {
+		req.BranchSha = effectiveBranchSha(wt)
+	}
+}
+
 // uncommitParkCheckpoint undoes a park checkpoint (see parkCheckpointTrailer) at the start of a
 // resumed session: if the worktree's HEAD is THIS session's checkpoint, soft-reset it so the
 // snapshot returns to an uncommitted working tree and the agent continues where it left off, with

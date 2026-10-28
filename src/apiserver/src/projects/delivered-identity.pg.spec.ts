@@ -23,11 +23,13 @@ import { PREREQUISITE_NOT_LANDED_MESSAGE, prerequisiteLandedSql } from '../tasks
 import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.service';
 import { TasksService } from '../tasks/tasks.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { readCriterionLandingReasonFacts, readInFlightLandingJobs } from './criterion-landing-reason';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import * as criterionLanding from './project-criterion-landing';
+import { criterionLandingWithReasons } from './project-done-derived';
 import { canonicalRepoUrl, isCodeTask } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
@@ -55,7 +57,14 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  *  (6) O-L7: a task whose work session ran in another repository than the project's binding is not
  *      this line's code task — J9 lets its dependent start, the SQL and TypeScript spellings agree,
  *      and its DONE freezes nothing — while the same repository spelled another way (SR36) is;
- *  (7) SR36: `canonicalRepoUrlSql` answers what `canonicalRepoUrl` answers, over one corpus.
+ *  (7) SR36: `canonicalRepoUrlSql` answers what `canonicalRepoUrl` answers, over one corpus;
+ *  (8) O-L4 2: the tip a finalize reports — its finalize commit included — is what the deferred
+ *      freeze reads, and an older runner's finalize, which reports none, leaves the last live tip;
+ *  (9) O-L7 and J-T1a: a DONE task whose work is in another repository is given no route to the
+ *      line — no LAND_TASK on a project branch, no candidate on a MAIN line, nothing frozen to observe;
+ * (10) O-L7 at §1.4: such work leaves its criterion's landing conjunction as codeless work does —
+ *      alone it reads LANDED with the codeless reason, beside an unlanded code task UNKNOWN, beside a
+ *      landed one LANDED.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -292,10 +301,11 @@ function landingUnobserved(stack: Stack, taskId: string) {
   });
 }
 
-/** The runner's own finalize of a live session: what writes its `finished_at`. */
-async function finalize(stack: Stack, w: World, sessionId: string): Promise<void> {
+/** The runner's own finalize of a live session: what writes its `finished_at`. `branchSha` is the
+ *  tip a current runner reports after its finalize commit; an older runner sends none. */
+async function finalize(stack: Stack, w: World, sessionId: string, branchSha?: string): Promise<void> {
   await stack.runnerApi.finalize({ id: w.runnerId } as never, sessionId, {
-    status: RunStatus.SUCCEEDED, isolationStatus: 'worktree',
+    status: RunStatus.SUCCEEDED, isolationStatus: 'worktree', ...(branchSha ? { branchSha } : {}),
   } as never);
   const row = await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { finishedAt: true } });
   assert.ok(row.finishedAt, 'CONTROL: the finalize wrote the finish');
@@ -683,3 +693,172 @@ test('(7) SR36: canonicalRepoUrlSql answers what canonicalRepoUrl answers', { sk
     await client.end();
   }
 });
+
+// ═══ (8) the finalize's own tip ══════════════════════════════════════════════════════════════════
+
+test('(8) O-L4 2: the tip a finalize reports, its finalize commit included, is what the deferred freeze reads; an older runner\'s finalize leaves the last live tip',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'final-tip');
+      // The last live report said `a`; the finalize then committed what the session had left, and
+      // the branch ends on `b`.
+      const taskId = await ownerTask(stack, w, 'leftovers');
+      const live = await workSession(stack, w, taskId, {
+        createdMinutesAgo: 30, branch: 'orbit/leftovers', branchSha: sha('a'), baseSha: sha('0'),
+      });
+      await confirm(stack, w, taskId);
+      assert.deepEqual(await identityOf(stack, taskId), NOTHING_FROZEN, 'CONTROL: the session is live');
+      await finalize(stack, w, live, sha('b'));
+      assert.deepEqual(await identityOf(stack, taskId), {
+        sha: sha('b'), baseSha: sha('0'), branch: 'orbit/leftovers', sessionId: live, frozen: true,
+      }, 'the freeze missed the finalize commit');
+      const session = await stack.db.session.findUniqueOrThrow({ where: { id: live }, select: { branchSha: true } });
+      assert.equal(session.branchSha, sha('b'), 'the finalize did not write the session\'s tip');
+
+      // A runner too old to report the tip: the tip of its last live report stands.
+      const older = await ownerTask(stack, w, 'older-runner');
+      const oldSession = await workSession(stack, w, older, {
+        createdMinutesAgo: 30, branch: 'orbit/older-runner', branchSha: sha('c'), baseSha: sha('0'),
+      });
+      await confirm(stack, w, older);
+      await finalize(stack, w, oldSession);
+      assert.deepEqual(await identityOf(stack, older), {
+        sha: sha('c'), baseSha: sha('0'), branch: 'orbit/older-runner', sessionId: oldSession, frozen: true,
+      });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (9) no route for work in another repository ═════════════════════════════════════════════════
+
+test('(9) O-L7, J-T1a: a DONE task whose work is in another repository is given no route — no LAND_TASK, no candidate, nothing frozen to observe',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      for (const [label, line] of [['route-branch', 'PROJECT_BRANCH'], ['route-main', 'MAIN']] as const) {
+        const w = await world(stack, label, { line });
+        const elsewhere = randomUUID();
+        await stack.db.workspace.create({
+          data: {
+            id: elsewhere, ownerId: w.ownerId, runnerId: w.runnerId, name: `${label}-elsewhere`, enabled: true,
+            repoUrl: 'https://git.invalid/orbit/a-different-repository.git', workDir: `/srv/${label}-elsewhere`,
+          },
+        });
+        const done = async (title: string, workspaceId: string) => {
+          const taskId = await ownerTask(stack, w, title);
+          await workSession(stack, w, taskId, {
+            createdMinutesAgo: 20, branch: `orbit/${title}`, branchSha: sha('a'), baseSha: sha('b'),
+            finishedMinutesAgo: 2, workspaceId,
+          });
+          await confirm(stack, w, taskId);
+          return taskId;
+        };
+        const foreign = await done(`${label}-foreign`, elsewhere);
+        const ours = await done(`${label}-ours`, w.workspaceId);
+
+        const routes = async (taskId: string) => ({
+          landings: await stack.db.projectIntegrationJob.count({ where: { taskId } }),
+          candidates: await stack.db.projectPromotion.count({ where: { taskId } }),
+        });
+        assert.deepEqual(await routes(foreign), { landings: 0, candidates: 0 },
+          `${line}: work in another repository was given a route to this line`);
+        assert.equal((await identityOf(stack, foreign)).frozen, false, `${line}: an identity was frozen to observe`);
+        assert.deepEqual(await routes(ours), line === 'PROJECT_BRANCH'
+          ? { landings: 1, candidates: 0 }
+          : { landings: 0, candidates: 1 },
+        `CONTROL ${line}: this line's own work is routed as before`);
+      }
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (10) the criterion fold ═════════════════════════════════════════════════════════════════════
+
+test('(10) O-L7 at §1.4: work in another repository leaves its criterion\'s conjunction as codeless work does — alone LANDED with the codeless reason, beside an unlanded code task UNKNOWN, beside a landed one LANDED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'criteria');
+      const elsewhere = randomUUID();
+      await stack.db.workspace.create({
+        data: {
+          id: elsewhere, ownerId: w.ownerId, runnerId: w.runnerId, name: 'criteria-elsewhere', enabled: true,
+          repoUrl: 'https://git.invalid/orbit/a-different-repository.git', workDir: '/srv/criteria-elsewhere',
+        },
+      });
+      const criterion = async (ordinal: number) => {
+        const id = randomUUID();
+        await stack.db.projectAcceptanceCriterionDefinition.create({
+          data: {
+            id, projectId: w.projectId, ordinal, text: `criterion ${ordinal}`,
+            verificationMethod: 'delivered-identity.pg.spec.ts reads its landing',
+            // Written by the definition's own BEFORE trigger; the placeholder satisfies the CHECK.
+            contentHash: '0'.repeat(64),
+          },
+        });
+        return id;
+      };
+      const serving = async (title: string, criterionId: string, workspaceId: string) => {
+        const task = await stack.db.task.create({
+          data: {
+            ownerId: w.ownerId, creatorType: 'USER', creatorId: w.ownerId, title, projectId: w.projectId,
+            assigneeId: w.workspaceId, status: TaskStatus.DONE, completionCriterion: 'OWNER_CONFIRMED',
+            criterionDefinitionId: criterionId, criterionRevision: 1,
+          },
+          select: { id: true },
+        });
+        const sessionId = await workSession(stack, w, task.id, {
+          createdMinutesAgo: 20, branch: `orbit/${title}`, branchSha: sha('a'), baseSha: sha('b'),
+          finishedMinutesAgo: 2, workspaceId,
+        });
+        return { taskId: task.id, sessionId };
+      };
+
+      const alone = await criterion(1);
+      await serving('alone-elsewhere', alone, elsewhere);
+
+      const waiting = await criterion(2);
+      await serving('waiting-elsewhere', waiting, elsewhere);
+      await serving('waiting-ours', waiting, w.workspaceId);
+
+      const landed = await criterion(3);
+      await serving('landed-elsewhere', landed, elsewhere);
+      const ours = await serving('landed-ours', landed, w.workspaceId);
+      await stack.db.sessionMergeReceipt.create({
+        data: {
+          ownerId: w.ownerId, sessionId: ours.sessionId, taskId: ours.taskId, projectId: w.projectId,
+          result: 'MERGED', sourceBranch: 'orbit/landed-ours', sourceSha: sha('a'), targetBranch: 'main',
+          targetShaBefore: sha('b'), targetShaAfter: sha('c'), recordedBy: 'AGENT',
+          idempotencyKey: `landed:${ours.taskId}`,
+        },
+      });
+
+      const prisma = stack.db as unknown as PrismaService;
+      const answers = criterionLandingWithReasons(
+        await readCriterionLandingReasonFacts(prisma, w.ownerId, w.projectId),
+        await criterionLanding.readLandingBranches(prisma, w.projectId),
+        await readInFlightLandingJobs(prisma, w.projectId),
+      );
+      const read = (definitionId: string) => {
+        const answer = answers.find((row) => row.definitionId === definitionId);
+        return { landing: answer?.landing, reason: answer?.landingReason };
+      };
+      assert.deepEqual(read(alone), { landing: 'LANDED', reason: 'CODELESS' },
+        'a criterion served only by work in another repository waits on it, or reads another reason');
+      assert.deepEqual(read(waiting), { landing: 'UNKNOWN', reason: 'NO_RECEIPT' },
+        'the unlanded code task beside it no longer holds the criterion');
+      assert.deepEqual(read(landed), { landing: 'LANDED', reason: null },
+        'work in another repository withholds LANDED from a criterion whose own work is on main');
+      // The plain landing lane — the share link's and the coordinator's reads — answers the same.
+      const lane = await criterionLanding.readCriterionLanding(prisma, w.ownerId, w.projectId);
+      assert.deepEqual(
+        [alone, waiting, landed].map((id) => lane.find((row) => row.definitionId === id)?.landing),
+        ['LANDED', 'UNKNOWN', 'LANDED'],
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

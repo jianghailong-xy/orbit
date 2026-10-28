@@ -9,7 +9,7 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { taskLandingSql } from './project-criterion-landing';
+import { taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
 import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
@@ -1388,14 +1388,16 @@ function workSessionsOfTaskSelect() {
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: LANDING_SESSION_CANDIDATES,
-    select: WORK_SESSION_SELECT,
+    // And the repository each ran in, for §1.1's repository condition (O-L7).
+    select: { ...WORK_SESSION_SELECT, workspace: { select: { repoUrl: true } } },
   } satisfies Prisma.Task$sessionsArgs;
 }
 
 /**
  * What a DONE of this task hands its project's integration line: the project, and the work session
  * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, a codeless
- * one, or one none of whose work sessions took a worktree on a branch.
+ * one, one none of whose work sessions took a worktree on a branch, or one whose branch is in another
+ * repository than the project's line (O-L7).
  *
  * Writes nothing. `enqueueForDoneTask` acts on it, and the owner's confirmation card reads it as the
  * landing confirming starts (`landing: NONE` when there is no work).
@@ -1411,11 +1413,17 @@ export async function doneTaskLandingWork(
       projectId: true,
       codeless: true,
       sessions: workSessionsOfTaskSelect(),
+      project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
     },
   });
   const work = landingWorkSession(task?.sessions ?? []);
   if (!task?.projectId || task.codeless || !work?.branch) {
     return { projectId: task?.projectId ?? null, work: null };
+  }
+  // A branch in another repository than the one the project's line is bound to is not this line's
+  // code work (§1.1 O-L7): it has no route here — no LAND_TASK, no candidate, nothing to observe.
+  if (!workOnProjectRepository(work.workspace?.repoUrl, task.project?.codebases[0])) {
+    return { projectId: task.projectId, work: null };
   }
   return { projectId: task.projectId, work: { ...work, branch: work.branch } };
 }
@@ -1868,6 +1876,8 @@ async function backfillFinishedCodeTasks(
   for (const candidate of candidates) {
     const work = landingWorkSession(candidate.sessions);
     if (!work?.branch) continue;
+    // Work in another repository is not this line's (O-L7), as it is not at its own DONE.
+    if (!workOnProjectRepository(work.workspace?.repoUrl, input.codebase)) continue;
     if (candidate.mergeReceipts.length > 0) continue;
     const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
     if (input.line === 'MAIN') {

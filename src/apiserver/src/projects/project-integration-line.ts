@@ -28,7 +28,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { branchName } from './project-criterion-landing';
+import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
@@ -53,6 +53,10 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+
+// SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
+// are served from here too, where the line's readers have always found them.
+export { canonicalRepoUrl, workOnProjectRepository };
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -121,42 +125,6 @@ export function defaultIntegrationLine(
 /** A project's own branch, named after its public id — the spelling every client shows (A-Q1). */
 export function projectBranchRef(projectId: string): string {
   return `refs/heads/project/${uuidToBase62(projectId)}`;
-}
-
-/**
- * A remote URL as repository identity (PSC SR36): trimmed, scheme and host lower-cased, any
- * `user@` dropped, the scp form `git@host:owner/repo` spelled as `ssh://host/owner/repo`, and no
- * trailing `/` or `.git`. Used to compare and to satisfy `project_codebase_canonical_url_chk`, never
- * to clone. Null when nothing is left.
- */
-export function canonicalRepoUrl(raw: string): string | null {
-  let url = raw.trim();
-  const scp = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(\S+)$/.exec(url);
-  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `ssh://${scp[1]}/${scp[2]}`;
-  const remote = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([^/]*)(.*)$/i.exec(url);
-  if (remote) url = `${remote[1]!.toLowerCase()}://${remote[2]!.toLowerCase()}${remote[3]}`;
-  for (let trimmed = url.replace(/\/+$/, '').replace(/\.git$/, ''); trimmed !== url;
-    trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '')) {
-    url = trimmed;
-  }
-  return url === '' ? null : url;
-}
-
-/**
- * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): the workspace a work session
- * ran in names, through SR36, the repository the project's line is bound to. A project with no
- * binding has none to differ from — its first integration binds it to this work's repository (L3) —
- * and a workspace with no `repo_url` differs from every binding. The binding's own URL is read
- * through SR36 as well: that changes nothing for one `bind()` wrote, which is canonical already, and
- * keeps one written by hand comparable. `workOnProjectRepositorySql` is the same condition in SQL.
- */
-export function workOnProjectRepository(
-  repoUrl: string | null | undefined,
-  binding: { canonicalRepoUrl?: string | null } | null | undefined,
-): boolean {
-  if (!binding?.canonicalRepoUrl) return true;
-  const repository = repoUrl ? canonicalRepoUrl(repoUrl) : null;
-  return repository !== null && repository === canonicalRepoUrl(binding.canonicalRepoUrl);
 }
 
 /**

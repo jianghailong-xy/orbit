@@ -158,7 +158,7 @@
 - `IntegrationLine` = `integration_ref = upstream_ref` ? `MAIN` : `PROJECT_BRANCH`。
 - 分支短名 = 全名去掉 `refs/heads/`，与 `session_merge_receipt.target_branch` 的写法一致（runner 回报短名）。
 
-**`isCodeTask(task)`**：`task.project_id` 非空 ∧ `task.codeless = false` ∧ 该任务最近一条工作会话（`starts_task_work = true`、`deleted_at IS NULL`、按 `created_at` 取最新）的 `isolation_status = 'worktree'` 且 `branch` 非空，且（修订 29，§10.5 O-L7）这条会话所在 workspace 的 `repo_url` 经 PSC SR36 规范化后等于项目代码库的 `canonical_repo_url`（还没有代码库行时条件成立；没有 `repo_url` 时算不等）。不等的不是本线的代码任务：J9 豁免，不冻结交付身份，不观测。
+**`isCodeTask(task)`**：`task.project_id` 非空 ∧ `task.codeless = false` ∧ 该任务最近一条工作会话（`starts_task_work = true`、`deleted_at IS NULL`、按 `created_at` 取最新）的 `isolation_status = 'worktree'` 且 `branch` 非空，且（修订 29，§10.5 O-L7）这条会话所在 workspace 的 `repo_url` 经 PSC SR36 规范化后等于项目代码库的 `canonical_repo_url`（还没有代码库行时条件成立；没有 `repo_url` 时算不等）。不等的不是本线的代码任务：J9 豁免，不入队，不冻结交付身份，不观测，也退出 §1.4 判据落地的合取。
 
 **`lineStarted(project)`**：该项目 `slot = 'primary'` 的代码库行存在且 `integration_started_at` 非空。
 
@@ -252,7 +252,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 
 - 任务级：有一条 `result ∈ {MERGED, ALREADY_MERGED}` 且 `target_branch ∈ upstream` 的回执 → `ON_UPSTREAM`；否则有同样结果且 `target_branch ∈ integration` 的回执 → `ON_INTEGRATION_LINE`；其余 → `NOT_KNOWN`。仍然没有 `NOT_LANDED`，沿用该文件「三值」一节的理由。修订 29 不改这条判定，仍只读回执；回执说的是「这份工作在这条线上」，可以来自观测：观测作业看到交付身份的提交在线上时写的回执带 `detail.observed = true`（§10.3 O2、§10.6 O-R1），与平台合入、Merge 按钮、`merge_receipt` 写的回执同样计入。
 - 判据级：服务任务非空且所有**有提交可落**的服务任务全部 `ON_UPSTREAM` → `LANDED`；服务任务非空、所有有提交可落的服务任务都是 `ON_UPSTREAM` 或 `ON_INTEGRATION_LINE`、且至少一个不是 `ON_UPSTREAM` → `ON_INTEGRATION_LINE`；其余 → `UNKNOWN`。`MAIN` 线项目不会出现 `ON_INTEGRATION_LINE`。
-- 「有提交可落」= `task.codeless = false`（§1.1 `isCodeTask` 的前半）。一条声明自己不需要代码的任务（SR5 的逃生口：调研、文档、以证据为交付的验收任务）不解析 SOURCE，因此没有自己的分支、没有自己的提交，也不可能有任何回执把它的工作放到 `main` 上——它不参与这条合取，既不挡 `LANDED` 也不提供 `LANDED`。这与 §2.5 J9 对依赖的豁免是同一条规则（SR27：文档类前置不该让下游等一个永远不会存在的检查点），也让 `ProjectIntegrationBuckets.doneNotIntegrated`（「DONE work with nothing to land」）与 `NOT_APPLICABLE` 的口径在判据这一层成立。**注意这不是给验收类任务开绕过落地判定的口子**：跑过分支的任务就是有自己的提交（无论它的回执或标题怎么说），仍然按原样顶住 `LANDED`；只读声明，不读会话史（`isCodeTask` 的后半读的是**最新**一条会话，而回执挂在**任务**上，用它会漏掉「上一次落地、这一次没分叉」的任务）。
+- 「有提交可落」= `task.codeless = false`（§1.1 `isCodeTask` 的前半），且（修订 29，§10.5 O-L7）该任务最新一条工作会话所在 workspace 的仓库就是项目代码库的仓库（§1.1 的仓库条件）：工作在别的仓库里的任务同 codeless 一样退出这条合取，既不挡 `LANDED` 也不提供 `LANDED`，只由这样的任务服务的判据照下面的规则读 `LANDED`，落地说明与只有 codeless 时相同。一条声明自己不需要代码的任务（SR5 的逃生口：调研、文档、以证据为交付的验收任务）不解析 SOURCE，因此没有自己的分支、没有自己的提交，也不可能有任何回执把它的工作放到 `main` 上——它不参与这条合取，既不挡 `LANDED` 也不提供 `LANDED`。这与 §2.5 J9 对依赖的豁免是同一条规则（SR27：文档类前置不该让下游等一个永远不会存在的检查点），也让 `ProjectIntegrationBuckets.doneNotIntegrated`（「DONE work with nothing to land」）与 `NOT_APPLICABLE` 的口径在判据这一层成立。**注意这不是给验收类任务开绕过落地判定的口子**：跑过分支的任务就是有自己的提交（无论它的回执或标题怎么说），仍然按原样顶住 `LANDED`；只读声明，不读会话史（`isCodeTask` 的后半读的是**最新**一条会话，而回执挂在**任务**上，用它会漏掉「上一次落地、这一次没分叉」的任务）。
 - 只有 codeless 的服务任务、但确实有服务任务时，判据读 `LANDED`（零个提交全部在 upstream 上，即 J9 的「没有可等的」）；**没有人**服务时仍读 `UNKNOWN`。
 - 声明 codeless 的门（0346）：`task_create`、`task_create_batch` 的每一项、`task_update`（MCP、CLI、runner API 同一个 DTO）。建任务时声明不需要理由；给已有任务声明必须带 `codelessReason`（存进 `task.codeless_reason`，撤回声明时清掉），且已经有自己提交的任务一律拒绝（`TASK_CODELESS_HAS_COMMITS`：有让目标移动过的 `MERGED` 回执，或有工作会话报告过改动）。
 - 线的 `NOTHING_TO_LAND` 也可以让任务退出合取，但**只凭 runner 的实测**（0346）：作业行的 `source_on_upstream = true`（空分支的 tip 是 upstream 的祖先），且该作业在任务结束工作之后、对它最后所在的分支作答（`jobSawTheFinishedBranch`），且写下了回执（只有任务在任何地方都没有会话报告过工作时才写，J8）。不按状态放行：会话死掉、成果在别的分支上的任务同样会被判 `NOTHING_TO_LAND`；没测（旧行、旧 runner）或测出不在 upstream 上的，一律仍挡 `LANDED`。此前这一豁免只在 `target_sha_before = upstream_sha` 且没做 main 同步时成立，项目分支一旦领先 main 就永远不成立（2026-10-01，项目 `34WzvgkHWbY1VwXmSPUZi` 的上线任务）。
@@ -2064,14 +2064,14 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 **O-L4（冻结交付身份）**：J-T1a 写 DONE 的事务里，`isCodeTask` 为真时冻结：
 
 1. 收敛管理下的任务（有 `task_checkpoint`）：取 DONE 所依据的那个 checkpoint 的 `commit_sha`、`base_sha`、`branch`，也就是 `checkpointLandingGate` 认可的那一个：最新一个 `ACCEPTED`，且门认可它的提交（它的 scope revision 仍是任务当前的）；会话取记下它的那条。门一个都不认可时身份不明。
-2. 其余任务：取工作结束所在的那条会话（`workBranchEndedOn`）报的 `branch_sha` 与 `base_sha`；分支取 `worktree_branch`，缺省回落 `branch`。
+2. 其余任务：取工作结束所在的那条会话（`workBranchEndedOn`）报的 `branch_sha` 与 `base_sha`；分支取 `worktree_branch`，缺省回落 `branch`。会话结束时 runner 的 finalize 报告带上结束时那条分支的 tip，包括 finalize 自己提交的遗留改动（SR13；暂停检查点不报，恢复时它会被撤销），服务端在写 `finished_at` 的同一事务里先把它写进 `branch_sha` 再冻结；旧 runner 不报这个字段时，沿用最后一次报上来的 tip。
 3. 不冻结的情形有两种。一是工作仍在移动（`landingWorkHasSettled` 为假，J-T1e）：等会话结束、写下 `finished_at` 的那个事务里再补冻结，并补做之后的入队。二是身份不明：`branch_sha` 缺失，或 `worktree_branch` 与 `branch` 不同而那条分支的 tip 没报上来。身份不明时按 O-T1 开待办。
 
 `task_reopen` 把五列清空，再次 DONE 时重新冻结。L10 不变：下游的 `requiredContains` 仍从回执里取。
 
 实现时的读法与写法（R29-2）：
 
-- 行上的读法：runner 报的 `branch_sha` 是检出所在那条分支的 tip，与 `worktree_branch` 出自同一次报告（心跳、turn-complete、diff）。所以 `worktree_branch` 旁边的 `branch_sha` 就是那条分支的 tip，第 3 条的「那条分支的 tip 没报上来」在行上读作 `branch_sha` 缺失。`base_sha` 不是 40 位小写十六进制时冻结为 NULL。
+- 行上的读法：runner 报的 `branch_sha` 是检出所在那条分支的 tip，与 `worktree_branch` 出自同一次报告（心跳、turn-complete、diff，以及结束时的 finalize）。所以 `worktree_branch` 旁边的 `branch_sha` 就是那条分支的 tip，第 3 条的「那条分支的 tip 没报上来」在行上读作 `branch_sha` 缺失。`base_sha` 不是 40 位小写十六进制时冻结为 NULL。
 - 写在哪里：身份写在写 DONE 的那条语句里（`deliveredIdentityAtDone`），不另写第二次——同一事务第二次写同一行 `task` 会重查它的全部外键（`lock-order.ts` I3）。不这样写的只有 turnComplete 的验收比对：它写 DONE 时，跑验收的那条会话还活着，工作必然仍在移动。`enqueueForDoneTask` 在入队之后结算（`settleDeliveredIdentity`）：宣告已冻结的身份（O-T1 的调用点）、补冻 DONE 语句没写的身份、或为身份不明开待办。
 - 补冻结的事务：写下工作会话 `finished_at` 的五处都在同一事务里结算——runner 的 finalize、让会话失败的 turn-complete、reaper 的强制结束、结束从没跑过的会话、SOURCE 冻结里拒绝开工的那一次。已冻结的不再改写。
 - 离开 DONE：`task_reopen` 以及别的把任务写出 DONE 的写入（普通状态写入、父任务与核验的聚合）在同一条语句里把五列清空：不是 DONE 的任务没有交付（§10.4 `delivered_at`）。
@@ -2083,7 +2083,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 **O-L7（空分支与别的仓库）**：
 
 - `delivered_sha = delivered_base_sha` 表示任务没有自己的提交，照 J8 的 `NOTHING_TO_LAND` 规则：该任务没有任何会话报告过工作时写回执，否则开 `LANDING_UNOBSERVED`（原因 `WORK_ELSEWHERE`）。
-- `isCodeTask` 的后半加一个条件：工作会话所在 workspace 的 `repo_url`，经 SR36 规范化后等于项目代码库的 `canonical_repo_url`。不等的不是本线的代码任务：J9 豁免，不冻结，不观测。还没有代码库行的项目无从比较，条件成立：第一次集成按 L3 把它绑到这份工作的仓库。workspace 没有 `repo_url` 的算不等。代码库这一侧同样过一遍 SR36：`bind()` 写下的行本来就是规范形，这一步对它不改变任何东西。SQL 里的规范化是 `canonicalRepoUrlSql`，与 TypeScript 的 `canonicalRepoUrl` 逐步对应。
+- `isCodeTask` 的后半加一个条件：工作会话所在 workspace 的 `repo_url`，经 SR36 规范化后等于项目代码库的 `canonical_repo_url`。不等的不是本线的代码任务：J9 豁免，不入队，不冻结，不观测，并像 codeless 一样退出 §1.4 判据落地的合取（「有提交可落」）。还没有代码库行的项目无从比较，条件成立：第一次集成按 L3 把它绑到这份工作的仓库。workspace 没有 `repo_url` 的算不等。代码库这一侧同样过一遍 SR36：`bind()` 写下的行本来就是规范形，这一步对它不改变任何东西。SQL 里的规范化是 `canonicalRepoUrlSql`，与 TypeScript 的 `canonicalRepoUrl` 逐步对应。
 
 ### 10.6 观测作业 `OBSERVE_LANDING`
 

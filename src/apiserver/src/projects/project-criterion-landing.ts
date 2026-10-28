@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -174,6 +175,42 @@ export function mainBranchOf(codebase: { upstreamRef: string } | null | undefine
   return codebase ? branchName(codebase.upstreamRef) : null;
 }
 
+/**
+ * A remote URL as repository identity (PSC SR36): trimmed, scheme and host lower-cased, any
+ * `user@` dropped, the scp form `git@host:owner/repo` spelled as `ssh://host/owner/repo`, and no
+ * trailing `/` or `.git`. Used to compare and to satisfy `project_codebase_canonical_url_chk`, never
+ * to clone. Null when nothing is left.
+ */
+export function canonicalRepoUrl(raw: string): string | null {
+  let url = raw.trim();
+  const scp = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(\S+)$/.exec(url);
+  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `ssh://${scp[1]}/${scp[2]}`;
+  const remote = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([^/]*)(.*)$/i.exec(url);
+  if (remote) url = `${remote[1]!.toLowerCase()}://${remote[2]!.toLowerCase()}${remote[3]}`;
+  for (let trimmed = url.replace(/\/+$/, '').replace(/\.git$/, ''); trimmed !== url;
+    trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '')) {
+    url = trimmed;
+  }
+  return url === '' ? null : url;
+}
+
+/**
+ * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): the workspace a work session
+ * ran in names, through SR36, the repository the project's line is bound to. A project with no
+ * binding has none to differ from — its first integration binds it to this work's repository (L3) —
+ * and a workspace with no `repo_url` differs from every binding. The binding's own URL is read
+ * through SR36 as well: that changes nothing for one `bind()` wrote, which is canonical already, and
+ * keeps one written by hand comparable. `workOnProjectRepositorySql` is the same condition in SQL.
+ */
+export function workOnProjectRepository(
+  repoUrl: string | null | undefined,
+  binding: { canonicalRepoUrl?: string | null } | null | undefined,
+): boolean {
+  if (!binding?.canonicalRepoUrl) return true;
+  const repository = repoUrl ? canonicalRepoUrl(repoUrl) : null;
+  return repository !== null && repository === canonicalRepoUrl(binding.canonicalRepoUrl);
+}
+
 /** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
 export function landingBranchesFor(codebase: LandingCodebase | null): LandingBranches {
   if (!codebase) return LEGACY_LANDING_BRANCHES;
@@ -243,12 +280,19 @@ export interface LandingJobSessionFacts {
  * identity on purpose — a task is named here only when something can be said about it, and "has no
  * receipt" is not something that can be said.
  *
- * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it.
+ * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it,
+ * together with the repository condition revision 29 added to that same half (O-L7).
  */
 export interface LandingServingTask {
   codeless: boolean;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
   integrationJobs: ReadonlyArray<LandingJobFacts>;
+  /** §1.1's repository condition (revision 29, O-L7) as this lane reads it: the task's newest work
+   *  session — the workspace whose `repo_url` it ran in — and the binding of the project the task is
+   *  filed under (`workInAnotherRepository`). A reader that did not select them has nothing to say
+   *  about the repository, which reads as work in the project's own. */
+  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null }>;
+  project?: { codebases: ReadonlyArray<{ canonicalRepoUrl: string }> } | null;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -688,7 +732,22 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
  * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless || lineSawNothingToLand(task);
+  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task);
+}
+
+/**
+ * Whether the task's work was done in another repository than the one its project's line is bound to
+ * (§1.1 `isCodeTask`'s repository condition, revision 29 §10.5 O-L7), read off the NEWEST work
+ * session as §1.1 reads it. No commit of such work can ever be on this line, and the task cannot be
+ * declared codeless either — it has commits (`TASK_CODELESS_HAS_COMMITS`) — so without this a criterion
+ * it serves would wait for a landing that never comes. It leaves the conjunction exactly as codeless
+ * work does (§1.4 "有提交可落"). A task with no work session, or in a project with no binding, has no
+ * repository to differ from.
+ */
+export function workInAnotherRepository(task: LandingServingTask): boolean {
+  const newest = task.sessions?.[0];
+  if (!newest) return false;
+  return !workOnProjectRepository(newest.workspace?.repoUrl, task.project?.codebases?.[0]);
 }
 
 /**
@@ -785,6 +844,14 @@ export async function readCriterionLandingFacts(
   }));
 }
 
+/** The newest session that started a task's work, with the repository its workspace names (O-L7). */
+export const NEWEST_WORK_REPOSITORY = {
+  where: { startsTaskWork: true, deletedAt: null },
+  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  take: 1,
+  select: { workspace: { select: { repoUrl: true } } },
+} satisfies Prisma.Task$sessionsArgs;
+
 /**
  * What the fold reads about one serving task, as a Prisma `select`.
  *
@@ -803,6 +870,10 @@ export async function readCriterionLandingFacts(
 export const LANDING_SERVING_WORK_SELECT = {
   codeless: true,
   mergeReceipts: { select: { result: true, targetBranch: true } },
+  // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
+  // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
+  sessions: NEWEST_WORK_REPOSITORY,
+  project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
 } as const;
 
 /**

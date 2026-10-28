@@ -8,9 +8,9 @@ import {
   LandingReceiptFacts,
   landingBranchesFor,
   taskLanding,
+  workOnProjectRepository,
   workOnProjectRepositorySql,
 } from '../projects/project-criterion-landing';
-import { workOnProjectRepository } from '../projects/project-integration-line';
 import { successorChain, TASK_SUPERSESSION_MAX_HOPS, taskNotRetiredSql } from './task-supersession';
 import {
   VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN,

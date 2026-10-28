@@ -3,9 +3,11 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   LANDING_SERVING_WORK_SELECT,
+  NEWEST_WORK_REPOSITORY,
   readLandingJobsByTask,
   taskHasNothingToLand,
   taskLanding,
+  workInAnotherRepository,
   type CriterionLanding,
   type LandingBranches,
   type LandingServingTask,
@@ -70,8 +72,13 @@ export interface InFlightLandingJob {
  *  session — §1.1 `isCodeTask`'s second half, which the landing fold deliberately does not read. */
 export interface LandingReasonServingTask extends LandingServingTask {
   id: string;
-  /** At most one: the newest session that started this task's work. */
-  sessions: ReadonlyArray<{ isolationStatus: string | null; branch: string | null }>;
+  /** At most one: the newest session that started this task's work, with the repository its
+   *  workspace names (the fold's O-L7 reading). */
+  sessions: ReadonlyArray<{
+    isolationStatus: string | null;
+    branch: string | null;
+    workspace?: { repoUrl: string | null } | null;
+  }>;
 }
 
 /** One criterion: its landing answer, and the work serving it. */
@@ -124,7 +131,8 @@ function heldTaskReason(
  * One criterion's reason, or null when it is on the upstream by work of its own.
  *
  * A criterion that is LANDED has a reason only when nothing of its work had to land: CODELESS when
- * every serving task declares it, NOTHING_TO_LAND otherwise. One that is not LANDED is held by the
+ * every serving task declares it or did its work in another repository (O-L7), NOTHING_TO_LAND
+ * otherwise. One that is not LANDED is held by the
  * serving tasks that have something to land and are not on the upstream — the same tasks the
  * landing fold is held by — and takes the first of their reasons in `PRECEDENCE`. A criterion
  * nothing is filed under has no receipt to stand on: NO_RECEIPT.
@@ -137,7 +145,11 @@ export function criterionLandingReason(
   const delivery = criterion.servingTasks.filter((task) => !taskHasNothingToLand(task));
   if (criterion.landing === 'LANDED') {
     if (delivery.length > 0) return null;
-    return criterion.servingTasks.every((task) => task.codeless) ? 'CODELESS' : 'NOTHING_TO_LAND';
+    // Work in another repository is out of the conjunction exactly as codeless work is (O-L7), and
+    // reads the same reason.
+    return criterion.servingTasks.every((task) => task.codeless || workInAnotherRepository(task))
+      ? 'CODELESS'
+      : 'NOTHING_TO_LAND';
   }
   const held = delivery.filter((task) => taskLanding(task.mergeReceipts, branches) !== 'ON_UPSTREAM');
   if (held.length === 0) return 'NO_RECEIPT';
@@ -147,10 +159,8 @@ export function criterionLandingReason(
 
 /** The newest session that started a task's work, the one §1.1 `isCodeTask` reads. */
 const NEWEST_WORK_SESSION = {
-  where: { startsTaskWork: true, deletedAt: null },
-  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  take: 1,
-  select: { isolationStatus: true, branch: true },
+  ...NEWEST_WORK_REPOSITORY,
+  select: { ...NEWEST_WORK_REPOSITORY.select, isolationStatus: true, branch: true },
 } satisfies Prisma.Task$sessionsArgs;
 
 /** What the reading needs about one serving task, as a Prisma `select`: the landing lane's own
