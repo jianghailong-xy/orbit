@@ -18,6 +18,9 @@ function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both') {
   const apns: any[][] = [];
   const fcm: any[][] = [];
   let pending = ['session'];
+  // The session row's 0 → pending edge (claimApprovalAlert), modelled: a session rings once until it
+  // leaves the pending set. The claim itself is held against PostgreSQL in push-claims.pg.spec.ts.
+  const alerted = new Set<string>();
   const prisma = {
     session: { findFirst: async () => ({ title: 'Orbit', ownerId: 'owner' }) },
     deviceToken: {
@@ -33,6 +36,11 @@ function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both') {
     || channels === 'android' && k.startsWith('FCM_')) ? configValues[k] : undefined } as ConfigService;
   const service = new PushService(prisma as any, config);
   (service as any).needsYouSessions = async () => pending;
+  (service as any).claimApprovalAlert = async (sessionId: string) => {
+    if (alerted.has(sessionId)) return false;
+    alerted.add(sessionId);
+    return true;
+  };
   (service as any).authToken = () => { assert.notEqual(channels, 'android'); return 'apns-auth'; };
   (service as any).send = async (...args: any[]) => { apns.push(args); return { status: 200 }; };
   (service as any).fcm.send = async (...args: any[]) => {
@@ -40,12 +48,16 @@ function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both') {
     fcm.push(args);
     return { accepted: true, invalidToken: false };
   };
-  return { service, prisma, queries, removed, apns, fcm, setPending: (p: string[]) => { pending = p; } };
+  const setPending = (p: string[]) => {
+    pending = p;
+    for (const id of [...alerted]) if (!p.includes(id)) alerted.delete(id);
+  };
+  return { service, prisma, queries, removed, apns, fcm, setPending };
 }
 
 test('query restricts owner, configured channel, package and environment; Android never reaches APNs', async () => {
   const h = harness();
-  await h.service.notifyApprovalRequest('session', 'Bash');
+  await h.service.notifyApprovalRequest('session', 'approval-1', 'Bash');
   assert.deepEqual(h.queries[0].where, { userId: 'owner', OR: [
     { platform: 'ios', bundleId: 'io.orbitd.app', environment: { in: ['production', 'sandbox'] } },
     { platform: 'android', bundleId: 'io.orbitd.android', environment: 'production' },
@@ -61,13 +73,14 @@ test('query restricts owner, configured channel, package and environment; Androi
 for (const channel of ['ios', 'android', 'both'] as const) {
   test(`${channel}: repeated parallel approvals alert once; processed items clear silently on every enabled channel`, async () => {
     const h = harness(channel);
-    await Promise.all(['Bash', 'Write', 'Edit'].map((tool) => h.service.notifyApprovalRequest('session', tool)));
+    await Promise.all(['Bash', 'Write', 'Edit'].map((tool) =>
+      h.service.notifyApprovalRequest('session', `approval-${tool}`, tool)));
     assert.equal(h.apns.length, channel === 'android' ? 0 : 1);
     assert.equal(h.fcm.length, channel === 'ios' ? 0 : 1);
     h.setPending([]);
     await (h.service as any).reconcileBadge('owner');
     await (h.service as any).reconcileBadge('owner');
-    await h.service.notifyApprovalRequest('session', 'late call');
+    await h.service.notifyApprovalRequest('session', 'approval-late', 'late call');
     if (channel !== 'android') {
       assert.equal(h.apns.length, 2);
       assert.deepEqual(JSON.parse(h.apns[1][2]), { aps: { 'content-available': 1, badge: 0 }, clearSessions: ['session'] });
@@ -79,18 +92,18 @@ for (const channel of ['ios', 'android', 'both'] as const) {
       assert.deepEqual(JSON.parse(h.fcm[1][1].payload), { clearSessions: ['session'], badge: 0 });
     }
     h.setPending(['session']);
-    await h.service.notifyApprovalRequest('session', 'new approval');
+    await h.service.notifyApprovalRequest('session', 'approval-new', 'new approval');
     assert.equal(channel === 'ios' ? h.apns.length : h.fcm.length, 3);
   });
 }
 
 test('an unconfigured deployment is a no-op; disabled channels are excluded from selection', async () => {
   const off = harness('none');
-  await off.service.notifyApprovalRequest('session', 'Bash');
+  await off.service.notifyApprovalRequest('session', 'approval-1', 'Bash');
   assert.equal(off.queries.length, 0);
   for (const channel of ['ios', 'android'] as const) {
     const h = harness(channel);
-    await h.service.notifyApprovalRequest('session', 'Bash');
+    await h.service.notifyApprovalRequest('session', 'approval-1', 'Bash');
     assert.deepEqual(h.queries[0].where.OR.map((w: any) => w.platform), [channel]);
   }
 });
@@ -107,12 +120,12 @@ test('defensive routing rejects foreign package/platform/environment even if a c
 test('APNs failure does not suppress Android; invalid cleanup matches the exact registration snapshot', async () => {
   const h = harness();
   (h.service as any).send = async () => ({ status: 410, reason: 'Unregistered' });
-  await h.service.notifyApprovalRequest('session', 'Bash');
+  await h.service.notifyApprovalRequest('session', 'approval-1', 'Bash');
   assert.equal(h.fcm.length, 1);
   assert.deepEqual(h.removed[0].where, ios);
   const f = harness('android');
   (f.service as any).fcm.send = async () => ({ accepted: false, invalidToken: true, reason: 'UNREGISTERED' });
-  await f.service.notifyApprovalRequest('session', 'Bash');
+  await f.service.notifyApprovalRequest('session', 'approval-1', 'Bash');
   assert.deepEqual(f.removed[0].where, android);
 });
 

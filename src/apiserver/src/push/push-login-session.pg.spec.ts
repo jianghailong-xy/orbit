@@ -89,7 +89,8 @@ test('a push registration ends with the login session that made it', { skip: !ur
   /** The devices one push to the account reaches: an agent's message, sent to every device it has. */
   const pushedTo = async () => {
     sent.length = 0;
-    (push as any).lastAgentNotify.clear(); // its one-a-minute limit is not under test
+    // Its one-a-minute limit is not under test: the account's turn, which a notify naming no session takes, given back.
+    await sql.query(`UPDATE "user" SET "agent_notified_at" = NULL WHERE "id" = $1::uuid`, [user.id]);
     await push.notifyAgentMessage({ ownerId: user.id, fallbackTitle: 'Orbit', message: 'Check in' });
     return [...sent].sort();
   };
