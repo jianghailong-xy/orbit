@@ -31,6 +31,8 @@
 #                                    batch alone; "default" is the gateway's own                         default
 #   ORBIT_LINK_STAGING_INGEST_RATE   the link gateway's LINK_DRILL_INGEST_RATE: the durable events a second it
 #                                    forwards at most, for a load test of a slow ingest; off forwards them as they come  off
+#   ORBIT_LINK_STAGING_MERGE_CALLS   the link gateway's LINK_EVENT_MERGE_CALLS_PER_BACKEND: merged calls out at once
+#                                    to each apiserver, 1 to 8; "default" is the gateway's own (4)                       default
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -41,7 +43,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -67,6 +69,7 @@ db_cpus="${ORBIT_LINK_STAGING_DB_CPUS:-$(setting STAGING_DB_CPUS 0)}"
 db_mem="${ORBIT_LINK_STAGING_DB_MEM:-$(setting STAGING_DB_MEM 4g)}"
 merge_window="${ORBIT_LINK_STAGING_MERGE_WINDOW:-$(setting STAGING_MERGE_WINDOW_SETTING default)}"
 ingest_rate="${ORBIT_LINK_STAGING_INGEST_RATE:-$(setting STAGING_INGEST_RATE_SETTING off)}"
+merge_calls="${ORBIT_LINK_STAGING_MERGE_CALLS:-$(setting STAGING_MERGE_CALLS_SETTING default)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
@@ -79,6 +82,9 @@ gateway_merge_window="$merge_window"
 [[ "$ingest_rate" =~ ^(off|[1-9][0-9]*)$ ]] || die "ORBIT_LINK_STAGING_INGEST_RATE must be off or events a second such as 300, not $ingest_rate"
 gateway_ingest_rate="$ingest_rate"
 [ "$ingest_rate" = off ] && gateway_ingest_rate=""
+[[ "$merge_calls" =~ ^(default|[1-8])$ ]] || die "ORBIT_LINK_STAGING_MERGE_CALLS must be default or 1 to 8 merged calls an apiserver, not $merge_calls"
+gateway_merge_calls="$merge_calls"
+[ "$merge_calls" = default ] && gateway_merge_calls=""
 [[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
 # The first apiserver, then apiserver-b, apiserver-c and on (extra_backends), each the first one's whole definition on
 # the same database; the link gateway forwards to all of them, round robin, or to those ORBIT_LINK_STAGING_LINK_BACKENDS
@@ -225,6 +231,8 @@ STAGING_MERGE_WINDOW_SETTING=$merge_window
 STAGING_MERGE_WINDOW=$gateway_merge_window
 STAGING_INGEST_RATE_SETTING=$ingest_rate
 STAGING_INGEST_RATE=$gateway_ingest_rate
+STAGING_MERGE_CALLS_SETTING=$merge_calls
+STAGING_MERGE_CALLS=$gateway_merge_calls
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
 RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
@@ -280,7 +288,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s), merge window $merge_window, ingest rate $ingest_rate"
+log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------

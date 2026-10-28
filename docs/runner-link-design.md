@@ -320,6 +320,8 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
   - 按会话哈希分到 256 个虚拟分区；写入器持有分区租约（带围栏号），交接完成后再写。
   - 会话行锁保留作为保险。
 - **批量**：放宽持久事件的提交节奏（§5.8），多个会话的事件合批写入。
+  - **合批调用的并发。** 网关同时在途的合批调用数随后端 apiserver 的数量变：`LINK_INTERNAL_API_URLS` 里每个 apiserver 最多 `LINK_EVENT_MERGE_CALLS_PER_BACKEND` 个（默认 4，可设 1–8）。所以一个 apiserver 时是 4 个，和以前一样；4 个 apiserver 时是 16 个。新的调用发给在途最少的 apiserver。刚拨不通的 apiserver 先跳过，它的份额也不借给别的 apiserver，所以没有哪个 apiserver 超过自己的份额。上限是 8，因为一个合批调用在整个事务期间占着 apiserver 的一条数据库连接，一个 apiserver 只有 10 条（pg 连接池的默认值），心跳和其他调用也要用。
+  - **事务里的语句。** 合批事务里每条语句是一个来回，每个来回都要等 apiserver 的事件循环空下来才发下一条。C2b 测得合批事务约 72% 的时间耗在这种等待上，数据库处于 idle in transaction。所以各批次的 tool_call 写入、结果回写、审批卡回收、启动行回读，各合成整个调用一条语句；会话行的更新按写的列分组，每组一条；run_event 本来就是一条。语句数因此不随批次数增长。单个批次单独入库时（HTTPS，或合批调用退回的批次），语句和以前一样。
 
 ### 6.7 去掉逐条的 pg_notify
 
