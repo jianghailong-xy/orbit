@@ -103,6 +103,8 @@ export const WIKI_NEXT_MARKED = 'Next marked ›';
 export const WIKI_DOC_NOT_WRITTEN = 'Not written yet.';
 /** Its section, when the document is written and that section is not (an accepted proposal's). */
 export const WIKI_DOC_SECTION_NOT_WRITTEN = 'Not written yet — Wiki maintenance writes it on its next run.';
+/** A section's diagram, as a screen reader names it (contract `docs.diagram`). */
+export const WIKI_DOC_DIAGRAM = 'Diagram';
 
 /** The footnote card (mock 23 ⑥) and the footnotes under the text (mock 23 ⑦). */
 export const WIKI_DOC_FOOTNOTES = 'Footnotes';

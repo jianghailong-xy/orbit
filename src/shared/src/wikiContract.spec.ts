@@ -105,6 +105,7 @@ import {
   WIKI_DOC_BLOCK_KINDS,
   WIKI_DOC_BUILD_RULES,
   WIKI_DOC_CHECKERS,
+  WIKI_DOC_DIAGRAM_RULES,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
   WIKI_DOC_LEAD_RULES,
@@ -1327,6 +1328,10 @@ describe('wiki contract', () => {
     expect(keysOf(docs.checkers)).toEqual([...WIKI_DOC_CHECKERS]);
     expect(docs.withdrawReasons).toEqual([...WIKI_DOC_WITHDRAW_REASONS]);
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
+    // A section's diagram: offered to these kinds, kept only as far as its sourced sentences go.
+    expect(docs.diagram.rules).toEqual(WIKI_DOC_DIAGRAM_RULES);
+    expect(WIKI_DOC_DIAGRAM_RULES.kinds.every((kind) => kind in CONTRACT.plan.sectionKinds)).toBe(true);
+    expect(docs.fingerprint).toMatch(/diagram\.rules\.version/u);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
     // A written document's two lines on the home, which the directory carries.
     expect(docs.lead.rules).toEqual(WIKI_DOC_LEAD_RULES);

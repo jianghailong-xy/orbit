@@ -57,7 +57,7 @@ export interface PublicWikiSentence {
 
 export interface PublicWikiBlock {
   kind: WikiDocBlockKind;
-  /** A heading's or a code block's text; null for a paragraph or a list item. */
+  /** A heading's or a code block's text, or a diagram's Mermaid source; null for a paragraph or a list item. */
   text: string | null;
   sentences: PublicWikiSentence[];
 }
@@ -198,7 +198,7 @@ export function publicWikiDoc(view: WikiDocView, written: ReadonlySet<string>, f
               notes: footnotes ? sentence.notes.filter((n) => notes.has(n)).map(numberOf) : [],
             })),
         }))
-        .filter((block) => block.kind === 'heading' || block.kind === 'code' || block.sentences.length > 0),
+        .filter((block) => block.kind === 'heading' || block.kind === 'code' || block.kind === 'diagram' || block.sentences.length > 0),
     }));
   return {
     slug: view.slug,

@@ -99,9 +99,9 @@ public enum WikiDocWithdrawReason: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// A section's blocks: paragraphs and list items hold sentences; a heading or a code block its text.
+/// A section's blocks: paragraphs and list items hold sentences; a heading, a code block or a diagram its text.
 public enum WikiDocBlockKind: String, Codable, Sendable, CaseIterable {
-    case paragraph, item, heading, code
+    case paragraph, item, heading, code, diagram
     case unknown
 
     public init(from decoder: Decoder) throws {

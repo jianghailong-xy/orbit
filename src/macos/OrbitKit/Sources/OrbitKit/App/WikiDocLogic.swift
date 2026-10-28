@@ -31,6 +31,8 @@ public enum WikiDocCopy {
     public static let nextMarked = "Next marked ›"                           // WIKI_NEXT_MARKED
     public static let notWritten = "Not written yet."                        // WIKI_DOC_NOT_WRITTEN
     public static let sectionNotWritten = "Not written yet — Wiki maintenance writes it on its next run."   // WIKI_DOC_SECTION_NOT_WRITTEN
+    /// Where a section has a diagram: the web draws it (WikiDiagram), the app says it is there.
+    public static let diagramOnWeb = "Diagram — open this document on the web to see it."
     /// The footnotes under the text, the footnote sheet, and the entries under the document.
     public static let footnotes = "Footnotes"                                // WIKI_DOC_FOOTNOTES
     public static let viaEntry = "Via entry"                                 // WIKI_VIA_ENTRY

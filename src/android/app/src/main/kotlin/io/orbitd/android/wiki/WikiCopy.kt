@@ -400,6 +400,8 @@ internal object WikiDocCopy {
     const val nextMarked = "Next marked ›"
     const val notWritten = "Not written yet."
     const val sectionNotWritten = "Not written yet — Wiki maintenance writes it on its next run."
+    /** Where a section has a diagram: the web draws it (WikiDiagram), the app says it is there. */
+    const val diagramOnWeb = "Diagram — open this document on the web to see it."
     const val footnotes = "Footnotes"
     const val viaEntry = "Via entry"
     const val noQuoteGiven = "— no quote given"

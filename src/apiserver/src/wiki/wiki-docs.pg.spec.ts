@@ -879,6 +879,45 @@ test('a fact with no footnote is marked, a transition passes by the rule, and pa
   assert.equal(page.body.footnotes.length, 1);
 });
 
+test('a diagram its sourced sentences back is stored as the server wrote it out, shown on the page and counted; one that names more is dropped (docs.diagram)', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const version = await confirmPlan(h, s);
+  const markdown = [
+    'A dispatch starts in `claimTask`[1].',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  claim[claimTask] -->|retries| roll[rollbackClaim]',
+    '```',
+    '',
+    'On a failure `rollbackClaim` undoes the claim, and the dispatch retries[2].',
+  ].join('\n');
+  const both = [code('export function claimTask('), code('rollbackClaim(', { symbol: 'rollbackClaim' })];
+  const kept = await writeDoc(h, s, 'task-dispatch', writeBody(version, [{ key: 's2', markdown, footnotes: both }]));
+  expectStatus(kept, 200, 'the flow section and its diagram');
+  assert.deepEqual([kept.body.sections[0].stats.diagrams, kept.body.sections[0].stats.diagramsDropped], [1, 0]);
+  assert.deepEqual(kept.body.counts, { sentences: 2, sourced: 2, transition: 0, unsourced: 0, unverified: 0, withdrawn: 0 }, 'a diagram is no sentence');
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/task-dispatch`);
+  expectStatus(page, 200, 'the page');
+  const shown = page.body.sections.find((section: { key: string }) => section.key === 's2');
+  assert.deepEqual(shown.blocks.map((block: { kind: string; text: string | null; sentences: unknown[] }) => [block.kind, block.text, block.sentences.length]), [
+    ['paragraph', null, 1],
+    ['diagram', 'flowchart LR\n  n1["claimTask"]\n  n2["rollbackClaim"]\n  n1 -->|"retries"| n2', 0],
+    ['paragraph', null, 1],
+  ]);
+
+  // Written again with the second footnote not found: `rollbackClaim` and "retries" are in no sourced sentence now.
+  const unsure = [both[0], code('rollbackClaim(', { symbol: 'rollbackClaim', verified: false })];
+  const dropped = await writeDoc(h, s, 'task-dispatch', writeBody(version, [{ key: 's2', markdown, footnotes: unsure, material: sha256('again') }]));
+  expectStatus(dropped, 200, 'the flow section again');
+  assert.deepEqual([dropped.body.sections[0].stats.diagrams, dropped.body.sections[0].stats.diagramsDropped], [0, 1]);
+  const { sections } = await stored(h, s.spaceId, 'task-dispatch');
+  const s2 = sections.get('s2')!;
+  assert.deepEqual(s2.blocks, [{ kind: 'paragraph' }, { kind: 'paragraph' }], 'the diagram is gone, not kept as code');
+  assert.deepEqual(s2.sentences.map((sentence) => [sentence.block, sentence.status]), [[0, 'sourced'], [1, 'unverified']], 'the sentence after it moved up a block');
+});
+
 // ── 5. unchanged material, unchanged section ────────────────────────────────────────────────────
 
 test('a section whose material did not change is not written again; one whose material did is; a section the plan dropped goes', { skip }, async () => {
