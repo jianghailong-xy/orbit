@@ -1648,6 +1648,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "runner_delete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		runnerID := getString(args, "runnerId")
+		if runnerID == "" {
+			return toolResult("runnerId is required", true)
+		}
+		if err := validatePathSegmentID(runnerID); err != nil {
+			return toolResult("runner "+err.Error(), true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, runnerDeleteApprovalToolName, map[string]interface{}{"runnerId": runnerID}); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+		}
+		raw, err := s.t.deleteRunner(s.sessionID, s.orchestrationToken, runnerID)
+		if err != nil {
+			return toolResult("delete runner failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -1680,6 +1702,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("update agent failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "agent_delete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "agentId")
+		if id == "" {
+			return toolResult("agentId is required", true)
+		}
+		if err := validatePathSegmentID(id); err != nil {
+			return toolResult("agent "+err.Error(), true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, agentDeleteApprovalToolName, map[string]interface{}{"agentId": id}); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+		}
+		raw, err := s.t.deleteAgent(s.sessionID, s.orchestrationToken, id)
+		if err != nil {
+			return toolResult("delete agent failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1745,7 +1789,7 @@ const projectIntegrationApprovalToolName = "orbit_project_update_integration"
 var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
-	"integration_skip_merge_check": true,
+	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else
@@ -4667,6 +4711,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				}, "agentId"),
 			},
 			map[string]interface{}{
+				"name": "agent_delete",
+				"description": "Delete one of this owner's agents/workspaces, named by the id agent_list shows. It leaves the account's list but is not erased: " +
+					"its sessions and tasks are kept and stay linked to it, as when it is deleted from its runner's page in the Orbit app. " +
+					"An agent that still coordinates a project is refused, and so is the agent this session runs in. " +
+					"It puts the agent — its name, its folder and its runner — on a confirmation card in front of the account owner and BLOCKS until they answer: " +
+					"nothing is deleted if they decline. Returns what was deleted.",
+				"inputSchema": obj(map[string]interface{}{
+					"agentId": map[string]interface{}{"type": "string", "description": "Agent id to delete, as agent_list shows it."},
+				}, "agentId"),
+			},
+			map[string]interface{}{
 				"name": "runner_list",
 				"description": "List this owner's runners — the machines that run sessions — including one no agent is bound to yet. Read-only. " +
 					"Use it to look up a runner's id to pass as runnerId to agent_create or agent_update. " +
@@ -4705,6 +4760,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"A finished install is cleared, status null again, by the heartbeat that reports its engine installed: runner_list then shows it among the runner's engines. A finished update stays until it is dismissed in the app.",
 				"inputSchema": obj(map[string]interface{}{
 					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to read. Use runner_list to look up a runner's id."},
+				}, "runnerId"),
+			},
+			map[string]interface{}{
+				"name": "runner_delete",
+				"description": "Delete one of this owner's runners — a machine runner_list shows — with every agent/workspace bound to it, as Delete on that runner's page in the Orbit app does. " +
+					"The machine itself is untouched: it can no longer reach Orbit, and registering it again adds it back; a rented machine still has to be released where it was rented. " +
+					"A managed runner is refused, and so is the runner this session runs on. " +
+					"It puts the runner — its name, whether it is online, and the workspaces that go with it — on a confirmation card in front of the account owner and BLOCKS until they answer: " +
+					"nothing is deleted if they decline. Returns what was deleted. Only available in a session with orchestration enabled.",
+				"inputSchema": obj(map[string]interface{}{
+					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to delete. Use runner_list to look up a runner's id."},
 				}, "runnerId"),
 			},
 			// A project tool on the orchestration gate rather than beside the other project_* ones:

@@ -9,6 +9,7 @@ import { MACHINE_PROTOCOL } from '../common/machine-protocol';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerDeleteController } from './runner-delete.controller';
 import { RunnerEngineInstallController } from './runner-engine-install.controller';
 import { RunnerLinkEventsController } from './runner-link-events.controller';
 import { RunnerLinkModeController } from './runner-link-required.controller';
@@ -67,6 +68,7 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerAgentsController,
     RunnerRunnersController,
     RunnerEngineInstallController,
+    RunnerDeleteController,
     RunnerProjectsController,
     RunnerServiceTokensController,
     RunnerWatchesController,

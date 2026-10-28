@@ -2859,3 +2859,24 @@ func (t *Transport) updateAgent(sessionID, orchestrationToken, id string, body i
 	err := t.doOrchestration("PATCH", "/runner/agents/"+url.PathEscape(id), body, &out, sessionID, orchestrationToken)
 	return out, err
 }
+
+// deleteRunner deletes one of the account's runners, with the workspaces bound to it, and deleteAgent one
+// of its workspaces: each on the confirmation card the account owner answered in this session, which the
+// caller raises first (askBeforeCreate). The server reads that card back and deletes nothing without it.
+func (t *Transport) deleteRunner(sessionID, orchestrationToken, runnerID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(runnerID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("DELETE", "/runner/runners/"+url.PathEscape(runnerID), nil, &out, sessionID, orchestrationToken)
+	return out, err
+}
+
+func (t *Transport) deleteAgent(sessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("DELETE", "/runner/workspaces/"+url.PathEscape(id), nil, &out, sessionID, orchestrationToken)
+	return out, err
+}
