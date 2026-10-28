@@ -515,7 +515,9 @@ export class RunnerSessionsController {
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
-    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds);
+    // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
+    // on a PLATFORM project's main is put in front of the owner.
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
   }
 
   /**

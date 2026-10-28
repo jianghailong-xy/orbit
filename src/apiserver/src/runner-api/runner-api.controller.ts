@@ -220,6 +220,7 @@ import {
   returnQueuedTurns,
 } from '../projects/project-open-item';
 import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
+import { queueLandingObservationAfterCommit } from '../projects/landing-observation';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -2555,7 +2556,9 @@ export class RunnerApiController {
       // somebody has to look at. Both are announcements of rows that are already committed, so a
       // failure here is logged and never raised — the runner's result was taken either way.
       await this.mergeReceipts
-        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskId)
+        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
+          observed: after.observed === true,
+        })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
       if (after.openItemIds.length > 0) {
         await this.openItems?.deliverForItems(after.openItemIds)
@@ -7104,6 +7107,10 @@ export class RunnerApiController {
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).
       await this.openItems?.deliverOwedTo(sessionId);
+      // O-T2 (§10.6): a work session of a project's task finished a turn — its agent may just have
+      // pushed — so the project's tasks waiting to be seen on the line are looked at again. After
+      // this commit, in a transaction of its own; it never raises.
+      if ('taskId' in finalized && finalized.taskId) await this.observeAfterWorkTurn(sessionId, finalized.taskId);
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
       await this.evidenceQueue?.deliverOwedTo(sessionId);
@@ -7194,6 +7201,24 @@ export class RunnerApiController {
       this.queue.notifySessionQueued(runner.id);
     }
     return { ok: true, status: finalized.status };
+  }
+
+  /**
+   * O-T2 (§10.6): queue an observation of the project whose task this work session's turn belongs to,
+   * when that project has tasks waiting to be observed. Read after the turn committed; logged and
+   * never raised, because the turn is answered either way and the next trigger asks again.
+   */
+  private async observeAfterWorkTurn(sessionId: string, taskId: string): Promise<void> {
+    try {
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { startsTaskWork: true, task: { select: { id: true, projectId: true } } },
+      });
+      if (!session?.startsTaskWork || session.task?.id !== taskId || !session.task.projectId) return;
+      await queueLandingObservationAfterCommit(this.prisma, { projectId: session.task.projectId, trigger: 'TURN_COMPLETE' });
+    } catch (error) {
+      this.logger.warn(`observation after a turn of ${sessionId} not queued: ${(error as Error)?.message ?? error}`);
+    }
   }
 
   /**
@@ -8881,6 +8906,7 @@ export class RunnerApiController {
           mergeCheckpointId: string | null;
           mergeRecoveryAction: string | null;
           mergeRecovery: unknown;
+          mergeRequestedBy: string | null;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -8891,7 +8917,8 @@ export class RunnerApiController {
                "branch", "merge_target" AS "mergeTarget",
                "merge_checkpoint_id" AS "mergeCheckpointId",
                "merge_recovery_action" AS "mergeRecoveryAction",
-               "merge_recovery" AS "mergeRecovery"
+               "merge_recovery" AS "mergeRecovery",
+               "merge_requested_by" AS "mergeRequestedBy"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -9056,6 +9083,10 @@ export class RunnerApiController {
           conflicts: dto.status === 'conflict' ? (dto.conflicts ?? []) : [],
           message: dto.message ?? null,
           operationId: dto.operationId ?? null,
+          // §10.6 O-R3: who pressed Merge, as the door recorded it when it queued this operation.
+          requestedBy: current.mergeRequestedBy === 'USER' || current.mergeRequestedBy === 'AGENT'
+            ? current.mergeRequestedBy
+            : null,
           // CP4: which verified point this landing is about, when there is one. Null for every
           // merge not under convergence management, which is almost all of them.
           // The checkpoint the SERVER authorised, for a landing it has just proved is that

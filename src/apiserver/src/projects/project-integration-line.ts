@@ -46,6 +46,7 @@ import {
   type IntegrationTimelineActorInput,
 } from './project-integration-event';
 import { readProjectIntegrationLog } from './project-integration-log';
+import { queueLandingObservationIfPending } from './landing-observation';
 import { medianMs } from './project-promotion';
 import {
   queueBlockingSummary,
@@ -943,6 +944,9 @@ async function readInFlightJobsForProjects(
           LEFT JOIN "workspace" source_workspace ON source_workspace."id" = source_session."workspace_id"
           LEFT JOIN "runner" runner ON runner."id" = source_workspace."runner_id"
          WHERE j."state" = 'QUEUED'
+           -- An observation names no session: any observing runner that reaches the repository
+           -- may claim it (§10.6), so no one runner's absence is its wait.
+           AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
       -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
@@ -1690,14 +1694,16 @@ export async function configureProjectIntegration(
 
 /**
  * O-T4 (§10.6): the owner turned this project's delivery mode to AGENT_PUSH. Called inside the
- * transaction that wrote it, under the binding's lock (rank 55), so whatever it queues commits with
- * the choice or not at all. Queuing the observation lands with `OBSERVE_LANDING` itself; until then
- * this writes nothing.
+ * transaction that wrote it, under the binding's lock (rank 55), so the observation it queues commits
+ * with the choice or not at all: the project's finished tasks are looked for on the line, now that
+ * nothing of the platform's will carry them there. With none waiting there is nothing to look for.
  */
 async function deliveryModeTurnedAgentPush(
-  _tx: Prisma.TransactionClient,
-  _change: { ownerId: string; projectId: string },
-): Promise<void> {}
+  tx: Prisma.TransactionClient,
+  change: { ownerId: string; projectId: string },
+): Promise<void> {
+  await queueLandingObservationIfPending(tx, { ...change, trigger: 'DELIVERY_MODE' });
+}
 
 /** 409 `DELIVERY_MODE_NEEDS_MAIN_LINE` (O-L1): AGENT_PUSH asked for, or kept, off a MAIN line. */
 function deliveryModeNeedsMainLine(
