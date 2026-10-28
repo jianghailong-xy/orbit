@@ -746,6 +746,16 @@ test('(5) §10.7 §4.7: open_item_resolve refuses LANDING_UNOBSERVED (OPEN_ITEM_
 
 // ═══ (6) LANDED_WITHOUT_CONFIRMATION and its Accept ══════════════════════════════════════════════
 
+/** The LANDED_WITHOUT_CONFIRMATION an agent's receipt onto main opened (§10.6 O-R3, R29-5). */
+async function raisedFor(stack: Stack, w: World, taskId: string, receiptId: string): Promise<{ itemId: string }> {
+  const raised = await stack.db.projectOpenItem.findFirst({
+    where: { projectId: w.projectId, dedupeKey: `UL:${taskId}:${receiptId}` },
+    select: { id: true },
+  });
+  assert.ok(raised, 'the agent\'s receipt onto main opened LANDED_WITHOUT_CONFIRMATION');
+  return { itemId: raised.id };
+}
+
 test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth, and only the owner\'s Accept ends it ACCEPTED',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -753,9 +763,14 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
       const w = await world(stack, 'ul-accept', { line: 'MAIN' });
       const t = await doneTask(stack, w, 'pushed-to-main');
       const { receipt } = await agentReceipt(stack, w, t, 'main');
-      const opened = await stack.db.$transaction((tx) =>
-        recordLandedWithoutConfirmation(tx, { taskId: t.taskId, receiptId: receipt.id }));
-      assert.ok(opened);
+      // §10.6 O-R3 (R29-5): an agent's receipt onto a PLATFORM project's main opens it, in the
+      // receipt's own transaction, through `recordLandedWithoutConfirmation`.
+      const raised = await stack.db.projectOpenItem.findFirst({
+        where: { projectId: w.projectId, dedupeKey: `UL:${t.taskId}:${receipt.id}` },
+        select: { id: true, assignee: true },
+      });
+      assert.ok(raised, 'the agent\'s receipt onto main opened it');
+      const opened = { itemId: raised.id, assignee: raised.assignee };
       assert.equal(opened.assignee, 'OWNER');
       const row = await item(stack.db, opened.itemId);
       assert.equal(row.kind, 'LANDED_WITHOUT_CONFIRMATION');
@@ -824,16 +839,14 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
       // Its task cancelled, or replaced: `resolveByFact` ends it the way it ends the others.
       const cancelled = await doneTask(stack, w, 'cancelled-after');
       const cancelledReceipt = (await agentReceipt(stack, w, cancelled, 'main')).receipt;
-      const cancelledItem = (await stack.db.$transaction((tx) =>
-        recordLandedWithoutConfirmation(tx, { taskId: cancelled.taskId, receiptId: cancelledReceipt.id })))!;
+      const cancelledItem = await raisedFor(stack, w, cancelled.taskId, cancelledReceipt.id);
       await stack.tasks.update(w.ownerId, cancelled.taskId, { status: TaskStatus.CANCELLED } as never);
       const closed = await item(stack.db, cancelledItem.itemId);
       assert.deepEqual([closed.state, closed.resolution, closed.resolvedBy], ['RESOLVED', 'TASK_CLOSED', 'PLATFORM']);
 
       const replaced = await doneTask(stack, w, 'replaced-after');
       const replacedReceipt = (await agentReceipt(stack, w, replaced, 'main')).receipt;
-      const replacedItem = (await stack.db.$transaction((tx) =>
-        recordLandedWithoutConfirmation(tx, { taskId: replaced.taskId, receiptId: replacedReceipt.id })))!;
+      const replacedItem = await raisedFor(stack, w, replaced.taskId, replacedReceipt.id);
       const successor = await filed(stack, w, 'successor-after');
       await stack.tasks.update(w.ownerId, replaced.taskId, {
         status: TaskStatus.CANCELLED, supersededByTaskId: successor,

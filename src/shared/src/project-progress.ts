@@ -732,6 +732,11 @@ export interface ProjectManualReady {
  * `NOT_APPLICABLE` is the state of most rows in most projects and is not a gap: a codeless task, or
  * one in a project that has not started integrating, has nothing to land, and a row that said
  * "queued" about it would be describing work nobody is going to do.
+ *
+ * `AWAITING_OBSERVATION` is a DONE task of an `AGENT_PUSH` project whose work has not been seen on the
+ * line yet (§10.9): its agent pushes, so no job of the platform's carries it, and the view names the
+ * commit it waits to see (`deliveredSha`). Once a receipt says it is there, the task reads
+ * `ON_UPSTREAM` like any other.
  */
 export type TaskIntegrationState =
   | 'NOT_APPLICABLE'
@@ -741,6 +746,7 @@ export type TaskIntegrationState =
   | 'CHECK_FAILED'
   | 'ERROR'
   | 'AWAITING_OWNER'
+  | 'AWAITING_OBSERVATION'
   | 'ON_INTEGRATION_LINE'
   | 'ON_UPSTREAM';
 
@@ -846,6 +852,13 @@ export interface TaskIntegrationView<Instant = string> {
    * bound. Absent from an older server.
    */
   mainBranch?: string | null;
+  /**
+   * With `AWAITING_OBSERVATION`: the commit the task's work was delivered as (`task.delivered_sha`,
+   * §10.4), which the observation waits to see on the line. Null while the identity is not frozen
+   * (the work is still moving, or it could not be named). Absent in every other state and from an
+   * older server.
+   */
+  deliveredSha?: string | null;
 }
 
 /**

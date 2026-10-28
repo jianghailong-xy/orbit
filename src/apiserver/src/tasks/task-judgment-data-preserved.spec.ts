@@ -2560,7 +2560,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // binding, which reads PLATFORM. No function, trigger or type is created, replaced or dropped, so it is not
       // another writer of the DONE fence and names none of the six preserved objects; `session`, `project` and every
       // `project_acceptance_*` object are named nowhere. No INSERT, UPDATE or DELETE.
-      '0453_landing_observation_delivery_mode'],
+      '0453_landing_observation_delivery_mode',
+      // Who pressed Merge, kept with the operation it queued (0454, §10.6 O-R3): one nullable TEXT column on
+      // `session` (`merge_requested_by`), added with IF NOT EXISTS, no default and no constraint — catalog-only.
+      // Only `session` is altered, which is not a preserved relation: no `task`, `project` or `project_acceptance_*`
+      // object nor any of the six preserved triggers/functions is named, and no function, trigger, type, index or
+      // constraint is created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE
+      // or DELETE: every stored session reads NULL.
+      '0454_session_merge_requested_by'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

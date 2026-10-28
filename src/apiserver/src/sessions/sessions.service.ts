@@ -355,6 +355,13 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
  */
 export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: string | null };
 
+/**
+ * Who pressed Merge (§10.6 O-R3): `USER` for a request that carried the account owner's credential and
+ * no acting session, `AGENT` for one made from a session. Kept with the operation (0454) and copied
+ * into the receipt its result writes, where O-R3 reads it.
+ */
+export type MergeRequester = 'USER' | 'AGENT';
+
 type TurnPlacement = SessionTurnPlacement;
 
 /** A waiting turn, with the cards the runner's echo will carry (`TurnCards`, turn-cards.ts): an
@@ -6711,7 +6718,13 @@ export class SessionsService {
     id: string,
     targetBranch?: string,
     waitSeconds?: number,
-    options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
+    options: {
+      rememberTarget?: boolean;
+      recoveryAction?: MergeRecoveryAction;
+      previewId?: string;
+      /** Who pressed (§10.6 O-R3): the owner's credential, or a session. Recorded with the operation. */
+      requestedBy?: MergeRequester;
+    } = {},
   ) {
     await this.assertEngineSession(ownerId, id);
     if (options.recoveryAction && !['preview', 'apply', 'sync-local', 'confirm-landed'].includes(options.recoveryAction)) {
@@ -6791,7 +6804,7 @@ export class SessionsService {
     ownerId: string,
     id: string,
     target: string | null,
-    options: { recoveryAction?: MergeRecoveryAction; previewId?: string },
+    options: { recoveryAction?: MergeRecoveryAction; previewId?: string; requestedBy?: MergeRequester },
     also: Pick<Prisma.SessionUncheckedUpdateInput, 'mergeRepairTurnEndedAt'> = {},
   ) {
     // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
@@ -6900,6 +6913,9 @@ export class SessionsService {
         mergeRecoveryAction: options.recoveryAction ?? null,
         ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
         mergeRequestedAt: new Date(),
+        // §10.6 O-R3: who pressed, for the receipt the result writes. Null for an operation the server
+        // queued itself (a check after a repair turn), which lands nothing.
+        mergeRequestedBy: options.requestedBy ?? null,
         mergeOperationId: operationId,
         // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
         // operation id it is part of. When the result comes back the server checks the reported

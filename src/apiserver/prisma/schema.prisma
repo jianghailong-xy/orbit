@@ -1931,6 +1931,11 @@ model Session {
   /// turn ends. Null when no check is owed (migration 0431).
   mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
+  /// Who pressed Merge for the operation queued (0454, contract §10.6 O-R3): `USER` for a request carrying
+  /// the account owner's credential, `AGENT` for one made from a session, NULL for one the server queued
+  /// or one queued before the column existed. The merge result copies it into its receipt's
+  /// `detail.requestedBy`.
+  mergeRequestedBy     String?   @map("merge_requested_by")
   // Fresh for every queued attempt. Runner results must echo this UUID, so a
   // delayed result from an attempt cleared by Resume cannot complete a later one.
   mergeOperationId     String?   @map("merge_operation_id") @db.Uuid

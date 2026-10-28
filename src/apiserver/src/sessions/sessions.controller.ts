@@ -729,10 +729,15 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: MergeToMainDto,
+    @Headers('x-orbit-session-id') actingSessionId?: string,
   ) {
     // The owner's own Merge menu: the one door whose explicit pick becomes the workspace default.
-    return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch, dto?.waitSeconds,
-      { rememberTarget: true, recoveryAction: dto?.recoveryAction, previewId: dto?.previewId });
+    // Who pressed is recorded with the operation (§10.6 O-R3): the owner's credential with no acting
+    // session is the owner; a request made from a session is not, whatever credential it carries.
+    return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch, dto?.waitSeconds, {
+      rememberTarget: true, recoveryAction: dto?.recoveryAction, previewId: dto?.previewId,
+      requestedBy: actingSessionId?.trim() ? 'AGENT' : 'USER',
+    });
   }
 
   /**

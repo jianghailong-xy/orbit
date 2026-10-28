@@ -25,6 +25,7 @@ import {
   type OpenItemHandlingStart,
 } from './project-open-item';
 import { checkpointLandingGate, latestAcceptedCheckpoint } from './task-checkpoint.service';
+import { queueLandingObservationIfPending } from './landing-observation';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
@@ -136,16 +137,40 @@ export function isTerminalJobState(state: string): boolean {
 }
 
 /**
- * What a runner may report through the job doors: the closed sets above less the two values only an
- * OBSERVE_LANDING job reports, its OBSERVE step and its OBSERVED result (§10.6). No runner is handed
- * an observation yet, so the doors refuse both exactly as they did before 0453 put them in the sets.
- * Accepted on a landing or a promotion, an OBSERVED would be written down as a job that ended without
- * a word about its work.
+ * What a runner may report through the job doors: the whole closed sets, now that an OBSERVE_LANDING
+ * job is handed out (§10.6). Which of them fits a job is the job's kind, decided where the row is read:
+ * OBSERVED and the OBSERVE step are an observation's alone (`observationRefusal`), and an observation
+ * ends only OBSERVED, ERROR or CANCELLED — accepted on a landing or a promotion, an OBSERVED would be
+ * written down as a job that ended without a word about its work.
  */
-export const REPORTABLE_JOB_STATES: readonly IntegrationJobState[] =
-  INTEGRATION_JOB_STATES.filter((state) => state !== 'OBSERVED');
-export const REPORTABLE_JOB_PHASES: readonly IntegrationJobPhase[] =
-  INTEGRATION_JOB_PHASES.filter((phase) => phase !== 'OBSERVE');
+export const REPORTABLE_JOB_STATES: readonly IntegrationJobState[] = INTEGRATION_JOB_STATES;
+export const REPORTABLE_JOB_PHASES: readonly IntegrationJobPhase[] = INTEGRATION_JOB_PHASES;
+
+/** The states an OBSERVE_LANDING ends in (§10.6 O-J3, O-J4), and the steps it reports. */
+const OBSERVATION_RESULT_STATES: ReadonlySet<string> = new Set(['OBSERVED', 'ERROR', 'CANCELLED']);
+const OBSERVATION_PHASES: ReadonlySet<string> = new Set(['FETCH', 'OBSERVE']);
+
+/**
+ * Why a reported state or step does not fit this job's kind, or null when it does: OBSERVED and
+ * OBSERVE belong to an observation alone, and an observation reports nothing a landing does — it
+ * merges, checks and pushes nothing (§10.6).
+ */
+export function observationRefusal(kind: string, report: { state?: string; phase?: string | null }): string | null {
+  const observes = kind === 'OBSERVE_LANDING';
+  if (report.state !== undefined) {
+    if (observes && !OBSERVATION_RESULT_STATES.has(report.state)) {
+      return `${report.state} is not a result of an OBSERVE_LANDING job`;
+    }
+    if (!observes && report.state === 'OBSERVED') return `OBSERVED is not a result of a ${kind} job`;
+  }
+  if (report.phase != null) {
+    if (observes && !OBSERVATION_PHASES.has(report.phase)) {
+      return `an OBSERVE_LANDING job has no ${report.phase} step`;
+    }
+    if (!observes && report.phase === 'OBSERVE') return `a ${kind} job has no OBSERVE step`;
+  }
+  return null;
+}
 
 /** The two states a receipt is written for (§2.5 J8). */
 export function jobLanded(state: string): state is 'LANDED' | 'ALREADY_LANDED' {
@@ -338,6 +363,15 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
 
 /**
+ * The capability a runner declares, beside `integration-job/v1`, before it is handed an OBSERVE_LANDING
+ * (§10.6): it knows the command's `observeTasks` and answers OBSERVED. A job no such runner can claim
+ * stays QUEUED, as a landing waits for a runner that takes integration jobs (C-T2). The same capability
+ * says the runner takes a TASK_BRANCH command named by its commit (O-L5). Its runner twin is
+ * `integrationObserveCapabilityV1` in `src/runner-go/integrate.go`.
+ */
+export const INTEGRATION_OBSERVE_CLAIM = 'integration-observe/v1';
+
+/**
  * The capability a runner declares when it speaks the periodic progress protocol (§2.2 J-T4): a
  * report inside every 30 seconds, a synchronous `phase = PUSH` report before it pushes, and a stop
  * read off every answer. A claim made by a runner that declared it records `progress_protocol = 'v2'`;
@@ -391,7 +425,8 @@ export const MAX_CHECK_OUTPUT_TAIL = 16 * 1_024;
  * J1's serial key: the repository and the ref being written, so that two PROJECTS landing into the
  * same branch of the same repository are serialised against each other and not merely two tasks of
  * one project. A promotion's own check runs against no ref and takes a key of its own rather than
- * occupying main's slot while it runs.
+ * occupying main's slot while it runs, and so does an observation, which writes no ref at all
+ * (§10.4: `canonical_repo_url || '#observe:' || project_id`).
  */
 export function integrationSerialKey(input: {
   kind: IntegrationJobKind;
@@ -399,6 +434,7 @@ export function integrationSerialKey(input: {
   targetRef: string;
   projectId: string;
 }): string {
+  if (input.kind === 'OBSERVE_LANDING') return `${input.canonicalRepoUrl}#observe:${input.projectId}`;
   return input.kind === 'CHECK_PROMOTION'
     ? `${input.canonicalRepoUrl}#check:${input.projectId}`
     : `${input.canonicalRepoUrl}#${input.targetRef}`;
@@ -563,8 +599,11 @@ export function integrationItemTitle(
   mainBranch: string | null = null,
 ): string {
   // A promotion's failure is not about one task — it is about the branch the owner was going to be
-  // asked to merge — so it is named after that rather than after whichever task landed last.
-  const subject = kind === 'LAND_TASK' ? taskTitle : `merging the project branch into ${mainBranch ?? 'main'}`;
+  // asked to merge — so it is named after that rather than after whichever task landed last. An
+  // observation's is about the line it could not look at (§10.6 O-J4).
+  const subject = kind === 'LAND_TASK' ? taskTitle
+    : kind === 'OBSERVE_LANDING' ? `looking for finished work on ${mainBranch ?? 'main'}`
+      : `merging the project branch into ${mainBranch ?? 'main'}`;
   switch (state) {
     case 'CONFLICT': return `Merge conflict: ${subject}`;
     case 'CHECK_FAILED': return `Checks failed on the combined tree: ${subject}`;
@@ -883,8 +922,9 @@ export function timedOutErrorCode(job: {
   progressProtocol: string | null;
   pushReportedGeneration: bigint | null;
 }): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
-  // A check answers READY before the push step exists for it, so nothing about it can have pushed.
-  if (job.kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
+  // A check answers READY before the push step exists for it, so nothing about it can have pushed;
+  // an observation only reads (§10.6), so neither can it.
+  if (job.kind === 'CHECK_PROMOTION' || job.kind === 'OBSERVE_LANDING') return 'RUNNER_LOST';
   // LAND_TASK / LAND_PROMOTION: only a v2 claim that never recorded a PUSH can prove the negative.
   if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL && job.pushReportedGeneration == null) {
     return 'RUNNER_LOST';
@@ -1308,15 +1348,25 @@ export async function settleDeliveredIdentityAfterFinish(
 }
 
 /**
- * O-T1's call point (§10.6): a code task's delivered identity stands frozen, in the transaction that
- * froze it — the DONE's, or the one that ended the work the DONE waited for (O-L4 3). Queuing the
- * observation of an AGENT_PUSH project lands with OBSERVE_LANDING itself; until then this writes
- * nothing.
+ * O-T1 (§10.6): a code task's delivered identity stands frozen, in the transaction that froze it —
+ * the DONE's, or the one that ended the work the DONE waited for (O-L4 3). An AGENT_PUSH project's
+ * work reaches its line by the agent's own push, which nothing of the platform's carries, so the
+ * observation is queued here (or folded into the one already queued); a PLATFORM project's DONE has
+ * its own route and waits for O-T2 or O-T3 to be looked at.
  */
 async function deliveredIdentityFrozen(
-  _tx: Prisma.TransactionClient,
-  _frozen: { ownerId: string; projectId: string; taskId: string },
-): Promise<void> {}
+  tx: Prisma.TransactionClient,
+  frozen: { ownerId: string; projectId: string; taskId: string },
+): Promise<void> {
+  const binding = await tx.projectCodebase.findFirst({
+    where: { projectId: frozen.projectId, slot: 'primary' },
+    select: { deliveryMode: true },
+  });
+  if (binding?.deliveryMode !== 'AGENT_PUSH') return;
+  await queueLandingObservationIfPending(tx, {
+    ownerId: frozen.ownerId, projectId: frozen.projectId, trigger: 'IDENTITY_FROZEN',
+  });
+}
 
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 

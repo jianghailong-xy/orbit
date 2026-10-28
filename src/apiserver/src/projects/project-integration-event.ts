@@ -190,6 +190,8 @@ export function enqueuedText(input: {
     if (input.automatic) return `Merging into ${target} on its own — Automatic is on`;
     return input.cause === 'RETRY' ? `Queued to merge into ${target} again` : `Queued to merge into ${target}`;
   }
+  // §10.6: an observation lands nothing; it looks for finished work on the line.
+  if (input.kind === 'OBSERVE_LANDING') return `Queued to look for finished work on ${target}`;
   switch (input.cause) {
     case 'RETRY':
       return `Queued again to land on ${target}`;
@@ -220,6 +222,7 @@ export function stepText(input: {
     case 'CHECK': return 'Running the checks';
     case 'VERIFY': return 'Verifying the merged tree';
     case 'PUSH': return `Reported starting the push to ${target}`;
+    case 'OBSERVE': return `Looking for finished work on ${target}`;
     default: return `Working · ${branchNameOf(input.sourceRef)}`;
   }
 }
@@ -334,6 +337,8 @@ export function resultText(input: {
       return 'Stopped · not landed';
     case 'SUPERSEDED':
       return 'Superseded · a newer attempt asks the same question';
+    case 'OBSERVED':
+      return `Looked at ${target} · ${shortShaOf(input.targetShaBefore)}`;
     default:
       return `Ended · ${state}`;
   }

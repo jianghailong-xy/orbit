@@ -104,6 +104,11 @@ interface TaskIntegrationRow {
   landedAt: Date | null;
   /** The project's main branch by name, which ON_UPSTREAM is on; null with no repository bound. */
   mainBranch: string | null;
+  /** How the project's finished work reaches the upstream (§10.4); null with no repository bound. */
+  deliveryMode?: string | null;
+  /** The task's frozen delivered identity (§10.4, O-L4): the commit, and when it was frozen. */
+  deliveredSha?: string | null;
+  deliveredAt?: Date | null;
 }
 
 const NOT_APPLICABLE: TaskIntegrationView<Date> = {
@@ -299,7 +304,16 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   }
   // Nothing to land, or nowhere to land it: both are "this row has no integration", and neither is
   // a state the platform is going to move out of on its own.
-  if (!row.isCode || !row.lineStarted) return none;
+  if (!row.isCode) return none;
+  // §10.9: an AGENT_PUSH project's agent pushes its own work, so a DONE task's next fact is the
+  // observation that sees it on the line, not a job of the platform's — it waits to be seen, on the
+  // commit its identity names (null while that is not frozen).
+  if (row.deliveryMode === 'AGENT_PUSH' && row.taskStatus === 'DONE') {
+    return {
+      ...none, state: 'AWAITING_OBSERVATION', since: row.deliveredAt ?? null, deliveredSha: row.deliveredSha ?? null,
+    };
+  }
+  if (!row.lineStarted) return none;
 
   const itemState = row.itemKind ? stateForItem(row.itemKind) : null;
   // A retry leaves the old failure OPEN until it succeeds or fails again. Its explicit handling
@@ -359,7 +373,8 @@ export async function readTaskIntegrationViews(
       SELECT t."id" AS "taskId", t."status"::text AS "taskStatus",
              (${landing})::text AS "landing",
              (${isCode}) AS "isCode",
-             (${lineStarted}) AS "lineStarted"
+             (${lineStarted}) AS "lineStarted",
+             t."delivered_sha" AS "deliveredSha", t."delivered_at" AS "deliveredAt"
         FROM "task" t
        WHERE t."id" IN (${ids})
          AND t."owner_id" = ${ownerId}::uuid
@@ -402,6 +417,7 @@ export async function readTaskIntegrationViews(
        GROUP BY r."task_id"
     )
     SELECT scoped."taskId", scoped."taskStatus", scoped."landing", scoped."isCode", scoped."lineStarted",
+           scoped."deliveredSha", scoped."deliveredAt",
            newest_job."id" AS "jobId", newest_job."state" AS "jobState",
            newest_job."phase" AS "jobPhase", newest_job."generation" AS "jobGeneration",
            newest_job."target_ref" AS "jobTargetRef",
@@ -455,7 +471,9 @@ export async function readTaskIntegrationViews(
            landed_at."at" AS "landedAt",
            -- The project's main branch by name, the same for every row: read once, as an InitPlan.
            (SELECT ${mainBranch} FROM "project_codebase" pc
-             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch"
+             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch",
+           (SELECT pc."delivery_mode" FROM "project_codebase" pc
+             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "deliveryMode"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
       LEFT JOIN "project_landing" landing ON landing."id" = newest_job."landing_id"

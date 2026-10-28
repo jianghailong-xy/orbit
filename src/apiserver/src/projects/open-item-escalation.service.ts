@@ -114,6 +114,9 @@ function leaseExpiredClaims(): Prisma.Sql {
         LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
         LEFT JOIN "runner" r ON r."id" = j."runner_id"
        WHERE j."state" = 'RUNNING'
+         -- §10.6: not an observation's claim. It only reads, and its silence is ended by the next
+         -- observation's trigger (J-T9) rather than put in front of the owner.
+         AND j."kind" <> 'OBSERVE_LANDING'
          AND COALESCE(j."heartbeat_at", j."claimed_at") IS NOT NULL
          -- One item per claim, ever (§4.2): a claim that reported and went silent again is the same
          -- silence the owner was already told about, so an item already ended under this key is

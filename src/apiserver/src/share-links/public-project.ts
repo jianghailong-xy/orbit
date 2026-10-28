@@ -418,6 +418,7 @@ function publicTaskLanding(state: TaskIntegrationState): PublicTaskLanding {
     case 'CHECK_FAILED':
     case 'ERROR':
     case 'AWAITING_OWNER':
+    case 'AWAITING_OBSERVATION':
       return 'INTEGRATING';
     default:
       return null;

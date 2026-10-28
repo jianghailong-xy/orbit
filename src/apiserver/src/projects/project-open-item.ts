@@ -2461,6 +2461,39 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
   );
 }
 
+/**
+ * §10.6 O-J4: the project's observation failed three times in a row. It names only the doors the
+ * item's cell holds (`openItemDoorMessageNames`) — none until the observation door that ends it is one
+ * (`integration_observe`, §10.8) — and says what closes it without anybody: the next observation that
+ * succeeds.
+ */
+function observationFailureMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: IntegrationItemPayload & { failures?: unknown },
+  notice: string,
+  doorNames: ReturnType<typeof openItemDoorMessageNames>,
+): string {
+  const failures = typeof payload.failures === 'number' ? payload.failures : null;
+  const fix = doorNames.taskCreateMcp == null ? null
+    : `If the repository needs work before it can be fetched, file it with ${doorNames.taskCreateMcp}.`;
+  const ask = doorNames.askOwnerMcp == null ? null
+    : `If only the account owner can give a runner access, ask with ${doorNames.askOwnerMcp}; the item stays with you.`;
+  const close = doorNames.resolveMcp == null ? null
+    : `Once you have dealt with it some other way, close it with ${doorNames.resolveMcp}, giving your reason.`;
+  return `From Orbit · exception item: ${item.title}\n\n`
+    + `The observation that looks for project ${projectId}'s finished work on its integration line `
+    + `${failures == null ? 'keeps failing' : `has failed ${failures} times in a row`}:\n`
+    + `${integrationItemFacts(item.kind, payload).join('\n')}\n\n`
+    + 'Until one succeeds, work an agent pushed to the line itself is not recorded as landed, and the tasks that '
+    + 'depend on it wait. This item is yours. Usually the cause is access: no runner that declares '
+    + 'integration-observe/v1 has a checkout of this repository it can fetch from. The platform looks again at the '
+    + 'next fact that may have moved the line — a work session’s turn, a recorded receipt — and closes this item '
+    + 'by itself when an observation succeeds.\n'
+    + [fix, ask, close].filter((line): line is string => line !== null).join('\n')
+    + `\n\n${notice}`;
+}
+
 function openItemBody(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
   const payload = (item.payload ?? {}) as {
@@ -2488,6 +2521,9 @@ function openItemBody(item: OpenItemMessageSource): string {
   // anything and no job will ever report a landing for it again.
   const handClose = 'Where the platform cannot close it by itself — the work is already on the target branch some other way, or you have dealt with it separately — '
     + `close it with ${doorNames.resolveMcp}, giving your reason: it is marked handled (HANDLED), and your session and reason stay on the item.`;
+  if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind) && payload.jobKind === 'OBSERVE_LANDING') {
+    return observationFailureMessage(item, projectId, payload, notice, doorNames);
+  }
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     // §4.7 H1–H3, said once for both scopes: a rerun does not close this item, its result does.

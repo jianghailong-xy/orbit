@@ -2811,6 +2811,34 @@ export interface IntegrationJobCommand {
    *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
    *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
   reportBeforePush?: true;
+  /** OBSERVE_LANDING only (§10.6 O-J2): the tasks the claim found waiting to be observed, each with
+   *  the commit its work was delivered as and the commit that work forked from. Sent only to a runner
+   *  that declared `integration-observe/v1`; absent on every other kind. */
+  observeTasks?: IntegrationObserveTask[];
+}
+
+/** One task an OBSERVE_LANDING looks for (§10.6 O-S2): its frozen delivered identity (O-L4). */
+export interface IntegrationObserveTask {
+  taskId: string;
+  deliveredSha: string;
+  /** Null when no fork point was recorded. */
+  baseSha: string | null;
+}
+
+/** What an OBSERVE_LANDING saw of one task (§10.4, §10.6 O-S2), in the command's order. */
+export interface IntegrationObservation {
+  taskId: string;
+  deliveredSha: string;
+  baseSha: string | null;
+  /** `delivered_sha` is an ancestor of the upstream tip the job fetched. */
+  onUpstream: boolean;
+  /** The same of the integration line's tip; null on a MAIN line, where the line is the upstream. */
+  onIntegrationLine: boolean | null;
+  /** `delivered_sha` equals its fork point: the branch carried no commit of its own. */
+  empty: boolean;
+  /** `git cherry` found every change of base..delivered in the upstream; null when the runner did not
+   *  have those commits. */
+  fullyApplied: boolean | null;
 }
 
 /** One earlier landing the control plane could not read the push outcome of, as a command names it
@@ -2968,6 +2996,9 @@ export interface IntegrationJobResultRequest {
   /** What this job's fetch found about the earlier unknown pushes its command named (J12): only the
    *  entries git could answer for. */
   unknownPushes?: IntegrationUnknownPushCheck[];
+  /** With OBSERVED, and only there (§10.6 O-S3): one observation per task the command named. The two
+   *  tips it observed are `upstreamSha` (U) and `targetShaBefore` (T). */
+  observations?: IntegrationObservation[];
 }
 
 /** The commits that moved the upstream under a landing, as the runner measured them on the

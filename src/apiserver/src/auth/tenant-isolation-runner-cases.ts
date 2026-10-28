@@ -1166,6 +1166,11 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'which turn the polling process says it is running, read on a runner link call only: compared, for inequality, '
     + 'with the turns of the path\'s session, already locked as this runner\'s, so another account\'s turn under that '
     + 'id is neither read nor written (runner-api.controller.ts:4270)',
+  'POST /runner/integration-jobs/:jobId/result body observations[].taskId':
+    'a task the control plane itself listed in this claim\'s OBSERVE_LANDING command (§10.6 O-J2), read again only '
+    + 'among the claiming job\'s own project\'s tasks of the job\'s owner, and answered for only while it still waits '
+    + 'with the commit named: another account\'s task under that id is not found, and nothing of it is read or '
+    + 'written (landing-observation-result.ts:155)',
   'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
