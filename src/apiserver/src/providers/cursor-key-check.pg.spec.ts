@@ -172,8 +172,8 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(wakes(at), count, 'the runner was not woken to heartbeat now');
   }
   /** The runner's answer about a check it was handed (POST /runner/cursor-key-check-result). */
-  const answer = (at: Machine, check: { checkId: string; apiKey: string }, state: string, about = check.apiKey) =>
-    answered(runnerProviders.cursorKeyCheckResult(at as never, { checkId: check.checkId, state, keyFingerprint: fingerprint(about) }));
+  const answer = async (at: Machine, check: { checkId: string; apiKey: string }, state: string, about = check.apiKey) =>
+    answered(await runnerProviders.cursorKeyCheckResult(at as never, { checkId: check.checkId, state, keyFingerprint: fingerprint(about) }));
   /** Connects `apiKey` as `ownerId` (POST /providers/test). */
   const connect = async (ownerId: string, apiKey: string) =>
     answered(await providers.testConnection({ baseUrl: CURSOR_API, apiKey, runtime: 'cursor' }, ownerId)) as CursorKeyCheckAnswer;
@@ -194,7 +194,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
       const { cursorKeyChecks } = await beat(at);
       assert.equal(cursorKeyChecks?.length, 1, 'the runner was not handed the key');
       assert.equal(cursorKeyChecks![0].apiKey, typed);
-      assert.deepEqual(answer(at, cursorKeyChecks![0], said), { accepted: true });
+      assert.deepEqual(await answer(at, cursorKeyChecks![0], said), { accepted: true });
       const result = await pending;
       assert.deepEqual({ ok: result.ok, keyCheck: result.keyCheck }, { ok: said === 'VALID', keyCheck: said });
       assert.ok(result.message.length > 0);
@@ -292,7 +292,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     await woken(at, 1);
     let checks = (await beat(at)).cursorKeyChecks!;
     assert.equal(checks[0].apiKey, first);
-    answer(at, checks[0], 'INVALID');
+    await answer(at, checks[0], 'INVALID');
     const refused = await pending;
     assert.deepEqual({ keyCheck: refused.keyCheck, recorded: refused.recorded, state: refused.keyCheckState }, { keyCheck: 'INVALID', recorded: true, state: 'INVALID' });
     assert.ok(refused.keyCheckedAt && Date.now() - Date.parse(refused.keyCheckedAt) < 60_000);
@@ -308,7 +308,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     assert.equal(checks[0].apiKey, first);
     const second = key();
     answered(await providers.update(owner, saved.id, { apiKey: second } as never));
-    assert.equal(answer(at, checks[0], 'VALID').accepted, true);
+    assert.equal((await answer(at, checks[0], 'VALID')).accepted, true);
     const stale = await pending;
     assert.deepEqual(
       { keyCheck: stale.keyCheck, recorded: stale.recorded, state: stale.keyCheckState, at: stale.keyCheckedAt },
@@ -321,7 +321,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     await woken(at, 3);
     checks = (await beat(at)).cursorKeyChecks!;
     assert.equal(checks[0].apiKey, second, 'the runner was handed the old key');
-    answer(at, checks[0], 'VALID');
+    await answer(at, checks[0], 'VALID');
     assert.deepEqual((({ keyCheck, recorded, keyCheckState }) => ({ keyCheck, recorded, keyCheckState }))(await pending),
       { keyCheck: 'VALID', recorded: true, keyCheckState: 'VALID' });
 
@@ -363,7 +363,7 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     // Checked, then given a new key through the update door — which is unchecked again.
     const pending = providers.recheckCursorKey(owner, String(created.id));
     await woken(at, 1);
-    answer(at, (await beat(at)).cursorKeyChecks![0], 'VALID');
+    await answer(at, (await beat(at)).cursorKeyChecks![0], 'VALID');
     assert.equal((await pending).keyCheckState, 'VALID');
     const second = key();
     const update = { runtime: 'cursor', apiKey: second };

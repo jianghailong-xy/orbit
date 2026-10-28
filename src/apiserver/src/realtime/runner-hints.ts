@@ -6,6 +6,7 @@ import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readRunnerLink } from '../runner-api/runner-link-token';
 import { normalizeToolOutputEvent } from '../runner-api/tool-output';
+import { relayPeers, type RelayPeers } from '../runners/relay-peers';
 
 /**
  * Hints for the runner link (docs/runner-link-design.md §5.5, §6.3). Each of the three wake signals is also
@@ -44,6 +45,10 @@ import { normalizeToolOutputEvent } from '../runner-api/tool-output';
  *   - turn prefixes: a stream that opens asks the session's runner what its current turn has streamed so far
  *     (`turnPrefix`), a NATS request on the runner's subject that the gateway relays to the runner and answers with what
  *     the runner says. That replaces the single-replica buffer (RealtimeService.turnPrefix) for a runner on the link.
+ *
+ * The apiserver processes reach each other on the same connection (runners/relay-peers.ts): what a heartbeat hands a
+ * runner from one process's memory, Antigravity's pasted code and a Cursor key to check, is asked of the process that
+ * holds it by the one the runner's heartbeat reached, on api.<instance>, the instance named here (instanceId).
  *
  * On only while the runner link is configured (the three RUNNER_LINK_* settings, runner-link-token.ts) and
  * RUNNER_LINK_NATS_URL names a server. A deployment without the link opens no connection, looks nothing up and changes
@@ -178,8 +183,9 @@ export interface HintBus {
   /** Whether a publish now reaches the server. */
   readonly up: boolean;
   publish(subject: string, message: string, headers?: Record<string, string>): void;
-  /** Subscribes to subject, now or once connected, and again after every new connection; the result unsubscribes. */
-  subscribe(subject: string, onMessage: (data: Uint8Array) => void): () => void;
+  /** Subscribes to subject, now or once connected, and again after every new connection; the result unsubscribes.
+   *  `reply`, when the message is a request, answers it once. */
+  subscribe(subject: string, onMessage: (data: Uint8Array, reply?: (message: string) => void) => void): () => void;
   /** One request: the answer, or null when none came within timeoutMs, nobody was there to answer, or it failed. */
   request(subject: string, message: string, timeoutMs: number): Promise<Uint8Array | null>;
   close(): Promise<void>;
@@ -216,7 +222,8 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
   /**
    * `url` null leaves hints off. `openBus` is NATS outside the specs. `linkConfigured` is whether the runner link is
    * configured at all, which it can be without a NATS server to hint over: link heartbeats then still answer from
-   * runner_presence, and RealtimeService.markRunnerChanged still marks what changed for them.
+   * runner_presence, and RealtimeService.markRunnerChanged still marks what changed for them. `peers`, connected
+   * over the same NATS while hints are on, is how this process's relays reach the other apiserver processes'.
    */
   constructor(
     private readonly prisma: Pick<PrismaService, 'session'>,
@@ -224,6 +231,7 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
     private readonly openBus: (url: string, log: Logger) => HintBus = (url, log) => new NatsHintBus(url, log, null),
     private readonly now: () => number = Date.now,
     readonly linkConfigured: boolean = url !== null,
+    private readonly peers?: RelayPeers,
   ) {}
 
   /** On when the runner link is configured and RUNNER_LINK_NATS_URL is set. A link without the URL says so once. */
@@ -238,7 +246,14 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
     if (link.config && !url) {
       new Logger('RunnerHints').warn('RUNNER_LINK_NATS_URL is not set: no runner link hints are published, and runners on the link learn of work at their heartbeat');
     }
-    return new RunnerHints(prisma, link.config ? url : null, (u, log) => new NatsHintBus(u, log, seed), undefined, link.config !== null);
+    return new RunnerHints(
+      prisma,
+      link.config ? url : null,
+      (u, log) => new NatsHintBus(u, log, seed),
+      undefined,
+      link.config !== null,
+      relayPeers,
+    );
   }
 
   get enabled(): boolean {
@@ -248,6 +263,7 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     if (!this.url) return;
     this.bus = this.openBus(this.url, this.log);
+    this.peers?.connect(this.bus, this.instanceId, (runnerId) => this.commands(runnerId));
     this.dropReport = setInterval(() => this.reportDrops(), DROP_REPORT_MS);
     this.dropReport.unref?.();
     this.watchersRefresh = setInterval(() => this.refreshWatchers(), WATCHERS_REFRESH_MS);
@@ -259,6 +275,7 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
     if (this.dropReport) clearInterval(this.dropReport);
     if (this.watchersRefresh) clearInterval(this.watchersRefresh);
     this.reportDrops();
+    this.peers?.disconnect();
     await this.bus?.close();
     this.bus = null;
   }
@@ -468,6 +485,13 @@ function redactUrl(url: string): string {
 /** How long to wait before dialing again after a connection could not be made. */
 const REDIAL_MS = 5_000;
 
+/** One subscription NatsHintBus keeps, and makes again on every new connection. */
+interface SubEntry {
+  subject: string;
+  onMessage: (data: Uint8Array, reply?: (message: string) => void) => void;
+  sub?: Subscription;
+}
+
 /**
  * The NATS connection, kept up for as long as the process runs. Once connected, the client reconnects by itself and
  * `up` follows its status; a first connection that fails is dialed again every REDIAL_MS, logged once until it
@@ -480,7 +504,7 @@ class NatsHintBus implements HintBus {
   private redial?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private failing = false;
-  private readonly subs = new Map<number, { subject: string; onMessage: (data: Uint8Array) => void; sub?: Subscription }>();
+  private readonly subs = new Map<number, SubEntry>();
   private nextSub = 0;
 
   constructor(
@@ -505,9 +529,9 @@ class NatsHintBus implements HintBus {
     this.nc.publish(subject, message, { headers: h });
   }
 
-  subscribe(subject: string, onMessage: (data: Uint8Array) => void): () => void {
+  subscribe(subject: string, onMessage: SubEntry['onMessage']): () => void {
     const id = this.nextSub++;
-    const entry: { subject: string; onMessage: (data: Uint8Array) => void; sub?: Subscription } = { subject, onMessage };
+    const entry: SubEntry = { subject, onMessage };
     this.subs.set(id, entry);
     if (this.nc) this.attach(this.nc, entry);
     return () => {
@@ -537,11 +561,11 @@ class NatsHintBus implements HintBus {
     await nc?.close().catch(() => undefined);
   }
 
-  private attach(nc: NatsConnection, entry: { subject: string; onMessage: (data: Uint8Array) => void; sub?: Subscription }): void {
+  private attach(nc: NatsConnection, entry: SubEntry): void {
     try {
       entry.sub = nc.subscribe(entry.subject, {
         callback: (error, msg) => {
-          if (!error) entry.onMessage(msg.data);
+          if (!error) entry.onMessage(msg.data, msg.reply ? (message) => void msg.respond(message) : undefined);
         },
       });
     } catch (error) {

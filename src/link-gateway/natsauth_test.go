@@ -13,7 +13,9 @@ import (
 
 // TestNATSAuthorizationOnARealServer holds a real nats-server running nats.conf to what it allows: a client without a
 // seed cannot connect at all, so it can neither read a session's live stream nor publish a runner's hints, and each of
-// the two users can do what it does and nothing of the other's. It needs the server and both seeds:
+// the two users can do what it does and nothing of the other's. Two apiserver processes ask and answer each other on
+// api.> (src/apiserver/src/runners/relay-peers.ts), and the gateway can neither read that nor an apiserver's inbox, where
+// an Antigravity code or a Cursor key crosses in a reply. It needs the server and both seeds:
 //
 //	scripts/runner-link/nats-auth-check.sh    # a throwaway nats-server with this nats.conf and fresh keys
 //
@@ -106,6 +108,51 @@ func TestNATSAuthorizationOnARealServer(t *testing.T) {
 	case m := <-hints:
 		t.Fatalf("a hint the gateway may not publish arrived: %s", m.Data)
 	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Two apiserver processes: one says what it holds on api.held and answers a request on its own subject, once; the
+	// other hears it and asks.
+	const instance = "0190a0b0-0000-7000-8000-0000000000f1"
+	holder, err := connectAs(url, "apiserver holder", apiSeed)
+	if err != nil {
+		t.Fatalf("a second apiserver connection: %v", err)
+	}
+	defer holder.client.Close()
+	held, _ := api.client.SubscribeSync("api.held")
+	if _, err := holder.client.Subscribe("api."+instance, func(m *nats.Msg) {
+		_ = m.Respond([]byte(`{"code":"relay-auth-check"}`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	flush(t, holder, api)
+	if err := holder.client.Publish("api.held", []byte(`{"instance":"`+instance+`","kind":"login-code"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := held.NextMsg(5 * time.Second); err != nil {
+		t.Fatalf("one apiserver did not hear what another holds: %v", err)
+	}
+	if reply, err := api.client.Request("api."+instance, []byte(`{"type":"take-login-code"}`), 5*time.Second); err != nil {
+		t.Fatalf("an apiserver's answer to another did not arrive: %v (holder errors %v, asker errors %v)", err, holder.errs, api.errs)
+	} else if string(reply.Data) != `{"code":"relay-auth-check"}` {
+		t.Fatalf("the answer was %q", reply.Data)
+	}
+
+	// The gateway reads none of it: not what the apiservers say or ask on api.>, not the answers in their inboxes, and
+	// it cannot ask them.
+	gateway.denied(t, "subscription", "api.>", func() error {
+		_, err := gateway.client.SubscribeSync("api.>")
+		return err
+	})
+	gateway.denied(t, "subscription", "_INBOX.>", func() error {
+		_, err := gateway.client.SubscribeSync("_INBOX.>")
+		return err
+	})
+	gateway.denied(t, "publish", "api."+instance, func() error {
+		return gateway.client.Publish("api."+instance, []byte(`{"type":"take-login-code"}`))
+	})
+	gateway.denied(t, "publish", "api.held", func() error { return gateway.client.Publish("api.held", []byte("forged")) })
+	if m, err := held.NextMsg(300 * time.Millisecond); err == nil {
+		t.Fatalf("something the gateway may not say on api.held arrived: %s", m.Data)
 	}
 }
 
