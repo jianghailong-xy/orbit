@@ -147,10 +147,13 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     file: 'tasks.service.ts',
     method: 'dispatchStalledListForemen',
     statements: ['task.create'],
-    holds: [],
+    holds: ['SELECT pg_try_advisory_xact_lock(hashtextextended(${foremanLock(list.id)}, 0)) AS "turn"`;'],
     note:
       'A bare INSERT with no creator Session and no links: the new row is invisible to everyone ' +
-      'else, which is the same argument as create\'s rank-40 case, so it takes no rank at all.',
+      'else, which is the same argument as create\'s rank-40 case, so it takes no rank of its own. ' +
+      'Ahead of it, the list\'s foreman advisory lock, which nothing else takes and nothing waits ' +
+      'for (a sweep that finds it taken files nothing), so two sweeps on two apiserver processes ' +
+      'file one foreman: no row is locked and no edge into the order is added.',
   },
   {
     file: 'tasks.service.ts',

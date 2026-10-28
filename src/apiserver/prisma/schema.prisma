@@ -938,6 +938,24 @@ model RunnerPresence {
   @@map("runner_presence")
 }
 
+/// An apiserver process of this deployment, as it reports itself (migration 0449). Each process writes its
+/// own row every ten seconds, through the pool its heartbeats are written through, and when a heartbeat it
+/// took fails to be written; the reaper, on whichever process runs it, reads every other process's row
+/// before it takes a runner's silence for its death (runners/runner-presence.ts). Written and read only
+/// there, and purged by the reaper a day after a process was last seen.
+model ApiserverProcess {
+  /// Drawn by the process when it starts; also the key of the advisory lock it holds while it is
+  /// connected (realtime/control-plane-leader.ts).
+  id         String    @id @db.Uuid
+  startedAt  DateTime  @default(now()) @map("started_at")
+  /// When it last wrote its row, at the database's clock.
+  seenAt     DateTime  @default(now()) @map("seen_at")
+  /// When a heartbeat it took last failed to be written, or it last came back from being quiet.
+  beatLostAt DateTime? @map("beat_lost_at")
+
+  @@map("apiserver_process")
+}
+
 // A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that
 // belongs to no session, so it can hold none of the session-bound proofs orchestration uses.
 //
