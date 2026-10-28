@@ -25863,6 +25863,10 @@ button.agent-progress-agent:hover {
   color: var(--warning);
 }
 
+.enroll-fact-ok {
+  color: var(--success);
+}
+
 .enroll-text-button {
   padding: 0;
   border: 0;

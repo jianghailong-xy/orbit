@@ -1084,6 +1084,9 @@ model DeviceEnrollment {
   agents         String[]  @default([])
   // The project directory the minted agents run in (claude's cwd), from the CLI.
   workDir        String?   @map("work_dir")
+  // The address that started it, as visitorAddress reads the client behind the proxies (0455); the
+  // approval page shows it, and whether the page was read from the same one.
+  requesterIp    String?   @map("requester_ip")
   runnerId       String?   @map("runner_id") @db.Uuid // the machine runner minted on approval
   runnerToken    String?   @map("runner_token") // raw runner credential, delivered to the CLI once then cleared
   // The minted agents [{agentKey,agentId,name,workDir}], delivered to the CLI once

@@ -14,7 +14,14 @@
  *   (4) a request decided by one account is 404 to every other — its page, approval and denial;
  *   (5) a runner of the same name already on the account: the page says so and when it was last heard
  *       from, and approving re-issues that runner's credential instead of adding a second runner;
- *   (6) a request past its ten minutes polls expired, and its page, approval and denial are 404.
+ *   (6) a request past its ten minutes polls expired, and its page, approval and denial are 404;
+ *   (7) the page says where the request came from — the person behind a trusted proxy, read from
+ *       X-Forwarded-For past the proxies TRUSTED_PROXIES names, not the proxy, nor what the person wrote
+ *       into the header — and whether the page itself is read from that address;
+ *   (8) X-Forwarded-For from a peer TRUSTED_PROXIES does not name is not read, and an internal address
+ *       (a proxy in front that it does not name) is never called the same network;
+ *   (9) an IPv6 requester, and an IPv4 one a dual-stack socket names as IPv4-mapped IPv6, each kept and
+ *       compared in one spelling.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-device-enrollment.pg.spec.ts
  *
@@ -72,22 +79,29 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
     await db.user.create({ data: { id, email, name, role: 'MEMBER', passwordHash: hashPassword(`${name}-password-1`) } });
     return { id, login: await jwt.signAsync({ sub: id, email }) };
   }
-  server = await startApiserver(url, jwtSecret);
+  // 198.51.100.0/24 and 2001:db8:cf::/48 stand for a CDN's edges in front of the gateway.
+  server = await startApiserver(url, jwtSecret, { TRUSTED_PROXIES: '198.51.100.0/24, 2001:db8:cf::/48' });
 
-  const api = (method: string, path: string, bearer?: string, body?: unknown): Promise<Reply> =>
-    call(server!, method, `/api${path}`, bearer, body);
+  const api = (method: string, path: string, bearer?: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
+    call(server!, method, `/api${path}`, bearer, body, headers);
   const expect = (reply: Reply, status: number, what: string) => {
     assert.equal(reply.status, status, `${what} answered ${reply.status}: ${reply.text}`);
     return reply.json;
   };
-  const start = async (name: string) =>
+  /** `orbit register` from the spec's own connection, or, given `via`, through the proxies those headers name. */
+  const start = async (name: string, via?: Record<string, string>) =>
     expect(
-      await api('POST', '/runner/device/start', undefined, { name, hostname: `${name}-host`, labels: ['gpu'], maxConcurrent: 4, version: '0.1.0' }),
+      await api('POST', '/runner/device/start', undefined, { name, hostname: `${name}-host`, labels: ['gpu'], maxConcurrent: 4, version: '0.1.0' }, via),
       201,
       `starting ${name}`,
     );
   const poll = async (deviceCode: string) => expect(await api('POST', '/runner/device/poll', undefined, { deviceCode }), 200, 'polling');
-  const page = (bearer: string, userCode: string) => api('GET', `/runners/device/${encodeURIComponent(userCode)}`, bearer);
+  const page = (bearer: string, userCode: string, via?: Record<string, string>) =>
+    api('GET', `/runners/device/${encodeURIComponent(userCode)}`, bearer, undefined, via);
+  /** What the gateway sends behind a CDN edge: the edge as X-Real-IP, the chain with the edge appended. */
+  const viaEdge = (edge: string, chain: string) => ({ 'x-real-ip': edge, 'x-forwarded-for': `${chain}, ${edge}` });
+  const requesterIpOf = async (userCode: string) =>
+    (await sql.query('SELECT requester_ip FROM device_enrollment WHERE user_code = $1', [userCode])).rows[0].requester_ip;
   const decide = (bearer: string, userCode: string, decision: 'approve' | 'deny') =>
     api('POST', `/runners/device/${encodeURIComponent(userCode)}/${decision}`, bearer);
   const runnersOf = async (owner: { id: string }) =>
@@ -107,6 +121,10 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
     assert.equal(read.nameConflict, false);
     assert.equal(read.existingLastSeenAt, null);
     assert.equal(read.runnerId, null);
+    // From the spec's own connection, which a dual-stack listener names ::ffff:127.0.0.1: kept as people write
+    // it, and, loopback being internal, not called the same network although the page is read from it too.
+    assert.equal(read.requesterIp, '127.0.0.1');
+    assert.equal(read.sameNetwork, false);
     const expiresIn = new Date(read.expiresAt).getTime() - before;
     assert.ok(expiresIn > 590_000 && expiresIn <= 610_000, `expires ${expiresIn} ms after it started`);
     assert.equal((await poll(started.deviceCode)).status, 'pending');
@@ -192,5 +210,54 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
     expect(await decide(owner.login, started.userCode, 'approve'), 404, 'the approval');
     expect(await decide(owner.login, started.userCode, 'deny'), 404, 'the denial');
     assert.deepEqual(await runnersOf(owner), []);
+  });
+
+  await t.test('(7) the page says where the request came from: the person behind a trusted proxy, and whether the page is read from there', async () => {
+    const owner = await user('from');
+    // The person at 203.0.113.24 wrote 203.0.113.66 into their own X-Forwarded-For; the edge appended them.
+    const started = await start(machine('from'), viaEdge('198.51.100.7', '203.0.113.66, 203.0.113.24'));
+    assert.equal(await requesterIpOf(started.userCode), '203.0.113.24', 'the person, not the edge nor what they wrote');
+
+    const same = expect(await page(owner.login, started.userCode, viaEdge('198.51.100.9', '203.0.113.24')), 200, 'the page from the same address');
+    assert.equal(same.requesterIp, '203.0.113.24');
+    assert.equal(same.sameNetwork, true, 'read from the address that started it, through another edge');
+
+    const elsewhere = expect(await page(owner.login, started.userCode, viaEdge('198.51.100.9', '192.0.2.50')), 200, 'the page from elsewhere');
+    assert.equal(elsewhere.requesterIp, '203.0.113.24');
+    assert.equal(elsewhere.sameNetwork, false);
+    // Claiming the requester's address in a header that no trusted proxy passed on does not make it the same.
+    const claimed = expect(await page(owner.login, started.userCode, { 'x-forwarded-for': '203.0.113.24' }), 200, 'the page claiming it');
+    assert.equal(claimed.sameNetwork, false);
+  });
+
+  await t.test('(8) X-Forwarded-For from a peer TRUSTED_PROXIES does not name is not read, and an internal address is never the same network', async () => {
+    const owner = await user('untrusted');
+    const fromPeer = await start(machine('peer'), { 'x-real-ip': '192.0.2.77', 'x-forwarded-for': '203.0.113.24, 192.0.2.77' });
+    assert.equal(await requesterIpOf(fromPeer.userCode), '192.0.2.77', 'the peer that reached the gateway');
+    const fromSocket = await start(machine('socket'), { 'x-forwarded-for': '203.0.113.24' });
+    assert.equal(await requesterIpOf(fromSocket.userCode), '127.0.0.1', 'the connection itself, its header unread');
+
+    // A TLS proxy on the host that TRUSTED_PROXIES does not name: every request comes from its address.
+    const behindProxy = await start(machine('hostproxy'), { 'x-real-ip': '172.17.0.1', 'x-forwarded-for': '203.0.113.24, 172.17.0.1' });
+    const read = expect(await page(owner.login, behindProxy.userCode, { 'x-real-ip': '172.17.0.1', 'x-forwarded-for': '192.0.2.50, 172.17.0.1' }), 200, 'the page');
+    assert.equal(read.requesterIp, '172.17.0.1');
+    assert.equal(read.sameNetwork, false, 'one proxy address for everyone says nothing about where either came from');
+  });
+
+  await t.test('(9) an IPv6 requester, and an IPv4 one named as IPv4-mapped IPv6, each kept and compared in one spelling', async () => {
+    const owner = await user('ipv6');
+    const v6 = await start(machine('v6'), viaEdge('2001:db8:cf::7', '2001:DB8:ABCD:0:0:0:0:24'));
+    assert.equal(await requesterIpOf(v6.userCode), '2001:db8:abcd::24');
+    const sameV6 = expect(await page(owner.login, v6.userCode, viaEdge('198.51.100.7', '2001:db8:abcd::24')), 200, 'the page from the same IPv6 address');
+    assert.equal(sameV6.requesterIp, '2001:db8:abcd::24');
+    assert.equal(sameV6.sameNetwork, true);
+    const otherV6 = expect(await page(owner.login, v6.userCode, viaEdge('2001:db8:cf::7', '2001:db8:abcd::25')), 200, 'the page from its neighbour');
+    assert.equal(otherV6.sameNetwork, false);
+
+    const mapped = await start(machine('mapped'), { 'x-real-ip': '::ffff:203.0.113.9' });
+    assert.equal(await requesterIpOf(mapped.userCode), '203.0.113.9', 'no ::ffff: prefix');
+    const sameV4 = expect(await page(owner.login, mapped.userCode, { 'x-real-ip': '203.0.113.9' }), 200, 'the page from the same IPv4 address');
+    assert.equal(sameV4.requesterIp, '203.0.113.9');
+    assert.equal(sameV4.sameNetwork, true);
   });
 });

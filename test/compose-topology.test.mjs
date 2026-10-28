@@ -79,6 +79,12 @@
 // gateway reaches every apiserver by it, and only where a deployment mounts gateway/several-apiservers/: the gateway's
 // definition is unchanged, and gateway/nginx.conf does not name it. No service, port, mount or environment is added, and
 // a deployment with one apiserver routes exactly as before. The block below pins its three lines.
+//
+// On 2026-10-28 the register approval page's "From" row (task 34nFH8xZ0PJ8LuC5yiCpk; the account owner chose an opt-in
+// .env setting in that task's session, recorded in its comment 34npARzKj2DjmhFRbEmfy) added one line to the apiserver's
+// environment: TRUSTED_PROXIES, the proxies in front of the gateway that a visitor's address is read through, empty
+// unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
+// every visitor's address exactly as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -302,9 +308,14 @@ function directivesNotInBaseline(block, baselineBlock) {
 // The exception is an approved block of the apiserver's. It is listed here as directives — comments
 // explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
+  // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
+  // Listed first because the line comes right after PUBLIC_ORIGIN's, before the runner link's.
+  [
+    '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
+  ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
-  // Listed first because the lines come before the managed runners' in the file.
+  // Listed before the managed runners' because the lines come before theirs in the file.
   [
     '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
     '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',

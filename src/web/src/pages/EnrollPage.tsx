@@ -64,7 +64,8 @@ function EnrollShell({ mark, children }: { mark: Mark; children: ReactNode }) {
 
 /**
  * The identity being approved and where it goes: the machine (its hostname only when `--name` chose
- * another name, its labels only when it has some), the account it joins, and how long is left.
+ * another name, its labels only when it has some), where the request came from, the account it
+ * joins, and how long is left.
  */
 export function EnrollmentDetails({
   info,
@@ -96,6 +97,15 @@ export function EnrollmentDetails({
             {info.labels.map((l) => (
               <Badge key={l}>{l}</Badge>
             ))}
+          </dd>
+        </div>
+      )}
+      {info.requesterIp && (
+        <div>
+          <dt>From</dt>
+          <dd>
+            {info.requesterIp}
+            {info.sameNetwork && <span className="enroll-fact-ok"> · same network as this browser</span>}
           </dd>
         </div>
       )}

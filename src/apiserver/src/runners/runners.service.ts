@@ -50,6 +50,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { isInternalAddress } from '../shared/public-surface.guard';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -309,8 +310,11 @@ export class RunnersService {
     });
   }
 
-  /** Details shown on the browser approval page for an `orbit register` session. */
-  async getDeviceEnrollment(ownerId: string, userCode: string) {
+  /**
+   * Details shown on the browser approval page for an `orbit register` session, read from
+   * `readerIp` (visitorAddress of the page's own request).
+   */
+  async getDeviceEnrollment(ownerId: string, userCode: string, readerIp: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.openDeviceEnrollment(ownerId, userCode);
     // Warn (don't block) if a runner with this name is already registered, so the
@@ -328,6 +332,12 @@ export class RunnersService {
       labels: s.labels,
       maxConcurrent: s.maxConcurrent,
       status: s.status,
+      // Where `orbit register` ran, and whether this page is read from the same address. A link
+      // someone else started and sent here shows a code that always matches; this is what tells.
+      // Never for an internal address: behind a proxy TRUSTED_PROXIES does not name, every
+      // request comes from the proxy's, a stranger's included.
+      requesterIp: s.requesterIp,
+      sameNetwork: !!s.requesterIp && s.requesterIp === readerIp && !isInternalAddress(s.requesterIp),
       nameConflict: !!existing,
       existingLastSeenAt: existing?.lastHeartbeatAt ?? null,
       // The runner an approval minted, for the page's way to it.
