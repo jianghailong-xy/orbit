@@ -23,7 +23,8 @@ import (
 //
 //	relay         an Antigravity sign-in started and its code pasted through the web API, then handed over by a heartbeat,
 //	              once, for its attempt; a Cursor key checked through the web API, handed over by a heartbeat once, and the
-//	              runner's answer settling the check the owner waits on.
+//	              runner's answer settling the check the owner waits on: sent over HTTPS, as a runner sends it, or with
+//	              -relay-handshake handed to the script (PATH.answer), which posts it to the second apiserver itself.
 //	relay-begin   an Antigravity sign-in started and its Google link reported, for the script to paste a code into.
 //	relay-finish  the code the script pasted, collected by this runner's heartbeats, once; with -relay-slow-holder the
 //	              first heartbeat is answered at once without it, while the process holding it is paused, and the code
@@ -287,21 +288,33 @@ func (d *driver) relayDrill(ctx context.Context, o drillOptions) {
 	}) {
 		return
 	}
-	d.step("the runner's answer, forwarded to a process that does not wait on it, settles the check", func() (string, error) {
-		sum := sha256.Sum256([]byte(strings.TrimSpace(secrets.Key)))
-		b, _ := json.Marshal(map[string]string{"checkId": checkID, "state": "INVALID", "keyFingerprint": hex.EncodeToString(sum[:])[:16]})
-		r, err := d.rpc(d.nextID("cursor-check"), "POST", "/runner/cursor-key-check-result", b, "", 0)
-		if err != nil {
-			return "", err
+	// The answer is not a daemon route (it is served beside the agent tool API, D14), so a runner sends it over HTTPS, which
+	// reaches the web's apiserver. With -relay-handshake the script posts it to the second apiserver's own listener
+	// instead, as HTTPS spread over every process would: the process that takes it does not wait on the check.
+	sum := sha256.Sum256([]byte(strings.TrimSpace(secrets.Key)))
+	answer := map[string]string{"checkId": checkID, "state": "INVALID", "keyFingerprint": hex.EncodeToString(sum[:])[:16]}
+	if o.relayHandshake != "" {
+		if !d.step("the runner's answer goes to the script, which posts it to the apiserver that does not wait on the check", func() (string, error) {
+			b, _ := json.Marshal(answer)
+			if err := os.WriteFile(o.relayHandshake+".answer", b, 0o600); err != nil {
+				return "", err
+			}
+			return "check " + checkID + ": INVALID", nil
+		}) {
+			return
 		}
+	} else if !d.step("the runner's answer, over HTTPS as a runner sends it, settles the check", func() (string, error) {
 		var out struct {
 			Accepted bool `json:"accepted"`
 		}
-		if r.GetTunnel().GetStatus() != http.StatusOK || json.Unmarshal(r.GetTunnel().GetJsonBody(), &out) != nil || !out.Accepted {
-			return tunnelStatus(r), errors.New("want 200, accepted")
+		status, body, err := d.daemonOverHTTPS("POST", "/api/runner/cursor-key-check-result", "", answer, &out)
+		if err != nil || status != http.StatusOK || !out.Accepted {
+			return fmt.Sprintf("POST /api/runner/cursor-key-check-result %d %s", status, clip(string(body), 300)), errOr(err, "want 200, accepted")
 		}
 		return "INVALID: accepted", nil
-	})
+	}) {
+		return
+	}
 	d.step("the owner's check answers what the runner said", func() (string, error) {
 		var c checked
 		select {

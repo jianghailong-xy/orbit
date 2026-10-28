@@ -275,8 +275,8 @@ test('P2 follow-up Cursor key check on PostgreSQL', { timeout: 600_000 }, async 
     const { cursorKeyChecks } = await beat(ready);
     assert.equal(cursorKeyChecks?.[0]?.apiKey, typed);
     // Another runner's answer about it settles nothing; the one it was handed to settles it.
-    assert.deepEqual(answer(theirs, cursorKeyChecks![0], 'INVALID'), { accepted: false });
-    assert.deepEqual(answer(ready, cursorKeyChecks![0], 'VALID'), { accepted: true });
+    assert.deepEqual(await answer(theirs, cursorKeyChecks![0], 'INVALID'), { accepted: false });
+    assert.deepEqual(await answer(ready, cursorKeyChecks![0], 'VALID'), { accepted: true });
     assert.equal((await pending).keyCheck, 'VALID');
   });
 
