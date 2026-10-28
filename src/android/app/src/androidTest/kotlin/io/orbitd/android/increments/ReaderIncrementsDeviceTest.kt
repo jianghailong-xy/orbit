@@ -395,7 +395,9 @@ class ReaderIncrementsDeviceTest : IncrementDeviceTest() {
         verify("the check cannot be pressed again", exists(hasText("Checking…") and isNotEnabled()))
         capture("02-checking")
         overlay = step("conflict", repairRun("AWAITING_INPUT")); refreshed()
-        await("step 3: the repair finished, the conflict is still there") { exists(hasText("Repair session finished"), unmerged = true) }
+        // Step 2's checking row says "Repair session finished" too: wait for this step's buttons, drawn only once the refresh is (A15 F-47).
+        await("step 3: the repair finished, the conflict is still there") { exists(hasText("Repair session finished"), unmerged = true) &&
+            exists(hasText("Continue repair") and hasClickAction()) && exists(hasText("Prepare PR candidate")) }
         verify("it offers to continue the repair and to prepare a PR", exists(hasText("Continue repair") and hasClickAction()) && exists(hasText("Prepare PR candidate")))
         capture("03-repair-finished")
         compose.onNode(hasText("Continue repair") and hasClickAction()).performClick()
