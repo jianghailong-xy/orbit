@@ -433,7 +433,7 @@ phase: its session goes `FAILED` once one release has failed for 10 s.
 A runner's silence is the reaper's only evidence that it died: a session whose runner has not beaten for 90 s is
 finalized `runner offline` (src/apiserver/src/realtime/reaper.service.ts). When a link gateway node stops, or a network
 cuts a share of the cell off, many runners go quiet together while they work on, and a reaper that took that for their
-death would fail every turn they were running. The design's answer (docs/runner-link-design.md §6.5, §10, §15.9; tasks
+death would fail every turn they were running. The design's answer (docs/runner-link-design.md §6.5, §10, §15.6; tasks
 B3 and 34nb3xhlRA03P4rMmfcpO): when a fifth of the cell's runners lose contact within 45 s of each other — those already
 back counted with those still out — or a fifth are silent at once, that is a mass disconnection, and the reaper does
 not reap the runs of its runners until each has been silent for 10¾ minutes. A runner counts as silent once it has
