@@ -80,7 +80,7 @@ final class ArdShotTests: ProbeCase {
         }
         settle(1)
         let field = app.textFields.firstMatch
-        bring(app, field, between: 150, and: 520, missingIsAbove: false, "\(name)-code")
+        bring(app, field, between: 150, and: 760, missingIsAbove: false, "\(name)-code")
         note("\(name): code field \(describe(field))")
         field.tap()
         // Return, as on the keyboard: it puts the keyboard away (and reads the code once more).
@@ -103,7 +103,7 @@ final class ArdShotTests: ProbeCase {
         let app = lookUp("pending")
         let approve = exactButton(app, "Approve")
         let deny = exactButton(app, "Deny")
-        bring(app, deny, between: 200, and: 800, missingIsAbove: false, "pending-deny")
+        bring(app, deny, between: 200, and: 820, missingIsAbove: false, "pending-deny")
         note("pending: \(describe(approve)); \(describe(deny))")
         if !approve.exists { XCTFail("pending: no Approve") }
         if !deny.exists { XCTFail("pending: no Deny beside Approve") }
@@ -111,15 +111,18 @@ final class ArdShotTests: ProbeCase {
         shot("ios-01-pending-approve-and-deny")
         tree(app, "pending")
 
-        setStub(#"{"hold": 6}"#)
+        // The stub holds the answer 20 s: a query on the simulator takes a second or more, and the first
+        // run's 6 s hold ran out between two of them.
+        setStub(#"{"hold": 20}"#)
         deny.tap()
-        settle(1)
-        note("in flight: \(describe(approve)); \(describe(deny))")
-        if approve.isEnabled { XCTFail("in flight: Approve can still be pressed while Deny is in flight") }
-        if deny.isEnabled { XCTFail("in flight: Deny can still be pressed while it is in flight") }
+        let approveEnabled = approve.isEnabled
+        let denyEnabled = deny.isEnabled
         shot("ios-02-deny-in-flight")
+        note("in flight: Approve enabled \(approveEnabled), Deny enabled \(denyEnabled)")
+        if approveEnabled { XCTFail("in flight: Approve can still be pressed while Deny is in flight") }
+        if denyEnabled { XCTFail("in flight: Deny can still be pressed while it is in flight") }
 
-        guard appears(app, Self.denied, timeout: 20) else {
+        guard appears(app, Self.denied, timeout: 45) else {
             write(app.debugDescription, "missing-denied.txt")
             return XCTFail("denied: the sheet never said \(Self.denied)")
         }
@@ -164,7 +167,7 @@ final class ArdShotTests: ProbeCase {
         let sent = decisions()
         let app = lookUp(state: #"{"status": "DENIED", "stale": true}"#, "refused")
         let approve = exactButton(app, "Approve")
-        bring(app, exactButton(app, "Deny"), between: 200, and: 760, missingIsAbove: false, "refused-deny")
+        bring(app, exactButton(app, "Deny"), between: 200, and: 820, missingIsAbove: false, "refused-deny")
         approve.tap()
         guard appears(app, Self.refusal, timeout: 20) else {
             write(app.debugDescription, "missing-refusal.txt")
@@ -192,7 +195,7 @@ final class ArdShotTests: ProbeCase {
         let app = lookUp(state: #"{"conflict": true, "lastSeenMinutes": 4380}"#, "same-name")
         expectText(app, [Self.nameTaken, "Last online 3d ago. \(Self.nameTakenDetail)"], "same-name")
         let reregister = exactButton(app, "Re-register")
-        bring(app, exactButton(app, "Deny"), between: 300, and: 800, missingIsAbove: false, "same-name-deny")
+        bring(app, exactButton(app, "Deny"), between: 300, and: 820, missingIsAbove: false, "same-name-deny")
         note("same-name: \(describe(reregister)); \(describe(exactButton(app, "Deny")))")
         if !reregister.exists { XCTFail("same-name: no Re-register") }
         if !exactButton(app, "Deny").exists { XCTFail("same-name: no Deny beside Re-register") }
