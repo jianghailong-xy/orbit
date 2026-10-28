@@ -292,6 +292,10 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 - `rnr.<runnerId>`：提示、踢连接。
 - `ses.<sessionId>.live`：实时流。
 - `usr.<userId>`：控制面事件，以后给客户端网关用。
+- `api.held`、`api.<instanceId>`：apiserver 进程之间转交只在内存里的登录状态（Antigravity 粘贴的登录码、待检查的 Cursor 密钥；`src/apiserver/src/runners/relay-peers.ts`）。
+  - 持有方在 `api.held` 上声明：哪个实例、为哪台 runner、持有哪个登录尝试或检查 ID。声明里不带登录码和密钥，持有期间每 5 秒重发一次，交出或作废后撤回。
+  - 心跳落到别的进程时，该进程向 `api.<instanceId>` 发请求，带上自己读到的登录尝试或检查 ID，对得上才交出。登录码和密钥只出现在这一次应答里，发往请求方的 inbox，只交一次；不存库、不写日志、不进事件。
+  - 只有 apiserver 的 NATS 用户能在 `api.>` 上发布、订阅和应答。网关的用户读不到 `api.>`，也读不到 `_INBOX.>`（`src/link-gateway/nats.conf`）。
 
 ### 6.4 控制请求的处理
 

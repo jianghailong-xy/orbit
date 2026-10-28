@@ -18,7 +18,7 @@ for tool in docker curl node git openssl jq flock systemd-run systemctl go psql 
   chmod +x "$work/bin/$tool"
 done
 
-scripts=(staging-up.sh staging-down.sh staging-client.sh staging-check.sh staging-check-link.sh staging-check-switch.sh
+scripts=(staging-up.sh staging-down.sh staging-client.sh staging-check.sh staging-check-link.sh staging-check-switch.sh staging-check-relay.sh
   loadgen-seed.sh loadgen-run.sh)
 refused=(orbit orbit-postgres orbit-apiserver orbit-link orbit-link- orbit-linkx Orbit-link-x orbit-link-X x-orbit-link-y
   orbit-link-a/../b "orbit-link-a b" orbit-link-.hidden)

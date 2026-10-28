@@ -111,7 +111,8 @@ export const RUNNER_ROW_FACTS: readonly string[] = [
  *   MARKED        its writers move the runner's change count after their commit; `writers` names each, and
  *                 link-heartbeat.spec.ts holds each to calling one of the marking functions.
  *   EVERY_BEAT    the beat statement reads it on every beat.
- *   IN_PROCESS    it is held in this process, which every beat asks.
+ *   IN_PROCESS    it is held in an apiserver process's memory, which every beat asks: this process's, and the
+ *                 process that said it holds it for the runner (runners/relay-peers.ts).
  *   FULL_ONLY     only a beat that reconciles in full can carry it, and those runners always do.
  *
  * `pending` says what keeps a runner reconciling in full while the field is in flight (heartbeatAnswerHandsOut,
@@ -183,7 +184,10 @@ export const HEARTBEAT_DELIVERIES = {
     pending: 'an operation of the runner queued or running',
   },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
-  cursorKeyChecks: { how: 'IN_PROCESS', reads: 'cursorKeyCheckRelay, asked on every beat (providers.service.ts#checkCursorKey also marks)' },
+  cursorKeyChecks: {
+    how: 'IN_PROCESS',
+    reads: 'cursorKeyCheckRelay.takeAnywhere, asked on every beat, here and of the process holding one (providers.service.ts#checkCursorKey also marks)',
+  },
   linkHints: { how: 'EVERY_BEAT', reads: 'readRunnerLinkHints in the beat statement; watchers and the release in this process' },
 } as const satisfies Record<keyof Required<RunnerHeartbeatResponse> | 'linkHints', HeartbeatDelivery>;
 

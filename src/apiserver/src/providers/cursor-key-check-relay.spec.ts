@@ -4,6 +4,9 @@ import { test } from 'node:test';
 import { RunnerStatus, type CursorKeyCheckAnswer, type RunnerHeartbeatResponse } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
+import { RelayPeers, relayPeers } from '../runners/relay-peers';
+import { MemoryNats } from '../test-support/memory-nats';
 import {
   CURSOR_KEY_CHECK_V1,
   CURSOR_KEY_CHECKS_PER_RUNNER,
@@ -245,4 +248,48 @@ test('P2 follow-up connecting a Cursor key answers VALID, INVALID, UNREACHABLE o
   // A blank key is refused before any runner is asked, and the refusal names no key.
   await assert.rejects(connect('   '), (error: { getStatus(): number; message: string }) => error.getStatus() === 400);
   for (const answer of answers) assert.ok(!JSON.stringify(answer).includes(KEY), `an answer carries the key: ${answer.message}`);
+});
+
+test('over the runner link, a heartbeat collects a key another apiserver process asked for, and the answer reaching this one settles it there', async () => {
+  const RUNNER = '66666666-6666-4666-8666-666666666666';
+  // This process and the main one, where the person's requests go behind nginx, on one NATS (runners/relay-peers.ts).
+  const nats = new MemoryNats();
+  relayPeers.connect(nats.connect('this'), 'this-process');
+  const main = new RelayPeers();
+  main.connect(nats.connect('main'), 'main-process');
+  const mainRelay = new CursorKeyCheckRelay(main);
+  const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
+    runner: { update: async () => ({ maxConcurrent: 2 }), findUnique: async () => null, updateMany: async () => ({ count: 0 }) },
+    workspace: { findMany: async () => [] },
+  } as never;
+  const realtime = {
+    drainCancellations: async () => [], drainMergeRequests: async () => [],
+    drainCommitRequests: async () => [], drainArtifactRequests: async () => [],
+  } as never;
+  const api = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never);
+  const runnerProviders = new RunnerProvidersController(new ProvidersService({} as never, {} as never, {} as never));
+  const beat = (overLink: boolean) => api.heartbeat(
+    { id: RUNNER, version: null }, { status: RunnerStatus.ONLINE, idleCapacity: 1 }, CURSOR_KEY_CHECK_V1,
+    undefined, undefined, undefined, overLink ? { leaseOwner: 'link-process', requestId: null, afterSeq: null } : undefined,
+  ) as Promise<RunnerHeartbeatResponse>;
+  try {
+    const answer = mainRelay.ask(RUNNER, KEY);
+    for (let i = 0; i < 400 && relayPeers.holders('cursor-key-check', RUNNER).length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    // An HTTPS runner beats on the main process alone: its path asks no other process.
+    assert.equal('cursorKeyChecks' in await beat(false), false);
+    const handed = await beat(true);
+    assert.deepEqual(handed.cursorKeyChecks?.map((check) => check.apiKey), [KEY]);
+    assert.equal('cursorKeyChecks' in await beat(true), false, 'the key was handed over twice');
+    const { checkId } = handed.cursorKeyChecks![0];
+    const result = (state: string, key = KEY) => runnerProviders.cursorKeyCheckResult({ id: RUNNER } as never, { checkId, state, keyFingerprint: fingerprint(key) });
+    assert.deepEqual(await result('VALID', `${KEY}-replaced`), { accepted: false }, 'an answer about another key settled it');
+    assert.deepEqual(await result('UNREACHABLE'), { accepted: true });
+    assert.equal(await answer, 'UNREACHABLE');
+    assert.deepEqual(await result('VALID'), { accepted: false }, 'settled twice');
+    for (const { subject, message } of nats.sent) assert.equal(message.includes(KEY), false, `${subject} carried the key`);
+  } finally {
+    relayPeers.disconnect();
+    main.disconnect();
+  }
 });

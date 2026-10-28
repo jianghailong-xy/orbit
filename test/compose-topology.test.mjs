@@ -66,6 +66,12 @@
 // from, to state the release GET /api/runner/release would assign. No service, mount or port is added. It is read only for
 // the link's answers, at most once a minute; while it cannot be read, the link states no release and runners ask that
 // route as before.
+//
+// On 2026-10-28 several apiservers behind the link (project 34bc0CsOzPh9KshG7H3DW, task 34mNe8DOyUq2wlk81EGlZ; its
+// coordinator approved this pin) gave the apiserver's NATS user api.> to publish and subscribe on, and the right to
+// answer a request once: its processes hand each other an Antigravity code or a Cursor key that a runner's heartbeat
+// collects from the process holding it, in a reply to the asking process's inbox. The gateway's user gains nothing.
+// (q) pins the lines, and that NATS logs no trace or debug, which would print what a reply carries.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -651,8 +657,10 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // directive of it in order, comments aside: the client port and the monitoring port its health check reads and no other
 // listener; no cluster, routes, leaf nodes, gateways, JetStream, WebSocket or MQTT, and nothing included; and exactly
 // two users, each by the public key the environment names, with exactly what it may do. The apiserver publishes runners'
-// hints and turn prefix requests and reads live streams and the answers to its requests; the gateway reads runners'
-// hints and requests, publishes live streams and answers a request once. Changing any of it is a new decision, made here.
+// hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
+// answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
+// live streams and answers a request once. No trace or debug logging, here or in the service's command (p). Changing
+// any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
   const lines = conf.split('\n').map((line) => line.replace(/#.*$/, '').trim()).filter((line) => line !== '');
@@ -664,8 +672,9 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_APISERVER_KEY',
     'permissions: {',
-    'publish: { allow: ["rnr.>"] }',
-    'subscribe: { allow: ["ses.*.live", "_INBOX.>"] }',
+    'publish: { allow: ["rnr.>", "api.>"] }',
+    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>"] }',
+    'allow_responses: true',
     '}',
     '}',
     '{',
@@ -680,4 +689,9 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '}',
   ]);
   assert.doesNotMatch(lines.join('\n'), /cluster|routes|leafnode|gateway\s*[{:]|jetstream|websocket|mqtt|include|listen|no_auth_user|token|password/i);
+  // Neither the file nor the command the service runs turns on trace or debug logging, which prints message payloads.
+  assert.doesNotMatch(lines.join('\n'), /trace|debug|\blog_file\b|\bsyslog\b/i);
+  const command = directives(currentServices.get(NATS)).find((line) => /^\s+command:/.test(line));
+  assert.equal(command, '    command: ["--config", "/etc/orbit-nats/nats.conf"]');
+  assert.doesNotMatch(command, /"-(?:V|D|DV|VV|DVV)"|--trace|--debug/);
 });

@@ -1190,8 +1190,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/claude-history-result body transcripts[].claudeSessionId':
     'a transcript file on the reporting machine, stored as that machine\'s own history scan (runner-api.controller.ts:1707)',
   'POST /runner/cursor-key-check-result body checkId':
-    'the token this process minted for one Cursor key check it handed the reporting machine, held in memory beside '
-    + 'that machine: an answer naming a check handed to any other settles nothing (cursor-key-check-relay.ts:129)',
+    'the token an apiserver process minted for one Cursor key check it handed the reporting machine, held in its memory '
+    + 'beside that machine: an answer naming a check handed to any other settles nothing, here or in the process it is '
+    + 'taken to (cursor-key-check-relay.ts:180)',
   'POST /runner/sessions/:id/approvals body toolUseId':
     'the engine\'s id for one tool call, a key only within the session the path names (runner-api.controller.ts:3867)',
   'POST /runner/sessions/:id/approvals body backgroundJobId':

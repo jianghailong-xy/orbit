@@ -1567,8 +1567,9 @@ export class RunnerApiController {
       }
     }
     if (verdict.answer !== 'FULL') {
+      // Whichever apiserver process holds them (cursor-key-check-relay.ts): the gateway forwards a beat to any.
       const cursorKeyChecks = runnerSupportsCapability(headers.capabilities, CURSOR_KEY_CHECK_V1)
-        ? cursorKeyCheckRelay.take(runnerId)
+        ? await cursorKeyCheckRelay.takeAnywhere(runnerId)
         : [];
       return quietHeartbeatAnswer(row, { cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised) });
     }
@@ -2072,7 +2073,7 @@ export class RunnerApiController {
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
-      loginRequest = await this.drainLoginRequest(runner.id, capabilities, osHeader);
+      loginRequest = await this.drainLoginRequest(runner.id, capabilities, osHeader, !!link);
       const removeRequest = await this.drainAccountRemoveRequest(runner.id, capabilities);
       // Codex rides the field a control plane older than accounts-per-engine reads; every other
       // engine names itself. An old runner handed the generic field would remove a path under its
@@ -2110,11 +2111,15 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
-    // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in this process
-    // alone: handed only to a process that declares cursor-key-check/v1, each once.
-    const cursorKeyChecks = runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
-      ? cursorKeyCheckRelay.take(runner.id)
-      : [];
+    // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in an apiserver
+    // process's memory: handed only to a process that declares cursor-key-check/v1, each once. An HTTPS beat
+    // reaches the main process, where they are held; one the link gateway forwarded may reach any, and takes
+    // them from whichever holds them.
+    const cursorKeyChecks = !runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
+      ? []
+      : link
+        ? await cursorKeyCheckRelay.takeAnywhere(runner.id)
+        : cursorKeyCheckRelay.take(runner.id);
     // A beat the link gateway forwarded is also answered with what waits for the runner (runner-link-hints.ts), which
     // the gateway states in HeartbeatAck.hints, and with the release the runner is assigned, which it states in
     // HeartbeatAck.release. Read last, and only for a link call; a read that fails leaves it out, and the gateway then
@@ -2763,6 +2768,8 @@ export class RunnerApiController {
     capabilities: string | string[] | undefined,
     /** The OS header as it arrived (runner-platform.ts). */
     osHeader?: string,
+    /** Whether the link gateway forwarded the beat, which may reach any apiserver process. */
+    overLink = false,
   ): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
@@ -2847,10 +2854,16 @@ export class RunnerApiController {
         ...(region ? { region } : {}),
       };
     }
-    // Antigravity's code never touched the row: it is in this process's memory, bound to the attempt
-    // it was pasted for, and this is the one heartbeat that hands it over (login-code-relay.ts).
+    // Antigravity's code never touched the row: it is in an apiserver process's memory, bound to the attempt
+    // it was pasted for, and this is the one heartbeat that hands it over (login-code-relay.ts). An HTTPS beat
+    // reaches the main process, where the paste did; one the link gateway forwarded may reach any, and takes
+    // it from whichever holds it, for this attempt.
     const heldCode =
-      engine === 'antigravity' && r.loginStatus === 'awaiting_code' ? loginCodeRelay.take(runnerId, attempt) : undefined;
+      engine !== 'antigravity' || r.loginStatus !== 'awaiting_code'
+        ? undefined
+        : overLink
+          ? await loginCodeRelay.takeAnywhere(runnerId, attempt)
+          : loginCodeRelay.take(runnerId, attempt);
     // With the account it is for, as the stored code below goes: a sign-in adding an Antigravity account
     // runs in that account's own directory, and the runner routes the paste by account.
     if (heldCode) {
