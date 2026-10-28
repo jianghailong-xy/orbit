@@ -122,6 +122,7 @@ import {
   INTEGRATION_OBSERVE_COORDINATOR_ONLY,
   INTEGRATION_OBSERVE_REASON_REQUIRED,
   MAX_INTEGRATION_OBSERVE_REASON,
+  hasPendingObservation,
   observableUnobservedItems,
   queueLandingObservation,
 } from './landing-observation';
@@ -137,7 +138,7 @@ import {
   startRequestDetailLine,
   supersedeStaleStartRequest,
 } from './project-start-request';
-import { doorsForOpenItem, openItemDoorMessageNames } from './open-item-doors';
+import { doorsForOpenItem, openItemDoorMessageNames, sourceJobForOpenItem } from './open-item-doors';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
   DONE_REQUEST_DECLINE_NOTE_REQUIRED,
@@ -1787,10 +1788,12 @@ export class ProjectOpenItemService {
     }
 
     // O-X1 (§10.7): an item about a task's landing is not closed by hand while that landing is what
-    // a dependent is still waiting on — the wait would be left with nobody in front of it (O5). Read
-    // once, before the write; the doors the refusal names are this item's cell's.
+    // a dependent is still waiting on — the wait would be left with nobody in front of it (O5) — and
+    // neither is the item a project's failing observations open (IE:observe) while a task of the
+    // project waits to be observed. Read once, before the write; the doors the refusal names are this
+    // item's cell's.
     if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)
-        && await landingConditionStands(this.prisma, item)) {
+        && await landingConditionStands(this.prisma, projectId, item)) {
       throw new ConflictException({ code: OPEN_ITEM_CONDITION_STANDS, message: conditionStandsRefusal(item) });
     }
 
@@ -3750,11 +3753,18 @@ function ownDoorRefusal(item: RefusedItem): string {
  * or the one a `TASK_BRANCH` candidate offers — is still NOT_KNOWN (§1.4, `taskLandingSql`), and a
  * task that has not ended (neither DONE nor CANCELLED, nor replaced) depends on it. Either half gone
  * — the work landed, or nothing waits on it any more — and the item closes by hand as before.
+ *
+ * The item a project's failing observations open (`IE:observe`, §10.6 O-J4) is about no one task: it
+ * is in front of somebody for every task of the project waiting to be observed, so its condition is
+ * that any of them still waits (`landingPendingObservationSql`) — until each has landed, been
+ * cancelled or replaced, or stopped being code work.
  */
 async function landingConditionStands(
   prisma: PrismaService,
-  item: { taskId: string | null; promotionId: string | null },
+  projectId: string,
+  item: RefusedItem,
 ): Promise<boolean> {
+  if (observationFailureItem(item)) return hasPendingObservation(prisma, projectId);
   const [row] = await prisma.$queryRaw<Array<{ stands: boolean }>>(Prisma.sql`
     SELECT EXISTS (
       SELECT 1 FROM "task" waited_on
@@ -3774,6 +3784,12 @@ async function landingConditionStands(
   return row?.stands === true;
 }
 
+/** Whether this is the item a project's failing observations open (§10.6 O-J4): the cell whose
+ *  source job is OBSERVE_LANDING. */
+function observationFailureItem(item: RefusedItem): boolean {
+  return sourceJobForOpenItem({ ...item, assignee: 'COORDINATOR' }) === 'OBSERVE_LANDING';
+}
+
 /** O-X1's refusal: the wait still stands, and the doors of this item's cell that answer it — of
  *  `integration_retry`, `integration_observe`, `merge_receipt`, `task_reopen` and
  *  `open_item_hand_over`, only the ones the cell really has (§4.7 T17). */
@@ -3781,6 +3797,13 @@ function conditionStandsRefusal(item: RefusedItem): string {
   const doors = messageDoorsOf(item);
   const named = [doors.retryMcp, doors.observeMcp, doors.mergeReceiptMcp, doors.taskReopenMcp, doors.handOverMcp]
     .filter((name): name is string => name != null);
+  if (observationFailureItem(item)) {
+    return 'this item stands for the tasks of this project still waiting to be observed: until an observation '
+      + 'of the line succeeds, their work is not recorded as landed, and this item is what puts that wait in '
+      + 'front of somebody. Marking it handled would leave the wait with nobody in front of it.'
+      + (named.length > 0 ? ` Move it with one of this item's doors: ${named.join(', ')}.` : '')
+      + ' Once no task of the project waits to be observed any more, it closes by hand as before.';
+  }
   return 'this item is about a task\'s landing, and the wait it is about still stands: the work is not on '
     + 'the line yet, and a task that depends on it is still waiting. Marking it handled would leave that '
     + 'wait with nobody in front of it.'

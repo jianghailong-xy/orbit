@@ -21,13 +21,22 @@ import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { applyIntegrationJobResult, dispatchIntegrationJobs } from '../runner-api/integration-job-relay';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { canonicalRepoUrl } from './project-integration-line';
+import {
+  canonicalRepoUrl,
+  projectIntegrationView,
+  readInFlightJobs,
+  readProjectCodebase,
+  readProjectIntegrationView,
+  readProjectListBindings,
+} from './project-integration-line';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
+import { ProjectsController } from './projects.controller';
 import { recordLandingUnobserved, type LandingUnobserved } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 
@@ -55,7 +64,14 @@ import { ProjectOpenItemService } from './project-open-item.service';
  *      handled, with no second item; one that sees it closes it RESOLVED / LANDED;
  *  (7) IE:observe (§10.6 O-J4): its coordinator message names integration_observe, the hand-over now
  *      accepts it (its cell holds the door), and the observation the door queues resolves it
- *      JOB_MOVED_ON when it answers.
+ *      JOB_MOVED_ON when it answers;
+ *  (8) O-X1 for IE:observe (§10.7): while a task of the project waits to be observed, open_item_resolve
+ *      refuses it 409 OPEN_ITEM_CONDITION_STANDS on the coordinator's runner door and the owner's user
+ *      door, naming integration_observe and open_item_hand_over and nothing else, and writes nothing;
+ *      once nothing waits, either door closes it by hand as before;
+ *  (9) A-Q23: an observation is not an integration attempt — with only a queued OBSERVE_LANDING the
+ *      integration view's inFlightJobs is empty and the project list counts nothing in flight, while a
+ *      LAND_TASK beside it is listed and counted; the line's own queue still holds both.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows. What this spec
  * reaches that the tree before R29-7 does not have is read through a local type, so the file compiles
@@ -143,7 +159,9 @@ interface World {
  * project is coordinated from, and — unless `bound` is false — an AGENT_PUSH project on main whose
  * line has started.
  */
-async function world(stack: Stack, label: string, options: { bound?: boolean } = {}): Promise<World> {
+async function world(
+  stack: Stack, label: string, options: { bound?: boolean; line?: 'MAIN' | 'PROJECT_BRANCH' } = {},
+): Promise<World> {
   const db = stack.db;
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -186,11 +204,14 @@ async function world(stack: Stack, label: string, options: { bound?: boolean } =
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
   if (options.bound !== false) {
+    // AGENT_PUSH is a MAIN line's alone (§10.4's CHECK); a project branch delivers by the platform.
+    const projectBranch = options.line === 'PROJECT_BRANCH';
     await db.projectCodebase.create({
       data: {
         ownerId, projectId, canonicalRepoUrl: canonicalRepoUrl(repoUrl)!, upstreamRef: 'refs/heads/main',
-        integrationRef: 'refs/heads/main', refAuthority: 'REMOTE', remoteName: 'origin',
-        integrationRefSource: 'EXPLICIT', integrationStartedAt: new Date(), deliveryMode: 'AGENT_PUSH',
+        integrationRef: projectBranch ? `refs/heads/project/${projectId.slice(0, 8)}` : 'refs/heads/main',
+        refAuthority: 'REMOTE', remoteName: 'origin', integrationRefSource: 'EXPLICIT',
+        integrationStartedAt: new Date(), deliveryMode: projectBranch ? 'PLATFORM' : 'AGENT_PUSH',
       },
     });
   }
@@ -661,6 +682,130 @@ test('(7) §10.6 O-J4 §10.8: IE:observe names integration_observe to its coordi
       const row = await itemRow(stack, second.id);
       assert.equal(row.assignee, 'OWNER');
       assert.equal(row.assigneeReason, 'HANDED_OVER');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (8) O-X1 for IE:observe ═════════════════════════════════════════════════════════════════════
+
+/** The item O-J4 opens at the third failure in a row, as `observationFailed` writes it. */
+async function observationErrorItem(stack: Stack, w: World, generation: number): Promise<string> {
+  const now = new Date();
+  const opened = await stack.db.projectOpenItem.create({
+    data: {
+      projectId: w.projectId, ownerId: w.ownerId, kind: 'INTEGRATION_ERROR', state: 'OPEN', assignee: 'COORDINATOR',
+      assigneeReason: 'DEFAULT', dedupeKey: `IE:observe:${w.projectId}`, title: 'Integration error: observing main',
+      payload: {
+        jobKind: 'OBSERVE_LANDING', phase: 'FETCH', targetRef: 'refs/heads/main', errorCode: 'FETCH_FAILED',
+        failureClass: 'ERROR', failures: 3, generation,
+      },
+      waitingSince: now, assignedAt: now, escalateAt: new Date(now.getTime() + 7_200_000),
+    },
+    select: { id: true },
+  });
+  return opened.id;
+}
+
+test('(8) §10.7 O-X1: IE:observe is not closed by hand while a task waits to be observed — 409 OPEN_ITEM_CONDITION_STANDS on both doors, naming integration_observe and open_item_hand_over — and closes by hand once nothing waits',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'observe-hand-close');
+      const waiting = await doneTask(stack, w, 'waits-to-be-observed', sha('c'));
+      const first = await observationErrorItem(stack, w, 3);
+      // The owner's own door is the user API's resolve route; the coordinator's is the runner's.
+      const ownerResolveDoor = new ProjectsController(
+        {} as never, {} as never, {} as never, {} as never, {} as never, stack.openItems, {} as never,
+      );
+      const asCoordinator = (itemId: string, note: string) => stack.runnerDoor.resolveOpenItem(
+        runnerOf(w), w.coordinatorSessionId, w.projectId, itemId, { note });
+      const asOwner = (itemId: string, note: string) => ownerResolveDoor.resolveOpenItem(
+        { userId: w.ownerId } as never, w.projectId, itemId, { note });
+      const before = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: first } });
+
+      for (const [label, press] of [['the coordinator\'s runner door', asCoordinator], ['the owner\'s user door', asOwner]] as const) {
+        const refused = await refusal(() => press(first, 'the runner can fetch the repository again'));
+        assert.equal(refused.status, 409, `${label}: ${refused.message}`);
+        assert.equal(refused.code, 'OPEN_ITEM_CONDITION_STANDS', label);
+        // §4.7 T17: only the doors this cell really has that move the wait.
+        for (const door of ['integration_observe', 'open_item_hand_over']) {
+          assert.match(refused.message, new RegExp(`\\b${door}\\b`), `${label}: the refusal does not name ${door}`);
+        }
+        for (const door of ['integration_retry', 'merge_receipt', 'task_reopen', 'open_item_resolve']) {
+          assert.doesNotMatch(refused.message, new RegExp(`\\b${door}\\b`), `${label}: the refusal names ${door}`);
+        }
+      }
+      const after = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: first } });
+      assert.deepEqual(after, before, 'a refused hand-close wrote nothing');
+
+      // The wait is gone: the task's work is recorded on main (the agent's merge_receipt), so no task
+      // of the project waits to be observed, and the item closes by hand as it always did.
+      await new MergeReceiptService(stack.prisma).record(w.ownerId, waiting.sessionId, {
+        result: 'ALREADY_MERGED', sourceSha: sha('c'), targetBranch: 'main',
+      }, 'AGENT');
+      assert.deepEqual(await asCoordinator(first, 'the work reached main by hand'),
+        { itemId: first, state: 'RESOLVED', resolution: 'HANDLED' });
+      const second = await observationErrorItem(stack, w, 6);
+      assert.deepEqual(await asOwner(second, 'nothing waits to be observed any more'),
+        { itemId: second, state: 'RESOLVED', resolution: 'HANDLED' });
+      const closed = await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: second }, select: { resolvedBy: true, resolvedByUserId: true },
+      });
+      assert.deepEqual(closed, { resolvedBy: 'USER', resolvedByUserId: w.ownerId });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (9) A-Q23: the in-flight reads leave observations out ═══════════════════════════════════════
+
+test('(9) §10.6 A-Q23: with only a queued OBSERVE_LANDING, inFlightJobs is empty and the project list counts nothing in flight; a LAND_TASK beside it is listed; the line\'s own queue holds both',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'observe-not-a-landing', { line: 'PROJECT_BRANCH' });
+      const asked = await observeAsOwner(stack, w, { reason: 'look at the line' });
+      assert.equal(asked.queued, true, 'CONTROL: an observation is queued');
+      const view = async () => readProjectIntegrationView(stack.prisma, w.projectId,
+        projectIntegrationView(await readProjectCodebase(stack.prisma, w.projectId), 7200));
+      const listed = async () => (await readProjectListBindings(stack.prisma, [w.projectId])).get(w.projectId)?.integration;
+
+      // GET /projects/:id/integration and project_get: no landing is in flight.
+      const alone = await view();
+      assert.deepEqual(alone.inFlightJobs, [], 'a queued observation is listed as a landing in flight');
+      assert.equal(alone.inFlight, null);
+      assert.equal(alone.queuedCount, 0);
+      // The project list and the session list's project row: nothing in flight, nothing to describe.
+      const row = await listed();
+      assert.ok(row, 'CONTROL: the project list reads the line');
+      assert.equal(row.activeJobCount, 0, 'the project list counts the observation as a job in flight');
+      assert.equal(row.inFlight, undefined);
+      // The line's own queue (project_integration_get, the timeouts, the doors) still holds it.
+      assert.deepEqual((await readInFlightJobs(stack.prisma, w.projectId)).map((job) => job.kind), ['OBSERVE_LANDING']);
+
+      // A LAND_TASK beside it is listed and counted as before.
+      const t = await doneTask(stack, w, 'lands-on-the-branch', sha('d'));
+      const landingJobId = randomUUID();
+      const branchRef = `refs/heads/project/${w.projectId.slice(0, 8)}`;
+      await stack.db.projectIntegrationJob.create({
+        data: {
+          id: landingJobId, projectId: w.projectId, ownerId: w.ownerId,
+          codebaseId: (await readProjectCodebase(stack.prisma, w.projectId))!.id,
+          kind: 'LAND_TASK', generation: 1, taskId: t.taskId, sessionId: t.sessionId, state: 'QUEUED',
+          serialKey: `${w.projectId}:${branchRef}`, idempotencyKey: `ij:v1:LAND_TASK:${t.taskId}:1`,
+          targetRef: branchRef, upstreamRef: 'refs/heads/main', sourceRef: `refs/heads/${t.branch}`,
+        },
+      });
+      const beside = await view();
+      assert.deepEqual((beside.inFlightJobs ?? []).map((job) => [job.jobId, job.kind]), [[landingJobId, 'LAND_TASK']]);
+      assert.equal(beside.inFlight?.kind, 'LAND_TASK');
+      assert.equal(beside.queuedCount, 1);
+      const rowBeside = await listed();
+      assert.equal(rowBeside?.activeJobCount, 1);
+      assert.equal(rowBeside?.inFlight?.kind, 'LAND_TASK');
+      assert.deepEqual((await readInFlightJobs(stack.prisma, w.projectId)).map((job) => job.kind).sort(),
+        ['LAND_TASK', 'OBSERVE_LANDING']);
     } finally {
       await stack.db.$disconnect();
     }
