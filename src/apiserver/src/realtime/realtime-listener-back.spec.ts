@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { Subject } from 'rxjs';
 
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import type { ControlPlaneLeader } from './control-plane-leader';
 import { RealtimeService } from './realtime.service';
 
@@ -27,11 +28,12 @@ const ev = (seq: number): NormalizedRunEvent => ({ seq, type: RunEventType.ASSIS
  * on), and whose log lines and hub are collected. `leader: false` builds it as the specs that build it by hand do.
  */
 function replica(others: number | Error | Promise<number>, opts: { leader?: false } = {}) {
-  const asked: Array<{ sql: string; values: unknown[] }> = [];
+  const asked: Array<{ sql: string; values: readonly unknown[] }> = [];
   const prisma = {
     $executeRawUnsafe: async () => 0,
-    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      asked.push({ sql: strings.join('?'), values });
+    $queryRaw: async (...args: unknown[]) => {
+      const { text, values } = renderRawQuery(args);
+      asked.push({ sql: text, values });
       if (others instanceof Error) throw others;
       return [{ others: await others }];
     },

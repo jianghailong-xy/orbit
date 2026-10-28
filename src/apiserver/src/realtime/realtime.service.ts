@@ -419,10 +419,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *
    * The inbox and wake notices missed meanwhile need nothing here. Over HTTPS an inbox poll looks again within five
    * seconds, and a wake lost costs the runner what it always could, its next heartbeat; over the runner link the
-   * apiserver that asks hints the runner over NATS itself (notifyInbox, notifyRunnerWake). A wake written in a
-   * transaction (runner-wake.ts) is marked by every apiserver that hears it; one that none heard, every listener down at
-   * its commit as on a database restart, reaches the runner with its next full reconcile, as a change count that could
-   * not be moved does (markRunnerChanged).
+   * apiserver that asks hints the runner over NATS itself (notifyInbox, notifyRunnerWake). Over the link, a wake written
+   * in a transaction (runner-wake.ts) is marked by every apiserver that hears it; one that none heard, every listener
+   * down at its commit as on a database restart, reaches the runner with its next full reconcile, as a change count that
+   * could not be moved does (markRunnerChanged).
    */
   private async listenerBack(downMs: number): Promise<void> {
     const back = `LISTEN/NOTIFY back after ${downMs} ms without it`;
