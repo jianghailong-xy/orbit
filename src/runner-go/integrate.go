@@ -710,15 +710,30 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
 			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
-			return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
-		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
 	if err != nil || upstreamSha == "" {
 		return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
 			"ref": cmd.UpstreamRef, "detail": errText(err),
 		})
+	}
+	// A task may have been pushed directly to the target without ever publishing its temporary
+	// source branch. The settled session's frozen commit, not a local target or a branch name,
+	// is the identity to verify against the upstream we just fetched. Never merge from this path.
+	frozen := strings.TrimSpace(cmd.SourceSha)
+	if cmd.PromotionSourceKind == "TASK_BRANCH" && frozen != "" &&
+		cmd.SessionBaseSha != "" && frozen != cmd.SessionBaseSha &&
+		isAncestor(repoRoot, cmd.SessionBaseSha, frozen) && isAncestor(repoRoot, frozen, upstreamSha) {
+		return integrationResult{
+			State: "ALREADY_LANDED", Phase: "MERGE", SourceSha: frozen,
+			TargetShaBefore: upstreamSha, UpstreamSha: upstreamSha,
+			UnknownPushes: checkUnknownPushes(repoRoot, upstreamSha, cmd.UnknownPushes),
+		}
+	}
+	if !local {
+		if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
+		}
 	}
 	// The commit the owner is being asked about, frozen when the candidate was made. Falling back
 	// to the ref would merge whatever has landed on the branch since, which is not what was shown.
@@ -751,6 +766,11 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	// Already on the upstream: nothing to merge, and a merge commit for it would be a commit that
 	// carries no change at all.
 	if isAncestor(scratch, sourceSha, upstreamSha) {
+		// A temporary branch still at the session's base contains none of its own work.
+		if cmd.PromotionSourceKind == "TASK_BRANCH" && (cmd.SessionBaseSha == "" || sourceSha == cmd.SessionBaseSha) {
+			result.State, result.Phase = "NOTHING_TO_LAND", "MERGE"
+			return result
+		}
 		result.State, result.Phase = "ALREADY_LANDED", "MERGE"
 		return result
 	}

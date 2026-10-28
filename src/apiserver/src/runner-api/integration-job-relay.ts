@@ -110,7 +110,7 @@ import {
 } from '../projects/project-integration-event';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { orderedIds } from '../common/lock-order';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, TransactionWriteConflict, withTransactionRetry } from '../common/transaction-retry';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 
 /**
@@ -697,7 +697,12 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       j."skip_merge_check" AS "skipMergeCheck",
       j."progress_protocol" AS "progressProtocol",
       j."landing_id" AS "landingId",
-      j."source_sha" AS "jobSourceSha",
+      -- A first task check may run after a direct push, with no published temporary branch.
+      -- Only a finished session's runner-reported commit can supply that missing identity.
+      COALESCE(j."source_sha", CASE
+        WHEN j."kind" = 'CHECK_PROMOTION' AND s."finished_at" IS NOT NULL
+          AND (SELECT p."source_kind" FROM "project_promotion" p WHERE p."id" = j."promotion_id") = 'TASK_BRANCH'
+        THEN s."branch_sha" END) AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
       -- Scalar subqueries rather than another join: the FROM list of an UPDATE cannot join ON a
@@ -1867,7 +1872,7 @@ export async function applyIntegrationJobResult(
     // NULL the key used to write — which is all the receipt below may be written against, since its
     // `session_id` IS a foreign key — and the same goes for the task the receipt and an item name.
     const session = job.sessionId
-      ? await tx.session.findFirst({ where: { id: job.sessionId }, select: { id: true, baseSha: true } })
+      ? await tx.session.findFirst({ where: { id: job.sessionId }, select: { id: true, baseSha: true, taskId: true } })
       : null;
     const liveTaskId = task ? job.taskId : null;
 
@@ -2007,7 +2012,11 @@ export async function applyIntegrationJobResult(
     // candidate's source is resolved by the check itself (M-S1, 0293), and the check is the only
     // thing that ever looks at that branch: freeze a tip while the work can still move and the owner
     // is asked to merge a commit the branch has already moved past, with nothing left to ask again.
-    if (job.kind === 'CHECK_PROMOTION' && job.promotionId && state === 'READY') {
+    const taskCheckAlreadyLanded = job.kind === 'CHECK_PROMOTION' && job.promotionId !== null
+      && state === 'ALREADY_LANDED' && (await tx.projectPromotion.findUnique({
+        where: { id: job.promotionId }, select: { sourceKind: true },
+      }))?.sourceKind === 'TASK_BRANCH';
+    if (job.kind === 'CHECK_PROMOTION' && job.promotionId && (state === 'READY' || taskCheckAlreadyLanded)) {
       const candidate = await readCandidateWork(tx, job.sessionId);
       if (candidate) {
         if (landingJudgedTooEarly(job.claimedAt, candidate.sessions)) {
@@ -2075,7 +2084,7 @@ export async function applyIntegrationJobResult(
     // of them clear in one statement, in id order, before the first of them — not each set's after the
     // receipts written before it (rank 30 after rank 60). A stopped LAND_TASK took them above.
     if (recoveryHeld === undefined && repairs.length > 0) {
-      const promotionSessions = job.kind === 'LAND_PROMOTION' && job.promotionId
+      const promotionSessions = job.promotionId
         && (state === 'LANDED' || state === 'ALREADY_LANDED')
         ? (await upstreamReceiptSubjects(tx, job.promotionId)).sessionIds
         : [];
@@ -2247,7 +2256,16 @@ export async function applyIntegrationJobResult(
           + 'not expired any more. Read the job again.');
       }
     } else {
-      await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
+      const ended = await tx.projectIntegrationJob.updateMany({
+        where: { id: job.id, state: 'RUNNING', claimGeneration: job.claimGeneration,
+          claimLeaseOwner: job.claimLeaseOwner },
+        data: terminalData,
+      });
+      if (ended.count !== 1) {
+        // A concurrent result committed first. Roll back every derived receipt/item write and
+        // re-read in a fresh transaction; the existing terminal-result fence then answers replay.
+        throw new TransactionWriteConflict('integration result lost its claim while being applied');
+      }
     }
     // §4.6 X-E5: the job is terminal, so the item about its claim's silence is answered — by the
     // party that ended it (the owner pressing Abandon is USER, with their id on the row; the
@@ -2473,7 +2491,7 @@ export async function applyIntegrationJobResult(
         // the same false claim one layer out.
         landedTaskId: (jobLanded(effectiveState) || receiptIds.length > 0) && !job.promotionId
           ? job.taskId
-          : null,
+          : promotionReceiptIds.length > 0 ? session?.taskId ?? null : null,
         openItemIds: [openItemId, rearmedItemId].filter((id): id is string => id !== null),
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:

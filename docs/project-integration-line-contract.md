@@ -2017,3 +2017,26 @@ SELECT resolution_note, count(*)
 - **v1 修订 26**（2026-10-21，任务 `34jBwFldsZVGXcU3hPS6A`；只改现状注，规则不变）：修订 25「现状与待修」的 (a) 已在代码里修正（`ef3f9c705`）。`applyPromotionJobResult` 带取消请求的那一支里，被叫停的 `LAND_PROMOTION` 以不能证明没有推送的结果结束时，候选写 `BLOCKED`（`blockPromotion`）。这种结果是 J-T10 放弃写的 `PUSH_OUTCOME_UNKNOWN`，和 legacy 领取推送之后在 `VERIFY` 报的 `ERROR`。能证明没有推送的结果仍写 `CANCELLED`，被叫停的一代照 J-T8 不开失败待办。`integration-job-cancel.pg.spec.ts` (16)–(19) 与 `integration-abandon.pg.spec.ts` (11)–(12) 钉住两种结局。§2.6 J12 段的现状注与 M-T10 指向它的那句改记为已修正。
 - **v1 修订 27**（2026-10-25，任务 `34iSqQcZj6PLO4nk77pMf`；缘由：2026-10-19 生产事故，见 §2.3 J-T3a 的「缘由」）：新增 §2.3 J-T3a。过期的领取若仍由正在心跳的同一进程持有，且是 v2 领取或领取后从未回报，心跳在领取新作业之前把它原样重投给那个进程：同一 `claimGeneration` 与 `leaseOwner`，command 与领取时同列、同步骤（`integration-job-relay.ts` 的 `silentClaimsOf`、`handOut`、`HELD_CLAIM_COLUMNS`）；不写作业行，不记事件，不占每拍 2 条的新领取。J-T3 那一行、G3 第 2 条、§7.2 V6 与 X-E5 各加一句指向它；`claimOne`、`dispatchIntegrationJobs`、控制器与 shared `HeartbeatResponse.integrationJobs` 的注释照改。控制器原来写的是「失败只少这一拍的作业，下一拍会从队列里重新领取」，这对本拍已经提交的领取从来不成立。三处选型：(a) 不换代，因为 runner 只按 job id 去重，换代会让真在跑的作业跳过新 command、下一次回报被 `STALE_CLAIM` 拒绝；(b) 不续租，让 V6、X-E5 与放弃门照旧看到沉默，runner 一直不接时 owner 照常收到 X-E5 待办；(c) legacy 领取只重投从未回报的那种，因为 legacy runner 不读应答、推送前不问，与长步骤结束赛跑的一次重投可能推送第二遍；回报过的 legacy 领取仍由 X-E5、放弃门或下一个进程的接管收口。只改服务端，不需要迁移：runner 本来就按 job id 去重（0.1.232 已是如此），收到自己已持有、没在跑的那条 command 就开始跑，所以不必发 runner。另一种做法是让 runner 在心跳里声明在跑哪些 job id、服务端据此判定：更快，也不靠租约，但要发 runner（须 owner 批准），老 runner 又不会声明，服务端仍要有本条这条路径，所以没选。正常的领取（J-T2、J-T3）语句与行为不变，只把 RETURNING 的列表挪进与重投共用的 `HELD_CLAIM_COLUMNS`。生产现场已在 10-19 由重启解开（任务评论 `34itQ2WHMwQCSWQpF5XKM`），本修订不动生产库。测试：`integration-job-lost-claim.pg.spec.ts` 复现 10-19 的情形（修复前红、修复后绿），并钉住按时回报、租约之内、本机锁上排队、回报过的 legacy 领取这几种都不重投，以及重投带着叫停请求、工作目录已不在时按 unworkable 结束。
 - **v1 修订 28**（2026-10-27 owner 决定，文档任务 `34nGbUrpAHgkEhiSzeg2D`；效果图 `docs/mocks/landings-one-window/`，分支 `orbit/landing-e0346e` 的 `3c6c34f47`）：**一个项目的落地合到一个 Landings 窗口里看，Merged into main 也合进来**。缘由：owner 2026-10-27「这个 landing 有好多个，是否可以合并到一个会话窗口里」，随后补「和 Merged into main 也合并到一个会话里」；看过效果图后定了图上的两条待定：方案 A（只合窗口），结了的落地在窗口里全部保留。改动：§2.9 LS6 的列表范围——项目 sessions 页只有一行 Landings，整行打开这个项目的 Landings 窗口；窗口列出该项目的全部落地会话，没结的在最下面，结了的按天分组、全部保留、不折叠；一个落地会话 id 打开它所属项目的窗口并定位到那一条（滚到、展开、高亮）。LS6 的入口表加「项目 sessions 页的 Landings 行」（整行进窗口、停在最底），合入卡的头与各处「Open landing ›」改为进窗口并定位到这一次，「Merged into main」行挪进窗口、整行在原地展开这一轮（回执、检查、推送），协调会话里那一行回执照旧、回执底部的「Open landing ›」进窗口；表下一句的 Landings 组改为 Landings 窗口，并新加一段：新客户端上的「落地会话页」就是窗口里定位到的这一次，原来页头的门挂在这一次的卡上。§3.6 `promotions/merged` 的记录从项目 sessions 页的时间线挪进窗口，与这一轮的落地会话按 `landingSessionId` 合成一条，没有 id 的合入（落地会话上线之前）只展开回执；协调会话里那一行不动。§1.6 `inFlightJobs` 一行与 §7.2 V6 里读它的 Landings 组改为 Landings 窗口；V6 第 3 处的按压、BLOCKED 时的入口与「Merged into main」行同步；§7.5 的 C 改为窗口里的一行。**取代**：owner 2026-10-19 批准 v4 时定下的 24 小时窗口与 Earlier 折叠——Landings 组只列等决定的与 24 小时内结案的，更早的折成 `Earlier · N landed · N nothing to land`，也不收已合入的合入轮（v4 待定第 3、4 条，`docs/session-list-projects-design.md` §3.2）；修订 10（2026-10-06）把合完的记录作为一行排进项目 sessions 页时间线的那一半（合入卡、协调会话里那一行与回执不变）；修订 23 写的「Merged into main」行整行打开回执，在窗口里改为原地展开。**服务端不变**：一次落地仍是一条记录（一个任务段一个，一轮合入一个），§2.9 的数据、`landingSessionId`、`GET /sessions/:id` 与 `session_get`、agent 读口、`GET /sessions?projectId=&includeLanding=1` 与 `promotions/merged`（上限 20 条）都不动，不加接口、不加迁移；只改客户端的展示与入口，旧客户端照旧。没选方案 B（一个项目只有一个落地会话）：看到的一样，却要加迁移、改 §2.9 LS1–LS3 与 LS6、改服务端与 agent 工具。设计文档 `docs/landing-session-design.md` §3、§8 与 `docs/session-list-projects-design.md` 同步。三端实现另是一个任务（`34nGbUykKeP4geymwZYB8`）；效果图只画了 iPhone，web 与 Android 用同一个结构。
+
+### Direct delivery to a MAIN target
+
+A task's settled runner-reported commit can already be on the remote target when its promotion
+check starts. For a `TASK_BRANCH` check, the runner first fetches the target and verifies that the
+frozen task commit is contained in it and differs from the session's base. This read-only proof
+can succeed even when the temporary task branch was never published. A local-only target, an
+empty branch, or a missing commit identity is not proof of delivery.
+
+A verified `ALREADY_LANDED` task check records the upstream receipt and retires its answered candidate
+(`SUPERSEDED`, as an external merge receipt does) in the result transaction. It resolves the candidate's open items and dispatches dependents
+after commit. Work that is still moving or ended on another branch is rechecked or refiled before
+any receipt is written. Conflicts and failed checks continue to block. A project-branch check
+retains its existing disposition.
+
+This is a code fix, not a historical database backfill. Deploy the API and runner through the
+normal release process. For an older blocked MAIN candidate, request a promotion-check retry;
+`task integration_retry` is for task landings on project branches. The retry must verify the
+recorded task commit against the current remote target before producing a receipt. If the old
+session lacks a reliable commit identity, preserve the gate and obtain verified delivery evidence
+through the normal merge-receipt workflow. Do not set DONE again, close an exception, remove a
+dependency, or edit database rows to manufacture a landing. This change performs no bulk repair
+and does not alter production records during development.
