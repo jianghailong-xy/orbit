@@ -24,7 +24,7 @@ be taken for a deployment's.
 | `gen-event-kind-fixtures.mjs` | Regenerate `src/runner-go/testdata/b8-link-events.json` from the apiserver's event rules: `isNoiseSystemEvent`, the live-only types and the coordinator-context boundary subtypes, which the runner's link event stream mirrors. |
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
-| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
+| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). `loadgen-report.test.mjs` tests it on synthetic runs: `node --test scripts/runner-link/`. |
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
 | `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
 | `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task O3's inputs are `cell-inputs.json`. See [The cell's size](#the-cells-size). |
@@ -90,9 +90,15 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 - **A real runner.** Build the runner from the checkout under test and register it with the enrollment token in
   `secrets/enrollment_token`, against `http://127.0.0.1:18086`. A runner that dials the link trusts the staging CA through
   `SSL_CERT_FILE=<state>/tls/ca-bundle.pem`.
-- **A gateway release.** Run `docker compose kill -s TERM` on `<project>-link-gateway`, or simply
-  `docker kill -s TERM <project>-link-gateway`. The gateway drains and exits, and its restart policy starts it again.
-  Run `staging-client.sh -until-drains 1` beforehand to see a runner drained and reconnected.
+- **A gateway release.** Run `docker kill -s TERM <project>-link-gateway`: the gateway drains and exits. Wait for it to
+  exit (`docker wait <project>-link-gateway`), then start it again with `docker start <project>-link-gateway`; its
+  restart policy will not. Run `staging-client.sh -until-drains 1` beforehand to see a runner drained and reconnected.
+  Docker takes a `docker kill` or `docker compose kill`, with TERM or KILL, for a stop someone asked for, and
+  `restart: unless-stopped` leaves such a container stopped until it is started (Docker 29.9.2 in task C2b, 29.8.2 on
+  HPC). The policy starts a container again only when its process ended without Docker being asked, as an OOM kill ends
+  it (started again in 0.39–0.57 s in C2b). To drill that, signal the gateway's process from the host as root (its image
+  has no shell to do it from inside), with TERM, or KILL for a crash:
+  `kill -s TERM "$(docker inspect -f '{{.State.Pid}}' <project>-link-gateway)"`.
 - **A certificate rotation.** Run `staging-up.sh --rotate-cert --no-build`. The gateway loads the new certificate within
   30 seconds, without a restart. The serial in its log and `link_tls_certificate_not_after_timestamp_seconds` show it.
 - **A revocation.** Rotate the probe runner's token (`POST /api/runners/<id>/rotate-token` as the owner). The gateway
@@ -141,7 +147,9 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
   gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
-  highest 10 s average of its container's CPU time, as a share of `ORBIT_LINK_STAGING_DB_CPUS` when set.
+  highest 10 s average of its container's CPU time, as a share of `ORBIT_LINK_STAGING_DB_CPUS` when set. A gateway
+  that restarts in the window (an OOM kill, a drill) counts again from zero, its container's CPU time too: the report
+  adds up what each process counted.
 - **On a shared host**, the loadgen runs in a scope of its own (`systemd-run`), and the run stops itself when the
   host's available memory stays under `LOADGEN_MIN_AVAILABLE_MB` (800) for 15 s. The report's host section says what
   else used the CPUs and how long the stack's containers waited for one (CPU pressure).
