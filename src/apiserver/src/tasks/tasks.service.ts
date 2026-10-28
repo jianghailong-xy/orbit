@@ -94,6 +94,7 @@ import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
@@ -1722,6 +1723,11 @@ export function orderWithinLists<T extends { listId: string | null; priority: nu
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
 
+/** The transaction lock a foreman is filed under, one per list (`dispatchStalledListForemen`). */
+function foremanLock(listId: string): string {
+  return `task-list-foreman:${listId}`;
+}
+
 /**
  * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
  * dispatched onto it?
@@ -2071,6 +2077,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * reconcile timer (`onModuleInit`). `@Optional()` and last for the same reason as `queue`.
      */
     @Optional() evidenceQueue?: CoordinatorEvidenceQueueService,
+    /**
+     * Which apiserver process runs the reconcile timer's sweeps (`reconcileTick`). `@Optional()` and last
+     * for the same reason as `queue`: a service built by hand ticks whenever it is asked to.
+     */
+    @Optional() leader?: ControlPlaneLeader,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
@@ -2082,6 +2093,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     this.fuse = fuse;
     this.queue = queue;
     this.evidenceQueue = evidenceQueue;
+    this.leader = leader;
   }
 
   private readonly handoffs: ProjectHandoffService;
@@ -2091,6 +2103,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly fuse?: ProjectFuseService;
   private readonly queue?: QueueService;
   private readonly evidenceQueue?: CoordinatorEvidenceQueueService;
+  private readonly leader?: ControlPlaneLeader;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -2434,64 +2447,74 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
-    // reconcileReadyTasks). Single-replica assumption, same as ReaperService.
-    this.reconcileTimer = setInterval(() => {
-      // All three sweeps ride this one timer. A second setInterval is how the reconciler once
-      // ended up running twice a minute (TasksService was provided by two modules), and the
-      // symptom — duplicate dispatch — took a production incident to spot. Sequential, not
-      // concurrent, so the foreman sees the dispatch decisions this same tick already made.
-      this.reconcileReadyTasks()
-        .catch((e) =>
-          this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
-        )
-        // The clock trigger rides the same timer, for the reason above and one of its own: a task
-        // can be both due and dependency-ready, and running the two sweeps sequentially means the
-        // second sees what the first already dispatched. A schedule is therefore honoured within
-        // one RECONCILE_INTERVAL_MS of coming due, which is the resolution the field promises —
-        // `run_at` is the earliest start, not an alarm.
-        .then(() => this.dispatchDueScheduledTasks())
-        .catch((e) =>
-          this.logger.error(`scheduled sweep failed: ${e instanceof Error ? e.message : e}`),
-        )
-        .then(() => this.dispatchStalledListForemen())
-        .catch((e) =>
-          this.logger.error(`foreman sweep failed: ${e instanceof Error ? e.message : e}`),
-        )
-        // §13.8: the @-mention delivery ledger. On this timer and not one of its own, for the
-        // reason written above — a second `setInterval` is how this service once ran its sweeps
-        // twice a minute. The comment write kicks this directly too; the kick is the latency and
-        // the timer is the guarantee.
-        .then(() => this.deliverMentions())
-        .catch((e) =>
-          this.logger.error(`mention delivery sweep failed: ${e instanceof Error ? e.message : e}`),
-        )
-        // The pause projector's catch-up, on this timer and not one of its own — the reason is the
-        // one written at the top of this block, and it applies twice over here. A second
-        // `setInterval` is how this service once ran its sweeps twice a minute; and a pause
-        // projection is dispatch work, so a task that a pause released must not become a candidate
-        // in a tick that projects it afterwards. Sequential means this tick's projection is
-        // finished before this tick's dispatch starts.
-        //
-        // 60s is the interval, and that is the whole worst-case bound the design quotes for a
-        // pause taking effect: sub-second when the PATCH's own kick fires, and at most one tick
-        // when the kick was missed or this process restarted between the commit and the kick. The
-        // watermark (`pause_applied_epoch < pause_epoch`) is what makes a tick sufficient — a
-        // missed kick leaves work the scan can still see, which is why nothing here has to be
-        // durable.
-        .then(() => this.pauseProjector?.catchUp())
-        .catch((e) =>
-          this.logger.error(`pause projection sweep failed: ${e instanceof Error ? e.message : e}`),
-        )
-        // The evidence an idle coordinator was not handed while it was paused, on this timer and not
-        // one of its own, for the reason at the top of this block. A coordinator's own turn ending
-        // hands it over too; that is the latency, and this is the guarantee that one which is back and
-        // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
-        .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
-        .catch((e) =>
-          this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
-        );
-    }, RECONCILE_INTERVAL_MS);
+    // reconcileReadyTasks). One apiserver process runs it at a time (`reconcileTick`).
+    this.reconcileTimer = setInterval(() => void this.reconcileTick(), RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
+  }
+
+  /**
+   * One tick of the reconcile timer, on the apiserver process that runs the singleton sweeps
+   * (realtime/control-plane-leader.ts) and on no other. Two ticks at once are two dispatch decisions
+   * made from one reading — a project's free slots counted by each, a stalled list given a foreman by
+   * each — so with several apiservers the others skip it. A service built without a leader is the
+   * only one there is, and always ticks. Never rejects.
+   */
+  reconcileTick(): Promise<void> {
+    if (this.leader && !this.leader.leads()) return Promise.resolve();
+    // All three sweeps ride this one timer. A second setInterval is how the reconciler once
+    // ended up running twice a minute (TasksService was provided by two modules), and the
+    // symptom — duplicate dispatch — took a production incident to spot. Sequential, not
+    // concurrent, so the foreman sees the dispatch decisions this same tick already made.
+    return this.reconcileReadyTasks()
+      .catch((e) =>
+        this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
+      )
+      // The clock trigger rides the same timer, for the reason above and one of its own: a task
+      // can be both due and dependency-ready, and running the two sweeps sequentially means the
+      // second sees what the first already dispatched. A schedule is therefore honoured within
+      // one RECONCILE_INTERVAL_MS of coming due, which is the resolution the field promises —
+      // `run_at` is the earliest start, not an alarm.
+      .then(() => this.dispatchDueScheduledTasks())
+      .catch((e) =>
+        this.logger.error(`scheduled sweep failed: ${e instanceof Error ? e.message : e}`),
+      )
+      .then(() => this.dispatchStalledListForemen())
+      .catch((e) =>
+        this.logger.error(`foreman sweep failed: ${e instanceof Error ? e.message : e}`),
+      )
+      // §13.8: the @-mention delivery ledger. On this timer and not one of its own, for the
+      // reason written above — a second `setInterval` is how this service once ran its sweeps
+      // twice a minute. The comment write kicks this directly too; the kick is the latency and
+      // the timer is the guarantee.
+      .then(() => this.deliverMentions())
+      .catch((e) =>
+        this.logger.error(`mention delivery sweep failed: ${e instanceof Error ? e.message : e}`),
+      )
+      // The pause projector's catch-up, on this timer and not one of its own — the reason is the
+      // one written at the top of this block, and it applies twice over here. A second
+      // `setInterval` is how this service once ran its sweeps twice a minute; and a pause
+      // projection is dispatch work, so a task that a pause released must not become a candidate
+      // in a tick that projects it afterwards. Sequential means this tick's projection is
+      // finished before this tick's dispatch starts.
+      //
+      // 60s is the interval, and that is the whole worst-case bound the design quotes for a
+      // pause taking effect: sub-second when the PATCH's own kick fires, and at most one tick
+      // when the kick was missed or this process restarted between the commit and the kick. The
+      // watermark (`pause_applied_epoch < pause_epoch`) is what makes a tick sufficient — a
+      // missed kick leaves work the scan can still see, which is why nothing here has to be
+      // durable.
+      .then(() => this.pauseProjector?.catchUp())
+      .catch((e) =>
+        this.logger.error(`pause projection sweep failed: ${e instanceof Error ? e.message : e}`),
+      )
+      // The evidence an idle coordinator was not handed while it was paused, on this timer and not
+      // one of its own, for the reason at the top of this block. A coordinator's own turn ending
+      // hands it over too; that is the latency, and this is the guarantee that one which is back and
+      // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
+      .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
+      .catch((e) =>
+        this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
+      );
   }
 
   onModuleDestroy(): void {
@@ -11708,29 +11731,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       }
       try {
-        const task = await this.prisma.task.create({
-          data: {
-            title: `[FOREMAN] ${list.title} — stalled ${list.minutes} min`.slice(0, 200),
-            description: this.buildForemanBrief(list.title, list.minutes),
-            ownerId: list.ownerId,
-            listId: list.id,
-            assigneeId: list.workspaceId,
-            isForeman: true,
-            // A foreman produces a diagnosis and may coordinate several unrelated repairs; no
-            // single repository command or independent verifier truthfully settles that work.
-            // Keep the existing owner-review contract, but state it instead of consuming the
-            // database's legacy EVIDENCE_JUDGMENT default invisibly.
-            completionCriterion: 'EVIDENCE_JUDGMENT',
-            completionCriterionOverrideReason:
-              'A stalled-list foreman produces a cross-task diagnosis for the owner to review.',
-            // Nothing gates this run but the stall that caused it; it has no prerequisites, and
-            // the auto-run sweep only ever considers tasks that do.
-            autoRunWhenReady: false,
-            creatorType: CreatorType.USER,
-            creatorId: list.ownerId,
-          },
-          select: { id: true },
-        });
+        // One coordinator per list however many sweeps meet here: one per apiserver process, while a
+        // takeover overlaps the sweep it replaces (realtime/control-plane-leader.ts). The scan above read
+        // without a lock, so the open-foreman clause is asked again under the list's own transaction lock,
+        // which only this filing takes and never waits for: a sweep that finds it taken leaves the list to
+        // the one filing for it, and one that comes after reads that one's foreman.
+        const task = await withTransactionRetry(this.prisma, async (tx) => {
+          const [{ turn }] = await tx.$queryRaw<Array<{ turn: boolean }>>`
+            SELECT pg_try_advisory_xact_lock(hashtextextended(${foremanLock(list.id)}, 0)) AS "turn"`;
+          if (!turn) return null;
+          const [{ open }] = await tx.$queryRaw<Array<{ open: boolean }>>`
+            SELECT EXISTS (
+              SELECT 1 FROM task t
+              WHERE t.list_id = ${list.id}::uuid AND t.is_foreman = true
+                AND t.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+            ) AS "open"`;
+          if (open) return null;
+          return tx.task.create({
+            data: {
+              title: `[FOREMAN] ${list.title} — stalled ${list.minutes} min`.slice(0, 200),
+              description: this.buildForemanBrief(list.title, list.minutes),
+              ownerId: list.ownerId,
+              listId: list.id,
+              assigneeId: list.workspaceId,
+              isForeman: true,
+              // A foreman produces a diagnosis and may coordinate several unrelated repairs; no
+              // single repository command or independent verifier truthfully settles that work.
+              // Keep the existing owner-review contract, but state it instead of consuming the
+              // database's legacy EVIDENCE_JUDGMENT default invisibly.
+              completionCriterion: 'EVIDENCE_JUDGMENT',
+              completionCriterionOverrideReason:
+                'A stalled-list foreman produces a cross-task diagnosis for the owner to review.',
+              // Nothing gates this run but the stall that caused it; it has no prerequisites, and
+              // the auto-run sweep only ever considers tasks that do.
+              autoRunWhenReady: false,
+              creatorType: CreatorType.USER,
+              creatorId: list.ownerId,
+            },
+            select: { id: true },
+          });
+        }, this.transientWriteRetry('tasks.dispatchStalledListForemen'));
+        if (!task) continue;
         // Same failure window as verification filing: the Task committed before execute(), and a
         // failed dispatch has no session event that could otherwise reveal the new list row.
         this.publishKnownTaskRows(list.ownerId, [task.id]);

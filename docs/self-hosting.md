@@ -687,35 +687,41 @@ their image is the one it rebuilt. So does `/upgrade`'s script. It finds them am
 their names (`apiserver-` and a number), and recreates them once the first apiserver has applied the migrations and is
 healthy. Until then they run the old code against the schema the first apiserver has just migrated.
 
-**Before production.** Each apiserver runs every background job. Most jobs coordinate through the database, so with
+**Background jobs.** Most background jobs run in every apiserver. They coordinate through the database, so with
 several processes they repeat work but do nothing twice:
 
-- the reaper's finalizing of sessions;
 - watches, open items and managed runners;
 - scheduled wakeups and session requests;
 - mentions and claims.
 
-Two things still assume one process. Until they are fixed, run more than one apiserver for load tests and staging
-only:
+**The reaper, the task scheduler's sweep and the auto-retry sweep** run in one apiserver at a time:
 
-- **The reaper, the task scheduler's sweep and the auto-retry sweep** are written for one process.
-  - The reaper holds back while heartbeat writes fail, but it sees only its own process's failures. Another process can
-    take a silent runner for gone while the first one's database connections are exhausted.
-  - The task sweep can file two foreman tasks for one stalled list, and spend one free slot of a project's task limit
-    twice.
-  - Auto-retry can announce a retried session's end twice, and its release limit (one session for each runner and
-    provider a sweep) applies once per process.
-- **Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the process that took them.
-  They reach the runner only through a heartbeat that lands on that same process. The link gateway spreads heartbeats
-  over every apiserver, so a code waits several beats, and a key check mostly times out.
+- **Which one.** The one that holds a PostgreSQL advisory lock, on a connection of its own. Its log says
+  `now runs the reaper, the task sweep and the auto-retry sweep`. The others ask for the lock every 5 seconds.
+- **Takeover.** When that apiserver stops or loses the database, the lock is released with its connection, and another
+  apiserver takes it within a few seconds. For its first 3 minutes the new one reaps no session for a silent runner,
+  as an apiserver that has just started does.
+- **Heartbeats another apiserver could not write.** Each apiserver records in the `apiserver_process` table when it last
+  failed to write a runner's heartbeat, and reports there every 10 seconds. The reaper reads every other apiserver's
+  row. So it reaps no session for a silent runner while another apiserver's heartbeat writes are failing, or while
+  another apiserver has stopped reporting.
+
+**Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the apiserver that took them.
+The apiserver a runner's heartbeat lands on asks that one for them over the runner link's NATS, so they reach the runner
+whichever apiserver the link gateway hands its heartbeats to.
 
 ### Database connections
 
-Each apiserver process opens at most 11 connections to PostgreSQL. Ten are its pool (node-postgres's default, which the
-apiserver keeps), and one listens for the notices the processes send each other. The wiki worker opens the same.
+Each apiserver process opens at most 12 connections to PostgreSQL:
 
-So N apiservers and the wiki worker need up to 11 × (N + 1) connections, and the backup sidecar and anyone working
-in `psql` a few more. The default `max_connections` is 100, which is reached at about eight apiservers. Raise it,
+- ten are its pool (node-postgres's default, which the apiserver keeps);
+- one listens for the notices the processes send each other;
+- one holds the locks that decide which apiserver runs the reaper and the other sweeps above.
+
+The wiki worker opens as many: its pool of ten, and a listener for each of its two queues.
+
+So N apiservers and the wiki worker need up to 12 × (N + 1) connections, and the backup sidecar and anyone working
+in `psql` a few more. The default `max_connections` is 100, which is reached at about seven apiservers. Raise it,
 then restart PostgreSQL:
 
 ```bash

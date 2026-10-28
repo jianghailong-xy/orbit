@@ -27,7 +27,12 @@ import { PatService } from './pat.service';
 import { call, type Apiserver, type Reply } from './pat-test-apiserver';
 import { evidence, paramsOf, type Tenant, type TenantRequest } from './tenant-isolation-cases';
 
-/** What every table notes while the census runs: one row per row written, by whom it does not say. */
+/**
+ * What every table notes while the census runs: one row per row written, by whom it does not say. Every table but the
+ * trap's own, the migration ledger, and `apiserver_process` (migration 0449): there each apiserver process rewrites its
+ * own row every ten seconds whatever it is asked (runners/runner-presence.ts), a row that names no account, so it is no
+ * write of any request's.
+ */
 export const WRITE_TRAP = `
   CREATE TABLE "tenant_census_write" (
     "seq" bigserial PRIMARY KEY,
@@ -46,7 +51,7 @@ export const WRITE_TRAP = `
   BEGIN
     FOR t IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
              WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p') AND NOT c.relispartition
-               AND c.relname NOT IN ('tenant_census_write', '_prisma_migrations')
+               AND c.relname NOT IN ('tenant_census_write', '_prisma_migrations', 'apiserver_process')
     LOOP
       EXECUTE format(
         'CREATE TRIGGER "tenant_census_write" AFTER INSERT OR UPDATE OR DELETE ON %I '

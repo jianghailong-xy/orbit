@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { classifyTransactionFault } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { APISERVER_PROCESS_LOCK_PREFIX, ControlPlaneLeader } from '../realtime/control-plane-leader';
 
 /**
  * Whether a runner is there, and when it was last heard from — the one place this control plane
@@ -181,29 +182,177 @@ export interface FleetSilence {
   silent: number;
 }
 
+/** How often each apiserver process writes its row in `apiserver_process` (migration 0449). */
+export const APISERVER_PROCESS_REPORT_EVERY_MS = 10_000;
+
+/** A process whose row has not been written for three reports has gone quiet. */
+export const APISERVER_PROCESS_QUIET_AFTER_MS = 3 * APISERVER_PROCESS_REPORT_EVERY_MS;
+
 /**
- * What this process knows about presence beyond any one runner: whether the heartbeats it took could
- * be written, and how much of the cell has gone quiet at once. The reaper asks both before it takes a
- * runner's silence for its death (realtime/reaper.service.ts).
+ * The least time between two of one process's writes of its row when beats fail in a burst: the reaper holds for
+ * RUNNER_OFFLINE_AFTER_MS past the last one, so a second a write is all the precision it needs, and a thousand
+ * failed beats are not a thousand writes of one row.
+ */
+const APISERVER_PROCESS_REPORT_SPACING_MS = 1_000;
+
+/** Another apiserver process as the reaper reads it (RunnerPresenceService.otherProcesses). */
+export interface ApiserverProcessReport {
+  id: string;
+  /** How long ago it last reported a heartbeat it took failing to be written, or coming back from quiet. */
+  beatLostAgoMs: number | null;
+  /** How long ago it last wrote its row. */
+  seenAgoMs: number;
+  /** Whether it still holds the lock it holds while connected (realtime/control-plane-leader.ts). */
+  connected: boolean;
+}
+
+/**
+ * What this control plane knows about presence beyond any one runner: whether the heartbeats its
+ * processes took could be written, and how much of the cell has gone quiet at once. The reaper asks
+ * both before it takes a runner's silence for its death (realtime/reaper.service.ts).
  *
- * The write half is this process's own: a heartbeat another replica failed to write is not seen here.
- * v1 runs the reaper on a single replica, where that is every heartbeat; the fleet half reads the
- * database and sees every runner, whichever replica took its beats.
+ * The write half has two readers. This process's own failures are kept here, in memory, as they always
+ * were (`lastBeatNotRecordedAt`), for the reaper beside it. Every other process reads them from
+ * `apiserver_process` (migration 0449): with several apiservers the link gateway spreads beats over all
+ * of them, the reaper runs on one (control-plane-leader.ts), and a beat another process failed to write
+ * is a silence that reaper must not read as a runner gone. So each process writes its row every
+ * APISERVER_PROCESS_REPORT_EVERY_MS and the moment a beat fails (`report`), and the reaper reads the
+ * others' rows (`otherProcesses`). The rows go through the same pool the heartbeats do: a process whose
+ * pool cannot write a beat cannot write its row either, and goes quiet there, which the reaper reads too.
+ * The fleet half reads the database and sees every runner, whichever process took its beats.
+ *
+ * Only a process that runs beside a ControlPlaneLeader reports or reads other processes; one built
+ * without (the specs that build the reaper by hand) is the only process there is, as v1 was.
  */
 @Injectable()
-export class RunnerPresenceService {
+export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
+  private readonly log = new Logger('RunnerPresence');
   private lastBeatLostAt: number | null = null;
+  /** A lost beat, or a quiet spell, that this process's row does not say yet. */
+  private lostUnreported = false;
+  /** When this process last wrote its row; null before it first has. */
+  private reportedAt: number | null = null;
+  private reporting: Promise<void> | null = null;
+  private reportAgain = false;
+  private timer?: ReturnType<typeof setInterval>;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** This process's id, and the sign that there may be others (realtime/control-plane-leader.ts). */
+    @Optional() private readonly leader?: ControlPlaneLeader,
+  ) {}
+
+  onModuleInit(): void {
+    if (!this.leader) return;
+    void this.report();
+    this.timer = setInterval(() => void this.report(), APISERVER_PROCESS_REPORT_EVERY_MS);
+    this.timer.unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer) clearInterval(this.timer);
+  }
 
   /**
    * A heartbeat whose writes failed: the runner reached this process and nothing recorded it. A
    * refusal the data made — the runner deleted under the beat — says nothing about the database, and
-   * is not counted.
+   * is not counted. Reported at once, for a reaper on another process to read before its next sweep.
    */
   beatNotRecorded(error: unknown, at: number = Date.now()): void {
     if (classifyTransactionFault(error).family === 'PERMANENT') return;
     this.lastBeatLostAt = at;
+    this.lostUnreported = true;
+    void this.report();
+  }
+
+  /**
+   * Write this process's row in `apiserver_process`: seen now, and a beat lost now when one has been
+   * since the row last said so — a heartbeat that failed to be written, or a spell longer than
+   * APISERVER_PROCESS_QUIET_AFTER_MS in which the row could not be written at all, whose beats may have
+   * been lost without any error reaching this process (a pool so busy they waited out their callers).
+   * Both at the database's clock. One write at a time: a call while one is out makes one more after it.
+   * Never throws; a write that fails leaves what it was to say for the next.
+   */
+  report(): Promise<void> {
+    if (!this.leader) return Promise.resolve();
+    if (this.reporting) {
+      this.reportAgain = true;
+      return this.reporting;
+    }
+    const processId = this.leader.processId;
+    this.reporting = (async () => {
+      for (;;) {
+        this.reportAgain = false;
+        const startedAt = Date.now();
+        // A write that failed leaves what it had to say to the timer's next report, rather than asking a
+        // database that just refused it again at once.
+        if (!(await this.writeReport(processId)) || !this.reportAgain) return;
+        await new Promise((resolve) => setTimeout(resolve, startedAt + APISERVER_PROCESS_REPORT_SPACING_MS - Date.now()));
+      }
+    })().finally(() => {
+      this.reporting = null;
+    });
+    return this.reporting;
+  }
+
+  /** One write of this process's row (`report`); whether it landed. */
+  private async writeReport(processId: string): Promise<boolean> {
+    const wasQuiet = this.reportedAt !== null && Date.now() - this.reportedAt > APISERVER_PROCESS_QUIET_AFTER_MS;
+    const lost = this.lostUnreported || wasQuiet;
+    this.lostUnreported = false;
+    try {
+      await this.prisma.$executeRaw`
+        INSERT INTO "apiserver_process" ("id", "started_at", "seen_at", "beat_lost_at")
+        VALUES (${processId}::uuid, now(), now(), CASE WHEN ${lost}::boolean THEN now() END)
+        ON CONFLICT ("id") DO UPDATE
+          SET "seen_at" = now(),
+              "beat_lost_at" = CASE WHEN ${lost}::boolean THEN now() ELSE "apiserver_process"."beat_lost_at" END`;
+      this.reportedAt = Date.now();
+      return true;
+    } catch (error) {
+      if (lost) this.lostUnreported = true;
+      this.log.warn(`apiserver process ${processId.slice(0, 8)} could not report itself: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
+   * The other apiserver processes the reaper has to hear about before it reads a runner's silence for its
+   * death: each that reported a lost beat within `windowMs`, and each that went quiet — has not written its
+   * row for APISERVER_PROCESS_QUIET_AFTER_MS — less than `windowMs` ago, with whether it still holds the
+   * lock a process holds while connected. Read on Postgres' clock, the clock the rows are written on. Empty
+   * for a process built without a leader, which knows of no other.
+   */
+  async otherProcesses(windowMs: number): Promise<ApiserverProcessReport[]> {
+    if (!this.leader) return [];
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string; beatLostAgoMs: number | null; seenAgoMs: number; connected: boolean;
+    }>>(Prisma.sql`
+      WITH held AS MATERIALIZED (
+        -- The session-level advisory locks held now, by key: pg_locks read once, however many processes there are.
+        SELECT ((l."classid"::bigint << 32) | l."objid"::bigint) AS "key"
+          FROM pg_locks l
+         WHERE l."locktype" = 'advisory' AND l."granted" AND l."objsubid" = 1
+      )
+      SELECT p."id",
+             (extract(epoch FROM (now() - p."beat_lost_at")) * 1000)::float8 AS "beatLostAgoMs",
+             (extract(epoch FROM (now() - p."seen_at")) * 1000)::float8 AS "seenAgoMs",
+             EXISTS (
+               SELECT 1 FROM held
+                WHERE held."key" = hashtextextended(${APISERVER_PROCESS_LOCK_PREFIX}::text || p."id"::text, 0)
+             ) AS "connected"
+        FROM "apiserver_process" p
+       WHERE p."id" <> ${this.leader.processId}::uuid
+         AND (p."beat_lost_at" >= now() - (${windowMs} * interval '1 millisecond')
+              OR (p."seen_at" < now() - (${APISERVER_PROCESS_QUIET_AFTER_MS} * interval '1 millisecond')
+                  AND p."seen_at" >= now() - (${APISERVER_PROCESS_QUIET_AFTER_MS + windowMs} * interval '1 millisecond')))
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      beatLostAgoMs: row.beatLostAgoMs === null ? null : Number(row.beatLostAgoMs),
+      seenAgoMs: Number(row.seenAgoMs),
+      connected: row.connected,
+    }));
   }
 
   /** When this process last failed to record a heartbeat; null when it never has. */

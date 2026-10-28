@@ -2521,7 +2521,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no CHECK, no index, no constraint, no foreign key, no trigger names them — and no `task`, `project` or
       // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row are out of its
       // reach. No function or trigger is created, and no INSERT, UPDATE or DELETE runs: every session reads NULL there.
-      '0448_session_inbox_request'],
+      '0448_session_inbox_request',
+      // The apiserver processes of the deployment, as each reports itself (0449, realtime/control-plane-leader.ts,
+      // runners/runner-presence.ts): one new table, `apiserver_process`, created with IF NOT EXISTS — a UUID key, three
+      // TIMESTAMP(3) columns, no foreign key — written by each apiserver process for itself and read by the reaper.
+      // Read against every claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the
+      // 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it names none of the six preserved objects and is not another writer of the
+      // DONE fence. No INSERT, UPDATE or DELETE: the table starts empty, and each process writes its own row once it runs.
+      '0449_apiserver_process'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

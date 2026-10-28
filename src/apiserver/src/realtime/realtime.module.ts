@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
 import { PushModule } from '../push/push.module';
 import { RunnerPresenceService } from '../runners/runner-presence';
+import { ControlPlaneLeader } from './control-plane-leader';
 import { RealtimeService } from './realtime.service';
 import { ReaperService } from './reaper.service';
 import { RunnerHints } from './runner-hints';
@@ -16,10 +17,13 @@ import { RunnerHints } from './runner-hints';
   imports: [PushModule, CoordinatorJudgmentModule],
   // RunnerPresenceService beside the reaper that asks it whether a runner's silence is evidence, and
   // exported so the heartbeat that writes presence tells the same instance when a write fails.
+  // ControlPlaneLeader decides which apiserver process runs the reaper, and is exported to the task
+  // sweep and the auto-retry sweep, which run on the same process (control-plane-leader.ts).
   providers: [
     RealtimeService,
     ReaperService,
     RunnerPresenceService,
+    ControlPlaneLeader,
     // The runner link's hints on NATS (runner-hints.ts), read from configuration once.
     {
       provide: RunnerHints,
@@ -27,6 +31,6 @@ import { RunnerHints } from './runner-hints';
       useFactory: (prisma: PrismaService, config: ConfigService) => RunnerHints.fromConfig(prisma, config),
     },
   ],
-  exports: [RealtimeService, RunnerPresenceService, RunnerHints],
+  exports: [RealtimeService, RunnerPresenceService, RunnerHints, ControlPlaneLeader],
 })
 export class RealtimeModule {}
