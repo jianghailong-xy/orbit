@@ -72,13 +72,10 @@ import io.orbitd.android.ui.typingFold
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 
-/** [unreadSteers]: the reader's steers nothing has read yet, which the conversation leaves to the tray above this box
- * ([SteerDelivery.place]). */
 @Composable
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
-    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
-    unreadSteers: List<UnreadSteer> = emptyList()) {
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -134,12 +131,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
         queuedTail(session?.snapshot?.queuedTurns.orEmpty(), session?.transcript?.events.orEmpty())
     }
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
-    // The engine this session's turns run on, which no pick here changes: whether a message can go into a running one — the tray's
-    // Steer, and Send's other way — and who it was that read one too late to withdraw.
+    // The engine this session's turns run on, which no pick here changes: whether a message can go into a running one (Send's other
+    // way), and what the box says while Cursor CLI's runs.
     val engine = ProviderChoices.engine(detail, state.catalog?.providers.orEmpty())
     val midTurn = SteerDelivery.runtimeTakesMidTurnSteer(engine)
-    // The tray above the box (docs/mocks/steer-tray): the reader's steers nothing has read yet and their messages still on the queue.
-    val trayRows = if (target != null) emptyList() else PendingTray.rows(unreadSteers, waiting, state, steerOffered = usable && running && midTurn)
     // The engine the box's picks run on: the session's, or a draft's pick.
     val shownEngine = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty())
     // DeepSeek Harness takes no ! command, and picks its own model until the runner reports one (A07-5).
@@ -185,13 +180,6 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             focusField()
         }
     }
-    Column {
-    // Directly above the box, and not folded while a phone types: it is about the messages being typed into. It takes what room the
-    // box leaves, scrolling past about four rows.
-    PendingTrayCard(trayRows, enabled = usable, steer = { model.steer(it.turnId) },
-        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) }, modifier = Modifier.weight(1f, fill = false),
-        // Cursor CLI takes no message mid-turn — one would stop the turn — so the tray says why its rows wait (iOS 5 ⑤).
-        note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null)
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -325,7 +313,6 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
-    }
     preview?.let { att ->
         val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }
         AttachmentActions(att.name, att.mime, { model.attachmentBytes(att.id) }, contentKey = att.id,
@@ -374,6 +361,31 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             } },
             dismissButton = { TextButton(onClick = { withdrawingWake = null }) { Text(WatchWakeQueue.keep) } })
     }
+}
+
+/**
+ * The session's tray of messages nothing has read yet (docs/mocks/steer-tray): the reader's steers — [unreadSteers], which the
+ * conversation leaves out until the engine reads them ([SteerDelivery.place]) — and their messages still on the queue, acted on
+ * through the session's composer [model]. The session page draws it as its band's first card, right under the conversation and
+ * above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28).
+ */
+@Composable
+internal fun SessionPendingTray(model: ComposerModel, session: SessionState?, unreadSteers: List<UnreadSteer>) {
+    val state by model.state.collectAsState()
+    val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
+    // What is still waiting, as the transcript's tail draws it (A07-14), and whether one can go into the turn running now.
+    val waiting = remember(session?.snapshot?.queuedTurns, session?.transcript?.events) {
+        queuedTail(session?.snapshot?.queuedTurns.orEmpty(), session?.transcript?.events.orEmpty())
+    }
+    val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // The engine this session's turns run on: whether it takes a message mid-turn, and who it was that read one too late to withdraw.
+    val engine = ProviderChoices.engine(detail, state.catalog?.providers.orEmpty())
+    val usable = state.loaded && session.canCompose()
+    val rows = PendingTray.rows(unreadSteers, waiting, state, steerOffered = usable && running && SteerDelivery.runtimeTakesMidTurnSteer(engine))
+    PendingTrayCard(rows, enabled = usable, steer = { model.steer(it.turnId) },
+        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) },
+        // Cursor CLI takes no message mid-turn — one would stop the turn — so the tray says why its rows wait (iOS 5 ⑤).
+        note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null)
 }
 
 /** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap to use"

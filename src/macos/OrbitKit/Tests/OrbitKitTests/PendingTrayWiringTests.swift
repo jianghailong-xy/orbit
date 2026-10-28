@@ -2,9 +2,10 @@ import Foundation
 import XCTest
 
 /// The tray above the composer, as OrbitApp draws it (docs/mocks/steer-tray, decided 2026-10-16).
-/// SwiftUI does not build on Linux, so these read the app's sources: the tray stands in the band on
-/// the composer and is one of the band's cards, its rows act through the console, and Send carries
-/// the other way to send a message while a turn runs. `PendingTrayTests` holds the rows themselves.
+/// SwiftUI does not build on Linux, so these read the app's sources: the tray is the band's first card,
+/// above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28), its rows act
+/// through the console, and Send carries the other way to send a message while a turn runs.
+/// `PendingTrayTests` holds the rows themselves.
 final class PendingTrayWiringTests: XCTestCase {
     private func source(_ relative: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -21,13 +22,19 @@ final class PendingTrayWiringTests: XCTestCase {
 
     private let app = "src/macos/OrbitApp/Sources/OrbitApp/"
 
-    func testTheTrayIsTheBandsCardOnTheComposer() throws {
+    func testTheTrayIsTheBandsFirstCardAboveTheParkingStrip() throws {
         let console = try source(app + "Views/Console/ConsoleView.swift")
+        let band = try XCTUnwrap(console.range(of: "ComposerBand {"))
         let tray = try XCTUnwrap(console.range(of: "PendingTrayView(console: console, rows: console.pendingTrayRows("))
-        let composer = try XCTUnwrap(console.range(of: "ComposerView(console: console)"))
-        XCTAssertLessThan(tray.lowerBound, composer.lowerBound, "the tray is drawn right above the composer")
+        let banner = try XCTUnwrap(console.range(of: "if let managed = console.managed, managed.showsBanner {"))
+        XCTAssertLessThan(band.lowerBound, tray.lowerBound)
+        XCTAssertLessThan(tray.lowerBound, banner.lowerBound, "the band's first card, right under the conversation")
+        let strip = try XCTUnwrap(console.range(of: "WatchingCardStack(sessionID: console.sessionID)"))
+        XCTAssertLessThan(tray.lowerBound, strip.lowerBound, "above the parking strip")
         let fold = try XCTUnwrap(console.range(of: ".modifier(TypingFold(folded: foldsChrome(console)))"))
-        XCTAssertLessThan(fold.lowerBound, tray.lowerBound, "and is not folded away while typing")
+        let folded = try XCTUnwrap(console.range(of: "VStack(spacing: 0) {", range: banner.upperBound..<fold.lowerBound))
+        XCTAssertLessThan(tray.lowerBound, folded.lowerBound, "and is not folded away while typing")
+        XCTAssertEqual(console.components(separatedBy: "PendingTrayView(").count - 1, 1, "drawn once")
 
         let view = try source(app + "Views/Console/PendingTrayView.swift")
         XCTAssertTrue(view.contains(".composerBandCard(cornerRadius: 12)"), "one of the band's cards, glass where it floats")

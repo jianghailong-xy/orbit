@@ -1,11 +1,12 @@
 import SwiftUI
 import OrbitKit
 
-/// The messages the reader sent that nothing has read yet, one row each, as the composer band's card
-/// nearest the composer (docs/mocks/steer-tray, decided 2026-10-16; web parity: `PendingTray.tsx`).
-/// They are not part of the conversation until the engine reads them (`TranscriptState.unreadSteers`),
-/// so what is still open about each — where it is going, how far it got, the way to take it back — is
-/// said here, where the next one is being typed.
+/// The messages the reader sent that nothing has read yet, one row each (docs/mocks/steer-tray,
+/// decided 2026-10-16; web parity: `PendingTray.tsx`), as the composer band's first card: right under
+/// the conversation, above the parking strip (docs/mocks/pending-tray-above-parking, decided
+/// 2026-10-28). They are not part of the conversation until the engine reads them
+/// (`TranscriptState.unreadSteers`), so what is still open about each — where it is going, how far it
+/// got, the way to take it back — is said here, over the composer the next one is being typed in.
 ///
 /// A row is headed into the turn running now (a steer: ↳) or queued for the next one. A queued row on
 /// an engine that takes a message mid-turn offers Steer, which sends it into the current turn.

@@ -11446,6 +11446,13 @@ export function WorkspaceView({
         </div>
 
       <div className="workspace-composer">
+        {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
+            first member, right under the conversation and above the parking strip below
+            (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
+        <PendingTray
+          rows={pendingTrayRows}
+          note={selectedEngine === AgentProvider.CURSOR ? CURSOR_QUEUE_NOTE : null}
+        />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
         {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
@@ -11613,11 +11620,6 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
-        {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
-        <PendingTray
-          rows={pendingTrayRows}
-          note={selectedEngine === AgentProvider.CURSOR ? CURSOR_QUEUE_NOTE : null}
-        />
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual

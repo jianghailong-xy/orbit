@@ -6489,19 +6489,18 @@ button.toast--pill:focus-visible {
 .composer-box-shell:has(.composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: var(--error);
 }
-/* The messages nothing has read yet (PendingTray): a card tucked behind the composer's top edge,
-   one row each (docs/mocks/steer-tray). 18px in from the composer's sides with 16px corners, its
-   foot runs 22px under the composer — positioned and later in the page, so drawn over it — and the
-   two read as one stack. Four rows show; more scroll inside it, and an opened row may take more. */
+/* The messages nothing has read yet (PendingTray), one row each (docs/mocks/steer-tray): the band's
+   first card, right under the conversation and above the parking strip (docs/mocks/
+   pending-tray-above-parking, decided 2026-10-28). A card of its own, as wide as the strip's and
+   white like the composer, with iOS's 12px corners and the band's 8px gap. Four rows show; more
+   scroll inside it, and an opened row may take more. */
 .pending-tray {
-  position: relative;
-  margin: 0 18px -22px;
-  padding: 3px 0 22px;
-  max-height: calc(4 * 42px + 25px);
+  margin: 0 0 8px;
+  padding: 3px 0;
+  max-height: calc(4 * 42px + 6px);
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 16px 16px 0 0;
+  border-radius: 12px;
   background: var(--bg-raised);
 }
 .pending-tray:has(.pending-tray-text.is-open) {
@@ -6661,9 +6660,6 @@ button.toast--pill:focus-visible {
 }
 /* Phone: the state goes under the words, and every target is a finger's 36px. */
 @media (max-width: 600px) {
-  .pending-tray {
-    margin: 0 12px -22px;
-  }
   .pending-tray-row {
     min-height: 50px;
     padding: 4px 4px 4px 12px;

@@ -209,11 +209,19 @@ struct ConsoleView: View {
     }
 
     private func bandMembers(_ console: ConsoleModel) -> some View {
-        // Error, background tray, git bar, composer — web's order (`workspace-composer`).
-        // Staged attachments are not a member: they sit inside the composer's card, above
-        // the text they go out with. The band owns the gutter and the gaps; members only
-        // say whether they are on screen.
+        // Unread messages, error, background tray, git bar, composer — web's order
+        // (`workspace-composer`). Staged attachments are not a member: they sit inside the
+        // composer's card, above the text they go out with. The band owns the gutter and the
+        // gaps; members only say whether they are on screen.
         ComposerBand {
+            // The reader's messages nothing has read yet: the conversation's next lines, so the
+            // band's first card, right under the conversation and above the parking strip
+            // (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
+            // typing: they are about the message flow being typed into.
+            PendingTrayView(console: console, rows: console.pendingTrayRows(
+                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
+                            // Why none of them goes into the turn running now: Cursor CLI's would stop it.
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
             // The managed runner's state while it is anything but ready, when this
             // console's runner is it (docs/managed-runner-design.md): about the runner the
             // message goes to, so it stays in sight while you type.
@@ -286,12 +294,6 @@ struct ConsoleView: View {
                 WorktreeBar(console: console)
             }
             .modifier(TypingFold(folded: foldsChrome(console)))
-            // The reader's messages nothing has read yet, on the composer they were sent from —
-            // not folded while typing: they are about the message flow being typed into.
-            PendingTrayView(console: console, rows: console.pendingTrayRows(
-                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
-                            // Why none of them goes into the turn running now: Cursor CLI's would stop it.
-                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
             // The landing this conversation's work fed, at the session's own bottom (owner
             // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
             SourceLandingChip(console: console)

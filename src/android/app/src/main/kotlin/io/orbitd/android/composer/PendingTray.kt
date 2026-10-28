@@ -153,10 +153,11 @@ internal object PendingTray {
 private val TRAY_MAX_HEIGHT = 248.dp
 
 /**
- * The messages the reader sent that nothing has read yet, one row each, as the card directly above the composer they were sent from
- * (docs/mocks/steer-tray; OrbitApp `PendingTrayView`, web `PendingTray`). They are not part of the conversation until the engine reads
- * them, so what is still open about each — where it is going, how far it got, the way to take it back — is said here, where the next
- * one is being typed. Not folded while a phone types: it is about the message flow being typed into.
+ * The messages the reader sent that nothing has read yet, one row each (docs/mocks/steer-tray; OrbitApp `PendingTrayView`, web
+ * `PendingTray`), as the first card above the composer: right under the conversation, above the parking strip
+ * (docs/mocks/pending-tray-above-parking, decided 2026-10-28). They are not part of the conversation until the engine reads them, so
+ * what is still open about each — where it is going, how far it got, the way to take it back — is said here, over the composer the
+ * next one is being typed in. Not folded while a phone types: it is about the message flow being typed into.
  *
  * A row is headed into the turn running now (↳) or queued for the next one. A queued row on an engine that takes a message mid-turn
  * offers Steer; the trash is Withdraw, and the words return to the composer under any draft. What a row cannot do — a Codex steer
@@ -167,8 +168,8 @@ internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer
     modifier: Modifier = Modifier, note: String? = null) {
     if (rows.isEmpty()) return
     val shape = RoundedCornerShape(14.dp)
-    // Inset from the composer's own edges, the board's 12 dp each side on a phone.
-    Column(modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 6.dp).clip(shape)
+    // As wide as the parking strip's cards under it (`WatchingCardStack`, `SessionTasksCard`).
+    Column(modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 6.dp).clip(shape)
         .background(MaterialTheme.colorScheme.surface).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
         .heightIn(max = TRAY_MAX_HEIGHT).verticalScroll(rememberScrollState())
         .semantics { contentDescription = PendingTray.LABEL }.testTag("pending-tray")) {
