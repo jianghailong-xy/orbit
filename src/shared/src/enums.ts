@@ -341,11 +341,13 @@ export enum RunEventType {
   // of truth is GET /sessions/:id/turns, which focused clients re-fetch on receipt. Keeping the
   // payload empty avoids maintaining a second queued-turn wire shape on the event stream.
   QUEUED_TURNS_CHANGED = 'queued_turns_changed',
-  // "Your cursor is too far behind to catch up in place — drop your cached window and re-seed
-  // from a tail page." Synthesized by the SSE endpoint alone (never persisted, never published
-  // to the hub) when a resuming client's gap exceeds SSE_GAP_CAP. Like the approval nudges it
-  // rides seq 0, so a client must handle it before its seq dedup. A client that doesn't know it
-  // falls through its reducer's default and simply keeps the transcript it has.
+  // "This stream cannot bring your window up to date in place — drop your cached window and
+  // re-seed from a tail page." Never persisted. The SSE endpoint synthesizes it when a resuming
+  // client's gap exceeds SSE_GAP_CAP; an apiserver hands it to its own streams of a session (never
+  // over NOTIFY) when it gives up reading back events another apiserver stored
+  // (RealtimeService.readBack). Like the approval nudges it rides seq 0, so a client must handle
+  // it before its seq dedup. A client that doesn't know it falls through its reducer's default and
+  // simply keeps the transcript it has.
   RESYNC = 'resync',
   // Background shells the agent launched with Bash(run_in_background). The runner derives
   // these from Claude's stream: BACKGROUND_TASK is the durable lifecycle signal (parsed
