@@ -679,8 +679,10 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether this work has nothing to land at all — and there are two ways for that to be true: the
- * task DECLARES it needs no code, or the line's own record says it never had a commit of its own.
+ * Whether this work has nothing to land at all — and there are three ways for that to be true: the
+ * task DECLARES it needs no code, its work was done in another repository than the one its line is
+ * bound to (`workInAnotherRepository`), or the line's own record says it never had a commit of its
+ * own.
  *
  * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
  * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
@@ -728,8 +730,13 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
  * whole record is "there was nothing of it to land" gets anything out — and a declaration, which is
  * §1.1's first half and authoritative wherever this lane reads it.
  *
- * The one session this does read is not that half either: `jobSawTheFinishedBranch` looks at the
+ * The sessions this does read are not that half either. `jobSawTheFinishedBranch` looks at the
  * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
+ * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), never
+ * for whether it ran a branch, and it takes a task out as the declaration does. It reads the newest
+ * session because §1.1 does, and no receipt overrides it: a task that landed on the project branch
+ * from one attempt and ran its newest attempt in another repository leaves the conjunction, MERGED
+ * receipt and all.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
   return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task);
@@ -758,7 +765,8 @@ export function workInAnotherRepository(task: LandingServingTask): boolean {
  * Work with nothing to land (`taskHasNothingToLand`) is not delivery and does not take part in
  * either: it neither withholds LANDED nor supplies it. So a criterion served by three tasks, two of
  * them on `main` and the third an acceptance task that declares it needs no code — or, since this
- * unit, one the line looked at and found no commit of its own on — is LANDED, and before this rule it
+ * unit, one the line looked at and found no commit of its own on, or (O-L7) one whose work was done
+ * in another repository — is LANDED, and before this rule it
  * could not be, at any time, by any receipt, which left every project holding
  * such a task unable to reach DONE (2026-09-22: 48 finished tasks, one of them a criteria-12
  * acceptance task, and still 48 of them after the declaration alone was honoured, because that task
@@ -859,9 +867,10 @@ export const NEWEST_WORK_REPOSITORY = {
  * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
  * against. A reader that wrote its own copy would be a second author of the fold's input, and the
  * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
- * which is what these two facts are: SR5's escape hatch and the merges recorded against the task.
+ * which is what these facts are: SR5's escape hatch, the merges recorded against the task, and
+ * where its newest work ran beside where its project's line is bound (O-L7).
  *
- * The third one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
+ * The last one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
  * the task rather than ON it, and it is read beside this select by `readLandingJobsByTask`. An empty
  * `integrationJobs` in this shape is not "the task has none" but "they have not been attached yet" —
  * a distinction nothing can enforce, which is why every caller in this tree attaches them in the same

@@ -36,7 +36,8 @@ import {
  *   * NO_RECEIPT        — no receipt puts its work on either branch: merged outside Orbit, or not
  *                         merged at all. Absence of evidence, never evidence of absence.
  *   * CODELESS          — its work has no branch to land: declared codeless (LANDED, nothing to
- *                         land), or never declared and its newest work session took no worktree
+ *                         land), done in another repository than the line's (O-L7, read the same
+ *                         way), or never declared and its newest work session took no worktree
  *                         branch — so no landing was ever queued and no receipt will ever come.
  *
  * Null exactly when the criterion is LANDED with work of its own on the upstream — "on main".
