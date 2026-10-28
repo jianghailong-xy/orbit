@@ -83,6 +83,58 @@ const TURN_PREFIX_MAX_CHARS = 64_000;
 const LINK_LIVE_HOLD_CAP = 500;
 
 /**
+ * Reading back events another replica stored (readBack): the waits before the second, third and fourth read, so at
+ * most four reads, and how long after the notice arrived this replica gives up. A session's later events wait behind
+ * the read-back here meanwhile, so these two bound how late they reach its streams.
+ */
+const READ_BACK_RETRY_WAITS_MS = [250, 1_000, 3_000];
+const READ_BACK_GIVE_UP_MS = 10_000;
+
+/** A read-back of the events another replica stored at seqs `from` to `to`, whose notice arrived at `heardAt`. */
+interface ReadBack {
+  from: number;
+  to: number;
+  heardAt: number;
+  read: () => Promise<NormalizedRunEvent[]>;
+}
+
+/** A run_event row as the hub carries it. */
+function storedEvent(row: { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }): NormalizedRunEvent {
+  return {
+    seq: row.seq,
+    type: row.type as RunEventType,
+    payload: row.payload as Record<string, unknown>,
+    turnId: row.turnId ?? undefined,
+    ts: row.createdAt.toISOString(),
+  };
+}
+
+/** `start()`'s answer, or a rejection once `ms` have passed without one (at once, with no time left). */
+async function within<T>(ms: number, start: () => Promise<T>): Promise<T> {
+  if (ms <= 0) throw new Error('no time left to read');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([start(), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** An error in one line for the log: its code and the last line of its message (a Prisma error's message opens with the
+ *  call and ends with the cause), at most 300 characters. A read's error is about the query, never the rows it read. */
+function describeError(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = message.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? '';
+  const line = typeof code === 'string' ? `${code} ${cause}` : cause;
+  return line.length > 300 ? `${line.slice(0, 300)}...` : line;
+}
+
+/**
  * How much of a reply preview rides in a summary. The list row clips its own two previews to the
  * same length in SQL (`SessionsService.PREVIEW_LEN`), and the summary is those same two fields on
  * the same row: a client folds it in verbatim, so the two have to agree on the text or a row's
@@ -234,6 +286,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly runnerWake = new EventEmitter(); // event name = runnerId
   /** runnerId → when a wake was asked for that no parked poll has taken yet. */
   private readonly runnerWakeOwed = new Map<string, number>();
+  /** sessionId → what reached this replica for the session behind its read-back in flight (readBackInOrder). */
+  private readonly heldBehindReadBack = new Map<string, Array<{ event: NormalizedRunEvent } | ReadBack>>();
   /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
   private unmarked = 0;
   private unmarkedReportedAt = 0;
@@ -362,32 +416,20 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
     if (channel === EVENT_CHANNEL) {
       if (m.e) {
-        this.hub.next({ runId: m.r, event: m.e });
+        this.toHub(m.r, m.e);
       } else if (Array.isArray(m.b)) {
         // A batch the ingest stored, whole (publishBatch).
-        for (const event of m.b) this.hub.next({ runId: m.r, event });
+        for (const event of m.b) this.toHub(m.r, event);
       } else if (typeof m.f === 'number' && typeof m.t === 'number') {
         // A batch too big to ride along: read back what the ingest stored of it.
         this.relayStoredBatch(m.r, m.f, m.t);
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
-        this.prisma.runEvent
-          .findUnique({ where: { sessionId_seq: { sessionId: m.r, seq: m.s } } })
-          .then((row) => {
-            if (row) {
-              this.hub.next({
-                runId: m.r,
-                event: {
-                  seq: row.seq,
-                  type: row.type as RunEventType,
-                  payload: row.payload as Record<string, unknown>,
-                  turnId: row.turnId ?? undefined,
-                  ts: row.createdAt.toISOString(),
-                },
-              });
-            }
-          })
-          .catch(() => undefined);
+        const seq = m.s;
+        this.readBackInOrder(m.r, seq, seq, async () => {
+          const row = await this.prisma.runEvent.findUnique({ where: { sessionId_seq: { sessionId: m.r, seq } } });
+          return row ? [storedEvent(row)] : [];
+        });
       }
     }
   }
@@ -397,25 +439,91 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * published of it and nothing else, so neither a noise ping nor a live-only row (a tombstone, a legacy delta).
    */
   private relayStoredBatch(runId: string, from: number, to: number): void {
-    this.prisma.runEvent
-      .findMany({
+    this.readBackInOrder(runId, from, to, async () => {
+      const rows = await this.prisma.runEvent.findMany({
         where: { sessionId: runId, seq: { gte: from, lte: to }, type: { notIn: [...NON_REPLAYABLE_EVENT_TYPES] } },
         orderBy: { seq: 'asc' },
         select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
-      })
-      .then((rows) => {
-        for (const row of rows) {
-          const event: NormalizedRunEvent = {
-            seq: row.seq,
-            type: row.type as RunEventType,
-            payload: row.payload as Record<string, unknown>,
-            turnId: row.turnId ?? undefined,
-            ts: row.createdAt.toISOString(),
-          };
-          if (!isNoiseSystemEvent(event)) this.hub.next({ runId, event });
+      });
+      return rows.map(storedEvent).filter((event) => !isNoiseSystemEvent(event));
+    });
+  }
+
+  /** One event to this replica's hub, or, while a read-back of its session is in flight here, behind that read-back. */
+  private toHub(runId: string, event: NormalizedRunEvent): void {
+    const held = this.heldBehindReadBack.get(runId);
+    if (held) held.push({ event });
+    else this.hub.next({ runId, event });
+  }
+
+  /**
+   * Events another replica stored, read back into this replica's hub in their place among the session's events: what
+   * arrives for the session while the read-back is in flight, from another replica or from this one, waits behind it
+   * (toHub), and so does a second read-back. With one replica nothing is ever read back, so nothing ever waits.
+   */
+  private readBackInOrder(runId: string, from: number, to: number, read: () => Promise<NormalizedRunEvent[]>): void {
+    const readBack: ReadBack = { from, to, heardAt: Date.now(), read };
+    const held = this.heldBehindReadBack.get(runId);
+    if (held) {
+      held.push(readBack);
+      return;
+    }
+    this.heldBehindReadBack.set(runId, []);
+    void this.readBack(runId, readBack).then((delivered) => this.releaseHeld(runId, delivered));
+  }
+
+  /**
+   * Hand over what waited behind a read-back that is done, up to the next read-back, which starts then. Once one was
+   * given up, the read-backs that waited behind it are not read: their events were stored before the session's streams
+   * here were told to re-fetch, so the re-fetch brings them.
+   */
+  private releaseHeld(runId: string, delivered: boolean): void {
+    const held = this.heldBehindReadBack.get(runId);
+    if (!held) return;
+    for (let next = held.shift(); next; next = held.shift()) {
+      if ('event' in next) {
+        this.hub.next({ runId, event: next.event });
+      } else if (delivered) {
+        void this.readBack(runId, next).then((ok) => this.releaseHeld(runId, ok));
+        return;
+      }
+    }
+    this.heldBehindReadBack.delete(runId);
+  }
+
+  /**
+   * Read back events another replica stored, again after each of READ_BACK_RETRY_WAITS_MS while the read fails, until
+   * READ_BACK_GIVE_UP_MS after the notice arrived. Each failure is logged with the session, the seqs and the error, never
+   * the events. Read: the events go to the hub, true. Given up: this replica's streams of the session are told to
+   * re-fetch (`resync`), and its owner's lists here to re-read its row (a session_updated of this replica's alone), false.
+   */
+  private async readBack(runId: string, readBack: ReadBack): Promise<boolean> {
+    const { from, to, heardAt } = readBack;
+    const seqs = from === to ? `seq ${from}` : `seq ${from}-${to}`;
+    const reads = READ_BACK_RETRY_WAITS_MS.length + 1;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const events = await within(heardAt + READ_BACK_GIVE_UP_MS - Date.now(), readBack.read);
+        for (const event of events) this.hub.next({ runId, event });
+        if (attempt > 1) this.log.log(`session ${runId}: read back ${seqs}, stored by another apiserver, on attempt ${attempt} of ${reads}`);
+        return true;
+      } catch (error) {
+        const wait = READ_BACK_RETRY_WAITS_MS[attempt - 1];
+        if (wait === undefined || Date.now() + wait >= heardAt + READ_BACK_GIVE_UP_MS || this.stopped) {
+          this.log.error(
+            `session ${runId}: gave up reading back ${seqs}, stored by another apiserver, after ${attempt} attempt(s) in ${Date.now() - heardAt} ms (${describeError(error)}); told this apiserver's streams of the session to re-fetch`,
+          );
+          const ts = new Date().toISOString();
+          this.hub.next({ runId, event: { seq: 0, type: RunEventType.RESYNC, payload: {}, ts } });
+          this.hub.next({ runId, event: { seq: 0, type: RunEventType.SESSION_UPDATED, payload: {}, ts } });
+          return false;
         }
-      })
-      .catch(() => undefined);
+        this.log.warn(
+          `session ${runId}: could not read back ${seqs}, stored by another apiserver (attempt ${attempt} of ${reads}: ${describeError(error)}); trying again in ${wait} ms`,
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, wait).unref?.());
+      }
+    }
   }
 
   private notifyRaw(channel: string, payload: string): void {
@@ -615,7 +723,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** One event to this replica's own streams and consumers; `publish` and `publishBatch` add the other replicas. */
   private publishHere(runId: string, event: NormalizedRunEvent): void {
     this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
-    this.hub.next({ runId, event }); // same replica
+    this.toHub(runId, event); // same replica
     this.published.next({ runId, event });
     // Locally-originated only — NOTIFY-bridged events from other replicas arrive via onNotify →
     // hub, not here — so the owner's badge is reconciled and synced exactly once, on the origin.

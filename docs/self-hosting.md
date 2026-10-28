@@ -727,6 +727,19 @@ docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls 
 - **Who watches.** Each apiserver tells the link gateway how many streams it has of each session, and the gateway adds
   the counts up. The count of an apiserver that stopped lapses after 60 seconds.
 
+**Events another apiserver stored.** The apiserver that stores a batch of a session's events tells the others, and the
+one holding the session's streams hands the batch on to them. A batch too big to ride along in that notice is read back
+from the database instead.
+
+- **When the read fails**, it is tried again after 250 ms, 1 s and 3 s. Each failure is logged with the session, the
+  events' sequence numbers and the error, never the events themselves:
+  `session <id>: could not read back seq 3-14, stored by another apiserver (attempt 1 of 4: <error>); trying again in 250 ms`.
+- **Meanwhile** the session's later events wait behind it, so its streams receive them in order.
+- **After four failed reads**, or 10 seconds after the notice, the apiserver gives up and logs
+  `gave up reading back seq 3-14`. It tells the session's streams to fetch the transcript again: the web and the apps
+  drop the part they hold and load its newest page. The owner's session lists that follow that apiserver get the
+  session's row again, read from the database.
+
 **Turning the switch off.** Before turning `RUNNER_LINK_REQUIRED` off, put every session stream back on the first
 apiserver, where runners that go back to HTTPS post their deltas. Either remove the gateway's lines from
 `docker-compose.override.yml` and run `docker compose up -d gateway`, or stop the other apiservers with
@@ -766,6 +779,16 @@ window, one turn's tool approvals ring the owner's phone once, and an agent's `n
 **Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the apiserver that took them.
 The apiserver a runner's heartbeat lands on asks that one for them over the runner link's NATS, so they reach the runner
 whichever apiserver the link gateway hands its heartbeats to.
+
+**Before production.** Several apiservers rely on all of the following. The first is a setting; the others are in the
+apiserver, and this section says how each works:
+
+- `RUNNER_LINK_REQUIRED` is on, and every runner works over the runner link.
+- The reaper, the task scheduler's sweep and the auto-retry sweep run in one apiserver at a time.
+- Antigravity's pasted sign-in code and the Cursor key check reach the runner from any apiserver.
+- Recaps, approval alerts and agents' notifications are decided on the database rows they are about.
+- An upgrade recreates every apiserver.
+- A batch another apiserver stored reaches a session's streams, or they are told to fetch the transcript again.
 
 ### Database connections
 
