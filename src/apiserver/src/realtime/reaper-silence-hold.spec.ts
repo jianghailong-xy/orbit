@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { RunnerPresenceService } from '../runners/runner-presence';
+import { RunnerPresenceService, type ApiserverProcessReport } from '../runners/runner-presence';
+import type { ControlPlaneLeader } from './control-plane-leader';
 import { ReaperService } from './reaper.service';
 
 /**
@@ -363,3 +364,51 @@ test('a runner that signed off is reaped as it always was, whatever holds silenc
   await silent.sweep();
   assert.deepEqual(silent.finalized, [], 'the control: the same cell holds a runner that only went quiet');
 });
+
+/** The leader a reaper is built beside, as the reaper reads it: when its process took the lock, if it holds it. */
+function leaderTakenAt(at: () => number | null): ControlPlaneLeader {
+  return { leads: () => at() !== null, leadingSince: at } as unknown as ControlPlaneLeader;
+}
+
+test('a process that takes the sweeps over starts its reaper again, inside the startup grace', async () => {
+  onTheClock();
+  const w = world();
+  let since: number | null = null;
+  (w.reaper as unknown as { leader: ControlPlaneLeader }).leader = leaderTakenAt(() => since);
+  // Up for an hour as a follower: its own start long past, and nothing swept while another process held the lock.
+  (w.reaper as unknown as { startedAt: number }).startedAt = T0 - 60 * MINUTE;
+  await w.reaper.tick();
+  assert.deepEqual(w.fleetReads, [], 'a process that does not hold the lock does not sweep');
+  since = clock;
+  await w.reaper.tick();
+  assert.equal(w.finalized.length, 0, 'the takeover is a start: nothing is reaped inside its grace');
+  assert.match(w.warns.join('\n'), /startup grace/);
+  clock = T0 + 3 * MINUTE + SECOND;
+  await w.reaper.tick();
+  assert.equal(w.finalized.length, 1, 'and past the grace the silent runner\'s run is reaped');
+});
+
+test('another apiserver process that lost a beat, or went quiet, holds the reaping; neither forever', async () => {
+  onTheClock();
+  let others: ApiserverProcessReport[] = [];
+  const peer = (over: Partial<ApiserverProcessReport>): ApiserverProcessReport => ({
+    id: '33333333-aaaa-4bbb-8ccc-444444444444', beatLostAgoMs: null, seenAgoMs: 5 * SECOND, connected: true, ...over,
+  });
+  const expect = async (report: ApiserverProcessReport, reaped: boolean, reason?: RegExp) => {
+    const w = world();
+    others = [report];
+    w.presence.otherProcesses = async () => others;
+    await w.sweep();
+    assert.equal(w.finalized.length, reaped ? 1 : 0, JSON.stringify(report));
+    if (reason) assert.match(w.warns.join('\n'), reason);
+  };
+  await expect(peer({ beatLostAgoMs: 30 * SECOND }), false, /a heartbeat write failed on apiserver process 33333333 30s ago/);
+  await expect(peer({ beatLostAgoMs: 91 * SECOND }), true);
+  await expect(peer({ seenAgoMs: 40 * SECOND }), false, /apiserver process 33333333 has not reported for 40s though it is still connected/);
+  await expect(peer({ seenAgoMs: 9 * MINUTE }), false);
+  await expect(peer({ seenAgoMs: 11 * MINUTE }), true);
+  await expect(peer({ seenAgoMs: 100 * SECOND, connected: false }), false, /has not reported for 100s, so the heartbeats/);
+  await expect(peer({ seenAgoMs: 2 * MINUTE + SECOND, connected: false }), true);
+  await expect(peer({ seenAgoMs: 20 * SECOND }), true);
+});
+

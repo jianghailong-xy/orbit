@@ -34,6 +34,7 @@ import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
 import {
+  APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_BEATS,
   RUNNER_OFFLINE_AFTER_MS,
   RUNNER_SILENT_AFTER_MS,
@@ -41,6 +42,7 @@ import {
   runnerLastBeatAt,
   type RunnerBeats,
 } from '../runners/runner-presence';
+import { ControlPlaneLeader } from './control-plane-leader';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -48,15 +50,18 @@ const REAP_INTERVAL_MS = 30_000;
 // removes nothing.
 const PURGE_INTERVAL_MS = 60 * 60_000;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60_000;
+/** How long after an apiserver process was last seen its row in `apiserver_process` is kept (migration 0449). */
+const GONE_PROCESS_RETENTION_MS = 24 * 60 * 60_000;
 const OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS; // runner missed ~3 heartbeats
 /**
  * How long after it starts the reaper reaps no session as `runner offline`. Its evidence is the
  * absence of beats in `runner_presence`, an UNLOGGED table a crash or a failover of the primary
  * empties (docs/runner-link-design.md §6.5); a control plane that has just come up — after a deploy,
  * or beside a database that just came back — has not yet had the time to hear every live runner
- * again. Two windows of OFFLINE_AFTER_MS: six heartbeat intervals.
+ * again. Two windows of OFFLINE_AFTER_MS: six heartbeat intervals. A reaper whose process has just
+ * taken the sweeps over from another starts again too (`ReaperService.leading`).
  */
-const STARTUP_GRACE_MS = 3 * 60_000;
+export const STARTUP_GRACE_MS = 3 * 60_000;
 /**
  * The share of the cell's runners that going quiet together pauses the offline reaping. Machines do
  * not stop a fifth at a time; a link gateway, the network or this control plane does, and the
@@ -68,7 +73,7 @@ const MASS_SILENCE_SHARE = 0.2;
  * also bounds how long one such silence holds the reaping: a runner quiet for longer than this past
  * that line leaves the count, and its sessions are reaped as anybody's are.
  */
-const MASS_SILENCE_WINDOW_MS = 10 * 60_000;
+export const MASS_SILENCE_WINDOW_MS = 10 * 60_000;
 // A cancel/end a live (online) runner hasn't honored within this window means the
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
@@ -143,8 +148,8 @@ function claimedLongAgo(now: number) {
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
  * whose runner dies mid-turn would sit RUNNING forever, leaking an active-turn slot.
- * An AWAITING_INPUT session is intentionally independent of runner liveness. v1 is single-replica;
- * for multi-replica this needs a leader lock (deferred to the HA phase).
+ * An AWAITING_INPUT session is intentionally independent of runner liveness. One apiserver process
+ * sweeps at a time: the one holding the singleton sweeps' lock (control-plane-leader.ts, `leading`).
  */
 @Injectable()
 export class ReaperService implements OnModuleInit, OnModuleDestroy {
@@ -169,6 +174,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * past that sweep, so the runners whose beats were lost in it get a whole window to be heard again.
    */
   private massSilenceHeldUntil = 0;
+  /** The instant this process took the singleton sweeps' lock, as the last sweep saw it (`leading`). */
+  private ledSince: number | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -182,20 +189,60 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * `@Optional()` for the specs that build the reaper by hand about something else.
      */
     @Optional() private readonly presence?: RunnerPresenceService,
+    /**
+     * Which apiserver process sweeps (control-plane-leader.ts). RealtimeModule provides it beside this
+     * service; `@Optional()` for the specs that build the reaper by hand, which sweep whenever they ask.
+     */
+    @Optional() private readonly leader?: ControlPlaneLeader,
   ) {}
 
   onModuleInit(): void {
     this.startedAt = Date.now();
     this.timer = setInterval(() => {
-      this.sweep().catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
+      this.tick().catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
     }, REAP_INTERVAL_MS);
     this.timer.unref(); // don't keep the process alive just for the reaper
     this.purgeTimer = setInterval(() => {
+      if (!this.leading()) return;
       this.purgeTrash().catch((e) => this.log.error('trash purge failed: ' + (e as Error).message));
       this.purgeLapsedLinkRevocations().catch((e) =>
         this.log.error('runner link revocation purge failed: ' + (e as Error).message));
+      this.purgeGoneProcesses().catch((e) =>
+        this.log.error('apiserver process purge failed: ' + (e as Error).message));
     }, PURGE_INTERVAL_MS);
     this.purgeTimer.unref();
+  }
+
+  /** What the timer runs every REAP_INTERVAL_MS: a sweep, on the one process that sweeps (`leading`). */
+  async tick(): Promise<void> {
+    if (!this.leading()) return;
+    await this.sweep();
+  }
+
+  /**
+   * Whether this process sweeps now: it holds the singleton sweeps' lock (control-plane-leader.ts), or
+   * it was built without a leader and is the only reaper there is.
+   *
+   * Holding the lock since an instant the last sweep did not see is a takeover — from another process,
+   * or by this one again after its connection dropped — and a takeover is a start. What this reaper
+   * carried in memory (when it started, the last mass silence it held for, a refusal of the database
+   * it watched) was read by sweeps that may not have been the last ones: the process that held the lock
+   * in between may have been killed in the middle of a mass silence, its hold dying with it. So the
+   * reaper starts again from the instant the lock was taken, inside STARTUP_GRACE_MS, as a reaper that
+   * has just come up does. The grace outlasts everything that state could still have held: a mass
+   * silence holds OFFLINE_AFTER_MS past the last sweep that saw it, and a refusal one sweep.
+   */
+  private leading(): boolean {
+    if (!this.leader) return true;
+    const since = this.leader.leadingSince();
+    if (since === null) return false;
+    if (since !== this.ledSince) {
+      this.ledSince = since;
+      this.startedAt = since;
+      this.massSilenceHeldUntil = 0;
+      this.databaseRefusedWorkLastSweep = false;
+    }
+    return true;
   }
 
   onModuleDestroy(): void {
@@ -225,6 +272,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private async purgeLapsedLinkRevocations(): Promise<void> {
     const cutoff = new Date(Date.now() - RUNNER_LINK_REVOCATION_WINDOW_MS);
     await this.prisma.runnerLinkRevocation.deleteMany({ where: { revokedAt: { lt: cutoff } } });
+  }
+
+  /**
+   * Delete the rows of apiserver processes last seen more than a day ago (migration 0449): every running
+   * process writes its own every ten seconds, so these are processes that have gone, long past any hold
+   * they could put on the reaping (`silenceHold`).
+   */
+  private async purgeGoneProcesses(): Promise<void> {
+    const cutoff = new Date(Date.now() - GONE_PROCESS_RETENTION_MS);
+    await this.prisma.apiserverProcess.deleteMany({ where: { seenAt: { lt: cutoff } } });
   }
 
   private async sweep(): Promise<void> {
@@ -487,6 +544,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *    or beside a database that just came back — has not yet had the time to hear every live runner.
    *  - A heartbeat write failed in this process within OFFLINE_AFTER_MS: the beat that would have
    *    answered may be one the database refused, here.
+   *  - The same, in another apiserver process (RunnerPresenceService.otherProcesses): the link gateway
+   *    spreads beats over every process, so a runner whose beats went to one that could not write them
+   *    is silent here. Read from that process's row in `apiserver_process`, which says when a beat it
+   *    took last failed. And a process that has stopped writing its row (APISERVER_PROCESS_QUIET_AFTER_MS)
+   *    may be failing every beat it takes without being able to say so — its pool exhausted, or the
+   *    database out of its reach — so it holds too: for OFFLINE_AFTER_MS past the line whatever it is,
+   *    since a process just cut off and one just killed look the same from here; and for as long as
+   *    MASS_SILENCE_WINDOW_MS while it is still connected (it still holds its own lock,
+   *    control-plane-leader.ts), which a process that has gone does not. Coming back, it says a beat was
+   *    lost then, so the runners whose beats it could not write get a whole window to be heard again.
    *  - A fifth of the cell's runners missed a beat together (MASS_SILENCE_SHARE, MASS_SILENCE_WINDOW_MS):
    *    silent for over RUNNER_SILENT_AFTER_MS, a heartbeat period and a half, whether or not they are
    *    past OFFLINE_AFTER_MS yet. Runners cut off at the same moment cross the offline line one by one
@@ -501,7 +568,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *    line — the price of not reaping a small cell's sessions through a partition on this side, and
    *    the window in which a restarted runner takes its sessions back.
    *
-   * None of them is a latch. The grace ends; a failed write ages out; a silence that does not lift
+   * None of them is a latch. The grace ends; a failed write ages out; a process that stays quiet stops
+   * holding MASS_SILENCE_WINDOW_MS past its line at the latest; a silence that does not lift
    * leaves the count MASS_SILENCE_WINDOW_MS past the silence line, and its sessions are then reaped
    * like any others. Nothing else here waits on it: a cancel or an end the runner never honored is
    * still finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since
@@ -516,6 +584,20 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const lostAt = this.presence.lastBeatNotRecordedAt();
     if (lostAt !== null && now - lostAt <= OFFLINE_AFTER_MS) {
       return `a heartbeat write failed ${s(now - lostAt)} ago, inside the ${s(OFFLINE_AFTER_MS)} runner silence is read from`;
+    }
+    const others = await this.presence.otherProcesses(MASS_SILENCE_WINDOW_MS);
+    const lostElsewhere = others.find((p) => p.beatLostAgoMs !== null && p.beatLostAgoMs <= OFFLINE_AFTER_MS);
+    if (lostElsewhere) {
+      return `a heartbeat write failed on apiserver process ${lostElsewhere.id.slice(0, 8)} `
+        + `${s(lostElsewhere.beatLostAgoMs!)} ago, inside the ${s(OFFLINE_AFTER_MS)} runner silence is read from`;
+    }
+    const quiet = others.find((p) => {
+      const past = p.seenAgoMs - APISERVER_PROCESS_QUIET_AFTER_MS;
+      return past >= 0 && (past <= OFFLINE_AFTER_MS || (p.connected && past <= MASS_SILENCE_WINDOW_MS));
+    });
+    if (quiet) {
+      return `apiserver process ${quiet.id.slice(0, 8)} has not reported for ${s(quiet.seenAgoMs)}`
+        + `${quiet.connected ? ' though it is still connected' : ''}, so the heartbeats it takes may not be landing`;
     }
     const fleet = await this.presence.fleetSilence(MASS_SILENCE_WINDOW_MS);
     if (fleet.heard > 0 && fleet.silent / fleet.heard >= MASS_SILENCE_SHARE) {

@@ -64,6 +64,7 @@ import {
   withTransactionRetry,
 } from '../common/transaction-retry';
 import { RUNNER_BEATS } from '../runners/runner-presence';
+import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 
 const SWEEP_INTERVAL_MS = 30_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
@@ -234,9 +235,12 @@ const NOT_IN_CANCELLED_PROJECT: Prisma.SessionWhereInput = {
  * one starts things that are merely waiting, and must not inherit "finalize it" as a fallback
  * behaviour.
  *
- * Single-replica, like the reaper: two of these would double-send. The armed row is claimed
- * with a conditional update before the resume, so a concurrent user message or a second
- * sweep loses the race rather than producing a second turn.
+ * One apiserver process sweeps at a time, as one reaps (realtime/control-plane-leader.ts): two
+ * sweeps would each release a quota's one session (PER_QUOTA_PER_SWEEP), so N processes would
+ * release N. What two sweeps meeting anyway — a takeover overlapping the sweep it replaces — could
+ * do twice is written once: the armed row is claimed with a conditional update before the resume,
+ * so a concurrent user message or a second sweep loses the race rather than producing a second
+ * turn, and a retry ends (`disarm`) only on the arm the sweep read, so its end is announced once.
  */
 /**
  * What one §13.1 AG6 settle concluded.
@@ -270,20 +274,33 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
      * switch is off, and for every self-managed runner; absent in the specs that build this service.
      */
     @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
+    /**
+     * Which apiserver process sweeps (realtime/control-plane-leader.ts). `@Optional()` for the specs that
+     * build this service directly, which sweep whenever they ask.
+     */
+    @Optional() private readonly leader?: ControlPlaneLeader,
   ) {}
 
   onModuleInit(): void {
-    this.timer = setInterval(() => {
-      // A claim whose re-send was never written — the process stopped between the two, or the
-      // backoff after a failed resume could not be written — is given up once its lease has run out,
-      // so that what was held for its turn is said by where the session stands then (§8 criterion
-      // 24). First, and on its own: a failure there must not cost the due rows their pass.
-      this.releaseExpiredClaims()
-        .catch((e) => this.log.error('expired retry claims were not given up: ' + (e as Error).message))
-        .then(() => this.sweep())
-        .catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
-    }, SWEEP_INTERVAL_MS);
+    this.timer = setInterval(() => void this.tick(), SWEEP_INTERVAL_MS);
     this.timer.unref();
+  }
+
+  /**
+   * What the timer runs every SWEEP_INTERVAL_MS, on the apiserver process that runs the singleton sweeps
+   * and on no other (realtime/control-plane-leader.ts); always, for a service built without a leader.
+   * Never rejects.
+   */
+  tick(): Promise<void> {
+    if (this.leader && !this.leader.leads()) return Promise.resolve();
+    // A claim whose re-send was never written — the process stopped between the two, or the
+    // backoff after a failed resume could not be written — is given up once its lease has run out,
+    // so that what was held for its turn is said by where the session stands then (§8 criterion
+    // 24). First, and on its own: a failure there must not cost the due rows their pass.
+    return this.releaseExpiredClaims()
+      .catch((e) => this.log.error('expired retry claims were not given up: ' + (e as Error).message))
+      .then(() => this.sweep())
+      .catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
   }
 
   onModuleDestroy(): void {
@@ -442,7 +459,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             ?? (session.task.verifies ? taskRetirement(session.task.verifies) : null))
           : null;
         if (retirement) {
-          await this.disarm(session.id, session.status,
+          await this.disarm(session.id, session.status, session.retryAt,
             `task was ${retirement.toLowerCase()}; the attempt that replaced it holds this work`);
           continue;
         }
@@ -508,7 +525,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         if (capabilities.resumeBlockedReason === 'RUNNER_OFFLINE') {
           const waited = session.finishedAt ? now.getTime() - session.finishedAt.getTime() : 0;
           if (waited > MAX_OFFLINE_WAIT_MS) {
-            await this.disarm(session.id, session.status, 'runner never came back');
+            await this.disarm(session.id, session.status, session.retryAt, 'runner never came back');
           } else {
             await this.rearm(
               session.id,
@@ -593,7 +610,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (attempts >= BACKOFF_MS.length) {
-          await this.disarm(session.id, session.status, `gave up after ${attempts} attempts`);
+          await this.disarm(session.id, session.status, session.retryAt, `gave up after ${attempts} attempts`);
           continue;
         }
 
@@ -615,7 +632,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           // had something to say, and nothing of it is left. A continue would be a turn about
           // nothing, so the retry ends as it always has.
           if (message.sessionReplies || message.confirmationReviewTurn) {
-            await this.disarm(session.id, session.status, 'nothing to re-send');
+            await this.disarm(session.id, session.status, session.retryAt, 'nothing to re-send');
             continue;
           }
           // Nothing of the person's is waiting to go out and this failure held back no turn of the
@@ -1790,15 +1807,23 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     return released;
   }
 
-  private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {
+  /**
+   * End the retry this sweep read armed at `armedAt`, and announce that it has ended. A compare-and-set on
+   * that arm: a sweep that meets another on the same row (two processes sweeping while one takes over from
+   * the other) clears it once and announces it once, and an arm somebody set since — a re-arm, a press of
+   * Retry — is a different retry, which the next sweep decides about.
+   */
+  private async disarm(sessionId: string, parkedAs: RunStatus, armedAt: Date | null, why: string): Promise<void> {
+    // A row read with no arm has no retry of this sweep's to end (the due read selects armed rows only).
+    if (armedAt === null) return;
     const cleared = await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parkedAs },
+      where: { id: sessionId, status: parkedAs, retryAt: armedAt },
       // The retry is over, so nothing is on its way to a turn any more: a claim that had not been
       // resolved yet ends here too (migration 0354).
       data: { retryAt: null, retryClaimedAt: null },
     });
-    this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
     if (cleared.count === 0) return;
+    this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
     this.announceSettled(sessionId, parkedAs);
   }
 

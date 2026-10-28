@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import {
+  APISERVER_PROCESS_QUIET_AFTER_MS,
+  RunnerPresenceService,
   RUNNER_BEATS,
   RUNNER_DURABLE_BEAT_EVERY_MS,
   RUNNER_OFFLINE_AFTER_MS,
@@ -184,3 +188,89 @@ test('a beat whose runner row was refused writes no presence: the runner is not 
   );
   assert.deepEqual(w.presenceWrites, []);
 });
+
+/**
+ * A presence service beside a leader whose writes of the process's own row are recorded: whether each said a beat
+ * was lost, and whether it landed. `fail` refuses the next write the way an exhausted pool does.
+ */
+function reporting() {
+  const writes: Array<{ lost: boolean; landed: boolean }> = [];
+  const reads: string[] = [];
+  let fail = 0;
+  const prisma = {
+    $executeRaw: async (...args: unknown[]) => {
+      const { text, values } = renderRawQuery(args);
+      assert.match(text, /INSERT INTO "apiserver_process"/);
+      // The process id, then the same `lost` twice: the new row's beat_lost_at and the existing row's.
+      const lost = values[1] === true;
+      if (fail > 0) {
+        fail -= 1;
+        writes.push({ lost, landed: false });
+        throw Object.assign(new Error('Timed out fetching a new connection from the connection pool'), { code: 'P2024' });
+      }
+      writes.push({ lost, landed: true });
+      return 1;
+    },
+    $queryRaw: async (...args: unknown[]) => {
+      reads.push(renderRawQuery(args).text);
+      return [];
+    },
+  };
+  const leader = { processId: '7c9e6679-7425-40de-944b-e07fc1f90ae7' } as ControlPlaneLeader;
+  const presence = new RunnerPresenceService(prisma as never, leader);
+  (presence as unknown as { log: unknown }).log = { warn: () => undefined };
+  return { presence, writes, reads, failNext: (n = 1) => { fail = n; } };
+}
+
+test('an apiserver process reports a lost beat at once, keeps it through a write that fails, and says it once it lands', async () => {
+  const w = reporting();
+  await w.presence.report();
+  assert.deepEqual(w.writes, [{ lost: false, landed: true }], 'a report on time loses nothing');
+
+  // A heartbeat this process could not write, while its pool cannot give the report a connection either.
+  w.failNext();
+  w.presence.beatNotRecorded(Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' }));
+  await w.presence.report();
+  assert.deepEqual(w.writes.slice(1), [{ lost: true, landed: false }], 'reported at once; the write fails');
+  // Not asked again at once of a database that just refused it: the next report says it.
+  await w.presence.report();
+  assert.deepEqual(w.writes.slice(2), [{ lost: true, landed: true }], 'the lost beat waited for the next report');
+  await w.presence.report();
+  assert.deepEqual(w.writes.slice(3), [{ lost: false, landed: true }], 'and was said once');
+
+  // A refusal the data made says nothing about the database, and is not reported at all.
+  w.presence.beatNotRecorded(Object.assign(new Error('Foreign key constraint violated'), { code: 'P2003' }));
+  await w.presence.report();
+  assert.deepEqual(w.writes.slice(4), [{ lost: false, landed: true }]);
+});
+
+test('a burst of lost beats is one write and one after it, not one each', async () => {
+  const w = reporting();
+  const error = Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' });
+  for (let i = 0; i < 50; i += 1) w.presence.beatNotRecorded(error);
+  await w.presence.report();
+  assert.deepEqual(w.writes, [{ lost: true, landed: true }, { lost: true, landed: true }],
+    'the first beat is reported at once; the 49 lost while that write was out are one more, a second after it');
+});
+
+test('a process back from a spell it could not write its row in says a beat was lost then', async () => {
+  const w = reporting();
+  await w.presence.report();
+  (w.presence as unknown as { reportedAt: number }).reportedAt = Date.now() - APISERVER_PROCESS_QUIET_AFTER_MS - 1_000;
+  await w.presence.report();
+  assert.deepEqual(w.writes, [{ lost: false, landed: true }, { lost: true, landed: true }]);
+});
+
+test('without a leader a presence service reports nothing and reads no other process', async () => {
+  const writes: unknown[] = [];
+  const presence = new RunnerPresenceService({
+    $executeRaw: async () => { writes.push('write'); return 1; },
+    $queryRaw: async () => { writes.push('read'); return []; },
+  } as never);
+  presence.beatNotRecorded(Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' }));
+  await presence.report();
+  assert.deepEqual(await presence.otherProcesses(60_000), []);
+  assert.deepEqual(writes, [], 'the only process there is, as v1 was');
+  assert.notEqual(presence.lastBeatNotRecordedAt(), null, 'its own failure is still kept for the reaper beside it');
+});
+

@@ -37,22 +37,40 @@ interface ListEventWrite {
  */
 function makeService(
   stalled: (typeof LIST)[] = [LIST],
-  options: { failExecuteFor?: string[]; priorForemen?: { count: number; agoMs: number } } = {},
+  options: {
+    failExecuteFor?: string[];
+    priorForemen?: { count: number; agoMs: number };
+    /** Another sweep holds the list's foreman lock as this one files. */
+    lockTaken?: boolean;
+    /** The list has an open foreman by the time this sweep files: another sweep's, committed since the scan. */
+    openForeman?: boolean;
+  } = {},
 ) {
   const created: any[] = [];
   const executed: string[] = [];
   const events: ListEventWrite[] = [];
   const published: unknown[][] = [];
+  const filing: string[] = [];
   let sql = '';
   let historySql = '';
   const prisma = {
-    // Three raw queries reach this stub: the candidate scan, the foreman history, and the dispatch
-    // epoch of each filed task. Told apart by what they ask for, so a test can say "this list has N
-    // prior foremen" in one place without the scan's own SQL assertions changing.
+    // Five raw queries reach this stub: the candidate scan, the foreman history, the filing's lock and
+    // its open-foreman check, and the dispatch epoch of each filed task. Told apart by what they ask for,
+    // so a test can say "this list has N prior foremen" in one place without the scan's own SQL
+    // assertions changing.
     $queryRaw: async (...args: unknown[]) => {
       const text = renderRawQuery(args).text;
       // A row this sweep has just created is at the epoch its seed trigger gave it.
       if (text.includes('task_dispatch_epoch')) return [{ epoch: 0n }];
+      // The filing's own two reads, inside its transaction: the list's lock, and the open foremen under it.
+      if (text.includes('pg_try_advisory_xact_lock')) {
+        filing.push(text);
+        return [{ turn: !options.lockTaken }];
+      }
+      if (text.includes('AS "open"')) {
+        filing.push(text);
+        return [{ open: !!options.openForeman }];
+      }
       if (text.includes('is_foreman = true') && text.includes('GROUP BY')) {
         historySql = text;
         const prior = options.priorForemen;
@@ -78,6 +96,8 @@ function makeService(
         return create;
       },
     },
+    // The filing's transaction: this stub again, as the client its closure writes through.
+    $transaction: async (work: (tx: unknown) => unknown) => work(prisma),
   } as never;
   const service = new TasksService(prisma, {} as never, {
     publishForUser: (...args: unknown[]) => void published.push(args),
@@ -102,6 +122,7 @@ function makeService(
       ).dispatchStalledListForemen(),
     sqlText: () => sql,
     historySql: () => historySql,
+    filingSql: () => filing,
   };
 }
 
@@ -295,4 +316,28 @@ test('the history query counts only foremen filed since real work last ran', asy
 
   assert.match(history, /wt\.is_foreman = false/);
   assert.match(history, /ft\.created_at > COALESCE/);
+});
+
+test('a list another sweep is filing for, or has filed for since the scan, gets no foreman from this one', async () => {
+  // Two apiserver processes, or a takeover overlapping the sweep it replaces, read the same stall. The scan
+  // reads without a lock, so the filing asks again under the list's own transaction lock: one another sweep
+  // holds, or an open foreman it has committed since, leaves this sweep nothing to file. The race itself, on
+  // PostgreSQL: sweeps-overlap.pg.spec.ts.
+  for (const meets of [{ lockTaken: true }, { openForeman: true }]) {
+    const f = makeService([LIST], meets);
+    await f.sweep();
+    assert.deepEqual(f.created, [], JSON.stringify(meets));
+    assert.deepEqual(f.executed, [], JSON.stringify(meets));
+    assert.deepEqual(f.events, [], JSON.stringify(meets));
+  }
+  const free = makeService([LIST]);
+  await free.sweep();
+  assert.equal(free.created.length, 1, 'the control: a free lock and no open foreman, and the list gets one');
+  const [lock, open] = free.filingSql();
+  // The lock is the list's own, and is never waited for.
+  assert.match(lock, /pg_try_advisory_xact_lock\(hashtextextended\(/);
+  assert.ok(free.filingSql().length === 2, 'the lock, then the open-foreman check, once for the one list');
+  // The scan's own "one coordinator at a time", asked again for this list.
+  assert.match(open, /t\.list_id = .+ AND t\.is_foreman = true/);
+  assert.match(open, /t\.status NOT IN \('DONE'::task_status, 'CANCELLED'::task_status\)/);
 });
