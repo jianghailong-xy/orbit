@@ -747,8 +747,8 @@ several processes they repeat work but do nothing twice:
 - scheduled wakeups and session requests;
 - mentions and claims.
 
-**Recaps, approval alerts and agents' notifications** are decided on the session's row, not in the memory of the
-apiserver that took the call. So with several apiservers, a session's recap still asks its model once per two-minute
+**Recaps, approval alerts and agents' notifications** are decided on the database rows they are about, not in the
+memory of the apiserver that took the call. So with several apiservers, a session's recap still asks its model once per two-minute
 window, one turn's tool approvals ring the owner's phone once, and an agent's `notify` rings it at most once a minute.
 
 **The reaper, the task scheduler's sweep and the auto-retry sweep** run in one apiserver at a time:
