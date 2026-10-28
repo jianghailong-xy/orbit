@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import { RunnerStatus, type CursorKeyCheckAnswer, type RunnerHeartbeatResponse } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
-import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
 import { RelayPeers, relayPeers } from '../runners/relay-peers';
 import { MemoryNats } from '../test-support/memory-nats';
 import {
@@ -267,8 +266,13 @@ test('over the runner link, a heartbeat collects a key another apiserver process
     drainCancellations: async () => [], drainMergeRequests: async () => [],
     drainCommitRequests: async () => [], drainArtifactRequests: async () => [],
   } as never;
-  const api = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never);
-  const runnerProviders = new RunnerProvidersController(new ProvidersService({} as never, {} as never, {} as never));
+  // The answer is the daemon's, so it is the runner controller's door too; ProvidersService is its last dependency.
+  const api = new RunnerApiController(
+    prisma, {} as never, realtime, {} as never, {} as never, {} as never,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    new ProvidersService({} as never, {} as never, {} as never),
+  );
   const beat = (overLink: boolean) => api.heartbeat(
     { id: RUNNER, version: null }, { status: RunnerStatus.ONLINE, idleCapacity: 1 }, CURSOR_KEY_CHECK_V1,
     undefined, undefined, undefined, overLink ? { leaseOwner: 'link-process', requestId: null, afterSeq: null } : undefined,
@@ -282,7 +286,7 @@ test('over the runner link, a heartbeat collects a key another apiserver process
     assert.deepEqual(handed.cursorKeyChecks?.map((check) => check.apiKey), [KEY]);
     assert.equal('cursorKeyChecks' in await beat(true), false, 'the key was handed over twice');
     const { checkId } = handed.cursorKeyChecks![0];
-    const result = (state: string, key = KEY) => runnerProviders.cursorKeyCheckResult({ id: RUNNER } as never, { checkId, state, keyFingerprint: fingerprint(key) });
+    const result = (state: string, key = KEY) => api.cursorKeyCheckResult({ id: RUNNER }, { checkId, state, keyFingerprint: fingerprint(key) });
     assert.deepEqual(await result('VALID', `${KEY}-replaced`), { accepted: false }, 'an answer about another key settled it');
     assert.deepEqual(await result('UNREACHABLE'), { accepted: true });
     assert.equal(await answer, 'UNREACHABLE');

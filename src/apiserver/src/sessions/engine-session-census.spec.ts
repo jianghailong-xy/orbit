@@ -39,8 +39,8 @@ test('the user door is exactly the 33 session-naming routes the registries hold'
   assert.deepEqual([...mapped].sort(), USER, 'a user route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });
 
-test('the runner door is exactly the 29 session-naming routes the registries hold', () => {
-  assert.equal(RUNNER.length, 29, `derived runner routes: ${RUNNER.join(', ')}`);
+test('the runner door is exactly the 30 session-naming routes the registries hold', () => {
+  assert.equal(RUNNER.length, 30, `derived runner routes: ${RUNNER.join(', ')}`);
   const mapped = Object.keys(DOORS).filter((key) => key.includes(' /runner/sessions/'));
   assert.deepEqual([...mapped].sort(), RUNNER, 'a runner route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });
