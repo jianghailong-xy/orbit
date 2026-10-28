@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
+  type DeliveryMode,
   type IntegrationCheckResult,
   type IntegrationJobGeneration,
   type IntegrationJobState,
@@ -160,6 +161,8 @@ const LINE_COLUMNS = {
   integrationStartedAt: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
+  deliveryMode: true,
+  deliveryModeChosenAt: true,
 } satisfies Prisma.ProjectCodebaseSelect;
 
 export type ProjectCodebaseLine = Prisma.ProjectCodebaseGetPayload<{ select: typeof LINE_COLUMNS }>;
@@ -296,6 +299,9 @@ export function projectIntegrationView(
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
     escalationSeconds,
+    // The column's default when there is no row: the mode a binding starts with (§10.4).
+    deliveryMode: (row?.deliveryMode ?? 'PLATFORM') as DeliveryMode,
+    deliveryModeChosenAt: row?.deliveryModeChosenAt ?? null,
   };
 }
 
@@ -1462,6 +1468,8 @@ export interface IntegrationSettings {
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
   exceptionEscalationSeconds?: number;
+  /** How finished work reaches the upstream (§10.5 O-L1). Not locked by L4; `AGENT_PUSH` needs `MAIN`. */
+  deliveryMode?: DeliveryMode;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1476,7 +1484,9 @@ async function lockCodebase(
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
            "merge_check_command" AS "mergeCheckCommand",
-           "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds"
+           "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
+           "delivery_mode" AS "deliveryMode",
+           "delivery_mode_chosen_at" AS "deliveryModeChosenAt"
       FROM "project_codebase"
      WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
        FOR UPDATE`);
@@ -1580,7 +1590,8 @@ export async function projectRepository(
  * `integration` on a project create or update (the CLI's `--upstream-ref` among them) and the start
  * door through `startProjectLine` — so this is where the choice is recorded: a request that names
  * `upstreamRef` writes `upstream_ref_chosen_at` with it, which is what the next binding of the same
- * repository starts from (L6).
+ * repository starts from (L6). The delivery mode is recorded the same way, `delivery_mode_chosen_at`
+ * in the UPDATE that writes `deliveryMode` (§10.5 O-L1).
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
@@ -1610,7 +1621,8 @@ export async function configureProjectIntegration(
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
     || settings.mergeCheckCommand !== undefined
-    || settings.mergeCheckTimeoutSeconds !== undefined;
+    || settings.mergeCheckTimeoutSeconds !== undefined
+    || settings.deliveryMode !== undefined;
   if (!bindingNamed) {
     return projectIntegrationView(
       await readProjectCodebase(tx, projectId),
@@ -1651,6 +1663,18 @@ export async function configureProjectIntegration(
         + `To change it, merge the project branch into ${branchName(row.upstreamRef)} or abandon it first.`,
     });
   }
+  // The delivery mode moves no ref, so L4 does not lock it (O-L1). What it may not do is leave
+  // AGENT_PUSH on anything but a MAIN line — and a line nobody decided is not one yet: the default
+  // rule may still put it on a project branch at its first integration (L3), where 0453's CHECK
+  // would refuse that transaction, and the DONE that queued it with it.
+  const deliveryMode = settings.deliveryMode ?? (row.deliveryMode as DeliveryMode);
+  if (deliveryMode === 'AGENT_PUSH' && (chosen ?? decided) !== 'MAIN') {
+    throw deliveryModeNeedsMainLine(
+      chosen ?? decided,
+      integrationRef,
+      settings.deliveryMode === undefined,
+    );
+  }
 
   const written = await tx.projectCodebase.update({
     where: { id: row.id },
@@ -1666,10 +1690,47 @@ export async function configureProjectIntegration(
       ...(settings.mergeCheckTimeoutSeconds !== undefined
         ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds }
         : {}),
+      // Recorded like the upstream: named is chosen, even where it is the mode already there.
+      ...(settings.deliveryMode !== undefined
+        ? { deliveryMode: settings.deliveryMode, deliveryModeChosenAt: new Date() }
+        : {}),
     },
     select: LINE_COLUMNS,
   });
+  if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
+    await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
+  }
   return projectIntegrationView(written, await escalationWindow(tx, projectId));
+}
+
+/**
+ * O-T4 (§10.6): the owner turned this project's delivery mode to AGENT_PUSH. Called inside the
+ * transaction that wrote it, under the binding's lock (rank 55), so whatever it queues commits with
+ * the choice or not at all. Queuing the observation lands with `OBSERVE_LANDING` itself; until then
+ * this writes nothing.
+ */
+async function deliveryModeTurnedAgentPush(
+  _tx: Prisma.TransactionClient,
+  _change: { ownerId: string; projectId: string },
+): Promise<void> {}
+
+/** 409 `DELIVERY_MODE_NEEDS_MAIN_LINE` (O-L1): AGENT_PUSH asked for, or kept, off a MAIN line. */
+function deliveryModeNeedsMainLine(
+  line: IntegrationLine | null,
+  integrationRef: string,
+  kept: boolean,
+): ConflictException {
+  const message = line === null
+    ? 'AGENT_PUSH needs a project that lands straight on its main branch, and this project\'s line '
+      + 'is not decided yet: its first integration could still put it on a project branch. Send '
+      + 'line: MAIN in the same request.'
+    : kept
+      ? 'this project delivers by AGENT_PUSH, which needs it to land straight on its main branch. '
+        + 'Set deliveryMode to PLATFORM in the same request to move it onto a project branch.'
+      : `AGENT_PUSH needs a project that lands straight on its main branch, and this one lands on `
+        + `${branchName(integrationRef)}: its agents would push past the project branch. Keep `
+        + 'PLATFORM, or send line: MAIN with it while the line can still change.';
+  return new ConflictException({ statusCode: 409, code: 'DELIVERY_MODE_NEEDS_MAIN_LINE', message });
 }
 
 /**
@@ -1739,6 +1800,11 @@ export interface StartLineSettings {
    * the project's check stands on once the start is done.
    */
   mergeCheckTimeoutSeconds?: number | null;
+  /**
+   * How finished work reaches the upstream (§10.5 O-L1), recorded as the owner's choice when asked
+   * for — on a line that has started too, since L4 does not lock it. Never in the answer.
+   */
+  deliveryMode?: DeliveryMode;
 }
 
 /**
@@ -1775,18 +1841,20 @@ export async function defaultStartLine(
  * transaction and holds the project row. Three ways it goes:
  *
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
- *     merge check — its command and the budget that check runs on — and says so — `locked`, with the
- *     line the project is actually on. A main branch the start asked for is not written either, and
- *     not recorded as a choice.
+ *     merge check — its command and the budget that check runs on — and the delivery mode it names,
+ *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
+ *     on. A main branch the start asked for is not written either, and not recorded as a choice.
  *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
  *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
- *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
- *     a project branch, a main branch or a merge check — a budget with no command among them — is
+ *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing — `PLATFORM`
+ *     delivery included, which is the mode a binding starts with; one asking for a project branch,
+ *     a main branch, a merge check — a budget with no command among them — or `AGENT_PUSH` is
  *     refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without
  *     them would drop what the owner chose.
  *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding,
  *     on the owner's last main branch for the repository — together with the merge check, and the
- *     main branch when the start names one, which records it as the owner's choice (L6).
+ *     main branch when the start names one, which records it as the owner's choice (L6), as it does
+ *     the delivery mode the start names (O-L1).
  *
  * Answers with the line, the main branch and the check as they stand once it is done.
  */
@@ -1806,20 +1874,22 @@ export async function startProjectLine(
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
-      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined) {
+      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
+      || settings.deliveryMode === 'AGENT_PUSH') {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
-        + 'no project branch, main branch or merge check: its coordination workspace has no '
-        + 'recorded remote. Wait for the runner to detect origin, or set Repository URL in the '
-        + 'workspace settings. A project without a repository can start on main with no merge '
-        + 'check.');
+        + 'no project branch, main branch, merge check or AGENT_PUSH delivery: its coordination '
+        + 'workspace has no recorded remote. Wait for the runner to detect origin, or set '
+        + 'Repository URL in the workspace settings. A project without a repository can start on '
+        + 'main with no merge check.');
     }
     return { line: 'MAIN', mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
   }
+  const namedDelivery = settings.deliveryMode !== undefined ? { deliveryMode: settings.deliveryMode } : {};
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
     settings: locked
-      ? { mergeCheckCommand, ...namedTimeout }
+      ? { mergeCheckCommand, ...namedTimeout, ...namedDelivery }
       : {
         line: settings.line,
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
@@ -1828,6 +1898,7 @@ export async function startProjectLine(
         ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
         ...namedTimeout,
+        ...namedDelivery,
       },
   });
   const written = (await readProjectCodebase(tx, projectId))!;

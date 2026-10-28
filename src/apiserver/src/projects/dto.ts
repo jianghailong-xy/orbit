@@ -24,6 +24,7 @@ import {
 import {
   ProjectStatus,
   type AcceptedGap,
+  type DeliveryMode,
   type DoneRequestGap,
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
@@ -181,6 +182,7 @@ export class UpdateProjectAcceptanceCriterionDto extends CreateProjectAcceptance
 }
 
 const INTEGRATION_LINES: readonly IntegrationLine[] = ['MAIN', 'PROJECT_BRANCH'];
+const DELIVERY_MODES: readonly DeliveryMode[] = ['PLATFORM', 'AGENT_PUSH'];
 /** A full branch ref: PSC SR9's rule, narrowed to branches, which are all a line can be. */
 const BRANCH_REF = /^refs\/heads\/\S+$/;
 
@@ -221,6 +223,10 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
    * it was opened under (X-E2), so shortening this does not reach back and escalate a queue.
    */
   @IsOptional() @IsInt() @Min(300) @Max(604_800) exceptionEscalationSeconds?: number;
+  /** How finished work reaches the upstream (§10.5 O-L1): `PLATFORM` lands it for the agents,
+   *  `AGENT_PUSH` has them push it themselves, on a MAIN line only. Not locked once integration
+   *  starts. */
+  @IsOptional() @IsIn(DELIVERY_MODES) deliveryMode?: DeliveryMode;
 }
 
 export class CreateProjectDto {
@@ -532,6 +538,9 @@ export class StartProjectDto implements StartProjectRequestBody {
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
   /** The coordinator's start request this start answers, when the card was drawn from one. */
   @IsOptional() @IsPublicId() requestId?: string | null;
+  /** How finished work reaches the upstream (§10.5 O-L1), the owner's choice; left out, the
+   *  project keeps the one it has. Written on a started line too, and `AGENT_PUSH` needs MAIN. */
+  @IsOptional() @IsIn(DELIVERY_MODES) deliveryMode?: DeliveryMode;
 }
 
 /**

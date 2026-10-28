@@ -1,4 +1,51 @@
+import type { Prisma } from '@prisma/client';
+import { branchName } from '../projects/project-criterion-landing';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
+
+/**
+ * What the brief reads of the task's project: its binding, for how finished work reaches the
+ * upstream (§10.5 O-L3). Selected beside the task by every reader that builds or rebuilds the brief,
+ * so the three cannot disagree about it.
+ */
+export const TASK_DELIVERY_SELECT = {
+  codebases: {
+    where: { slot: 'primary' },
+    select: { deliveryMode: true, integrationStartedAt: true, integrationRef: true, remoteName: true },
+  },
+} satisfies Prisma.ProjectSelect;
+
+/** One binding, as `TASK_DELIVERY_SELECT` reads it. */
+interface TaskDeliveryBinding {
+  deliveryMode: string;
+  integrationStartedAt: Date | null;
+  integrationRef: string;
+  remoteName: string;
+}
+
+/**
+ * O-L3 (§10.5): the sentence that tells a run how this project's work reaches its line — always on an
+ * AGENT_PUSH project (a MAIN line, so the line's branch is the upstream), and on a PLATFORM one once
+ * it has started integrating. Null for everything else: no project or binding, a PLATFORM line not
+ * started yet, a codeless task, and a foreman's or a verifier's run, neither of which delivers the
+ * work.
+ */
+function taskDeliverySentence(task: {
+  codeless?: boolean | null;
+  isForeman?: boolean;
+  verifiesTaskId?: string | null;
+  project?: { codebases?: readonly TaskDeliveryBinding[] } | null;
+}): string | null {
+  const binding = task.project?.codebases?.[0];
+  if (!binding || task.codeless || task.isForeman === true || task.verifiesTaskId != null) return null;
+  const branch = branchName(binding.integrationRef);
+  if (binding.deliveryMode === 'AGENT_PUSH') {
+    return `This project delivers by pushing to ${branch}. Push your commits to `
+      + `${binding.remoteName}/${branch} before you finish — Orbit checks that they are there.`;
+  }
+  return binding.integrationStartedAt
+    ? `Do not push to ${branch}. Orbit lands your branch after your work is accepted.`
+    : null;
+}
 
 /**
  * The brief a task's run is handed as its opening turn — and what `task-start-card.ts` rebuilds to
@@ -17,9 +64,12 @@ export function buildTaskExecutionPrompt(task: {
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
+  codeless?: boolean | null;
+  project?: { codebases?: readonly TaskDeliveryBinding[] } | null;
 }): string {
   const systemRun = task.isForeman === true || task.verifiesTaskId != null;
   const instructions = systemRun ? undefined : task.list?.instructions?.trim();
+  const delivery = taskDeliverySentence(task);
   // What would PROVE this task done, handed to the run that has to argue it is. It used to be
   // left out, which asked every run to answer "am I finished?" against criteria it had to go and
   // fetch with `task_get` — so a run that did not fetch them answered against the description
@@ -40,6 +90,8 @@ export function buildTaskExecutionPrompt(task: {
     (task.description ? `Task description:\n${task.description}\n\n` : '') +
     (acceptance ? `Acceptance criteria (what decides whether this task is done):\n${acceptance}\n\n` : '') +
     (instructions ? `List instructions (the same for every task in this list):\n${instructions}\n\n` : '') +
+    // Where the work goes once it is done; a project's instructions that say otherwise give way to it.
+    (delivery ? `${delivery}\n\n` : '') +
     // The wiki's dossier cuts the brief at this heading (`TASK_BOILERPLATE` in wiki/wiki-dossier.ts):
     // reworded here, it has to be reworded there too.
     `Follow these steps:\n` +

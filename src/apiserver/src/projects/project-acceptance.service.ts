@@ -40,7 +40,7 @@ import {
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { storeDerivedProjectStatus } from './project-done-derived';
-import { defaultStartLine, startProjectLine } from './project-integration-line';
+import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import { DONE_REQUEST_KIND, answerDoneRequests, doneRequestMoved } from './project-done-request';
@@ -501,7 +501,7 @@ export class ProjectAcceptanceService {
     }
     await this.assertProject(ownerId, projectId);
 
-    const asked: ProjectStartSettings = {
+    const asked: ProjectStartSettings & Pick<StartLineSettings, 'deliveryMode'> = {
       line: input.line,
       ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
       ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
@@ -513,6 +513,9 @@ export class ProjectAcceptanceService {
       ...(input.mergeCheckTimeoutSeconds !== undefined
         ? { mergeCheckTimeoutSeconds: input.mergeCheckTimeoutSeconds }
         : {}),
+      // Written by `startProjectLine` beside the line (§10.5 O-L1); not one of the settings a
+      // start records, so the receipt and `differsFromRequest` are as they were.
+      ...(input.deliveryMode !== undefined ? { deliveryMode: input.deliveryMode } : {}),
     };
     const started = await this.start(
       ownerId,
@@ -543,7 +546,8 @@ export class ProjectAcceptanceService {
    *   2. The line, its main branch when the start names one, and the merge check, under the
    *      binding's lock (rank 55): written as the owner's choice, a named main branch recorded as
    *      chosen (L6), unless the line has started integrating — then it is left where it is, and
-   *      the answer says so (`startProjectLine`).
+   *      the answer says so (`startProjectLine`). A delivery mode the start names is written and
+   *      recorded as chosen either way (O-L1).
    *   3. Automatic and the concurrency limit — `coordinator_enabled` and `max_concurrent_tasks`,
    *      written only where they change, with the one `configRevision` bump every write of
    *      `ProjectsService.AUTHORIZATION_FIELDS` owes — and `started_at`, in the same statement, as a
@@ -565,7 +569,7 @@ export class ProjectAcceptanceService {
     settingsFor: (
       tx: Prisma.TransactionClient,
       project: { maxConcurrentTasks: number },
-    ) => Promise<ProjectStartSettings>,
+    ) => Promise<ProjectStartSettings & Pick<StartLineSettings, 'deliveryMode'>>,
     requestId: string | null = null,
   ): Promise<ProjectStartOutcome> {
     return withTransactionRetry(this.prisma, async (tx) => {

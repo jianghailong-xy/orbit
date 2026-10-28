@@ -22,6 +22,13 @@ export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
  *  integration (§1.2 L1 / L2). */
 export type IntegrationRefSource = 'EXPLICIT' | 'DEFAULT_RULE';
 
+/**
+ * How a finished task's work reaches the upstream (§10.3 O4, §10.5 O-L1): `PLATFORM` — Orbit lands
+ * it and the agent does not touch the target branch — or `AGENT_PUSH` — the agent pushes its commits
+ * to the upstream itself, which only a `MAIN` line allows. The account owner's to choose.
+ */
+export type DeliveryMode = 'PLATFORM' | 'AGENT_PUSH';
+
 /** The check results of the latest finished task landing attempt (§1.6).
  *  `UNKNOWN` means that attempt has no complete check verdict. */
 export type MergeCheckTipState = 'PASSING' | 'FAILING' | 'UNKNOWN';
@@ -62,6 +69,15 @@ export interface ProjectIntegrationSettings<Instant = string> {
   mergeCheckTimeoutSeconds: number | null;
   /** How long an exception item may wait on the coordinator before it becomes the owner's (§4.6). */
   escalationSeconds: number;
+  /**
+   * How this project's finished work reaches its upstream (§10.5 O-L1) — `PLATFORM` for a project
+   * with no binding, which is what it gets once it has one. Not locked once integration starts.
+   * Absent on servers that predate it.
+   */
+  deliveryMode?: DeliveryMode;
+  /** When the account owner last wrote `deliveryMode` — null while nobody ever chose it. Absent on
+   *  servers that predate it. */
+  deliveryModeChosenAt?: Instant | null;
 }
 
 /** An account's last choice of main branch for one repository (§1.2 L6). */

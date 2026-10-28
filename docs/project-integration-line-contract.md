@@ -2050,7 +2050,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 
 ### 10.5 规则
 
-**O-L1（交付方式的写入门）**：与 L5 同一扇门，即 `PATCH /projects/:id/integration` 的 `deliveryMode`，以及开始门 `POST /projects/:id/start` 的可选 `deliveryMode`。只收 owner 凭据，带 acting session 照 L5 拒绝 403 `INTEGRATION_SETTINGS_OWNER_ONLY`。`PROJECT_BRANCH` 线上写 `AGENT_PUSH` → 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`。L4 的锁定不管它：开始集成之后照样能换，只影响之后写下的 DONE。改成 `AGENT_PUSH` 的同一事务入队一次观测（O-T4）。
+**O-L1（交付方式的写入门）**：与 L5 同一扇门，即 `PATCH /projects/:id/integration` 的 `deliveryMode`，以及开始门 `POST /projects/:id/start` 的可选 `deliveryMode`。只收 owner 凭据，带 acting session 照 L5 拒绝 403 `INTEGRATION_SETTINGS_OWNER_ONLY`。`PROJECT_BRANCH` 线上写 `AGENT_PUSH` → 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`。线还没定（没人选过、也没开始集成）时同样 409，除非同一请求选 `MAIN`：默认规则在第一次集成时才定线（L3），可能定成项目分支，而 §10.4 的 CHECK 会让那个事务连同写 DONE 一起失败；已是 `AGENT_PUSH` 的项目改到项目分支，须在同一请求里把交付方式改回 `PLATFORM`，否则也是这条 409。开始门照旧整单拒绝带 acting session 的请求（403，开始门自己的码），什么都不写；没有仓库的项目在开始门带 `AGENT_PUSH` → 409 `INTEGRATION_REPOSITORY_UNKNOWN`，带 `PLATFORM` 不写任何东西。L4 的锁定不管它：开始集成之后照样能换，只影响之后写下的 DONE。改成 `AGENT_PUSH` 的同一事务入队一次观测（O-T4）。
 
 **O-L2（M7 的第二种常设授权）**：`AGENT_PUSH` 是 owner 对「agent 自己把工作推到 upstream」的常设授权，与 M7 里 Automatic 的授权同类。这种项目的代码任务 DONE 时不建晋升候选（不走 M-F2），不出确认卡；进 main 由观测记下（O2），也不开 §10.7 的 `LANDED_WITHOUT_CONFIRMATION`。`PLATFORM` 照旧，M7 原文一个字不改。
 
@@ -2059,7 +2059,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 - `AGENT_PUSH`：`This project delivers by pushing to <branch>. Push your commits to <remote>/<branch> before you finish — Orbit checks that they are there.`
 - `PLATFORM`，且项目已开始集成：`Do not push to <branch>. Orbit lands your branch after your work is accepted.`
 
-项目说明与它冲突时以设置为准。协调会话写项目说明前读 `project_get.integration.deliveryMode`。
+`<branch>` 是集成线分支的短名（`AGENT_PUSH` 只在 `MAIN` 线上，就是 upstream），`<remote>` 是代码库行的 `remote_name`。工头与验证任务的运行、声明 codeless 的任务不加这句：它们不交付提交。项目说明与它冲突时以设置为准。协调会话写项目说明前读 `project_get.integration.deliveryMode`。
 
 **O-L4（冻结交付身份）**：J-T1a 写 DONE 的事务里，`isCodeTask` 为真时冻结：
 
@@ -2160,7 +2160,7 @@ G5 照旧：不加 `project_blocker` kind，不加唤醒事件。设计图 04 �
 
 **读模型**：
 
-- `project_get.integration` 与 `GET /projects/:id/integration` 加 `deliveryMode`、`deliveryModeChosenAt`。开始卡片在 `MAIN` 线上列出两种交付方式让 owner 选（附录 A-Q21）。
+- `project_get.integration` 与 `GET /projects/:id/integration` 加 `deliveryMode`、`deliveryModeChosenAt`（没有代码库行时读 `PLATFORM` 与 null）。开始卡片在 `MAIN` 线上列出两种交付方式让 owner 选（附录 A-Q21）。
 - 任务行的集成三段（§7.3）：`AGENT_PUSH` 任务 DONE 后，第二段读 `Waiting to be seen on <branch>`，带 `delivered_sha` 的短号；看到之后读 `On <branch>`。
 - J9 的拒绝文案改为说出它在等什么：有 OPEN 的 `LANDING_UNOBSERVED` 时写 `A prerequisite is finished but its work is not on <branch> yet — see “Not on <branch> yet” in open items`；有在途作业时保留原句；两者都没有时（按 O5 不该出现）写原句，并记一行 `warn`。
 

@@ -321,7 +321,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
-import { buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -14596,6 +14596,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
+        // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
+        codeless: true,
+        project: { select: TASK_DELIVERY_SELECT },
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -15061,6 +15064,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     isForeman?: boolean;
     verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;
+    codeless?: boolean | null;
+    project?: Parameters<typeof buildTaskExecutionPrompt>[0]['project'];
   }): string {
     // Neither a foreman nor a verifier is performing the list's work — one coordinates it, the
     // other checks it — so the standing instructions, which say how that work is done, would be
@@ -15183,8 +15188,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion: true,
         children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
-        // Whether its project was cancelled — the gate `execute` applies third, classified here.
-        project: { select: { status: true } },
+        // Whether its project was cancelled — the gate `execute` applies third, classified here —
+        // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
+        codeless: true,
+        project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

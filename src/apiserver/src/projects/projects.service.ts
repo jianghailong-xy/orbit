@@ -2902,15 +2902,26 @@ export class ProjectsService {
   }
 
   /**
-   * The account owner choosing this project's integration line and merge check
-   * (`PATCH /projects/:id/integration`, contract L5). Once the project started integrating, a change
-   * that would move the line is 409 `INTEGRATION_LINE_LOCKED`.
+   * The account owner choosing this project's integration line, merge check and delivery mode
+   * (`PATCH /projects/:id/integration`, contract L5, O-L1). Once the project started integrating, a
+   * change that would move the line is 409 `INTEGRATION_LINE_LOCKED`. A request carrying an acting
+   * session is refused whole before anything is read: this door is the owner's, card or no card.
    */
   async configureIntegration(
     ownerId: string,
     id: string,
     settings: IntegrationSettings,
+    actingSessionId?: string,
   ): Promise<ProjectIntegrationView> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: 'a project’s integration settings — its line, merge check and delivery mode — are '
+          + 'the account owner’s to set on this door, not this session’s. Ask them to set them from '
+          + 'the Orbit web app, the user API or `orbit project update` at their own terminal',
+      });
+    }
     await this.assertOwned(ownerId, id);
     const written = await withTransactionRetry(
       this.prisma,
