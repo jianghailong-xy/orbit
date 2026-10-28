@@ -57,6 +57,7 @@ It is one static binary with these subcommands:
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
 | `LINK_EVENT_MERGE_WINDOW` | `100ms` | How long an event batch waits for others, from any connection, to go with it in one [merged call](#merged-calls), up to `500ms`. `0` forwards every batch alone. |
 | `LINK_EVENT_MERGE_MAX_BATCHES`, `LINK_EVENT_MERGE_MAX_BYTES` | `64`, `2097152` | What one merged call may carry: the sessions its transaction holds at once (at most the apiserver's 256), and the bytes of its events. A full call goes at once. |
+| `LINK_INGEST_QUEUE_MAX_EVENTS`, `LINK_INGEST_QUEUE_MAX_BYTES` | `200000`, `134217728` | The most durable events, and payload bytes, the [ingest queue](#durable-events-and-credit) holds across all connections, however many there are. At the defaults that is about half a gigabyte of the gateway's memory: 200,000 events of 660 bytes are about 470 MiB, at the 2.4 KB each that task C2b measured, and 128 MiB of larger events, which the bytes bound stops first, about 600 MiB. Size it to the gateway's memory beside its connections (about 158 KiB each: 2.3 GiB for 15,000). Each must be at least one connection's credit, 10,000 events and 64 MiB. The credit's high- and low-water marks are half and a quarter of it. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
 | `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. |
@@ -67,12 +68,15 @@ It is one static binary with these subcommands:
 | `LINK_DRAIN_TIMEOUT` | `80s` | When the drain gives up and closes what is left. Keep Compose's `stop_grace_period` (90s) above it. |
 | `LINK_FRAME_LOG` | `lifecycle` | `lifecycle` logs Hello, Welcome, Drain and Close. `all` logs a summary of every frame, in and out. `off` logs no frames. |
 | `LINK_DRILL_LOSE_ANSWERS` | — | For staging drills only: answers the gateway loses on purpose, such as `claim:3,inbox:3` ([Lost answers](#lost-answers-a-drills-fault)). Unset, it loses none. |
+| `LINK_DRILL_INGEST_RATE` | — | For load tests only: the durable events a second the gateway forwards at most, each batch in its turn, so that runners can send faster than the events are stored and the ingest queue fills to its bound. A batch waiting its turn counts in the queue. Unset, batches are forwarded as they come. |
 
 These values are fixed by the design: ping every 20s, disconnect after 60s without a pong, heartbeat every 30s, at most
 two connections per runner, frames of at most 256 KiB. Forwarding's bounds are fixed too: 64 calls in flight and 8
 sessions' events being stored at once per connection; a credit of 10,000 events or 64 MiB per connection, a tenth of
-it while the ingest queue holds more than 100,000 events or 512 MiB, back once it holds less than half that; retries on
-other backends for up to 5s; a watcher count lapses after 60s; a turn prefix request waits 10s for the runner.
+it, or the connection's share of the ingest queue's bound when that is less, while the queue holds more than half its
+bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter; room the queue frees held
+15s for a session in line; retries on other backends for up to 5s; a watcher count lapses after 60s; a turn prefix
+request waits 10s for the runner.
 
 ## Handshake
 
@@ -407,9 +411,31 @@ and acknowledged under the id the runner sent. One session's batches are forward
 | It starts after a seq this connection has not stored. | `EVENT_SEQ_GAP`, retryable, not forwarded. |
 | Its own seqs are not increasing without gaps. | `EVENT_BATCH_MALFORMED`, not forwarded. |
 | It would put the connection past its credit. | `CREDIT_EXCEEDED`, retryable after 1s, not forwarded. |
+| The ingest queue has no room for it (below). | `CREDIT_EXCEEDED`, retryable after 1s, not forwarded; its session waits in line. |
 
 A failure's `durable_seq` is the last this connection acknowledged; the runner sends again from it plus one. `rejected`
 stays empty until B5 writes tombstones.
+
+The ingest queue is every connection's events queued for or in flight to the apiserver, counted from a batch's arrival
+to its `EventAck`. It never holds more than `LINK_INGEST_QUEUE_MAX_EVENTS` events or `LINK_INGEST_QUEUE_MAX_BYTES`
+payload bytes (200,000 or 128 MiB), however many connections there are: about half a gigabyte of the gateway's memory
+at the defaults (see [Configuration](#configuration)). What it has no room for stays with the runner, which slows down
+and holds its events in its own buffer, in memory and then on disk (design §5.8).
+
+- **The line.** A session whose batch finds the queue full takes a place in line. Room the queue frees goes to the
+  sessions in line, oldest first: it is held for each until its runner sends again, at most 15s, and nothing else may
+  take it, not even a batch that would fit. So every session gets its turn, however small the others' batches. A
+  session whose runner sends more than was held for it stays first in line for what it sends; one whose runner does
+  not send again within 15s loses its turn, and one whose connection closes leaves the line.
+- **Credit.** Credit is granted by the depth of the queue (§5.8). While it holds more than half its bound (100,000
+  events or 64 MiB), every connection's credit drops from 10,000 events or 64 MiB to a tenth of that, in a `Credit`
+  frame, and it comes back once the queue holds less than a quarter of its bound. The reduced credit is also at most
+  the connection's share of the bound in events, the bound divided by the connections in `MODE_LINK`: 13 events each
+  for 15,000 connections. So what every connection may have in flight fits in the queue, and runners slow down rather
+  than send what it would refuse. The bytes are not shared: the reduced 8 MiB is what the largest event a runner sends
+  needs, and the bytes bound alone holds them. A connection opened meanwhile gets the reduced credit in its Welcome, and
+  one whose share has moved with the number of connections is sent its new credit with its next batch, ahead of that
+  batch's `EventAck`.
 
 #### Merged calls
 
@@ -429,11 +455,6 @@ at most four calls are out at once, and batches collect behind them.
 | The database turns the call away (503), or no backend answers. | Every batch of it fails as it would have alone, retryable. |
 
 A session's batches still go one after another: its next batch is merged into a later call once this one is answered.
-
-Credit is granted by the depth of the ingest queue (§5.8): the events and payload bytes every connection has queued or
-in flight to the apiserver. While it holds more than 100,000 events or 512 MiB, every connection's credit drops from
-10,000 events or 64 MiB to a tenth of that, in a `Credit` frame, and it comes back once the queue holds less than half
-the mark. A connection opened meanwhile gets the reduced credit in its Welcome.
 
 ### Live stream and watchers
 
@@ -639,7 +660,7 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_heartbeat_forward_duration_seconds` | histogram | — |
 | `link_heartbeat_facts_total` | counter | `result`: whole, cached, unknown_digest, invalid_json, digest_mismatch, ignored |
 | `link_welcome_lookups_total` | counter | `result`: answered, failed (no answer), refused (not 2xx), malformed; all but answered send a Welcome without sessions and release |
-| `link_event_batches_total` | counter | `result`: stored, credit_exceeded, gap, malformed, no_answer, refused, refused_retryable, failed_behind, empty |
+| `link_event_batches_total` | counter | `result`: stored, credit_exceeded (past the connection's credit), queue_full (no room in the ingest queue), gap, malformed, no_answer, refused, refused_retryable, failed_behind, empty |
 | `link_events_stored_total` | counter | — (events stored and acknowledged) |
 | `link_event_ack_duration_seconds` | histogram | — (from a batch's arrival to its EventAck: the acknowledgement latency) |
 | `link_event_merge_calls_total` | counter | `result`: answered, alone (every batch forwarded alone instead), failed (no answer, or the database turned the call away) |
@@ -648,7 +669,8 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_event_merge_batches` | histogram | — (batches per merged call) |
 | `link_event_merge_call_duration_seconds` | histogram | — (from a merged call's start to its answer) |
 | `link_event_merge_held_seconds` | histogram | — (how long the call's transaction held its sessions, as the apiserver states it) |
-| `link_ingest_queue_events`, `link_ingest_queue_bytes` | gauge | — (queued or in flight to the apiserver: the depth credit is granted by; the unacknowledged events) |
+| `link_ingest_queue_events`, `link_ingest_queue_bytes` | gauge | — (queued or in flight to the apiserver: the depth credit is granted by; the unacknowledged events; never past `LINK_INGEST_QUEUE_MAX_*`) |
+| `link_ingest_waiting_sessions` | gauge | — (sessions whose batch found the ingest queue full, in line for its room) |
 | `link_credit_reduced`, `link_credit_changes_total` | gauge, counter | `to`: reduced, restored |
 | `link_live_events_total` | counter | `result`: published, no_watchers, nats_down, publish_failed, bad_session |
 | `link_watched_sessions` | gauge | — |

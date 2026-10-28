@@ -28,7 +28,10 @@ heartbeats and 2,000 durable events a second). Each simulated runner behaves as 
   first event, or at once on a `tool_result` (a boundary event), and kept until an `EventAck` covers it. A failed
   batch, and what was out behind it, is sent again from `durable_seq + 1`; a lost connection's batches are sent again
   on the next one; nothing of a session is sent on a new connection while a batch of it is out on the old one, so a
-  session's events are stored in seq order;
+  session's events are stored in seq order. What a connection's batches have out stays within its credit, as a
+  runner's does: `Welcome`'s, then each `Credit` frame's, which the gateway lowers while its ingest queue is deep. A
+  session the credit holds back waits for an acknowledgement or a `Credit` frame, and its next batch carries what
+  fits;
 - with `-live-rate` (task O3), each running session that somebody watches streams reply deltas (`text_delta`, about
   100 bytes each, design §9), at its share of the rate across the sessions watched at the time. Who watches is read
   as a runner reads it: a `Hint{watchers}`, the `HintState` of `Welcome` and of every `HeartbeatAck`, and a
