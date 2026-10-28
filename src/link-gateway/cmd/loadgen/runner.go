@@ -242,9 +242,12 @@ type runner struct {
 	attempt       int
 	connectedOnce bool
 	renewAt       time.Time
-	firstRenewal  bool
-	quiescing     bool
-	quiesceUntil  time.Time
+	// draining: the connection in use was told to drain, so the next connection renewAt brings is the Drain's, which
+	// keeps the token in hand while it is good for longer than renewBefore, as a runner's does.
+	draining     bool
+	firstRenewal bool
+	quiescing    bool
+	quiesceUntil time.Time
 	// supersededEarly: the renewal's new connection was welcomed and the gateway closed the old one before the loop
 	// took the dial's result. The connection that result brings is the renewal.
 	supersededEarly bool
@@ -499,10 +502,11 @@ func (r *runner) inflightOn(c *rconn) bool {
 func (r *runner) dial(ctx context.Context, renewal bool) {
 	r.dialing = true
 	first := !r.connectedOnce
+	drain := renewal && r.draining
 	token, exp, linkURL := r.token, r.tokenExp, r.linkURL
 	h := r.hello()
 	go func() {
-		d := r.open(ctx, first, renewal, token, exp, linkURL, h)
+		d := r.open(ctx, first, renewal, drain, token, exp, linkURL, h)
 		select {
 		case r.conns <- d:
 		case <-ctx.Done():
@@ -530,7 +534,12 @@ func (r *runner) hello() *linkpb.Hello {
 
 // open trades the runner token for a link token when the one in hand will not do, dials, says Hello and waits for
 // Welcome. It runs on its own goroutine: it reads only what dial passed it.
-func (r *runner) open(ctx context.Context, first, renewal bool, token string, exp time.Time, linkURL string, h *linkpb.Hello) dialResult {
+//
+// A renewal is due because the token is, so it takes a fresh one, unless it is a Drain's: the next connection then
+// keeps the token in hand while it is good for longer than renewBefore, as a runner's does (src/runner-go/link_client.go,
+// token and renewAt), and the gateway it reaches verifies it as the draining one did. Minting one for every drained
+// connection put a gateway's whole fleet on POST /api/runner/link-token within a minute (C2b, 34m88i6i8CQeU4dSuw7HM).
+func (r *runner) open(ctx context.Context, first, renewal, drain bool, token string, exp time.Time, linkURL string, h *linkpb.Hello) dialResult {
 	g := r.g
 	d := dialResult{renewal: renewal, token: token, tokenExp: exp, linkURL: linkURL}
 	if first {
@@ -541,7 +550,11 @@ func (r *runner) open(ctx context.Context, first, renewal bool, token string, ex
 			return d
 		}
 	}
-	if renewal || token == "" || time.Until(exp) < 10*time.Minute {
+	mint := token == "" || time.Until(exp) < 10*time.Minute
+	if renewal {
+		mint = !drain || token == "" || time.Until(exp) <= g.o.renewBefore
+	}
+	if mint {
 		started := time.Now()
 		tok, err := g.mintToken(ctx, r.runnerTok, r.process)
 		if err != nil {
@@ -680,6 +693,7 @@ func (r *runner) onDial(ctx context.Context, d dialResult, now time.Time) {
 	r.connectedOnce = true
 	r.attempt = 0
 	r.quiescing = false
+	r.draining = false
 	r.renewAt = r.renewalTime(now)
 	r.beatInterval = time.Duration(c.welcome.GetHeartbeatIntervalMs()) * time.Millisecond
 	if r.beatInterval <= 0 {
@@ -900,6 +914,7 @@ func (r *runner) onFrame(c *rconn, f *linkpb.Frame, now time.Time) {
 		g.note("drain")
 		if c == r.cur {
 			r.renewAt = now.Add(time.Duration(body.Drain.GetReconnectAfterMs()) * time.Millisecond)
+			r.draining = true
 		}
 	case *linkpb.Frame_Hint:
 		g.stats.with(func(w *window) { w.Hints++ })
@@ -1049,6 +1064,7 @@ func (r *runner) onEnd(c *rconn, now time.Time) {
 		return
 	}
 	r.quiescing = false
+	r.draining = false
 	g.stats.setConnected(-1)
 	wait := backoff(r.rng, r.attempt)
 	r.attempt++

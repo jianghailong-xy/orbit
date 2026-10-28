@@ -106,17 +106,20 @@ func TestFactsCarryTheDigestOfTheirOwnBytes(t *testing.T) {
 // supersedeFirst the old connection is closed before the new one's Welcome is sent, so the runner sees its old
 // connection end before its renewal's dial comes back. With credit, Welcome grants that many events, a batch past it
 // is refused CREDIT_EXCEEDED as the link gateway refuses it, and after raiseAfter batches a connection is sent a Credit
-// frame for raiseTo; ackDelay holds each acknowledgement back.
+// frame for raiseTo; ackDelay holds each acknowledgement back. With drainAfterBeats, a connection is told to drain once
+// it has had that many heartbeats. Its link tokens last tokenLife, 1.5s unless set; mints counts them.
 type fakeGateway struct {
-	t              *testing.T
-	failEvery      int
-	cutConn        int
-	beat           time.Duration
-	supersedeFirst bool
-	credit         uint32
-	raiseAfter     int
-	raiseTo        uint32
-	ackDelay       time.Duration
+	t               *testing.T
+	failEvery       int
+	cutConn         int
+	beat            time.Duration
+	supersedeFirst  bool
+	credit          uint32
+	raiseAfter      int
+	raiseTo         uint32
+	ackDelay        time.Duration
+	drainAfterBeats int
+	tokenLife       time.Duration
 
 	mu       sync.Mutex
 	stored   map[string][]uint64
@@ -134,6 +137,7 @@ type fakeGateway struct {
 	// creditRefusals counts the batches refused for the connection's credit; batchSizes is every batch's events.
 	creditRefusals int
 	batchSizes     []int
+	drains, mints  int
 }
 
 func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +212,7 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if !f.supersedeFirst {
 		supersede()
 	}
-	batches, taken := 0, 0
+	batches, taken, beats := 0, 0, 0
 	var unacked atomic.Uint64 // events in flight on this connection
 	for {
 		fr, err := read()
@@ -229,6 +233,12 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 			_ = write(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK,
 				ReconcileJson: []byte(`{"cancelSessionIds":[],"leaseLostSessionIds":[]}`)}}})
+			if beats++; f.drainAfterBeats > 0 && beats == f.drainAfterBeats {
+				f.mu.Lock()
+				f.drains++
+				f.mu.Unlock()
+				_ = write(&linkpb.Frame{Body: &linkpb.Frame_Drain{Drain: &linkpb.Drain{ReconnectAfterMs: 50}}})
+			}
 		case *linkpb.Frame_EventBatch:
 			events := uint64(len(body.EventBatch.GetEvents()))
 			f.mu.Lock()
@@ -402,6 +412,47 @@ func TestTheFleetKeepsWithinItsConnectionsCredit(t *testing.T) {
 	}
 }
 
+// A Drain is answered as a runner answers it (src/runner-go/link_work.go, link_client.go): the next connection keeps
+// the link token in hand while it is good for longer than -renew-before, and takes a fresh one once it is not. The
+// fleet's tokens last an hour here, so no renewal falls due on its own: with -renew-before 5m every drained connection is
+// replaced on the runner's first token, and with -renew-before 2h each replacement mints one. Either way every event is
+// stored once, in order.
+func TestADrainedConnectionIsReplacedWithTheTokenInHandWhileItIsGood(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		renewBefore time.Duration
+		fresh       bool
+	}{
+		{"an hour left: kept", 5 * time.Minute, false},
+		{"inside -renew-before: renewed", 2 * time.Hour, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fg := &fakeGateway{t: t, beat: 200 * time.Millisecond, drainAfterBeats: 3, tokenLife: time.Hour,
+				stored: map[string][]uint64{}, byProc: map[string]*websocket.Conn{}}
+			sum, sessions := runFleet(t, fg, func(o *options) { o.renewBefore = tc.renewBefore })
+			fg.mu.Lock()
+			defer fg.mu.Unlock()
+			w := sum.Whole.Counters
+			t.Logf("drains %d, renewals %d, reconnects %d, tokens minted %d (the gateway saw %d)", fg.drains, w.Renewals, w.Reconnects, w.TokensMinted, fg.mints)
+			if fg.drains < 6 || w.Renewals < 3 {
+				t.Fatalf("%d drains and %d renewals: the fleet was not drained enough to tell", fg.drains, w.Renewals)
+			}
+			// Three runners, each with its first token.
+			minted := int64(3)
+			if tc.fresh {
+				minted += w.Renewals
+			}
+			if w.TokensMinted != minted || int64(fg.mints) != minted {
+				t.Errorf("tokens minted %d (the gateway saw %d), want %d", w.TokensMinted, fg.mints, minted)
+			}
+			stored := fg.assertStoredInOrder(t, sessions)
+			if sum.Unacknowledged != 0 || stored != w.EventsProduced || w.EventsAcked != w.EventsProduced {
+				t.Errorf("produced %d, acknowledged %d, stored %d, unacknowledged %d", w.EventsProduced, w.EventsAcked, stored, sum.Unacknowledged)
+			}
+		})
+	}
+}
+
 // assertStoredInOrder fails unless every session's stored seqs count up from 1, for sessions that stream; it returns
 // how many are stored. Under fg.mu.
 func (fg *fakeGateway) assertStoredInOrder(t *testing.T, sessions map[string]bool) int64 {
@@ -429,16 +480,20 @@ func runFleet(t *testing.T, fg *fakeGateway, tune func(*options)) (*summary, map
 	link := httptest.NewServer(http.HandlerFunc(fg.serveHTTP))
 	defer link.Close()
 	linkURL := "ws" + strings.TrimPrefix(link.URL, "http")
-	var mints sync.Map
+	life := fg.tokenLife
+	if life == 0 {
+		life = 1500 * time.Millisecond
+	}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/runner/link-token" || r.Header.Get("Authorization") == "" {
 			http.Error(w, "no", http.StatusNotFound)
 			return
 		}
-		n, _ := mints.LoadOrStore(r.Header.Get("Authorization"), new(int))
-		*(n.(*int))++
+		fg.mu.Lock()
+		fg.mints++
+		fg.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]string{"token": "t", "linkUrl": linkURL,
-			"expiresAt": time.Now().Add(1500 * time.Millisecond).UTC().Format(time.RFC3339Nano)})
+			"expiresAt": time.Now().Add(life).UTC().Format(time.RFC3339Nano)})
 	}))
 	defer api.Close()
 

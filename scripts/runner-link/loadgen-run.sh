@@ -17,6 +17,9 @@
 #   metrics.prom             every 15 s: the link gateway's /metrics, each scrape after a "# scrape <ms>" line
 #   threads.jsonl            every 5 s: each apiserver's node process, its CPU time as a whole and its main thread's: a
 #                            process's main thread is what fills (task O3)
+#   nats.jsonl               every 5 s: NATS's clients (its /connz), with each apiserver's address: the messages each
+#                            one was delivered, and the live streams it subscribes to (ses.<id>.live), one per session it
+#                            has a stream of; streams.md and streams.json read them (loadgen-streams.mjs)
 #   db.jsonl                 every 15 s: the database's sessions by state, transactions, statements, rows and WAL
 #                            position
 #   pgss.json, db-before.json, db-after.json, sizes.txt, logs/   the database's statements, totals and the containers' logs
@@ -83,6 +86,7 @@ cgroup[loadgen]="/sys/fs/cgroup/system.slice/$unit.scope"
 gateway_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$project-link-gateway")"
 api="http://$(setting STAGING_BIND 127.0.0.1):$(setting STAGING_HTTP_PORT 18086)"
 metrics="http://127.0.0.1:$(setting STAGING_METRICS_PORT 19464)/metrics"
+nats_monitor="http://127.0.0.1:$(setting STAGING_NATS_MONITOR_PORT 18222)"
 
 log "building loadgen from $(git -C "$repo" rev-parse --short HEAD)"
 (cd "$repo/src/link-gateway" && go build -trimpath -o "$out/loadgen" ./cmd/loadgen)
@@ -117,11 +121,12 @@ holds_lock() {
   return 1
 }
 {
-  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","mergeWindow":"%s","ingestRate":"%s","hostCpus":%s,"hostMemKb":%s,' \
+  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","mergeWindow":"%s","ingestRate":"%s","spread":%s,"hostCpus":%s,"hostMemKb":%s,' \
     "$name" "$project" "$(git -C "$repo" rev-parse HEAD)" \
-    "$([ -n "$(git -C "$repo" status --porcelain -- src scripts)" ] && echo true || echo false)" \
+    "$([ -n "$(git -C "$repo" status --porcelain -- src scripts gateway docker-compose.yml)" ] && echo true || echo false)" \
     "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(setting STAGING_MERGE_WINDOW_SETTING default)" \
-    "$(setting STAGING_INGEST_RATE_SETTING off)" "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
+    "$(setting STAGING_INGEST_RATE_SETTING off)" "$([ "$(setting STAGING_SPREAD 0)" = 1 ] && echo true || echo false)" \
+    "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
   printf '"markEverySeconds":%s,"loadTestLock":%s,' "${mark_every:-null}" "$(holds_lock && echo true || echo false)"
   [ -z "$watch" ] || printf '"watchSessions":%s,' "$watch"
   if [ ${#args[@]} -gt 0 ]; then printf '"loadgenArgs":%s,' "$(printf '%s\n' "${args[@]}" | jq -R . | jq -cs .)"; else printf '"loadgenArgs":[],'; fi
@@ -217,6 +222,30 @@ sample_threads() {
     sleep 5
   done
 }
+# NATS's view of the live streams (task 34nb3xgCijTDzQJVXDVT7): every client with the messages it was delivered, and of
+# its subscriptions those to a session's live stream, with what each delivered. An apiserver subscribes to a session's
+# only while it has a stream of that session open, so these say which apiserver holds each session's streams, and that
+# one with none of a session receives none of its deltas. The apiservers' addresses are read each time: one that was
+# started again may come back on another.
+sample_nats() {
+  local t svc ip ips body
+  while :; do
+    t="$(date +%s%3N)"
+    ips=""
+    for svc in "${services[@]}"; do
+      [[ "$svc" == apiserver* ]] || continue
+      ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$project-$svc" 2>/dev/null || true)"
+      [ -n "$ip" ] && ips+="${ips:+,}\"$ip\":\"$svc\""
+    done
+    if body="$(curl -fsS --max-time 5 "$nats_monitor/connz?subs=detail&limit=4096")"; then
+      jq -c --argjson t "$t" --argjson apiservers "{$ips}" '{t: $t, apiservers: $apiservers, clients: [.connections[] |
+        {ip, name, inMsgs: .in_msgs, outMsgs: .out_msgs, outBytes: .out_bytes,
+         live: [(.subscriptions_list_detail // [])[] | select(.subject | test("^ses\\.[^.]+\\.live$")) | {s: .subject[4:-5], m: .msgs}]}]}' \
+        <<<"$body" >> "$out/nats.jsonl" 2>> "$out/nats.err" || true
+    fi
+    sleep 5
+  done
+}
 mark_runners() {
   while :; do
     psql_at -c 'UPDATE "runner_presence" SET "changes" = "changes" + 1' > /dev/null 2>> "$out/db.err" || true
@@ -240,6 +269,7 @@ sample_slices & pids+=($!)
 sample_metrics & pids+=($!)
 sample_db & pids+=($!)
 sample_threads & pids+=($!)
+sample_nats & pids+=($!)
 if [ -n "$mark_every" ]; then mark_runners & pids+=($!); fi
 
 # --- The watchers (--watch): a session stream on each of the first running sessions, as their owners. ----------------
@@ -298,5 +328,6 @@ for svc in "${services[@]}"; do
 done
 
 node "$here/loadgen-report.mjs" "$out" > "$out/report.md" || log "the report could not be written (see $out)"
-log "report: $out/report.md"
+node "$here/loadgen-streams.mjs" "$out" > "$out/streams.md" || log "the streams summary could not be written (see $out)"
+log "report: $out/report.md, the session streams by apiserver: $out/streams.md"
 exit "$rc"
