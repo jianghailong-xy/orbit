@@ -81,6 +81,27 @@ type sentBatch struct {
 
 func (b *sentBatch) last() uint64 { return b.events[len(b.events)-1].ev.GetSeq() }
 
+// amount is an amount of durable events, as the link's Credit counts them: how many, and their payload bytes.
+type amount struct{ events, bytes uint64 }
+
+func amountOf(events []*pev) amount {
+	a := amount{events: uint64(len(events))}
+	for _, p := range events {
+		a.bytes += uint64(len(p.ev.GetPayloadJson()))
+	}
+	return a
+}
+
+// defaultCredit is what a Welcome that grants none is taken to grant, as a runner takes it (src/runner-go/link_events.go).
+var defaultCredit = amount{events: 10_000, bytes: 64 << 20}
+
+func creditOf(c *linkpb.Credit) amount {
+	if c == nil {
+		return defaultCredit
+	}
+	return amount{events: uint64(c.GetMaxUnackedEvents()), bytes: c.GetMaxUnackedBytes()}
+}
+
 // rconn is one connection.
 type rconn struct {
 	ws      *websocket.Conn
@@ -97,6 +118,29 @@ type rconn struct {
 	retired bool      // replaced by the next connection: what ends it is expected
 	retire  time.Time // when the runner closes it itself, if the gateway has not
 	opened  time.Time
+	// credit is what may be in flight on it (Welcome's, then each Credit frame's), and unacked what its batches have
+	// in flight: a runner keeps within the gateway's credit (§5.8), which shrinks while the gateway's ingest queue is
+	// deep, and sends the rest as acknowledgements make room.
+	credit, unacked amount
+}
+
+// room is how many of events, from the first, one batch on c may carry within its credit.
+func (c *rconn) room(events []*pev) int {
+	used := c.unacked
+	for i, p := range events {
+		used.events++
+		used.bytes += uint64(len(p.ev.GetPayloadJson()))
+		if used.events > c.credit.events || used.bytes > c.credit.bytes {
+			return i
+		}
+	}
+	return len(events)
+}
+
+// settled takes what is no longer in flight on c off what its credit counts.
+func (c *rconn) settled(a amount) {
+	c.unacked.events -= min(c.unacked.events, a.events)
+	c.unacked.bytes -= min(c.unacked.bytes, a.bytes)
 }
 
 func (c *rconn) send(f *linkpb.Frame) error {
@@ -360,9 +404,14 @@ func (r *runner) tick(ctx context.Context, now time.Time, generating bool) {
 			}
 		}
 	}
+	// A session has one batch out at a time, as a runner's does (src/runner-go/link_events.go): an EventAck names no
+	// batch, and the gateway answers a batch it refuses on sight ahead of one it is still storing, so the answer to a
+	// second batch out could not be told from the first's. Nothing is sent for it on a new connection either while its
+	// batch is out on the one being replaced, so its events are stored in seq order.
 	if r.cur != nil && !r.quiescing {
 		for _, s := range r.active {
-			if len(s.pending) > 0 && !now.Before(s.flushAt) && !now.Before(s.resendAfter) && !r.heldByRetired(s) {
+			if len(s.pending) > 0 && len(s.inflight) == 0 && !now.Before(s.flushAt) && !now.Before(s.resendAfter) &&
+				r.cur.room(s.pending[:1]) > 0 {
 				r.flush(s, now)
 			}
 		}
@@ -414,7 +463,9 @@ func (r *runner) nextDeadline(now time.Time, generating bool) time.Time {
 		if generating && s.started {
 			take(s.nextEventAt)
 		}
-		if len(s.pending) > 0 && r.cur != nil && !r.quiescing {
+		// A session whose batch is out, or that the credit holds back, waits for an acknowledgement or a Credit frame,
+		// which wake the loop.
+		if len(s.pending) > 0 && len(s.inflight) == 0 && r.cur != nil && !r.quiescing && r.cur.room(s.pending[:1]) > 0 {
 			take(maxTime(s.flushAt, s.resendAfter))
 		}
 		inflight = inflight || len(s.inflight) > 0
@@ -439,17 +490,6 @@ func (r *runner) inflightOn(c *rconn) bool {
 			if b.conn == c {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// heldByRetired: the session has batches out on a connection being replaced. Nothing more is sent for it until they
-// are acknowledged or that connection ends and they are sent again, so its events are stored in seq order.
-func (r *runner) heldByRetired(s *session) bool {
-	for _, b := range s.inflight {
-		if b.conn != r.cur {
-			return true
 		}
 	}
 	return false
@@ -573,7 +613,7 @@ func (r *runner) open(ctx context.Context, first, renewal bool, token string, ex
 				g.stats.fail("frame_before_welcome", fmt.Sprintf("runner %s: %T before Welcome", r.id, f.GetBody()))
 				continue
 			}
-			c.welcome, c.id = w, w.GetConnectionId()
+			c.welcome, c.id, c.credit = w, w.GetConnectionId(), creditOf(w.GetCredit())
 			g.stats.with(func(win *window) { win.dialMs.add(time.Since(started), 1) })
 			if w.GetMode() != linkpb.Mode_MODE_LINK {
 				c.close()
@@ -764,9 +804,9 @@ func (r *runner) produce(s *session, at time.Time) {
 	r.g.stats.with(func(w *window) { w.EventsProduced++ })
 }
 
-// flush sends what the session has pending as one batch.
+// flush sends what the session has pending as one batch, as much of it as the connection's credit has room for.
 func (r *runner) flush(s *session, now time.Time) {
-	n := min(len(s.pending), r.g.o.maxBatch)
+	n := r.cur.room(s.pending[:min(len(s.pending), r.g.o.maxBatch)])
 	events := s.pending[:n:n]
 	eb := &linkpb.EventBatch{SessionId: s.id, Events: make([]*linkpb.Event, n)}
 	resent := 0
@@ -793,6 +833,9 @@ func (r *runner) flush(s *session, now time.Time) {
 	}
 	s.pending = s.pending[n:]
 	s.inflight = append(s.inflight, &sentBatch{events: events, conn: r.cur, sentAt: now})
+	a := amountOf(events)
+	r.cur.unacked.events += a.events
+	r.cur.unacked.bytes += a.bytes
 	if len(s.pending) > 0 {
 		s.flushAt = now
 	} else {
@@ -851,6 +894,7 @@ func (r *runner) onFrame(c *rconn, f *linkpb.Frame, now time.Time) {
 		} else {
 			g.note("credit_restored")
 		}
+		c.credit = creditOf(body.Credit)
 	case *linkpb.Frame_Drain:
 		// The gateway is going away: the next connection is opened after the delay it gave, make before break.
 		g.note("drain")
@@ -884,7 +928,7 @@ func (r *runner) onEventAck(c *rconn, a *linkpb.EventAck, now time.Time) {
 	}
 	r.ackThrough(s, a.GetDurableSeq(), now)
 	if fl := a.GetFailure(); fl != nil {
-		// What this connection had out after the failed batch fails alike, and is sent again from durable_seq + 1.
+		// The batch is sent again from durable_seq + 1.
 		requeued := r.requeue(s, c)
 		if requeued > 0 {
 			g.stats.fail("event_failure_"+fl.GetCode(), fmt.Sprintf("runner %s conn %s session %s: durable_seq %d, retryable %v, retry_after %dms: %s",
@@ -911,10 +955,12 @@ func (r *runner) ackThrough(s *session, durable uint64, now time.Time) {
 		}
 		oldest := now
 		kept := b.events[:0:0]
+		var covered []*pev
 		for _, p := range b.events {
 			if p.ev.GetSeq() <= durable {
 				eventLat = append(eventLat, now.Sub(p.sent))
 				events++
+				covered = append(covered, p)
 				if p.sent.Before(oldest) {
 					oldest = p.sent
 				}
@@ -922,6 +968,7 @@ func (r *runner) ackThrough(s *session, durable uint64, now time.Time) {
 				kept = append(kept, p)
 			}
 		}
+		b.conn.settled(amountOf(covered))
 		if len(kept) > 0 {
 			// Covered in part: the rest stays out.
 			b.events = kept
@@ -959,6 +1006,7 @@ func (r *runner) requeue(s *session, c *rconn) int {
 	for _, b := range s.inflight {
 		if b.conn == c {
 			back = append(back, b.events...)
+			c.settled(amountOf(b.events))
 		} else {
 			kept = append(kept, b)
 		}

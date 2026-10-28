@@ -11,8 +11,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,13 +104,19 @@ func TestFactsCarryTheDigestOfTheirOwnBytes(t *testing.T) {
 // misbehaves on purpose: every failEvery-th batch fails retryable, the cutConn-th connection is cut right after it
 // stores its third batch, before acknowledging it, and a process's new connection supersedes its old one. With
 // supersedeFirst the old connection is closed before the new one's Welcome is sent, so the runner sees its old
-// connection end before its renewal's dial comes back.
+// connection end before its renewal's dial comes back. With credit, Welcome grants that many events, a batch past it
+// is refused CREDIT_EXCEEDED as the link gateway refuses it, and after raiseAfter batches a connection is sent a Credit
+// frame for raiseTo; ackDelay holds each acknowledgement back.
 type fakeGateway struct {
 	t              *testing.T
 	failEvery      int
 	cutConn        int
 	beat           time.Duration
 	supersedeFirst bool
+	credit         uint32
+	raiseAfter     int
+	raiseTo        uint32
+	ackDelay       time.Duration
 
 	mu       sync.Mutex
 	stored   map[string][]uint64
@@ -123,6 +131,9 @@ type fakeGateway struct {
 	helloSessions []int
 	// clientCloses counts the connections that ended with the runner's own normal close.
 	clientCloses int
+	// creditRefusals counts the batches refused for the connection's credit; batchSizes is every batch's events.
+	creditRefusals int
+	batchSizes     []int
 }
 
 func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -145,8 +156,11 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		fr := &linkpb.Frame{}
 		return fr, proto.Unmarshal(data, fr)
 	}
+	var wmu sync.Mutex
 	write := func(fr *linkpb.Frame) error {
 		b, _ := proto.Marshal(fr)
+		wmu.Lock()
+		defer wmu.Unlock()
 		return ws.Write(ctx, websocket.MessageBinary, b)
 	}
 	first, err := read()
@@ -182,15 +196,20 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		supersede()
 		time.Sleep(50 * time.Millisecond)
 	}
+	credit := uint64(10_000)
+	if f.credit > 0 {
+		credit = uint64(f.credit)
+	}
 	if err := write(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: &linkpb.Welcome{ProtocolVersion: 1, Mode: linkpb.Mode_MODE_LINK,
 		HeartbeatIntervalMs: uint32(f.beat / time.Millisecond), ConnectionId: fmt.Sprintf("c-%d", n), Sessions: states,
-		Credit: &linkpb.Credit{MaxUnackedEvents: 10_000, MaxUnackedBytes: 64 << 20}}}}); err != nil {
+		Credit: &linkpb.Credit{MaxUnackedEvents: uint32(credit), MaxUnackedBytes: 64 << 20}}}}); err != nil {
 		return
 	}
 	if !f.supersedeFirst {
 		supersede()
 	}
-	batches := 0
+	batches, taken := 0, 0
+	var unacked atomic.Uint64 // events in flight on this connection
 	for {
 		fr, err := read()
 		if err != nil {
@@ -211,9 +230,36 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = write(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK,
 				ReconcileJson: []byte(`{"cancelSessionIds":[],"leaseLostSessionIds":[]}`)}}})
 		case *linkpb.Frame_EventBatch:
+			events := uint64(len(body.EventBatch.GetEvents()))
+			f.mu.Lock()
+			f.batchSizes = append(f.batchSizes, int(events))
+			refused := unacked.Load()+events > credit
+			if refused {
+				f.creditRefusals++
+			}
+			f.mu.Unlock()
+			if refused {
+				_ = write(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: &linkpb.EventAck{SessionId: body.EventBatch.GetSessionId(),
+					Failure: &linkpb.Failure{Code: "CREDIT_EXCEEDED", Retryable: true, RetryAfterMs: 1000}}}})
+				continue
+			}
+			unacked.Add(events)
+			if taken++; f.raiseAfter > 0 && taken == f.raiseAfter {
+				credit = uint64(f.raiseTo)
+				_ = write(&linkpb.Frame{Body: &linkpb.Frame_Credit{Credit: &linkpb.Credit{MaxUnackedEvents: f.raiseTo, MaxUnackedBytes: 64 << 20}}})
+			}
 			// The cut connection's batches are stored without failures, so the one it stores before it is cut follows
 			// what is stored: what the next Welcome says.
-			_ = write(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: f.store(body.EventBatch, n != f.cutConn)}})
+			ack := f.store(body.EventBatch, n != f.cutConn)
+			answer := func() {
+				unacked.Add(-events)
+				_ = write(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: ack}})
+			}
+			if f.ackDelay > 0 {
+				time.AfterFunc(f.ackDelay, answer)
+			} else {
+				answer()
+			}
 		}
 	}
 }
@@ -274,54 +320,7 @@ func TestTheFleetStoresEveryEventOnceInOrder(t *testing.T) {
 func playFleet(t *testing.T, supersedeFirst bool) {
 	fg := &fakeGateway{t: t, failEvery: 7, cutConn: 2, beat: 200 * time.Millisecond, supersedeFirst: supersedeFirst,
 		stored: map[string][]uint64{}, byProc: map[string]*websocket.Conn{}}
-	link := httptest.NewServer(http.HandlerFunc(fg.serveHTTP))
-	defer link.Close()
-	linkURL := "ws" + strings.TrimPrefix(link.URL, "http")
-	var mints sync.Map
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/runner/link-token" || r.Header.Get("Authorization") == "" {
-			http.Error(w, "no", http.StatusNotFound)
-			return
-		}
-		n, _ := mints.LoadOrStore(r.Header.Get("Authorization"), new(int))
-		*(n.(*int))++
-		_ = json.NewEncoder(w).Encode(map[string]string{"token": "t", "linkUrl": linkURL,
-			"expiresAt": time.Now().Add(1500 * time.Millisecond).UTC().Format(time.RFC3339Nano)})
-	}))
-	defer api.Close()
-
-	dir := t.TempDir()
-	var lines []string
-	sessions := map[string]bool{}
-	for i := 0; i < 3; i++ {
-		fr := fleetRunner{Runner: newUUID(rand.New(rand.NewPCG(9, uint64(i)))), Token: fmt.Sprintf("tok-%d", i), Process: fmt.Sprintf("proc-%d", i)}
-		for j := 0; j < 2; j++ {
-			id := fmt.Sprintf("session-%d-%d", i, j)
-			fr.Sessions = append(fr.Sessions, id)
-			if j == 0 {
-				fr.Active = append(fr.Active, activeSession{ID: id})
-				sessions[id] = true
-			}
-		}
-		b, _ := json.Marshal(fr)
-		lines = append(lines, string(b))
-	}
-	fleet := filepath.Join(dir, "fleet.jsonl")
-	if err := os.WriteFile(fleet, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	g, err := newLoadgen(options{fleet: fleet, api: api.URL, out: dir, rampRate: 100, duration: 3 * time.Second,
-		drainTimeout: 5 * time.Second, interval: time.Second, eventRate: 150, flushMin: 30 * time.Millisecond,
-		flushMax: 120 * time.Millisecond, maxBatch: 10, renewBefore: 500 * time.Millisecond, settle: 200 * time.Millisecond, seed: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	sum, _ := g.run(ctx)
-	if sum == nil || sum.Steady == nil {
-		t.Fatalf("no steady window: %+v", sum)
-	}
+	sum, sessions := runFleet(t, fg, nil)
 
 	fg.mu.Lock()
 	defer fg.mu.Unlock()
@@ -331,18 +330,7 @@ func playFleet(t *testing.T, supersedeFirst bool) {
 		t.Errorf("%d events were never acknowledged", sum.Unacknowledged)
 	}
 	w := sum.Whole.Counters
-	var stored int64
-	for id, seqs := range fg.stored {
-		if !sessions[id] {
-			t.Errorf("events stored for %s, which streams none", id)
-		}
-		for k, seq := range seqs {
-			if seq != uint64(k+1) {
-				t.Fatalf("session %s: stored seq %d at position %d", id, seq, k)
-			}
-		}
-		stored += int64(len(seqs))
-	}
+	stored := fg.assertStoredInOrder(t, sessions)
 	if stored != w.EventsProduced || w.EventsAcked != w.EventsProduced || stored < 100 {
 		t.Errorf("produced %d, acknowledged %d, stored %d", w.EventsProduced, w.EventsAcked, stored)
 	}
@@ -385,4 +373,110 @@ func playFleet(t *testing.T, supersedeFirst bool) {
 	if sum.Whole.AckBatch.Count == 0 || sum.Whole.AckBatch.MaxMs <= 0 {
 		t.Errorf("no acknowledgement latency recorded: %+v", sum.Whole.AckBatch)
 	}
+}
+
+// The fleet keeps within each connection's credit, as runners do (§5.8): a credit of 5 events with acknowledgements
+// that take a while has every session's events wait their turn, and the gateway refuses none; a Credit frame that
+// raises it has larger batches follow. Every event is stored once, in order.
+func TestTheFleetKeepsWithinItsConnectionsCredit(t *testing.T) {
+	fg := &fakeGateway{t: t, beat: time.Second, credit: 5, raiseAfter: 8, raiseTo: 50, ackDelay: 40 * time.Millisecond,
+		stored: map[string][]uint64{}, byProc: map[string]*websocket.Conn{}}
+	// Sessions faster than a credit of 5 lets through, until it is raised.
+	sum, sessions := runFleet(t, fg, func(o *options) { o.eventRate = 600 })
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	w := sum.Whole.Counters
+	if fg.creditRefusals != 0 || sum.Whole.Errors["event_failure_CREDIT_EXCEEDED"] != 0 {
+		t.Errorf("the gateway refused %d batches for the connection's credit", fg.creditRefusals)
+	}
+	stored := fg.assertStoredInOrder(t, sessions)
+	if sum.Unacknowledged != 0 || stored != w.EventsProduced || w.EventsAcked != w.EventsProduced || stored < 100 {
+		t.Errorf("produced %d, acknowledged %d, stored %d, unacknowledged %d", w.EventsProduced, w.EventsAcked, stored, sum.Unacknowledged)
+	}
+	largest := slices.Max(fg.batchSizes)
+	if largest <= 5 || largest > 10 {
+		t.Errorf("the largest batch was %d events: within the raised credit, and up to -max-batch 10", largest)
+	}
+	if sum.Notes["credit_restored"] == 0 {
+		t.Errorf("the raised credit was not noted: %v", sum.Notes)
+	}
+}
+
+// assertStoredInOrder fails unless every session's stored seqs count up from 1, for sessions that stream; it returns
+// how many are stored. Under fg.mu.
+func (fg *fakeGateway) assertStoredInOrder(t *testing.T, sessions map[string]bool) int64 {
+	t.Helper()
+	var stored int64
+	for id, seqs := range fg.stored {
+		if !sessions[id] {
+			t.Errorf("events stored for %s, which streams none", id)
+		}
+		for k, seq := range seqs {
+			if seq != uint64(k+1) {
+				t.Fatalf("session %s: stored seq %d at position %d", id, seq, k)
+			}
+		}
+		stored += int64(len(seqs))
+	}
+	return stored
+}
+
+// runFleet plays three runners, each with one of its two sessions streaming, against fg for a steady window of 3s,
+// with link tokens of 1.5s, so that connections are renewed; tune changes the loadgen's options. It returns the summary
+// and the streaming sessions.
+func runFleet(t *testing.T, fg *fakeGateway, tune func(*options)) (*summary, map[string]bool) {
+	t.Helper()
+	link := httptest.NewServer(http.HandlerFunc(fg.serveHTTP))
+	defer link.Close()
+	linkURL := "ws" + strings.TrimPrefix(link.URL, "http")
+	var mints sync.Map
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/runner/link-token" || r.Header.Get("Authorization") == "" {
+			http.Error(w, "no", http.StatusNotFound)
+			return
+		}
+		n, _ := mints.LoadOrStore(r.Header.Get("Authorization"), new(int))
+		*(n.(*int))++
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": "t", "linkUrl": linkURL,
+			"expiresAt": time.Now().Add(1500 * time.Millisecond).UTC().Format(time.RFC3339Nano)})
+	}))
+	defer api.Close()
+
+	dir := t.TempDir()
+	var lines []string
+	sessions := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		fr := fleetRunner{Runner: newUUID(rand.New(rand.NewPCG(9, uint64(i)))), Token: fmt.Sprintf("tok-%d", i), Process: fmt.Sprintf("proc-%d", i)}
+		for j := 0; j < 2; j++ {
+			id := fmt.Sprintf("session-%d-%d", i, j)
+			fr.Sessions = append(fr.Sessions, id)
+			if j == 0 {
+				fr.Active = append(fr.Active, activeSession{ID: id})
+				sessions[id] = true
+			}
+		}
+		b, _ := json.Marshal(fr)
+		lines = append(lines, string(b))
+	}
+	fleet := filepath.Join(dir, "fleet.jsonl")
+	if err := os.WriteFile(fleet, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := options{fleet: fleet, api: api.URL, out: dir, rampRate: 100, duration: 3 * time.Second,
+		drainTimeout: 5 * time.Second, interval: time.Second, eventRate: 150, flushMin: 30 * time.Millisecond,
+		flushMax: 120 * time.Millisecond, maxBatch: 10, renewBefore: 500 * time.Millisecond, settle: 200 * time.Millisecond, seed: 3}
+	if tune != nil {
+		tune(&o)
+	}
+	g, err := newLoadgen(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	sum, _ := g.run(ctx)
+	if sum == nil || sum.Steady == nil {
+		t.Fatalf("no steady window: %+v", sum)
+	}
+	return sum, sessions
 }

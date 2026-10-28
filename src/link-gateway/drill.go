@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -192,4 +193,40 @@ func drillCallOf(t *linkpb.TunnelRequest) (string, drillCall, bool) {
 		}
 	}
 	return "", drillCall{}, false
+}
+
+// A load test's slow ingest (LINK_DRILL_INGEST_RATE): the gateway forwards at most that many durable events a second,
+// each batch in its turn in the order it came, so that a staging load test can have its runners send faster than the
+// events are stored and watch the ingest queue stop at its bound (events.go). A batch waiting its turn counts in the
+// queue as one the apiserver is slow to store does. Unset, which is every deployment's setting, batches are forwarded
+// as they come.
+
+// pacer holds batches to a rate of events.
+type pacer struct {
+	mu    sync.Mutex
+	every time.Duration // the time one event takes
+	next  time.Time     // when the next batch may go
+}
+
+func newPacer(rate float64) *pacer {
+	return &pacer{every: time.Duration(float64(time.Second) / rate)}
+}
+
+// wait holds a batch of n events until its turn. False when ctx ended first.
+func (p *pacer) wait(ctx context.Context, n int) bool {
+	p.mu.Lock()
+	at := p.next
+	if now := time.Now(); at.Before(now) {
+		at = now
+	}
+	p.next = at.Add(time.Duration(n) * p.every)
+	p.mu.Unlock()
+	t := time.NewTimer(time.Until(at))
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
