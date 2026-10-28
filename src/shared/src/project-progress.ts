@@ -910,6 +910,9 @@ export type OpenItemKind =
  *
  * The array is the runtime half: the server builds its read's `IN` list from it, so the phrase a
  * client prints and the rows a server counts cannot be about different sets.
+ *
+ * `LANDING_UNOBSERVED` is here because it goes to the coordinator first (§10.7);
+ * `LANDED_WITHOUT_CONFIRMATION` is not, because it is the owner's from birth.
  */
 export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_CONFLICT',
@@ -917,6 +920,7 @@ export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_ERROR',
   'TASK_FAILED',
   'DELIVERY_REVIEW',
+  'LANDING_UNOBSERVED',
 ] as const;
 export type CoordinatorLeadKind = (typeof COORDINATOR_LEAD_KINDS)[number];
 
@@ -964,7 +968,10 @@ export type OpenItemAction =
   | 'ANSWER'
   | 'OPEN_LANDING'
   /** §4.7 J-T10: end a landing attempt whose runner stopped reporting. Owner-only. */
-  | 'ABANDON';
+  | 'ABANDON'
+  /** §10.8: accept work that reached main without the owner's confirmation
+   *  (`LANDED_WITHOUT_CONFIRMATION`). Owner-only. */
+  | 'ACCEPT';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {

@@ -10,7 +10,9 @@ import { DEFAULT_CHECK_TIMEOUT_SECONDS, INTEGRATION_PROGRESS_V2_PROTOCOL } from 
 import { LANDED_RESULTS } from './project-criterion-landing';
 import {
   INTEGRATION_ITEM_KINDS,
+  LANDED_WITHOUT_CONFIRMATION_KIND,
   LANDING_LEASE_EXPIRED_KIND,
+  LANDING_UNOBSERVED_KIND,
   OPEN_ITEM_TURN_PREFIX,
   openItemOwed,
 } from './project-open-item';
@@ -606,7 +608,11 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * about a candidate the edge's own `PROMOTION_MOVED_ON`, with the state `closePromotionItems`
    * writes (SUPERSEDED when the candidate was). An X-E5 item whose claim moved without an edge
    * (`LANDING_LEASE_EXPIRED`) ends with the same `JOB_MOVED_ON` its edges write, RESOLVED, naming
-   * `job <id>@<state>`. All by the PLATFORM, with a `resolution_note` that
+   * `job <id>@<state>`. Revision 29's two (§10.7) are `resolveByFact`'s fourth and fifth statements:
+   * a `LANDING_UNOBSERVED` whose task was replaced, cancelled, declared codeless, sent back or whose
+   * work landed (`SUCCESSOR_FILED` / `TASK_CLOSED` / `CODELESS` / `RETRIED` / `LANDED`), and a
+   * `LANDED_WITHOUT_CONFIRMATION` whose task was replaced or cancelled. All by the PLATFORM, with a
+   * `resolution_note` that
    * starts `backstop:` and names the fact as it stands — the one thing here an edge never writes — so
    * an item closed here can be told apart from one its edge closed and a missing edge is something a
    * query can count. Each one is also a warning in the log, which is where somebody learns an edge is
@@ -643,6 +649,15 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  -- item is about one claim, and every edge that moves that claim writes
                  -- JOB_MOVED_ON — the same ending here, whatever state the job is in now.
                  CASE WHEN stale_item."kind" = ${LANDING_LEASE_EXPIRED_KIND} THEN 'JOB_MOVED_ON'
+                      WHEN stale_item."kind" = ${LANDING_UNOBSERVED_KIND} THEN
+                        CASE WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                             WHEN task."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                             WHEN task."codeless" THEN 'CODELESS'
+                             WHEN task."status" <> 'DONE' THEN 'RETRIED'
+                             ELSE 'LANDED' END
+                      WHEN stale_item."kind" = ${LANDED_WITHOUT_CONFIRMATION_KIND} THEN
+                        CASE WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                             ELSE 'TASK_CLOSED' END
                       WHEN stale_item."promotion_id" IS NOT NULL THEN 'PROMOTION_MOVED_ON'
                       WHEN stale_item."kind" = 'TASK_FAILED' THEN
                         CASE WHEN task."status" = 'DONE' THEN 'TASK_DONE'
@@ -662,6 +677,13 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  -- cancellation it is not; one whose task really was cancelled is.
                  CASE WHEN stale_item."kind" = ${LANDING_LEASE_EXPIRED_KIND}
                         THEN ' is no longer the claim that stopped reporting'
+                      WHEN stale_item."kind" = ${LANDING_UNOBSERVED_KIND} THEN
+                        CASE WHEN task."superseded_by_task_id" IS NOT NULL
+                               THEN ' was superseded by task ' || task."superseded_by_task_id"::text
+                             WHEN task."status" = 'CANCELLED' THEN ' was cancelled'
+                             WHEN task."codeless" THEN ' was declared codeless'
+                             WHEN task."status" <> 'DONE' THEN ' left DONE'
+                             ELSE ' landed on its line' END
                       WHEN stale_item."kind" = 'PROMOTION_APPROVAL'
                         THEN ' is not READY, so the card asks nothing'
                       WHEN stale_item."promotion_id" IS NOT NULL THEN ' is no longer live'

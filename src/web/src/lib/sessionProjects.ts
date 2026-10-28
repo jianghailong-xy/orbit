@@ -109,6 +109,7 @@ export const SESSION_PROJECT_COORDINATOR_COPY: Record<CoordinatorLeadKind, strin
   INTEGRATION_ERROR: 'Handling an integration error',
   TASK_FAILED: 'Handling a failed task',
   DELIVERY_REVIEW: 'Reviewing a delivery',
+  LANDING_UNOBSERVED: 'Handling work not on the line yet',
 };
 
 /** A runner that has stopped reporting, in this row's own scale: "no report for 11m", or

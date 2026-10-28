@@ -434,6 +434,7 @@ export const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_ERROR: 'handling an integration error',
   TASK_FAILED: 'handling a failed task',
   DELIVERY_REVIEW: 'reviewing a delivery',
+  LANDING_UNOBSERVED: 'handling work not on the line yet',
 };
 
 /**

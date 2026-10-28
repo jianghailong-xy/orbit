@@ -70,10 +70,13 @@ import {
 } from '../projects/task-aggregation-writer';
 import {
   INTEGRATION_ITEM_KINDS,
+  LANDING_UNOBSERVED_KIND,
   SESSION_ENDING_SELECT,
+  openItemOwed,
   recordTaskFailure,
   sessionHasEnded,
 } from '../projects/project-open-item';
+import { branchName } from '../projects/project-criterion-landing';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -273,6 +276,7 @@ import {
   dependenciesSatisfiedSql,
   everyPrerequisiteDoneOrRetiredSql,
   prerequisiteLanded,
+  prerequisiteNotOnLineMessage,
   PREREQUISITE_NOT_LANDED_MESSAGE,
   dependencyEpochGate,
   dependencyEpochStalled,
@@ -3075,6 +3079,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // The completion asked about ahead of time reads as finished with nothing left of its own —
       // whether its landing will hold its dependents is the caller's to say (`dependentRelease`).
       entry.id === assumeDone ? { status: TaskStatus.DONE } : {
+        taskId: entry.id,
         status: entry.status,
         verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
         verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
@@ -3082,6 +3087,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // means: a prerequisite with no landing to do (`task-dependencies.ts`).
         landed: landing.get(entry.id),
       }))]));
+  }
+
+  /**
+   * J9's refusal in words (§10.9): what the wait is waiting for.
+   *
+   * An OPEN `LANDING_UNOBSERVED` on a prerequisite that has not landed is named, by the line its
+   * title names. Otherwise a job in flight that will answer — the prerequisite's landing, the check or
+   * landing of a candidate carrying it, or its project's observation — keeps the sentence J9 always
+   * said. With neither, nobody is behind the wait (§10.3 O5 says that should not happen): the same
+   * sentence, and a warn line naming the prerequisite.
+   */
+  private async prerequisiteNotLandedRefusal(
+    ownerId: string,
+    dependentId: string,
+    facts: readonly DependencyPrerequisiteFact[],
+  ): Promise<string> {
+    const waitingOn = [...new Set(facts.filter((fact) => fact.landed === false && fact.taskId)
+      .map((fact) => fact.taskId!))];
+    if (waitingOn.length === 0) return PREREQUISITE_NOT_LANDED_MESSAGE;
+    const ids = Prisma.join(waitingOn.map((taskId) => Prisma.sql`${taskId}::uuid`));
+    const [unobserved] = await this.prisma.$queryRaw<Array<{ integrationRef: string }>>(Prisma.sql`
+      SELECT line."integration_ref" AS "integrationRef"
+        FROM "project_open_item" item
+        JOIN "project_codebase" line ON line."project_id" = item."project_id" AND line."slot" = 'primary'
+       WHERE item."owner_id" = ${ownerId}::uuid
+         AND item."kind" = ${LANDING_UNOBSERVED_KIND}
+         AND item."state" = 'OPEN'
+         AND item."task_id" IN (${ids})
+         AND ${openItemOwed('item')}
+       ORDER BY item."waiting_since", item."id"
+       LIMIT 1`);
+    if (unobserved) return prerequisiteNotOnLineMessage(branchName(unobserved.integrationRef));
+    const [inFlight] = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT job."id"
+        FROM "task" waited_on
+        JOIN "project_integration_job" job
+          ON job."state" IN ('QUEUED', 'RUNNING')
+         AND (job."task_id" = waited_on."id"
+              OR (job."kind" = 'OBSERVE_LANDING' AND job."project_id" = waited_on."project_id")
+              OR job."promotion_id" IN (
+                   SELECT candidate."id" FROM "project_promotion" candidate
+                    WHERE candidate."task_id" = waited_on."id"
+                       OR waited_on."id" = ANY(candidate."included_task_ids")))
+       WHERE waited_on."id" IN (${ids}) AND waited_on."owner_id" = ${ownerId}::uuid
+       LIMIT 1`);
+    if (!inFlight) {
+      this.logger.warn(`J9 refused task ${dependentId}: prerequisite ${waitingOn.join(', ')} is finished and not `
+        + 'landed, and no OPEN LANDING_UNOBSERVED or integration job in flight is behind the wait (§10.9, O5)');
+    }
+    return PREREQUISITE_NOT_LANDED_MESSAGE;
   }
 
   /**
@@ -14742,7 +14797,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // they are complete — and a person told that about a task whose prerequisite finished
             // an hour ago goes looking for work that nobody owes.
             : depFacts.some((fact) => fact.landed === false)
-              ? PREREQUISITE_NOT_LANDED_MESSAGE
+              ? await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)
               : 'Prerequisites are not all complete yet, cannot run',
       );
     }

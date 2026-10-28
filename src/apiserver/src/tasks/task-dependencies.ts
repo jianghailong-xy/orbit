@@ -72,6 +72,11 @@ export interface DependencyPrerequisiteFact {
    * alone runs on a baseline that does not contain the thing it depends on.
    */
   landed?: boolean;
+  /**
+   * The prerequisite this fact is about: the task whose landing `landed` reads — the tail of its
+   * successor chain. Additive, and read only to word J9's refusal (§10.9), never to decide it.
+   */
+  taskId?: string;
 }
 
 export function computeDependencyState(
@@ -614,3 +619,13 @@ export function prerequisiteLanded(facts: PrerequisiteLandingFacts): boolean {
 export const PREREQUISITE_NOT_LANDED_MESSAGE =
   'A prerequisite is finished but its work has not landed on this project\'s integration line yet '
   + '— it starts by itself once the landing is recorded';
+
+/**
+ * The same refusal when an OPEN `LANDING_UNOBSERVED` is what the wait is about (§10.9): it says what
+ * it is waiting for and where to look — the item's title starts with the same words. `branch` is the
+ * line's short name, the one that title names. While a job is in flight to answer it, the sentence
+ * above stands.
+ */
+export function prerequisiteNotOnLineMessage(branch: string): string {
+  return `A prerequisite is finished but its work is not on ${branch} yet — see “Not on ${branch} yet” in open items`;
+}

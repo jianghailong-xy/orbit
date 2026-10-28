@@ -247,6 +247,11 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     {
+      route: 'POST /projects/:id/open-items/:itemId/accept',
+      path: `/projects/${anyProject}/open-items/${nobody()}/accept`,
+      login: 404,
+    },
+    {
       route: 'PATCH /projects/:id/integration',
       path: `/projects/${anyProject}/integration`,
       body: { exceptionEscalationSeconds: 900 },
