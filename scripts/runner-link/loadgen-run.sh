@@ -121,11 +121,11 @@ holds_lock() {
   return 1
 }
 {
-  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","mergeWindow":"%s","ingestRate":"%s","spread":%s,"hostCpus":%s,"hostMemKb":%s,' \
+  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","mergeWindow":"%s","mergeCalls":"%s","ingestRate":"%s","spread":%s,"hostCpus":%s,"hostMemKb":%s,' \
     "$name" "$project" "$(git -C "$repo" rev-parse HEAD)" \
     "$([ -n "$(git -C "$repo" status --porcelain -- src scripts gateway docker-compose.yml)" ] && echo true || echo false)" \
     "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(setting STAGING_MERGE_WINDOW_SETTING default)" \
-    "$(setting STAGING_INGEST_RATE_SETTING off)" "$([ "$(setting STAGING_SPREAD 0)" = 1 ] && echo true || echo false)" \
+    "$(setting STAGING_MERGE_CALLS_SETTING default)" "$(setting STAGING_INGEST_RATE_SETTING off)" "$([ "$(setting STAGING_SPREAD 0)" = 1 ] && echo true || echo false)" \
     "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
   printf '"markEverySeconds":%s,"loadTestLock":%s,' "${mark_every:-null}" "$(holds_lock && echo true || echo false)"
   [ -z "$watch" ] || printf '"watchSessions":%s,' "$watch"

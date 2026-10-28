@@ -36,6 +36,8 @@
 #                                    batch alone; "default" is the gateway's own                         default
 #   ORBIT_LINK_STAGING_INGEST_RATE   the link gateway's LINK_DRILL_INGEST_RATE: the durable events a second it
 #                                    forwards at most, for a load test of a slow ingest; off forwards them as they come  off
+#   ORBIT_LINK_STAGING_MERGE_CALLS   the link gateway's LINK_EVENT_MERGE_CALLS_PER_BACKEND: merged calls out at once
+#                                    to each apiserver, 1 to 8; "default" is the gateway's own (4)                       default
 #   ORBIT_LINK_STAGING_SPREAD        1: the web gateway sends session streams, by session, and link tokens to every
 #                                    apiserver (staging.spread.compose.yml); 0: to the first, as with one   0
 set -euo pipefail
@@ -48,7 +50,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -78,6 +80,7 @@ metrics_port_b="${ORBIT_LINK_STAGING_METRICS_PORT_B:-$(setting STAGING_METRICS_P
 handshake_rate="${ORBIT_LINK_STAGING_HANDSHAKE_RATE_B:-$(setting STAGING_HANDSHAKE_RATE_B 200)}"
 handshake_burst="${ORBIT_LINK_STAGING_HANDSHAKE_BURST_B:-$(setting STAGING_HANDSHAKE_BURST_B 400)}"
 ingest_rate="${ORBIT_LINK_STAGING_INGEST_RATE:-$(setting STAGING_INGEST_RATE_SETTING off)}"
+merge_calls="${ORBIT_LINK_STAGING_MERGE_CALLS:-$(setting STAGING_MERGE_CALLS_SETTING default)}"
 spread="${ORBIT_LINK_STAGING_SPREAD:-$(setting STAGING_SPREAD 0)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
@@ -92,6 +95,9 @@ gateway_merge_window="$merge_window"
 [[ "$ingest_rate" =~ ^(off|[1-9][0-9]*)$ ]] || die "ORBIT_LINK_STAGING_INGEST_RATE must be off or events a second such as 300, not $ingest_rate"
 gateway_ingest_rate="$ingest_rate"
 [ "$ingest_rate" = off ] && gateway_ingest_rate=""
+[[ "$merge_calls" =~ ^(default|[1-8])$ ]] || die "ORBIT_LINK_STAGING_MERGE_CALLS must be default or 1 to 8 merged calls an apiserver, not $merge_calls"
+gateway_merge_calls="$merge_calls"
+[ "$merge_calls" = default ] && gateway_merge_calls=""
 [[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
 case "$gateways" in 1|2) ;; *) die "ORBIT_LINK_STAGING_GATEWAYS must be 1 or 2, not $gateways" ;; esac
 [[ "$handshake_rate" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_HANDSHAKE_RATE_B must be handshakes a second, not $handshake_rate"
@@ -245,6 +251,8 @@ STAGING_HANDSHAKE_RATE_B=$handshake_rate
 STAGING_HANDSHAKE_BURST_B=$handshake_burst
 STAGING_INGEST_RATE_SETTING=$ingest_rate
 STAGING_INGEST_RATE=$gateway_ingest_rate
+STAGING_MERGE_CALLS_SETTING=$merge_calls
+STAGING_MERGE_CALLS=$gateway_merge_calls
 STAGING_SPREAD=$spread
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
@@ -307,7 +315,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst"), session streams and link tokens to $([ "$spread" = 1 ] && echo "every apiserver" || echo "the first apiserver")"
+log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst"), session streams and link tokens to $([ "$spread" = 1 ] && echo "every apiserver" || echo "the first apiserver")"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------

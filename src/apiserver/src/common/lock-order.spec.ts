@@ -333,13 +333,23 @@ test('each inventory entry holds what it says it holds', () => {
  */
 const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note: string }> = [
   {
-    // The events route's transaction, which the runner link's batches run too (one per part of a batch).
-    method: 'ingestEvents',
+    // The events route's ingest (ingestEvents' closure), which the runner link's batches run too (one per part of a
+    // batch), and each batch of a merged link call.
+    method: 'ingestSteps',
     statements: 1,
     note:
       'One, literally. It used to be up to eight — a telemetry write, a runtime-id fill, the ' +
       'preview denormalisation and one per background/sub-agent id — accumulated into `sessionData` ' +
-      'and issued once at the end.',
+      'and issued once at the end. In a merged link call that collects its batches\' writes, that one ' +
+      'write is handed to writeCallSessions instead of issued.',
+  },
+  {
+    // A merged link call's writes of every session it ingested (RunnerApiController.ingestLinkEventCall).
+    method: 'writeCallSessions',
+    statements: 2,
+    note:
+      'Two spellings, one write a session: each session is in exactly one of them — the UPDATE of ' +
+      'the set of columns it writes, or, for a field that UPDATE does not carry, its own update.',
   },
   {
     method: 'turnComplete',
@@ -356,11 +366,11 @@ const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note:
 test('the runner Session writers issue one write per row', () => {
   const SESSION_WRITE = /\btx\.session\.(update|updateMany)\b|UPDATE\s+"session"/g;
   for (const writer of SESSION_WRITERS) {
-    const start = runnerApi.search(new RegExp(`\\n {2}(?:private )?async ${writer.method}\\(`));
+    const start = runnerApi.search(new RegExp(`\\n(?: {2}(?:private )?(?:async )?|async function )${writer.method}\\(`));
     assert.ok(start > 0, `${writer.method} is gone`);
-    // Up to the next method declaration at class-body indentation.
+    // Up to the next method declaration at class-body indentation, or the closing brace of a function of the module.
     const rest = runnerApi.slice(start + 10);
-    const end = rest.search(/\n {2}(?:private |@)/);
+    const end = runnerApi.startsWith('\nasync function ', start) ? rest.search(/\n\}\n/) : rest.search(/\n {2}(?:private |@)/);
     const body = end > 0 ? rest.slice(0, end) : rest;
     assert.equal(
       body.match(SESSION_WRITE)?.length ?? 0,
