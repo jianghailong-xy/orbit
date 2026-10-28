@@ -1886,6 +1886,22 @@ func (t *Transport) abandonIntegrationJob(sessionID, id, jobID, reason string) (
 	return out, err
 }
 
+// observeIntegration asks for the project's line to be looked at again (contract §10.8, O-T5), as the
+// acting session. The session header is the authority the server checks against the project's
+// coordinator pointer; the reason travels as the body and is kept on every item the observation
+// handles. The server queues one observation or folds into the one already queued, and a refusal —
+// not the coordinator, no repository bound — travels as the server raised it.
+func (t *Transport) observeIntegration(sessionID, id, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/integration/observe",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // skipIntegrationMergeCheck queues one of a DONE task's landings again with the project's merge
 // check NOT RUN (contract §2.4 J-S5), as the acting session — which the server checks against the
 // project's coordinator pointer exactly as it does for a rerun.

@@ -357,8 +357,11 @@ test('the sidebar reads queued and running integration work once for the whole p
       findMany: async (args: any) => {
         bindingReads += 1;
         assert.deepEqual(args.where, { projectId: { in: ids }, slot: 'primary' });
+        // An observation is not an integration attempt (§10.6, A-Q23): it is not counted as in flight.
         assert.deepEqual(args.select._count, {
-          select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } },
+          select: { integrationJobs: {
+            where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+          } },
         });
         return [{ projectId: ids[0], upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',
           integrationRefSource: 'EXPLICIT', integrationStartedAt: null,

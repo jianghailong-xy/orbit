@@ -984,7 +984,11 @@ export type OpenItemAction =
   | 'ABANDON'
   /** §10.8: accept work that reached main without the owner's confirmation
    *  (`LANDED_WITHOUT_CONFIRMATION`). Owner-only. */
-  | 'ACCEPT';
+  | 'ACCEPT'
+  /** §10.8: look at the project's line again (`integration_observe`), with a reason — on a
+   *  `LANDING_UNOBSERVED` and on the item a project's failing observations open. The owner's press is
+   *  `POST /projects/:id/integration/observe`. */
+  | 'OBSERVE';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {
@@ -1061,9 +1065,10 @@ export interface OpenItemHandling<Instant = string> {
   /** Why it said the rerun would come out differently, as it said it. */
   reason: string;
   startedAt: Instant;
-  /** The job the rerun queued: a task's next landing, or a blocked candidate's next check. */
+  /** The job the rerun queued: a task's next landing, or a blocked candidate's next check — or, for
+   *  a `LANDING_UNOBSERVED`, the observation `integration_observe` queued or joined (§10.8). */
   jobId: string;
-  jobKind: 'LAND_TASK' | 'CHECK_PROMOTION';
+  jobKind: 'LAND_TASK' | 'CHECK_PROMOTION' | 'OBSERVE_LANDING';
   generation: number;
   /** Where that job is: waiting for its turn, or running on a runner. */
   state: 'QUEUED' | 'RUNNING';
@@ -1701,7 +1706,8 @@ export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
-  /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
+  /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity, and
+   *  neither is an observation (OBSERVE_LANDING, §10.6 A-Q23). */
   activeJobCount?: number;
   /** The job the project page's landing line would describe, chosen by the same rule; absent when
    *  nothing is in flight and on older servers. The session list's project row states it. */

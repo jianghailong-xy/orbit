@@ -118,6 +118,14 @@ import {
   notAnApprovalId,
 } from './project-integration-skip-check';
 import { requeuePromotionCheck } from './project-promotion.service';
+import {
+  INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+  INTEGRATION_OBSERVE_REASON_REQUIRED,
+  MAX_INTEGRATION_OBSERVE_REASON,
+  hasPendingObservation,
+  observableUnobservedItems,
+  queueLandingObservation,
+} from './landing-observation';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
   START_REQUEST_COORDINATOR_ONLY,
@@ -130,7 +138,7 @@ import {
   startRequestDetailLine,
   supersedeStaleStartRequest,
 } from './project-start-request';
-import { doorsForOpenItem, openItemDoorMessageNames } from './open-item-doors';
+import { doorsForOpenItem, openItemDoorMessageNames, sourceJobForOpenItem } from './open-item-doors';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
   DONE_REQUEST_DECLINE_NOTE_REQUIRED,
@@ -314,6 +322,7 @@ export interface OpenItemRow {
     | 'OPEN_LANDING'
     | 'ABANDON'
     | 'ACCEPT'
+    | 'OBSERVE'
   >;
   /** The server's one-sentence next step, optional for rolling-version readers. */
   requiredAction?: string;
@@ -329,7 +338,8 @@ export interface OpenItemRow {
     | 'ANSWER'
     | 'OPEN_LANDING'
     | 'ABANDON'
-    | 'ACCEPT';
+    | 'ACCEPT'
+    | 'OBSERVE';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -415,6 +425,21 @@ export interface IntegrationRetried {
   /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
+  handlingItemIds: string[];
+}
+
+/** The project's line looked at again (§10.8, O-T5), as `integration_observe` answers it. */
+export interface IntegrationObserved {
+  projectId: string;
+  /** The OBSERVE_LANDING that will look: the one this press queued, or the one already queued. */
+  jobId: string;
+  generation: number;
+  /** False when the press folded into the observation already queued (§10.4). */
+  queued: boolean;
+  reason: string;
+  /** The asker's OPEN `LANDING_UNOBSERVED` items that observation can answer, now being handled by
+   *  it (§4.7 H1): OPEN until it reports, closed LANDED by the receipt it writes when it sees the
+   *  commit, and left as they were when it does not. */
   handlingItemIds: string[];
 }
 
@@ -1763,10 +1788,12 @@ export class ProjectOpenItemService {
     }
 
     // O-X1 (§10.7): an item about a task's landing is not closed by hand while that landing is what
-    // a dependent is still waiting on — the wait would be left with nobody in front of it (O5). Read
-    // once, before the write; the doors the refusal names are this item's cell's.
+    // a dependent is still waiting on — the wait would be left with nobody in front of it (O5) — and
+    // neither is the item a project's failing observations open (IE:observe) while a task of the
+    // project waits to be observed. Read once, before the write; the doors the refusal names are this
+    // item's cell's.
     if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)
-        && await landingConditionStands(this.prisma, item)) {
+        && await landingConditionStands(this.prisma, projectId, item)) {
       throw new ConflictException({ code: OPEN_ITEM_CONDITION_STANDS, message: conditionStandsRefusal(item) });
     }
 
@@ -1853,6 +1880,81 @@ export class ProjectOpenItemService {
        RETURNING item."id"`);
     if (!accepted) throw notOpen();
     return { itemId, state: 'RESOLVED', resolution: 'ACCEPTED' };
+  }
+
+  /**
+   * Look at the project's line again (`integration_observe`, §10.8; §10.6 O-T5): queue one
+   * OBSERVE_LANDING, or fold into the one already queued, as the conversation the project is
+   * coordinated from or as the account owner.
+   *
+   * WHO MAY ASK. The project's current coordinator conversation, named by the acting session, and
+   * nothing else on the runner door — a missing or blank header is not read as the account owner,
+   * whose own press is the user door (`{ kind: 'OWNER' }`, which the owner's controller sends only
+   * without an acting session). A reason is required, as on every integration door: it stays on the
+   * items the observation handles.
+   *
+   * WHAT IT WRITES. One transaction. `queueLandingObservation` under the binding's lock (rank 55) —
+   * the observation's own enqueue, which also ends a silent RUNNING one (J-T9) — then, by §4.7 H1,
+   * the asker's OPEN `LANDING_UNOBSERVED` items whose task that observation will look at, marked as
+   * being handled by it. They stay OPEN: the observation that sees a task's commit writes its landing
+   * receipt, which closes the item LANDED (O-R1), and one that does not leaves it as it was. An
+   * observation queues even with nothing waiting (O-T5); a project with no repository bound has no
+   * line to look at and is refused, with nothing written.
+   */
+  async observeIntegration(
+    ownerId: string,
+    projectId: string,
+    given: { reason?: unknown } | undefined,
+    actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  ): Promise<IntegrationObserved> {
+    const reason = observeReason(given);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actor.kind === 'SESSION' ? actor.sessionId.trim() : null;
+    if (actor.kind === 'SESSION' && (!asking || asking !== project.coordinatorSessionId)) {
+      throw observeCoordinatorOnly();
+    }
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const queued = await queueLandingObservation(tx, { ownerId, projectId, trigger: 'OBSERVE_DOOR' });
+      if (!queued) {
+        throw new ConflictException({
+          code: 'INTEGRATION_REPOSITORY_UNKNOWN',
+          message: 'this project has no repository bound yet, so there is no line to look at. Its first '
+            + 'landing binds one.',
+        });
+      }
+      if (asking) {
+        // Read again inside the transaction: the pointer can rotate while the call was on its way.
+        const current = await tx.project.findUniqueOrThrow({
+          where: { id: projectId },
+          select: { coordinatorSessionId: true },
+        });
+        if (current.coordinatorSessionId !== asking) throw observeCoordinatorOnly();
+      }
+      const handle = await observableUnobservedItems(tx, projectId, asking ? 'COORDINATOR' : 'OWNER');
+      await markOpenItemsHandling(tx, handle, {
+        jobId: queued.jobId,
+        sessionId: asking,
+        userId: asking ? null : ownerId,
+        reason,
+      });
+      const job = await tx.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: queued.jobId },
+        select: { generation: true },
+      });
+      return {
+        projectId,
+        jobId: queued.jobId,
+        generation: job.generation,
+        queued: queued.queued,
+        reason,
+        handlingItemIds: handle,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.observeIntegration'));
   }
 
   /**
@@ -3548,6 +3650,36 @@ function rerunReason(given: { reason?: string } | undefined): string {
   return reason;
 }
 
+/** The reason `integration_observe` keeps (§10.8), trimmed and bounded — or its one 400. */
+function observeReason(given: { reason?: unknown } | undefined): string {
+  const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
+  if (!reason) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message:
+        'a reason is required: say why the work may be on the line now — what changed since Orbit '
+        + 'last looked. It stays on the items the observation handles.',
+    });
+  }
+  if (reason.length > MAX_INTEGRATION_OBSERVE_REASON) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message: `a reason is at most ${MAX_INTEGRATION_OBSERVE_REASON} characters`,
+    });
+  }
+  return reason;
+}
+
+/** Only the conversation the project is coordinated from asks for its line to be looked at. */
+function observeCoordinatorOnly(): ForbiddenException {
+  return new ForbiddenException({
+    code: INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+    message:
+      'only the conversation this project is coordinated from may ask for its line to be looked at '
+      + 'again; the account owner asks on their own door.',
+  });
+}
+
 /** Only the conversation the project is coordinated from reruns any of its integrations. */
 function rerunCoordinatorOnly(): ForbiddenException {
   return new ForbiddenException({
@@ -3621,11 +3753,18 @@ function ownDoorRefusal(item: RefusedItem): string {
  * or the one a `TASK_BRANCH` candidate offers — is still NOT_KNOWN (§1.4, `taskLandingSql`), and a
  * task that has not ended (neither DONE nor CANCELLED, nor replaced) depends on it. Either half gone
  * — the work landed, or nothing waits on it any more — and the item closes by hand as before.
+ *
+ * The item a project's failing observations open (`IE:observe`, §10.6 O-J4) is about no one task: it
+ * is in front of somebody for every task of the project waiting to be observed, so its condition is
+ * that any of them still waits (`landingPendingObservationSql`) — until each has landed, been
+ * cancelled or replaced, or stopped being code work.
  */
 async function landingConditionStands(
   prisma: PrismaService,
-  item: { taskId: string | null; promotionId: string | null },
+  projectId: string,
+  item: RefusedItem,
 ): Promise<boolean> {
+  if (observationFailureItem(item)) return hasPendingObservation(prisma, projectId);
   const [row] = await prisma.$queryRaw<Array<{ stands: boolean }>>(Prisma.sql`
     SELECT EXISTS (
       SELECT 1 FROM "task" waited_on
@@ -3645,6 +3784,12 @@ async function landingConditionStands(
   return row?.stands === true;
 }
 
+/** Whether this is the item a project's failing observations open (§10.6 O-J4): the cell whose
+ *  source job is OBSERVE_LANDING. */
+function observationFailureItem(item: RefusedItem): boolean {
+  return sourceJobForOpenItem({ ...item, assignee: 'COORDINATOR' }) === 'OBSERVE_LANDING';
+}
+
 /** O-X1's refusal: the wait still stands, and the doors of this item's cell that answer it — of
  *  `integration_retry`, `integration_observe`, `merge_receipt`, `task_reopen` and
  *  `open_item_hand_over`, only the ones the cell really has (§4.7 T17). */
@@ -3652,6 +3797,13 @@ function conditionStandsRefusal(item: RefusedItem): string {
   const doors = messageDoorsOf(item);
   const named = [doors.retryMcp, doors.observeMcp, doors.mergeReceiptMcp, doors.taskReopenMcp, doors.handOverMcp]
     .filter((name): name is string => name != null);
+  if (observationFailureItem(item)) {
+    return 'this item stands for the tasks of this project still waiting to be observed: until an observation '
+      + 'of the line succeeds, their work is not recorded as landed, and this item is what puts that wait in '
+      + 'front of somebody. Marking it handled would leave the wait with nobody in front of it.'
+      + (named.length > 0 ? ` Move it with one of this item's doors: ${named.join(', ')}.` : '')
+      + ' Once no task of the project waits to be observed any more, it closes by hand as before.';
+  }
   return 'this item is about a task\'s landing, and the wait it is about still stands: the work is not on '
     + 'the line yet, and a task that depends on it is still waiting. Marking it handled would leave that '
     + 'wait with nobody in front of it.'

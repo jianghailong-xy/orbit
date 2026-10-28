@@ -31,6 +31,8 @@ export const OPEN_ITEM_DOOR_SOURCE_JOBS = [
   'MAIN_SYNC',
   'CHECK_PROMOTION',
   'LAND_PROMOTION',
+  /** §10.6 O-J4: the project's observations failing, `IE:observe:<projectId>`. */
+  'OBSERVE_LANDING',
   'TASK_FAILURE',
   'DIRECT',
 ] as const;
@@ -448,6 +450,21 @@ function declareCodeless(holder: OpenItemDoorAssignee): OpenItemDoor {
 }
 
 /**
+ * §10.8's "look again": `integration_observe` queues an observation of the project's line (O-T5). The
+ * coordinator asks with the tool, the owner on their own route, and the card projects it as `OBSERVE`.
+ * What it ends is the cell's own: the landing a seen commit records (`LANDED`, a `LANDING_UNOBSERVED`),
+ * or the failures an observation that answers puts behind the project (`JOB_MOVED_ON`, `IE:observe`).
+ */
+function observe(holder: OpenItemDoorAssignee, outcome: 'LANDED' | 'JOB_MOVED_ON'): OpenItemDoor {
+  const owner = holder === 'OWNER';
+  return door(holder, 'integration-observe', 'integration_observe', owner ? 'ROUTE' : 'MCP', 'RERUN', [outcome], {
+    action: 'OBSERVE',
+    mcp: owner ? undefined : 'integration_observe',
+    route: owner ? '/projects/:id/integration/observe' : '/runner/projects/:id/integration/observe',
+  });
+}
+
+/**
  * §10.8's Accept: the owner's own route, and the one door that ends a `LANDED_WITHOUT_CONFIRMATION`.
  * Undoing the work is not a door — it is ordinary work the coordinator files when the owner asks it
  * to in "Chat about this".
@@ -495,6 +512,9 @@ export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSour
   if (input.sourceJob && (OPEN_ITEM_DOOR_SOURCE_JOBS as readonly string[]).includes(input.sourceJob)) {
     return input.sourceJob as OpenItemDoorSourceJob;
   }
+  // §10.6 O-J4's item: the project's observations failing. It names no task and no promotion, so it
+  // is read by its job's kind before the fallbacks below would file it as either.
+  if (jobKind === 'OBSERVE_LANDING') return 'OBSERVE_LANDING';
   if (input.kind === 'TASK_FAILED') return 'TASK_FAILURE';
   if (input.kind === 'COORDINATOR_QUESTION' || input.kind === 'FUSE_PAUSED'
       || input.kind === 'START_REQUEST' || input.kind === 'DONE_REQUEST') return 'DIRECT';
@@ -593,8 +613,8 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     // hand-close. The hand-over is in its allow-list (both holders, as `handOver` asks of a cell).
     if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee), openTaskSession(assignee), askOwner(assignee));
     else doors.push(askAgain(assignee), openTaskSession(assignee));
-    doors.push(recordLanding(assignee), ...taskRepair(assignee), cancelTask(assignee, true),
-      declareCodeless(assignee), handOver(assignee));
+    doors.push(recordLanding(assignee), observe(assignee, 'LANDED'), ...taskRepair(assignee),
+      cancelTask(assignee, true), declareCodeless(assignee), handOver(assignee));
     return doors;
   }
   if (todoType === 'LANDED_WITHOUT_CONFIRMATION') {
@@ -613,6 +633,19 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     return doors;
   }
   if (!isIntegration(todoType)) return [handClose(assignee), handOver(assignee)];
+
+  if (sourceJob === 'OBSERVE_LANDING') {
+    // §10.6 O-J4 · §10.8: the project's observations failing (`IE:observe:<projectId>`), about its line
+    // rather than one task. The observation that answers ends it, so `integration_observe` is its one
+    // resolving door; a fix task can be filed against it, the coordinator can ask the owner (access to
+    // the repository is often theirs to give), and it can be handed over. No hand-close: while it is
+    // open it is what keeps the tasks waiting to be observed in front of somebody (O5). No landing
+    // door: an observation opens no landing session (A-Q23).
+    doors.push(observe(assignee, 'JOB_MOVED_ON'));
+    if (assignee === 'COORDINATOR') doors.push(askOwner(assignee));
+    doors.push(createFixTask(assignee), handOver(assignee));
+    return doors;
+  }
 
   // The coordinator and owner use the same integration_retry decision.  A conflict is different:
   // replaying the same source cannot repair it, so the table names the concrete branch-changing
@@ -669,7 +702,8 @@ function buildTable(): OpenItemDoorCell[] {
   const cells: OpenItemDoorCell[] = [];
   const integrationKinds = OPEN_ITEM_DOOR_TODO_TYPES.filter(isIntegration);
   for (const todoType of integrationKinds) {
-    for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) => job !== 'TASK_FAILURE' && job !== 'DIRECT')) {
+    for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) =>
+      job !== 'TASK_FAILURE' && job !== 'DIRECT' && job !== 'OBSERVE_LANDING')) {
       for (const failureClass of OPEN_ITEM_DOOR_FAILURE_CLASSES) {
         for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
           cells.push({ todoType, sourceJob, failureClass, assignee,
@@ -718,6 +752,12 @@ function buildTable(): OpenItemDoorCell[] {
   cells.push({ todoType: 'LANDED_WITHOUT_CONFIRMATION', sourceJob: 'DIRECT', failureClass: 'ERROR',
     assignee: 'OWNER',
     doors: doorsForCell({ todoType: 'LANDED_WITHOUT_CONFIRMATION', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
+  // §10.6 O-J4: an observation fails one way — an ERROR — and its item is the coordinator's like every
+  // integration item, the owner's when there is none or it is handed over.
+  for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
+    cells.push({ todoType: 'INTEGRATION_ERROR', sourceJob: 'OBSERVE_LANDING', failureClass: 'ERROR', assignee,
+      doors: doorsForCell({ todoType: 'INTEGRATION_ERROR', sourceJob: 'OBSERVE_LANDING', failureClass: 'ERROR', assignee }) });
+  }
   return cells;
 }
 
@@ -816,6 +856,12 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     return (['ACCEPT', 'OPEN_TASK_SESSION'] as const).filter((action) => directDoors.some((candidate) =>
       candidate.implemented && candidate.holder === assignee && candidate.action === action));
   }
+  if (sourceJobForOpenItem(input) === 'OBSERVE_LANDING') {
+    // §10.6 O-J4 · §10.8: the project's observations failing names no task; its one press is the
+    // observation that ends it.
+    return directDoors.some((candidate) => candidate.implemented && candidate.holder === assignee
+      && candidate.action === 'OBSERVE') ? ['OBSERVE'] : [];
+  }
   if (input.promotionId) {
     const doors = directDoors.length > 0
       ? directDoors
@@ -837,9 +883,10 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
         failureClass: 'ERROR',
         assignee,
       });
+  // `OBSERVE` is a `LANDING_UNOBSERVED`'s (§10.8): no other task cell holds that door.
   const actions: OpenItemAction[] = assignee === 'COORDINATOR'
-    ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-    : ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
+    ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'OBSERVE', 'CANCEL_TASK']
+    : ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'OBSERVE', 'CANCEL_TASK'];
   return appendOpenLanding(actions.filter((action) =>
     (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
     && doors.some((candidate) => candidate.action === action && candidate.holder === assignee)),
@@ -858,7 +905,7 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
  */
 export interface OpenItemDoorMessageNames {
   retryMcp: string | null;
-  /** §10.8's re-observation; no cell holds it until `integration_observe` is a door of one. */
+  /** §10.8's re-observation: the `LANDING_UNOBSERVED` cells and the observation failures' (O-J4). */
   observeMcp: string | null;
   mergeReceiptMcp: string | null;
   resolveMcp: string | null;

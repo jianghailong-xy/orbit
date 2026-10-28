@@ -457,6 +457,40 @@ test('abandonIntegrationJob abandons in the runner owner scope, as the acting se
   assert.equal(seen.length, 1, 'a blank reason never reached the service');
 });
 
+test('observeIntegration is exposed as POST projects/:id/integration/observe', () => {
+  const handler = RunnerProjectsController.prototype.observeIntegration;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/integration/observe');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'observeIntegration') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  const id = Object.values(args ?? {}).find((candidate) => candidate.data === 'id');
+  assert.ok(id, 'no id param on observeIntegration');
+  assert.ok((id.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+    'id does not resolve through PublicIdPipe');
+});
+
+/** The observation door is the retry doors' shape: the runner owner's scope and the acting session
+ *  as the authority, trimmed — a missing header is passed on as blank, never read as the owner. */
+test('observeIntegration asks in the runner owner scope, as the acting session', async () => {
+  const seen: unknown[] = [];
+  const openItems = {
+    observeIntegration: async (...input: unknown[]) => {
+      seen.push(input);
+      return { projectId: 'project-1', jobId: 'job-1', generation: 1, queued: true, reason: 'pushed', handlingItemIds: [] };
+    },
+  } as never;
+  const controller = new RunnerProjectsController({} as never, acceptanceDouble(), {} as never, orchestrationDouble(), openItems);
+
+  await controller.observeIntegration(RUNNER, ` ${SESSION_ID} `, 'project-1', { reason: ' pushed ' });
+  await controller.observeIntegration(RUNNER, undefined, 'project-1', { reason: 'pushed' });
+
+  assert.deepEqual(seen, [
+    ['owner-1', 'project-1', { reason: ' pushed ' }, { kind: 'SESSION', sessionId: SESSION_ID }],
+    ['owner-1', 'project-1', { reason: 'pushed' }, { kind: 'SESSION', sessionId: '' }],
+  ]);
+});
+
 test('skipIntegrationMergeCheck skips in the runner owner scope, as the acting session and its card', async () => {
   const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'skipIntegrationMergeCheck') as
     | Record<string, { data?: unknown }>
@@ -934,6 +968,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // different hat. Migration 0229 took the reopen preview with the acceptance epoch it read, and
     // the three acceptance-judgment routes with the runs and conclusions they wrote.
     'listProjectHandoffs',
+    // `integration_observe` (§10.8, O-T5): the coordinator asking for its project's line to be looked
+    // at again, with a reason. On the machine door for the retry doors' reason — the acting session is
+    // the authority the service checks against the project's current coordinator — and it spends no
+    // orchestration credential: the observation only reads, and starts no session.
+    'observeIntegration',
     'recordMergeEvidence',
     'removeProject',
     // The coordinator asking the owner to record the project done (`project_request_done`). It is
@@ -998,6 +1037,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator
     // answering a crossing on a person's behalf.
     listProjectHandoffs: RequestMethod.GET,
+    observeIntegration: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     requestDone: RequestMethod.POST,

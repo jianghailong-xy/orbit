@@ -209,7 +209,10 @@ export async function readProjectListBindings(
     select: {
       ...LINE_COLUMNS,
       projectId: true,
-      _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+      // An observation is not an integration attempt (§10.6, A-Q23): it is not counted here.
+      _count: { select: { integrationJobs: {
+        where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+      } } },
     },
   });
   // The line's job is the one the integration view describes, read through that view's own function
@@ -344,7 +347,9 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  const jobs = await readInFlightJobs(prisma, projectId);
+  // The Landings window's jobs: an observation is not an integration attempt (§10.6, A-Q23), so it is
+  // left out here and on the project list, while the line's own queue still holds it.
+  const jobs = (await readInFlightJobsForProjects(prisma, [projectId])).get(projectId) ?? [];
   // Each current LAND_TASK through the task read model, so this page and the task's own describe
   // one landing in the same words (§2.7a).
   const landTasks = await readProjectLandTaskViews(prisma, projectId);
@@ -864,6 +869,10 @@ async function readInFlightJobsForProjects(
   projectIds: readonly string[],
   /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
   jobId?: string,
+  /** Whether the project's OBSERVE_LANDING jobs are read too. An observation is not an integration
+   *  attempt (§10.6, A-Q23), so the Landings window and the project list leave it out; the queue's own
+   *  readers — its timeouts (J-T9), its doors and the integration line's queue — read every job. */
+  observations: 'INCLUDE' | 'EXCLUDE' = 'EXCLUDE',
 ): Promise<Map<string, ProjectIntegrationJob<Date>[]>> {
   if (projectIds.length === 0) return new Map();
   const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
@@ -977,6 +986,7 @@ async function readInFlightJobsForProjects(
       ) running_block ON true
      WHERE j."project_id" IN (${ids})
        AND j."state" IN ('RUNNING', 'QUEUED')
+       ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
      ORDER BY j."project_id" ASC,
               (j."state" = 'RUNNING') DESC,
@@ -994,14 +1004,16 @@ async function readInFlightJobsForProjects(
   return byProject;
 }
 
-/** Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`). */
+/** Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`), its
+ *  observations included: the queue's own read, for its timeouts, its doors and the integration
+ *  line's queue. The Landings window's `inFlightJobs` leaves observations out (A-Q23). */
 export async function readInFlightJobs(
   prisma: Pick<PrismaService, '$queryRaw'>,
   projectId: string,
   /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
   jobId?: string,
 ): Promise<ProjectIntegrationJob<Date>[]> {
-  return (await readInFlightJobsForProjects(prisma, [projectId], jobId)).get(projectId) ?? [];
+  return (await readInFlightJobsForProjects(prisma, [projectId], jobId, 'INCLUDE')).get(projectId) ?? [];
 }
 
 /** The page selectors `GET /runner/projects/:id/integration` reserves for the timeline and log

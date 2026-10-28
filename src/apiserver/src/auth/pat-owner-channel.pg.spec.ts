@@ -271,6 +271,14 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/projects/${anyProject}/tasks/${nobody()}/integration/stop`,
       login: 404,
     },
+    // §10.8's "look again": the project has no repository bound, so a login is answered that there is
+    // no line to look at — the door itself, reached.
+    {
+      route: 'POST /projects/:id/integration/observe',
+      path: `/projects/${anyProject}/integration/observe`,
+      body: { reason: 'the census' },
+      login: 409,
+    },
     { route: 'POST /wiki/entries/:id/reject', path: `/wiki/entries/${nobody()}/reject`, body: { reason: 'not_true' }, login: 404 },
     { route: 'POST /wiki/entries/:id/confirm', path: `/wiki/entries/${nobody()}/confirm`, login: 404 },
     {

@@ -896,6 +896,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"have happened; the next job on this repository and branch can be claimed now.\n"+
 			prettyJSON(raw), false)
 
+	case "integration_observe":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required: the project whose line Orbit should look at again", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why the work may be on the line now — what changed "+
+				"since Orbit last looked. It stays on the items the observation handles", true)
+		}
+		// The acting session IS the authority, as it is for integration_retry: the server checks it
+		// against the project's own coordinator pointer, and refuses a project with no repository bound.
+		raw, err := s.t.observeIntegration(s.sessionID, id, reason)
+		if err != nil {
+			return toolResult("integration observe failed: "+err.Error(), true)
+		}
+		return toolResult("An observation of the project's line is queued, with your reason on it (queued: "+
+			"false means the one already queued takes it in). Your open items about work not yet seen on the "+
+			"line read as being handled until it reports: a task whose commit it sees is recorded as landed, "+
+			"its item closes and the tasks waiting on it start; an item about a commit it does not see stays "+
+			"open as it was. Read the project again once the observation has run.\n"+prettyJSON(raw), false)
+
 	case "integration_skip_merge_check":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -3512,8 +3534,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteriaItems": projectCriteriaCreateProp,
 				"instructions": map[string]interface{}{
-					"type":        "string",
-					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
+					"type": "string",
+					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters. " +
+						"How work reaches a branch is not set here: it is the account owner's delivery setting, " +
+						"integration.deliveryMode in project_get (PLATFORM until the owner chooses) — AGENT_PUSH: agents " +
+						"push their own commits to the upstream; PLATFORM: Orbit lands the work and agents do not push the " +
+						"target branch. Read it before you write anything about how work reaches a branch; where these " +
+						"instructions and that setting disagree, the setting wins.",
 				},
 				"workspaceId": map[string]interface{}{
 					"type": "string",
@@ -3578,8 +3605,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteriaItems": projectCriteriaUpdateProp,
 				"instructions": map[string]interface{}{
-					"type":        []string{"string", "null"},
-					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions.",
+					"type": []string{"string", "null"},
+					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions. " +
+						"Before you write anything about how work reaches a branch, read integration.deliveryMode in " +
+						"project_get: AGENT_PUSH means agents push their own commits to the upstream, PLATFORM means Orbit " +
+						"lands the work and agents do not push the target branch. Where these instructions and that setting " +
+						"disagree, the setting wins.",
 				},
 				"status": map[string]interface{}{
 					"type":        "string",
@@ -4027,6 +4058,37 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"characters, and kept on the job as the record of why the work was given up.",
 				},
 			}, "projectId", "jobId", "reason"),
+		},
+		{
+			"name": "integration_observe",
+			"description": "Ask Orbit to look again, now, at whether your project's finished work is on its " +
+				"line, as the conversation that coordinates the project. Orbit records a task's work as " +
+				"landed when it sees the commit the task delivered there — an observation fetches and reads, " +
+				"and never merges, pushes or runs a check. It looks by itself after the facts that may move " +
+				"the line (a work session's turn, a recorded receipt); this is the door to look again when " +
+				"something else changed: an agent pushed after its task finished, a later task carried the " +
+				"work there, or a runner that could not fetch the repository can again. It queues one " +
+				"observation of the project, or joins the one already queued (the answer says queued: " +
+				"false), and every task waiting to be seen is looked at when a runner takes it. Your open " +
+				"\"Not on <branch> yet\" items (LANDING_UNOBSERVED) about those tasks read as being handled " +
+				"until it reports: when it sees a task's commit, the landing is recorded, the item closes as " +
+				"landed and the tasks waiting on it start; when it does not, the item stays open as it was — " +
+				"then name the commit on the line that carries the work with merge_receipt, or send the task " +
+				"back with task_reopen. An observation that succeeds also closes the item about the " +
+				"project's failing observations. It needs a runner that declares integration-observe/v1 with " +
+				"a checkout of the repository, and waits queued until there is one. Refused for a project " +
+				"with no repository bound, and unless you are the project's current coordinator conversation.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why the work may be on the line now — what changed since Orbit last " +
+						"looked. Required, up to 2000 characters, and kept on the items the observation handles.",
+				},
+			}, "projectId", "reason"),
 		},
 		{
 			"name": "integration_skip_merge_check",

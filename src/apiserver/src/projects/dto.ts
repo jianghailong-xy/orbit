@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  Allow,
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
@@ -780,6 +781,17 @@ export class RetryIntegrationDto {
  */
 export class AbandonIntegrationJobDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_ABANDON_REASON) reason!: string;
+}
+
+/**
+ * Why the line may have moved, for `integration_observe` (§10.8). `@Allow()` only keeps the whitelist
+ * from stripping it: a reason that is missing, blank, not a string or over its limit is refused by
+ * the service with the door's own code (INTEGRATION_OBSERVE_REASON_REQUIRED), which a class-validator
+ * message cannot carry.
+ */
+export class ObserveIntegrationDto {
+  @Allow()
+  reason?: unknown;
 }
 
 export class SkipMergeCheckDto {

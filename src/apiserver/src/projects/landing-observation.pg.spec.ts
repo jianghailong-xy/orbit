@@ -30,6 +30,7 @@ import {
   releaseIntegrationJob,
 } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.service';
@@ -80,7 +81,12 @@ import * as integrationJob from './project-integration-job';
  * (10) the kind decides: OBSERVE and OBSERVED are refused on a landing;
  * (11) the lease: a claim whose process went silent is handed to it again under the same claim
  *      (J-T3a), and taken over by another process of the same runner (J-T3), whose answer is the one
- *      taken.
+ *      taken;
+ * (12) §10.9 2: work pushed as another commit (a rebase, a cherry-pick) opens LANDING_UNOBSERVED
+ *      (APPLIED_AS_OTHER_COMMITS) for the coordinator, and J9 names it; `open_item_resolve` is refused
+ *      (OPEN_ITEM_HAS_ITS_OWN_DOOR); `integration_observe` looks again through the coordinator's
+ *      runner door and the item is handled while it runs; `merge_receipt` naming the commit on main
+ *      that carries the work closes it RESOLVED / LANDED, and J10 starts the dependent by itself.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -155,6 +161,7 @@ interface Stack {
   confirmations: TaskOwnerConfirmationService;
   receipts: MergeReceiptService;
   runnerApi: RunnerApiController;
+  openItems: ProjectOpenItemService;
 }
 
 /** The services the doors live in, over one client. Nothing reaches a device. */
@@ -186,6 +193,7 @@ async function connect(): Promise<Stack> {
     // J10's dispatcher is the real one: a released dependent is started, as the running server does.
     receipts: new MergeReceiptService(prisma, undefined, tasks),
     runnerApi,
+    openItems,
   };
 }
 
@@ -1105,6 +1113,100 @@ test('(11) J-T3a and J-T3: a silent observation is handed to its own process aga
         where: { jobId: first.jobId, kind: 'TAKEN_OVER' }, select: { claimGeneration: true },
       });
       assert.equal(takeover?.claimGeneration, BigInt(taken!.claimGeneration));
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (12) §10.9 2 ═══════════════════════════════════════════════════════════════════════════════
+
+/** The coordinator's observation door (R29-7), read through a local type so this file compiles on a
+ *  tree from before it and the case is red for want of the door. */
+type ObserveDoor = {
+  observeIntegration?(runner: { id: string; ownerId: string }, sessionId: string | undefined, id: string, dto: { reason?: string }):
+    Promise<{ jobId: string; queued: boolean; handlingItemIds: string[] }>;
+};
+
+test('(12) §10.9 2: work pushed as another commit opens LANDING_UNOBSERVED (APPLIED_AS_OTHER_COMMITS) for the coordinator; open_item_resolve is refused, integration_observe looks again, and merge_receipt naming the commit on main closes it LANDED and releases the dependent',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'rebased', { line: 'MAIN', deliveryMode: 'AGENT_PUSH', started: true });
+      const rebased = await ownerTask(stack, w, 'pushed as a rebased commit');
+      const workSessionId = await workSession(stack, w, rebased, {
+        branch: 'orbit/rebased', branchSha: sha('a'), baseSha: sha('b'), finishedMinutesAgo: 2,
+      });
+      const dependent = await stack.tasks.create(w.ownerId, {
+        title: 'waits for the rebased work', projectId: w.projectId, assigneeId: w.workspaceId,
+        autoRunWhenReady: true, completionCriterion: 'OWNER_CONFIRMED', dependsOnTaskIds: [rebased],
+      } as never);
+      await confirm(stack, w, rebased);
+
+      // O-T1 queued the observation. The agent pushed a rebased copy: its commit is not on main, but
+      // every change it makes is (`git cherry`), so O-R4 reads APPLIED_AS_OTHER_COMMITS.
+      const first = await claimObservation(stack, w.runnerId, 'observer-1');
+      assert.ok(first, 'CONTROL: the DONE queued an observation');
+      assert.deepEqual(first.observeTasks, [{ taskId: rebased, deliveredSha: sha('a'), baseSha: sha('b') }]);
+      const asOtherCommits = [seen({ taskId: rebased, deliveredSha: sha('a'), baseSha: sha('b') }, { fullyApplied: true })];
+      await report(stack, w, first, observed(first, asOtherCommits, sha('c')));
+      const [item, ...more] = await openItems(stack, w, 'LANDING_UNOBSERVED');
+      assert.equal(more.length, 0);
+      assert.ok(item, 'the observation opened no LANDING_UNOBSERVED');
+      assert.equal(item.state, 'OPEN');
+      assert.equal(item.assignee, 'COORDINATOR', '§10.7: the coordinator handles it first');
+      assert.equal(item.dedupeKey, `LU:${rebased}:${sha('a')}`);
+      assert.equal(item.title, 'Not on main yet: pushed as a rebased commit');
+      assert.equal((item.payload as { reason?: string }).reason, 'APPLIED_AS_OTHER_COMMITS');
+      assert.equal(await landingOf(stack, rebased), 'NOT_KNOWN');
+      await assert.rejects(stack.tasks.execute(w.ownerId, dependent.id), /not on main yet/i,
+        'J9 holds the dependent and names the item');
+      assert.equal(await stack.db.session.count({ where: { taskId: dependent.id } }), 0);
+
+      // In the meantime the item cannot be closed by hand: it has its own doors.
+      await assert.rejects(
+        stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id, { note: 'the work is on main' },
+          { kind: 'SESSION', sessionId: w.coordinatorSessionId }),
+        (error: { getResponse?: () => unknown }) => {
+          assert.equal((error.getResponse?.() as { code?: string } | undefined)?.code, 'OPEN_ITEM_HAS_ITS_OWN_DOOR');
+          return true;
+        },
+      );
+      assert.equal((await openItems(stack, w, 'LANDING_UNOBSERVED'))[0]?.state, 'OPEN');
+
+      // integration_observe: the coordinator looks again through its own runner door (O-T5). The item
+      // is handled by that observation until it answers.
+      const door = new RunnerProjectsController({} as never, {} as never, {} as never, {} as never, stack.openItems);
+      const observe = (door as unknown as ObserveDoor).observeIntegration;
+      assert.ok(observe, 'there is no integration_observe runner door');
+      const asked = await observe.call(door, { id: w.runnerId, ownerId: w.ownerId }, w.coordinatorSessionId, w.projectId,
+        { reason: 'the agent may have pushed the original commit after all' });
+      assert.equal(asked.queued, true);
+      assert.deepEqual(asked.handlingItemIds, [item.id]);
+      const handled = await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: item.id }, select: { handlingJobId: true, handlingSessionId: true, handlingReason: true },
+      });
+      assert.deepEqual(handled, {
+        handlingJobId: asked.jobId, handlingSessionId: w.coordinatorSessionId,
+        handlingReason: 'the agent may have pushed the original commit after all',
+      });
+      const second = await claimObservation(stack, w.runnerId, 'observer-2');
+      assert.ok(second);
+      assert.equal(second.jobId, asked.jobId);
+      assert.deepEqual(second.observeTasks, [{ taskId: rebased, deliveredSha: sha('a'), baseSha: sha('b') }]);
+      await report(stack, w, second, observed(second, asOtherCommits, sha('d')));
+      assert.deepEqual((await openItems(stack, w, 'LANDING_UNOBSERVED')).map((open) => [open.id, open.state]), [[item.id, 'OPEN']],
+        'still not seen: the same item stands, and no second one opens');
+
+      // merge_receipt names the commit on main that really carries the work: the landing.
+      await stack.receipts.record(w.ownerId, workSessionId, {
+        result: 'ALREADY_MERGED', sourceSha: sha('d'), targetBranch: 'main',
+      }, 'AGENT');
+      const [closed] = await openItems(stack, w, 'LANDING_UNOBSERVED');
+      assert.equal(closed?.state, 'RESOLVED');
+      assert.equal(closed?.resolution, 'LANDED');
+      assert.equal(await landingOf(stack, rebased), 'ON_UPSTREAM');
+      assert.equal(await stack.db.session.count({ where: { taskId: dependent.id } }), 1,
+        'J10 started the dependent by itself once the landing was recorded');
     } finally {
       await stack.db.$disconnect();
     }
