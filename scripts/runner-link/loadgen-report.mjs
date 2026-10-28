@@ -58,7 +58,10 @@ function cpuSeries(key, field = 'cpuUsec') {
     if (!a || !b) continue;
     const dt = (covering[i].t - covering[i - 1].t) * 1000;
     if (dt <= 0) continue;
-    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: (b[field] - a[field]) / dt, mem: b.memBytes });
+    // A container that restarted within the interval (an OOM kill, a gateway release) starts its cgroup's counters
+    // again: what it used is then what the new one counted, the old one's last moments unseen.
+    const used = b[field] >= a[field] ? b[field] - a[field] : b[field];
+    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: used / dt, mem: b.memBytes });
   }
   return out;
 }
@@ -217,7 +220,21 @@ function parseScrapes() {
 const scrapes = parseScrapes();
 const firstScrape = scrapes.filter((s) => s.t <= steadyFrom + 15_000).at(-1) ?? scrapes[0];
 const lastScrape = scrapes.filter((s) => s.t <= steadyTo + 15_000).at(-1) ?? scrapes.at(-1);
-const delta = (key) => (lastScrape?.values.get(key) ?? 0) - (firstScrape?.values.get(key) ?? 0);
+// A counter's increase from the first scrape to the last. A gateway that restarted in between (an OOM kill, a release)
+// counts again from zero, so a value lower than the one before it is a reset, and what the new process counted is
+// added, as Prometheus' increase() takes it. Without a reset this is the last value less the first, as before.
+const between = scrapes.slice(scrapes.indexOf(firstScrape), scrapes.indexOf(lastScrape) + 1);
+const startOf = (s) => s.values.get('link_gateway_start_time_seconds');
+const restarted = between.some((s, i) => i > 0 && startOf(s) !== startOf(between[i - 1]));
+const delta = (key) => {
+  if (!restarted) return (lastScrape?.values.get(key) ?? 0) - (firstScrape?.values.get(key) ?? 0);
+  let total = 0;
+  for (let i = 1; i < between.length; i++) {
+    const b = between[i].values.get(key) ?? 0;
+    total += startOf(between[i]) !== startOf(between[i - 1]) ? b : b - (between[i - 1].values.get(key) ?? 0);
+  }
+  return total;
+};
 const counterFamily = (family) => {
   const out = {};
   for (const key of lastScrape?.values.keys() ?? []) {
