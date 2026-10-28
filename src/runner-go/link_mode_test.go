@@ -106,11 +106,23 @@ func linkDaemonWorkout(t *testing.T, tr *Transport) {
 	if _, err := tr.me(); err != nil {
 		t.Fatal(err)
 	}
+	if err := tr.cursorKeyCheckResult(CursorKeyCheckResult{CheckID: linkTestCheckID, State: "INVALID", KeyFingerprint: "0123456789abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.cursorKeyCheck("session-a", CursorKeyCheckReport{State: "VALID", KeyFingerprint: "0123456789abcdef"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.sessionNotify("session-a", "Background shell job-1 ended (exit code 0): make"); err != nil {
+		t.Fatal(err)
+	}
 	var agents json.RawMessage
 	if err := tr.do(ctx, http.MethodGet, "/runner/agents", nil, &agents, 10*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
+
+// linkTestCheckID is a Cursor key check's id, as an apiserver mints one (cursor-key-check-relay.ts).
+const linkTestCheckID = "0123456789abcdef0123456789abcdef"
 
 // While the control plane has not asked for the link, a transport with a link mode makes exactly the requests a
 // transport without one makes: the same methods, paths, bodies and headers, all over HTTPS, and the gateway hears
@@ -188,6 +200,78 @@ func TestUpgradeRequiredMovesTheWorkToTheLink(t *testing.T) {
 	if !strings.Contains(strings.Join(r.logs.all(), "\n"), "UPGRADE_REQUIRED") {
 		t.Errorf("the log does not say why the link came into use: %v", r.logs.all())
 	}
+}
+
+// The daemon's calls that went beside the agent tool API until 2026-10-28 go where its other calls go: a Cursor key
+// check's answer, a session's own key check and a background job's alert travel over the link while it is in use, and
+// not over HTTPS; answered UPGRADE_REQUIRED over HTTPS, the first moves the work to the link and is made again there.
+// With the link not in use they go over HTTPS exactly as before (linkDaemonWorkout,
+// TestTheLinkIsNotUsedUntilTheControlPlaneAsks).
+func TestTheCursorKeyChecksAndTheJobAlertGoOverTheLink(t *testing.T) {
+	calls := []struct {
+		path string
+		body string
+		call func(*Transport) error
+	}{
+		{"/runner/cursor-key-check-result", `{"checkId":"` + linkTestCheckID + `","state":"INVALID","keyFingerprint":"0123456789abcdef"}`,
+			func(tr *Transport) error {
+				return tr.cursorKeyCheckResult(CursorKeyCheckResult{CheckID: linkTestCheckID, State: "INVALID", KeyFingerprint: "0123456789abcdef"})
+			}},
+		{"/runner/sessions/session-a/cursor-key-check", `{"state":"VALID","keyFingerprint":"0123456789abcdef"}`,
+			func(tr *Transport) error {
+				return tr.cursorKeyCheck("session-a", CursorKeyCheckReport{State: "VALID", KeyFingerprint: "0123456789abcdef"})
+			}},
+		{"/runner/sessions/session-a/notify", `{"message":"Background shell job-1 ended (exit code 0): make"}`,
+			func(tr *Transport) error {
+				return tr.sessionNotify("session-a", "Background shell job-1 ended (exit code 0): make")
+			}},
+	}
+	overTheLink := func(t *testing.T, r *linkWorkRig) {
+		t.Helper()
+		for _, c := range calls {
+			rpcs := r.g.rpcsTo(c.path)
+			if len(rpcs) != 1 {
+				t.Errorf("%s went over the link %d times, want 1", c.path, len(rpcs))
+				continue
+			}
+			if rpcs[0].method != http.MethodPost || string(rpcs[0].body) != c.body || rpcs[0].requestID == "" {
+				t.Errorf("%s over the link: %s %s %q", c.path, rpcs[0].method, rpcs[0].body, rpcs[0].requestID)
+			}
+		}
+	}
+	t.Run("in use", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		r.useLink(t)
+		for _, c := range calls {
+			if err := c.call(r.t); err != nil {
+				t.Fatalf("%s: %v", c.path, err)
+			}
+			if n := len(r.cp.requests("/api" + c.path)); n != 0 {
+				t.Errorf("%s went over HTTPS %d times with the link in use", c.path, n)
+			}
+		}
+		overTheLink(t, r)
+	})
+	t.Run("UPGRADE_REQUIRED", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		r.cp.status = func(string) int { return http.StatusUpgradeRequired }
+		for i, c := range calls {
+			if err := c.call(r.t); err != nil {
+				t.Fatalf("%s after UPGRADE_REQUIRED: %v", c.path, err)
+			}
+			want := 0
+			if i == 0 {
+				want = 1 // refused over HTTPS, which put the link in use
+			}
+			if n := len(r.cp.requests("/api" + c.path)); n != want {
+				t.Errorf("%s went over HTTPS %d times, want %d", c.path, n, want)
+			}
+		}
+		if !r.m.inUse() {
+			t.Fatal("the link is not in use after UPGRADE_REQUIRED")
+		}
+		overTheLink(t, r)
+	})
 }
 
 // A call answered UPGRADE_REQUIRED while the link cannot come up fails as a network failure, which callers retry,
@@ -510,8 +594,10 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 	if want := []string{"POST /runner/device/poll", "POST /runner/device/start", "POST /runner/register"}; !reflect.DeepEqual(open, want) {
 		t.Errorf("the controller's routes without the runner guard are %v, want %v", open, want)
 	}
-	if n := len(guarded) + len(open); n != 49 {
-		t.Errorf("the controller has %d routes; 49 were counted on 2026-10-25", n)
+	// 49 counted on 2026-10-25, and the daemon's three calls that went beside the agent tool API until 2026-10-28: a
+	// Cursor key check's answer, a session's own key check and a background job's alert.
+	if n := len(guarded) + len(open); n != 52 {
+		t.Errorf("the controller has %d routes; 52 since 2026-10-28", n)
 	}
 }
 
@@ -524,6 +610,11 @@ func TestLinkDaemonRouteMatchesAsTheControllerRoutes(t *testing.T) {
 		"GET /runner/sessions/abc/approvals/ap-1":           "GET /runner/sessions/:id/approvals/:id",
 		"GET /runner/sessions/abc/events?after=3&limit=200": "GET /runner/sessions/:id/events",
 		"POST /runner/heartbeat":                            linkRouteHeartbeat,
+		"POST /runner/cursor-key-check-result":              "POST /runner/cursor-key-check-result",
+		"POST /runner/sessions/abc/cursor-key-check":        "POST /runner/sessions/:id/cursor-key-check",
+		"POST /runner/sessions/abc/notify":                  "POST /runner/sessions/:id/notify",
+		"POST /runner/notify":                               "",
+		"GET /runner/providers":                             "",
 		"GET /runner/agents":                                "",
 		"POST /runner/tasks/abc/comments":                   "",
 		"GET /runner/release?latest=1":                      "",

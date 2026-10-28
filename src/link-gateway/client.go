@@ -72,7 +72,7 @@ func clientMain(args []string) int {
 	fs.StringVar(&d.relaySecrets, "relay-secrets", "", "the relay drills: a JSON file {\"code\", \"key\"} naming the Antigravity code and the Cursor key to hand over (client_relay.go)")
 	fs.StringVar(&d.relayAttempt, "relay-attempt", "", "the relay-finish drill: the sign-in attempt relay-begin reported")
 	fs.BoolVar(&d.relaySlowHolder, "relay-slow-holder", false, "the relay-finish drill: the process holding the code is paused when it starts")
-	fs.StringVar(&d.relayHandshake, "relay-handshake", "", "the relay drills: relay-finish creates PATH.ready once connected and waits for PATH.go before its first heartbeat; relay writes the Cursor check's answer to PATH.answer for the script to post")
+	fs.StringVar(&d.relayHandshake, "relay-handshake", "", "the relay drills: relay-finish creates PATH.ready once connected and waits for PATH.go before its first heartbeat")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

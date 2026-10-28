@@ -125,7 +125,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
   └──HTTPS（经 Cloudflare）──▶ API：注册、领取连接令牌、自更新与 /dl、agent 工具 API、附件
 ```
 
-**被替换的**：runner-api 主控制器里的全部守护进程路由（2026-10-25 统计为 49 个），包括领会话、取消息、wake、心跳、事件、租约、各类结果回报等。
+**被替换的**：runner-api 主控制器里的全部守护进程路由（2026-10-25 统计为 49 个，2026-10-28 起为 52 个，见 §15.9），包括领会话、取消息、wake、心跳、事件、租约、各类结果回报等。
 
 **继续走 HTTPS 的**（D14）：
 
@@ -410,7 +410,7 @@ apiserver 进程数和数据库规格按 O3 的测量补齐，见 §15.3。
 
 1. 确认生产上的 runner 都已是支持链路模式的版本；切换步骤先在 staging 复验。
 2. 打开"暂停派发"，等所有正在运行的 turn、集成任务、merge/commit 跑完（D8）。看板上列出剩余项和各自已运行的时长。
-3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。实现上开关是运行时的，用 `PUT /api/admin/runner-link-required` 打开，1 秒内生效，不用部署；返回 `UPGRADE_REQUIRED` 的是其中 44 个，见 §15.1。
+3. 打开服务端切换开关 `RUNNER_LINK_REQUIRED` 并部署。全部旧守护进程路由（当前 49 个）统一返回 `UPGRADE_REQUIRED`。实现上开关是运行时的，用 `PUT /api/admin/runner-link-required` 打开，1 秒内生效，不用部署；返回 `UPGRADE_REQUIRED` 的是 47 个，见 §15.1、§15.9。
 4. runner 的处理：
    - 支持链路的 runner 收到 `UPGRADE_REQUIRED` 后，立即切到链路模式；
    - 还不支持的版本会触发自更新，升级后再切换。自更新最长等 10 分钟，此时没有 turn 在跑，`updateWhenNoTurnInFlight` 不会拦住；也可以手动执行 `orbit upgrade`。
@@ -494,7 +494,7 @@ runner 本地的两种暂存，回滚和降级时这样处理：
 - 开关是数据库里的一行（表 `runner_link_switch`，迁移 0446），不是部署时设的环境变量。登录的管理员用 `GET` / `PUT /api/admin/runner-link-required` 查询和翻转（不接受访问令牌），不用重新构建，也不用重启或部署。
 - 1 秒内生效：处理 `PUT` 的 apiserver 进程立即按新值应答，其他进程最多 1 秒后重读。网关每秒读一次 `GET /api/runner/link/mode`，之后的 `Welcome` 和每个 `HeartbeatAck` 都带新模式：连着网关的 runner（包括影子连接）在下一次心跳时得知；打开时，走 HTTPS 的 runner 也会在下一次守护进程调用被拒时得知。
 - 读不到时保持上一次的值：数据库或路由不可用时，各 apiserver 进程和网关都按上一次读到的值应答，不来回切换。进程启动后还没读到过时，按关闭处理（网关告诉 runner `MODE_HTTP`）。
-- 打开时，runner-api 主控制器的 49 个路由（2026-10-25 统计）里，44 个守护进程路由对 HTTPS 调用返回 426 `UPGRADE_REQUIRED`，并提示执行 `orbit upgrade`；注册的 3 个（register、device/start、device/poll）和附件的 2 个按 D14 留在 HTTPS，照常应答。§11.3 第 3 步说"全部旧守护进程路由（当前 49 个）"统一返回 `UPGRADE_REQUIRED`，实际返回的是这 44 个。带 `X-Orbit-Runner-Caller` 标记的调用（`orbit mcp`、Antigravity 审批钩子、CLI 命令）也照常处理，守护进程从不带这个标记。
+- 打开时，runner-api 主控制器的 52 个路由（2026-10-25 统计为 49 个，2026-10-28 又挪进来 3 个，见 §15.9）里，47 个守护进程路由对 HTTPS 调用返回 426 `UPGRADE_REQUIRED`，并提示执行 `orbit upgrade`；注册的 3 个（register、device/start、device/poll）和附件的 2 个按 D14 留在 HTTPS，照常应答。§11.3 第 3 步说"全部旧守护进程路由（当前 49 个）"统一返回 `UPGRADE_REQUIRED`，实际返回的是这 47 个。带 `X-Orbit-Runner-Caller` 标记的调用（`orbit mcp`、Antigravity 审批钩子、CLI 命令）也照常处理，守护进程从不带这个标记。
 - 网关的 `LINK_MODE=link` 会不看开关，一直告诉 runner `MODE_LINK`。生产网关要保持默认的 `http`（跟随开关），否则关开关时 runner 不会退回 HTTP。
 
 ### 15.2 大载荷没有按引用传输
@@ -637,3 +637,20 @@ runner 本地的两种暂存，回滚和降级时这样处理：
   - runner 启动时，交回给它的空闲会话的暂存事件马上发出，不再等下一次领取；
   - 暂存分段读进内存后留在磁盘上，直到其中的事件全部存好；发送途中被强杀，下一个进程重发，服务端每个 seq 只存一次。
 - 回滚和降级时怎么处理这些文件，见 §11.4。
+
+### 15.9 守护进程漏在链路外的三个调用，已挪到链路上；runner 调用普查
+
+出处：34nb3xeq1s4tHra7apUWD（(b) 34mNe8DOyUq2wlk81EGlZ 测试时发现）。涉及 §4、§11.3、D14。
+
+- 2026-10-25 统计的 49 个路由只数了 runner-api 主控制器（RunnerApiController）。守护进程还发三个调用，由给 agent 工具用的控制器提供：链路不转（`RUNNER_LINK_ROUTE_NOT_ON_LINK`），runner 也一直走 HTTPS 发，开关打开后照样走 HTTPS。
+  - `POST /runner/cursor-key-check-result`：回报心跳交来的 Cursor 密钥检查。
+  - `POST /runner/sessions/:id/cursor-key-check`：会话启动前检查派发来的 Cursor 密钥，回报结果。
+  - 会话的后台任务在没有引擎时结束，提醒账号所有者：原来走 `POST /runner/notify`（`orbit notify` 和 MCP 的 notify 工具也走它），会话 id 放在 `X-Orbit-Session-Id` 头里，而链路调用不带请求头。
+- 现在三个都由 RunnerApiController 提供，runner 的 `linkDaemonRoutes` 也列了它们。前两个路径不变。后台任务的提醒改走守护进程自己的 `POST /runner/sessions/:id/notify`，会话 id 在路径里，和 `background-wake` 一样只接受分给这台 runner 的会话。`POST /runner/notify` 留给 agent 和 CLI，照旧走 HTTPS。
+- RunnerApiController 现在有 52 个路由：`RUNNER_LINK_REQUIRED` 打开时 47 个对 HTTPS 返回 426，注册的 3 个和附件的 2 个照常应答（§15.1）。
+- 开关关闭时：两个 Cursor 调用的请求和应答都和以前一样（同一路径、守卫和校验，应答里没有 id）。后台任务的提醒换了路由，推送的内容、标题和频率限制不变；只有会话已经不归这台 runner 时，以前照样推送，现在返回 403。
+- 部署顺序：apiserver 先于这一版 runner 上线，否则新 runner 的后台任务提醒会得到 404。打开开关之前，runner 要升级到这一版：更早的支持链路的版本仍走 HTTPS 发两个 Cursor 调用，开关打开后会收到 426，回报丢失。
+- 普查（runner-go 发出的每个 HTTPS 调用，2026-10-28，项目分支 54a61ed32）：
+  - 守护进程的控制面调用，链路在用时全部走链路。例外只有 D14 列的几项：取连接令牌（`POST /runner/link-token`，在链路建立之前）；自更新（`GET /runner/release`，链路下发了版本时不再调用；`/dl` 下的 `version.json` 和二进制）；附件（`GET /runner/sessions/:id/attachments/:id`、`POST /runner/sessions/:id/attachments`）。
+  - `orbit mcp`、CLI 和 Antigravity 审批钩子不是守护进程，没有自己的链路，都走 HTTPS，并用 `X-Orbit-Runner-Caller` 标明身份。它们用到的守护进程路由（审批、编排凭证续期、`GET /runner/me`、会话 meta 等），开关不拒绝（§15.1）。`orbit doctor` 检查开关时有意不带这个标记。
+  - 守护进程直接访问的外部服务不是控制面，不归链路管：Cursor、Kimi、Claude 的用量接口，Kimi 的令牌刷新，引擎版本检查，Cursor CLI 和 dsh 的下载。

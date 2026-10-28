@@ -50,6 +50,10 @@ const STACK = ['postgres', 'apiserver', 'apiserver-b', ...moreApiservers, 'link-
 // the loadgen stops, took up to 5% off a run's mean cores, by how the samples happened to fall (O2, 2026-10-26).
 const covering = samples.filter((s) => s.t >= steadyFrom - 6000 && s.t <= steadyTo + 6000);
 const insideUs = (from, to) => Math.max(0, Math.min(to, steadyTo) - Math.max(from, steadyFrom)) * 1000;
+// What a cgroup's counter added from one sample to the next. A container that restarted in between (an OOM kill, or a
+// kill and `docker start`) counts again from zero in a new cgroup of the same name: a value lower than the one before it
+// is what the new one counted, the old one's last moments unseen, as Prometheus' increase() takes a reset.
+const added = (from, to) => (to >= from ? to - from : to);
 function cpuSeries(key, field = 'cpuUsec') {
   const out = [];
   for (let i = 1; i < covering.length; i++) {
@@ -58,7 +62,7 @@ function cpuSeries(key, field = 'cpuUsec') {
     if (!a || !b) continue;
     const dt = (covering[i].t - covering[i - 1].t) * 1000;
     if (dt <= 0) continue;
-    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: (b[field] - a[field]) / dt, mem: b.memBytes });
+    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: added(a[field], b[field]) / dt, mem: b.memBytes });
   }
   return out;
 }
@@ -183,11 +187,23 @@ const others = [];
     // This test's own containers and its loadgen are named as such; everything else is what shared the host.
     const ours = new Map(Object.entries(run.containers ?? {}).map(([svc, c]) => [c.cgroup, svc]));
     ours.set(`c2-loadgen-${run.name}.scope`, 'loadgen');
+    // One of this test's containers that restarted in the window counts again from zero, so what it used is added up over
+    // each 15 s, as its 5 s samples are. What else ran on the host is read from the window's two ends.
+    const usedOver = (name) => {
+      let used = 0;
+      let prev = a[name];
+      for (const s of within) {
+        if (typeof s[name] !== 'number') continue;
+        used += added(prev, s[name]);
+        prev = s[name];
+      }
+      return used;
+    };
     let elsewhere = 0;
     for (const [name, end] of Object.entries(b)) {
       if (name === 't' || typeof a[name] !== 'number') continue;
-      const cores = (end - a[name]) / span;
       const svc = ours.get(name);
+      const cores = (svc ? usedOver(name) : end - a[name]) / span;
       if (!svc) elsewhere += cores;
       others.push({ name: svc ? `${name} (this test: ${svc})` : name, meanCores: round(cores, 2), ours: !!svc });
     }
@@ -217,10 +233,29 @@ function parseScrapes() {
 const scrapes = parseScrapes();
 const firstScrape = scrapes.filter((s) => s.t <= steadyFrom + 15_000).at(-1) ?? scrapes[0];
 const lastScrape = scrapes.filter((s) => s.t <= steadyTo + 15_000).at(-1) ?? scrapes.at(-1);
-const delta = (key) => (lastScrape?.values.get(key) ?? 0) - (firstScrape?.values.get(key) ?? 0);
+// A counter's increase from the first scrape to the last. A gateway that restarted in between (an OOM kill, a kill and
+// `docker start`) counts again from zero: a scrape whose link_gateway_start_time_seconds differs from the one before it
+// is a new process, and all it counted is added, as Prometheus' increase() takes a reset. Without a restart this is
+// the last value less the first, as before.
+const between = scrapes.slice(scrapes.indexOf(firstScrape), scrapes.indexOf(lastScrape) + 1);
+const startOf = (s) => s.values.get('link_gateway_start_time_seconds');
+const restarted = between.some((s, i) => i > 0 && startOf(s) !== startOf(between[i - 1]));
+const delta = (key) => {
+  if (!restarted) return (lastScrape?.values.get(key) ?? 0) - (firstScrape?.values.get(key) ?? 0);
+  let total = 0;
+  for (let i = 1; i < between.length; i++) {
+    const b = between[i].values.get(key) ?? 0;
+    total += startOf(between[i]) !== startOf(between[i - 1]) ? b : b - (between[i - 1].values.get(key) ?? 0);
+  }
+  return total;
+};
+// The series counted: the last scrape's, and after a restart those of the earlier processes too. A series appears at its
+// first count, so one that only an earlier process counted is not in the last scrape.
+const seriesKeys = new Set(lastScrape?.values.keys() ?? []);
+if (restarted) for (const s of between) for (const key of s.values.keys()) seriesKeys.add(key);
 const counterFamily = (family) => {
   const out = {};
-  for (const key of lastScrape?.values.keys() ?? []) {
+  for (const key of seriesKeys) {
     if (key.startsWith(family + '{') || key === family) {
       const d = delta(key);
       if (d !== 0) out[key.slice(family.length) || '_'] = d;
