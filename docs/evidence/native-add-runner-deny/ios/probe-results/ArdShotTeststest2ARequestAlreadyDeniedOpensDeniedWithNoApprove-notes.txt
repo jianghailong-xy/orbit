@@ -1,0 +1,10 @@
+denied-on-open-settings-row: in view after 0 drag(s) at (16.0, 326.0, 370.0, 52.0)
+denied-on-open-add: in view after 0 drag(s) at (16.0, 305.33333333333337, 370.0, 51.99999999999994)
+denied-on-open-code: in view after 0 drag(s) at (32.0, 585.3333129882812, 338.0, 22.66668701171875)
+denied-on-open: code field 49 label="Code" value="ABCD-1234" frame=(32.0, 585.3333129882812, 338.0, 22.66668701171875) hittable=true
+denied-on-open: in view after 0 drag(s) at (32.0, 762.3333333333334, 338.0, 33.66666666666663)
+denied-on-open-dark-settings-row: in view after 0 drag(s) at (16.0, 326.0, 370.0, 52.0)
+denied-on-open-dark-add: in view after 0 drag(s) at (16.0, 305.33333333333337, 370.0, 51.99999999999994)
+denied-on-open-dark-code: in view after 0 drag(s) at (32.0, 585.3333129882812, 338.0, 22.66668701171875)
+denied-on-open-dark: code field 49 label="Code" value="ABCD-1234" frame=(32.0, 585.3333129882812, 338.0, 22.66668701171875) hittable=true
+denied-on-open-dark: in view after 0 drag(s) at (32.0, 762.3333333333334, 338.0, 33.66666666666663)
