@@ -193,7 +193,7 @@ func (d *driver) loginResult(body map[string]any) (string, error) {
 
 // codeHandedOver is the step that collects the pasted code: once, for the attempt.
 func (d *driver) codeHandedOver(secrets relaySecrets, attempt string, within time.Duration) bool {
-	return d.step("a heartbeat, forwarded to a process that does not hold the code, hands it over for its attempt", func() (string, error) {
+	return d.step("a heartbeat, forwarded to an apiserver the gateway picks, hands the code over for its attempt", func() (string, error) {
 		started := time.Now()
 		a, beats, err := d.relayBeatUntil(within, func(a beatAnswer) bool { return a.LoginRequest != nil && a.LoginRequest.Action == "code" })
 		if err != nil {
@@ -261,7 +261,7 @@ func (d *driver) relayDrill(ctx context.Context, o drillOptions) {
 		done <- c
 	}()
 	var checkID string
-	if !d.step("the owner checks a Cursor key through the web API; a heartbeat, forwarded to a process that does not hold it, hands it over", func() (string, error) {
+	if !d.step("the owner checks a Cursor key through the web API; a heartbeat, forwarded to an apiserver the gateway picks, hands it over", func() (string, error) {
 		started := time.Now()
 		a, beats, err := d.relayBeatUntil(20*time.Second, func(a beatAnswer) bool { return len(a.CursorKeyChecks) > 0 })
 		if err != nil {
