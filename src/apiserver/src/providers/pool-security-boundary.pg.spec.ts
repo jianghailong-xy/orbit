@@ -8,7 +8,8 @@
  *      and what is asserted is what each door RESOLVED: the row it wrote or did not write, the
  *      environment it handed out. Never the wording of a refusal.
  *  (C) No browser-visible providers or pool payload carries a credential. Every route the providers
- *      controllers declare is called, refusals included, and no body holds `sk-ant`, a stored
+ *      controllers declare is called, refusals included — and the two a runner answers about a Cursor key
+ *      on, which RunnerApiController serves since ed4fe4b22 — and no body holds `sk-ant`, a stored
  *      ciphertext or a key field. The owner's own reveal route, which exists to return a key, is the
  *      positive control that shows the check can see one. A person the owner added to a pool of her
  *      ChatGPT accounts (migration 0358) reads those accounts — since 2026-10-03 they run their sessions
@@ -70,19 +71,26 @@ import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from '../common/workspace-alias.interceptor';
+import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestration-authorizer';
 import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { ListEventsService } from '../task-lists/list-events.service';
+import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
@@ -302,6 +310,19 @@ function routesOf(...controllers: Array<new (...args: never[]) => unknown>): str
   });
 }
 
+/**
+ * The two routes a runner answers about a Cursor key on. They were RunnerProvidersController's until ed4fe4b22 moved them
+ * onto RunnerApiController, so that they go over the runner link, with their paths, guard and answers unchanged.
+ */
+const CURSOR_KEY_ANSWERS = ['POST runner/sessions/:id/cursor-key-check', 'POST runner/cursor-key-check-result'];
+
+/** Every route (C) sweeps: those the providers controllers declare, and CURSOR_KEY_ANSWERS where they are served now. */
+function providerRoutes(): string[] {
+  const served = routesOf(RunnerApiController);
+  assert.deepEqual(CURSOR_KEY_ANSWERS.filter((route) => !served.includes(route)), [], 'Cursor key answers RunnerApiController no longer serves');
+  return [...routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController), ...CURSOR_KEY_ANSWERS];
+}
+
 /** The tables holding any of this spec's keys in the clear, read row by row as text. */
 async function tablesHoldingAKey(client: Client): Promise<string[]> {
   const { rows: tables } = await client.query<{ name: string }>(
@@ -339,7 +360,9 @@ const doorsOver: {
 };
 
 @Module({
-  controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController],
+  // RunnerApiController for the two routes a runner answers about a Cursor key on (CURSOR_KEY_ANSWERS), which serves
+  // them since ed4fe4b22 moved them off RunnerProvidersController and onto the runner link.
+  controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController, RunnerApiController],
   providers: [
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
     // The ChatGPT sign-in's own controller dependency (migration 0323). The REAL service: (C) sweeps
@@ -352,6 +375,18 @@ const doorsOver: {
     // A DeepSeek key's account balance, read with the stored key — the REAL service, for the same reason.
     { provide: DeepSeekBalanceService, useFactory: () => doorsOver.balances },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
+    // The rest of what RunnerApiController is built with. Neither of its two routes reaches any of it: what a runner
+    // answers about a Cursor key is kept by ProvidersService, the REAL one above.
+    { provide: QueueService, useValue: {} },
+    { provide: RealtimeService, useValue: {} },
+    { provide: PushService, useValue: {} },
+    { provide: RunnerOrchestrationAuthorizer, useValue: {} },
+    { provide: ReferenceExpansionService, useValue: {} },
+    { provide: ListEventsService, useValue: {} },
+    { provide: AttemptBudgetMeterService, useValue: {} },
+    { provide: ProjectAcceptanceService, useValue: {} },
+    { provide: TasksService, useValue: {} },
+    { provide: MergeReceiptService, useValue: {} },
     JwtAuthGuard,
     AdminRoleGuard,
     RunnerAuthGuard,
@@ -1282,9 +1317,9 @@ exec sleep 300
       await ask(runner, 'PATCH', 'runner/providers/:slug', { slug: pool.slug }, { label: 'Renamed' }, 404);
       await ask(runner, 'DELETE', 'runner/providers/:slug', { slug: pool.slug }, undefined, 404);
       // A runner's answer about the Cursor key a session of its own runs on, about no session of theirs:
-      // refused before anything is read.
+      // refused before anything is read. RunnerApiController's route, as is the next (CURSOR_KEY_ANSWERS).
       await ask(runner, 'POST', 'runner/sessions/:id/cursor-key-check', { id: randomUUID() }, { state: 'VALID', keyFingerprint: '0123456789abcdef' }, 403);
-      // A runner's answer to a Cursor key check nobody handed it: it settles nothing.
+      // A runner's answer to a Cursor key check nobody handed it: it settles nothing (checked after the sweep).
       await ask(runner, 'POST', 'runner/cursor-key-check-result', {}, { checkId: '0'.repeat(32), state: 'VALID', keyFingerprint: '0123456789abcdef' }, 200);
 
       // What each of them makes of their own.
@@ -1402,7 +1437,11 @@ exec sleep 300
     );
     // Each was the answer its request should get, and each of them asked every route there is.
     assert.deepEqual([...asked.person, ...asked.owner].filter((answer) => answer.status !== answer.expected).map(statusOf), []);
-    const declared = routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController);
+    // The answer to a Cursor key check nobody handed their runner accepted nothing, for either of them.
+    for (const who of ['person', 'owner'] as const) {
+      assert.deepEqual(answered(who, 'POST', 'runner/cursor-key-check-result'), { accepted: false }, `the ${who}'s runner settled a check nobody handed it`);
+    }
+    const declared = providerRoutes();
     for (const who of ['person', 'owner'] as const) {
       const swept = new Set(asked[who].map((answer) => `${answer.method} ${answer.route}`));
       assert.deepEqual(declared.filter((route) => !swept.has(route)), [], `routes the ${who} never asked`);
@@ -1410,7 +1449,7 @@ exec sleep 300
   });
 
   await t.test('(C) …and those responses are every route the providers controllers declare', () => {
-    const declared = routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController);
+    const declared = providerRoutes();
     assert.ok(declared.length >= 18, `read only ${declared.length} routes off the controllers`);
     const swept = new Set(answers.map((answer) => `${answer.method} ${answer.route}`));
     assert.deepEqual(

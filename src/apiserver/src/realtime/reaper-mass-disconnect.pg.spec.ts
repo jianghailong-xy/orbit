@@ -22,11 +22,19 @@
  *
  * Throughout, the lock stays with the process that took it, and the other process's reaper says nothing.
  *
- *   RUN_PG_SPEC_TIMEOUT=2700 bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts
+ * By default only (1) runs, as a smoke of the cell: about 5 minutes, most of it the reaper's startup grace, inside the
+ * 600 s a spec gets from scripts/run-pg-spec.sh and from CI's pg shards (scripts/project-pg-matrix.sh). (2) to (5) take
+ * about 20 minutes more on the clock and run only when REAPER_MASS_DISCONNECT_CASES names them. Every case, about 25
+ * minutes:
  *
- * About 25 minutes on the clock. REAPER_MASS_DISCONNECT_CASES names the cases to run (default 1,2,3,4,5): `2,3` is the
- * control against a reaper that reaps the late runners of a reconnection. Not destructive: every row belongs to the user
- * this run creates, on the disposable database the script creates.
+ *   REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 \
+ *     bash scripts/run-pg-spec.sh src/apiserver/src/realtime/reaper-mass-disconnect.pg.spec.ts
+ *
+ * A case left out is not registered at all, because both harnesses count a skipped case as red. `2,3` is the control
+ * against a reaper that reaps the late runners of a reconnection, and REAPER_MASS_DISCONNECT_SEED repeats a run's return
+ * times (the run prints its seed). The rules the cases hold are reaper-silence-hold.spec.ts's too, on a clock of its own,
+ * in every CI run. scripts/runner-link/README.md says the same. Not destructive: every row belongs to the user this run
+ * creates, on the disposable database the script creates.
  */
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
@@ -56,7 +64,8 @@ const SWEEP_SLACK = 5 * SECOND;
 const FLEET = 24;
 const GATEWAY_TOKEN = `reaper-mass-disconnect-gateway:${randomBytes(24).toString('hex')}`;
 const PROVIDERS = 'claude';
-const CASES = new Set((process.env.REAPER_MASS_DISCONNECT_CASES ?? '1,2,3,4,5').split(',').map((c) => c.trim()));
+/** The cases to run: (1) alone unless REAPER_MASS_DISCONNECT_CASES names others, which take about 20 minutes more. */
+const CASES = new Set((process.env.REAPER_MASS_DISCONNECT_CASES ?? '1').split(',').map((c) => c.trim()));
 /** The schedule's seed, printed, so that a run can be repeated. */
 const SEED = Number(process.env.REAPER_MASS_DISCONNECT_SEED ?? Date.now() % 1_000_000);
 
@@ -152,6 +161,9 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   const db: PrismaClient = prismaClientFor(url);
   const random = prng(SEED);
   t.diagnostic(`seed ${SEED}`);
+  if (process.env.REAPER_MASS_DISCONNECT_CASES === undefined) {
+    t.diagnostic('case (1) alone, the smoke: REAPER_MASS_DISCONNECT_CASES=1,2,3,4,5 RUN_PG_SPEC_TIMEOUT=2700 runs every case');
+  }
 
   // ── the cell's two apiservers, the runner link on in both ───────────────────────────────────────────────────────
   const { privateKey } = generateKeyPairSync('ed25519');
