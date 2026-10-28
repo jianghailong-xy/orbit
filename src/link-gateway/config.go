@@ -293,6 +293,12 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("LINK_EVENT_MERGE_MAX_BATCHES=%d is more than the %d batches the apiserver takes in one call", c.link.Merge.MaxBatches, maxMergeBatches))
 	}
 	c.link.Merge.MaxBytes = integer("LINK_EVENT_MERGE_MAX_BYTES", c.link.Merge.MaxBytes)
+	// The merged calls out at once to each apiserver LINK_INTERNAL_API_URLS names: the gateway's grow with them.
+	c.link.Merge.CallsPerBackend = integer("LINK_EVENT_MERGE_CALLS_PER_BACKEND", c.link.Merge.CallsPerBackend)
+	if c.link.Merge.CallsPerBackend > mergeMaxCallsPerBackend {
+		problems = append(problems, fmt.Sprintf("LINK_EVENT_MERGE_CALLS_PER_BACKEND=%d is more than %d: each merged call holds one of its apiserver's 10 database connections, which its other calls need too",
+			c.link.Merge.CallsPerBackend, mergeMaxCallsPerBackend))
+	}
 	// The ingest queue's bound (events.go); the high- and low-water marks of the credit are half and a quarter of it.
 	c.link.MaxQueued = creditLevel{
 		Events: uint32(min(integer("LINK_INGEST_QUEUE_MAX_EVENTS", int(defaultMaxQueued.Events)), 1<<31)),
