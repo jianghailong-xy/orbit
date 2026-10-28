@@ -5521,7 +5521,7 @@ export class RunnerApiController {
       });
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
-      void this.push.notifyApprovalRequest(sessionId, approval.toolName);
+      void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }

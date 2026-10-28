@@ -589,7 +589,7 @@ arithmetic, and how to repeat both.
 | Part | For a cell | What it carries at the peak |
 | --- | --- | --- |
 | Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | 5,000 connections each, 7,500 with one node down (about 1.4 GB of connections); about 0.4 cores across the cell |
-| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 41% busy, 54% with one of them down. The first one also takes people's requests and the live relay, which at a cell's full live load it cannot carry (see below). |
+| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 41% busy, 54% with one of them down. The live relay adds about 0.4 cores, spread too: 52% busy, 70% with one down (see below). The first one also takes people's other requests. |
 | Database | 8 cores, 32 GB of memory, its own fast disk | 4.2 cores at its 10-second peak, 53% of its cores |
 | NATS | 1 node, 1 core | Hints, and the live stream |
 
@@ -615,20 +615,18 @@ arithmetic, and how to repeat both.
   - a managed database whose failover keeps every acknowledged commit.
 
   Keep the standby near, since every commit that writes events waits for it.
-- **The live relay** is an order-of-magnitude estimate. Every run that could have measured it cleanly on the test host
-  was voided by the host's swapping, so the estimate comes from the void runs.
-  - **Its cost.** Each delta forwarded to a watcher costs about 0.04 ms of apiserver CPU, which comes to 0.4 cores at
-    10,000 a second. It lands on the apiserver that holds the watchers' session streams, and the web gateway sends those
-    to the first apiserver. Each delta reached its watcher about 105 ms after it was produced (p99): two 50 ms
-    gatherings, the runner's and the stream's.
-  - **Its consequence.** With its share of the runners' calls on top, the first apiserver's main thread would be about
-    87% busy at the peak. As streams reach it now, the first apiserver does not carry a cell's full live load.
-  - **The ways out.** Spread the session streams over every apiserver: a web-gateway route the deployment does not have
-    yet, with which four processes carry everything at 52%, 70% with one down. Or take the first apiserver out of
-    `LINK_INTERNAL_API_URLS` once the sign-in hand-overs under [Several apiservers](#several-apiservers) no longer
-    need its heartbeats.
-- **Not measured here:** people's own requests (web, apps, their streams), which go to the first apiserver; and what each
-  apiserver's own background work costs the database. Each process's figures leave room for them.
+- **The live relay** is spread over every apiserver, with the session streams it feeds (the web gateway's routes under
+  [Several apiservers](#several-apiservers)).
+  - **Its cost** is an order-of-magnitude estimate: every run that could have measured it cleanly on the test host was
+    voided by the host's swapping. Each delta forwarded to a watcher costs about 0.04 ms of CPU on the apiserver that
+    holds the session's streams, which comes to 0.4 cores at 10,000 a second. Each delta reached its watcher about
+    105 ms after it was produced (p99): two 50 ms gatherings, the runner's and the stream's.
+  - **Why it is spread.** On one apiserver it does not fit. With every stream on the first apiserver, its main thread
+    would be about 87% busy at the peak, with its share of the runners' calls. A test on a slower host measured it: at
+    a cell's live rate, the first apiserver's main thread was 98% busy and the others' about 40%. Every delta still
+    reached its watcher, but the other work of that process waited, the link tokens it alone signed among it.
+- **Not measured here:** people's own requests (web and apps), which go to the first apiserver, their session streams
+  apart; and what each apiserver's own background work costs the database. Each process's figures leave room for them.
 
 ### Several apiservers
 
@@ -637,14 +635,28 @@ calls over several apiservers. It sends each call, whether a request, a heartbea
 apiserver in `LINK_INTERNAL_API_URLS`. A call that is safe to send again goes to the next apiserver when one cannot be
 reached.
 
-The web gateway keeps sending people's requests to the first apiserver. A Codex "Sign in with ChatGPT" runs its
-sign-in in the process that started it, so all of one person's requests must reach that same process.
+The web gateway sends two kinds of request to every apiserver, once the deployment mounts its routes for several
+apiservers (below):
+
+- **Session streams** (`GET /api/sessions/:id/events`, the transcript a person watches as it is written), by session.
+- **Link tokens** (`POST /api/runner/link-token`), to the apiserver with the fewest requests in flight. A runner asks for
+  one when it connects and about once an hour after, and every runner asks at once when they all restart after a
+  release.
+
+It sends everything else a person does to the first apiserver. A Codex "Sign in with ChatGPT" runs its sign-in in the
+process that started it, so all of one person's other requests must reach that same process.
+
+**Only where the link carries the runners' work.** Run several apiservers in a cell whose runners work over the
+[runner link](#runner-link), with `RUNNER_LINK_REQUIRED` on. A runner that works over HTTPS posts the deltas of its
+replies to the first apiserver, which hands them to its own streams alone. A stream on another apiserver then shows
+that runner's replies only as each one is stored, not as it is written. Until the switch is on, the link gateway runs
+in shadow and forwards nothing, so the other apiservers would carry no runner calls anyway.
 
 Add the other apiservers in `docker-compose.override.yml` beside `docker-compose.yml`. Compose reads the file with
 every command run in the checkout:
 
 ```yaml
-# docker-compose.override.yml: a second apiserver for the runner link's calls (docs/self-hosting.md, "Several apiservers").
+# docker-compose.override.yml: a second apiserver (docs/self-hosting.md, "Several apiservers").
 services:
   apiserver-2:
     extends:
@@ -657,27 +669,68 @@ services:
         condition: service_healthy
       apiserver:
         condition: service_healthy
+  gateway:
+    volumes:
+      - ./gateway/several-apiservers:/etc/nginx/several-apiservers:ro
   link-gateway:
     environment:
       LINK_INTERNAL_API_URLS: "http://apiserver:${RUNNER_LINK_INTERNAL_PORT:-3001},http://apiserver-2:${RUNNER_LINK_INTERNAL_PORT:-3001}"
 ```
 
-- **`extends`** gives `apiserver-2` the first apiserver's whole definition: its image, environment, mounts and health
-  check. It builds nothing and runs the image the first one builds.
+- **`extends`** gives `apiserver-2` the first apiserver's whole definition: its image, environment, mounts, network
+  name and health check. It builds nothing and runs the image the first one builds.
 - **Migrations.** It starts only once the first apiserver is healthy. So the first applies any pending migrations, and
   the second finds none: its log says `No pending migrations to apply`.
-- **No name the web gateway uses.** `apiserver` still resolves to the first apiserver alone. `apiserver-2` is reached
-  only by the link gateway, which `LINK_INTERNAL_API_URLS` lists it to.
+- **The web gateway's routes** are the two files in `gateway/several-apiservers/`. `gateway/nginx.conf` includes them
+  only where that directory is mounted, so a deployment that does not mount it sends every request to the first
+  apiserver. They reach the apiservers by `orbit-apiservers`, a name that `docker-compose.yml` gives the apiserver and
+  that `apiserver-2` takes with the rest of its definition. The web gateway looks the name up every 10 seconds.
+  `apiserver` still names the first apiserver alone.
 - **More apiservers.** For a third and more, repeat the `apiserver-2` block as `apiserver-3` and on, and add each one
-  to `LINK_INTERNAL_API_URLS`. Keep the first apiserver in the list.
+  to `LINK_INTERNAL_API_URLS`. Keep the first apiserver in the list. The web gateway finds them by their shared name.
 
-Start the new apiservers, and recreate the link gateway so that it reads the new list:
+**The routes need nginx 1.27.3 or later in the web gateway.** They use upstream `resolve`, which older versions do
+not have, and an nginx that cannot read its configuration does not start: the gateway would serve nothing. A deployment
+keeps the `nginx:alpine` image it first pulled, since upgrades refresh it only with `--pull-base`. So check the version
+before you add the gateway's lines, and pull a newer image if it is older:
 
 ```bash
-docker compose up -d --wait apiserver-2 link-gateway
-docker compose ps apiserver apiserver-2 link-gateway
+docker compose exec gateway nginx -v      # nginx version: nginx/1.27.3 or later
+docker compose pull gateway
+```
+
+An older nginx refuses the routes with `"resolver" directive is not allowed here`. `gateway/nginx.conf` alone loads on
+any version.
+
+Start the new apiservers, and recreate both gateways so that they read the new settings:
+
+```bash
+docker compose up -d --wait apiserver-2 link-gateway gateway
+docker compose ps apiserver apiserver-2 link-gateway gateway
 docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls are served'
 ```
+
+**How the session streams are spread:**
+
+- **By session.** The web gateway hashes the session's id in the stream's address, so all of one session's streams,
+  from every tab and device, reach one apiserver while the set of apiservers stays the same. That apiserver alone
+  subscribes to the session's live stream on NATS and relays its deltas. The apps address a session by its public id;
+  a stream addressed by its UUID can reach another apiserver, which costs that apiserver a subscription of its own.
+- **When the set changes.** When an apiserver is added or stops, some sessions move to another apiserver, each when its
+  stream next connects. A stream already open stays where it is.
+- **When an apiserver stops.** Its streams end, and the clients open them again on the others: the web gateway gives up
+  on the stopped one after 2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and
+  the deltas go on.
+- **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
+  healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
+  later.
+- **Who watches.** Each apiserver tells the link gateway how many streams it has of each session, and the gateway adds
+  the counts up. The count of an apiserver that stopped lapses after 60 seconds.
+
+**Turning the switch off.** Before turning `RUNNER_LINK_REQUIRED` off, put every session stream back on the first
+apiserver, where runners that go back to HTTPS post their deltas. Either remove the gateway's lines from
+`docker-compose.override.yml` and run `docker compose up -d gateway`, or stop the other apiservers with
+`docker compose stop apiserver-2`. Then turn the switch off ([the design's rollback](runner-link-design.md#114-回滚)).
 
 This was tested with Docker Compose v5.5.1. Versions have treated `extends` from a service with `depends_on`
 differently. `docker compose config apiserver-2` should list both `postgres` and `apiserver` under its `depends_on`.
@@ -693,6 +746,10 @@ several processes they repeat work but do nothing twice:
 - watches, open items and managed runners;
 - scheduled wakeups and session requests;
 - mentions and claims.
+
+**Recaps, approval alerts and agents' notifications** are decided on the database rows they are about, not in the
+memory of the apiserver that took the call. So with several apiservers, a session's recap still asks its model once per two-minute
+window, one turn's tool approvals ring the owner's phone once, and an agent's `notify` rings it at most once a minute.
 
 **The reaper, the task scheduler's sweep and the auto-retry sweep** run in one apiserver at a time:
 

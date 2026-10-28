@@ -111,17 +111,23 @@ test('approval push is suppressed when completion wins the race', async () => {
   };
   const service = new PushService(prisma as any, enabledConfig());
   (service as any).needsYouSessions = async () => [];
+  let claims = 0;
+  (service as any).claimApprovalAlert = async () => {
+    claims += 1;
+    return true;
+  };
   (service as any).deliver = async () => {
     deliveries += 1;
   };
 
-  await service.notifyApprovalRequest('s-completed', 'Bash');
+  await service.notifyApprovalRequest('s-completed', 'a-1', 'Bash');
 
   assert.equal(tokenQueries, 0);
+  assert.equal(claims, 0, 'a session that no longer needs you takes no edge');
   assert.equal(deliveries, 0);
 });
 
-test('a second approval on an already-flagged session does not alert again', async () => {
+test('an approval alerts only when its session row claims the 0 → pending edge', async () => {
   const bodies: string[] = [];
   const prisma = {
     session: {
@@ -138,18 +144,29 @@ test('a second approval on an already-flagged session does not alert again', asy
   (service as any).deliver = async (_t: unknown, body: string) => {
     bodies.push(body);
   };
+  // The edge is the session row's, held against PostgreSQL in push-claims.pg.spec.ts; modelled here
+  // as a stretch the first of its approvals claims and the rest find taken.
+  const claims: string[][] = [];
+  const rung = new Set<string>();
+  (service as any).claimApprovalAlert = async (sessionId: string, approvalId: string) => {
+    claims.push([sessionId, approvalId]);
+    if (rung.has(sessionId)) return false;
+    rung.add(sessionId);
+    return true;
+  };
 
   // Parallel tool calls in one turn: an approval apiece, all on the same session.
-  await service.notifyApprovalRequest('s-1', 'Bash');
-  await service.notifyApprovalRequest('s-1', 'Write');
-  await service.notifyApprovalRequest('s-1', 'Edit');
+  await service.notifyApprovalRequest('s-1', 'a-1', 'Bash');
+  await service.notifyApprovalRequest('s-1', 'a-2', 'Write');
+  await service.notifyApprovalRequest('s-1', 'a-3', 'Edit');
 
+  assert.deepEqual(claims, [['s-1', 'a-1'], ['s-1', 'a-2'], ['s-1', 'a-3']], 'each approval asks the row');
   assert.equal(bodies.length, 1);
   assert.match(bodies[0], /Needs your reply · Bash/);
 
   // A different session needing you is its own interruption and still alerts.
   (service as any).needsYouSessions = async () => ['s-1', 's-2'];
-  await service.notifyApprovalRequest('s-2', 'Bash');
+  await service.notifyApprovalRequest('s-2', 'b-1', 'Bash');
   assert.equal(bodies.length, 2);
   assert.equal(JSON.parse(bodies[1]).aps.badge, 2);
 });
@@ -292,7 +309,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
   };
   const service = new PushService(prisma as any, enabledConfig());
 
-  await service.notifyApprovalRequest('s-completed', 'Bash');
+  await service.notifyApprovalRequest('s-completed', 'a-1', 'Bash');
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
@@ -306,7 +323,12 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
 // ── notifyAgentMessage ─────────────────────────────────────────────────────
 
-/** A PushService whose delivery is captured, wired to one session with one registered device. */
+/**
+ * A PushService whose delivery is captured, wired to one session with one registered device. The
+ * once-a-minute limit lives on the rows (a session's agentNotifiedAt, the account's for a headless
+ * call), modelled here with the compare-and-set `claimAgentNotify` sends; `beforeClaim` runs between
+ * the service's read and its claim, where a call on another apiserver can land.
+ */
 function agentNotifyHarness(opts: {
   session?: Record<string, unknown> | null;
   preferences?: Record<string, unknown>;
@@ -314,9 +336,30 @@ function agentNotifyHarness(opts: {
   devices?: number;
 } = {}) {
   const sent: string[] = [];
+  const rang = { sessions: new Map<string, Date>(), account: null as Date | null, beforeClaim: () => {} };
+  // The statement's own predicate: never rang, or rang at least the interval before the claim's clock.
+  const free = (last: Date | null | undefined, where: any) => !last || last <= where.OR[1].agentNotifiedAt.lte;
   const prisma = {
-    session: { findFirst: async () => (opts.session === undefined ? { title: 'Fix the login bug' } : opts.session) },
-    user: { findUnique: async () => ({ preferences: opts.preferences ?? {} }) },
+    session: {
+      findFirst: async (q: any) => (opts.session === undefined
+        ? { title: 'Fix the login bug', agentNotifiedAt: rang.sessions.get(q.where.id) ?? null }
+        : opts.session),
+      updateMany: async ({ where, data }: any) => {
+        rang.beforeClaim();
+        if (!free(rang.sessions.get(where.id), where)) return { count: 0 };
+        rang.sessions.set(where.id, data.agentNotifiedAt);
+        return { count: 1 };
+      },
+    },
+    user: {
+      findUnique: async () => ({ preferences: opts.preferences ?? {}, agentNotifiedAt: rang.account }),
+      updateMany: async ({ where, data }: any) => {
+        rang.beforeClaim();
+        if (!free(rang.account, where)) return { count: 0 };
+        rang.account = data.agentNotifiedAt;
+        return { count: 1 };
+      },
+    },
     deviceToken: {
       findMany: async () => opts.tokens ?? [{ token: 'device', environment: 'sandbox' }],
     },
@@ -327,7 +370,7 @@ function agentNotifyHarness(opts: {
     sent.push(body);
     return opts.devices ?? 1;
   };
-  return { service, sent };
+  return { service, sent, rang };
 }
 
 const agentInput = { ownerId: 'owner-1', sessionId: 's-1', fallbackTitle: 'runner-a', message: 'x' };
@@ -391,6 +434,40 @@ test('a different session is not blocked by another session having just alerted'
   // The limit protects the person from one runaway run, not from having several runs.
   assert.equal(other.delivered, true);
   assert.equal(sent.length, 2);
+});
+
+test('a ring recorded since the read, on another apiserver or through the other door, refuses this one', async () => {
+  const { service, sent, rang } = agentNotifyHarness();
+  // Another call for the same session lands between this one's read and its claim.
+  rang.beforeClaim = () => {
+    if (!rang.sessions.has('s-1')) rang.sessions.set('s-1', new Date(Date.now() - 15_500));
+  };
+
+  const result = await service.notifyAgentMessage(agentInput);
+
+  assert.deepEqual(result, { delivered: false, reason: 'rate limited — try again in 45s' });
+  assert.equal(sent.length, 0, 'the call that lost the claim rings nobody');
+});
+
+test('a headless notify has the account\'s own once-a-minute turn, apart from every session\'s', async () => {
+  const { service, sent, rang } = agentNotifyHarness();
+  const headless = { ownerId: 'owner-1', fallbackTitle: 'runner-a', message: 'Nightly backup finished' };
+
+  assert.equal((await service.notifyAgentMessage(headless)).delivered, true);
+  assert.ok(rang.account instanceof Date, 'kept on the account row');
+  const again = await service.notifyAgentMessage(headless);
+  assert.equal(again.delivered, false);
+  assert.match(again.reason ?? '', /rate limited/);
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true, 'a session is not held by it');
+  assert.equal(sent.length, 2);
+});
+
+test('a session that rang a minute ago or more may ring again', async () => {
+  const { service, sent, rang } = agentNotifyHarness();
+  rang.sessions.set('s-1', new Date(Date.now() - 60_000));
+
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(sent.length, 1);
 });
 
 test('the owner can turn agent notifications off on their own', async () => {

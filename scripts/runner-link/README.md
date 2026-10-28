@@ -24,11 +24,13 @@ be taken for a deployment's.
 | `gen-event-kind-fixtures.mjs` | Regenerate `src/runner-go/testdata/b8-link-events.json` from the apiserver's event rules: `isNoiseSystemEvent`, the live-only types and the coordinator-context boundary subtypes, which the runner's link event stream mirrors. |
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
-| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
+| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). `loadgen-report.test.mjs` tests it on synthetic runs: `node --test scripts/runner-link/`. |
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
 | `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
 | `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task O3's inputs are `cell-inputs.json`. See [The cell's size](#the-cells-size). |
-| `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
+| `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
+| `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
+| `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, an apiserver killed and started again, and a gateway started before any apiserver (502 until its next look-up, 10 s later). A Compose project of its own, removed at the end; no staging stack needed. |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -68,6 +70,7 @@ else the default:
 | `ORBIT_LINK_STAGING_DB_CPUS` | `0` | With `LOADGEN=1`, the database's CPU allocation (Compose `cpus`), the capacity a load test's database CPU is a share of. `0` is unlimited. |
 | `ORBIT_LINK_STAGING_DB_MEM` | `4g` | With `LOADGEN=1`, the database's memory limit (Compose `mem_limit`): room for the cache a cell-scale run needs. |
 | `ORBIT_LINK_STAGING_INGEST_RATE` | `off` | The link gateway's `LINK_DRILL_INGEST_RATE`: the durable events a second it forwards at most, so that a load test's runners send faster than the events are stored and the gateway's ingest queue fills to its bound ([Durable events and credit](../../src/link-gateway/README.md#durable-events-and-credit)). `off` forwards them as they come. Changing it recreates only the gateway. |
+| `ORBIT_LINK_STAGING_SPREAD` | `0` | `1` adds `staging.spread.compose.yml`: the web gateway mounts `gateway/several-apiservers/`, as a deployment with several apiservers does ([docs/self-hosting.md](../../docs/self-hosting.md#several-apiservers)), and sends session streams, by session, and link tokens to every apiserver. `0` sends every request to the first apiserver, as a deployment with one does, which the relay check relies on. Changing it recreates only the web gateway. |
 | `ORBIT_LINK_STAGING_MERGE_WINDOW` | `default` | The link gateway's `LINK_EVENT_MERGE_WINDOW`: how long an event batch waits for others, from any connection, to go with it in one merged call ([events_merge.go](../../src/link-gateway/events_merge.go)). `default` is the gateway's own (100 ms); `0` forwards every batch alone, as before merging, which is what a load test compares against. Changing it recreates only the gateway. |
 | `ORBIT_LINK_STAGING_MERGE_CALLS` | `default` | The link gateway's `LINK_EVENT_MERGE_CALLS_PER_BACKEND`: how many merged calls may be out at once to each apiserver, 1 to 8, so that the gateway has that many times `ORBIT_LINK_STAGING_BACKENDS` out ([Merged calls](../../src/link-gateway/README.md#merged-calls)). `default` is the gateway's own (4); `1` with four apiservers is the four calls out that every gateway had before they grew with the apiservers. Changing it recreates only the gateway. |
 
@@ -91,9 +94,15 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 - **A real runner.** Build the runner from the checkout under test and register it with the enrollment token in
   `secrets/enrollment_token`, against `http://127.0.0.1:18086`. A runner that dials the link trusts the staging CA through
   `SSL_CERT_FILE=<state>/tls/ca-bundle.pem`.
-- **A gateway release.** Run `docker compose kill -s TERM` on `<project>-link-gateway`, or simply
-  `docker kill -s TERM <project>-link-gateway`. The gateway drains and exits, and its restart policy starts it again.
-  Run `staging-client.sh -until-drains 1` beforehand to see a runner drained and reconnected.
+- **A gateway release.** Run `docker kill -s TERM <project>-link-gateway`: the gateway drains and exits. Wait for it to
+  exit (`docker wait <project>-link-gateway`), then start it again with `docker start <project>-link-gateway`; its
+  restart policy will not. Run `staging-client.sh -until-drains 1` beforehand to see a runner drained and reconnected.
+  Docker takes a `docker kill` or `docker compose kill`, with TERM or KILL, for a stop someone asked for, and
+  `restart: unless-stopped` leaves such a container stopped until it is started (Docker 29.9.2 in task C2b, 29.8.2 on
+  HPC). The policy starts a container again only when its process ended without Docker being asked, as an OOM kill ends
+  it (started again in 0.39–0.57 s in C2b). To drill that, signal the gateway's process from the host as root (its image
+  has no shell to do it from inside), with TERM, or KILL for a crash:
+  `kill -s TERM "$(docker inspect -f '{{.State.Pid}}' <project>-link-gateway)"`.
 - **A certificate rotation.** Run `staging-up.sh --rotate-cert --no-build`. The gateway loads the new certificate within
   30 seconds, without a restart. The serial in its log and `link_tls_certificate_not_after_timestamp_seconds` show it.
 - **A revocation.** Rotate the probe runner's token (`POST /api/runners/<id>/rotate-token` as the owner). The gateway
@@ -138,11 +147,15 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
   (`db.jsonl`), its statements (`pgss.json`, the 60 with the most time, after `pg_stat_statements_reset()` at the start;
   `pgss-totals.json`, every statement's calls) and sizes; each apiserver's node process every 5 s, its CPU time as a
-  whole and its main thread's (`threads.jsonl`, since task O3); and each container's log over the run (`logs/`).
+  whole and its main thread's (`threads.jsonl`, since task O3); NATS's clients every 5 s, with what each was delivered
+  and the sessions' live streams each apiserver subscribes to (`nats.jsonl`, read into `streams.md`); and each
+  container's log over the run (`logs/`).
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
   gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
-  highest 10 s average of its container's CPU time, as a share of `ORBIT_LINK_STAGING_DB_CPUS` when set.
+  highest 10 s average of its container's CPU time, as a share of `ORBIT_LINK_STAGING_DB_CPUS` when set. A gateway
+  that restarts in the window (an OOM kill, a drill) counts again from zero, its container's CPU time too: the report
+  adds up what each process counted.
 - **On a shared host**, the loadgen runs in a scope of its own (`systemd-run`), and the run stops itself when the
   host's available memory stays under `LOADGEN_MIN_AVAILABLE_MB` (800) for 15 s. The report's host section says what
   else used the CPUs and how long the stack's containers waited for one (CPU pressure).
@@ -161,6 +174,7 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 | `loadgen-run.sh` | `LOADGEN_MIN_AVAILABLE_MB`: the host memory floor that stops a run | 800 |
 | `loadgen-run.sh` | `--mark-every <seconds>`: move every runner's change count this often, so each beat reconciles in full (see [the heartbeat after task O1](#the-heartbeat-after-task-o1)) | off |
 | `loadgen-run.sh` | `--watch <N>`: a session stream on each of the first N running sessions while the run lasts, which the loadgen's `-live-rate` sends live deltas to (see [the live stream](#the-live-stream)) | off |
+| `loadgen-run.sh` | `LOADGEN_WATCH_STREAMS`: with `--watch`, how many streams each watched session has, as tabs and devices would; the watchers' deltas count each stream's | 1 |
 | `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway, up to 16), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
 
 `node scripts/runner-link/loadgen-report.mjs <run>` writes a run's report again from what it collected.
@@ -408,6 +422,43 @@ A stack runs several apiservers in one of two ways:
 Either way `loadgen-run.sh` samples every apiserver it finds running, `apiserver-*` beside the first, and the report and
 the baseline count them all: "apiserver CPU" is the sum. Each process's main thread is what fills: a process carries
 about a core of the load test's work, less what its other threads take. The figures below say how much.
+
+The web gateway sends every session stream to the first apiserver unless the stack mounts its routes for several
+apiservers (`ORBIT_LINK_STAGING_SPREAD=1`, task 34nb3xgCijTDzQJVXDVT7). Then each session's streams reach one apiserver,
+by session, and so does the relay of its deltas. `streams.md` says, run by run, which apiserver held how many sessions'
+streams, what NATS delivered to each, and each one's main thread: an apiserver that holds no stream of a session is
+delivered none of its deltas.
+
+```bash
+ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 ORBIT_LINK_STAGING_SPREAD=1 \
+  scripts/runner-link/staging-up.sh
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm &&
+  scripts/runner-link/loadgen-run.sh --name spread --watch 400 -- -duration 6m -settle 2m -event-rate 200 -live-rate 8000 -volatile'
+ORBIT_LINK_STAGING_SPREAD=0 scripts/runner-link/staging-up.sh --no-build     # every stream on the first again
+```
+
+On HPC (task 34nb3xgCijTDzQJVXDVT7, 2026-10-28) a stack of four apiservers, 1,000 runners, 500 running sessions and
+200 durable events a second (`-volatile`), with its containers on the P-cores, ran five times, each with a 6-minute
+steady window after 2 minutes' settle:
+
+| Run | Web gateway | Watched sessions, deltas a second | Main thread of apiserver, -b, -c, -d (cores) | NATS messages delivered to each a second | Deltas received |
+| --- | --- | --- | --- | --- | --- |
+| spread-live | `SPREAD=1` | 400, 8,000 | 0.119, 0.123, 0.125, 0.113 | 997, 1,028, 1,094, 903 | 8,004.1 of the 8,004.9 sent, p99 113 ms |
+| first-live | `SPREAD=0` | 400, 8,000 | 0.264, 0.040, 0.042, 0.042 | 4,020, 0, 0, 0 | 8,004.8 of 8,005.1, p99 3,502 ms: the host swapped for 15 s |
+| first-nolive | `SPREAD=0` | none | 0.039, 0.038, 0.038, 0.038 | 0, 0, 0, 0 | — |
+| first-throttled | `SPREAD=0`, the first apiserver capped at 0.2 CPU | 400, 8,000 | 0.179, 0.037, 0.038, 0.038 | 4,022, 0, 0, 0 | 8,007.2 of 8,008.2, p99 620 ms |
+| spread-failover | `SPREAD=1`, `apiserver-d` killed for 2 minutes | 200 with 2 streams each, 4,000 | 0.105, 0.102, 0.099, 0.100 | 576, 662, 584, 179 | 7,992.9: each delta twice |
+
+- **Spread**, the 400 sessions' streams were held 99, 102, 109 and 90 to an apiserver, none by two at once, and their
+  main threads were within 6% of their mean. No error anywhere; no stream missed a stored event.
+- **Together the four apiservers took 0.563 cores spread and 0.462 with every stream on the first**: a relayed delta
+  cost about 0.044 ms spread over four processes and 0.031 ms in one, against 0.211 cores without the live stream.
+- **An apiserver with no stream of a session is delivered none of its deltas**: with every stream on the first, NATS
+  delivered the other three nothing. Each of them took 0.052–0.053 cores without the live stream, 0.056–0.059 while the
+  first relayed 8,000 deltas a second, and 0.052–0.054 while the first, saturated, was throttled in 65% of its periods.
+- **Killed**, `apiserver-d` held 48 sessions' 96 streams. They opened again on the other three, both streams of a
+  session on the same one, each with its next delta 1.1–1.4 s after it ended, from the last stored event it had and
+  missing none. The link gateway sent the 26 calls it had for `apiserver-d` to the others; the runners saw no error.
 
 ### The cell's size
 

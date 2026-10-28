@@ -38,6 +38,8 @@
 #                                    forwards at most, for a load test of a slow ingest; off forwards them as they come  off
 #   ORBIT_LINK_STAGING_MERGE_CALLS   the link gateway's LINK_EVENT_MERGE_CALLS_PER_BACKEND: merged calls out at once
 #                                    to each apiserver, 1 to 8; "default" is the gateway's own (4)                       default
+#   ORBIT_LINK_STAGING_SPREAD        1: the web gateway sends session streams, by session, and link tokens to every
+#                                    apiserver (staging.spread.compose.yml); 0: to the first, as with one   0
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -48,7 +50,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -79,10 +81,12 @@ handshake_rate="${ORBIT_LINK_STAGING_HANDSHAKE_RATE_B:-$(setting STAGING_HANDSHA
 handshake_burst="${ORBIT_LINK_STAGING_HANDSHAKE_BURST_B:-$(setting STAGING_HANDSHAKE_BURST_B 400)}"
 ingest_rate="${ORBIT_LINK_STAGING_INGEST_RATE:-$(setting STAGING_INGEST_RATE_SETTING off)}"
 merge_calls="${ORBIT_LINK_STAGING_MERGE_CALLS:-$(setting STAGING_MERGE_CALLS_SETTING default)}"
+spread="${ORBIT_LINK_STAGING_SPREAD:-$(setting STAGING_SPREAD 0)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
 case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, not $loadgen" ;; esac
+case "$spread" in 0|1) ;; *) die "ORBIT_LINK_STAGING_SPREAD must be 0 or 1, not $spread" ;; esac
 [[ "$db_cpus" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_DB_CPUS must be a number of CPUs, not $db_cpus"
 [[ "$db_mem" =~ ^[1-9][0-9]*[mg]$ ]] || die "ORBIT_LINK_STAGING_DB_MEM must be a size such as 4g or 16384m, not $db_mem"
 [[ "$merge_window" =~ ^(default|0|[0-9]+ms)$ ]] || die "ORBIT_LINK_STAGING_MERGE_WINDOW must be default, 0 or a window such as 100ms, not $merge_window"
@@ -249,6 +253,7 @@ STAGING_INGEST_RATE_SETTING=$ingest_rate
 STAGING_INGEST_RATE=$gateway_ingest_rate
 STAGING_MERGE_CALLS_SETTING=$merge_calls
 STAGING_MERGE_CALLS=$gateway_merge_calls
+STAGING_SPREAD=$spread
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
 RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
@@ -310,7 +315,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst")"
+log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, merged calls an apiserver $merge_calls, ingest rate $ingest_rate$([ "$gateways" = 1 ] || echo ", the second node's handshakes $handshake_rate/s after a burst of $handshake_burst"), session streams and link tokens to $([ "$spread" = 1 ] && echo "every apiserver" || echo "the first apiserver")"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------

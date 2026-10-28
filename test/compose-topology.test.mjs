@@ -72,6 +72,13 @@
 // answer a request once: its processes hand each other an Antigravity code or a Cursor key that a runner's heartbeat
 // collects from the process holding it, in a reply to the asking process's inbox. The gateway's user gains nothing.
 // (q) pins the lines, and that NATS logs no trace or debug, which would print what a reply carries.
+//
+// On 2026-10-28 the session streams and the link tokens spread over every apiserver (project 34bc0CsOzPh9KshG7H3DW, task
+// 34nb3xgCijTDzQJVXDVT7, whose coordinator decided the spreading and listed docker-compose.yml for the route) gave the
+// apiserver one network alias, orbit-apiservers, which apiserver-2 and on take with the rest of its definition. The web
+// gateway reaches every apiserver by it, and only where a deployment mounts gateway/several-apiservers/: the gateway's
+// definition is unchanged, and gateway/nginx.conf does not name it. No service, port, mount or environment is added, and
+// a deployment with one apiserver routes exactly as before. The block below pins its three lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -332,6 +339,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
+  ],
+  // The name every apiserver answers to (2026-10-28, the top of this file), which the web gateway's routes for several
+  // apiservers reach them by. It comes after the managed runners' lines in the file, behind the port the service exposes.
+  [
+    '    networks:',
+    '      default:',
+    '        aliases: [orbit-apiservers]',
   ],
 ];
 const APPROVED_APISERVER_ADDITIONS = APPROVED_APISERVER_BLOCKS.flat();

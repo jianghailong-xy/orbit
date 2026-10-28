@@ -1,0 +1,1464 @@
+{
+  "run": "steady",
+  "sha": "c615e5f18b5e5eb0c46bdcfdeeadf2b4d0194655",
+  "dirty": false,
+  "loadTestLock": true,
+  "verdict": false,
+  "criteria": [
+    {
+      "name": "connections",
+      "target": "1000",
+      "measured": "1000 (lowest in the window)",
+      "pass": true
+    },
+    {
+      "name": "heartbeats per second",
+      "target": "≈ 500",
+      "measured": "67",
+      "pass": false
+    },
+    {
+      "name": "durable events per second",
+      "target": "≈ 2000",
+      "measured": "20",
+      "pass": false
+    },
+    {
+      "name": "steady window",
+      "target": "1 h",
+      "measured": "10 min",
+      "pass": false
+    },
+    {
+      "name": "errors",
+      "target": "0",
+      "measured": "7",
+      "pass": false
+    },
+    {
+      "name": "EventAck p99 (runner side, per batch)",
+      "target": "< 1000 ms",
+      "measured": "120 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck p99 (runner side, per event)",
+      "target": "< 1000 ms",
+      "measured": "120 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck within 1 s (gateway histogram)",
+      "target": "≥ 99%",
+      "measured": "99.333%",
+      "pass": true
+    },
+    {
+      "name": "database CPU peak (10 s)",
+      "target": "< 60%",
+      "measured": "50% of 4 CPUs (2 cores)",
+      "pass": true
+    }
+  ],
+  "errorCounts": {
+    "loadgen": 0,
+    "gateway": 7,
+    "gatewayLogWarnError": 0,
+    "apiserverErrorLines": 0,
+    "http5xx": 0,
+    "postgresErrorLines": 0,
+    "deadlocks": 0,
+    "natsErrorLines": 0
+  },
+  "gatewayErrors": {
+    "backend_retries{kind=\"welcome\",reason=\"lost\"}": 7
+  },
+  "steadyFrom": "2026-10-28T02:01:00.000Z",
+  "steadyTo": "2026-10-28T02:11:00.000Z",
+  "loadgen": {
+    "steady": {
+      "seconds": 600,
+      "counters": {
+        "renewals": 0,
+        "reconnects": 0,
+        "tokensMinted": 0,
+        "batchesAcked": 6000,
+        "eventsAcked": 12000,
+        "eventsResent": 0,
+        "payloadBytes": 7200000
+      },
+      "eventsAckedPerSecond": 20,
+      "batchesAckedPerSecond": 10,
+      "heartbeatAcksPerSecond": 67,
+      "ackBatch": {
+        "count": 6000,
+        "meanMs": 60,
+        "p50Ms": 60,
+        "p90Ms": 120,
+        "p99Ms": 120,
+        "p999Ms": 120,
+        "maxMs": 120
+      },
+      "ackEvent": {
+        "count": 6000,
+        "meanMs": 60,
+        "p50Ms": 60,
+        "p90Ms": 120,
+        "p99Ms": 120,
+        "p999Ms": 120,
+        "maxMs": 120
+      },
+      "heartbeatAck": {
+        "count": 6000,
+        "meanMs": 2,
+        "p50Ms": 2,
+        "p90Ms": 9,
+        "p99Ms": 9,
+        "p999Ms": 9,
+        "maxMs": 9
+      },
+      "tokenMint": {
+        "count": 6000,
+        "meanMs": 3,
+        "p50Ms": 3,
+        "p90Ms": 8,
+        "p99Ms": 8,
+        "p999Ms": 8,
+        "maxMs": 8
+      },
+      "dialToWelcome": {
+        "count": 6000,
+        "meanMs": 4,
+        "p50Ms": 4,
+        "p90Ms": 40,
+        "p99Ms": 40,
+        "p999Ms": 40,
+        "maxMs": 40
+      },
+      "errorTotal": 0,
+      "errors": {}
+    },
+    "whole": {
+      "seconds": 690
+    },
+    "notes": {},
+    "unacknowledgedEvents": 0,
+    "errorSamples": {},
+    "config": {
+      "runners": 1000,
+      "activeSessions": 500,
+      "eventRate": 20,
+      "perSessionRate": 0.04,
+      "liveRate": 0
+    }
+  },
+  "components": {
+    "postgres": {
+      "meanCores": 2,
+      "peak10sCores": 2,
+      "peak60sCores": 2,
+      "peakMemMiB": 2048,
+      "cpuPressurePct": 5,
+      "cpuPressurePeak60sPct": 5,
+      "throttledPct": 0
+    },
+    "apiserver": {
+      "meanCores": 0.8,
+      "peak10sCores": 0.8,
+      "peak60sCores": 0.8,
+      "peakMemMiB": 700,
+      "cpuPressurePct": 0,
+      "cpuPressurePeak60sPct": 0,
+      "throttledPct": 0
+    },
+    "link-gateway": {
+      "meanCores": 1.5,
+      "peak10sCores": 1.5,
+      "peak60sCores": 1.5,
+      "peakMemMiB": 512,
+      "cpuPressurePct": 10,
+      "cpuPressurePeak60sPct": 10,
+      "throttledPct": 0
+    }
+  },
+  "host": {
+    "cpus": 8,
+    "meanBusyCores": 4.8,
+    "peak60sBusyCores": 4.8,
+    "testMeanCores": 4.3,
+    "otherMeanCores": 0.5,
+    "load1": {
+      "min": 4.8,
+      "mean": 4.8,
+      "max": 4.8
+    },
+    "cpuPressurePct": 2,
+    "memAvailMinMiB": 8789,
+    "swapFreeMinMiB": 3906,
+    "swapInPages": 0,
+    "swapOutPages": 0,
+    "swapFrom1MiBs": null,
+    "swapFrom10MiBs": null,
+    "swapOutPeak": {
+      "t": 1793152805000,
+      "elapsedS": 5,
+      "connected": 500,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    "otherCgroupCores": 0.5
+  },
+  "others": [
+    {
+      "name": "docker-postgres.scope (this test: postgres)",
+      "meanCores": 2,
+      "ours": true
+    },
+    {
+      "name": "docker-link-gateway.scope (this test: link-gateway)",
+      "meanCores": 1.5,
+      "ours": true
+    },
+    {
+      "name": "docker-apiserver.scope (this test: apiserver)",
+      "meanCores": 0.8,
+      "ours": true
+    },
+    {
+      "name": "user.slice",
+      "meanCores": 0.45,
+      "ours": false
+    },
+    {
+      "name": "cron.service",
+      "meanCores": 0.05,
+      "ours": false
+    }
+  ],
+  "gateway": {
+    "link_handshakes_total": {},
+    "link_token_refusals_total": {},
+    "link_disconnects_total": {},
+    "link_rpc_results_total": {},
+    "link_backend_calls_total": {
+      "{kind=\"events\",result=\"answered\"}": 6000,
+      "{kind=\"heartbeat\",result=\"answered\"}": 40000
+    },
+    "link_backend_retries_total": {
+      "{kind=\"welcome\",reason=\"lost\"}": 7
+    },
+    "link_heartbeat_forwards_total": {
+      "{result=\"forwarded\"}": 40000
+    },
+    "link_heartbeat_facts_total": {},
+    "link_event_batches_total": {
+      "{result=\"stored\"}": 6000
+    },
+    "link_events_stored_total": {
+      "_": 12000
+    },
+    "link_queue_full_total": {},
+    "link_credit_changes_total": {},
+    "link_hints_total": {},
+    "link_hints_slow_total": {},
+    "link_frame_decode_errors_total": {},
+    "link_tls_handshake_errors_total": {},
+    "link_nats_reconnects_total": {},
+    "link_revocation_fetches_total": {},
+    "link_turn_prefix_requests_total": {},
+    "link_event_merge_calls_total": {},
+    "link_event_merge_flushes_total": {},
+    "link_event_merge_alone_total": {},
+    "connections": {
+      "min": 1000,
+      "max": 1000
+    },
+    "ingestQueueEventsMax": 40,
+    "creditReducedEver": false,
+    "eventAck": {
+      "count": 6000,
+      "meanMs": 80,
+      "p50Ms": 62.5,
+      "p99Ms": 750,
+      "withinOneSecondPct": 99.333
+    },
+    "heartbeatForward": {
+      "count": 40000,
+      "meanMs": 3,
+      "p50Ms": 2.8,
+      "p99Ms": 23,
+      "withinOneSecondPct": 100
+    },
+    "backendCall": {
+      "count": 0,
+      "meanMs": null,
+      "p50Ms": 0,
+      "p99Ms": 0,
+      "withinOneSecondPct": 0
+    },
+    "mergeCalls": 0,
+    "mergeBatchesPerCall": null,
+    "mergeHeld": {
+      "count": 0,
+      "meanMs": null,
+      "p50Ms": 0,
+      "p99Ms": 0,
+      "withinOneSecondPct": 0
+    },
+    "mergeCall": {
+      "count": 0,
+      "meanMs": null,
+      "p50Ms": 0,
+      "p99Ms": 0,
+      "withinOneSecondPct": 0
+    }
+  },
+  "nginx": {
+    "byStatus": {},
+    "linkToken": {
+      "count": 0,
+      "byStatus": {}
+    },
+    "samples5xx": []
+  },
+  "logs": {
+    "link-gateway": {
+      "byLevel": {},
+      "samples": {}
+    },
+    "postgres": {
+      "byLevel": {},
+      "samples": {}
+    },
+    "nats": {
+      "byLevel": {},
+      "samples": {}
+    }
+  },
+  "db": {
+    "seconds": 600,
+    "commitsPerSecond": 300,
+    "rollbacks": 0,
+    "rowsInsertedPerSecond": 20,
+    "rowsUpdatedPerSecond": 70,
+    "walMiBPerSecond": 0.05,
+    "deadlocks": 0,
+    "tempBytes": 0,
+    "cacheHitPct": 100,
+    "backendsMax": 15,
+    "activeMax": 3,
+    "lockWaitsMax": 0,
+    "topStatements": []
+  },
+  "dbAllocation": 4,
+  "dbPeak10sPct": 50,
+  "dbPeak60sPct": 50,
+  "backends": "1",
+  "memory": [
+    {
+      "t": 1793152805000,
+      "elapsedS": 5,
+      "connected": 500,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152810000,
+      "elapsedS": 10,
+      "connected": 500,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152815000,
+      "elapsedS": 15,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152820000,
+      "elapsedS": 20,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152825000,
+      "elapsedS": 25,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152830000,
+      "elapsedS": 30,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152835000,
+      "elapsedS": 35,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152840000,
+      "elapsedS": 40,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152845000,
+      "elapsedS": 45,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152850000,
+      "elapsedS": 50,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152855000,
+      "elapsedS": 55,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152860000,
+      "elapsedS": 60,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152865000,
+      "elapsedS": 65,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152870000,
+      "elapsedS": 70,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152875000,
+      "elapsedS": 75,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152880000,
+      "elapsedS": 80,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152885000,
+      "elapsedS": 85,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152890000,
+      "elapsedS": 90,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152895000,
+      "elapsedS": 95,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152900000,
+      "elapsedS": 100,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152905000,
+      "elapsedS": 105,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152910000,
+      "elapsedS": 110,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152915000,
+      "elapsedS": 115,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152920000,
+      "elapsedS": 120,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152925000,
+      "elapsedS": 125,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152930000,
+      "elapsedS": 130,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152935000,
+      "elapsedS": 135,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152940000,
+      "elapsedS": 140,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152945000,
+      "elapsedS": 145,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152950000,
+      "elapsedS": 150,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152955000,
+      "elapsedS": 155,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152960000,
+      "elapsedS": 160,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152965000,
+      "elapsedS": 165,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152970000,
+      "elapsedS": 170,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152975000,
+      "elapsedS": 175,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152980000,
+      "elapsedS": 180,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152985000,
+      "elapsedS": 185,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152990000,
+      "elapsedS": 190,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793152995000,
+      "elapsedS": 195,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153000000,
+      "elapsedS": 200,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153005000,
+      "elapsedS": 205,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153010000,
+      "elapsedS": 210,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153015000,
+      "elapsedS": 215,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153020000,
+      "elapsedS": 220,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153025000,
+      "elapsedS": 225,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153030000,
+      "elapsedS": 230,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153035000,
+      "elapsedS": 235,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153040000,
+      "elapsedS": 240,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153045000,
+      "elapsedS": 245,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153050000,
+      "elapsedS": 250,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153055000,
+      "elapsedS": 255,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153060000,
+      "elapsedS": 260,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153065000,
+      "elapsedS": 265,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153070000,
+      "elapsedS": 270,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153075000,
+      "elapsedS": 275,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153080000,
+      "elapsedS": 280,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153085000,
+      "elapsedS": 285,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153090000,
+      "elapsedS": 290,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153095000,
+      "elapsedS": 295,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153100000,
+      "elapsedS": 300,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153105000,
+      "elapsedS": 305,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153110000,
+      "elapsedS": 310,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153115000,
+      "elapsedS": 315,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153120000,
+      "elapsedS": 320,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153125000,
+      "elapsedS": 325,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153130000,
+      "elapsedS": 330,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153135000,
+      "elapsedS": 335,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153140000,
+      "elapsedS": 340,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153145000,
+      "elapsedS": 345,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153150000,
+      "elapsedS": 350,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153155000,
+      "elapsedS": 355,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153160000,
+      "elapsedS": 360,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153165000,
+      "elapsedS": 365,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153170000,
+      "elapsedS": 370,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153175000,
+      "elapsedS": 375,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153180000,
+      "elapsedS": 380,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153185000,
+      "elapsedS": 385,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153190000,
+      "elapsedS": 390,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153195000,
+      "elapsedS": 395,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153200000,
+      "elapsedS": 400,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153205000,
+      "elapsedS": 405,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153210000,
+      "elapsedS": 410,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153215000,
+      "elapsedS": 415,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153220000,
+      "elapsedS": 420,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153225000,
+      "elapsedS": 425,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153230000,
+      "elapsedS": 430,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153235000,
+      "elapsedS": 435,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153240000,
+      "elapsedS": 440,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153245000,
+      "elapsedS": 445,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153250000,
+      "elapsedS": 450,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153255000,
+      "elapsedS": 455,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153260000,
+      "elapsedS": 460,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153265000,
+      "elapsedS": 465,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153270000,
+      "elapsedS": 470,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153275000,
+      "elapsedS": 475,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153280000,
+      "elapsedS": 480,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153285000,
+      "elapsedS": 485,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153290000,
+      "elapsedS": 490,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153295000,
+      "elapsedS": 495,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153300000,
+      "elapsedS": 500,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153305000,
+      "elapsedS": 505,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153310000,
+      "elapsedS": 510,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153315000,
+      "elapsedS": 515,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153320000,
+      "elapsedS": 520,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153325000,
+      "elapsedS": 525,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153330000,
+      "elapsedS": 530,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153335000,
+      "elapsedS": 535,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153340000,
+      "elapsedS": 540,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153345000,
+      "elapsedS": 545,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153350000,
+      "elapsedS": 550,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153355000,
+      "elapsedS": 555,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153360000,
+      "elapsedS": 560,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153365000,
+      "elapsedS": 565,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153370000,
+      "elapsedS": 570,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153375000,
+      "elapsedS": 575,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153380000,
+      "elapsedS": 580,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153385000,
+      "elapsedS": 585,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153390000,
+      "elapsedS": 590,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153395000,
+      "elapsedS": 595,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153400000,
+      "elapsedS": 600,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153405000,
+      "elapsedS": 605,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153410000,
+      "elapsedS": 610,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153415000,
+      "elapsedS": 615,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153420000,
+      "elapsedS": 620,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153425000,
+      "elapsedS": 625,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153430000,
+      "elapsedS": 630,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153435000,
+      "elapsedS": 635,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153440000,
+      "elapsedS": 640,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153445000,
+      "elapsedS": 645,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153450000,
+      "elapsedS": 650,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153455000,
+      "elapsedS": 655,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153460000,
+      "elapsedS": 660,
+      "connected": 1000,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153465000,
+      "elapsedS": 665,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153470000,
+      "elapsedS": 670,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153475000,
+      "elapsedS": 675,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153480000,
+      "elapsedS": 680,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153485000,
+      "elapsedS": 685,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    },
+    {
+      "t": 1793153490000,
+      "elapsedS": 690,
+      "connected": 0,
+      "memAvailMiB": 8789,
+      "swapOutPagesPerS": 0,
+      "swapInPagesPerS": 0
+    }
+  ]
+}

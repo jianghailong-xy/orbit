@@ -2,7 +2,8 @@
 # Compose is run for it (README.md beside this file).
 #
 # The stack is the root docker-compose.yml under its own Compose project, with staging.compose.yml on top (and
-# staging.acme.compose.yml in the ACME TLS mode, staging.loadgen.compose.yml for a load test). Compose runs with an
+# staging.acme.compose.yml in the ACME TLS mode, staging.loadgen.compose.yml for a load test, staging.spread.compose.yml
+# for the web gateway's routes for several apiservers). Compose runs with an
 # empty environment plus the env file staging-up.sh writes, so nothing from the calling shell, an agent session's
 # ORBIT_* variables included, reaches the stack: Compose prefers the shell's environment to an env file.
 
@@ -42,6 +43,9 @@ compose_files() {
   fi
   if [ "$(setting STAGING_GATEWAYS 1)" = 2 ]; then
     printf '%s\n' -f "$here/staging.gateways.compose.yml"
+  fi
+  if [ "$(setting STAGING_SPREAD 0)" = 1 ]; then
+    printf '%s\n' -f "$here/staging.spread.compose.yml"
   fi
   # The apiservers past apiserver-b (extra_backends), which staging-up.sh writes for ORBIT_LINK_STAGING_BACKENDS of 3 or
   # more.

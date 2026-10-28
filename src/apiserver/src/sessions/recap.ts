@@ -14,9 +14,11 @@ import { truncatePayload } from './truncate-payload';
  * (recapAfterSettle, enqueueRecap), the pass folds the events since the previous pass's cursor
  * (recapEventSeq) together with the recap that came before, and a compare-and-set write advances
  * the cursor — so a long session costs one small call per settle rather than a re-read of the
- * whole transcript. Everything that can go wrong is a silent skip: no key, a provider answer
- * that fails or times out, a session with too little to say. Nothing here throws, and nothing
- * here may ever delay the turn it is describing.
+ * whole transcript. A pass that obeys the two-minute window claims it on the session row before it
+ * asks a model (claimRecapWindow), so the settles and trailing timers of several apiservers make
+ * one call a window between them. Everything that can go wrong is a silent skip: no key, a
+ * provider answer that fails or times out, a session with too little to say. Nothing here throws,
+ * and nothing here may ever delay the turn it is describing.
  */
 
 /** What the model is asked to write, and the longest recap that is stored: one list line. */
@@ -256,6 +258,24 @@ export function recapEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.ORBIT_RECAP_ENABLED !== '0';
 }
 
+/** A session's two-minute window as a pass reads it: its last recap, and the last claim of a pass. */
+export interface RecapWindow {
+  recapAt: Date | null;
+  recapClaimedAt?: Date | null;
+}
+
+/**
+ * When the session's current window opened: the last recap, or a pass's claim since then (a pass
+ * that is still asking its model, or one whose apiserver died while it did), whichever is later.
+ * Null when neither has happened. A pass that wrote leaves the two equal, and one that wrote nothing
+ * gives its claim back, so this is the last recap's time unless a pass is in flight.
+ */
+export function recapWindowStart(session: RecapWindow): Date | null {
+  const claimed = session.recapClaimedAt ?? null;
+  if (session.recapAt === null || (claimed !== null && claimed > session.recapAt)) return claimed;
+  return session.recapAt;
+}
+
 /**
  * Whether a settle at `now` may spend on a recap, read off the values a caller already has: the
  * switch, the two-minute window (which a finalize does not obey), and the minimum event count that
@@ -264,19 +284,60 @@ export function recapEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
  * onto it. Null is "go ahead".
  */
 export function recapSkipReason(
-  session: { recapAt: Date | null },
+  session: RecapWindow,
   eventCount: number,
   opts: { finalize?: boolean; now: Date },
 ): RecapSkipReason | null {
   if (!recapEnabled()) return 'disabled';
+  const opened = recapWindowStart(session);
   if (
     !opts.finalize
-    && session.recapAt !== null
-    && opts.now.getTime() - session.recapAt.getTime() < RECAP_MIN_INTERVAL_MS
+    && opened !== null
+    && opts.now.getTime() - opened.getTime() < RECAP_MIN_INTERVAL_MS
   ) {
     return 'throttled';
   }
   return eventCount < RECAP_MIN_EVENTS ? 'too-few-events' : null;
+}
+
+/**
+ * Claim the window for a pass that obeys it, or learn that it is taken: one compare-and-set on the
+ * session row, setting recapClaimedAt to the pass's clock only while neither the last recap nor
+ * another pass's claim is inside the window. The trailing timers and the settle hooks are per
+ * apiserver, so two apiservers can each find the window open and each start a pass for it; this is
+ * where they meet, and the one that matches no row asks no model. One apiserver meets itself here
+ * only when a settle starts a pass while another of its own is still asking.
+ */
+async function claimRecapWindow(input: RecapInput, now: Date): Promise<boolean> {
+  const closed = new Date(now.getTime() - RECAP_MIN_INTERVAL_MS);
+  const claimed = await input.db.session.updateMany({
+    where: {
+      id: input.sessionId,
+      AND: [
+        { OR: [{ recapAt: null }, { recapAt: { lte: closed } }] },
+        { OR: [{ recapClaimedAt: null }, { recapClaimedAt: { lte: closed } }] },
+      ],
+    },
+    data: { recapClaimedAt: now },
+  });
+  return claimed.count === 1;
+}
+
+/**
+ * Give back a claim whose pass wrote nothing — the model failed, or another pass moved the cursor
+ * first — so the window stands where the last recap left it, exactly as if this pass had never
+ * run. Only the claim this pass made: a later one is another pass's. Never throws; a claim that
+ * could not be given back only holds its window shut for its two minutes.
+ */
+async function releaseRecapWindow(input: RecapInput, claimedAt: Date): Promise<void> {
+  try {
+    await input.db.session.updateMany({
+      where: { id: input.sessionId, recapClaimedAt: claimedAt },
+      data: { recapClaimedAt: null },
+    });
+  } catch {
+    // Best-effort, like the pass.
+  }
 }
 
 /** What a pass reads of the session: the recap and its cursor, and what a held key needs. */
@@ -284,6 +345,7 @@ const RECAP_SESSION_SELECT = {
   recapText: true,
   recapEventSeq: true,
   recapAt: true,
+  recapClaimedAt: true,
   provider: true,
   providerBuiltin: true,
   ownerId: true,
@@ -387,12 +449,15 @@ async function requestRecap(call: RecapCall, timeoutMs: number): Promise<string 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * One recap pass, start to finish: gate, read the new events, ask a model, and — only on a parsed
- * answer — compare-and-set the three fields the recap lives in. Writes nothing when the model
- * failed, and concedes silently when another pass advanced the cursor first. NEVER throws; every
- * ending is a RecapOutcome the caller may ignore.
+ * One recap pass, start to finish: gate, read the new events, claim the window unless this pass
+ * ignores it, ask a model, and — only on a parsed answer — compare-and-set the three fields the
+ * recap lives in. Writes nothing when the model failed, and concedes silently when another pass
+ * advanced the cursor first or holds the window ('throttled'). NEVER throws; every ending is a
+ * RecapOutcome the caller may ignore.
  */
 export async function generateRecap(input: RecapInput, opts: RecapOptions = {}): Promise<RecapOutcome> {
+  // The window this pass claimed, while the claim is still its own to give back.
+  let claimed: Date | null = null;
   try {
     const now = opts.now ?? new Date();
     const session = await input.db.session.findFirst({
@@ -417,6 +482,12 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
     const heldKey = process.env.DEEPSEEK_API_KEY?.trim() ? null : await sessionHeldKey(input.db, session);
     const call = recapCall(RECAP_SYSTEM_PROMPT, buildRecapTask(session.recapText, activity.text), heldKey);
     if (!call) return { written: false, reason: 'no-key' };
+    // Last, so a pass that has nothing to send or no key to send it with never touches the window.
+    // A finalize and a person's refresh ignore the window, and so the claim too.
+    if (!input.finalize && !input.force) {
+      if (!(await claimRecapWindow(input, now))) return { written: false, reason: 'throttled' };
+      claimed = now;
+    }
     const timeoutMs = opts.timeoutMs ?? RECAP_TIMEOUT_MS;
     const retries = opts.retries ?? RECAP_RETRIES;
     const backoffMs = opts.backoffMs ?? RECAP_BACKOFF_MS;
@@ -430,6 +501,8 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
           data: { recapText: recap, recapAt: now, recapEventSeq: activity.lastSeq },
         });
         if (updated.count === 0) return { written: false, reason: 'cas-lost' };
+        // Kept: the window it claimed is the one the recap just written opened (recapAt = now).
+        claimed = null;
         try {
           input.onWritten?.();
         } catch {
@@ -442,6 +515,8 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
     }
   } catch {
     return { written: false, reason: 'error' };
+  } finally {
+    if (claimed) await releaseRecapWindow(input, claimed);
   }
 }
 
@@ -461,7 +536,9 @@ const trailingRecaps = new Map<string, { timer: ReturnType<typeof setTimeout>; a
  * pass reads every event after the cursor. When it fires it asks the way a settle does, so a pass
  * written in between (a finalize, a person's refresh) is found and only what came after it waits
  * again. Process-local, like the queue: a restart drops a waiting timer, and the recap stands as it
- * did before the settle. The timer never holds the process open.
+ * did before the settle. Several apiservers each keep their own, and their timers for one window
+ * fire together; the window's claim (claimRecapWindow) lets one of their passes ask a model. The
+ * timer never holds the process open.
  */
 function scheduleTrailingRecap(input: RecapInput, closesAt: number): void {
   const at = closesAt + RECAP_TRAILING_MARGIN_MS;
@@ -476,29 +553,45 @@ function scheduleTrailingRecap(input: RecapInput, closesAt: number): void {
   trailingRecaps.set(input.sessionId, { timer, at });
 }
 
+/** The session's window, read again for a settle: its last recap and the last claim of a pass. */
+function readRecapWindow(input: RecapInput): Promise<RecapWindow | null> {
+  return input.db.session.findFirst({
+    where: { id: input.sessionId },
+    select: { recapAt: true, recapClaimedAt: true },
+  });
+}
+
 /**
  * What a settled turn asks for, off the settle path: a pass now when one is due; when the
  * two-minute window is all that stands in the way, one when it closes (scheduleTrailingRecap);
  * nothing when any other gate refuses. One indexed read of the session row plus one aggregate over
  * its events comes before anything is queued, never the whole transcript, and a throttled settle
  * reaches no provider. A pass re-checks every gate on its own, so a race cannot produce two recaps
- * from one cursor. Resolves when the pass it asked for does, and NEVER rejects.
+ * from one cursor, and claims the window, so it cannot produce two model calls in one window either.
+ * Resolves when the pass it asked for does, and NEVER rejects.
  */
 export async function recapAfterSettle(input: RecapInput, opts: { now?: Date } = {}): Promise<void> {
   try {
     if (!recapEnabled()) return;
-    const session = await input.db.session.findFirst({
-      where: { id: input.sessionId },
-      select: { recapAt: true },
-    });
+    const session = await readRecapWindow(input);
     if (!session) return;
     const now = opts.now ?? new Date();
     const skip = recapSkipReason(session, await countRecapEvents(input.db, input.sessionId), { now });
     if (skip === 'throttled') {
-      scheduleTrailingRecap(input, session.recapAt!.getTime() + RECAP_MIN_INTERVAL_MS);
+      scheduleTrailingRecap(input, recapWindowStart(session)!.getTime() + RECAP_MIN_INTERVAL_MS);
       return;
     }
-    if (skip === null) await enqueueRecap({ db: input.db, sessionId: input.sessionId, onWritten: input.onWritten });
+    if (skip !== null) return;
+    const outcome = await enqueueRecap({ db: input.db, sessionId: input.sessionId, onWritten: input.onWritten });
+    // The window was taken while this pass waited for it: by a recap written meanwhile, or by the
+    // claim of another pass, on this apiserver or another. That pass covers the events it read, and
+    // whatever this settle added after them waits for its window to close, like any settle the
+    // window held back.
+    if (!outcome.written && outcome.reason === 'throttled') {
+      const taken = await readRecapWindow(input);
+      const opened = taken && recapWindowStart(taken);
+      if (opened) scheduleTrailingRecap(input, opened.getTime() + RECAP_MIN_INTERVAL_MS);
+    }
   } catch {
     // A broken read is a skipped recap, never a failed settle.
   }
