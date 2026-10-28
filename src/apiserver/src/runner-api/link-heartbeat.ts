@@ -9,6 +9,7 @@ import { PREPARED_STATEMENT } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { sanitizePlanUsageAccounts } from '../providers/plan-usage-accounts';
 import { countCodexResetSnapshotWrite } from '../runners/codex-reset-metrics';
+import { RUNNER_SILENT_AFTER_MS } from '../runners/runner-presence';
 import { storableBranchSha } from '../tasks/owner-confirmation-review';
 import { mergeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { runnerLinkHintsOf, runnerLinkHintsSql, type RunnerLinkHintColumns, type RunnerLinkHints } from './runner-link-hints';
@@ -347,10 +348,12 @@ const OPEN_STATUSES_SQL = Prisma.raw(OPEN_SESSION_STATUSES.map((status) => `'${s
  * managed runner's beat writes nothing here: RunnerAuthGuard admits it, with its instance, and it reconciles in full.
  *
  * Then it upserts the presence row — the process, the gateway node, the beat, LINK — leaving the change count and the
- * reconcile record as they are, and reads what the answer needs: the record, how many of the supervised sessions this
- * process still holds the lease of (the leaseLostSessionIds rule: assigned to the runner, open, a conversation, leased
- * to this process), what waits for the runner (readRunnerLinkHints' three columns), the runner's settings, and the
- * stored plan usage when the beat's differs from what was last stored.
+ * reconcile record as they are; a beat that comes more than RUNNER_SILENT_AFTER_MS after the one before it also keeps
+ * that one as the last the runner was heard with before it lost contact (`lost_at`, migration 0450), for the reaper to
+ * read a mass disconnection off once the runner is back. Then it reads what the answer needs: the record, how many of
+ * the supervised sessions this process still holds the lease of (the leaseLostSessionIds rule: assigned to the runner,
+ * open, a conversation, leased to this process), what waits for the runner (readRunnerLinkHints' three columns), the
+ * runner's settings, and the stored plan usage when the beat's differs from what was last stored.
  *
  * It is sent as a named prepared statement (PREPARED_STATEMENT, prisma-client.ts), whose text is one of two as the
  * beat carries a plan usage or not: unnamed, PostgreSQL parsed and planned it on every beat, 1.6 ms of database CPU
@@ -380,7 +383,12 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
          SET "process_id" = EXCLUDED."process_id",
              "gateway_id" = EXCLUDED."gateway_id",
              "last_beat_at" = EXCLUDED."last_beat_at",
-             "link_state" = EXCLUDED."link_state"
+             "link_state" = EXCLUDED."link_state",
+             "lost_at" = CASE
+               WHEN "runner_presence"."last_beat_at" < EXCLUDED."last_beat_at" - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
+                 THEN "runner_presence"."last_beat_at"
+               ELSE "runner_presence"."lost_at"
+             END
       RETURNING "changes"::text AS "changes",
                 "facts_hash" AS "factsHash",
                 "reconcile_hash" AS "reconcileHash",

@@ -29,9 +29,10 @@ import { evidence, paramsOf, type Tenant, type TenantRequest } from './tenant-is
 
 /**
  * What every table notes while the census runs: one row per row written, by whom it does not say. Every table but the
- * trap's own, the migration ledger, and `apiserver_process` (migration 0449): there each apiserver process rewrites its
+ * trap's own, the migration ledger, `apiserver_process` (migration 0449): there each apiserver process rewrites its
  * own row every ten seconds whatever it is asked (runners/runner-presence.ts), a row that names no account, so it is no
- * write of any request's.
+ * write of any request's; and `runner_mass_disconnect` (migration 0450), which the reaper writes on its own timer when
+ * a fifth of the runners it hears lose contact at once, also naming no account.
  */
 export const WRITE_TRAP = `
   CREATE TABLE "tenant_census_write" (
@@ -51,7 +52,7 @@ export const WRITE_TRAP = `
   BEGIN
     FOR t IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
              WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p') AND NOT c.relispartition
-               AND c.relname NOT IN ('tenant_census_write', '_prisma_migrations', 'apiserver_process')
+               AND c.relname NOT IN ('tenant_census_write', '_prisma_migrations', 'apiserver_process', 'runner_mass_disconnect')
     LOOP
       EXECUTE format(
         'CREATE TRIGGER "tenant_census_write" AFTER INSERT OR UPDATE OR DELETE ON %I '

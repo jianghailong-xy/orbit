@@ -1,0 +1,43 @@
+# Two link gateway nodes behind a layer-4 balancer (staging-up.sh, ORBIT_LINK_STAGING_GATEWAYS=2), as a cell's nodes
+# stand behind one (docs/runner-link-design.md §15.3), on top of staging.compose.yml. The balancer, nginx's stream module
+# (staging-link-balancer.conf), takes the runners' port and passes each connection to a node that accepts it, so TLS
+# still ends on a node, both with the same certificate. Each node keeps a metrics port of its own on this host's loopback.
+# The second node is the first's whole definition with its staging settings repeated, since extends reads the root file
+# alone. The drill that stops one node (drills/mass-disconnect-drill.sh node) tells which holds a runner by
+# runner_presence.gateway_id, the node's hostname.
+services:
+  link-gateway:
+    ports: !override
+      - 127.0.0.1:${STAGING_METRICS_PORT}:9464
+
+  link-gateway-b:
+    extends:
+      file: ${STAGING_REPO}/docker-compose.yml
+      service: link-gateway
+    build: !reset null
+    image: ${STAGING_PROJECT}-link-gateway:local
+    container_name: ${STAGING_PROJECT}-link-gateway-b
+    environment:
+      LINK_FRAME_LOG: all
+      LINK_MODE: ${STAGING_MODE}
+      LINK_INTERNAL_API_URLS: ${STAGING_BACKEND_URLS}
+      LINK_EVENT_MERGE_WINDOW: ${STAGING_MERGE_WINDOW:-}
+      LINK_HANDSHAKE_RATE: ${STAGING_HANDSHAKE_RATE:-200}
+      LINK_HANDSHAKE_BURST: ${STAGING_HANDSHAKE_BURST:-400}
+    ports: !override
+      - 127.0.0.1:${STAGING_METRICS_PORT_B}:9464
+
+  link-balancer:
+    profiles: [runner-link]
+    image: nginx:alpine
+    container_name: ${STAGING_PROJECT}-link-balancer
+    restart: unless-stopped
+    volumes:
+      - ${STAGING_REPO}/scripts/runner-link/staging-link-balancer.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - ${STAGING_BIND}:${STAGING_LINK_PORT}:8443
+    depends_on:
+      link-gateway:
+        condition: service_healthy
+      link-gateway-b:
+        condition: service_healthy

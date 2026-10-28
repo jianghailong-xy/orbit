@@ -24,6 +24,11 @@
 #   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 to 16  1
 #   ORBIT_LINK_STAGING_LINK_BACKENDS which of them it forwards to: all, or names  all
 #                                    such as apiserver-b, comma-separated (the web's requests reach apiserver)
+#   ORBIT_LINK_STAGING_GATEWAYS      link gateway nodes: 1, or 2 behind a TCP balancer            1
+#                                    (staging.gateways.compose.yml), which then takes the link port
+#   ORBIT_LINK_STAGING_METRICS_PORT_B  the second node's metrics, on 127.0.0.1                    19465
+#   ORBIT_LINK_STAGING_HANDSHAKE_RATE  each node's LINK_HANDSHAKE_RATE, handshakes a second       200
+#   ORBIT_LINK_STAGING_HANDSHAKE_BURST each node's LINK_HANDSHAKE_BURST                           400
 #   ORBIT_LINK_STAGING_LOADGEN       1: the load test's settings (staging.loadgen.compose.yml)   0
 #   ORBIT_LINK_STAGING_DB_CPUS       with LOADGEN=1, the database's CPU allocation; 0 is unlimited   0
 #   ORBIT_LINK_STAGING_DB_MEM        with LOADGEN=1, the database's memory limit (Compose mem_limit)  4g
@@ -64,6 +69,10 @@ loadgen="${ORBIT_LINK_STAGING_LOADGEN:-$(setting STAGING_LOADGEN 0)}"
 db_cpus="${ORBIT_LINK_STAGING_DB_CPUS:-$(setting STAGING_DB_CPUS 0)}"
 db_mem="${ORBIT_LINK_STAGING_DB_MEM:-$(setting STAGING_DB_MEM 4g)}"
 merge_window="${ORBIT_LINK_STAGING_MERGE_WINDOW:-$(setting STAGING_MERGE_WINDOW_SETTING default)}"
+gateways="${ORBIT_LINK_STAGING_GATEWAYS:-$(setting STAGING_GATEWAYS 1)}"
+metrics_port_b="${ORBIT_LINK_STAGING_METRICS_PORT_B:-$(setting STAGING_METRICS_PORT_B 19465)}"
+handshake_rate="${ORBIT_LINK_STAGING_HANDSHAKE_RATE:-$(setting STAGING_HANDSHAKE_RATE 200)}"
+handshake_burst="${ORBIT_LINK_STAGING_HANDSHAKE_BURST:-$(setting STAGING_HANDSHAKE_BURST 400)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
@@ -74,6 +83,9 @@ case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, no
 gateway_merge_window="$merge_window"
 [ "$merge_window" = default ] && gateway_merge_window=""
 [[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
+case "$gateways" in 1|2) ;; *) die "ORBIT_LINK_STAGING_GATEWAYS must be 1 or 2, not $gateways" ;; esac
+[[ "$handshake_rate" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_HANDSHAKE_RATE must be handshakes a second, not $handshake_rate"
+[[ "$handshake_burst" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_LINK_STAGING_HANDSHAKE_BURST must be a positive whole number, not $handshake_burst"
 # The first apiserver, then apiserver-b, apiserver-c and on (extra_backends), each the first one's whole definition on
 # the same database; the link gateway forwards to all of them, round robin, or to those ORBIT_LINK_STAGING_LINK_BACKENDS
 # names: with apiserver-b alone, every call of a runner lands on a process the web's requests never reach
@@ -217,6 +229,10 @@ STAGING_DB_CPUS=$db_cpus
 STAGING_DB_MEM=$db_mem
 STAGING_MERGE_WINDOW_SETTING=$merge_window
 STAGING_MERGE_WINDOW=$gateway_merge_window
+STAGING_GATEWAYS=$gateways
+STAGING_METRICS_PORT_B=$metrics_port_b
+STAGING_HANDSHAKE_RATE=$handshake_rate
+STAGING_HANDSHAKE_BURST=$handshake_burst
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
 RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
@@ -234,6 +250,12 @@ services=(postgres apiserver web gateway link-gateway nats)
 if [ "$backends" -ge 2 ]; then
   profiles+=(--profile staging-backend-b)
   services+=("${extras[@]}")
+fi
+if [ "$gateways" = 2 ]; then
+  services+=(link-gateway-b link-balancer)
+else
+  # Left from a run with two: the link port is the first node's again.
+  docker rm -f "$project-link-gateway-b" "$project-link-balancer" >/dev/null 2>&1 || true
 fi
 if [ "$build" = 1 ]; then
   log "building the apiserver, web and link gateway images from $(git -C "$repo" rev-parse --short HEAD)"
@@ -272,7 +294,7 @@ if [ "$backends" -gt 2 ]; then
 else
   rm -f "$generated"
 fi
-log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s), merge window $merge_window"
+log "starting ${services[*]} as project $project, $gateways link gateway node(s) in MODE_${mode^^} over $backends backend(s), merge window $merge_window, handshakes $handshake_rate/s (burst $handshake_burst)"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------
