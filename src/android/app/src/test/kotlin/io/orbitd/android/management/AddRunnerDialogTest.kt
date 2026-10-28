@@ -3,6 +3,7 @@ package io.orbitd.android.management
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
 import kotlinx.coroutines.CompletableDeferred
@@ -51,6 +52,12 @@ class AddRunnerDialogTest {
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun press(label: String) = hasText(label) and hasClickAction()
     private fun presses(label: String) = compose.onAllNodes(press(label)).fetchSemanticsNodes().size
+    /** Pressed through its semantics once it can be: a dialog's buttons take no injected touch while it settles. */
+    private fun tap(label: String) {
+        compose.waitUntil(60_000) { compose.onAllNodes(press(label) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(press(label)).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
     private fun decisions() = fixture.calls.filter { it.startsWith("POST runners/device/") }
 
     @Test fun aPendingRequestOffersDenyBesideApproveAndDenyingSaysNothingWasAdded() {
@@ -58,7 +65,7 @@ class AddRunnerDialogTest {
         compose.onNode(press(RunnerCopy.APPROVE)).assertIsEnabled()
         compose.onNode(press(RunnerCopy.DENY)).assertIsEnabled()
         val gate = CompletableDeferred<Unit>().also { fixture.deviceGate = it }
-        compose.onNode(press(RunnerCopy.DENY)).performClick()
+        tap(RunnerCopy.DENY)
         // Both wait while the press is in flight.
         compose.waitUntil(10_000) { compose.onAllNodes(press(RunnerCopy.DENY) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(press(RunnerCopy.APPROVE)).assertIsNotEnabled()
@@ -95,13 +102,13 @@ class AddRunnerDialogTest {
         lookUp()
         // Denied from a browser after this lookup read it PENDING.
         fixture.deviceStatus = "DENIED"
-        compose.onNode(press(RunnerCopy.APPROVE)).performClick()
+        tap(RunnerCopy.APPROVE)
         await("This registration request was denied — run `orbit register` again")
         compose.onNode(press(RunnerCopy.APPROVE)).assertIsEnabled()
         compose.onNode(press(RunnerCopy.DENY)).assertIsEnabled()
         // And the other way round: approved meanwhile, then denied here.
         fixture.deviceStatus = "APPROVED"
-        compose.onNode(press(RunnerCopy.DENY)).performClick()
+        tap(RunnerCopy.DENY)
         await("This registration request was already approved")
         assertEquals(0, compose.onAllNodesWithText("This registration request was denied", substring = true).fetchSemanticsNodes().size)
         assertEquals(listOf("POST runners/device/${fixture.DEVICE_CODE}/approve", "POST runners/device/${fixture.DEVICE_CODE}/deny"), decisions())
@@ -116,7 +123,7 @@ class AddRunnerDialogTest {
         await("Last online 3d ago. ${RunnerCopy.DEVICE_NAME_TAKEN_DETAIL}")
         assertEquals("the old button's words are gone", 0, presses("Re-register machine"))
         compose.onNode(press(RunnerCopy.DENY)).assertIsEnabled()
-        compose.onNode(press(RunnerCopy.REREGISTER)).performClick()
+        tap(RunnerCopy.REREGISTER)
         await(RunnerCopy.DEVICE_APPROVED)
         await(RunnerCopy.deviceApprovedDetail("devbox"))
         assertEquals(listOf("POST runners/device/${fixture.DEVICE_CODE}/approve"), decisions())
