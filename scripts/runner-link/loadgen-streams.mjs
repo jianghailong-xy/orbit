@@ -112,8 +112,9 @@ if (has('watch.json')) {
   watchers = {
     sessions: sessions.length, streamsPerSession: w.streamsPerSession ?? 1,
     opened: sessions.reduce((n, s) => n + s.opened, 0), ended: sessions.reduce((n, s) => n + s.ended, 0),
-    storedEvents: sessions.reduce((n, s) => n + s.stored, 0), gaps: sessions.reduce((n, s) => n + s.gaps, 0),
-    sessionsWithGaps: sessions.filter((s) => s.gaps > 0).length,
+    storedEvents: sessions.reduce((n, s) => n + s.stored, 0), late: sessions.reduce((n, s) => n + (s.late ?? 0), 0),
+    gaps: sessions.reduce((n, s) => n + s.gaps, 0), sessionsWithGaps: sessions.filter((s) => s.gaps > 0).length,
+    openAtStop: sessions.reduce((n, s) => n + (s.openAtStop ?? 0), 0),
     resumes: { count: after.length, deltaAfterMs: { p50: q(0.5), p99: q(0.99), max: after.at(-1) ?? null } },
   };
 }
@@ -141,7 +142,7 @@ lines.push('', `Sessions whose streams moved to another apiserver during the run
 for (const [pair, n] of Object.entries(movesByPair)) lines.push(`- ${pair}: ${n}`);
 if (watchers) {
   lines.push('', `Watchers (loadgen-watch.mjs): ${watchers.sessions} sessions, ${watchers.streamsPerSession} stream(s) each; streams opened ${watchers.opened}, ended ${watchers.ended}.`);
-  lines.push(`- Stored events received ${watchers.storedEvents}; missed (a gap in a stream's seqs) ${watchers.gaps}, in ${watchers.sessionsWithGaps} session(s).`);
+  lines.push(`- Stored events received ${watchers.storedEvents}, ${watchers.late} of them after a later one; missed (a gap in a stream's seqs) ${watchers.gaps}, in ${watchers.sessionsWithGaps} session(s); still on their way as the watchers stopped ${watchers.openAtStop}.`);
   lines.push(`- A stream that ended had its next delta, once open again, after (ms): p50 ${watchers.resumes.deltaAfterMs.p50}, p99 ${watchers.resumes.deltaAfterMs.p99}, max ${watchers.resumes.deltaAfterMs.max} (${watchers.resumes.count} times).`);
 }
 console.log(lines.join('\n'));
