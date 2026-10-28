@@ -1584,6 +1584,11 @@ type RunFinalizeRequest struct {
 	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
 	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// BranchSha is the tip of the effective branch once finalizeWorktree has committed what the
+	// session left (see SessionLiveState.BranchSha): the commit a finished task's work is frozen as
+	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
+	// undoes, and whenever git cannot resolve the tip.
+	BranchSha string `json:"branchSha,omitempty"`
 	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
 	// stage or could not commit. Empty on every finalize that captured the work.
 	//

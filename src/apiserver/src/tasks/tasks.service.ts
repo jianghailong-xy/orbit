@@ -185,6 +185,7 @@ import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
+import { DELIVERED_IDENTITY_CLEARED } from '../projects/project-integration-job';
 import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
 import {
   settleTaskSegmentAfterCancel,
@@ -3164,17 +3165,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             select: {
               codebases: {
                 where: { slot: 'primary' },
-                select: { upstreamRef: true, integrationRef: true, integrationStartedAt: true },
+                select: {
+                  upstreamRef: true, integrationRef: true, integrationStartedAt: true, canonicalRepoUrl: true,
+                },
               },
             },
           },
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
-          // whose latest one did not is judged by the latest.
+          // whose latest one did not is judged by the latest — and by the repository its workspace
+          // names (O-L7).
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { isolationStatus: true, branch: true },
+            select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
           },
           mergeReceipts: { select: { result: true, targetBranch: true } },
         },
@@ -3184,11 +3188,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // than merely stated: a double that answers `task.findMany` with rows it wrote before this
         // read existed carries none of these, and indexing into an absent list would turn "this
         // fixture says nothing about landing" into a crash on the task page.
+        const work = row.sessions?.[0];
         landed.set(row.id, prerequisiteLanded({
           codeless: row.codeless,
           projectId: row.projectId,
           codebase: row.project?.codebases?.[0] ?? null,
-          work: row.sessions?.[0] ?? null,
+          work: work
+            ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
+            : null,
           receipts: row.mergeReceipts ?? [],
         }));
       }
@@ -9858,6 +9865,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
     }
     if (projectedVerifierStatus != null) data.status = projectedVerifierStatus as TaskStatus;
+    // A task that is not DONE has delivered nothing (§10.4): `task_reopen`, and every other write that
+    // leaves it anything but DONE, clears its delivered identity in the same statement, and its next
+    // DONE freezes one again (§10.5 O-L4).
+    if (data.status !== undefined && data.status !== TaskStatus.DONE) {
+      Object.assign(data, DELIVERED_IDENTITY_CLEARED);
+    }
     // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
     // a defect subtask, a downstream block — is recorded against the subject this task named at
     // the time. Re-pointing it afterwards would leave the ledger asserting conclusions about a

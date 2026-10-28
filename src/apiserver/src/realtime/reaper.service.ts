@@ -30,6 +30,7 @@ import {
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
+import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
@@ -857,6 +858,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
+      // This finish may be the one a DONE task's identity was waiting for (§10.5 O-L4 3).
+      const delivered = taskId
+        ? await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+          where: { id: sessionId },
+          select: { ownerId: true, taskId: true, startsTaskWork: true },
+        }))
+        : null;
       await retireSessionInboxGeneration(tx, sessionId);
       const currentWork = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
         includeInFlight: true,
@@ -903,7 +911,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       if (taskId && failed && resetTaskTo === TaskStatus.FAILED) {
         await postRunFailureComment(tx, taskId, opts.failureDetail ?? reason);
       }
-      return { ok: true, taskReclaimed, currentWorkTerminalized };
+      return {
+        ok: true,
+        taskReclaimed,
+        currentWorkTerminalized,
+        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+      };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) {
       if ('recanted' in outcome) {
@@ -917,6 +930,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (outcome.taskReclaimed && taskId) {
       this.realtime.publishTaskChanged(sessionId, taskId);
       // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
+      await this.openItems?.deliverForTasks([taskId]);
+    }
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
+    if ('identityUnknown' in outcome && outcome.identityUnknown && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
     }
     if (outcome.currentWorkTerminalized > 0) {

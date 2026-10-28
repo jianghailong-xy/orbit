@@ -28,7 +28,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { branchName } from './project-criterion-landing';
+import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
@@ -53,6 +53,10 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+
+// SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
+// are served from here too, where the line's readers have always found them.
+export { canonicalRepoUrl, workOnProjectRepository };
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -121,25 +125,6 @@ export function defaultIntegrationLine(
 /** A project's own branch, named after its public id — the spelling every client shows (A-Q1). */
 export function projectBranchRef(projectId: string): string {
   return `refs/heads/project/${uuidToBase62(projectId)}`;
-}
-
-/**
- * A remote URL as repository identity (PSC SR36): trimmed, scheme and host lower-cased, any
- * `user@` dropped, the scp form `git@host:owner/repo` spelled as `ssh://host/owner/repo`, and no
- * trailing `/` or `.git`. Used to compare and to satisfy `project_codebase_canonical_url_chk`, never
- * to clone. Null when nothing is left.
- */
-export function canonicalRepoUrl(raw: string): string | null {
-  let url = raw.trim();
-  const scp = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(\S+)$/.exec(url);
-  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `ssh://${scp[1]}/${scp[2]}`;
-  const remote = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([^/]*)(.*)$/i.exec(url);
-  if (remote) url = `${remote[1]!.toLowerCase()}://${remote[2]!.toLowerCase()}${remote[3]}`;
-  for (let trimmed = url.replace(/\/+$/, '').replace(/\.git$/, ''); trimmed !== url;
-    trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '')) {
-    url = trimmed;
-  }
-  return url === '' ? null : url;
 }
 
 /**
@@ -1735,7 +1720,8 @@ function deliveryModeNeedsMainLine(
 
 /**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch.
+ * project, not codeless, and its latest work session ran in a worktree on a branch, in no
+ * repository known to differ from the one the project's line is bound to (O-L7).
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -1747,6 +1733,9 @@ async function codeTaskWork(
     select: {
       projectId: true,
       codeless: true,
+      project: {
+        select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } },
+      },
       sessions: {
         where: { startsTaskWork: true, deletedAt: null },
         orderBy: { createdAt: 'desc' },
@@ -1759,7 +1748,9 @@ async function codeTaskWork(
   if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
     return null;
   }
-  return { repoUrl: work.workspace?.repoUrl ?? null };
+  const repoUrl = work.workspace?.repoUrl ?? null;
+  if (!workOnProjectRepository(repoUrl, task.project?.codebases[0])) return null;
+  return { repoUrl };
 }
 
 /**

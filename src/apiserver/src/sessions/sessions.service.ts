@@ -149,6 +149,7 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
+import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
@@ -7571,6 +7572,9 @@ export class SessionsService {
             ...CLEARED_RUNNING_WORK,
           },
         });
+        // A session that ends before it ran is still a finish of the task's work, and may be the one
+        // a DONE task's identity was waiting for (§10.5 O-L4 3).
+        await settleDeliveredIdentityAfterFinish(tx, session);
         await retireSessionInboxGeneration(tx, sessionId);
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },

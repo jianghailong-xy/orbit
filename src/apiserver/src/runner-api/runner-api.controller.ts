@@ -219,7 +219,7 @@ import {
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
-import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -3947,6 +3947,12 @@ export class RunnerApiController {
             { code: frozen.refused.code, reason: frozen.refused.reason },
             at,
           );
+          // The refusal ended the run, and that finish may be the one a DONE task's identity was
+          // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
+          await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+            where: { id: sessionId },
+            select: { ownerId: true, taskId: true, startsTaskWork: true },
+          }));
         }
         return frozen;
       },
@@ -5885,6 +5891,7 @@ export class RunnerApiController {
         select: {
           status: true,
           taskId: true,
+          startsTaskWork: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -6859,6 +6866,10 @@ export class RunnerApiController {
       }
       if (failSession) {
         await retireSessionInboxGeneration(tx, sessionId);
+        // The park above wrote this session's finish, which may be the one a DONE task's identity was
+        // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
+        // turn's own exception items.
+        await settleDeliveredIdentityAfterFinish(tx, current);
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
       // request it has read and not answered is closed with its last words — unless something will
@@ -8471,6 +8482,10 @@ export class RunnerApiController {
           // The worktree's actual HEAD branch at completion → the bar flags divergence from the
           // tracked `branch` / offers Adopt for a session that finished on a checkout -b branch.
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+          // And that branch's tip after the finalize commit, which the delivered identity of a DONE
+          // task is frozen from below (§10.5 O-L4). Written when reported: an older runner, and a park
+          // checkpoint the next resume undoes, leave the tip the last live report gave.
+          ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? {
@@ -8506,6 +8521,9 @@ export class RunnerApiController {
       });
       const retryAt = quotaRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
+      // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
+      // once every work session has finished (§10.5 O-L4 3).
+      const delivered = await settleDeliveredIdentityAfterFinish(tx, current);
       await retireSessionInboxGeneration(tx, sessionId);
       // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
       // off the session payload, fetched on demand when a file's diff is opened.
@@ -8621,6 +8639,7 @@ export class RunnerApiController {
         retryAt,
         taskReclaimed,
         dispatchRefused,
+        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
         taskId: current.taskId,
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
@@ -8638,6 +8657,10 @@ export class RunnerApiController {
       this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
       // this door reclaimed the task and told nobody at all.
+      await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
+    if ('identityUnknown' in outcome && outcome.identityUnknown && outcome.taskId) {
       await this.openItems?.deliverForTasks([outcome.taskId]);
     }
     // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,

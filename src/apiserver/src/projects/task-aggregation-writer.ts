@@ -28,7 +28,11 @@ import {
   PlannedTaskAggregation,
 } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
-import { enqueueForDoneTask } from './project-integration-job';
+import {
+  DELIVERED_IDENTITY_CLEARED,
+  deliveredIdentityAtDone,
+  enqueueForDoneTask,
+} from './project-integration-job';
 
 /** The closure reads tasks and nothing else; `task.findMany` is the whole of its surface. */
 export type AggregationScopeTransaction = TransactionSurface<{ task: ['findMany'] }>;
@@ -188,9 +192,19 @@ export async function applyTaskAggregations(
 ): Promise<string[]> {
   const moved: string[] = [];
   for (const aggregation of aggregations) {
+    // The delivered identity moves with DONE, in the same statement (§10.5 O-L4): a DONE states the
+    // one it freezes, and a move out of DONE clears it — a task that is not DONE has delivered nothing.
+    const delivered = aggregation.to === 'DONE'
+      ? await deliveredIdentityAtDone(db, ownerId, aggregation.taskId)
+      : aggregation.from === 'DONE' ? DELIVERED_IDENTITY_CLEARED : null;
     const rows = await db.$executeRaw(Prisma.sql`
       UPDATE "task"
-         SET "status" = ${aggregation.to}::"task_status", "updated_at" = ${now}
+         SET "status" = ${aggregation.to}::"task_status", "updated_at" = ${now}${delivered ? Prisma.sql`,
+             "delivered_sha" = ${delivered.deliveredSha},
+             "delivered_base_sha" = ${delivered.deliveredBaseSha},
+             "delivered_branch" = ${delivered.deliveredBranch},
+             "delivered_session_id" = ${delivered.deliveredSessionId}::uuid,
+             "delivered_at" = ${delivered.deliveredAt}` : Prisma.empty}
        WHERE "id" = ${aggregation.taskId}::uuid
          AND "owner_id" = ${ownerId}::uuid
          AND "status" = ${aggregation.from}::"task_status"
