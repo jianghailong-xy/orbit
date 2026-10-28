@@ -222,7 +222,10 @@ func (d *driver) codeHandedOver(secrets relaySecrets, attempt string, within tim
 
 func (d *driver) relayDrill(ctx context.Context, o drillOptions) {
 	secrets, err := readRelaySecrets(o.relaySecrets)
-	if !d.record("the code and the key to hand over", err == nil && secrets.Key != "", time.Now(), errString(errOr(err, "-relay-secrets names no key"))) {
+	if err == nil && secrets.Key == "" {
+		err = errors.New("-relay-secrets names no key")
+	}
+	if !d.record("the code and the key to hand over", err == nil, time.Now(), errString(err)) {
 		return
 	}
 	own, attempt := d.relayStart(o)
@@ -346,7 +349,10 @@ func (d *driver) relayBeginDrill(ctx context.Context, o drillOptions) {
 
 func (d *driver) relayFinishDrill(ctx context.Context, o drillOptions) {
 	secrets, err := readRelaySecrets(o.relaySecrets)
-	if !d.record("the code to collect", err == nil && o.relayAttempt != "", time.Now(), errString(errOr(err, "-relay-attempt is required"))) {
+	if err == nil && o.relayAttempt == "" {
+		err = errors.New("-relay-attempt is required")
+	}
+	if !d.record("the code to collect, for attempt "+o.relayAttempt, err == nil, time.Now(), errString(err)) {
 		return
 	}
 	d.beat(true)
