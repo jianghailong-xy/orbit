@@ -730,11 +730,8 @@ internal object RunnerPage {
     }
 
     /** green online, amber while it drains, grey offline. */
-    fun presence(runner: JsonObject, nowMs: Long) = when {
-        isOffline(runner, nowMs) -> "offline"
-        runner.str("status") == "DRAINING" -> "draining"
-        else -> "online"
-    }
+    /** The status dot, by the web's rule: "online" or "offline" — a machine that drains is online. */
+    fun presence(runner: JsonObject, nowMs: Long) = if (isOffline(runner, nowMs)) "offline" else "online"
 
     /** A list row's `4/12`: none for an offline machine or one with no limit reported. */
     fun slots(runner: JsonObject, nowMs: Long): Pair<Int, Int>? {

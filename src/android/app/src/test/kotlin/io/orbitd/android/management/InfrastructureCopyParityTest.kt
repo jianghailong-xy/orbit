@@ -28,13 +28,13 @@ class InfrastructureCopyParityTest {
         val source = listOf("${kit}Infrastructure.swift", "${kit}ProvidersOverview.swift", "${kit}AppSection.swift", "${views}RunnerEnginePage.swift")
             .joinToString("\n") { read(it) }
         val words = constants(Infrastructure)
-        assertTrue("Infrastructure holds no words", words.size >= 17)
+        assertTrue("Infrastructure holds no words", words.size >= 15)
         assertEquals("Infrastructure strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
         // The sentences built around a name keep iOS's words around it.
-        listOf("\\(ProviderEngines.cliName(engine.rawValue)) is signed out on \\(machine)\"", "\"\\(machine) is offline\"",
+        listOf("\"\\(machine) is offline\"",
             "\"Last seen \\(", "\"Never checked in\"", "\" · its subscriptions are unavailable until it’s back\"", "\"\\(pool) is unavailable\"",
             "\"\\(reason) · no session can start on it\"", " · \\(busy) / \\(all) slots busy\"", "\"\\(active) / \\(max) running\"",
-            "\"1 engine signed out\"", " engines signed out\"", "\"Install failed\"", "\"Update failed\"", "\"Updating…\"",
+            "\"Install failed\"", "\"Update failed\"", "\"Updating…\"",
             "\"Engines not reported\"", "\"1 engine not updating\"", "\"All signed in\"", " of \\(engines.count) signed in\"",
             "\"Install \\(RunnerPageFormat.engineName(engine))\"").forEach { assertTrue("$it is not in the Swift sources", source.contains(it)) }
         val settings = read("${kit}SettingsHome.swift")

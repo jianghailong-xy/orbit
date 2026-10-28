@@ -183,11 +183,9 @@ struct RunnersListView: View {
 
     private func push(_ page: NavNode) { model.push(page) }
 
-    /// A line of Needs you, opened: the engine's page, the machine's record, the pool's page.
+    /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: Infrastructure.Attention) {
         switch item.kind {
-        case .signedOut(let runnerID, let engine):
-            openEngine(runnerID, engine.rawValue)
         case .offline(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
@@ -197,12 +195,6 @@ struct RunnersListView: View {
         case .poolUnavailable(let poolID, let own):
             model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))
         }
-    }
-
-    /// An engine's page — over its machine's record where the pane shows the record the list selects.
-    private func openEngine(_ runnerID: String, _ engine: String) {
-        if rowNavigation == .selection { model.selectedRunnerID = runnerID }
-        model.push(.runnerEngine(runnerID: runnerID, engine: engine))
     }
 }
 
@@ -373,10 +365,9 @@ struct RunnerRow: View {
         let nowMs = RunnerPageFormat.nowMs(now)
         let items = RunnerAttention.runnerAttention(runner: runner, workspaces: workspaces, nowMs: nowMs,
                                                     latestVersion: latestVersion)
-        let signedOut = !Infrastructure.signedOutEngines(runner).isEmpty
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now))
+                RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now), ringed: true)
                     .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 5 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -394,7 +385,7 @@ struct RunnerRow: View {
                     }
                     Text(Infrastructure.machineLine(runner, now: now))
                         .font(.orbitListSubtitle)
-                        .foregroundStyle(signedOut ? RunnerInk.amber : Color.secondary)
+                        .foregroundStyle(Color.secondary)
                         .lineLimit(1)
                     if let line = RunnerAttention.listAttentionLine(items) {
                         // Not a `Label`: a list gives a label's icon a column of its own, and the

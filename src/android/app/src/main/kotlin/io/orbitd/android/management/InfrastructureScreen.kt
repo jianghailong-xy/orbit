@@ -116,7 +116,6 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
         while (true) { delay(15_000); machines.load() }
     }
     fun runner(id: String) = open(OrbitRoute(Destination.RUNNER, id))
-    fun engine(runnerId: String, engine: String) = open(OrbitRoute(Destination.RUNNER, runnerId, recordId = "engine:$engine"))
     fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = record))
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -141,7 +140,6 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                 val attention = model.attention(machines.runners, now)
                 if (attention.isNotEmpty()) NeedsYouSection(attention) { item ->
                     when (val kind = item.kind) {
-                        is Infrastructure.Kind.SignedOut -> engine(kind.runnerId, kind.engine)
                         is Infrastructure.Kind.Offline -> runner(kind.runnerId)
                         is Infrastructure.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
                     }
@@ -170,8 +168,7 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
     if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id -> adding = false; runner(id) }
 }
 
-/** A line for each thing that waits on a person, in the web's words, each with its way out: an engine signed in again on its page, a
- * machine's record, a pool's page. */
+/** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page. */
 @Composable
 private fun NeedsYouSection(items: List<Infrastructure.Attention>, open: (Infrastructure.Attention) -> Unit) {
     FormSection(Infrastructure.NEEDS_YOU) {
@@ -180,13 +177,12 @@ private fun NeedsYouSection(items: List<Infrastructure.Attention>, open: (Infras
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("needs-you:${item.id}"), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Grey for a machine that is away, amber for the rest — the web's two dots.
-                StatusDot(if (item.kind is Infrastructure.Kind.Offline) "offline" else "draining")
+                Dot(if (item.kind is Infrastructure.Kind.Offline) IDLE_DOT else Ink.amber)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(bold(item.line, item.names))
                     Text(item.detail, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
                 when (item.kind) {
-                    is Infrastructure.Kind.SignedOut -> Button(onClick = { open(item) }) { Text(Infrastructure.SIGN_IN) }
                     is Infrastructure.Kind.Offline -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.DETAILS) }
                     is Infrastructure.Kind.PoolUnavailable -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.MANAGE) }
                 }

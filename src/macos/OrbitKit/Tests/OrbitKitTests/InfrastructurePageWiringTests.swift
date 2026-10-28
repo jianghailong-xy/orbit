@@ -142,11 +142,11 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let agents = code(try appSource("AgentsModel.swift"))
         XCTAssertTrue(agents.contains("ownKeys = try await api.personalProviders()"),
                       "the keys are the account's own, as the web page reads them")
-        // Every press stays in the app: an engine's page, a machine's record, a pool's page.
+        // Every press stays in the app: a machine's record, a pool's page. An engine signed out is no line.
         let page = try XCTUnwrap(try lists().first?.code)
         let presses = try slice(page, from: "private func openAttention(",
-                                to: "model.push(.runnerEngine(runnerID: runnerID, engine: engine))")
-        for piece in ["openEngine(runnerID, engine.rawValue)", "model.selectedRunnerID = runnerID",
+                                to: "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))")
+        for piece in ["model.selectedRunnerID = runnerID",
                       "model.push(.runnerDetail(runnerID: runnerID))",
                       "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))"] {
             XCTAssertTrue(presses.contains(piece), "the page's presses lost \(piece)")
@@ -183,17 +183,17 @@ final class InfrastructurePageWiringTests: XCTestCase {
         }
     }
 
-    /// ②–⑤ Dot, name, the slots' bar — or Offline — then "2 / 4 running · 1 engine signed out" in amber
-    /// (03-ios.png), and the third line only when something needs a person — `RunnerAttention`'s.
+    /// ②–⑤ Dot — the web card's, ringed — name, the slots' bar — or Offline — then "2 / 4 running · 1 of 3
+    /// signed in" in grey (03-ios.png, without the count of engines signed out the web's card dropped), and
+    /// the third line only when something needs a person — `RunnerAttention`'s.
     func testTheRowIsTheMocksRow() throws {
         let row = code(try slice(try runners(), from: "struct RunnerRow: View {", to: "struct RunnerDetailView: View {"))
-        for piece in ["RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now))",
+        XCTAssertFalse(row.contains("signedOut"), "a machine's row counts no engine signed out")
+        for piece in ["RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now), ringed: true)",
                       "if let slots = RunnerPageFormat.slots(runner, now: now) {",
                       "RunnerSlotBar(slots: slots)",
                       "Text(RunnerPageCopy.RUNNER_OFFLINE)",
                       "Text(Infrastructure.machineLine(runner, now: now))",
-                      "let signedOut = !Infrastructure.signedOutEngines(runner).isEmpty",
-                      ".foregroundStyle(signedOut ? RunnerInk.amber : Color.secondary)",
                       "if let line = RunnerAttention.listAttentionLine(items) {",
                       "Image(systemName: \"exclamationmark.triangle.fill\")",
                       "RunnerInk.attention(RunnerPageFormat.listTone(items) ?? .warn)",

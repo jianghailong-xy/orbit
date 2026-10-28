@@ -67,6 +67,8 @@ class InfrastructurePageTest {
 
     @Test fun theFiveSectionsComeInIosOrderWithIosWords() {
         codexSignedOut()
+        // The pool's people couldn't be read, so its own account — signed out — is all it has: Needs you's one line.
+        fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
         fixture.providersMine = """[{"id":"${fixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai",
             "hasApiKey":true,"enabled":false,"defaultModel":"gpt-5","models":[{"value":"gpt-5","label":"GPT-5"}],"engines":["codex","opencode"]}]"""
         page()
@@ -80,8 +82,8 @@ class InfrastructurePageTest {
         listOf(Infrastructure.MACHINES_DETAIL, RunnerCopy.ADD_FOOTER, Infrastructure.ACCOUNT_POOLS_DETAIL,
             "${Infrastructure.API_KEYS_DETAIL} ${DeepSeekBalance.EDIT_ON_WEB}").forEach { compose.onNodeWithText(it).assertExists() }
         compose.onNodeWithText("1 machine · 0 / 2 slots busy").assertExists()
-        // The machine's row: its slots and its engine signed out, Needs you's rule.
-        compose.onNodeWithText("0 / 2 running · 1 engine signed out", useUnmergedTree = true).assertExists()
+        // The machine's row: its slots and where its engines stand — Codex signed out there is no count of its own, as on the web's card.
+        compose.onNodeWithText("0 / 2 running · 1 of 3 signed in", useUnmergedTree = true).assertExists()
         // A key switched off says so, beside its model and the engines it runs on.
         compose.onNodeWithText("GPT-5", useUnmergedTree = true).assertExists()
         compose.onNodeWithText(Infrastructure.DISABLED, useUnmergedTree = true).assertExists()
@@ -96,19 +98,18 @@ class InfrastructurePageTest {
         // The pool's people couldn't be read, so its own account — signed out — is all it has.
         fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
         page()
-        await("Codex is signed out on Old alias")
-        compose.onNodeWithText("Spare box is offline").assertExists()
+        await("Spare box is offline")
         compose.onNodeWithText("Last seen 1d ago · its subscriptions are unavailable until it’s back").assertExists()
         compose.onNodeWithText("Team Codex is unavailable").assertExists()
         compose.onNodeWithText("Signed out · no session can start on it").assertExists()
-        compose.onNodeWithText(Infrastructure.SIGNED_OUT_DETAIL).assertExists()
+        // Codex signed out on Old alias is no line, as the web's machine card draws it nothing.
+        compose.onAllNodesWithText("is signed out on", substring = true).assertCountEquals(0)
         fun press(line: String, action: String) = compose.onNode(hasText(action) and hasClickAction() and
             hasAnyAncestor(hasTestTag(line))).performScrollTo().performClick()
-        press("needs-you:out:${fixture.RUNNER}/codex", Infrastructure.SIGN_IN)
         press("needs-you:offline:${fixture.RUNNER_TWO}", Infrastructure.DETAILS)
         press("needs-you:pool:${fixture.POOL}", Infrastructure.MANAGE)
         compose.runOnIdle {
-            assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER, recordId = "engine:codex"), OrbitRoute(Destination.RUNNER, fixture.RUNNER_TWO),
+            assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER_TWO),
                 OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "own:${fixture.POOL}")), opened)
         }
     }
@@ -144,6 +145,8 @@ class InfrastructurePageTest {
      * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it.
      * It comes first, before Preferences, whose first row is Sessions (docs/mocks/ios-settings-order). */
     @Test fun settingsHasOneInfrastructureRowWithItsValueAndTheLineUnderIt() {
+        // Codex signed out on the one machine is nothing for the row to count, as the web's machine card draws it nothing.
+        codexSignedOut()
         val api = api()
         compose.setContent {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, { opened += it }, {}, logout = {}, changed = {}, workspaceDeleted = {},
@@ -156,7 +159,8 @@ class InfrastructurePageTest {
         compose.onAllNodesWithText(Infrastructure.TITLE).assertCountEquals(1)
         assertTrue("Machines & models comes before Preferences", top(Infrastructure.TITLE) < top(Infrastructure.SUBTITLE) &&
             top(Infrastructure.SUBTITLE) < top("Preferences") && top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications"))
-        codexSignedOut()
+        // A machine offline is.
+        fixture.secondRunner = true; fixture.runnerTwoOnline = false
         revision++
         await("1 needs you")
         compose.onNode(hasText(Infrastructure.TITLE) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()

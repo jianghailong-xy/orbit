@@ -655,7 +655,7 @@ class ManagementDeviceTest {
 
     /**
      * A13g (A13-17 with A07-15 ②, iOS 5e75edbde): Settings' one Infrastructure row says how many things need you; the page says each —
-     * an engine signed out on a machine online, a machine offline, a pool no session can start on — with its way out in the app, then
+     * a machine offline, a pool no session can start on, and no engine signed out (as on the web's card) — with its way out in the app, then
      * the machines, Add Runner, the pools and the keys, top to bottom; it installs OpenCode from the page of the machine that lacks it,
      * and reads the machines again every 15 s while it is up (on the compose rule's clock, which a test's effects run on) and not while
      * the app is in the background.
@@ -667,24 +667,22 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; infraPass = true; installRelay = "null"
                 signIn(server); settings()
-                await("3 need you")
+                await("2 need you")
                 compose.onNodeWithText("Where your agents run, and whose model quota they spend.").assertExists()
                 listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
                 capture("infrastructure-settings-row")
                 click(hasText("Machines & models") and hasClickAction())
-                await("Codex is signed out on Controlled remote"); await("ThinkPad is offline"); await("Old keys is unavailable")
+                await("ThinkPad is offline"); await("Old keys is unavailable")
+                compose.onAllNodesWithText("is signed out on", substring = true).assertCountEquals(0)
                 capture("infrastructure-needs-you")
                 val sections = listOf("Needs you", "Machines", "Add Runner", "Account pools", "API keys")
                 // Down the page, on screen or scrolled out of it (boundsInRoot clips to what is on screen).
                 val tops = sections.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
                 assertEquals("top to bottom: $sections", tops.sorted(), tops)
                 compose.onNodeWithText("2 machines · 1 / 4 slots busy").performScrollTo()
-                await("1 / 4 running · 1 engine signed out"); capture("infrastructure-machines")
+                await("1 / 4 running · 1 of 3 signed in"); capture("infrastructure-machines")
                 compose.onNodeWithText("API keys").performScrollTo(); await("No keys yet"); capture("infrastructure-pools-keys")
-                // Every line's way out stays in the app: the engine's page, the machine's record, the pool's page.
-                click(hasText("Sign in") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:out:$runnerId/codex")))
-                await("Accounts"); await("Signed out"); capture("infrastructure-sign-in-codex")
-                back(); await("Needs you")
+                // Every line's way out stays in the app: the machine's record, the pool's page.
                 click(hasText("Details") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:offline:$thinkPadId")))
                 await("Max Concurrent"); await("Offline"); capture("infrastructure-details-thinkpad")
                 back(); await("Needs you")

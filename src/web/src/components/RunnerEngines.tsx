@@ -1529,9 +1529,9 @@ export interface MachineChip {
 
 /**
  * What a session on this machine can run on, in the order its rows come (docs/mocks/infrastructure-focus):
- * each engine signed in here, with how many of its logins, and each one signed out — which the card
- * draws no chip for, and Settings counts as needing you — and DeepSeek Harness once it can run here. An
- * engine not installed, or whose CLI wouldn't say, has nothing to show on the head: its row says what it is.
+ * each engine signed in here, with how many of its logins, and each one signed out, which the card
+ * draws no chip for — and DeepSeek Harness once it can run here. An engine not installed, or whose CLI
+ * wouldn't say, has nothing to show on the head: its row says what it is.
  */
 export function machineChipsOf(runner: Runner): MachineChip[] {
   if (!runner.engines) return [];

@@ -18,10 +18,9 @@ public enum RunnerPageFormat {
 
     // MARK: presence
 
-    /// The status dot: green online, amber while it drains, grey offline.
+    /// The status dot, by the web's rule: green online, grey offline — a machine that drains is online.
     public enum Presence: Equatable, Sendable {
         case online
-        case draining
         case offline
     }
 
@@ -30,8 +29,7 @@ public enum RunnerPageFormat {
     }
 
     public static func presence(_ runner: Runner, now: Date) -> Presence {
-        if isOffline(runner, now: now) { return .offline }
-        return runner.status == .draining ? .draining : .online
+        isOffline(runner, now: now) ? .offline : .online
     }
 
     /// The name the list and the page head show: the alias, else the machine's own name.

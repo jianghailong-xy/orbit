@@ -65,33 +65,18 @@ class InfrastructureTest {
 
     // Needs you
 
-    /** An engine signed out on a machine that is online gets a line, signed in again on its page; the same engine signed out on a machine
-     * that is offline doesn't — the machine's line is its line. */
-    @Test fun anEngineSignedOutOnAMachineOnlineIsALine() {
-        val lines = attention(fleet, own = listOf(claudePool()))
-        assertEquals("Codex is signed out on Mac Studio · Sessions there can’t use it", says(lines[0]))
-        assertEquals(Infrastructure.Kind.SignedOut("mac", "codex"), lines[0].kind)
-        assertEquals("the names the line sets in bold", listOf("Codex", "Mac Studio"), lines[0].names)
-        assertEquals(1, lines.count { it.line.contains("signed out") })
-        assertEquals("offline: its line says so instead", emptyList<String>(), Infrastructure.signedOutEngines(thinkPad))
-    }
-
-    /** Nothing for an engine still signed in on another account, one whose CLI would not say, or one not installed — and no block at all
-     * while nothing needs a person. */
-    @Test fun nothingForAnEngineStillInOnAnotherAccountOrOneThatWouldNotSay() {
-        val box = obj("""{"id":"hpc","name":"HPC","online":true,"engines":[
-          {"engine":"claude","installed":true,"auth":"no","accounts":[{"id":"default","auth":"no"},{"id":"slot-2","name":"Work","auth":"yes"}]},
-          {"engine":"codex","installed":true,"auth":"unknown"},
-          {"engine":"kimi","installed":false,"auth":"no"}]}""")
-        assertEquals(emptyList<Infrastructure.Attention>(), attention(listOf(box)))
+    /** An engine signed out is no line: the web's machine card draws it nothing, and the machine's own page says so and signs it in. Mac
+     * Studio's Codex is out, and only ThinkPad, offline, needs a person — no block at all while nothing does. */
+    @Test fun anEngineSignedOutIsNoLine() {
+        assertEquals(listOf(Infrastructure.Kind.Offline("thinkpad")), attention(fleet, own = listOf(claudePool())).map { it.kind })
         assertEquals("nothing needs a person", emptyList<Infrastructure.Attention>(), attention(listOf(hpc), own = listOf(claudePool())))
     }
 
     /** A machine that is offline: when it was last seen, and that its subscriptions are gone with it. */
     @Test fun aMachineOfflineIsALine() {
         val lines = attention(fleet, own = listOf(claudePool()))
-        assertEquals("ThinkPad is offline · Last seen 1d ago · its subscriptions are unavailable until it’s back", says(lines[1]))
-        assertEquals(Infrastructure.Kind.Offline("thinkpad"), lines[1].kind)
+        assertEquals("ThinkPad is offline · Last seen 1d ago · its subscriptions are unavailable until it’s back", says(lines[0]))
+        assertEquals(Infrastructure.Kind.Offline("thinkpad"), lines[0].kind)
         val never = obj("""{"id":"new","name":"New box","online":false}""")
         assertEquals("New box is offline · Never checked in · its subscriptions are unavailable until it’s back", says(attention(listOf(never))[0]))
     }
@@ -99,34 +84,12 @@ class InfrastructureTest {
     /** A pool no session can start on: its own reason, and its page — the account's own, or one it is in, which come first. */
     @Test fun aPoolNoSessionCanStartOnIsALine() {
         val lines = attention(fleet, own = listOf(claudePool(unavailable = "No account can run")))
-        assertEquals("Claude keys is unavailable · No account can run · no session can start on it", says(lines[2]))
-        assertEquals(Infrastructure.Kind.PoolUnavailable("pool", own = true), lines[2].kind)
+        assertEquals("Claude keys is unavailable · No account can run · no session can start on it", says(lines[1]))
+        assertEquals(Infrastructure.Kind.PoolUnavailable("pool", own = true), lines[1].kind)
         val both = attention(emptyList(), own = listOf(claudePool(unavailable = "No account can run")),
             member = listOf(codexPool("shared", "Team Codex", unavailable = "No keys")))
         assertEquals(listOf(Infrastructure.Kind.PoolUnavailable("shared", own = false), Infrastructure.Kind.PoolUnavailable("pool", own = true)),
             both.map { it.kind })
-    }
-
-    /** Antigravity is only a line where its Google sign-in can be started — the one way back in. */
-    @Test fun antigravitySignedOutIsALineOnlyWhereGoogleSignInCanStart() {
-        fun box(login: String) = obj("""{"id":"r","name":"Box","online":true,
-            "antigravity":{"supported":true,"installed":true,"envKeyAvailable":false,"googleLogin":"$login"},
-            "engines":[{"engine":"antigravity","installed":true,"auth":"no"}]}""")
-        assertEquals(listOf("antigravity"), Infrastructure.signedOutEngines(box("available")))
-        val line = attention(listOf(box("available")))[0]
-        assertEquals("Antigravity CLI is signed out on Box · Sessions there can’t use it", says(line))
-        assertEquals("the engine by its CLI's name, as every list names it", listOf("Antigravity CLI", "Box"), line.names)
-        assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(box("needs_update")))
-        assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(box("unsupported_platform")))
-    }
-
-    /** Antigravity on a machine's own Gemini key: the server's answer stands for its install and its credential, and Default on that key
-     * is no engine signed out. */
-    @Test fun antigravityOnTheMachinesOwnKeyIsNotSignedOut() {
-        val box = obj("""{"id":"r","name":"Box","online":true,
-         "antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"googleLogin":"available"},
-         "engines":[{"engine":"antigravity","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"no"}]}]}""")
-        assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(box))
     }
 
     // A key's row
@@ -145,12 +108,12 @@ class InfrastructureTest {
 
     // A machine's row (03-ios.png)
 
-    /** "2 / 4 running · 1 engine signed out"; "5 / 8 running · All signed in"; offline, where its engines stood: "1 of 3 signed in". */
-    @Test fun aMachinesLineSaysItsSlotsAndItsEnginesSignedOut() {
-        assertEquals("2 / 4 running · 1 engine signed out", Infrastructure.machineLine(macStudio, now))
+    /** "2 / 4 running · 1 of 3 signed in" — Mac Studio's Codex is signed out, and the line says where its engines stand rather than counting
+     * that, as the web's card does; "5 / 8 running · All signed in"; offline, where its engines stood: "1 of 3 signed in". */
+    @Test fun aMachinesLineSaysItsSlotsAndWhereItsEnginesStand() {
+        assertEquals("2 / 4 running · 1 of 3 signed in", Infrastructure.machineLine(macStudio, now))
         assertEquals("5 / 8 running · All signed in", Infrastructure.machineLine(hpc, now))
         assertEquals("1 of 3 signed in", Infrastructure.machineLine(thinkPad, now))
-        assertEquals("2 engines signed out", Infrastructure.signedOutCount(2))
         assertEquals("3 machines · 7 / 12 slots busy", Infrastructure.machinesCount(fleet))
         assertEquals("1 machine · 5 / 8 slots busy", Infrastructure.machinesCount(listOf(hpc)))
         assertNull(Infrastructure.machinesCount(emptyList()))
