@@ -10,6 +10,7 @@ import {
   TransactionOptions,
   TransactionOutcomeEvent,
   TransactionRunner,
+  TransactionWriteConflict,
   classifyTransactionError,
   classifyTransactionFault,
   isTransientTransactionError,
@@ -424,4 +425,21 @@ test('a hook that throws cannot fail a transaction that committed', async () => 
     },
   });
   assert.equal(result, 'done');
+});
+
+// An optimistic fence must abort the unit of work, not leave its derived writes committed.
+test('an optimistic write conflict reruns the transaction and returns the winner reread', async () => {
+  let attempts = 0;
+  const runner = {
+    async $transaction<T>(work: (tx: object) => Promise<T>): Promise<T> {
+      attempts += 1;
+      return work({});
+    },
+  };
+  const result = await withTransactionRetry(runner, async () => {
+    if (attempts === 1) throw new TransactionWriteConflict('claim changed');
+    return 'terminal replay';
+  });
+  assert.equal(result, 'terminal replay');
+  assert.equal(attempts, 2);
 });

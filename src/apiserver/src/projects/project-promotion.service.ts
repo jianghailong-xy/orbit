@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, TransactionWriteConflict, withTransactionRetry } from '../common/transaction-retry';
 import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
@@ -1363,7 +1363,23 @@ export async function applyPromotionJobResult(
     return { promotionId: promotion.id, state: 'CANCELLED', receiptIds: [], openApproval: null };
   }
 
-  if (input.jobKind === 'CHECK_PROMOTION') {
+  // A task check can discover a delivery already on main. It pushes nothing, so there is no
+  // merge to authorize: record the verified fact and retire the candidate, as an external
+  // merge receipt does. MERGED requires a real confirmation; never invent one for this check.
+  // A project-branch check retains its existing owner-facing disposition.
+  const settledSource = input.jobKind === 'CHECK_PROMOTION' && promotion.sourceKind === 'TASK_BRANCH'
+    && input.state === 'ALREADY_LANDED' && promotion.sessionId
+    ? await tx.session.findUnique({
+      where: { id: promotion.sessionId },
+      select: { baseSha: true, branchSha: true, finishedAt: true },
+    }) : null;
+  const deliveredTaskCheck = input.jobKind === 'CHECK_PROMOTION'
+    && promotion.sourceKind === 'TASK_BRANCH' && input.state === 'ALREADY_LANDED'
+    && input.sourceSha !== null && (input.targetShaBefore ?? input.upstreamSha) !== null
+    && settledSource?.finishedAt != null && settledSource.baseSha != null
+    && input.sourceSha !== settledSource.baseSha
+    && (settledSource.branchSha === null || settledSource.branchSha === input.sourceSha);
+  if (input.jobKind === 'CHECK_PROMOTION' && !deliveredTaskCheck) {
     if (input.state === 'READY') {
       // M-T11 before M-T2: whether anybody is asked at all.
       const refusal = await automaticConfirmationRefusalIn(tx, promotion, {
@@ -1433,7 +1449,7 @@ export async function applyPromotionJobResult(
     const mergedSha = input.state === 'LANDED' ? input.landedSha : (input.targetShaBefore ?? input.upstreamSha);
     if (!mergedSha) return null;
     const receiptIds = await writeUpstreamReceipts(tx, {
-      promotion,
+      promotion: { ...promotion, sourceSha: input.sourceSha ?? promotion.sourceSha },
       jobId: input.jobId,
       state: input.state,
       mergedSha,
@@ -1442,12 +1458,14 @@ export async function applyPromotionJobResult(
       testedTreeSha: input.testedTreeSha,
       recoveryHeld: input.recoveryHeld,
     });
-    await tx.projectPromotion.update({
-      where: { id: promotion.id },
+    const settledState: PromotionState = deliveredTaskCheck ? 'SUPERSEDED' : 'MERGED';
+    const settled = await tx.projectPromotion.updateMany({
+      where: { id: promotion.id, state: promotion.state },
       data: {
-        state: 'MERGED' satisfies PromotionState,
-        mergedSha,
-        mergedAt: now,
+        state: settledState,
+        sourceSha: input.sourceSha ?? promotion.sourceSha,
+        blockedReason: null,
+        ...(!deliveredTaskCheck ? { mergedSha, mergedAt: now } : {}),
         decidedAt: now,
         upstreamShaChecked: input.upstreamSha ?? promotion.upstreamShaChecked,
         mergeTreeSha: input.testedTreeSha ?? promotion.mergeTreeSha,
@@ -1457,8 +1475,13 @@ export async function applyPromotionJobResult(
         receiptIds,
       },
     });
+    if (settled.count !== 1) {
+      // The same result or an external receipt retired this candidate first. Roll back its
+      // derived receipts and let the transaction retry observe that committed disposition.
+      throw new TransactionWriteConflict('promotion changed while its result was being applied');
+    }
     await closePromotionItems(tx, promotion.projectId, promotion.id, 'RESOLVED');
-    return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
+    return { promotionId: promotion.id, state: settledState, receiptIds, openApproval: null };
   }
   return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
     promotionBlockedReasonFor(input.state));

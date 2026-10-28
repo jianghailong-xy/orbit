@@ -93,6 +93,14 @@ const TRANSIENT_CODES = new Map<string, TransientTransactionReason>([
 ]);
 
 /**
+ * An optimistic write lost its version/claim fence. Throw inside the transaction so every
+ * derived write rolls back before withTransactionRetry rereads the winner's committed state.
+ */
+export class TransactionWriteConflict extends Error {
+  readonly code = 'P2034';
+}
+
+/**
  * Codes that are an answer about one statement rather than about the transaction.
  *
  * A duplicate key or a missing parent row is a decision the data made; the second attempt reaches
