@@ -46,8 +46,8 @@ struct InfrastructureLists {
 
 // MARK: - Needs you
 
-/// A line for each thing that waits on a person, in the web's words, each with its way out: an engine
-/// signed in again on its page, a machine's record, a pool's page.
+/// A line for each thing that waits on a person, in the web's words, each with its way out: a machine's
+/// record, a pool's page.
 struct InfrastructureNeedsYouSection: View {
     let items: [Infrastructure.Attention]
     /// Whether a pool's line opens its page — the Mac has no pool pages, so there the line only says why.
@@ -104,9 +104,6 @@ private struct InfrastructureAttentionRow: View {
 
     @ViewBuilder private func press(_ action: @escaping () -> Void) -> some View {
         switch item.kind {
-        case .signedOut:
-            Button(Infrastructure.signIn, action: action)
-                .buttonStyle(.borderedProminent)
         case .offline:
             Button(Infrastructure.details, action: action)
                 .buttonStyle(.bordered)

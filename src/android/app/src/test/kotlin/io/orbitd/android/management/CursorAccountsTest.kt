@@ -135,10 +135,6 @@ class CursorAccountsTest {
         val out = single("""{"engine":"cursor","installed":true,"version":"2026.10.14-941492e","auth":"no"}""")
         assertEquals(RunnerCopy.SIGNED_OUT to "warn", RunnerPage.engineStatus(cursor(out), out))
         assertTrue(RunnerPage.needsSignIn(cursor(out), out))
-        // Needs you raises the sign-in only where the machine can run Cursor CLI.
-        assertEquals(listOf("cursor"), Infrastructure.signedOutEngines(out))
-        assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(single("""{"engine":"cursor","installed":true,"auth":"no",
-            "installationError":"CURSOR_VERSION_INCOMPATIBLE: x"}""", "")))
     }
 
     /** Add Account, the section's name and the sign-in itself need a runner that signs a named account into its own directory

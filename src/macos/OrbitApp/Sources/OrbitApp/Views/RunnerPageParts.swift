@@ -36,7 +36,6 @@ enum RunnerInk {
     static func dot(_ presence: RunnerPageFormat.Presence) -> Color {
         switch presence {
         case .online: return Color.green
-        case .draining: return Color.orange
         case .offline: return idle
         }
     }
@@ -93,15 +92,20 @@ struct RunnerSectionHeader: View {
     }
 }
 
-/// Online green, draining amber, offline grey.
+/// Online green, offline grey (the web's `.re-dot`). `ringed` gives it the web card's soft ring of its own
+/// colour, 2.5 pt at 20%, so a list's dot reads as a light rather than a speck.
 struct RunnerStatusDot: View {
     let presence: RunnerPageFormat.Presence
-    var size: CGFloat = 8
+    var size: CGFloat = 9
+    var ringed = false
 
     var body: some View {
+        let colour = RunnerInk.dot(presence)
         Circle()
-            .fill(RunnerInk.dot(presence))
+            .fill(colour)
             .frame(width: size, height: size)
+            .padding(ringed ? 2.5 : 0)
+            .background(Circle().fill(colour.opacity(ringed ? 0.2 : 0)))
     }
 }
 

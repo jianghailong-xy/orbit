@@ -165,7 +165,7 @@ class RemoveDefaultTest {
         assertNull(RunnerPage.engineNextAccount(withDefault(), "codex", now))
     }
 
-    /** What sums up the engine elsewhere — its row, the machine's line, Needs Attention — speaks for the accounts that remain. */
+    /** What sums up the engine elsewhere — its row and the machine's Needs Attention — speaks for the accounts that remain. */
     @Test fun whatSumsUpTheEngineSpeaksForTheAccountsThatRemain() {
         val one = removed(work())
         assertEquals(RunnerCopy.SIGNED_IN to "ok", RunnerPage.engineStatus(health(one), one))
@@ -173,10 +173,8 @@ class RemoveDefaultTest {
         val two = removed(work(), personal("no"))
         assertEquals(RunnerCopy.SIGNED_OUT to "warn", RunnerPage.engineStatus(health(two), two))
         assertTrue("Personal's sign-in", RunnerPage.needsSignIn(health(two), two))
-        assertEquals(emptyList<String>(), Infrastructure.signedOutEngines(two))
         // Every one that remains signed out: Codex is signed out there for Orbit, whatever Default's sign-in on the machine.
         val out = removed(work("no"), personal("no"))
-        assertEquals(listOf("codex"), Infrastructure.signedOutEngines(out))
         val workspace = json("""{"id":"w","name":"Alpha","lastProvider":"codex"}""")
         assertEquals(listOf("Codex is signed out"), RunnerPage.attention(out, listOf(workspace), now, null).map { it.title })
         assertEquals(emptyList<String>(), RunnerPage.attention(two, listOf(workspace), now, null).map { it.title })

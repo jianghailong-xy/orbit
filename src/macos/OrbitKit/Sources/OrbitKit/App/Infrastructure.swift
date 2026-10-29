@@ -19,17 +19,10 @@ public enum Infrastructure {
     public static let needsYou = "Needs you"
     public static let machines = "Machines"
     public static let machinesDetail = "Subscriptions signed in here are spent only by sessions on that machine."
-    public static let signIn = "Sign in"
     public static let details = "Details"
     public static let manage = "Manage"
     /// A key that is switched off — listed, and nothing runs on it.
     public static let disabled = "Disabled"
-    public static let signedOutDetail = "Sessions there can’t use it"
-
-    /// "Antigravity CLI is signed out on HPC": the engine by its CLI's name, as every list on the page names it.
-    public static func signedOutLine(engine: LoginEngine, machine: String) -> String {
-        "\(ProviderEngines.cliName(engine.rawValue)) is signed out on \(machine)"
-    }
 
     public static func offlineLine(machine: String) -> String { "\(machine) is offline" }
 
@@ -58,9 +51,6 @@ public enum Infrastructure {
     /// One line of what waits on a person (web's `NeedsAttention`), and where its way out goes.
     public struct Attention: Equatable, Sendable, Identifiable {
         public enum Kind: Equatable, Sendable {
-            /// An engine installed but signed out on a machine that is online: signed in again on that
-            /// engine's page, where signing in lives.
-            case signedOut(runnerID: String, engine: LoginEngine)
             /// A machine that is offline: its record.
             case offline(runnerID: String)
             /// A pool no session can start on: its page — one of the account's own, or one it is in.
@@ -68,35 +58,27 @@ public enum Infrastructure {
         }
 
         public let kind: Kind
-        /// "Codex is signed out on Mac Studio".
+        /// "ThinkPad is offline".
         public let line: String
         /// The names the line sets in bold, as the web does.
         public let names: [String]
-        /// What it means: "Sessions there can’t use it".
+        /// What it means: "Last seen 1d ago · its subscriptions are unavailable until it’s back".
         public let detail: String
 
         public var id: String {
             switch kind {
-            case .signedOut(let runnerID, let engine): return "out:\(runnerID)/\(engine.rawValue)"
             case .offline(let runnerID): return "offline:\(runnerID)"
             case .poolUnavailable(let poolID, _): return "pool:\(poolID)"
             }
         }
     }
 
-    /// What needs a person, a line each, in the web's order: each engine signed out on a machine that is
-    /// online, each machine offline, then each pool no session can start on — the ones the account is in
-    /// before its own, as the page lists them. Empty while nothing does.
+    /// What needs a person, a line each: each machine offline, then each pool no session can start on —
+    /// the ones the account is in before its own, as the page lists them. Empty while nothing does. An
+    /// engine signed out on a machine is no line, as the web's machine card draws it nothing: the machine's
+    /// own page says so, and signs it in.
     public static func attention(runners: [Runner], memberPools: [ProviderPool], ownPools: [ProviderPool],
                                  now: Date = Date()) -> [Attention] {
-        let signedOut = runners.flatMap { runner in
-            signedOutEngines(runner).map { engine -> Attention in
-                let machine = RunnerPageFormat.displayName(runner)
-                return Attention(kind: .signedOut(runnerID: runner.id, engine: engine),
-                                 line: signedOutLine(engine: engine, machine: machine),
-                                 names: [ProviderEngines.cliName(engine.rawValue), machine], detail: signedOutDetail)
-            }
-        }
         let offline = runners.filter { $0.online != true }.map { runner -> Attention in
             let machine = RunnerPageFormat.displayName(runner)
             return Attention(kind: .offline(runnerID: runner.id), line: offlineLine(machine: machine),
@@ -111,30 +93,7 @@ public enum Infrastructure {
                              line: poolLine(pool: entry.pool.label), names: [entry.pool.label],
                              detail: poolDetail(reason: reason))
         }
-        return signedOut + offline + unavailable
-    }
-
-    /// The engines signed out on a machine that is online — the ones Needs you lists for it, so a machine's
-    /// row and that list never disagree. None for a machine offline: its line says so instead.
-    public static func signedOutEngines(_ runner: Runner) -> [LoginEngine] {
-        guard runner.online == true else { return [] }
-        return LoginEngine.allCases.filter { signedOut(runner, $0) }
-    }
-
-    /// Whether this engine is signed out on this machine (web's `signedOutOn`): installed, the CLI's own
-    /// answer is no, and no account of it is signed in either — with one that is, sessions there still run
-    /// on it. Antigravity only where its Google sign-in can be started, the one way back in there is; and
-    /// Cursor CLI only where the machine can run it at all — one that can't says so on its row instead,
-    /// and signing in there would not help.
-    static func signedOut(_ runner: Runner, _ engine: LoginEngine) -> Bool {
-        let health = engineHealth(runner, engine)
-        guard rowKind(health, install: runner.install, engine: engine) == .signedOut else { return false }
-        if engine == .antigravity
-            && (runner.antigravity?.supported == false || runner.antigravity?.googleLogin != .available) {
-            return false
-        }
-        if engine == .cursor && CursorRuntime.state(of: runner) != .ready { return false }
-        return !(health?.accounts ?? []).contains { $0.auth == "yes" }
+        return offline + unavailable
     }
 
     // MARK: - A key's model and name
@@ -171,20 +130,15 @@ public enum Infrastructure {
     /// "2 / 4 running" — the slots taken on a machine that is online.
     public static func running(active: Int, max: Int) -> String { "\(active) / \(max) running" }
 
-    public static func signedOutCount(_ count: Int) -> String {
-        count == 1 ? "1 engine signed out" : "\(count) engines signed out"
-    }
-
     /// A machine's line in the list (03-ios.png): how many of its slots are taken while it is online and has
-    /// a limit, then how many of its engines are signed out — Needs you's rule — or, with none, where its
-    /// engines stand.
+    /// a limit, then where its engines stand — never a count of the ones signed out, which the web's card
+    /// leaves to the machine's own page too.
     public static func machineLine(_ runner: Runner, now: Date = Date()) -> String {
         var parts: [String] = []
         if runner.online == true, let max = runner.maxConcurrent, max > 0 {
             parts.append(running(active: runner.activeSessions ?? 0, max: max))
         }
-        let out = signedOutEngines(runner).count
-        parts.append(out > 0 ? signedOutCount(out) : summary(runner, now: now))
+        parts.append(summary(runner, now: now))
         return parts.joined(separator: " · ")
     }
 

@@ -161,11 +161,19 @@ fun runnerTitle(record: String?, runnerId: String?, fallback: String?): String =
     else -> runnerNames[ObjectId.canonical(runnerId) ?: runnerId] ?: fallback ?: "Runner"
 }
 
+/** A machine's status dot, by the web's rule: green online, grey offline (a machine that drains is online). [ringed] gives it the web
+ * card's soft ring of its own colour, 2.5 dp at 20%, so a list's dot reads as a light rather than a speck. */
 @Composable
-internal fun StatusDot(presence: String, size: Int = 8) {
-    Box(Modifier.size(size.dp).clip(CircleShape).background(when (presence) {
-        "online" -> Ink.green; "draining" -> Ink.amber; else -> Color(0xFFA8A8AD)
-    }))
+internal fun StatusDot(presence: String, size: Int = 9, ringed: Boolean = false) =
+    Dot(if (presence == "online") Ink.green else IDLE_DOT, size, ringed)
+
+internal val IDLE_DOT = Color(0xFFA8A8AD)
+
+@Composable
+internal fun Dot(colour: Color, size: Int = 8, ringed: Boolean = false) {
+    Box(Modifier.clip(CircleShape).background(colour.copy(alpha = if (ringed) .2f else 0f)).padding(if (ringed) 2.5.dp else 0.dp)) {
+        Box(Modifier.size(size.dp).clip(CircleShape).background(colour))
+    }
 }
 
 @Composable
@@ -264,7 +272,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                     CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
             }.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatusDot(RunnerPage.presence(runner, now))
+            StatusDot(RunnerPage.presence(runner, now), ringed = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, Modifier.weight(1f), maxLines = 2)
@@ -274,8 +282,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                         Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
                     } else if (RunnerPage.isOffline(runner, now)) Text(RunnerCopy.OFFLINE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
-                Text(Infrastructure.machineLine(runner, now), style = MaterialTheme.typography.bodySmall,
-                    color = if (Infrastructure.signedOutEngines(runner).isNotEmpty()) Ink.amber else Ink.muted, maxLines = 1)
+                Text(Infrastructure.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
                 RunnerPage.listAttentionLine(items)?.let { line ->
                     Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
                 }
