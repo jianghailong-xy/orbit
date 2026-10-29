@@ -23613,6 +23613,11 @@ button.project-open-item-action:disabled {
   line-height: 1.6;
   color: var(--text-2);
 }
+/* What a §10.7 card is about, under a heading that tells how it became the owner's. */
+.project-open-item-detail.project-open-item-subject {
+  color: var(--text-1);
+  font-weight: 500;
+}
 .project-open-item-next {
   margin: 0 0 12px;
   padding: 10px 12px 8px;

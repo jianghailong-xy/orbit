@@ -12,6 +12,7 @@ import { ownerConfirmationQuery } from '../lib/queries';
 import { ENTER_HINT } from './CardHotkey';
 import { DecisionStrip, ownerConfirmationPointer, type PendingDecisionQueue } from './DecisionRail';
 import {
+  IF_CONFIRMED_AGENT_PUSHED,
   IF_CONFIRMED_AUTO_MAIN,
   IF_CONFIRMED_ENDS_SESSION,
   IF_CONFIRMED_LINE_THEN_OWNER,
@@ -468,6 +469,25 @@ describe('If you confirm, by the project’s main branch', () => {
     expect(html).toContain('Not on master yet · <span class="owner-confirmation-if-added">+12</span>');
     expect(html).toContain('merging into master asks you again');
     expect(html).not.toContain(IF_CONFIRMED_NOT_ON_MAIN);
+  });
+
+  // §10.5 O-L2: an AGENT_PUSH project's task. No merge card follows the confirmation — the agent
+  // pushes, and an observation records the landing once it sees the commit (R29-9's `AGENT_PUSHED`).
+  it('says an AGENT_PUSH project’s work is pushed by its agent, and that confirming merges nothing', () => {
+    expect(ifConfirmedRows({ branch: unmerged, landing: 'AGENT_PUSHED', mainBranch: 'feature/v1.1.1' })).toEqual([
+      { kind: 'BRANCH', lead: 'Not on feature/v1.1.1 yet', added: '+12',
+        detail: 'orbit/p1-1c207b — confirming doesn’t merge it' },
+      { kind: 'LANDING',
+        lead: 'Pushed to feature/v1.1.1 by the agent; Orbit records it once it sees the commit there',
+        added: null, detail: null },
+    ]);
+    // Already on main: the landing row alone, in main's words.
+    expect(leads({ branch: { ...unmerged, onMain: 'YES' }, landing: 'AGENT_PUSHED', mainBranch: 'main' }))
+      .toEqual([IF_CONFIRMED_AGENT_PUSHED]);
+    expect(IF_CONFIRMED_AGENT_PUSHED).toBe('Pushed to main by the agent; Orbit records it once it sees the commit there');
+    const html = card({ view: view({ ifConfirmed: { branch: unmerged, landing: 'AGENT_PUSHED', mainBranch: null } }) });
+    expect(html).toContain(escaped(IF_CONFIRMED_AGENT_PUSHED));
+    expect(html).not.toContain(IF_CONFIRMED_AUTO_MAIN);
   });
 
   it('says them as before for a project on main, with no repository bound, or from an older server', () => {

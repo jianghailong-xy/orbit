@@ -231,6 +231,9 @@ export const IF_CONFIRMED_NO_RECORD_ON_MAIN = 'No record of this branch on main'
 export const IF_CONFIRMED_DOES_NOT_MERGE = 'confirming doesn’t merge it';
 export const IF_CONFIRMED_LINE_THEN_OWNER = 'Goes onto the integration line; merging into main asks you again';
 export const IF_CONFIRMED_AUTO_MAIN = 'Lands on main by itself if the checks pass';
+/** An AGENT_PUSH project's task (§10.5 O-L2): no merge card follows the confirmation — the agent
+ *  pushes the work itself, and an observation records the landing once it sees the commit. */
+export const IF_CONFIRMED_AGENT_PUSHED = 'Pushed to main by the agent; Orbit records it once it sees the commit there';
 export const IF_CONFIRMED_ENDS_SESSION = 'Ends this session';
 /** The four above that name main, said of the project's main branch (`ifConfirmed.mainBranch`). */
 export function ifConfirmedNotOn(main: string = DEFAULT_MAIN_BRANCH): string {
@@ -244,6 +247,9 @@ export function ifConfirmedLineThenOwner(main: string = DEFAULT_MAIN_BRANCH): st
 }
 export function ifConfirmedAutoMain(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Lands on ${main} by itself if the checks pass`;
+}
+export function ifConfirmedAgentPushed(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Pushed to ${main} by the agent; Orbit records it once it sees the commit there`;
 }
 
 /** One row of the block: its symbol, its first line, the branch's added lines said after it in the
@@ -280,7 +286,8 @@ const START_TIERS: readonly OwnerConfirmationStart[] = ['NOW', 'WHEN_SLOT_FREES'
  * read left out draws no row; no rows, no block.
  *
  * The branch row says confirming does not merge it only where the landing is read and is not
- * Automatic's — there the DONE does lead to main, as the landing row says.
+ * Automatic's — there the DONE does lead to main, as the landing row says. An AGENT_PUSH project's
+ * DONE merges nothing either: its agent pushes, which is what its landing row says.
  */
 export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null | undefined): IfConfirmedRow[] {
   if (!ifConfirmed) return [];
@@ -302,7 +309,7 @@ export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null
       kind: 'BRANCH',
       lead: branch.onMain === 'NO' ? ifConfirmedNotOn(main) : ifConfirmedNoRecordOn(main),
       added: branch.onMain === 'NO' && branch.linesAdded > 0 ? `+${branch.linesAdded.toLocaleString('en-US')}` : null,
-      detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER'
+      detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER' || landing === 'AGENT_PUSHED'
         ? `${branch.name} — ${IF_CONFIRMED_DOES_NOT_MERGE}`
         : branch.name,
     });
@@ -314,6 +321,9 @@ export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null
       added: null,
       detail: null,
     });
+  }
+  if (landing === 'AGENT_PUSHED') {
+    rows.push({ kind: 'LANDING', lead: ifConfirmedAgentPushed(main), added: null, detail: null });
   }
   if (endsSession) {
     const jobs = endsSession.runningBgJobs;

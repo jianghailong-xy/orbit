@@ -868,6 +868,26 @@ describe('what a successful Run now refreshes', () => {
     expect(message.success).not.toHaveBeenCalled();
   });
 
+  // §10.9: J9 refuses a run whose prerequisite is finished but not on the line yet, and says what it
+  // waits for — naming the open item when a `LANDING_UNOBSERVED` is behind the wait. The browser says
+  // the server's sentence as it is: the quotes and the dash are the item title's own words.
+  it('says J9’s refusal in the server’s own words', async () => {
+    const qc = seededCache();
+    const message = toast();
+    const refusal = 'A prerequisite is finished but its work is not on main yet — see “Not on main yet” in open items';
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(refusal, 400));
+
+    const observer = new MutationObserver(qc, {
+      ...runNowMutationOptions(qc, message, TASK_ID, PROJECT_ID),
+      retry: false,
+    });
+    await observer.mutate({ triggerId: newRunRequestToken() }).catch(() => {});
+
+    expect(message.error).toHaveBeenCalledWith("Couldn't start the task", refusal);
+    expect(message.sessionNotice).not.toHaveBeenCalled();
+  });
+
   it('answers a task that has already moved on with the run, not with the server’s English', async () => {
     // The panel's press meets the same gap the row's does: its copy of the task is from before
     // the re-dispatch. The refusal names the run that has it, so that is what the reader is given.

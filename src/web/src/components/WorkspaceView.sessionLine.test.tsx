@@ -77,6 +77,31 @@ describe('sessionLine', () => {
     });
   });
 
+  // §10.7 / §7.6 V13 (owner 2026-10-28): the fifth owner item, in the kind word all three clients
+  // copy verbatim. Not an escalation, so its `need` — the same words — is not appended a second time.
+  it('names work that reached main without the owner’s confirmation by its kind word', () => {
+    const landed = { itemId: 'i5', kind: 'LANDED_WITHOUT_CONFIRMATION',
+                     title: 'Reached main without your confirmation: Fix the login redirect',
+                     need: 'Landed without your confirmation', since: '2026-10-29T01:00:00Z' };
+    const waiting = {
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      projectId: 'p_1',
+      waitingKind: 'OWNER_ITEM',
+      pendingApprovals: 1,
+    };
+    expect(sessionLine({ ...waiting, ownerItems: [landed] }, true)).toEqual({
+      text: 'Landed without your confirmation',
+      tone: 'approval',
+    });
+    // The oldest item still names the row: an older question beats it, a newer one does not.
+    const question = { itemId: 'i6', kind: 'COORDINATOR_QUESTION', title: 'q', since: '2026-10-29T00:00:00Z' };
+    expect(statusLabel({ ...waiting, pendingApprovals: 2, ownerItems: [landed, question] }))
+      .toBe('Question from coordinator');
+    expect(statusLabel({ ...waiting, pendingApprovals: 2, ownerItems: [landed, { ...question, since: '2026-10-29T02:00:00Z' }] }))
+      .toBe('Landed without your confirmation');
+  });
+
   it('writes the server need after the escalation marker', () => {
     expect(sessionLine({
       status: 'AWAITING_INPUT',

@@ -102,7 +102,8 @@ export const SESSION_PROJECT_COPY = {
   startHint: 'Opens the start card: the criteria, the plan and how it runs.',
 } as const;
 
-// Capitalized COORDINATOR_LEAD_COPY; literals also let OrbitKit read the shared wording.
+// Capitalized COORDINATOR_LEAD_COPY; literals also let OrbitKit read the shared wording. Work not seen on
+// its line (§10.7) is in its final words, settled by R29-10 for the native clients to copy.
 export const SESSION_PROJECT_COORDINATOR_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CONFLICT: 'Resolving a merge conflict',
   INTEGRATION_CHECK_FAILED: 'Checks failed',

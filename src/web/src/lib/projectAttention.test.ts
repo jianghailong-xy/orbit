@@ -572,6 +572,41 @@ describe('attention by reason', () => {
     });
   });
 
+  // §10.7, owner 2026-10-28: work that reached main without the owner's confirmation is pushed once
+  // and counted in Needs-you, in the kind word all three clients copy verbatim (§7.1 V2).
+  it('names work that reached main without the owner’s confirmation, in the owner tier', () => {
+    const row = project({
+      buckets: { running: 2, done: 6 },
+      lastActivityAt: at(MINUTE),
+      attention: attention({ ownerItems: [ownerItem('LANDED_WITHOUT_CONFIRMATION', 1, 2 * HOUR)] }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('landed-without-confirmation');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · Landed without your confirmation · 2h',
+    });
+    // The longest wait leads among the five, and a tie goes to the contract's order: it is last.
+    const older = project({
+      attention: attention({
+        ownerItems: [
+          ownerItem('COORDINATOR_QUESTION', 1, 35 * MINUTE),
+          ownerItem('LANDED_WITHOUT_CONFIRMATION', 1, 3 * HOUR),
+        ],
+      }),
+    });
+    expect(attentionChipOf(older, NOW)?.text).toBe('Needs you · Landed without your confirmation · 3h');
+    const tied = project({
+      attention: attention({
+        ownerItems: [
+          ownerItem('LANDED_WITHOUT_CONFIRMATION', 1, HOUR),
+          ownerItem('FUSE_PAUSED', 1, HOUR),
+        ],
+      }),
+    });
+    expect(attentionReasonOf(tied, NOW)).toBe('fuse-paused');
+  });
+
   it('leads with the item that has waited longest, whatever else is also waiting', () => {
     const row = project({
       attention: attention({
@@ -667,6 +702,8 @@ describe('attention by reason', () => {
     ['INTEGRATION_ERROR', 'Coordinator · handling an integration error · 3h'],
     ['TASK_FAILED', 'Coordinator · handling a failed task · 3h'],
     ['DELIVERY_REVIEW', 'Coordinator · reviewing a delivery · 3h'],
+    // §10.7: the phrase R29-4 proposed, settled by R29-10 — the words the item's `need` uses.
+    ['LANDING_UNOBSERVED', 'Coordinator · handling work not on the line yet · 3h'],
   ] as const)('names what the coordinator is doing with a %s', (leadKind, text) => {
     const row = project({
       buckets: { running: 1 },
@@ -889,6 +926,16 @@ describe('the sidebar’s Projects group', () => {
     expect(projectNeedsYouCount(busy)).toBe(3);
     // The two marks answer different questions, so a project can carry both.
     expect(projectIsWorking(busy)).toBe(true);
+  });
+
+  it('counts work that reached main without your confirmation as waiting on you', () => {
+    const landed = row({
+      title: 'Landed',
+      attention: { ownerItems: [ownerItem('LANDED_WITHOUT_CONFIRMATION', 2, 4 * HOUR)] },
+    });
+    const merge = row({ title: 'Merge', attention: { ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, HOUR)] } });
+    expect(projectNeedsYouCount(landed)).toBe(2);
+    expect(sidebarProjects([merge, landed]).map((p) => p.title)).toEqual(['Landed', 'Merge']);
   });
 
   it('counts a coordinator asking to start the project as one more thing waiting on you', () => {

@@ -2101,10 +2101,11 @@ export function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
  * `integrating` is deliberately every non-terminal integration state AND the three failures: a
  * conflict is not a fourth lane on this page, it is integration stopped — and a row filed under
  * "Landed" or "Done" because its checks went red would be the exact false green the lane exists to
- * prevent. `landed` is the two states a merge receipt proves.
+ * prevent. `landed` is the two states a merge receipt proves. An AGENT_PUSH task waiting to be seen
+ * on its line (§10.9) has no receipt yet either, so it waits in the same lane.
  */
 const INTEGRATING_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
-  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER',
+  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',
 ]);
 const LANDED_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
   'ON_INTEGRATION_LINE', 'ON_UPSTREAM',
@@ -2135,6 +2136,17 @@ export function taskWaitsForLanding(task: ProjectTask): boolean {
 export interface TaskLandingBranches {
   ref: string | null;
   upstreamRef: string | null;
+}
+
+/**
+ * §10.9's second segment for an AGENT_PUSH task its line has not been seen to carry yet: "Waiting to
+ * be seen on main · 9f1c2ab" — the delivered commit, short, as the other commit tags on these pages
+ * shorten it. The words alone while the identity is not frozen (`deliveredSha` null: the work is
+ * still moving, or the commit could not be named). Once seen, the row reads `On <branch>`.
+ */
+export function waitingToBeSeenOn(branch: string, deliveredSha: string | null | undefined): string {
+  const words = `Waiting to be seen on ${branch}`;
+  return deliveredSha ? `${words} · ${deliveredSha.slice(0, 7)}` : words;
 }
 
 /**
@@ -2174,6 +2186,10 @@ export function projectTaskIntegrationTag(
       return { text: `Integration error · ${who}`, color: 'red' };
     case 'AWAITING_OWNER':
       return { text: 'Awaiting your approval', color: 'gold' };
+    case 'AWAITING_OBSERVATION':
+      // §10.9: the agent pushes, and Orbit records the landing once an observation sees the commit
+      // there — so the row names the commit it waits to see, while the identity is frozen.
+      return { text: waitingToBeSeenOn(branches.upstreamRef ?? 'main', integration.deliveredSha), color: 'default' };
     case 'ON_INTEGRATION_LINE':
       return { text: `On ${branches.ref ?? 'the project branch'}`, color: 'green' };
     case 'ON_UPSTREAM':

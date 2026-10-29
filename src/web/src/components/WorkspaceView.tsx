@@ -1140,7 +1140,7 @@ const sentLine = (text: string): SessionLine => ({
   tone: 'preview',
 });
 
-// The four owner items, one word each: no project and no count, because a row is one line and the
+// The five owner items, one word each: no project and no count, because a row is one line and the
 // project it is about is the conversation the row already names (contract §7.6 V13). The native
 // banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
 const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
@@ -1149,6 +1149,9 @@ const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
 export const OWNER_ITEM_ESCALATED = 'Escalated to you';
 export const OWNER_ITEM_NEED_SEPARATOR = ' · ';
 const OWNER_ITEM_PAUSED = 'Paused';
+// Revision 29's fifth (§10.7, owner 2026-10-28): the kind word all three clients copy verbatim —
+// a banner says it as `Landed without your confirmation · <project>`. A literal for the same reason.
+export const OWNER_ITEM_LANDED_WITHOUT_CONFIRMATION = 'Landed without your confirmation';
 
 /** The kinds this row can name, and the words it says for each. A kind missing here — one this
  *  build does not know — falls back to the approval wording rather than naming nothing. */
@@ -1157,6 +1160,7 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
   COORDINATOR_QUESTION: OWNER_ITEM_COORDINATOR_QUESTION,
   ESCALATED: OWNER_ITEM_ESCALATED,
   FUSE_PAUSED: OWNER_ITEM_PAUSED,
+  LANDED_WITHOUT_CONFIRMATION: OWNER_ITEM_LANDED_WITHOUT_CONFIRMATION,
 };
 
 /** The words above for an item whose project's main branch is `main` by name (the item's

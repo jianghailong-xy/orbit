@@ -222,6 +222,8 @@ describe('project second line and target', () => {
     ['INTEGRATION_ERROR', 'Handling an integration error'],
     ['TASK_FAILED', 'Handling a failed task'],
     ['DELIVERY_REVIEW', 'Reviewing a delivery'],
+    // §10.7: the phrase R29-4 proposed for work not seen on its line, settled by R29-10.
+    ['LANDING_UNOBSERVED', 'Handling work not on the line yet'],
   ] as [CoordinatorLeadKind, string][])(
     'uses the project handling words for %s, capitalized and without the Coordinator prefix',
     (leadKind, text) => {
