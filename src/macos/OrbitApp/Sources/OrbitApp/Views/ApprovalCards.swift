@@ -132,16 +132,29 @@ struct ApprovalHeader: View {
 /// the long "remember …" label crushing the others (web's ApprovalPanel does the same under 600px),
 /// and stacking keeps a destructive Deny from sitting a thumb-width from Allow. macOS keeps them in
 /// a natural row. Wiki Review's cards answer through this same stack (`WikiReviewCard`).
+///
+/// `stacked` keeps them one per line on macOS too, for a card whose doors each carry their line of
+/// consequence beside them (the exception card's `doorRow`), as the browser's door grid stacks them.
+/// Side by side, three such doors left each line a sliver of the card, and the window's layout never
+/// settled: AppKit ended the app ("needs another Update Constraints in Window pass").
 struct ApprovalActions<Content: View>: View {
     private let content: () -> Content
+    private let stacked: Bool
 
-    init(@ViewBuilder content: @escaping () -> Content) { self.content = content }
+    init(stacked: Bool = false, @ViewBuilder content: @escaping () -> Content) {
+        self.stacked = stacked
+        self.content = content
+    }
 
     var body: some View {
         #if os(iOS)
         VStack(spacing: 10) { content() }
         #else
-        HStack(spacing: 8) { content() }
+        if stacked {
+            VStack(alignment: .leading, spacing: 8) { content() }
+        } else {
+            HStack(spacing: 8) { content() }
+        }
         #endif
     }
 }
@@ -4288,7 +4301,7 @@ private struct OwnerItemCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            ApprovalActions {
+            ApprovalActions(stacked: true) {
                 // The card's own presses, in the three weights of mock 7 方案 B and the order the
                 // browser draws the same doors in — from the console's own read, which is what says
                 // whether the merge card a `Review` points at is on screen. A pause is a card of its

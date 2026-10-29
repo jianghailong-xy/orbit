@@ -1054,6 +1054,7 @@ public enum RunSettings {
     public static func deliveryLabel(_ mode: DeliveryMode) -> String {
         mode == .agentPush ? deliveryAgentPush : deliveryPlatform
     }
+
     public static let automatic = "Automatic"
     /// What Automatic means, on a project branch: the coordinator runs the project, merges included.
     public static let automaticHintProjectBranch =

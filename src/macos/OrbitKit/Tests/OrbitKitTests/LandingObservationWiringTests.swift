@@ -69,6 +69,20 @@ final class LandingObservationWiringTests: XCTestCase {
                       "the question is the panel, drawn on the card")
     }
 
+    /// A door is a row — its press beside its line of consequence on the Mac — and the rows stack, one
+    /// per line, as the browser's door grid does. Side by side on the Mac, the third door the work not
+    /// seen on its line brings (Observe again) left the window's layout unable to settle, and AppKit
+    /// ended the app (probe run 40808934994).
+    func testTheCardsDoorsStackOnePerLine() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("ApprovalActions(stacked: true) {"), "the card's doors stack")
+        let stack = try section(try source(Self.cards), from: "struct ApprovalActions<Content: View>: View {",
+                                to: "/// Answer an approval.")
+        XCTAssertTrue(stack.contains("if stacked {\n            VStack(alignment: .leading, spacing: 8) { content() }"),
+                      "stacked is a column on the Mac too")
+        XCTAssertTrue(stack.contains("HStack(spacing: 8) { content() }"), "and every other card keeps its row")
+    }
+
     /// The fifth kind wears its own word and the merge's mark; the handling rows follow the facts.
     func testTheCardSaysWhatItIsAndWhatIsHandlingIt() throws {
         let card = try card()
