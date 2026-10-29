@@ -1,4 +1,5 @@
 import type {
+  DeliveryMode,
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
@@ -217,6 +218,31 @@ export function runLineMain(main: string = DEFAULT_MAIN_BRANCH): string {
 export function runLineMainHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `For a single task or an urgent fix. Every merge into ${main} asks you.`;
 }
+/**
+ * How a finished task's work reaches the main branch (§10.5 O-L1, A-Q21): Orbit lands it — the
+ * default, and what every project did before the choice existed — or the agent pushes it there
+ * itself, which only a project that lands directly into its main branch can choose (409
+ * `DELIVERY_MODE_NEEDS_MAIN_LINE` otherwise). Each hint is the owner's half of the sentence the task
+ * prompt tells the agent (O-L3).
+ */
+export const RUN_DELIVERY = 'Delivery';
+export const RUN_DELIVERY_PLATFORM = 'Orbit lands it';
+export const RUN_DELIVERY_AGENT_PUSH = 'The agent pushes it';
+export function runDeliveryPlatformHint(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `The agent doesn’t push to ${main}: Orbit lands its branch once the work is accepted.`;
+}
+export function runDeliveryAgentPushHint(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `The agent pushes to ${main} itself, and Orbit checks the commits are there.`;
+}
+/** Why the agent may not push here: the project lands on a project branch, or no line is decided. */
+export function runDeliveryNeedsMainLine(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `The agent can push only on a project that lands directly into ${main}. On a project branch, `
+    + 'Orbit lands the work.';
+}
+/** Directly into main's hint once the agent pushes there: no merge into main asks anybody (O-L2). */
+export function runLineMainHintAgentPush(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `For a single task or an urgent fix. The agent pushes each task’s work to ${main} itself.`;
+}
 export const RUN_AUTOMATIC = 'Automatic';
 /** What Automatic means, on a project branch: the coordinator runs the project, merges included. */
 export const RUN_AUTOMATIC_HINT_PROJECT_BRANCH =
@@ -310,6 +336,20 @@ export function runAutomaticSays(
       + 'you can revert.';
 }
 
+/** The start card's sentence under the switch for a project whose agent pushes its own work (§10.5
+ *  O-L2): no merge into main asks anybody, because Orbit merges nothing there. */
+export function runAutomaticSaysAgentPush(automatic: boolean, main: string = DEFAULT_MAIN_BRANCH): string {
+  return `${automatic ? 'The coordinator decides' : 'You decide'} when each task is done. The agent `
+    + `pushes each task’s work to ${main} itself.`;
+}
+
+/** How it runs' Automatic sentence for the same project: the merging half is the agent's. */
+export function runAutomaticHintAgentPush(main: string = DEFAULT_MAIN_BRANCH): string {
+  return 'The coordinator runs it for you: it decides when each task is done and handles failed tasks '
+    + `and work not seen on ${main}. The agent pushes each task’s work to ${main} itself. The criteria `
+    + 'and anything irreversible stay yours.';
+}
+
 /** Said under the switch when Automatic is on and the project has no coordinator to run it yet:
  *  the start opens one (`POST /projects/:id/start`). */
 export const START_OPENS_COORDINATOR =
@@ -381,12 +421,16 @@ export function startComesToYou(input: {
   escalationSeconds: number;
   /** The project's main branch, as the list names it. */
   main?: string;
+  /** How its work reaches main (§10.5 O-L1); absent is PLATFORM. */
+  deliveryMode?: DeliveryMode;
 }): StartComesToYouItem[] {
   const confirms: StartComesToYouItem[] = input.ownerConfirmed.length > 3
     ? [{ text: startTasksYouConfirm(input.ownerConfirmed.length), detail: null }]
     : input.ownerConfirmed.map((task) => ({ text: `${task.label} · ${task.title}`, detail: START_YOU_CONFIRM }));
+  // An agent that pushes its own work to main asks nobody to merge it (O-L2): no merge comes to the
+  // owner on that line.
   const merges: StartComesToYouItem[] = input.line === 'MAIN'
-    ? [{ text: startEachMergeInto(input.main), detail: null }]
+    ? input.deliveryMode === 'AGENT_PUSH' ? [] : [{ text: startEachMergeInto(input.main), detail: null }]
     : input.automatic ? [] : [{ text: startMergingInto(input.main), detail: null }];
   const criteria = { text: START_CRITERIA_CHANGES, detail: null };
   if (input.automatic) {

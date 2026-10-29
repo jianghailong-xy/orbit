@@ -32,6 +32,7 @@ import {
   projectsQueryKey,
   projectsReturnPath,
   projectsRoutePath,
+  waitingToBeSeenOn,
 } from './ProjectsPage';
 
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
@@ -2386,6 +2387,57 @@ describe('ProjectDetailPage — integration', () => {
     // A task the platform is still working on has not settled, so it is not filed under the
     // heading that says it has.
     expect(out).not.toContain('Done / Cancelled');
+  });
+
+  // §10.9 / §7.3: an AGENT_PUSH task, finished, whose commit no observation has seen on its line
+  // yet (R29-5's `AWAITING_OBSERVATION`), and the same task once a receipt says it is there.
+  it('says an AGENT_PUSH task is waiting to be seen on the line, with its short commit, then On the line', () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail({
+      integration: { line: 'MAIN', ref: 'main', upstreamRef: 'main', deliveryMode: 'AGENT_PUSH' },
+      maxConcurrentTasks: 3,
+    }));
+    qc.setQueryData(integrationKey(P1), integration({ line: 'MAIN', ref: 'main', deliveryMode: 'AGENT_PUSH' }));
+    qc.setQueryData(tasksKey(P1), {
+      items: [
+        task({
+          id: 'o1', title: 'Pushed by its agent, not seen yet', status: 'DONE', workState: 'DONE',
+          integration: taskIntegration({
+            state: 'AWAITING_OBSERVATION', since: '2026-10-29T02:40:00Z',
+            deliveredSha: '9f1c2ab7e4d0b5a6c3f8e1d2a7b4c9e0f1a2b3c4', mainBranch: 'main',
+          }),
+        }),
+        task({
+          id: 'o2', title: 'Pushed by its agent, still moving', status: 'DONE', workState: 'DONE',
+          integration: taskIntegration({ state: 'AWAITING_OBSERVATION', deliveredSha: null, mainBranch: 'main' }),
+        }),
+        task({
+          id: 'o3', title: 'Pushed by its agent and seen there', status: 'DONE', workState: 'DONE',
+          integration: taskIntegration({ state: 'ON_UPSTREAM', mainBranch: 'main' }),
+        }),
+      ],
+      nextCursor: null,
+    });
+    const out = renderDetail(qc, encodeId(P1));
+
+    expect(out).toContain('Waiting to be seen on main · 9f1c2ab');
+    expect(out).toContain('Waiting to be seen on main<');
+    expect(out).toContain('On main');
+    // Not seen is not landed: the two waiting rows are pending landing, and only the seen one landed.
+    const groups = projectTaskGroups(
+      (qc.getQueryData(tasksKey(P1)) as { items: Parameters<typeof projectTaskGroups>[0] }).items,
+    );
+    expect(groups.map((group) => [group.key, group.tasks.map((row) => row.id)])).toEqual([
+      ['integrating', ['o1', 'o2']],
+      ['landed', ['o3']],
+    ]);
+  });
+
+  it('names the branch the project lands on, whatever it is called', () => {
+    expect(waitingToBeSeenOn('feature/v1.1.1', '0123456789abcdef0123456789abcdef01234567'))
+      .toBe('Waiting to be seen on feature/v1.1.1 · 0123456');
+    expect(waitingToBeSeenOn('main', null)).toBe('Waiting to be seen on main');
+    expect(waitingToBeSeenOn('main', undefined)).toBe('Waiting to be seen on main');
   });
 
   it('counts the tasks a row waits on in the plural the number asks for', () => {

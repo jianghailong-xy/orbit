@@ -165,12 +165,15 @@ function autoRemediationBlockerCount(project: AttentionProject): number {
   );
 }
 
-/** The four owner items in the order a tie between them is settled — the contract's own order. */
+/** The five owner items in the order a tie between them is settled — the contract's own order
+ *  (§7.1 V1). The fifth, work that reached main without the owner's confirmation (§10.7), is counted
+ *  like a merge approval or a question (owner 2026-10-28). */
 const OWNER_ITEM_KINDS: readonly OwnerItemKind[] = [
   'PROMOTION_APPROVAL',
   'COORDINATOR_QUESTION',
   'ESCALATED',
   'FUSE_PAUSED',
+  'LANDED_WITHOUT_CONFIRMATION',
 ];
 
 /** The four reasons, derived from the one table that maps an item kind to its chip — so a fifth
@@ -428,7 +431,9 @@ export function elapsedLabel(at: string | null | undefined, now: number): string
   return `${Math.floor(waited / DAY_MS)}d`;
 }
 
-/** What the coordinator is doing with the item it holds, by the item's kind (§7.1 V2). */
+/** What the coordinator is doing with the item it holds, by the item's kind (§7.1 V2). Work not seen
+ *  on its line (§10.7) is said in the words its `need` uses — "Not on the line yet" — which R29-10
+ *  settled as the final phrase for both lists (`SESSION_PROJECT_COORDINATOR_COPY`). */
 export const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CONFLICT: 'resolving a merge conflict',
   INTEGRATION_CHECK_FAILED: 'checks failed',
@@ -672,7 +677,7 @@ export interface SidebarProject {
   mainBranch?: string | null;
 }
 
-/** The four owner items this project is waiting on the reader for, of the kinds this build names. */
+/** The five owner items this project is waiting on the reader for, of the kinds this build names. */
 function waitingOwnerItems(project: SidebarProject) {
   if (project.status !== 'OPEN') return [];
   return (project.attention?.ownerItems ?? []).filter(

@@ -535,3 +535,100 @@ describe('How it runs — the main branch', () => {
     expect(node.querySelector('.main-branch-select')).toBeNull();
   });
 });
+
+// ── how the work reaches main (§10.5 O-L1) ──────────────────────────────────────────────────────
+
+const deliveryInput = (node: ParentNode, mode: 'PLATFORM' | 'AGENT_PUSH'): HTMLInputElement =>
+  settingRow(node, 'Delivery').querySelector<HTMLInputElement>(`input[value="${mode}"]`)!;
+
+describe('How it runs — how the work reaches main', () => {
+  it('offers the agent pushing on a main line, even once it started, and writes the choice alone', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    const node = await mount();
+    expect(labels(node)).toEqual(['Tasks land on', 'Delivery', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
+    // The line is locked; the delivery mode is not (O-L1).
+    expect(lineInput(node, 'MAIN').disabled).toBe(true);
+    expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(false);
+    const row = settingRow(node, 'Delivery').textContent ?? '';
+    expect(row).toContain('Orbit lands it');
+    expect(row).toContain('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
+    expect(row).toContain('The agent pushes it');
+    expect(row).toContain('The agent pushes to main itself, and Orbit checks the commits are there.');
+
+    await press(deliveryInput(node, 'AGENT_PUSH'));
+    // Automatic no longer says a merge into main asks you: nothing of Orbit's merges there now.
+    expect(settingRow(node, 'Automatic').textContent).toContain('The agent pushes each task’s work to main itself.');
+    expect(settingRow(node, 'Automatic').textContent).not.toContain(RUN_AUTOMATIC_HINT_MAIN);
+    await save(node, 1);
+
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { deliveryMode: 'AGENT_PUSH' } },
+    ]);
+  });
+
+  it('does not offer it on a project branch, and says why — the door would refuse it', async () => {
+    server.view = viewOf({ deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    const node = await mount();
+    expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
+    expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(true);
+    expect(settingRow(node, 'Delivery').textContent).toContain(
+      'The agent can push only on a project that lands directly into main. On a project branch, Orbit lands the work.');
+    expect(settingRow(node, 'Delivery').textContent).not.toContain('Orbit checks the commits are there');
+    await press(deliveryInput(node, 'AGENT_PUSH'));
+    expect(button(node, RUN_SAVE).disabled).toBe(true);
+  });
+
+  it('does not offer it while nobody decided the line, and writes it with main once main is chosen', async () => {
+    server.view = { ...undecided(), deliveryMode: 'PLATFORM', deliveryModeChosenAt: null };
+    const node = await mount();
+    expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(true);
+    await press(lineInput(node, 'MAIN'));
+    expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(false);
+    await press(deliveryInput(node, 'AGENT_PUSH'));
+    // The line it needs travels in the same write (O-L1: AGENT_PUSH on an undecided line needs MAIN).
+    await save(node, 1);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { line: 'MAIN', deliveryMode: 'AGENT_PUSH' } },
+    ]);
+  });
+
+  it('takes the delivery back to Orbit’s in the same write that moves an agent-push line off main', async () => {
+    server.view = viewOf({
+      line: 'MAIN', ref: 'main', locked: false, startedAt: null, deliveryMode: 'AGENT_PUSH',
+      deliveryModeChosenAt: '2026-10-28T09:00:00.000Z',
+    });
+    const node = await mount();
+    expect(deliveryInput(node, 'AGENT_PUSH').checked).toBe(true);
+    // Directly into main says no merge asks anybody while the agent pushes.
+    expect(settingRow(node, 'Tasks land on').textContent)
+      .toContain('For a single task or an urgent fix. The agent pushes each task’s work to main itself.');
+    expect(settingRow(node, 'Tasks land on').textContent).not.toContain(RUN_LINE_MAIN_HINT);
+
+    await press(lineInput(node, 'PROJECT_BRANCH'));
+    expect(deliveryInput(node, 'PLATFORM').checked).toBe(true);
+    expect(deliveryInput(node, 'AGENT_PUSH').disabled).toBe(true);
+    await save(node, 1);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { line: 'PROJECT_BRANCH', deliveryMode: 'PLATFORM' } },
+    ]);
+  });
+
+  it('says the door’s refusal in its own words', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    server.door = async () => {
+      throw new ApiError('this project has no repository to integrate into', 409, 'INTEGRATION_REPOSITORY_UNKNOWN');
+    };
+    const node = await mount();
+    await press(deliveryInput(node, 'AGENT_PUSH'));
+    await save(node, 1);
+    await until(() => (node.textContent ?? '').includes(RUN_NOT_SAVED), 'the refusal');
+    expect(node.textContent).toContain('this project has no repository to integrate into');
+  });
+
+  it('draws no Delivery row for a server that predates it', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main' });
+    const node = await mount();
+    expect(labels(node)).not.toContain('Delivery');
+  });
+});
