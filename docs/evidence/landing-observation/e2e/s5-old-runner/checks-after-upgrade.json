@@ -1,0 +1,20 @@
+[
+  {
+    "phase": "5-after",
+    "name": "the owner's retry is accepted",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5-after",
+    "name": "checked by its commit on the upgraded runner: READY",
+    "ok": true,
+    "detail": "READY -"
+  },
+  {
+    "phase": "5-after",
+    "name": "the retried check was handed over with sourceSha",
+    "ok": true,
+    "detail": "sourceSha=3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d; sourceSha=ce7b944a3b290c7998c7fcced8af946b543c4211"
+  }
+]

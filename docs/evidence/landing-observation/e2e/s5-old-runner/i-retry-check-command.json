@@ -1,0 +1,66 @@
+[
+  {
+    "jobId": "e1094701-ee53-447d-be05-83ed8cc81646",
+    "kind": "CHECK_PROMOTION",
+    "claimGeneration": "1",
+    "leaseOwner": "ab83acfc-5b11-4f7f-8851-2115e2ff3199",
+    "workDir": "/var/tmp/r29-13-e2e/b/work/s4",
+    "remoteName": "origin",
+    "refAuthority": "REMOTE",
+    "targetRef": "refs/heads/feature/release-2",
+    "upstreamRef": "refs/heads/feature/release-2",
+    "sourceRef": "refs/heads/orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc",
+    "sessionBaseSha": "323bd3983e4dee6441f125278b57b382383c95ad",
+    "sourceSha": "3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d",
+    "promotionSourceKind": "TASK_BRANCH",
+    "checks": [
+      {
+        "name": "TASK_ACCEPTANCE",
+        "command": "ls E2E_WORK_*.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 60
+      },
+      {
+        "name": "MERGE_CHECK",
+        "command": "test -f README.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 3600
+      }
+    ],
+    "cancelRequested": false,
+    "reportBeforePush": true,
+    "jobPublicId": "6qdVpI6haaDBmpMosbITcU"
+  },
+  {
+    "jobId": "6809c733-fc2d-4040-adab-5ca0ba58e529",
+    "kind": "CHECK_PROMOTION",
+    "claimGeneration": "1",
+    "leaseOwner": "ab83acfc-5b11-4f7f-8851-2115e2ff3199",
+    "workDir": "/var/tmp/r29-13-e2e/b/work/s5",
+    "remoteName": "origin",
+    "refAuthority": "REMOTE",
+    "targetRef": "refs/heads/main",
+    "upstreamRef": "refs/heads/main",
+    "sourceRef": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149",
+    "sessionBaseSha": "027820cf91fe356e564c7e92da682e9ded6e66fb",
+    "sourceSha": "ce7b944a3b290c7998c7fcced8af946b543c4211",
+    "promotionSourceKind": "TASK_BRANCH",
+    "checks": [
+      {
+        "name": "TASK_ACCEPTANCE",
+        "command": "ls E2E_WORK_*.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 60
+      },
+      {
+        "name": "MERGE_CHECK",
+        "command": "test -f README.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 3600
+      }
+    ],
+    "cancelRequested": false,
+    "reportBeforePush": true,
+    "jobPublicId": "3AJfZtMGVIBBApX8csEaG9"
+  }
+]

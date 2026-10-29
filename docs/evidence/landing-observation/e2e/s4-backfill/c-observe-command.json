@@ -1,0 +1,44 @@
+[
+  {
+    "jobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d",
+    "kind": "OBSERVE_LANDING",
+    "claimGeneration": "1",
+    "leaseOwner": "ab83acfc-5b11-4f7f-8851-2115e2ff3199",
+    "workDir": "/var/tmp/r29-13-e2e/b/work/s4",
+    "remoteName": "origin",
+    "refAuthority": "REMOTE",
+    "targetRef": "refs/heads/feature/release-2",
+    "upstreamRef": "refs/heads/feature/release-2",
+    "sourceRef": "refs/heads/feature/release-2",
+    "checks": [],
+    "cancelRequested": false,
+    "observeTasks": [
+      {
+        "taskId": "01a1855c-f1a6-70b9-979d-972b1fd0e4f8",
+        "deliveredSha": "6180e80ad95fee78cbe1d7d6621e1aa871c6ca96",
+        "baseSha": "1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0",
+        "taskPublicId": "34o4RPLSeUBVha64umyOu"
+      },
+      {
+        "taskId": "01a1855c-f1b5-74fd-aba8-d2a9b6204cd1",
+        "deliveredSha": "526a6a429a2633e4ada8851c028b3ad0a526543f",
+        "baseSha": "6180e80ad95fee78cbe1d7d6621e1aa871c6ca96",
+        "taskPublicId": "34o4RPMvPQuNUNHDMOjM9"
+      },
+      {
+        "taskId": "01a1855c-f1d3-7027-ab7c-e709d3b3ec31",
+        "deliveredSha": "323bd3983e4dee6441f125278b57b382383c95ad",
+        "baseSha": "8b63825e1daf024db919e3d56144842308ddb446",
+        "taskPublicId": "34o4RPPqblDOz2nBlLQuH"
+      },
+      {
+        "taskId": "01a1855c-f1ea-7205-99d9-be78c080b4d0",
+        "deliveredSha": "8b63825e1daf024db919e3d56144842308ddb446",
+        "baseSha": "a10bd145ecfaaaea90648775e499b02d9758f2fb",
+        "taskPublicId": "34o4RPS5eu8gAtXOs8SMi"
+      }
+    ],
+    "reportBeforePush": true,
+    "jobPublicId": "KycTEcC7imCXzrxuDYsRh"
+  }
+]

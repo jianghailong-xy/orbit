@@ -1,0 +1,33 @@
+[
+  {
+    "jobId": "eaa6f71e-804e-4cbc-b8da-4f702bdf9467",
+    "kind": "CHECK_PROMOTION",
+    "claimGeneration": "1",
+    "leaseOwner": "17140729-8cd8-4a35-863c-1909590d6503",
+    "workDir": "/var/tmp/r29-13-e2e/b/work/s5",
+    "remoteName": "origin",
+    "refAuthority": "REMOTE",
+    "targetRef": "refs/heads/main",
+    "upstreamRef": "refs/heads/main",
+    "sourceRef": "refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a",
+    "sessionBaseSha": "d4eef22340adf2bdb927d79752657bde0e8f520e",
+    "promotionSourceKind": "TASK_BRANCH",
+    "checks": [
+      {
+        "name": "TASK_ACCEPTANCE",
+        "command": "ls E2E_WORK_*.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 60
+      },
+      {
+        "name": "MERGE_CHECK",
+        "command": "test -f README.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 3600
+      }
+    ],
+    "cancelRequested": false,
+    "reportBeforePush": true,
+    "jobPublicId": "78mVUGhEjcnRaoxRGIxJ6V"
+  }
+]

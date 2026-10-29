@@ -1,0 +1,32 @@
+[
+  {
+    "phase": "B",
+    "name": "the boot-time pass ran and froze finished work",
+    "ok": true,
+    "detail": "[Nest] 446425  - 10/29/2026, 9:56:21 AM     LOG [InstanceLoader] LandingObservationBackfillModule dependencies initialized +1ms | [Nest] 446425  - 10/29/2026, 9:56:21 AM     LOG [LandingObservationBackfill] landing backfill: 1 project(s) with unfrozen finished work, 4 identities frozen, 1 observation(s) queued, 0 failed"
+  },
+  {
+    "phase": "B",
+    "name": "the four DONE, NOT_KNOWN tasks (T1, T2, T4, T6) have a delivered identity; T3 (landed by its own receipt) and T5 (OPEN) have none",
+    "ok": true,
+    "detail": "4"
+  },
+  {
+    "phase": "B",
+    "name": "one OBSERVE_LANDING queued for the project",
+    "ok": true,
+    "detail": "QUEUED gen 1 runner -"
+  },
+  {
+    "phase": "B",
+    "name": "its enqueue fact says trigger DEPLOY",
+    "ok": true,
+    "detail": "DEPLOY"
+  },
+  {
+    "phase": "B",
+    "name": "the BLOCKED candidates are untouched by the pass",
+    "ok": true,
+    "detail": ""
+  }
+]
