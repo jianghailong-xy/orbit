@@ -7771,8 +7771,10 @@ export class SessionsService {
     }
     // "Create and start" is a second yes of the single-task create card and of no other card: the
     // runner reads it off the poll as "start the task this create writes", so on a card that writes
-    // no task there is nothing it could start, and a refusal starts nothing. Both are refused here
-    // rather than stored as a choice the runner would have to ignore.
+    // no task there is nothing it could start, and a refusal starts nothing. Nor on a card whose
+    // runner predates it (`input.acceptsStartAfterCreate`, recorded when the card was filed): that
+    // runner would only create the task. All are refused here rather than stored as a choice the
+    // runner would ignore.
     if (dto.startAfterCreate != null && typeof dto.startAfterCreate !== 'boolean') {
       throw new BadRequestException('startAfterCreate must be a boolean');
     }
@@ -7785,12 +7787,18 @@ export class SessionsService {
       }
       const asked = await this.prisma.approval.findFirst({
         where: { id: approvalId, sessionId: id },
-        select: { toolName: true },
+        select: { toolName: true, input: true },
       });
       if (!asked) throw new NotFoundException('approval not found');
       if (asked.toolName !== TASK_CREATE_APPROVAL_TOOL) {
         throw new BadRequestException(
           `startAfterCreate applies only to a single task create card (${TASK_CREATE_APPROVAL_TOOL}), and this card is ${asked.toolName}`,
+        );
+      }
+      if ((asked.input as { acceptsStartAfterCreate?: unknown } | null)?.acceptsStartAfterCreate !== true) {
+        throw new BadRequestException(
+          'startAfterCreate needs a card filed by a runner that starts what it creates, and this one predates it: ' +
+            'create the task with the plain yes, then start it',
         );
       }
     }

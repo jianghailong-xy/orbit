@@ -5510,7 +5510,8 @@ export class RunnerApiController {
           // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
           // agent that waits for a card nobody can ever be shown.
           toolName: stripNul(dto.toolName),
-          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId }),
+          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
+            dto.acceptsStartAfterCreate === true),
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
@@ -5568,12 +5569,19 @@ export class RunnerApiController {
    * The one exception is a refusal the answer to which is a CALLER's, and it is rethrown rather
    * than swallowed (`isTaskCriterionShapeAdvice`): that one would be asked of a person who cannot
    * answer it, and refused again the moment they did.
+   *
+   * A single create also records whether its asker acts on the owner's "Create and start"
+   * (`acceptsStartAfterCreate`, which the runner declares beside the input). Clients offer the button,
+   * and `SessionsService.decideApproval` accepts the choice, only on a card that says so: a runner that
+   * predates it would read the yes and only create the task, and the owner would be left believing it
+   * had started. It is this server's statement, so the asker's input never gets to make it.
    */
   private async cardInput(
     ownerId: string,
     toolName: string,
     raw: unknown,
     asker: { runnerId: string; sessionId: string },
+    acceptsStartAfterCreate = false,
   ): Promise<Prisma.InputJsonValue> {
     const input = stripNul(raw ?? {}) as Record<string, unknown>;
     // A delete card says what the server reads, not what the asker sent: the runner or workspace its
@@ -5582,9 +5590,10 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
-    if (toolName !== RunnerApiController.taskCreateApprovalToolName || input.preview || !this.tasks) {
-      return input as Prisma.InputJsonValue;
-    }
+    if (toolName !== RunnerApiController.taskCreateApprovalToolName) return input as Prisma.InputJsonValue;
+    const { acceptsStartAfterCreate: _assertedByTheAsker, ...body } = input;
+    const card = acceptsStartAfterCreate ? { ...body, acceptsStartAfterCreate: true } : body;
+    if (card.preview || !this.tasks) return card as Prisma.InputJsonValue;
     try {
       // Every id the runner sends is a public id — the base62 spelling the MCP tools and the
       // clients use — and the HTTP door is what normally decodes one, on the way in through its
@@ -5594,13 +5603,13 @@ export class RunnerApiController {
       // dies on its first query with `invalid input syntax for type uuid` — which is how every
       // single-create card has been filed since this preview shipped: whole, and without its pill.
       const preview = await this.tasks.previewCreateMany(ownerId, {
-        tasks: [plainToInstance(CreateTaskBatchItemDto, input)],
+        tasks: [plainToInstance(CreateTaskBatchItemDto, body)],
       });
-      return { ...input, preview } as Prisma.InputJsonValue;
+      return { ...card, preview } as Prisma.InputJsonValue;
     } catch (error) {
       if (isTaskCriterionShapeAdvice(error)) throw error;
       // The card is drawn without its pill; the question stands.
-      return input as Prisma.InputJsonValue;
+      return card as Prisma.InputJsonValue;
     }
   }
 

@@ -1955,6 +1955,12 @@ export interface ApprovalCreateRequest {
    *  hands it back here; `sessions/abandoned-approvals.ts` refuses to collect a card whose job is
    *  still up, because that process outlives the turn. Absent on every in-turn ask. */
   backgroundJobId?: string;
+  /** On an `orbit_task_create` card: the asker acts on the owner's "Create and start"
+   *  (`ApprovalDecisionRequest.startAfterCreate`). The server records it on the stored card as
+   *  `input.acceptsStartAfterCreate`, beside the preview; clients offer the button, and the server
+   *  accepts the choice, only on a card that carries it, so a runner that would ignore the choice is
+   *  never sent one. */
+  acceptsStartAfterCreate?: boolean;
 }
 
 /** A human's answers to an AskUserQuestion, keyed by question text → the selected
@@ -1996,7 +2002,8 @@ export interface ApprovalDecisionRequest {
   rememberRules?: PermissionRule[];
   /** The single-task create card's "Create and start": the owner's yes also starts the new task's
    *  run, so they are not asked again to start it. Accepted only on an `allow` of an
-   *  `orbit_task_create` card (400 on any other); absent or false is the plain yes. */
+   *  `orbit_task_create` card whose asker acts on it (`input.acceptsStartAfterCreate`; 400 on any
+   *  other); absent or false is the plain yes. */
   startAfterCreate?: boolean;
 }
 

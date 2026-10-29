@@ -165,13 +165,15 @@ export const CREATE_AND_START = 'Create and start';
  * Whether the single-task card offers Create and start: only when the server's forecast says nothing
  * would start the task by itself (`needsManualStart` is 1). A task that starts on its own (now or at
  * its runAt), waits on a prerequisite, cannot run, or waits for its project to start has nothing for
- * the press to add, and a card whose forecast could not be read says nothing either way.
+ * the press to add, and a card whose forecast could not be read says nothing either way. Nor a card
+ * the server did not mark `acceptsStartAfterCreate`: its runner, or the server itself, predates the
+ * choice and would only create the task.
  * macOS/iOS: `Approvals.offersCreateAndStart`; Android: `ApprovalRules.offersCreateAndStart`.
  */
 export function offersCreateAndStart(a: ApprovalInfo): boolean {
   if (!isTaskCreate(a)) return false;
-  const preview = ((a.input ?? {}) as { preview?: BatchPreview }).preview;
-  return preview?.needsManualStart === 1;
+  const input = (a.input ?? {}) as { preview?: BatchPreview; acceptsStartAfterCreate?: unknown };
+  return input.acceptsStartAfterCreate === true && input.preview?.needsManualStart === 1;
 }
 
 /** Under a new project's criteria: approving the create is not confirming them — the project's

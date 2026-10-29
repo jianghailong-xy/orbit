@@ -2417,7 +2417,8 @@ model Approval {
   // calls are auto-allowed by claude without re-prompting.
   rememberRule Json?     @map("remember_rule")
   /// The owner's "Create and start" on an `orbit_task_create` card (0456): the runner creates the task
-  /// and starts it at once. Only an ALLOWED card of that tool can carry it (SessionsService.decideApproval).
+  /// and starts it at once. Only an ALLOWED card of that tool whose runner acts on it
+  /// (`input.acceptsStartAfterCreate`) can carry it (SessionsService.decideApproval).
   startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid

@@ -11,7 +11,9 @@ import { SessionsService } from './sessions.service';
 
 type Written = { where: unknown; data: Record<string, unknown> };
 
-function makeService(toolName: string) {
+/** A card of `toolName`; a single create is filed by a runner that acts on the choice unless `accepts`
+ *  is false (the server records it on the card as `input.acceptsStartAfterCreate`). */
+function makeService(toolName: string, accepts = true) {
   const writes: Written[] = [];
   const prisma = {
     session: { findFirst: async () => ({ id: 's1', workspaceId: null, sessionKind: 'CONVERSATION' }) },
@@ -21,7 +23,8 @@ function makeService(toolName: string) {
         return { count: 1 };
       },
       findFirst: async () => ({
-        id: 'a1', sessionId: 's1', toolName, input: {}, toolUseId: null, backgroundJobId: null,
+        id: 'a1', sessionId: 's1', toolName, input: accepts ? { acceptsStartAfterCreate: true } : {},
+        toolUseId: null, backgroundJobId: null,
         status: 'ALLOWED', message: null, createdAt: new Date(), decidedAt: new Date(),
       }),
     },
@@ -73,6 +76,18 @@ test('every card that does not create one task refuses a start, and writes nothi
   }
 });
 
+test('a card whose runner would only create the task refuses a start, and writes nothing', async () => {
+  const { service, writes } = makeService('orbit_task_create', false);
+  await assert.rejects(
+    service.decideApproval('owner-1', 's1', 'a1', { behavior: 'allow', startAfterCreate: true }),
+    (error: unknown) => error instanceof BadRequestException && /predates it/.test(error.message),
+  );
+  assert.equal(writes.length, 0);
+  // Its plain yes is still the plain yes.
+  await service.decideApproval('owner-1', 's1', 'a1', { behavior: 'allow' });
+  assert.equal(writes[0].data.startAfterCreate, false);
+});
+
 test('a start that is not a boolean is refused', async () => {
   const { service, writes } = makeService('orbit_task_create');
   await assert.rejects(
@@ -80,6 +95,27 @@ test('a start that is not a boolean is refused', async () => {
     /startAfterCreate must be a boolean/,
   );
   assert.deepEqual(writes, []);
+});
+
+/** What a card is stored with, as the runner's door files it (the private `cardInput`). */
+function filedInput(toolName: string, input: Record<string, unknown>, accepts: boolean) {
+  const api = new RunnerApiController({} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  return (api as unknown as {
+    cardInput(owner: string, tool: string, raw: unknown, asker: unknown, accepts: boolean): Promise<Record<string, unknown>>;
+  }).cardInput('owner-1', toolName, input, { runnerId: 'r1', sessionId: 's1' }, accepts);
+}
+
+test('a single create card records that its runner acts on Create and start, and only then', async () => {
+  const body = { title: 'Fix login redirect', completionCriterion: 'EVIDENCE_JUDGMENT' };
+  assert.equal((await filedInput('orbit_task_create', body, true)).acceptsStartAfterCreate, true);
+  // A runner that does not say so is a runner that would only create the task.
+  assert.equal('acceptsStartAfterCreate' in (await filedInput('orbit_task_create', body, false)), false);
+  // It is the server's statement about the asker, so the asker's own input cannot make it…
+  const forged = await filedInput('orbit_task_create', { ...body, acceptsStartAfterCreate: true }, false);
+  assert.equal('acceptsStartAfterCreate' in forged, false);
+  assert.equal(forged.title, 'Fix login redirect');
+  // …and no other card carries it, whatever its asker says.
+  assert.equal('acceptsStartAfterCreate' in (await filedInput('orbit_project_create', { title: 'P' }, true)), false);
 });
 
 /** The runner's long-poll over one decided row. */

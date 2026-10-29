@@ -11,8 +11,9 @@ import type { ApprovalInfo } from '../api';
 // says nothing else would start the task, and sent as `startAfterCreate` beside the plain allow,
 // which itself stays exactly what it was.
 
-/** A single create card, with the server's forecast when one is given. */
-const taskCreate = (forecast?: Record<string, number>): ApprovalInfo =>
+/** A single create card, with the server's forecast when one is given — filed, unless `accepts` is
+ *  false, by a runner that acts on Create and start, which the server records beside the forecast. */
+const taskCreate = (forecast?: Record<string, number>, accepts = true): ApprovalInfo =>
   ({
     id: 'c1',
     sessionId: 's1',
@@ -22,6 +23,7 @@ const taskCreate = (forecast?: Record<string, number>): ApprovalInfo =>
     input: {
       title: 'Fix login redirect',
       completionCriterion: 'EVIDENCE_JUDGMENT',
+      ...(accepts ? { acceptsStartAfterCreate: true } : {}),
       ...(forecast
         ? {
             preview: {
@@ -57,10 +59,21 @@ describe('Create and start', () => {
     expect(render(taskCreate())).not.toContain(CREATE_AND_START);
   });
 
+  it('is not offered on a card whose runner would only create the task', () => {
+    // A runner, or a server, that predates the choice files the card without the mark: pressing the
+    // button there would create the task and start nothing, so it is not offered.
+    expect(offersCreateAndStart(taskCreate({ needsManualStart: 1 }, false))).toBe(false);
+    expect(render(taskCreate({ needsManualStart: 1 }, false))).not.toContain(CREATE_AND_START);
+    // The mark must be the server's boolean, not anything truthy.
+    const stringly = taskCreate({ needsManualStart: 1 }, false);
+    (stringly.input as Record<string, unknown>).acceptsStartAfterCreate = 'true';
+    expect(offersCreateAndStart(stringly)).toBe(false);
+  });
+
   it('belongs to the single-task card alone', () => {
     const preview = { taskCount: 1, needsManualStart: 1 };
     for (const toolName of ['orbit_task_batch', 'orbit_project_create', 'Bash']) {
-      const card = { id: 'x', toolName, input: { title: 'Checkout rewrite', preview } } as ApprovalInfo;
+      const card = { id: 'x', toolName, input: { title: 'Checkout rewrite', preview, acceptsStartAfterCreate: true } } as ApprovalInfo;
       expect(offersCreateAndStart(card), toolName).toBe(false);
       expect(render(card), toolName).not.toContain(CREATE_AND_START);
     }

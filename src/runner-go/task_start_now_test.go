@@ -558,3 +558,40 @@ func TestTaskCreateToolsSayWhenToPassStartNowAndThatOneApprovalCoversIt(t *testi
 		}
 	}
 }
+
+// The card says that this runner acts on the owner's "Create and start": the server records it on the
+// card and offers the button only there, so a runner that would ignore the choice is never sent one.
+// It is said beside the input, never in it nor in the body the create sends, and only by the
+// single-task card.
+func TestTaskCreateCardDeclaresItActsOnCreateAndStart(t *testing.T) {
+	srv, hits := startNowServer(t, `{"status":"ALLOWED"}`, http.StatusCreated, `{"id":"s1"}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+	if res := mcp.callTool("task_create", map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"}); res["isError"] == true {
+		t.Fatalf("task_create returned an error: %v", resultText(res))
+	}
+	got := hits()
+	filed := got[0].body
+	if filed["toolName"] != taskCreateApprovalToolName || filed["acceptsStartAfterCreate"] != true {
+		t.Fatalf("the single-task card does not declare it: %#v", filed)
+	}
+	if input, _ := filed["input"].(map[string]interface{}); input["acceptsStartAfterCreate"] != nil {
+		t.Fatalf("the declaration leaked into the card's input: %#v", input)
+	}
+	if create := hitsTo(got, "POST", "/api/runner/tasks"); len(create) != 1 || create[0].body["acceptsStartAfterCreate"] != nil {
+		t.Fatalf("the declaration leaked into the create: %v", startNowPaths(got))
+	}
+
+	// Every other card is filed exactly as before.
+	srv2, hits2 := startNowServer(t, `{"status":"ALLOWED"}`, http.StatusCreated, `{"id":"s1"}`)
+	other := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv2.URL, "tok")}
+	other.callTool("project_create", map[string]interface{}{"title": "P"})
+	other.callTool("task_create_batch", map[string]interface{}{"tasks": []interface{}{
+		map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"},
+	}})
+	for _, hit := range hitsTo(hits2(), "POST", "/approvals") {
+		if _, declared := hit.body["acceptsStartAfterCreate"]; declared {
+			t.Fatalf("%v declares Create and start: %#v", hit.body["toolName"], hit.body)
+		}
+	}
+}

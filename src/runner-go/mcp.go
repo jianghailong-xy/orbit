@@ -1919,7 +1919,7 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 // does not know — and a transport failure is never a silent yes: it is polled again (see
 // approvalPollIsAnswered), because the card is already in front of a human.
 func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}) (declined string, err error) {
-	dec, err := askCreateCard(t, sessionID, toolName, input)
+	dec, err := askCreateCard(t, sessionID, toolName, input, nil)
 	if err != nil || dec == nil {
 		return "", err
 	}
@@ -1929,8 +1929,13 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 // askBeforeTaskCreate is askBeforeCreate for a single task create, the one card whose yes can carry a
 // second choice: the owner's "Create and start" (startAfterCreate), which asks for the task to be
 // started as soon as it is written (task_start_now.go). Anything but a yes carries no start.
+//
+// The card says that this asker acts on that choice (acceptsStartAfterCreate, beside the input, never
+// in the body the create sends). Clients offer the button, and the server takes the choice, only on a
+// card that says so — a runner that predates it would read the yes and only create the task.
 func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interface{}) (declined string, startAfterCreate bool, err error) {
-	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body)
+	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body,
+		map[string]interface{}{"acceptsStartAfterCreate": true})
 	if err != nil || dec == nil {
 		return "", false, err
 	}
@@ -1952,13 +1957,17 @@ func declinedReason(dec *ApprovalDecisionResponse) string {
 }
 
 // askCreateCard files the card and waits for its answer; nil, with nothing filed, when headless.
-func askCreateCard(t *Transport, sessionID, toolName string, input interface{}) (*ApprovalDecisionResponse, error) {
+// declares are fields of the filing beside the input: what this asker says about itself.
+func askCreateCard(t *Transport, sessionID, toolName string, input interface{}, declares map[string]interface{}) (*ApprovalDecisionResponse, error) {
 	if sessionID == "" {
 		return nil, nil
 	}
 	body := map[string]interface{}{
 		"toolName": toolName,
 		"input":    input,
+	}
+	for key, value := range declares {
+		body[key] = value
 	}
 	// Who is asking, when it is a runner-hosted job rather than the turn: this loop is a process
 	// that goes on polling after the turn ends, so the server must not collect the card when the
