@@ -545,24 +545,61 @@ func TestCodexStateInitWaiterCancellationDoesNotStopBootstrap(t *testing.T) {
 	}
 }
 
-func TestCodexStderrDiagnosticClassifiesRecoverableStartupAuth(t *testing.T) {
+func TestCodexStderrDiagnosticClassifiesRecoverableLines(t *testing.T) {
 	tests := []struct {
 		name      string
 		line      string
 		component string
 		code      string
+		// Empty: the diagnostic carries no phase at all.
+		phase string
 	}{
 		{
 			name:      "model catalog",
 			line:      "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has been invalidated. Please try signing in again.",
 			component: "model_catalog",
 			code:      "token_invalidated",
+			phase:     "startup",
 		},
 		{
 			name:      "mcp transport",
 			line:      `2026-10-03T15:27:45.110778Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 401: {\\"error\\":{\\"code\\":\\"token_invalidated\\"}}")`,
 			component: "mcp_transport",
 			code:      "token_invalidated",
+			phase:     "startup",
+		},
+		// A catalog refresh that failed for any other reason is just as non-fatal, and it also
+		// runs mid-turn, so these carry no phase.
+		{
+			name:      "model catalog request timed out",
+			line:      "2026-10-28T15:13:06.979719Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out",
+			component: "model_catalog",
+			code:      "timeout",
+		},
+		{
+			name:      "model catalog child process timeout",
+			line:      "2026-08-12T15:31:40.112363Z ERROR codex_models_manager::manager: failed to refresh available models: timeout waiting for child process to exit",
+			component: "model_catalog",
+			code:      "timeout",
+		},
+		{
+			name:      "model catalog other status",
+			line:      "2026-10-28T15:13:06.979719Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 503 Service Unavailable",
+			component: "model_catalog",
+			code:      "refresh_failed",
+		},
+		{
+			name:      "model catalog forbidden",
+			line:      "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 403 Forbidden",
+			component: "model_catalog",
+			code:      "refresh_failed",
+		},
+		{
+			// A 401 is token_invalidated only when Codex says the token was invalidated.
+			name:      "model catalog 401 without token_invalidated",
+			line:      "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized",
+			component: "model_catalog",
+			code:      "refresh_failed",
 		},
 	}
 	for _, tt := range tests {
@@ -577,8 +614,10 @@ func TestCodexStderrDiagnosticClassifiesRecoverableStartupAuth(t *testing.T) {
 			if got := diagnostic["code"]; got != tt.code {
 				t.Errorf("code = %v, want %q", got, tt.code)
 			}
-			if got := diagnostic["phase"]; got != "startup" {
-				t.Errorf("phase = %v, want startup", got)
+			if got, has := diagnostic["phase"]; tt.phase == "" && has {
+				t.Errorf("phase = %v, want none", got)
+			} else if tt.phase != "" && got != tt.phase {
+				t.Errorf("phase = %v, want %q", got, tt.phase)
 			}
 			if got := diagnostic["severity"]; got != "WARN" {
 				t.Errorf("severity = %v, want WARN", got)
@@ -595,9 +634,9 @@ func TestCodexStderrDiagnosticClassifiesRecoverableStartupAuth(t *testing.T) {
 
 func TestCodexStderrDiagnosticLeavesUnknownAndFatalLinesUnclassified(t *testing.T) {
 	for _, line := range []string{
-		"2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 403 Forbidden",
-		"2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized",
 		"2026-10-03T15:27:45.110778Z ERROR rmcp::transport::worker: worker quit with fatal: HTTP 500",
+		// A timeout anywhere but the catalog refresh can be the turn's own failure.
+		"2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out",
 		"2026-10-03T15:28:00Z ERROR codex_core: turn failed",
 		"",
 	} {

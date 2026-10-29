@@ -1916,6 +1916,74 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "engine failed to start")
     }
 
+    /// Codex logs a failed model-catalog refresh and keeps the catalog it had, so the turn goes on.
+    /// It retries on every later model request, so one session repeats the line (web parity:
+    /// Transcript.test.tsx "engine stderr").
+    private static func refreshFailed(_ ts: String, _ reason: String) -> String {
+        "\(ts) ERROR codex_models_manager::manager: failed to refresh available models: \(reason)"
+    }
+    private static let timedOut = "request timed out"                                // 2026-10-28, an iOS screenshot
+    private static let childTimeout = "timeout waiting for child process to exit"   // 2026-08-12, web
+    /// What a current runner attaches to either line (runner-go `codexStderrDiagnostic`).
+    private static let refreshTimeout: JSONValue = .object([
+        "component": .string("model_catalog"), "severity": .string("WARN"), "impact": .string("degraded"),
+        "recoverable": .bool(true), "code": .string("timeout"),
+    ])
+
+    func testCatalogRefreshFailureFromACurrentRunnerBecomesANoticeRow() {
+        for reason in [Self.timedOut, Self.childTimeout] {
+            var r = TranscriptReducer()
+            let line = Self.refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+                "stderr": .string(line), "diagnostic": Self.refreshTimeout])))
+
+            XCTAssertEqual(r.state.items.map(\.asNotice), ["model_catalog · timeout: \(line)"])
+        }
+    }
+
+    func testPersistedCatalogRefreshFailureBecomesANoticeRow() {
+        for (reason, code) in [(Self.timedOut, "timeout"), (Self.childTimeout, "timeout"),
+                               ("unexpected status 503 Service Unavailable", "refresh_failed")] {
+            var r = TranscriptReducer()
+            let line = Self.refreshFailed("2026-08-12T15:31:40.112363Z", reason)
+            r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+            XCTAssertEqual(r.state.items.map(\.asNotice), ["model_catalog · \(code): \(line)"])
+        }
+    }
+
+    /// One notice row per incident, counted on the first occurrence's row, as web folds it. Until a
+    /// `resumed`: a new engine run starts its own row, as on web.
+    func testRepeatedCatalogRefreshFailureFoldsIntoOneNoticeRow() {
+        for (reason, times) in [(Self.timedOut, 10), (Self.childTimeout, 3)] {
+            var r = TranscriptReducer()
+            for i in 0..<times {
+                // The first half as an older runner stored them, the rest with the diagnostic after its upgrade.
+                var payload: [String: JSONValue] = ["stderr": .string(Self.refreshFailed("2026-10-28T15:\(13 + i):06.979719Z", reason))]
+                if i >= times / 2 { payload["diagnostic"] = Self.refreshTimeout }
+                r.apply(RunEvent(seq: i + 1, type: .system, payload: .object(payload)))
+            }
+
+            let first = Self.refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            XCTAssertEqual(r.state.items.map(\.asNotice), ["model_catalog · timeout: \(first) ×\(times)"])
+
+            r.apply(RunEvent(seq: 100, type: .system, payload: .object(["subtype": .string("resumed")])))
+            let again = Self.refreshFailed("2026-10-28T16:00:06.979719Z", reason)
+            r.apply(RunEvent(seq: 101, type: .system, payload: .object(["stderr": .string(again)])))
+            XCTAssertEqual(r.state.items.map(\.asNotice), ["model_catalog · timeout: \(first) ×\(times)",
+                                                           "model_catalog · timeout: \(again)"])
+        }
+    }
+
+    func testUnrelatedErrorStderrStaysAnErrorRow() {
+        // A timeout logged by anything but the catalog refresh can be the turn's own failure.
+        let line = "2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out"
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+        XCTAssertEqual(r.state.items.map(\.asError), [line])
+    }
+
     /// apply_patch writes its verification explanation over adjacent stderr events. The reducer
     /// keeps those lines in one row so the native card can show a compact summary and disclose the
     /// complete log on demand.

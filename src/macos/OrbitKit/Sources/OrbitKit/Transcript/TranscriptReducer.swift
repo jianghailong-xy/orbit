@@ -155,6 +155,11 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
+    /// The same for recoverable diagnostics, keyed as web's `diagnosticSeen` keys them (see
+    /// `EngineStderr.diagnosticFoldKey`): Codex retries a failed model-catalog refresh on every later
+    /// model request, so one incident logs its line again and again, and gets one row with a count
+    /// rather than a row per attempt. Transient like `stderrSeen`.
+    private var diagnosticSeen: [String: (id: String, message: String, count: Int)] = [:]
     /// The most recent stderr row that may receive continuation lines. Tool failures from
     /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
     /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
@@ -315,6 +320,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 clearLiveToolOutputsAtBoundary()
                 lastStderr = nil
                 lastToolFailure = nil
+                // A new engine run: as on web, a diagnostic it reports again starts a row of its own.
+                diagnosticSeen.removeAll()
             }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
@@ -324,7 +331,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
                 // a recoverable diagnostic as a calm notice on native too; an unclassified stderr
                 // line still follows appendEngineStderr and remains an error.
-                state.items.append(.notice(id: nextID(), message: diagnostic))
+                appendDiagnosticNotice(diagnostic)
                 lastStderr = nil
                 lastToolFailure = nil
             } else {
@@ -338,15 +345,21 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     /// Convert a structured diagnostic that is explicitly recoverable/degraded into the native
-    /// notice row. The runner keeps the raw stderr alongside this metadata for older clients, so
-    /// malformed or unknown diagnostics deliberately return nil and retain the old error path.
-    private func recoverableDiagnostic(_ ev: RunEvent) -> String? {
+    /// notice row, with the key its repeats fold on. The runner keeps the raw stderr alongside this
+    /// metadata for older clients, so malformed or unknown diagnostics deliberately return nil and
+    /// retain the old error path. An event stored before the runner sent the metadata is read
+    /// through `EngineStderr.legacyRecoverableDiagnostic`, as on web.
+    private func recoverableDiagnostic(_ ev: RunEvent) -> (message: String, key: String)? {
         guard let rawMessage = str(ev, "stderr") else { return nil }
         let message = EngineStderr.clean(rawMessage)
         guard !message.isEmpty else { return nil }
-        guard case .object(let raw)? = ev.payload["diagnostic"] else {
-            guard let label = EngineStderr.legacyRecoverableLabel(message) else { return nil }
-            return label + ": " + message
+        let raw: [String: JSONValue]
+        if case .object(let diagnostic)? = ev.payload["diagnostic"] {
+            raw = diagnostic
+        } else if let legacy = EngineStderr.legacyRecoverableDiagnostic(message) {
+            raw = legacy
+        } else {
+            return nil
         }
         let string = { (key: String) -> String? in
             guard case .string(let value)? = raw[key] else { return nil }
@@ -355,14 +368,32 @@ public struct TranscriptReducer: Sendable, Codable {
         }
         let impact = string("impact")?.lowercased()
         let severity = string("severity")?.lowercased()
-        let recoverable = raw["recoverable"]?.boolValue == true
-        guard recoverable || severity == "warn" || severity == "warning" ||
+        let recoverable = raw["recoverable"]?.boolValue
+        guard recoverable == true || severity == "warn" || severity == "warning" ||
                 ["recoverable", "degraded", "warning", "warn", "non-fatal", "nonfatal"].contains(impact) else {
             return nil
         }
         let phase = string("phase").map { $0 == "startup" ? "Startup" : $0 }
         let label = [phase, string("component"), string("code")].compactMap { $0 }.joined(separator: " · ")
-        return label.isEmpty ? message : label + ": " + message
+        let key = EngineStderr.diagnosticFoldKey(
+            component: string("component"), phase: string("phase"), severity: string("severity"),
+            impact: string("impact"), recoverable: recoverable, code: string("code"),
+            message: string("message") ?? message)
+        return (message: label.isEmpty ? message : label + ": " + message, key: key)
+    }
+
+    /// A recoverable diagnostic's notice row. A repeat bumps the first row's count instead of taking
+    /// a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
+    private mutating func appendDiagnosticNotice(_ diagnostic: (message: String, key: String)) {
+        if let seen = diagnosticSeen[diagnostic.key], let i = state.items.firstIndex(where: { $0.id == seen.id }) {
+            let count = seen.count + 1
+            diagnosticSeen[diagnostic.key] = (id: seen.id, message: seen.message, count: count)
+            state.items[i] = .notice(id: seen.id, message: "\(seen.message) ×\(count)")
+            return
+        }
+        let id = nextID()
+        diagnosticSeen[diagnostic.key] = (id: id, message: diagnostic.message, count: 1)
+        state.items.append(.notice(id: id, message: diagnostic.message))
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -390,6 +421,7 @@ public struct TranscriptReducer: Sendable, Codable {
         bgLaunch.removeAll()
         taskLaunch.removeAll()
         stderrSeen.removeAll()
+        diagnosticSeen.removeAll()
         lastStderr = nil
         lastToolFailure = nil
         state.subagentItems = [:]
@@ -2005,24 +2037,57 @@ private enum EngineStderr {
     static func isBenign(_ line: String) -> Bool { benignMarkers.contains(where: line.contains) }
 
     /// Compatibility for system events persisted by a runner before `payload.diagnostic` was
-    /// added. These exact auxiliary failures were already known to be non-fatal; every other old
-    /// stderr line must retain the error path.
-    static func legacyRecoverableLabel(_ line: String) -> String? {
+    /// added: the diagnostic runner-go's `codexStderrDiagnostic` attaches to the same line now, by
+    /// its rules and codes (web parity: `legacyRecoverableDiagnostic`). These auxiliary failures
+    /// are known to be non-fatal; every other old stderr line must retain the error path.
+    static func legacyRecoverableDiagnostic(_ line: String) -> [String: JSONValue]? {
         let lower = line.lowercased()
         let tokenInvalidated = lower.contains("token_invalidated") || lower.contains("token has been invalidated")
-        if lower.contains("codex_models_manager") &&
-            lower.contains("failed to refresh available models") &&
-            lower.contains("401") && tokenInvalidated {
-            return "Startup · model_catalog · token_invalidated"
+        func degraded(_ component: String, _ code: String, phase: String?) -> [String: JSONValue] {
+            var diagnostic: [String: JSONValue] = [
+                "component": .string(component), "severity": .string("WARN"), "impact": .string("degraded"),
+                "recoverable": .bool(true), "code": .string(code),
+            ]
+            if let phase { diagnostic["phase"] = .string(phase) }
+            return diagnostic
+        }
+        if lower.contains("codex_models_manager") && lower.contains("failed to refresh available models") {
+            if lower.contains("401") && tokenInvalidated {
+                return degraded("model_catalog", "token_invalidated", phase: "startup")
+            }
+            // A failed refresh is non-fatal whatever its cause: Codex keeps the catalog it had. The
+            // refresh also runs mid-turn, so these carry no phase.
+            let timeout = lower.contains("timed out") || lower.contains("timeout")
+            return degraded("model_catalog", timeout ? "timeout" : "refresh_failed", phase: nil)
         }
         if lower.contains("rmcp::transport::worker") && lower.contains("401") && tokenInvalidated {
-            return "Startup · mcp_transport · token_invalidated"
+            return degraded("mcp_transport", "token_invalidated", phase: "startup")
         }
         return nil
     }
 
-    private static func strip(_ re: NSRegularExpression?, from s: String) -> String {
-        guard let re else { return s }
-        return re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+    private static let requestID = try? NSRegularExpression(pattern: "request id:\\s*\\S+", options: .caseInsensitive)
+    private static let cfRay = try? NSRegularExpression(pattern: "cf-ray:\\s*\\S+", options: .caseInsensitive)
+
+    /// The key two reports of one recoverable diagnostic fold on — web's `diagnosticSeen` key. With a
+    /// code, the code is the diagnosis and the message is left out: a model refresh carries a fresh
+    /// request and cf-ray id on every attempt. Without one, the message counts, minus those ids and
+    /// its leading timestamp.
+    static func diagnosticFoldKey(component: String?, phase: String?, severity: String?, impact: String?,
+                                  recoverable: Bool?, code: String?, message: String) -> String {
+        var stable = ""
+        if code == nil {
+            stable = replace(requestID, in: message, with: "request id: <id>")
+            stable = foldKey(replace(cfRay, in: stable, with: "cf-ray: <id>"))
+        }
+        return [component ?? "", phase ?? "", severity ?? "", impact ?? "",
+                recoverable.map { $0 ? "true" : "false" } ?? "", code ?? "", stable].joined(separator: "\u{0}")
     }
+
+    private static func replace(_ re: NSRegularExpression?, in s: String, with template: String) -> String {
+        guard let re else { return s }
+        return re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: template)
+    }
+
+    private static func strip(_ re: NSRegularExpression?, from s: String) -> String { replace(re, in: s, with: "") }
 }

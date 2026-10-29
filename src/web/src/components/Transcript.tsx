@@ -654,25 +654,33 @@ function parseRunDiagnostic(raw: unknown, fallbackMessage: string): RunDiagnosti
   };
 }
 
-/** Recognize the two auxiliary Codex errors emitted by runners before structured diagnostics
- * existed. This keeps already-persisted sessions from changing meaning when the UI is upgraded. */
+/** Recognize the auxiliary Codex errors emitted by runners before structured diagnostics existed,
+ * by the rules and codes of runner-go's `codexStderrDiagnostic`. This keeps already-persisted
+ * sessions from changing meaning when the UI is upgraded. */
 function legacyRecoverableDiagnostic(line: string): RunDiagnostic | undefined {
   const lower = line.toLowerCase();
   const tokenInvalidated = lower.includes('token_invalidated') || lower.includes('token has been invalidated');
-  if (
-    lower.includes('codex_models_manager') &&
-    lower.includes('failed to refresh available models') &&
-    lower.includes('401') &&
-    tokenInvalidated
-  ) {
+  if (lower.includes('codex_models_manager') && lower.includes('failed to refresh available models')) {
+    if (lower.includes('401') && tokenInvalidated) {
+      return {
+        message: line,
+        component: 'model_catalog',
+        phase: 'startup',
+        severity: 'WARN',
+        impact: 'degraded',
+        recoverable: true,
+        code: 'token_invalidated',
+      };
+    }
+    // A failed refresh is non-fatal whatever its cause: Codex keeps the catalog it had. The refresh
+    // also runs mid-turn, so these carry no phase.
     return {
       message: line,
       component: 'model_catalog',
-      phase: 'startup',
       severity: 'WARN',
       impact: 'degraded',
       recoverable: true,
-      code: 'token_invalidated',
+      code: lower.includes('timed out') || lower.includes('timeout') ? 'timeout' : 'refresh_failed',
     };
   }
   if (lower.includes('rmcp::transport::worker') && lower.includes('401') && tokenInvalidated) {

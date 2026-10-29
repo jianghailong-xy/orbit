@@ -139,35 +139,65 @@ internal object EngineStderr {
 
     fun isBenign(line: String): Boolean = benignMarkers.any { line.contains(it) }
 
-    /** Events persisted before `payload.diagnostic` existed: these exact auxiliary failures were already known non-fatal. */
-    fun legacyRecoverableLabel(line: String): String? {
+    /**
+     * Events persisted before `payload.diagnostic` existed: the diagnostic runner-go's `codexStderrDiagnostic` attaches to the same
+     * line now, by its rules and codes (web `legacyRecoverableDiagnostic`). These auxiliary failures are known non-fatal.
+     */
+    fun legacyRecoverableDiagnostic(line: String): JsonObject? {
         val lower = line.lowercase()
         val tokenInvalidated = lower.contains("token_invalidated") || lower.contains("token has been invalidated")
-        if (lower.contains("codex_models_manager") && lower.contains("failed to refresh available models") &&
-            lower.contains("401") && tokenInvalidated) return "Startup · model_catalog · token_invalidated"
+        fun degraded(component: String, code: String, phase: String?) = buildJsonObject {
+            put("component", component); phase?.let { put("phase", it) }; put("severity", "WARN"); put("impact", "degraded")
+            put("recoverable", true); put("code", code)
+        }
+        if (lower.contains("codex_models_manager") && lower.contains("failed to refresh available models")) {
+            if (lower.contains("401") && tokenInvalidated) return degraded("model_catalog", "token_invalidated", "startup")
+            // A failed refresh is non-fatal whatever its cause: Codex keeps the catalog it had. It also runs mid-turn, so no phase.
+            val timeout = lower.contains("timed out") || lower.contains("timeout")
+            return degraded("model_catalog", if (timeout) "timeout" else "refresh_failed", null)
+        }
         if (lower.contains("rmcp::transport::worker") && lower.contains("401") && tokenInvalidated)
-            return "Startup · mcp_transport · token_invalidated"
+            return degraded("mcp_transport", "token_invalidated", "startup")
         return null
     }
+
+    /** A recoverable diagnostic's notice text, and the key its repeats fold on ([diagnosticFoldKey]). */
+    internal data class Diagnostic(val text: String, val key: String)
 
     /**
      * A structured diagnostic that says it is recoverable or degraded, as the notice it reads as
      * ("Startup · model_catalog · token_invalidated: …"). Nil keeps the old error path: the runner keeps
      * the raw stderr beside the metadata, so an unknown or malformed diagnostic stays an error.
      */
-    fun recoverableDiagnostic(payload: JsonObject): String? {
+    fun recoverableDiagnostic(payload: JsonObject): Diagnostic? {
         val message = clean(payload.string("stderr") ?: return null)
         if (message.isEmpty()) return null
-        val raw = payload["diagnostic"] as? JsonObject ?: return legacyRecoverableLabel(message)?.let { "$it: $message" }
+        val raw = payload["diagnostic"] as? JsonObject ?: legacyRecoverableDiagnostic(message) ?: return null
         fun field(key: String) = (raw[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.ifEmpty { null }
         val impact = field("impact")?.lowercase()
         val severity = field("severity")?.lowercase()
-        val recoverable = (raw["recoverable"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
-        if (!recoverable && severity != "warn" && severity != "warning" &&
+        val recoverable = (raw["recoverable"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+        if (recoverable != true && severity != "warn" && severity != "warning" &&
             impact !in setOf("recoverable", "degraded", "warning", "warn", "non-fatal", "nonfatal")) return null
         val phase = field("phase")?.let { if (it == "startup") "Startup" else it }
         val label = listOfNotNull(phase, field("component"), field("code")).joinToString(" · ")
-        return if (label.isEmpty()) message else "$label: $message"
+        val key = diagnosticFoldKey(field("component"), field("phase"), field("severity"), field("impact"), recoverable, field("code"),
+            field("message") ?: message)
+        return Diagnostic(if (label.isEmpty()) message else "$label: $message", key)
+    }
+
+    private val requestId = Regex("request id:\\s*\\S+", RegexOption.IGNORE_CASE)
+    private val cfRay = Regex("cf-ray:\\s*\\S+", RegexOption.IGNORE_CASE)
+
+    /**
+     * The key two reports of one recoverable diagnostic fold on — web's `diagnosticSeen` key. With a code, the code is the diagnosis
+     * and the message is left out: a model refresh carries a fresh request and cf-ray id on every attempt. Without one, the message
+     * counts, minus those ids and its leading timestamp.
+     */
+    private fun diagnosticFoldKey(component: String?, phase: String?, severity: String?, impact: String?, recoverable: Boolean?,
+        code: String?, message: String): String {
+        val stable = if (code != null) "" else foldKey(message.replace(requestId, "request id: <id>").replace(cfRay, "cf-ray: <id>"))
+        return listOf(component, phase, severity, impact, recoverable?.toString(), code, stable).joinToString("\u0000") { it.orEmpty() }
     }
 
     /**

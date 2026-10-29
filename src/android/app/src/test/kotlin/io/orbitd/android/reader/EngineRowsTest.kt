@@ -44,6 +44,52 @@ class EngineRowsTest {
         assertEquals(listOf("error" to "engine failed to start"), kinds(rows))
     }
 
+    // Codex logs a failed model-catalog refresh and keeps the catalog it had, so the turn goes on. It retries on every later model
+    // request, so one session repeats the line (OrbitKit's and web's cases for it).
+    private fun refreshFailed(ts: String, reason: String) = "$ts ERROR codex_models_manager::manager: failed to refresh available models: $reason"
+    private val timedOut = "request timed out" // 2026-10-28, an iOS screenshot
+    private val childTimeout = "timeout waiting for child process to exit" // 2026-08-12, web
+    /** What a current runner attaches to either line (runner-go `codexStderrDiagnostic`). */
+    private val refreshTimeout = """"diagnostic":{"component":"model_catalog","severity":"WARN","impact":"degraded","recoverable":true,"code":"timeout"}"""
+
+    @Test fun catalogRefreshFailureFromACurrentRunnerBecomesANoticeRow() {
+        for (reason in listOf(timedOut, childTimeout)) {
+            val line = refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            assertEquals(listOf("notice" to "model_catalog · timeout: $line"), kinds(transcriptRows(listOf(stderr(1, line, refreshTimeout)))))
+        }
+    }
+
+    @Test fun persistedCatalogRefreshFailureBecomesANoticeRow() {
+        for ((reason, code) in listOf(timedOut to "timeout", childTimeout to "timeout", "unexpected status 503 Service Unavailable" to "refresh_failed")) {
+            val line = refreshFailed("2026-08-12T15:31:40.112363Z", reason)
+            assertEquals(listOf("notice" to "model_catalog · $code: $line"), kinds(transcriptRows(listOf(stderr(1, line)))))
+        }
+    }
+
+    /** One notice row per incident, counted on the first occurrence's row, as web folds it; a `resumed` starts a new engine run's row. */
+    @Test fun repeatedCatalogRefreshFailureFoldsIntoOneNoticeRow() {
+        for ((reason, times) in listOf(timedOut to 10, childTimeout to 3)) {
+            // The first half as an older runner stored them, the rest with the diagnostic after its upgrade.
+            val events = (0 until times).map { i ->
+                stderr(i + 1L, refreshFailed("2026-10-28T15:${13 + i}:06.979719Z", reason), if (i >= times / 2) refreshTimeout else "")
+            }
+            val first = refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            val rows = transcriptRows(events)
+            assertEquals(listOf("notice" to "model_catalog · timeout: $first ×$times"), kinds(rows))
+            assertEquals("event:1", rows.single().key)
+
+            val again = refreshFailed("2026-10-28T16:00:06.979719Z", reason)
+            assertEquals(listOf("notice" to "model_catalog · timeout: $first ×$times", "notice" to "model_catalog · timeout: $again"),
+                kinds(transcriptRows(events + event(100, "system", """{"subtype":"resumed"}""") + stderr(101, again))))
+        }
+    }
+
+    @Test fun unrelatedErrorStderrStaysAnErrorRow() {
+        // A timeout logged by anything but the catalog refresh can be the turn's own failure.
+        val line = "2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out"
+        assertEquals(listOf("error" to line), kinds(transcriptRows(listOf(stderr(1, line)))))
+    }
+
     @Test fun multilineApplyPatchStderrFoldsIntoOneRow() {
         val rows = transcriptRows(listOf(
             stderr(1, "2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /root/.orbit/worktrees/session/site/assets/README.md:"),

@@ -991,6 +991,86 @@ describe('engine stderr', () => {
     expect(html).toContain('startup_failed');
   });
 
+  // Codex logs a failed model-catalog refresh and keeps the catalog it had, so the turn goes on. It
+  // retries on every later model request, so one session repeats the line.
+  const refreshFailed = (ts: string, reason: string) =>
+    `${ts} ERROR codex_models_manager::manager: failed to refresh available models: ${reason}`;
+  const TIMED_OUT = 'request timed out'; // 2026-10-28, an iOS screenshot
+  const CHILD_TIMEOUT = 'timeout waiting for child process to exit'; // 2026-08-12, web
+  // What a current runner attaches to either line (runner-go `codexStderrDiagnostic`).
+  const refreshTimeout = {
+    component: 'model_catalog',
+    severity: 'WARN',
+    impact: 'degraded',
+    recoverable: true,
+    code: 'timeout',
+  };
+
+  it('renders a failed model-catalog refresh from a current runner as a notice', () => {
+    for (const reason of [TIMED_OUT, CHILD_TIMEOUT]) {
+      const html = renderToStaticMarkup(
+        <Transcript
+          events={[{
+            seq: 1,
+            type: 'system',
+            payload: { stderr: refreshFailed('2026-10-28T15:13:06.979719Z', reason), diagnostic: refreshTimeout },
+          }]}
+        />,
+      );
+
+      expect(html).toContain('chat-notice chat-diagnostic');
+      expect(html).toContain('model_catalog · timeout');
+      expect(html).toContain(`failed to refresh available models: ${reason}`);
+      expect(html).not.toContain('Startup');
+      expect(html).not.toContain('chat-error');
+    }
+  });
+
+  it('recognizes a failed model-catalog refresh in an older persisted stderr event', () => {
+    for (const [reason, code] of [
+      [TIMED_OUT, 'timeout'],
+      [CHILD_TIMEOUT, 'timeout'],
+      ['unexpected status 503 Service Unavailable', 'refresh_failed'],
+    ]) {
+      const html = renderToStaticMarkup(
+        <Transcript events={[stderrEvent(1, refreshFailed('2026-08-12T15:31:40.112363Z', reason))]} />,
+      );
+
+      expect(html).toContain('chat-notice chat-diagnostic');
+      expect(html).toContain(`model_catalog · ${code}`);
+      expect(html).not.toContain('chat-error');
+    }
+  });
+
+  it('folds every repeat of a failed refresh into one notice row with a count', () => {
+    for (const [reason, times] of [[TIMED_OUT, 10], [CHILD_TIMEOUT, 3]] as const) {
+      // The first half as an older runner stored them, the rest with the diagnostic after its upgrade.
+      const events = Array.from({ length: times }, (_, i): RunEvent => {
+        const stderr = refreshFailed(`2026-10-28T15:${13 + i}:06.979719Z`, reason);
+        return { seq: i + 1, type: 'system', payload: i < times / 2 ? { stderr } : { stderr, diagnostic: refreshTimeout } };
+      });
+      const html = renderToStaticMarkup(<Transcript events={events} />);
+
+      expect(html.split('chat-diagnostic"').length - 1).toBe(1);
+      expect(html).toContain(`×${times}`);
+      expect(html).toContain('2026-10-28T15:13:06.979719Z');
+      expect(html).not.toContain('chat-error');
+    }
+  });
+
+  it('keeps an unrelated ERROR line red', () => {
+    // A timeout logged by anything but the catalog refresh can be the turn's own failure.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[stderrEvent(1, '2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out')]}
+      />,
+    );
+
+    expect(html.split('chat-error"').length - 1).toBe(1);
+    expect(html).toContain('data-level="ERROR"');
+    expect(html).not.toContain('chat-notice');
+  });
+
   // Claude Code prints this whenever an auth token is in its environment — i.e. on every
   // session of every configured provider, whose API key Orbit injects that way.
   it('drops the connectors notice Orbit’s own env injection provokes', () => {
