@@ -2565,6 +2565,9 @@ export class RunnerApiController {
       await this.mergeReceipts
         ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
           observed: after.observed === true,
+          // §7.6 V12: a LANDED_WITHOUT_CONFIRMATION this result opened — O-R3 of an observation, the
+          // deploy-time pass's one item per project, or a check that saw the work on main (O-L6).
+          ownerItemIds: after.ownerItemIds,
         })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
       if (after.openItemIds.length > 0) {
@@ -8905,6 +8908,9 @@ export class RunnerApiController {
     // commit (§2.9 LS3 / errata E5). Keyed by project and task so a retried closure overwrites
     // rather than accumulates.
     const landedReceipts = new Map<string, { projectId: string; taskId: string; result: 'MERGED' | 'ALREADY_MERGED' }>();
+    // The owner items the receipt opened (§10.6 O-R3), pushed once after the commit (§7.6 V12). Keyed by
+    // project, so a retried closure overwrites rather than accumulates.
+    const openedOwnerItems = new Map<string, string[]>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -9084,7 +9090,7 @@ export class RunnerApiController {
         const receiptResult = merged
           ? (dto.alreadyMerged ? 'ALREADY_MERGED' as const : 'MERGED' as const)
           : dto.status === 'conflict' ? 'CONFLICT' as const : 'ERROR' as const;
-        await MergeReceiptService.fromRunnerMergeResult(tx, {
+        const written = await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
           taskId: current.taskId,
@@ -9118,6 +9124,7 @@ export class RunnerApiController {
               commitSha: sourceSha,
             })),
         });
+        if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
         if (task?.projectId && current.taskId
             && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
           landedReceipts.set(`${task.projectId}:${current.taskId}`, {
@@ -9136,7 +9143,9 @@ export class RunnerApiController {
     // the merge and the receipt are committed and a coordinator that could not be reached does not
     // un-record them.
     for (const [projectId, landedTaskId] of receiptProjects) {
-      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId);
+      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId, {
+        ownerItemIds: openedOwnerItems.get(projectId),
+      });
     }
     // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
     // retired (M-T13). Its own transaction, after the receipt committed.

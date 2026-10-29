@@ -18,8 +18,9 @@
  *       merge receipt decides even where the branch is not an ancestor (squash), the runner's
  *       verdict answers where no receipt does, and with neither the answer is UNKNOWN;
  *   (5) the landing: NONE outside a project, LINE_THEN_OWNER on a MAIN line or a project branch with
- *       Automatic off, AUTO_MAIN on a project branch with Automatic on — and the dependents wait for
- *       the landing until a receipt says the work is on the line;
+ *       Automatic off, AUTO_MAIN on a project branch with Automatic on, AGENT_PUSHED on a MAIN line
+ *       whose project delivers by AGENT_PUSH (§10.5 O-L2) — and the dependents wait for the landing
+ *       until a receipt says the work is on the line;
  *   (6) an item that cannot be read is left out, and the card is still drawn.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/owner-confirmation-if-confirmed.pg.spec.ts
@@ -419,7 +420,8 @@ test('(4) the branch counts lines as changedFiles does, and is on main by its re
 // ═══ (5) how it lands, and the session it ends ═══════════════════════════════════════════════════
 
 test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line or with Automatic off, '
-  + 'AUTO_MAIN on a project branch with Automatic on; the session it ends and its running jobs',
+  + 'AUTO_MAIN on a project branch with Automatic on, AGENT_PUSHED on an AGENT_PUSH line; the session it '
+  + 'ends and its running jobs',
 { skip, timeout: 300_000 }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const s = connect();
@@ -485,6 +487,16 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
       sourceBranch: `orbit/on-a-project-branch-automatic-on-${RUN}`, targetBranch: `project/${uuidToBase62(autoBranch)}`,
     });
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: false });
+
+    // AGENT_PUSHED (§10.5 O-L2): an AGENT_PUSH project on its MAIN line builds no candidate, so no merge
+    // card follows — and the dependents still wait, for the observation's receipt.
+    const pushedLine = await lineProject('agent-push-main-line', 'MAIN', false);
+    await s.db.projectCodebase.updateMany({
+      where: { projectId: pushedLine, slot: 'primary' },
+      data: { deliveryMode: 'AGENT_PUSH', deliveryModeChosenAt: new Date() },
+    });
+    const onPushedLine = await codeTask(pushedLine, 'on-an-agent-push-line');
+    assert.deepEqual(await landingOf(onPushedLine.taskId), { landing: 'AGENT_PUSHED', startsAfterLanding: true });
 
     // The run a DONE ends: the waiting session, while it is open, with the jobs it still runs.
     const withJobs = await confirmedTask(s.db, w, null, 'jobs-still-running');

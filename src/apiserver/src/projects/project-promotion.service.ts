@@ -857,6 +857,8 @@ export interface PromotionJobOutcome {
   receiptIds: string[];
   /** The tasks a check's own receipt put on the upstream (§10.5 O-L6): J10 dispatches their dependents. */
   landedTaskIds?: string[];
+  /** The `LANDED_WITHOUT_CONFIRMATION` that receipt opened (O-R3), pushed once after the commit (§7.6 V12). */
+  ownerItemIds?: string[];
   /**
    * J-T13, the owner-confirmed half: this landing ended on a refused push and the candidate — still
    * the owner's confirmation — has the next generation queued. A failure with nobody to look at it:
@@ -1558,6 +1560,7 @@ async function recordCheckSawWorkOnUpstream(
   await tx.$queryRaw(Prisma.sql`
     SELECT "id" FROM "task" WHERE "id" = ${promotion.taskId}::uuid FOR KEY SHARE`);
   let receiptId: string;
+  let ownerItemIds: string[];
   try {
     const recorded = await MergeReceiptService.recordIn(tx, promotion.ownerId, session.id, {
       result: 'ALREADY_MERGED',
@@ -1569,6 +1572,7 @@ async function recordCheckSawWorkOnUpstream(
       detail: { integrationJobId: input.jobId, observed: true, ...(empty ? { empty: true } : {}) },
     }, 'RUNNER', { keepJobIds: [input.jobId] });
     receiptId = recorded.receipt.id;
+    ownerItemIds = recorded.ownerItemIds;
   } catch (error) {
     // A door's refusal is raised before it writes anything, so the candidate goes on to M-T3.
     if (!(error instanceof HttpException)) throw error;
@@ -1584,6 +1588,7 @@ async function recordCheckSawWorkOnUpstream(
     state: 'SUPERSEDED',
     receiptIds: [receiptId],
     landedTaskIds: [promotion.taskId],
+    ownerItemIds,
     openApproval: null,
   };
 }

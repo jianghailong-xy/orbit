@@ -147,6 +147,18 @@ test('an item the coordinator holds is one summary, led by the kind that has wai
   assert.deepEqual(row?.ownerItems, []);
 });
 
+test('work that reached main without the owner’s confirmation is counted among the owner’s items (owner 2026-10-28)', async () => {
+  const waited = new Date('2026-10-28T12:33:00.000Z');
+  const { prisma } = fakePrisma([], [
+    { projectId: 'project-a', kind: 'LANDED_WITHOUT_CONFIRMATION', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 2, oldestWaitingSince: waited, nextEscalationAt: null },
+  ]);
+
+  const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
+
+  assert.deepEqual(row?.ownerItems, [{ kind: 'LANDED_WITHOUT_CONFIRMATION', count: 2, oldestWaitingSince: waited }]);
+  assert.equal(row?.coordinatorItems, null);
+});
+
 test('a coordinator-kind item is the coordinator’s, not one of the four, even with no reason', async () => {
   // The negative control for the two classifiers: `ownerItemKind` answers about the OWNER, and a
   // row it declines is read as the coordinator's only when the coordinator is actually its

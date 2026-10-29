@@ -3,13 +3,19 @@ import { Prisma } from '@prisma/client';
 import type { IntegrationJobResultRequest, IntegrationObservation } from '@orbit/shared';
 import { orderedIds } from '../common/lock-order';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
-import { landingPendingObservationSql, resolveObservationErrorItems } from './landing-observation';
+import {
+  answersDeployRound,
+  landingPendingObservationSql,
+  resolveObservationErrorItems,
+} from './landing-observation';
 import { sessionReportedWork } from './landing-source-branch';
 import { branchName } from './project-criterion-landing';
 import { appendIntegrationJobEvent, resultText } from './project-integration-event';
 import {
+  recordLandedWithoutConfirmation,
   recordLandingUnobserved,
   resolveIntegrationItemsOnLanding,
+  type LandedWithoutConfirmation,
   type LandingUnobservedReason,
 } from './project-open-item';
 
@@ -74,6 +80,8 @@ export interface ObservedJob {
   upstreamRef: string;
   claimGeneration: bigint;
   round: number | null;
+  /** The project's observation generation, which places it in the deploy-time pass's round (§10.9). */
+  generation: number;
 }
 
 /** What the result wrote, for the doors' answer and the delivery after the commit. */
@@ -83,6 +91,8 @@ export interface ObservedApplied {
   landedTaskIds: string[];
   /** The `LANDING_UNOBSERVED` items opened, for their holder to be told. */
   openItemIds: string[];
+  /** The `LANDED_WITHOUT_CONFIRMATION` items opened (O-R3), for the owner's devices to be told once. */
+  ownerItemIds: string[];
 }
 
 /** A waiting task as this result reads it. */
@@ -119,6 +129,12 @@ type TaskPlan =
  *    `LANDING_UNOBSERVED` — APPLIED_AS_OTHER_COMMITS when `git cherry` found every change on the
  *    upstream, NOT_ON_LINE otherwise; one per delivered commit. A PLATFORM project writes nothing: its
  *    own pipeline carries the work.
+ *
+ * The deploy-time pass's round (`answersDeployRound`, §10.9): O-R3 opens no item per receipt — on a
+ * PLATFORM project's main, the receipts it is owed for become ONE `LANDED_WITHOUT_CONFIRMATION` for the
+ * project, `UL:backfill:<projectId>`, listing the tasks and their receipts. A project that already has
+ * that item (a later start's pass, for work an older build finished meanwhile) gets O-R3's item per
+ * task instead, as every later observation does.
  *
  * Locks in rank order before the first write (`common/lock-order.ts`): the sessions the receipts write
  * (30), the project (40) and the tasks (50) every row here names, then the rank-60 rows.
@@ -180,6 +196,9 @@ export async function applyObservedResult(
 
   const receiptIds: string[] = [];
   const landedTaskIds: string[] = [];
+  const ownerItemIds: string[] = [];
+  const deployRound = receiptPlans.length > 0 && await answersDeployRound(tx, job);
+  const unconfirmed: LandedWithoutConfirmation[] = [];
   for (const plan of receiptPlans) {
     let receiptId: string;
     try {
@@ -191,8 +210,10 @@ export async function applyObservedResult(
         targetShaBefore: plan.targetShaBefore,
         targetShaAfter: null,
         detail: { integrationJobId: job.id, observed: true, ...(plan.empty ? { empty: true } : {}) },
-      }, 'RUNNER');
+      }, 'RUNNER', { collectUnconfirmed: deployRound });
       receiptId = recorded.receipt.id;
+      ownerItemIds.push(...recorded.ownerItemIds);
+      if (recorded.unconfirmed) unconfirmed.push(recorded.unconfirmed);
     } catch (error) {
       // A door's refusal is raised before it writes anything — a session that is gone or not an
       // engine session, a checkpoint the landing gate does not accept — so the transaction goes on
@@ -205,6 +226,21 @@ export async function applyObservedResult(
     landedTaskIds.push(plan.task.id);
     // J-T5's landing edge: what was open about landing this task is answered by its landing.
     await resolveIntegrationItemsOnLanding(tx, plan.task.id);
+  }
+  // §10.9: the deploy-time pass's round says it once for the project; O-R3's per-task item when the
+  // project has had its one.
+  if (unconfirmed.length > 0) {
+    const synthesized = await recordLandedWithoutConfirmation(tx, {
+      projectId: job.projectId, jobId: job.id, receipts: unconfirmed,
+    });
+    if (synthesized) {
+      ownerItemIds.push(synthesized.itemId);
+    } else {
+      for (const owed of unconfirmed) {
+        const opened = await recordLandedWithoutConfirmation(tx, owed);
+        if (opened) ownerItemIds.push(opened.itemId);
+      }
+    }
   }
 
   const openItemIds: string[] = [];
@@ -263,7 +299,7 @@ export async function applyObservedResult(
     }),
     at: now,
   });
-  return { receiptIds, landedTaskIds, openItemIds };
+  return { receiptIds, landedTaskIds, openItemIds, ownerItemIds };
 }
 
 /** What one waiting task's observation calls for (O-R1, O-R2, O-R4), or null for nothing. */

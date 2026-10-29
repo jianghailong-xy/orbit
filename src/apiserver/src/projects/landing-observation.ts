@@ -25,6 +25,7 @@ import {
   landedWithoutConfirmationKey,
   recordIntegrationFailure,
   recordLandedWithoutConfirmation,
+  type LandedWithoutConfirmation,
 } from './project-open-item';
 
 /**
@@ -396,6 +397,41 @@ export async function resolveObservationErrorItems(
   return resolved.count;
 }
 
+/**
+ * Whether an observation of this project, at `generation`, answers the deploy-time pass's round (§10.9):
+ * the pass queued an observation (its `enqueued` fact says `trigger: DEPLOY`) at or before this
+ * generation, and no observation of the project has answered OBSERVED since — so this is the first look
+ * at the line the pass asked for. A failed look queued again (O-J4), one ended by J-T9 or handed back
+ * (J-T11) are the same round; the first OBSERVED ends it, and every later observation is a normal one,
+ * whose O-R3 opens an item per task. A pass that found an observation already queued folded into it
+ * and wrote no fact of its own: that observation is a normal one.
+ */
+export async function answersDeployRound(
+  db: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  job: { projectId: string; generation: number },
+): Promise<boolean> {
+  const trigger: ObservationTrigger = 'DEPLOY';
+  const [row] = await db.$queryRaw<Array<{ round: boolean }>>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1
+        FROM "project_integration_job" deploy
+        JOIN "project_integration_job_event" enqueued
+          ON enqueued."job_id" = deploy."id" AND enqueued."key" = 'enqueued'
+       WHERE deploy."project_id" = ${job.projectId}::uuid
+         AND deploy."kind" = 'OBSERVE_LANDING'
+         AND deploy."generation" <= ${job.generation}
+         AND enqueued."data"->>'trigger' = ${trigger}
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_integration_job" seen
+            WHERE seen."project_id" = deploy."project_id"
+              AND seen."kind" = 'OBSERVE_LANDING'
+              AND seen."state" = 'OBSERVED'
+              AND seen."generation" >= deploy."generation"
+              AND seen."generation" < ${job.generation})
+    ) AS "round"`);
+  return row?.round === true;
+}
+
 // ── who claims an observation (§10.6 「领取」) ────────────────────────────────────────────────────
 
 /**
@@ -480,9 +516,9 @@ interface ReceiptDetail {
 }
 
 /**
- * O-R3 (§10.6): open `LANDED_WITHOUT_CONFIRMATION` for one receipt just recorded, when it is owed —
- * in the transaction that recorded it, beside M-T13's retirement. Every condition is the receipt's or
- * its project's, so each door that records a landing asks the same question here:
+ * O-R3 (§10.6): whether one receipt just recorded owes the owner a `LANDED_WITHOUT_CONFIRMATION` —
+ * asked in the transaction that recorded it, beside M-T13's retirement. Every condition is the
+ * receipt's or its project's, so each door that records a landing asks the same question here:
  *
  *  - the project is a `PLATFORM` project on a `MAIN` line (on `AGENT_PUSH` the push is the owner's
  *    standing authorization, O-L2; a project branch is not main);
@@ -494,13 +530,13 @@ interface ReceiptDetail {
  *    before the door recorded one, and is not judged;
  *  - it is not an empty branch's receipt (O-R2): nothing of the task's own reached main.
  *
- * Idempotent per receipt: an item about it, in any state, is never opened twice. Answers the item's
- * id, or null.
+ * Idempotent per receipt: an item about it, in any state, is never owed twice. Answers the task and
+ * receipt the item would be about, or null.
  */
-export async function openLandedWithoutConfirmationIfOwed(
+export async function landedWithoutConfirmationOwed(
   tx: Prisma.TransactionClient,
   receiptId: string,
-): Promise<string | null> {
+): Promise<LandedWithoutConfirmation | null> {
   const receipt = await tx.sessionMergeReceipt.findUnique({
     where: { id: receiptId },
     select: {
@@ -543,6 +579,20 @@ export async function openLandedWithoutConfirmationIfOwed(
     },
   });
   if (raised > 0) return null;
-  const opened = await recordLandedWithoutConfirmation(tx, { taskId: receipt.taskId, receiptId: receipt.id });
+  return { taskId: receipt.taskId, receiptId: receipt.id };
+}
+
+/**
+ * O-R3 (§10.6): open `LANDED_WITHOUT_CONFIRMATION` for one receipt just recorded, when it is owed
+ * (`landedWithoutConfirmationOwed`) — in the transaction that recorded it, beside M-T13's retirement.
+ * Answers the item's id, which the caller's commit pushes once (§7.6 V12), or null.
+ */
+export async function openLandedWithoutConfirmationIfOwed(
+  tx: Prisma.TransactionClient,
+  receiptId: string,
+): Promise<string | null> {
+  const owed = await landedWithoutConfirmationOwed(tx, receiptId);
+  if (!owed) return null;
+  const opened = await recordLandedWithoutConfirmation(tx, owed);
   return opened?.itemId ?? null;
 }

@@ -852,9 +852,13 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     return actions;
   }
   if (normalizeTodo(input.kind) === 'LANDED_WITHOUT_CONFIRMATION') {
-    // §10.8: Accept leads, and the task's session is the way to read what reached main.
-    return (['ACCEPT', 'OPEN_TASK_SESSION'] as const).filter((action) => directDoors.some((candidate) =>
-      candidate.implemented && candidate.holder === assignee && candidate.action === action));
+    // §10.8: Accept leads, and the task's session is the way to read what reached main. The deploy-time
+    // pass's one item per project (`UL:backfill:<projectId>`, §10.9) names no task, so it has no session
+    // to open: its payload lists the tasks.
+    return (['ACCEPT', 'OPEN_TASK_SESSION'] as const).filter((action) =>
+      (action !== 'OPEN_TASK_SESSION' || !!input.taskId)
+      && directDoors.some((candidate) =>
+        candidate.implemented && candidate.holder === assignee && candidate.action === action));
   }
   if (sourceJobForOpenItem(input) === 'OBSERVE_LANDING') {
     // §10.6 O-J4 · §10.8: the project's observations failing names no task; its one press is the

@@ -68,7 +68,8 @@ import {
  *  (6) §10.7 §10.8: `LANDED_WITHOUT_CONFIRMATION` is the owner's from birth, never delivered to the
  *      coordinator, closed only by the owner's Accept (RESOLVED / ACCEPTED, USER) — not by a request
  *      from a session, not by `open_item_resolve`, not sent back to the coordinator — and by
- *      `resolveByFact` when its task is cancelled or replaced;
+ *      `resolveByFact` when its task is cancelled or replaced; pushed once after the receipt's commit
+ *      and counted in Needs-you and the project list until then (owner 2026-10-28, §7.6 V12/V13);
  *  (7) O-X1 (§10.9 5): a task-landing `INTEGRATION_*` item — by `task_id`, or by a `TASK_BRANCH`
  *      candidate — is not closed by hand while its task is NOT_KNOWN and a dependent waits: 409
  *      OPEN_ITEM_CONDITION_STANDS naming only the doors its cell has; once the work lands, or the
@@ -135,7 +136,11 @@ async function connect(): Promise<Stack> {
       if (method === 'warn') warned.push(String(message));
     },
   });
-  return { db, sessions, openItems, tasks, receipts: new MergeReceiptService(prisma), pushed, warned };
+  // The fifth argument is the owner-item notifier R29-9 adds (§7.6 V12); a tree without it ignores it.
+  const receipts = new (MergeReceiptService as unknown as new (...args: unknown[]) => MergeReceiptService)(
+    prisma, undefined, undefined, undefined, push,
+  );
+  return { db, sessions, openItems, tasks, receipts, pushed, warned };
 }
 
 type Coordinator = 'LIVE' | 'OFF' | 'ENDED';
@@ -772,6 +777,8 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
       assert.ok(raised, 'the agent\'s receipt onto main opened it');
       const opened = { itemId: raised.id, assignee: raised.assignee };
       assert.equal(opened.assignee, 'OWNER');
+      // §7.6 V12 (owner 2026-10-28): the receipt's commit pushed it, once.
+      assert.deepEqual(stack.pushed, [opened.itemId], 'the owner\'s phone was not told once');
       const row = await item(stack.db, opened.itemId);
       assert.equal(row.kind, 'LANDED_WITHOUT_CONFIRMATION');
       assert.equal(row.assignee, 'OWNER');
@@ -788,20 +795,23 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
         recordLandedWithoutConfirmation(tx, { taskId: t.taskId, receiptId: receipt.id })), null,
       'the same receipt opened a second item');
 
-      // Never delivered to a coordinator conversation, and not one of the four things the owner's
-      // surfaces count (§7.6 V12/V13: it is the owner's by DEFAULT, not by escalation).
+      // Never delivered to a coordinator conversation, and never pushed a second time by a later
+      // delivery; the fifth thing the owner's surfaces count, by its own name (§7.6 V12/V13, owner
+      // 2026-10-28: the owner's by DEFAULT, like a merge approval, not by escalation).
       await stack.openItems.deliverForTasks([t.taskId]);
       await stack.openItems.deliverOwed(w.projectId);
       assert.deepEqual(await coordinatorTurns(stack, w), []);
       assert.equal(await stack.db.projectOpenItemDelivery.count({ where: { itemId: opened.itemId } }), 0);
-      assert.equal(ownerItemKind(row), null);
+      assert.deepEqual(stack.pushed, [opened.itemId], 'a later delivery pushed it again');
+      assert.equal(ownerItemKind(row), 'LANDED_WITHOUT_CONFIRMATION');
       const list = await stack.openItems.list(w.ownerId, w.projectId);
       const drawn = list.needsYou.find((candidate) => candidate.itemId === opened.itemId);
       assert.ok(drawn, 'the owner\'s open items do not draw it');
       assert.deepEqual(drawn.actions, ['ACCEPT', 'OPEN_TASK_SESSION']);
       assert.equal(drawn.primaryAction, 'ACCEPT');
-      assert.deepEqual(await counted(stack, w), { coordinatorLead: null, ownerItems: [], needsYou: [] },
-        'it is the owner\'s by DEFAULT, not by escalation: none of the four things the list and signal count');
+      assert.deepEqual(await counted(stack, w), {
+        coordinatorLead: null, ownerItems: [['LANDED_WITHOUT_CONFIRMATION', 1]], needsYou: [opened.itemId],
+      }, 'the project list and the Needs-you signal count it, as they count a merge approval');
 
       // Its doors are Accept and nothing that ends it another way.
       const resolved = await refusal(() => stack.openItems.resolveOpenItem(
@@ -835,6 +845,11 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
       assert.equal(ended.resolvedBySessionId, null);
       const again = await refusal(() => stack.openItems.acceptOpenItem(w.ownerId, w.projectId, opened.itemId));
       assert.equal(again.code, OPEN_ITEM_NOT_OPEN);
+      // The owner's surfaces only: the LANDING_UNOBSERVED opened above for the wrong-kind press is the
+      // coordinator's, and the list names it as such.
+      const ownersAfterAccept = await counted(stack, w);
+      assert.deepEqual({ ownerItems: ownersAfterAccept.ownerItems, needsYou: ownersAfterAccept.needsYou },
+        { ownerItems: [], needsYou: [] }, 'an accepted item is still counted');
 
       // Its task cancelled, or replaced: `resolveByFact` ends it the way it ends the others.
       const cancelled = await doneTask(stack, w, 'cancelled-after');
@@ -853,6 +868,9 @@ test('(6) §10.7 §10.8: LANDED_WITHOUT_CONFIRMATION is the owner\'s from birth,
       } as never);
       const superseded = await item(stack.db, replacedItem.itemId);
       assert.deepEqual([superseded.state, superseded.resolution], ['RESOLVED', 'SUCCESSOR_FILED']);
+      const ownersAtTheEnd = await counted(stack, w);
+      assert.deepEqual({ ownerItems: ownersAtTheEnd.ownerItems, needsYou: ownersAtTheEnd.needsYou },
+        { ownerItems: [], needsYou: [] }, 'an item whose task was cancelled or replaced is still counted');
     } finally {
       await stack.db.$disconnect();
     }

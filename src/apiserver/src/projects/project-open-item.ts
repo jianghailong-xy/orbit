@@ -119,7 +119,7 @@ export const OPEN_ITEM_ESCALATION_REASONS: ReadonlyArray<OpenItemAssigneeReason>
 ];
 
 /**
- * Which of the four owner-facing kinds this item is (§7.6 V12/V13), or null when the owner is not
+ * Which of the five owner-facing kinds this item is (§7.6 V12/V13), or null when the owner is not
  * the one being asked.
  *
  * The one place that decides it, because three surfaces turn on the same answer and a second
@@ -127,6 +127,9 @@ export const OPEN_ITEM_ESCALATION_REASONS: ReadonlyArray<OpenItemAssigneeReason>
  * and the macOS menu bar read, and the chip on the project list. `assignee` is the whole of the
  * negative case — an exception the coordinator is still working on is not the owner's to be told
  * about (owner decision 10), however long it has been open.
+ *
+ * `LANDED_WITHOUT_CONFIRMATION` is the owner's from birth, like a merge approval: work that reached
+ * main without their confirmation is pushed once and counted in Needs-you (owner 2026-10-28, §10.7).
  */
 export function ownerItemKind(item: {
   kind: OpenItemKind | string;
@@ -135,7 +138,7 @@ export function ownerItemKind(item: {
 }): OwnerItemKind | null {
   if (item.assignee !== 'OWNER') return null;
   if (item.kind === 'PROMOTION_APPROVAL' || item.kind === 'COORDINATOR_QUESTION'
-      || item.kind === 'FUSE_PAUSED') {
+      || item.kind === 'FUSE_PAUSED' || item.kind === 'LANDED_WITHOUT_CONFIRMATION') {
     return item.kind;
   }
   return OPEN_ITEM_ESCALATION_REASONS.includes(item.assigneeReason as OpenItemAssigneeReason)
@@ -1524,29 +1527,56 @@ export interface LandedWithoutConfirmation {
   receiptId: string;
 }
 
+/**
+ * The deploy-time pass's one item per project (§10.9): the receipts its observation round recorded on a
+ * PLATFORM project's main that O-R3 would each have opened an item about, put to the owner together.
+ */
+export interface LandedWithoutConfirmationBackfill {
+  projectId: string;
+  /** The observation whose result recorded them. */
+  jobId: string;
+  receipts: ReadonlyArray<LandedWithoutConfirmation>;
+}
+
 /** One item per receipt of a task (§10.7): `UL:<taskId>:<receiptId>`. */
 export function landedWithoutConfirmationKey(taskId: string, receiptId: string): string {
   return `UL:${taskId}:${receiptId}`;
 }
 
+/** The deploy-time pass's one item per project (§10.9): `UL:backfill:<projectId>`. */
+export function landedWithoutConfirmationBackfillKey(projectId: string): string {
+  return `UL:backfill:${projectId}`;
+}
+
 /**
  * Open the owner's item about work that reached main without their confirmation, in the transaction
- * that recorded it (§10.6 O-R3, §10.5 O-L6): which receipts qualify is the caller's to judge.
+ * that recorded it (§10.6 O-R3, §10.5 O-L6): which receipts qualify is the caller's to judge. The one
+ * door every opening goes through — an observation's O-R3, a check that answered ALREADY_LANDED (O-L6),
+ * an agent's receipt, a Merge pressed from a session, and the deploy-time pass's round — so the item it
+ * returns is what the caller's commit hands to `MergeReceiptService.deliverProjectFactsAfterCommit`,
+ * which pushes it once (§7.6 V12).
  *
  * The owner's from birth (`assignee_reason = DEFAULT`), like a merge card and for the same reason —
  * it is a question of authority, and no conversation can answer it for them — so it has no clock
- * (`escalate_at`, `remind_at` NULL) and is never delivered to a coordinator. It is not one of the
- * four things the owner's phone, badge and project list count (§7.6 V12/V13, `ownerItemKind`): it
- * is drawn among their open items, where Accept ends it (`ProjectOpenItemService.acceptOpenItem`).
+ * (`escalate_at`, `remind_at` NULL) and is never delivered to a coordinator. It is one of the five
+ * things the owner's phone, badge and project list count (§7.6 V12/V13, `ownerItemKind`; owner
+ * 2026-10-28), drawn among their open items, where Accept ends it
+ * (`ProjectOpenItemService.acceptOpenItem`).
  *
  * Its payload is that receipt's facts (§10.7), its title the branch the receipt landed on. Returns
  * null when the key is already held, and when the receipt is not this task's or the task is in no
  * project.
+ *
+ * Given the deploy-time pass's receipts instead (`LandedWithoutConfirmationBackfill`), one item for the
+ * project: `UL:backfill:<projectId>`, about no single task (`task_id` NULL, so it is owed until the owner
+ * presses Accept), titled by how many tasks it names, its payload every receipt's facts beside its task.
+ * Opened once per project: null when an item under that key exists in any state.
  */
 export async function recordLandedWithoutConfirmation(
   tx: Prisma.TransactionClient,
-  input: LandedWithoutConfirmation,
+  input: LandedWithoutConfirmation | LandedWithoutConfirmationBackfill,
 ): Promise<RecordedOpenItem | null> {
+  if ('receipts' in input) return recordLandedWithoutConfirmationBackfill(tx, input);
   const receipt = await tx.sessionMergeReceipt.findUnique({
     where: { id: input.receiptId },
     select: { taskId: true, sessionId: true, recordedBy: true, targetBranch: true, sourceSha: true, detail: true },
@@ -1556,9 +1586,6 @@ export async function recordLandedWithoutConfirmation(
     select: { ownerId: true, projectId: true, title: true },
   });
   if (!receipt || receipt.taskId !== input.taskId || !task?.projectId) return null;
-  const detail = receipt.detail && typeof receipt.detail === 'object' && !Array.isArray(receipt.detail)
-    ? receipt.detail as { observed?: unknown }
-    : {};
   const now = new Date();
   const [created] = await tx.projectOpenItem.createManyAndReturn({
     data: [{
@@ -1572,13 +1599,7 @@ export async function recordLandedWithoutConfirmation(
       sessionId: receipt.sessionId,
       dedupeKey: landedWithoutConfirmationKey(input.taskId, input.receiptId),
       title: `Reached ${branchName(receipt.targetBranch)} without your confirmation: ${task.title}`,
-      payload: {
-        receiptId: input.receiptId,
-        recordedBy: receipt.recordedBy,
-        targetBranch: receipt.targetBranch,
-        sourceSha: receipt.sourceSha,
-        observed: detail.observed === true,
-      },
+      payload: landedReceiptPayload(input.receiptId, receipt),
       waitingSince: now,
       assignedAt: now,
       escalateAt: null,
@@ -1588,6 +1609,77 @@ export async function recordLandedWithoutConfirmation(
   });
   if (!created) return null;
   return { itemId: created.id, projectId: task.projectId, taskId: input.taskId, assignee: 'OWNER' };
+}
+
+/** §10.7's payload for one receipt: what it says, and whether an observation is how Orbit knows. */
+function landedReceiptPayload(
+  receiptId: string,
+  receipt: { recordedBy: string; targetBranch: string; sourceSha: string; detail: unknown },
+): { receiptId: string; recordedBy: string; targetBranch: string; sourceSha: string; observed: boolean } {
+  const detail = receipt.detail && typeof receipt.detail === 'object' && !Array.isArray(receipt.detail)
+    ? receipt.detail as { observed?: unknown }
+    : {};
+  return {
+    receiptId,
+    recordedBy: receipt.recordedBy,
+    targetBranch: receipt.targetBranch,
+    sourceSha: receipt.sourceSha,
+    observed: detail.observed === true,
+  };
+}
+
+/** `recordLandedWithoutConfirmation` for the deploy-time pass's round (§10.9): one item per project. */
+async function recordLandedWithoutConfirmationBackfill(
+  tx: Prisma.TransactionClient,
+  input: LandedWithoutConfirmationBackfill,
+): Promise<RecordedOpenItem | null> {
+  if (input.receipts.length === 0) return null;
+  const dedupeKey = landedWithoutConfirmationBackfillKey(input.projectId);
+  const project = await tx.project.findUnique({ where: { id: input.projectId }, select: { ownerId: true } });
+  if (!project) return null;
+  // Once per project, whatever became of the first: the round is the deploy's, and it ran once.
+  if (await tx.projectOpenItem.count({ where: { projectId: input.projectId, dedupeKey } }) > 0) return null;
+  const receiptIds = input.receipts.map((entry) => entry.receiptId);
+  const receipts = await tx.sessionMergeReceipt.findMany({
+    where: { id: { in: receiptIds }, projectId: input.projectId },
+    select: {
+      id: true, taskId: true, recordedBy: true, targetBranch: true, sourceSha: true, detail: true,
+      task: { select: { title: true } },
+    },
+  });
+  const byId = new Map(receipts.map((receipt) => [receipt.id, receipt]));
+  const listed = input.receipts.flatMap((entry) => {
+    const receipt = byId.get(entry.receiptId);
+    return receipt && receipt.taskId === entry.taskId
+      ? [{ taskId: entry.taskId, title: receipt.task?.title ?? null, ...landedReceiptPayload(receipt.id, receipt) }]
+      : [];
+  });
+  if (listed.length === 0) return null;
+  const targetBranch = listed[0]!.targetBranch;
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: input.projectId,
+      ownerId: project.ownerId,
+      kind: LANDED_WITHOUT_CONFIRMATION_KIND,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee: 'OWNER' satisfies OpenItemAssignee,
+      assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+      taskId: null,
+      sessionId: null,
+      dedupeKey,
+      title: `Reached ${branchName(targetBranch)} without your confirmation: `
+        + `${listed.length} ${listed.length === 1 ? 'task' : 'tasks'}`,
+      payload: { backfill: true, jobId: input.jobId, targetBranch, receipts: listed },
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+  return { itemId: created.id, projectId: input.projectId, taskId: null, assignee: 'OWNER' };
 }
 
 /** What the coordinator's rerun of a failure carries onto the items it is handling (§4.7 H1). */

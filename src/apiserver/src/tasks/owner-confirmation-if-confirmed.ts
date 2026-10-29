@@ -108,11 +108,26 @@ async function readStartsTasks(
 }
 
 /**
+ * How a DONE's work reaches main, given the project's delivery mode and whether Automatic would merge
+ * the candidate it leads to (M-T11): an AGENT_PUSH project builds no candidate at all — its agents push
+ * to main themselves and the observation records it (§10.5 O-L2) — so no merge card follows the
+ * confirmation; otherwise the line's own route.
+ */
+export function confirmationLanding(input: {
+  deliveryMode: string | null | undefined;
+  automatic: boolean;
+}): Exclude<OwnerConfirmationLanding, 'NONE'> {
+  if (input.deliveryMode === 'AGENT_PUSH') return 'AGENT_PUSHED';
+  return input.automatic ? 'AUTO_MAIN' : 'LINE_THEN_OWNER';
+}
+
+/**
  * How the DONE lands the work, and whether the dependents wait for that landing.
  *
  * They wait when the work lands at all: the DONE starts the project's line if nothing has, and from
  * then on §2.5 J9 holds a code task's dependents until a receipt puts its work on the line or on
- * main — `prerequisiteLanded`'s last clause, which a receipt already on record answers now.
+ * main — `prerequisiteLanded`'s last clause, which a receipt already on record answers now. An
+ * AGENT_PUSH project's too: its receipt is the observation's (O-R1).
  */
 async function readLanding(
   db: Prisma.TransactionClient,
@@ -138,7 +153,7 @@ async function readLanding(
     select: { result: true, targetBranch: true },
   });
   return {
-    landing: automatic ? 'AUTO_MAIN' : 'LINE_THEN_OWNER',
+    landing: confirmationLanding({ deliveryMode: codebase?.deliveryMode, automatic }),
     startsAfterLanding: taskLanding(receipts, landingBranchesFor(codebase)) === 'NOT_KNOWN',
   };
 }

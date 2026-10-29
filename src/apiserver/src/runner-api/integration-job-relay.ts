@@ -1865,6 +1865,12 @@ export interface IntegrationResultAftermath {
   openItemIds: string[];
   /** An observation's result (§10.6 O-R1): every task whose landing it recorded, for J10. */
   landedTaskIds?: string[];
+  /**
+   * The `LANDED_WITHOUT_CONFIRMATION` items this result opened (§10.6 O-R3, §10.5 O-L6, and the
+   * deploy-time pass's one item per project, §10.9), for the door that delivered the result to push
+   * once after the commit (§7.6 V12, `MergeReceiptService.deliverProjectFactsAfterCommit`).
+   */
+  ownerItemIds?: string[];
   /** Set for an observation's own result, which has just looked at the line (O-T3 skips it). */
   observed?: boolean;
   /**
@@ -2051,6 +2057,7 @@ export async function applyIntegrationJobResult(
         upstreamRef: job.upstreamRef,
         claimGeneration: job.claimGeneration,
         round: job.round ?? null,
+        generation: job.generation,
       }, body);
       return {
         answer: { accepted: true, state: 'OBSERVED' as never, receiptIds: observed.receiptIds, openItemId: null },
@@ -2059,6 +2066,7 @@ export async function applyIntegrationJobResult(
           landedTaskId: null,
           landedTaskIds: observed.landedTaskIds,
           openItemIds: observed.openItemIds,
+          ownerItemIds: observed.ownerItemIds,
           // M-F1: a receipt on a project branch moved the line, as a landing does.
           considerPromotionProjectId: observed.receiptIds.length > 0 ? job.projectId : null,
           observed: true,
@@ -2827,6 +2835,7 @@ export async function applyIntegrationJobResult(
           : null,
         // §10.5 O-L6: a task branch's check that saw the work on the upstream wrote its receipt.
         ...(promotion?.landedTaskIds?.length ? { landedTaskIds: promotion.landedTaskIds } : {}),
+        ...(promotion?.ownerItemIds?.length ? { ownerItemIds: promotion.ownerItemIds } : {}),
         openItemIds: [openItemId, rearmedItemId].filter((id): id is string => id !== null),
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:

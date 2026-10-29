@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectIntegrationInFlight, ProjectIntegrationJob } from './project-progress';
+import { OWNER_ITEM_PUSH_KINDS } from './project-progress';
+import type { OwnerItemKind, ProjectIntegrationInFlight, ProjectIntegrationJob } from './project-progress';
 
 /**
  * The landing-session fields on the integration read model are optional in both directions
@@ -75,5 +76,32 @@ describe('the integration read model', () => {
     expect(current.round).toBe(2);
     expect(current.liveness).toBe('QUIET');
     expect(current.blockingReason?.summary).toBe('Waiting to land: the work is running');
+  });
+});
+
+/**
+ * What a "needs you" push says it is about (§7.6 V12, §7.1 V2): one slug per owner item kind, the
+ * words the phone, the banner and the project list route by. The fifth, `LANDED_WITHOUT_CONFIRMATION`
+ * (§10.7), is pushed and counted like the other four since the owner's decision of 2026-10-28.
+ */
+describe('the owner item push slugs', () => {
+  it('maps each of the five kinds to its own slug', () => {
+    expect(OWNER_ITEM_PUSH_KINDS).toEqual({
+      PROMOTION_APPROVAL: 'approve-merge-to-main',
+      COORDINATOR_QUESTION: 'coordinator-question',
+      ESCALATED: 'escalated-to-you',
+      FUSE_PAUSED: 'fuse-paused',
+      LANDED_WITHOUT_CONFIRMATION: 'landed-without-confirmation',
+    });
+  });
+
+  it('names work that reached main without the owner\'s confirmation landed-without-confirmation', () => {
+    const kind: OwnerItemKind = 'LANDED_WITHOUT_CONFIRMATION';
+    expect(OWNER_ITEM_PUSH_KINDS[kind]).toBe('landed-without-confirmation');
+  });
+
+  it('gives no two kinds the same slug', () => {
+    const slugs = Object.values(OWNER_ITEM_PUSH_KINDS);
+    expect(new Set(slugs).size).toBe(slugs.length);
   });
 });
