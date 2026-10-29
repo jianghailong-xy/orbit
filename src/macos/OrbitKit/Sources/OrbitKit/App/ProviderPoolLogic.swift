@@ -232,15 +232,18 @@ public enum ProviderPools {
         "\(SessionProviderChoices.compactWindowLabel(row.label)) \(row.percent)%"
     }
 
-    /// When a window resets, as the pages say it: `14:05` within a day, `Mon 14:05` beyond that — a
-    /// weekly limit can be days out, and a bare time would read as today. Nil for an unreadable time.
+    /// When a window resets, as the pages say it: `14:05` today, `Fri 14:05` on any other day — a
+    /// weekly limit usually lands days out, and even tomorrow's bare time would read as today's,
+    /// already past. Nil for an unreadable time.
     public static func formatResetTime(_ iso: String, now: Date = Date(),
                                        timeZone: TimeZone = .current) -> String? {
         guard let at = RelativeTime.parse(iso) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = timeZone
-        formatter.dateFormat = at.timeIntervalSince(now) < 24 * 60 * 60 ? "HH:mm" : "EEE HH:mm"
+        formatter.dateFormat = calendar.isDate(at, inSameDayAs: now) ? "HH:mm" : "EEE HH:mm"
         return formatter.string(from: at)
     }
 }

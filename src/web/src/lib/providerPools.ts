@@ -212,13 +212,20 @@ export function memberQuota(member: PoolMember): PlanUsageDisplayRow | null {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** When a window resets, as the page says it: `14:05` within a day, `Mon 14:05` beyond that — a
- *  weekly limit can be days out, and a bare time would read as today. */
+/** When a window resets, as the page says it: `14:05` today, `Fri 14:05` on any other day — a weekly
+ *  limit usually lands days out, and even tomorrow's bare time would read as today's, already past. */
 export function formatResetTime(iso: string, now: number = Date.now()): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return '';
   const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
-  if (at.getTime() - now < 24 * 60 * 60 * 1000) return time;
+  const today = new Date(now);
+  if (
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate()
+  ) {
+    return time;
+  }
   return `${at.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
 }
 
