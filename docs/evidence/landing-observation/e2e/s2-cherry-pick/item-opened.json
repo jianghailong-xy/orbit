@@ -1,0 +1,52 @@
+{
+  "itemId": "34o3gBRxSd1jjLTB4CIye",
+  "kind": "LANDING_UNOBSERVED",
+  "title": "Not on main yet: S2-C: push a cherry-pick of the work to main",
+  "detailLine": "Its changes are there as other commits · delivered 832123978271",
+  "question": null,
+  "startRequest": null,
+  "doneRequest": null,
+  "facts": null,
+  "assignee": "COORDINATOR",
+  "assigneeReason": "DEFAULT",
+  "waitingSince": "2026-10-29T01:22:41.112Z",
+  "escalateAt": null,
+  "escalatedAt": null,
+  "handoverNote": null,
+  "taskId": "34o3fYBORoF4H2t5yfFO2",
+  "handledBy": [],
+  "sessionId": "2Jz0d4y0DSdOoUED097BY7",
+  "landingSessionId": null,
+  "integrationJobId": null,
+  "lease": null,
+  "promotionId": null,
+  "fuseEpisodeId": null,
+  "delivery": {
+    "state": "DELIVERED",
+    "sessionId": "34o3fY1Y0IjTWKoCMEHAm",
+    "at": "2026-10-29T01:22:41.153Z",
+    "sessionPublicId": "34o3fY1Y0IjTWKoCMEHAm"
+  },
+  "actions": [
+    "OPEN_COORDINATOR",
+    "OPEN_TASK_SESSION",
+    "OBSERVE",
+    "CANCEL_TASK"
+  ],
+  "requiredAction": "This task’s work is not on main yet — record the commit that carries it, or send the task back to push it.",
+  "primaryAction": "OPEN_TASK_SESSION",
+  "handling": null,
+  "outcome": null,
+  "chat": {
+    "sessionId": "34o3fY1Y0IjTWKoCMEHAm",
+    "stage": "WITH_COORDINATOR",
+    "refusal": null,
+    "sessionPublicId": "34o3fY1Y0IjTWKoCMEHAm"
+  },
+  "sessionPublicId": "2Jz0d4y0DSdOoUED097BY7",
+  "itemPublicId": "34o3gBRxSd1jjLTB4CIye",
+  "integrationJobPublicId": null,
+  "promotionPublicId": null,
+  "fuseEpisodePublicId": null,
+  "taskPublicId": "34o3fYBORoF4H2t5yfFO2"
+}

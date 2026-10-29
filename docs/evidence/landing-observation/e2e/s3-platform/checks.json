@@ -1,0 +1,112 @@
+[
+  {
+    "name": "the project is PLATFORM by default",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "S3-F is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "origin main is F's commit; no task branch on the origin",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "candidate source_sha = delivered_sha (O-L5)",
+    "ok": true,
+    "detail": "b8a5e4913009a36bf443f584cece0e2457f88176"
+  },
+  {
+    "name": "the check answered ALREADY_LANDED",
+    "ok": true,
+    "detail": "ALREADY_LANDED -"
+  },
+  {
+    "name": "the candidate is SUPERSEDED, not BLOCKED",
+    "ok": true,
+    "detail": "SUPERSEDED -"
+  },
+  {
+    "name": "a receipt: ALREADY_MERGED on main, by the RUNNER, detail.observed + integrationJobId",
+    "ok": true,
+    "detail": "ALREADY_MERGED main RUNNER b8a5e4913009a36bf443f584cece0e2457f88176 {\"observed\": true, \"integrationJobId\": \"a9370543-2539-4b3d-a442-2bc8c1a89a3a\"}"
+  },
+  {
+    "name": "LANDED_WITHOUT_CONFIRMATION is the owner's, titled for the task",
+    "ok": true,
+    "detail": "OWNER: Reached main without your confirmation: S3-F: pushes its work straight to main"
+  },
+  {
+    "name": "it offers Accept",
+    "ok": true,
+    "detail": "[\"ACCEPT\",\"OPEN_TASK_SESSION\"]"
+  },
+  {
+    "name": "S3-F2 started by itself (J9 released by the check's receipt, J10)",
+    "ok": true,
+    "detail": "session 4Kl4AjP8bTsWGCq0zClSGD"
+  },
+  {
+    "name": "S3-E is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "S3-E's candidate source_sha = its commit",
+    "ok": true,
+    "detail": "ca3d193d08f5763fe056d8d2a64304803e6abe58"
+  },
+  {
+    "name": "the check by commit answered READY (no SOURCE_BRANCH_MISSING for the unpublished branch)",
+    "ok": true,
+    "detail": "READY -"
+  },
+  {
+    "name": "the runner was handed the check with sourceSha = the commit (wire log)",
+    "ok": true,
+    "detail": "CHECK_PROMOTION TASK_BRANCH refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc sourceSha=ca3d193d08f5763fe056d8d2a64304803e6abe58"
+  },
+  {
+    "name": "the owner's confirmation is accepted",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "LAND_PROMOTION landed it",
+    "ok": true,
+    "detail": "LANDED - ca3d193d08f5763fe056d8d2a64304803e6abe58"
+  },
+  {
+    "name": "the runner was handed the landing with sourceSha = the commit (wire log)",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "a MERGED receipt on main",
+    "ok": true,
+    "detail": "MERGED main RUNNER"
+  },
+  {
+    "name": "S3-E2 started by itself after the landing (J10)",
+    "ok": true,
+    "detail": "session 395GoUcnjAHzo6qnripJa2"
+  },
+  {
+    "name": "no candidate BLOCKED",
+    "ok": true,
+    "detail": "0"
+  },
+  {
+    "name": "no SOURCE_BRANCH_MISSING",
+    "ok": true,
+    "detail": "0"
+  },
+  {
+    "name": "the runner log shows no fetch of a task branch",
+    "ok": true,
+    "detail": ""
+  }
+]

@@ -1,0 +1,72 @@
+[
+  {
+    "name": "S2-C is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "origin main is the cherry-pick, not the task's commit",
+    "ok": true,
+    "detail": "main 2e33f82a53a8588f82fe989f7641f3e5253c9732"
+  },
+  {
+    "name": "delivered_sha = the task branch's commit (not the cherry-pick)",
+    "ok": true,
+    "detail": "8321239782714cf5ca3f565e83b293a96b258309"
+  },
+  {
+    "name": "LANDING_UNOBSERVED reason APPLIED_AS_OTHER_COMMITS, assigned to the COORDINATOR",
+    "ok": true,
+    "detail": "COORDINATOR | LU:01a18540-25ca-747d-ad08-6e2d2e1649a6:8321239782714cf5ca3f565e83b293a96b258309 | APPLIED_AS_OTHER_COMMITS | 8321239782714cf5ca3f565e83b293a96b258309"
+  },
+  {
+    "name": "its title names the branch and the task",
+    "ok": true,
+    "detail": "Not on main yet: S2-C: push a cherry-pick of the work to main"
+  },
+  {
+    "name": "J9 refuses S2-D and names \"Not on main yet\"",
+    "ok": true,
+    "detail": "{\"message\":\"A prerequisite is finished but its work is not on main yet — see “Not on main yet” in open items\",\"error\":\"Bad Request\",\"statusCode\":400}"
+  },
+  {
+    "name": "open_item_resolve refused OPEN_ITEM_HAS_ITS_OWN_DOOR",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "integration_observe queued an observation",
+    "ok": true,
+    "detail": "\"jobId\": \"7AtZSqMylIyWhZ6UmUHg9L\""
+  },
+  {
+    "name": "the item records the handling (H1) with the reason",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "still not seen: the one item stays OPEN, no second item",
+    "ok": true,
+    "detail": "OPEN  |            |     1"
+  },
+  {
+    "name": "merge_receipt recorded",
+    "ok": true,
+    "detail": "{   \"receipt\": {     \"id\": \"34o3gyjHJA4t8PPmPAW94\",     \"sessionId\": \"2Jz0d4y0DSdOoUED097BY7\",     \"taskId\": \"34o3fYBORoF4H2t5yfFO2\",     \"projectId\": \"34o3fY0BLFOUgQMiJa2PB\",     \"result\": \"ALREADY_M"
+  },
+  {
+    "name": "LANDING_UNOBSERVED RESOLVED / LANDED",
+    "ok": true,
+    "detail": "RESOLVED | LANDED     | PLATFORM"
+  },
+  {
+    "name": "S2-D started by itself (J10)",
+    "ok": true,
+    "detail": "session 51y8ixUkOKDYKSliKscc7v"
+  },
+  {
+    "name": "S2-D is DONE",
+    "ok": true,
+    "detail": ""
+  }
+]

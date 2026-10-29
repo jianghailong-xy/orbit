@@ -1,0 +1,161 @@
+
+### S2 final — codebase  (2026-10-29T01:23:14.015Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick')
+
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode |  delivery_mode_chosen_at   |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+----------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/a/origin/s2 | refs/heads/main | refs/heads/main | origin      | AGENT_PUSH    | 2026-10-29 01:22:16.167+00 | 2026-10-29 01:22:16.485+00 | 
+(1 row)
+
+
+### S2 final — tasks  (2026-10-29T01:23:14.056Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by t.created_at
+
+-[ RECORD 1 ]------+------------------------------------------------------
+title              | S2-C: push a cherry-pick of the work to main
+status             | DONE
+auto_run           | f
+delivered_sha      | 8321239782714cf5ca3f565e83b293a96b258309
+delivered_base_sha | 11a1973eb32ec03c9d0870d62be68e5afef843cf
+delivered_branch   | orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d
+delivered_at       | 2026-10-29 01:22:36.555+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:22:16.138
+-[ RECORD 2 ]------+------------------------------------------------------
+title              | S2-D: waits for S2-C to be on main
+status             | DONE
+auto_run           | t
+delivered_sha      | 
+delivered_base_sha | 
+delivered_branch   | 
+delivered_at       | 
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:22:16.15
+
+
+### S2 final — sessions  (2026-10-29T01:23:14.103Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S2-C: push a cherry-pick of the work to main
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d
+base_sha        | 11a1973eb32ec03c9d0870d62be68e5afef843cf
+branch_sha      | 8321239782714cf5ca3f565e83b293a96b258309
+created_at      | 2026-10-29 01:22:16.237
+finished_at     | 2026-10-29 01:22:36.549
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S2-D: waits for S2-C to be on main
+kind            | CONVERSATION
+status          | AWAITING_INPUT
+end_reason      | 
+worktree_branch | orbit/task-s2-d-waits-for-s2-c-to-be-on-main-b69000
+base_sha        | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+branch_sha      | 2ed666476d2a1db0cddd75e46e87414895afbbed
+created_at      | 2026-10-29 01:23:12.495
+finished_at     | 
+
+
+### S2 final — jobs  (2026-10-29T01:23:14.151Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join task t on t.id = j.task_id
+where j.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by j.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 1
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+target_sha_before | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18540-25ca-747d-ad08-6e2d2e1649a6", "baseSha": "11a1973eb32ec03c9d0870d62be68e5afef843cf", "onUpstream": false, "deliveredSha": "8321239782714cf5ca3f565e83b293a96b258309", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:22:41.067+00
+finished_at       | 2026-10-29 01:22:41.109+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18540-2557-7169-a680-206a0607e131:1
+-[ RECORD 2 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 2
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+target_sha_before | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18540-25ca-747d-ad08-6e2d2e1649a6", "baseSha": "11a1973eb32ec03c9d0870d62be68e5afef843cf", "onUpstream": false, "deliveredSha": "8321239782714cf5ca3f565e83b293a96b258309", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:23:11.066+00
+finished_at       | 2026-10-29 01:23:11.112+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18540-2557-7169-a680-206a0607e131:2
+
+
+### S2 final — receipts  (2026-10-29T01:23:14.199Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by r.created_at
+
+-[ RECORD 1 ]-----+-----------------------------------------------------------------------------------------------
+task              | S2-C: push a cherry-pick of the work to main
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d
+source_sha        | 2e33f82a53a8588f82fe989f7641f3e5253c9732
+target_branch     | main
+target_sha_before | 
+target_sha_after  | 
+recorded_by       | AGENT
+detail            | {"message": "S2-C reached main as a cherry-pick; this is the commit on main that carries it."}
+created_at        | 2026-10-29 01:23:12.456
+
+
+### S2 final — promotions  (2026-10-29T01:23:14.246Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by p.created_at
+
+(0 rows)
+
+
+### S2 final — openItems  (2026-10-29T01:23:14.294Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by i.created_at
+
+-[ RECORD 1 ]---+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | LANDING_UNOBSERVED
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | S2-C: push a cherry-pick of the work to main
+dedupe_key      | LU:01a18540-25ca-747d-ad08-6e2d2e1649a6:8321239782714cf5ca3f565e83b293a96b258309
+title           | Not on main yet: S2-C: push a cherry-pick of the work to main
+payload         | {"jobId": "b8a91870-a02e-47a1-adaf-953d4c51bf2d", "branch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d", "reason": "APPLIED_AS_OTHER_COMMITS", "baseSha": "11a1973eb32ec03c9d0870d62be68e5afef843cf", "observedAt": "2026-10-29T01:22:41.109Z", "upstreamRef": "refs/heads/main", "deliveredSha": "8321239782714cf5ca3f565e83b293a96b258309", "integrationRef": "refs/heads/main", "observedLineSha": "2e33f82a53a8588f82fe989f7641f3e5253c9732", "observedUpstreamSha": "2e33f82a53a8588f82fe989f7641f3e5253c9732"}
+resolution      | LANDED
+resolved_by     | PLATFORM
+resolution_note | 
+handling_reason | The agent says it pushed; look at main again.
+handling_job_id | ebc5c1c7-6164-4595-a75f-d6cb8e6e88c3
+created_at      | 2026-10-29 01:22:41.113+00
+resolved_at     | 2026-10-29 01:23:12.449+00
+

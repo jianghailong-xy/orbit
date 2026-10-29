@@ -1,0 +1,80 @@
+[
+  {
+    "phase": "C",
+    "name": "the upgraded runner declares integration-observe/v1",
+    "ok": true,
+    "detail": "version 0.1.240"
+  },
+  {
+    "phase": "C",
+    "name": "the deploy round's OBSERVE_LANDING answered OBSERVED",
+    "ok": true,
+    "detail": "OBSERVED -"
+  },
+  {
+    "phase": "C",
+    "name": "the claim named the four frozen tasks (T3 is already landed)",
+    "ok": true,
+    "detail": "6180e80ad9 526a6a429a 323bd3983e 8b63825e1d"
+  },
+  {
+    "phase": "C",
+    "name": "four observed receipts (T1, T2, T4, T6) beside T3's own",
+    "ok": true,
+    "detail": "4 observed"
+  },
+  {
+    "phase": "C",
+    "name": "their four BLOCKED candidates are retired (SUPERSEDED, M-T13)",
+    "ok": true,
+    "detail": "4"
+  },
+  {
+    "phase": "C",
+    "name": "one LANDED_WITHOUT_CONFIRMATION for the project, UL:backfill:<projectId>, the owner's",
+    "ok": true,
+    "detail": "UL:backfill:01a1855c-f10d-73a4-bb31-48db38b818ca | OWNER | Reached feature/release-2 without your confirmation: 4 tasks"
+  },
+  {
+    "phase": "C",
+    "name": "no per-task LANDED_WITHOUT_CONFIRMATION in the deploy round",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "C",
+    "name": "its payload lists the four tasks and their receipts (backfill: true)",
+    "ok": true,
+    "detail": "{\"jobId\": \"0b1dfd20-da3b-4e48-9c37-59b3fdc7278d\", \"backfill\": true, \"receipts\": [{\"title\": \"S4-T1: the API endpoint\", \"taskId\": \"01a1855c-f1a6-70b9-979d-972b1fd0e4f8\", \"observed\": true, \"receiptId\": \""
+  },
+  {
+    "phase": "C",
+    "name": "T5 (needs T1 and T2) started by itself (J9 released, J10)",
+    "ok": true,
+    "detail": "session eWUshGTixwTiBgEf83x9w at 2026-10-29T02:00:50.408Z"
+  },
+  {
+    "phase": "C",
+    "name": "T5 is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "C",
+    "name": "T3's leftover candidate surfaces in no owner read (no blocker, no withheld criterion, not the current promotion)",
+    "ok": true,
+    "detail": "BLOCKED ERROR"
+  },
+  {
+    "phase": "C",
+    "name": "the owner's Accept closes it RESOLVED / ACCEPTED by USER",
+    "ok": true,
+    "detail": "RESOLVED ACCEPTED USER"
+  },
+  {
+    "phase": "C",
+    "name": "a second start writes nothing again (no observation, no second UL:backfill, no receipt)",
+    "ok": true,
+    "detail": "{\"observations\":\"1\",\"ul\":\"1\",\"receipts\":\"7\"} -> {\"observations\":\"1\",\"ul\":\"1\",\"receipts\":\"7\"}"
+  }
+]

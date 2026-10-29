@@ -1,0 +1,74 @@
+[
+  {
+    "phase": "A",
+    "name": "T1 is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "T2 is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "T3 is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "T4 is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "T6 started by itself after T3's own receipt",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "five TASK_BRANCH candidates BLOCKED",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "four answered SOURCE_BRANCH_MISSING, one ALREADY_LANDED",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "the project has exactly one receipt (T3's agent's)",
+    "ok": true,
+    "detail": "1"
+  },
+  {
+    "phase": "A",
+    "name": "every DONE task's commit is on feature/release-2",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "A",
+    "name": "J9 refuses T5 although T1 and T2 are on the line",
+    "ok": true,
+    "detail": "{\"message\":\"A prerequisite is finished but its work has not landed on this project's integration line yet — it starts by itself once the landing is recorded\",\"error\":\"Bad Request\",\"statusCode\":400}"
+  },
+  {
+    "phase": "A",
+    "name": "the coordinator closed its INTEGRATION_ERROR items as HANDLED",
+    "ok": true,
+    "detail": "4 items"
+  },
+  {
+    "phase": "A",
+    "name": "T5 is still waiting",
+    "ok": true,
+    "detail": "OPEN"
+  }
+]

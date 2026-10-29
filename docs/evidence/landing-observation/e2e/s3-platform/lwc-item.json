@@ -1,0 +1,50 @@
+{
+  "itemId": "34o3qprhMx276ZfL1aBQV",
+  "kind": "LANDED_WITHOUT_CONFIRMATION",
+  "title": "Reached main without your confirmation: S3-F: pushes its work straight to main",
+  "detailLine": "b8a5e4913009 is on main · seen by Orbit",
+  "question": null,
+  "startRequest": null,
+  "doneRequest": null,
+  "facts": null,
+  "assignee": "OWNER",
+  "assigneeReason": "DEFAULT",
+  "waitingSince": "2026-10-29T01:29:41.155Z",
+  "escalateAt": null,
+  "escalatedAt": null,
+  "handoverNote": null,
+  "taskId": "34o3qEuusiGlG3IxptUIQ",
+  "handledBy": [],
+  "sessionId": "6vgyfPrvGkOszi80FUhZuT",
+  "landingSessionId": null,
+  "integrationJobId": null,
+  "lease": null,
+  "promotionId": null,
+  "fuseEpisodeId": null,
+  "delivery": {
+    "state": "NOT_REQUIRED",
+    "sessionId": null,
+    "at": null,
+    "sessionPublicId": null
+  },
+  "actions": [
+    "ACCEPT",
+    "OPEN_TASK_SESSION"
+  ],
+  "requiredAction": "This work reached main without your confirmation — accept it, or use Chat about this to have the coordinator file a task that reverts it.",
+  "primaryAction": "ACCEPT",
+  "handling": null,
+  "outcome": null,
+  "chat": {
+    "sessionId": "34o3qEoTs2n4q7xcJfPKD",
+    "stage": "WITH_OWNER",
+    "refusal": null,
+    "sessionPublicId": "34o3qEoTs2n4q7xcJfPKD"
+  },
+  "sessionPublicId": "6vgyfPrvGkOszi80FUhZuT",
+  "itemPublicId": "34o3qprhMx276ZfL1aBQV",
+  "integrationJobPublicId": null,
+  "promotionPublicId": null,
+  "fuseEpisodePublicId": null,
+  "taskPublicId": "34o3qEuusiGlG3IxptUIQ"
+}

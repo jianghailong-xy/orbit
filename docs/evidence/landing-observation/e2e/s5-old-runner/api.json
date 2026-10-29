@@ -1,0 +1,1280 @@
+{
+  "project": {
+    "id": "34o4XU5Y5bA7bpVrXeUa6",
+    "title": "S5 PLATFORM work on the 0.1.239 runner",
+    "ownerId": "34o4OL7vcbklZDbNlhR9L",
+    "goal": "Show the old runner on the new apiserver: the paths it knows keep working.",
+    "instructions": "R29-13 scenario 5. H publishes its task branch; I does not.",
+    "status": "OPEN",
+    "doneBy": null,
+    "doneAt": null,
+    "doneCriteriaDigest": null,
+    "acceptedGaps": [],
+    "coordinatorSessionId": "34o4XU93cwoSywgV9bPg5",
+    "coordinatorWorkspaceId": "34o4PsFTVyEs1uNxUxu3T",
+    "coordinatorEnabled": false,
+    "maxConcurrentTasks": 2,
+    "sessionBudgetPerDay": null,
+    "configRevision": "0",
+    "convergenceThresholds": null,
+    "attemptBudget": null,
+    "unboundedAuthorizedBy": null,
+    "exceptionEscalationSeconds": 7200,
+    "startedAt": "2026-10-29T01:57:43.155Z",
+    "pausedAt": null,
+    "pausedReason": null,
+    "createdAt": "2026-10-29T01:57:42.953Z",
+    "updatedAt": "2026-10-29T01:58:51.840Z",
+    "coordinatorAgentId": "34o4PsFTVyEs1uNxUxu3T",
+    "coordinatorGeneration": "0",
+    "_count": {
+      "tasks": 3
+    },
+    "tasksByStatus": {
+      "DONE": 3
+    },
+    "acceptanceCriteriaItems": [
+      {
+        "id": "4iSGgnvOLmhFkzD0gyh3xn",
+        "ordinal": 1,
+        "text": "The work is on main",
+        "verificationMethod": "git log on the origin",
+        "completionCriterionOverrideReason": null,
+        "key": "4iSGgnvOLmhFkzD0gyh3xn",
+        "revision": 1,
+        "contentHash": "0543db1f6520d13c1466d10b42e309aef19d83a07b1b802bd7c7b8bbc862fc7c",
+        "semanticRevision": 1,
+        "semanticHash": "315247060978f71bc05c5d34c113ad021829b7002f89868d0dac30b4a7680300",
+        "satisfied": true,
+        "unmet": [],
+        "landing": "UNKNOWN",
+        "independence": "INDEPENDENT",
+        "conflicts": [],
+        "remedy": null,
+        "publicId": "4iSGgnvOLmhFkzD0gyh3xn"
+      }
+    ],
+    "blockers": {
+      "open": [],
+      "resolved": [],
+      "resolvedCount": 0
+    },
+    "integration": {
+      "line": "MAIN",
+      "lineAbsentReason": null,
+      "ref": "main",
+      "upstreamRef": "main",
+      "upstreamChosenAt": "2026-10-29T01:57:43.153Z",
+      "source": "EXPLICIT",
+      "locked": true,
+      "startedAt": "2026-10-29T01:57:43.472Z",
+      "mergeCheckCommand": "test -f README.md",
+      "mergeCheckCommandAbsentReason": null,
+      "mergeCheckTimeoutSeconds": null,
+      "escalationSeconds": 7200,
+      "deliveryMode": "PLATFORM",
+      "deliveryModeChosenAt": null,
+      "lastMainBranch": {
+        "branch": "main",
+        "repository": "origin/s5",
+        "chosenAt": "2026-10-29T01:57:43.153Z"
+      }
+    },
+    "derivedDone": {
+      "status": "OPEN",
+      "done": false,
+      "withheld": [
+        "CRITERION_UNLANDED"
+      ],
+      "criteria": [
+        {
+          "definitionId": "4iSGgnvOLmhFkzD0gyh3xn",
+          "satisfied": true,
+          "landing": "UNKNOWN",
+          "independence": "INDEPENDENT",
+          "conflicts": [],
+          "remedy": null,
+          "landingReason": "NO_RECEIPT",
+          "withheld": [
+            "CRITERION_UNLANDED"
+          ],
+          "definitionPublicId": "4iSGgnvOLmhFkzD0gyh3xn"
+        }
+      ],
+      "confirmation": "CONFIRMED",
+      "counts": {
+        "criteria": 1,
+        "met": 1,
+        "landed": 0,
+        "onMain": 0,
+        "byReason": {
+          "IN_FLIGHT": 0,
+          "ON_PROJECT_BRANCH": 0,
+          "NOTHING_TO_LAND": 0,
+          "NO_RECEIPT": 1,
+          "CODELESS": 0
+        }
+      }
+    },
+    "publicId": "34o4XU5Y5bA7bpVrXeUa6",
+    "ownerPublicId": "34o4OL7vcbklZDbNlhR9L",
+    "coordinatorSessionPublicId": "34o4XU93cwoSywgV9bPg5",
+    "coordinatorWorkspacePublicId": "34o4PsFTVyEs1uNxUxu3T",
+    "coordinatorAgentPublicId": "34o4PsFTVyEs1uNxUxu3T"
+  },
+  "integration": {
+    "line": "MAIN",
+    "lineAbsentReason": null,
+    "ref": "main",
+    "upstreamRef": "main",
+    "upstreamChosenAt": "2026-10-29T01:57:43.153Z",
+    "source": "EXPLICIT",
+    "locked": true,
+    "startedAt": "2026-10-29T01:57:43.472Z",
+    "mergeCheckCommand": "test -f README.md",
+    "mergeCheckCommandAbsentReason": null,
+    "mergeCheckTimeoutSeconds": null,
+    "escalationSeconds": 7200,
+    "deliveryMode": "PLATFORM",
+    "deliveryModeChosenAt": null,
+    "lastMainBranch": {
+      "branch": "main",
+      "repository": "origin/s5",
+      "chosenAt": "2026-10-29T01:57:43.153Z"
+    },
+    "repository": "origin/s5",
+    "branches": {
+      "names": [
+        "main"
+      ],
+      "workspaceName": "r2913-s5",
+      "reportedAt": "2026-10-29T01:58:51.705Z",
+      "agentName": "r2913-s5"
+    },
+    "commitsAheadOfUpstream": null,
+    "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
+    "lastUpstreamSyncAt": null,
+    "lastUpstreamSyncAbsentReason": "NEVER_SYNCED",
+    "integratingCount": 0,
+    "queuedCount": 0,
+    "mergeCheckOnTip": "UNKNOWN",
+    "landTasks": [],
+    "inFlight": null,
+    "inFlightJobs": []
+  },
+  "tasks": {
+    "H": {
+      "id": "34o4XUKAgleKd4tpfxAH3",
+      "title": "S5-H: publishes its task branch",
+      "description": "E2E-DO: push-task-branch",
+      "status": "DONE",
+      "ownerId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorType": "USER",
+      "creatorId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionId": null,
+      "assigneeId": "34o4PsFTVyEs1uNxUxu3T",
+      "listId": null,
+      "projectId": "34o4XU5Y5bA7bpVrXeUa6",
+      "fixesOpenItemId": null,
+      "discoveredFromProjectId": null,
+      "triggerEvent": null,
+      "sourceTaskId": null,
+      "sourceSessionId": null,
+      "parentTaskId": null,
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
+      "acceptanceExpectedExitCode": 0,
+      "acceptanceTimeoutSeconds": 60,
+      "completionCriterion": "EXECUTABLE",
+      "completionFenceRevision": 1,
+      "completionCriterionOverrideReason": null,
+      "ownerConfirmationReason": null,
+      "ownerConfirmationReasonNote": null,
+      "criterionDefinitionId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "criterionRevision": 1,
+      "labels": [],
+      "dueDate": null,
+      "runAt": null,
+      "provider": null,
+      "engine": null,
+      "model": null,
+      "modelHint": null,
+      "modelHintReason": null,
+      "autoRunWhenReady": false,
+      "dispatchHold": false,
+      "priority": 0,
+      "dispatchAttempt": "0",
+      "requiredCapabilities": [],
+      "isForeman": false,
+      "completionPolicy": "MANUAL",
+      "verdict": null,
+      "verdictRevision": "0",
+      "verifiesTaskId": null,
+      "supersededByTaskId": null,
+      "supersededAt": null,
+      "terminalReason": null,
+      "idempotencyKey": null,
+      "scopeRevision": 1,
+      "attemptGeneration": "0",
+      "progressState": "CONVERGING",
+      "convergenceCounters": {
+        "transientRetries": 0,
+        "sameActionRepeats": 0,
+        "attemptsOnRevision": 0,
+        "verificationRounds": 0,
+        "sameFingerprintRepeats": 0,
+        "scopeExpansionRequests": 0,
+        "attemptsWithoutProgress": 0,
+        "decisionsWithoutProgress": 0,
+        "repairsWithoutSeverityDrop": 0
+      },
+      "lastProgressAt": null,
+      "knownGoodSha": null,
+      "pinnedRevision": null,
+      "codeless": false,
+      "codelessReason": null,
+      "dispatchRefusal": null,
+      "deliveredSha": "027820cf91fe356e564c7e92da682e9ded6e66fb",
+      "deliveredBaseSha": "d4eef22340adf2bdb927d79752657bde0e8f520e",
+      "deliveredBranch": "orbit/task-s5-h-publishes-its-task-branch-4a838a",
+      "deliveredSessionId": "5eoi0464Cjpi6ZWlvtLDpW",
+      "deliveredAt": "2026-10-29T01:57:51.710Z",
+      "createdAt": "2026-10-29T01:57:43.103Z",
+      "updatedAt": "2026-10-29T01:57:51.710Z",
+      "assignee": {
+        "id": "34o4PsFTVyEs1uNxUxu3T",
+        "name": "r2913-s5",
+        "model": null,
+        "publicId": "34o4PsFTVyEs1uNxUxu3T"
+      },
+      "project": {
+        "id": "34o4XU5Y5bA7bpVrXeUa6",
+        "title": "S5 PLATFORM work on the 0.1.239 runner",
+        "status": "OPEN",
+        "publicId": "34o4XU5Y5bA7bpVrXeUa6"
+      },
+      "comments": [],
+      "attachments": [],
+      "sessions": [
+        {
+          "id": "5eoi0464Cjpi6ZWlvtLDpW",
+          "title": "Task: S5-H: publishes its task branch",
+          "status": "SUCCEEDED",
+          "endReason": "task_done",
+          "completedAt": "2026-10-29T01:57:51.659Z",
+          "archivedAt": "2026-10-29T01:57:51.659Z",
+          "deletedAt": null,
+          "createdAt": "2026-10-29T01:57:43.217Z",
+          "model": "claude-opus-(r2913-fake)",
+          "effort": null,
+          "workspace": {
+            "name": "r2913-s5"
+          },
+          "runStatus": "SUCCEEDED",
+          "sessionState": "COMPLETED",
+          "runState": "SUCCEEDED",
+          "lifecycleState": "COMPLETED",
+          "filingState": "ARCHIVED",
+          "route": null,
+          "publicId": "5eoi0464Cjpi6ZWlvtLDpW",
+          "agent": {
+            "name": "r2913-s5"
+          }
+        }
+      ],
+      "creatorSession": null,
+      "dependsOn": [],
+      "dependedOnBy": [
+        {
+          "id": "34o4XUMtnPTuqD9eAAabb",
+          "taskId": "34o4XUM7Px4wdUQGmepgS",
+          "dependsOnTaskId": "34o4XUKAgleKd4tpfxAH3",
+          "createdAt": "2026-10-29T01:57:43.131Z",
+          "task": {
+            "id": "34o4XUM7Px4wdUQGmepgS",
+            "title": "S5-H2: starts once S5-H has landed",
+            "status": "DONE",
+            "publicId": "34o4XUM7Px4wdUQGmepgS"
+          },
+          "publicId": "34o4XUMtnPTuqD9eAAabb",
+          "taskPublicId": "34o4XUM7Px4wdUQGmepgS",
+          "dependsOnTaskPublicId": "34o4XUKAgleKd4tpfxAH3"
+        }
+      ],
+      "supersedes": [],
+      "dependencyState": "NONE",
+      "blocked": false,
+      "autoRunSkipped": null,
+      "completionCriterionChange": null,
+      "verificationState": null,
+      "verifier": null,
+      "progress": {
+        "taskId": "34o4XUKAgleKd4tpfxAH3",
+        "lifecycleEpoch": 0,
+        "epochStartedAt": "2026-10-29T01:57:43.103Z",
+        "phase": null,
+        "current": null,
+        "total": null,
+        "message": null,
+        "revision": 0,
+        "lastProgressAt": null,
+        "updatedAt": null,
+        "taskPublicId": "34o4XUKAgleKd4tpfxAH3"
+      },
+      "modelHintOptions": [
+        {
+          "level": "S",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "M",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "L",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "XL",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        }
+      ],
+      "integration": {
+        "state": "ON_UPSTREAM",
+        "since": "2026-10-29T01:58:13.104Z",
+        "handler": null,
+        "openItemId": null,
+        "jobId": null,
+        "checksRunningForMs": null,
+        "landTask": null,
+        "mainBranch": "main",
+        "openItemPublicId": null,
+        "jobPublicId": null
+      },
+      "outcome": "DONE",
+      "supersededByTaskIdAbsentReason": "NOT_SUPERSEDED",
+      "supersedesEmptyReason": "SUPERSEDES_NOTHING",
+      "successorChain": [],
+      "successorChainTruncated": false,
+      "publicId": "34o4XUKAgleKd4tpfxAH3",
+      "ownerPublicId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionPublicId": null,
+      "deliveredSessionPublicId": "5eoi0464Cjpi6ZWlvtLDpW",
+      "fixesOpenItemPublicId": null,
+      "sourceTaskPublicId": null,
+      "verifiesTaskPublicId": null,
+      "supersededByTaskPublicId": null,
+      "criterionDefinitionPublicId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "discoveredFromProjectPublicId": null,
+      "sourceSessionPublicId": null,
+      "parentTaskPublicId": null,
+      "listPublicId": null,
+      "projectPublicId": "34o4XU5Y5bA7bpVrXeUa6",
+      "assigneePublicId": "34o4PsFTVyEs1uNxUxu3T",
+      "creatorPublicId": "34o4OL7vcbklZDbNlhR9L"
+    },
+    "H2": {
+      "id": "34o4XUM7Px4wdUQGmepgS",
+      "title": "S5-H2: starts once S5-H has landed",
+      "description": "E2E-DO: push-task-branch",
+      "status": "DONE",
+      "ownerId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorType": "USER",
+      "creatorId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionId": null,
+      "assigneeId": "34o4PsFTVyEs1uNxUxu3T",
+      "listId": null,
+      "projectId": "34o4XU5Y5bA7bpVrXeUa6",
+      "fixesOpenItemId": null,
+      "discoveredFromProjectId": null,
+      "triggerEvent": null,
+      "sourceTaskId": null,
+      "sourceSessionId": null,
+      "parentTaskId": null,
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
+      "acceptanceExpectedExitCode": 0,
+      "acceptanceTimeoutSeconds": 60,
+      "completionCriterion": "EXECUTABLE",
+      "completionFenceRevision": 1,
+      "completionCriterionOverrideReason": null,
+      "ownerConfirmationReason": null,
+      "ownerConfirmationReasonNote": null,
+      "criterionDefinitionId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "criterionRevision": 1,
+      "labels": [],
+      "dueDate": null,
+      "runAt": null,
+      "provider": null,
+      "engine": null,
+      "model": null,
+      "modelHint": null,
+      "modelHintReason": null,
+      "autoRunWhenReady": true,
+      "dispatchHold": false,
+      "priority": 0,
+      "dispatchAttempt": "0",
+      "requiredCapabilities": [],
+      "isForeman": false,
+      "completionPolicy": "MANUAL",
+      "verdict": null,
+      "verdictRevision": "0",
+      "verifiesTaskId": null,
+      "supersededByTaskId": null,
+      "supersededAt": null,
+      "terminalReason": null,
+      "idempotencyKey": null,
+      "scopeRevision": 1,
+      "attemptGeneration": "0",
+      "progressState": "CONVERGING",
+      "convergenceCounters": {
+        "transientRetries": 0,
+        "sameActionRepeats": 0,
+        "attemptsOnRevision": 0,
+        "verificationRounds": 0,
+        "sameFingerprintRepeats": 0,
+        "scopeExpansionRequests": 0,
+        "attemptsWithoutProgress": 0,
+        "decisionsWithoutProgress": 0,
+        "repairsWithoutSeverityDrop": 0
+      },
+      "lastProgressAt": null,
+      "knownGoodSha": null,
+      "pinnedRevision": null,
+      "codeless": false,
+      "codelessReason": null,
+      "dispatchRefusal": null,
+      "deliveredSha": "90e6560db4e01ea5256e05ba75249735f0386647",
+      "deliveredBaseSha": "027820cf91fe356e564c7e92da682e9ded6e66fb",
+      "deliveredBranch": "orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc",
+      "deliveredSessionId": "2HevE7ULIaneYHelcjgPlz",
+      "deliveredAt": "2026-10-29T01:58:51.853Z",
+      "createdAt": "2026-10-29T01:57:43.123Z",
+      "updatedAt": "2026-10-29T01:58:51.853Z",
+      "assignee": {
+        "id": "34o4PsFTVyEs1uNxUxu3T",
+        "name": "r2913-s5",
+        "model": null,
+        "publicId": "34o4PsFTVyEs1uNxUxu3T"
+      },
+      "project": {
+        "id": "34o4XU5Y5bA7bpVrXeUa6",
+        "title": "S5 PLATFORM work on the 0.1.239 runner",
+        "status": "OPEN",
+        "publicId": "34o4XU5Y5bA7bpVrXeUa6"
+      },
+      "comments": [],
+      "attachments": [],
+      "sessions": [
+        {
+          "id": "2HevE7ULIaneYHelcjgPlz",
+          "title": "Task: S5-H2: starts once S5-H has landed",
+          "status": "SUCCEEDED",
+          "endReason": "task_done",
+          "completedAt": "2026-10-29T01:58:51.670Z",
+          "archivedAt": "2026-10-29T01:58:51.670Z",
+          "deletedAt": null,
+          "createdAt": "2026-10-29T01:58:21.720Z",
+          "model": "claude-opus-(r2913-fake)",
+          "effort": null,
+          "workspace": {
+            "name": "r2913-s5"
+          },
+          "runStatus": "SUCCEEDED",
+          "sessionState": "COMPLETED",
+          "runState": "SUCCEEDED",
+          "lifecycleState": "COMPLETED",
+          "filingState": "ARCHIVED",
+          "route": null,
+          "publicId": "2HevE7ULIaneYHelcjgPlz",
+          "agent": {
+            "name": "r2913-s5"
+          }
+        }
+      ],
+      "creatorSession": null,
+      "dependsOn": [
+        {
+          "id": "34o4XUMtnPTuqD9eAAabb",
+          "taskId": "34o4XUM7Px4wdUQGmepgS",
+          "dependsOnTaskId": "34o4XUKAgleKd4tpfxAH3",
+          "createdAt": "2026-10-29T01:57:43.131Z",
+          "dependsOnTask": {
+            "id": "34o4XUKAgleKd4tpfxAH3",
+            "title": "S5-H: publishes its task branch",
+            "status": "DONE",
+            "publicId": "34o4XUKAgleKd4tpfxAH3"
+          },
+          "publicId": "34o4XUMtnPTuqD9eAAabb",
+          "taskPublicId": "34o4XUM7Px4wdUQGmepgS",
+          "dependsOnTaskPublicId": "34o4XUKAgleKd4tpfxAH3"
+        }
+      ],
+      "dependedOnBy": [],
+      "supersedes": [],
+      "dependencyState": "READY",
+      "blocked": false,
+      "autoRunSkipped": null,
+      "completionCriterionChange": null,
+      "verificationState": null,
+      "verifier": null,
+      "progress": {
+        "taskId": "34o4XUM7Px4wdUQGmepgS",
+        "lifecycleEpoch": 0,
+        "epochStartedAt": "2026-10-29T01:57:43.123Z",
+        "phase": null,
+        "current": null,
+        "total": null,
+        "message": null,
+        "revision": 0,
+        "lastProgressAt": null,
+        "updatedAt": null,
+        "taskPublicId": "34o4XUM7Px4wdUQGmepgS"
+      },
+      "modelHintOptions": [
+        {
+          "level": "S",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "M",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "L",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "XL",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        }
+      ],
+      "integration": {
+        "state": "QUEUED",
+        "since": null,
+        "handler": null,
+        "openItemId": null,
+        "jobId": null,
+        "checksRunningForMs": null,
+        "landTask": null,
+        "mainBranch": "main",
+        "openItemPublicId": null,
+        "jobPublicId": null
+      },
+      "outcome": "DONE",
+      "supersededByTaskIdAbsentReason": "NOT_SUPERSEDED",
+      "supersedesEmptyReason": "SUPERSEDES_NOTHING",
+      "successorChain": [],
+      "successorChainTruncated": false,
+      "publicId": "34o4XUM7Px4wdUQGmepgS",
+      "ownerPublicId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionPublicId": null,
+      "deliveredSessionPublicId": "2HevE7ULIaneYHelcjgPlz",
+      "fixesOpenItemPublicId": null,
+      "sourceTaskPublicId": null,
+      "verifiesTaskPublicId": null,
+      "supersededByTaskPublicId": null,
+      "criterionDefinitionPublicId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "discoveredFromProjectPublicId": null,
+      "sourceSessionPublicId": null,
+      "parentTaskPublicId": null,
+      "listPublicId": null,
+      "projectPublicId": "34o4XU5Y5bA7bpVrXeUa6",
+      "assigneePublicId": "34o4PsFTVyEs1uNxUxu3T",
+      "creatorPublicId": "34o4OL7vcbklZDbNlhR9L"
+    },
+    "I": {
+      "id": "34o4XUNsDkFJJbMPdqpER",
+      "title": "S5-I: only commits (branch never published)",
+      "description": "E2E-DO: commit",
+      "status": "DONE",
+      "ownerId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorType": "USER",
+      "creatorId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionId": null,
+      "assigneeId": "34o4PsFTVyEs1uNxUxu3T",
+      "listId": null,
+      "projectId": "34o4XU5Y5bA7bpVrXeUa6",
+      "fixesOpenItemId": null,
+      "discoveredFromProjectId": null,
+      "triggerEvent": null,
+      "sourceTaskId": null,
+      "sourceSessionId": null,
+      "parentTaskId": null,
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
+      "acceptanceExpectedExitCode": 0,
+      "acceptanceTimeoutSeconds": 60,
+      "completionCriterion": "EXECUTABLE",
+      "completionFenceRevision": 1,
+      "completionCriterionOverrideReason": null,
+      "ownerConfirmationReason": null,
+      "ownerConfirmationReasonNote": null,
+      "criterionDefinitionId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "criterionRevision": 1,
+      "labels": [],
+      "dueDate": null,
+      "runAt": null,
+      "provider": null,
+      "engine": null,
+      "model": null,
+      "modelHint": null,
+      "modelHintReason": null,
+      "autoRunWhenReady": false,
+      "dispatchHold": false,
+      "priority": 0,
+      "dispatchAttempt": "0",
+      "requiredCapabilities": [],
+      "isForeman": false,
+      "completionPolicy": "MANUAL",
+      "verdict": null,
+      "verdictRevision": "0",
+      "verifiesTaskId": null,
+      "supersededByTaskId": null,
+      "supersededAt": null,
+      "terminalReason": null,
+      "idempotencyKey": null,
+      "scopeRevision": 1,
+      "attemptGeneration": "0",
+      "progressState": "CONVERGING",
+      "convergenceCounters": {
+        "transientRetries": 0,
+        "sameActionRepeats": 0,
+        "attemptsOnRevision": 0,
+        "verificationRounds": 0,
+        "sameFingerprintRepeats": 0,
+        "scopeExpansionRequests": 0,
+        "attemptsWithoutProgress": 0,
+        "decisionsWithoutProgress": 0,
+        "repairsWithoutSeverityDrop": 0
+      },
+      "lastProgressAt": null,
+      "knownGoodSha": null,
+      "pinnedRevision": null,
+      "codeless": false,
+      "codelessReason": null,
+      "dispatchRefusal": null,
+      "deliveredSha": "ce7b944a3b290c7998c7fcced8af946b543c4211",
+      "deliveredBaseSha": "027820cf91fe356e564c7e92da682e9ded6e66fb",
+      "deliveredBranch": "orbit/task-s5-i-only-commits-branch-never-publ-4d5149",
+      "deliveredSessionId": "4EMlHqq1CnrMpTEcLPvyN",
+      "deliveredAt": "2026-10-29T01:58:51.720Z",
+      "createdAt": "2026-10-29T01:57:43.141Z",
+      "updatedAt": "2026-10-29T01:58:51.720Z",
+      "assignee": {
+        "id": "34o4PsFTVyEs1uNxUxu3T",
+        "name": "r2913-s5",
+        "model": null,
+        "publicId": "34o4PsFTVyEs1uNxUxu3T"
+      },
+      "project": {
+        "id": "34o4XU5Y5bA7bpVrXeUa6",
+        "title": "S5 PLATFORM work on the 0.1.239 runner",
+        "status": "OPEN",
+        "publicId": "34o4XU5Y5bA7bpVrXeUa6"
+      },
+      "comments": [],
+      "attachments": [],
+      "sessions": [
+        {
+          "id": "4EMlHqq1CnrMpTEcLPvyN",
+          "title": "Task: S5-I: only commits (branch never published)",
+          "status": "SUCCEEDED",
+          "endReason": "task_done",
+          "completedAt": "2026-10-29T01:58:51.658Z",
+          "archivedAt": "2026-10-29T01:58:51.658Z",
+          "deletedAt": null,
+          "createdAt": "2026-10-29T01:58:22.267Z",
+          "model": "claude-opus-(r2913-fake)",
+          "effort": null,
+          "workspace": {
+            "name": "r2913-s5"
+          },
+          "runStatus": "SUCCEEDED",
+          "sessionState": "COMPLETED",
+          "runState": "SUCCEEDED",
+          "lifecycleState": "COMPLETED",
+          "filingState": "ARCHIVED",
+          "route": null,
+          "publicId": "4EMlHqq1CnrMpTEcLPvyN",
+          "agent": {
+            "name": "r2913-s5"
+          }
+        }
+      ],
+      "creatorSession": null,
+      "dependsOn": [],
+      "dependedOnBy": [],
+      "supersedes": [],
+      "dependencyState": "NONE",
+      "blocked": false,
+      "autoRunSkipped": null,
+      "completionCriterionChange": null,
+      "verificationState": null,
+      "verifier": null,
+      "progress": {
+        "taskId": "34o4XUNsDkFJJbMPdqpER",
+        "lifecycleEpoch": 0,
+        "epochStartedAt": "2026-10-29T01:57:43.141Z",
+        "phase": null,
+        "current": null,
+        "total": null,
+        "message": null,
+        "revision": 0,
+        "lastProgressAt": null,
+        "updatedAt": null,
+        "taskPublicId": "34o4XUNsDkFJJbMPdqpER"
+      },
+      "modelHintOptions": [
+        {
+          "level": "S",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "M",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "L",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        },
+        {
+          "level": "XL",
+          "provider": "claude",
+          "model": null,
+          "label": null,
+          "effort": null
+        }
+      ],
+      "integration": {
+        "state": "QUEUED",
+        "since": null,
+        "handler": null,
+        "openItemId": null,
+        "jobId": null,
+        "checksRunningForMs": null,
+        "landTask": null,
+        "mainBranch": "main",
+        "openItemPublicId": null,
+        "jobPublicId": null
+      },
+      "outcome": "DONE",
+      "supersededByTaskIdAbsentReason": "NOT_SUPERSEDED",
+      "supersedesEmptyReason": "SUPERSEDES_NOTHING",
+      "successorChain": [],
+      "successorChainTruncated": false,
+      "publicId": "34o4XUNsDkFJJbMPdqpER",
+      "ownerPublicId": "34o4OL7vcbklZDbNlhR9L",
+      "creatorSessionPublicId": null,
+      "deliveredSessionPublicId": "4EMlHqq1CnrMpTEcLPvyN",
+      "fixesOpenItemPublicId": null,
+      "sourceTaskPublicId": null,
+      "verifiesTaskPublicId": null,
+      "supersededByTaskPublicId": null,
+      "criterionDefinitionPublicId": "4iSGgnvOLmhFkzD0gyh3xn",
+      "discoveredFromProjectPublicId": null,
+      "sourceSessionPublicId": null,
+      "parentTaskPublicId": null,
+      "listPublicId": null,
+      "projectPublicId": "34o4XU5Y5bA7bpVrXeUa6",
+      "assigneePublicId": "34o4PsFTVyEs1uNxUxu3T",
+      "creatorPublicId": "34o4OL7vcbklZDbNlhR9L"
+    }
+  },
+  "openItems": {
+    "needsYou": [
+      {
+        "itemId": "34o4Zl7Vy9zIXmdxtxi3e",
+        "kind": "PROMOTION_APPROVAL",
+        "title": "Merge 1 task into main?",
+        "detailLine": "",
+        "question": null,
+        "startRequest": null,
+        "doneRequest": null,
+        "facts": null,
+        "assignee": "OWNER",
+        "assigneeReason": "DEFAULT",
+        "waitingSince": "2026-10-29T01:59:12.652Z",
+        "escalateAt": null,
+        "escalatedAt": null,
+        "handoverNote": null,
+        "taskId": null,
+        "handledBy": [],
+        "sessionId": "2HevE7ULIaneYHelcjgPlz",
+        "landingSessionId": null,
+        "integrationJobId": null,
+        "lease": null,
+        "promotionId": "4uMPsVPagrGJBrfj2Tn2UE",
+        "fuseEpisodeId": null,
+        "delivery": {
+          "state": "NOT_REQUIRED",
+          "sessionId": null,
+          "at": null,
+          "sessionPublicId": null
+        },
+        "actions": [
+          "REVIEW"
+        ],
+        "requiredAction": "You must decide whether this promotion reaches main — review it, then approve, decline, or cancel it.",
+        "primaryAction": "REVIEW",
+        "handling": null,
+        "outcome": null,
+        "chat": {
+          "sessionId": "34o4XU93cwoSywgV9bPg5",
+          "stage": "WITH_OWNER",
+          "refusal": null,
+          "sessionPublicId": "34o4XU93cwoSywgV9bPg5"
+        },
+        "sessionPublicId": "2HevE7ULIaneYHelcjgPlz",
+        "itemPublicId": "34o4Zl7Vy9zIXmdxtxi3e",
+        "integrationJobPublicId": null,
+        "promotionPublicId": "4uMPsVPagrGJBrfj2Tn2UE",
+        "fuseEpisodePublicId": null,
+        "taskPublicId": null
+      },
+      {
+        "itemId": "34o4aWE7EPnLoRtAsx5dj",
+        "kind": "INTEGRATION_ERROR",
+        "title": "Integration error: merging the project branch into main",
+        "detailLine": "",
+        "question": null,
+        "startRequest": null,
+        "doneRequest": null,
+        "facts": {
+          "task": null,
+          "targetRef": null,
+          "targetSha": null,
+          "files": [],
+          "nothingLanded": false,
+          "check": null,
+          "branchUnchanged": false,
+          "errorCode": "SOURCE_BRANCH_MISSING",
+          "failure": null,
+          "review": null
+        },
+        "assignee": "OWNER",
+        "assigneeReason": "NO_COORDINATOR",
+        "waitingSince": "2026-10-29T01:59:42.614Z",
+        "escalateAt": null,
+        "escalatedAt": null,
+        "handoverNote": null,
+        "taskId": null,
+        "handledBy": [],
+        "sessionId": "4EMlHqq1CnrMpTEcLPvyN",
+        "landingSessionId": "b70f9be7-81b4-4eb6-80ce-ecd3db4da0a3",
+        "integrationJobId": null,
+        "lease": null,
+        "promotionId": "5F0Exi3ML1UVkyNkX08V1M",
+        "fuseEpisodeId": null,
+        "delivery": {
+          "state": "NOT_REQUIRED",
+          "sessionId": null,
+          "at": null,
+          "sessionPublicId": null
+        },
+        "actions": [
+          "ASK_COORDINATOR_AGAIN",
+          "RETRY",
+          "REVIEW",
+          "OPEN_LANDING"
+        ],
+        "requiredAction": "The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.",
+        "primaryAction": "ASK_COORDINATOR_AGAIN",
+        "handling": null,
+        "outcome": null,
+        "chat": {
+          "sessionId": "34o4XU93cwoSywgV9bPg5",
+          "stage": "WITH_OWNER",
+          "refusal": null,
+          "sessionPublicId": "34o4XU93cwoSywgV9bPg5"
+        },
+        "sessionPublicId": "4EMlHqq1CnrMpTEcLPvyN",
+        "itemPublicId": "34o4aWE7EPnLoRtAsx5dj",
+        "integrationJobPublicId": null,
+        "promotionPublicId": "5F0Exi3ML1UVkyNkX08V1M",
+        "fuseEpisodePublicId": null,
+        "taskPublicId": null
+      }
+    ],
+    "withCoordinator": [],
+    "startRequest": null,
+    "doneRequest": null,
+    "settled": [],
+    "closedQuestions": [],
+    "mainBranch": "main"
+  },
+  "runners": [
+    {
+      "id": "34o4OLI48NH2BX07FAYiw",
+      "name": "r2913-b-runner",
+      "displayName": null,
+      "hostname": "workstation",
+      "labels": [],
+      "status": "ONLINE",
+      "maxConcurrent": 16,
+      "version": "0.1.239",
+      "lastHeartbeatAt": "2026-10-29T02:00:12.556Z",
+      "enrolledAt": "2026-10-29T01:51:42.454Z",
+      "position": null,
+      "planUsage": null,
+      "modelCatalog": {
+        "codex": [
+          {
+            "label": "GPT-6.1-Sol",
+            "value": "gpt-6.1-sol",
+            "priority": 1,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "low"
+          },
+          {
+            "label": "GPT-6-Astra",
+            "value": "gpt-6-astra",
+            "priority": 2,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "low"
+          },
+          {
+            "label": "GPT-6-Sol",
+            "value": "gpt-6-sol",
+            "priority": 3,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "medium"
+          },
+          {
+            "label": "GPT-6-Luna",
+            "value": "gpt-6-luna",
+            "priority": 4,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultReasoningLevel": "medium"
+          },
+          {
+            "label": "GPT-5.6-Sol",
+            "value": "gpt-5.6-sol",
+            "priority": 5,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "low"
+          },
+          {
+            "label": "GPT-6.1 Terra",
+            "value": "gpt-6.1-terra",
+            "priority": 7,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 500000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "low"
+          },
+          {
+            "label": "GPT-5.6-Terra",
+            "value": "gpt-5.6-terra",
+            "priority": 8,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultReasoningLevel": "medium"
+          },
+          {
+            "label": "GPT-5.6-Luna",
+            "value": "gpt-5.6-luna",
+            "priority": 9,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultReasoningLevel": "medium"
+          },
+          {
+            "label": "GPT-5.5",
+            "value": "gpt-5.5",
+            "priority": 13,
+            "serviceTiers": [
+              "priority"
+            ],
+            "contextWindow": 272000,
+            "reasoningLevels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "defaultReasoningLevel": "medium"
+          }
+        ],
+        "claude": [
+          {
+            "label": "opus (r2913 fake)",
+            "value": "claude-opus-(r2913-fake)",
+            "priority": 0
+          },
+          {
+            "label": "fable (r2913 fake)",
+            "value": "claude-fable-(r2913-fake)",
+            "priority": 1
+          },
+          {
+            "label": "sonnet (r2913 fake)",
+            "value": "claude-sonnet-(r2913-fake)",
+            "priority": 2
+          },
+          {
+            "label": "haiku (r2913 fake)",
+            "value": "claude-haiku-(r2913-fake)",
+            "priority": 3
+          }
+        ]
+      },
+      "runsAsRoot": true,
+      "minFreeDiskMb": null,
+      "reposRoot": "/var/tmp/r29-13-e2e/b/runner-userhome/orbit-repos",
+      "capabilities": [
+        "antigravity-account-login/v1",
+        "antigravity-account-remove/v1",
+        "antigravity-google-login/v1",
+        "claude-account-login/v1",
+        "claude-account-move/v1",
+        "claude-account-remove/v1",
+        "codex-account-login/v1",
+        "codex-account-move/v1",
+        "codex-account-remove/v1",
+        "codex-rate-limit-reset-v1",
+        "cursor-account-login/v1",
+        "cursor-account-remove/v1",
+        "cursor-key-check/v1",
+        "integration-job/v1",
+        "integration-progress/v2",
+        "kimi-account-login/v1",
+        "kimi-account-move/v1",
+        "kimi-account-remove/v1",
+        "kimi-login-region/v1",
+        "promotion-automatic-land/v1",
+        "session-claude-coordinator-context-v1",
+        "session-claude-steer-withdraw-v1",
+        "session-codex-coordinator-context-v1",
+        "session-codex-steer-v1",
+        "session-current-work-routing-v1",
+        "session-merge-recovery-v1",
+        "session-move/v1",
+        "session-orchestration-credential-v1",
+        "session-terminal-handoff-v1",
+        "session-worktree-ops-v1",
+        "source-pin/v1",
+        "wiki-repo-op-read/v1",
+        "wiki-repo-op/v1",
+        "provider:claude",
+        "provider:codex",
+        "provider:opencode",
+        "provider:antigravity",
+        "provider:dsh",
+        "os:linux"
+      ],
+      "heartbeatLeaseOwner": "17140729-8cd8-4a35-863c-1909590d6503",
+      "heartbeatDraining": null,
+      "runtimeDefaultModels": {},
+      "selfUpdate": {
+        "state": "disabledByEnv",
+        "reason": "ORBIT_NO_SELFUPDATE is set",
+        "installDir": "/var/tmp/r29-13-e2e/b/bin"
+      },
+      "engines": [
+        {
+          "engine": "claude",
+          "installed": true,
+          "version": "2.1.312 (Claude Code)",
+          "auth": "yes",
+          "accounts": [
+            {
+              "id": "default",
+              "home": "/var/tmp/r29-13-e2e/b/runner-userhome/.claude",
+              "auth": "yes"
+            }
+          ]
+        },
+        {
+          "engine": "codex",
+          "installed": true,
+          "version": "codex-cli 0.165.0",
+          "auth": "no",
+          "accounts": [
+            {
+              "id": "default",
+              "home": "/var/tmp/r29-13-e2e/b/runner-userhome/.codex",
+              "codexHome": "/var/tmp/r29-13-e2e/b/runner-userhome/.codex",
+              "auth": "no"
+            }
+          ]
+        },
+        {
+          "engine": "kimi",
+          "installed": false,
+          "auth": "unknown"
+        },
+        {
+          "engine": "opencode",
+          "installed": false,
+          "auth": "unknown"
+        },
+        {
+          "engine": "antigravity",
+          "installed": false,
+          "auth": "unknown"
+        },
+        {
+          "engine": "dsh",
+          "installed": false,
+          "auth": "unknown",
+          "dsh": {
+            "versionCompatible": false,
+            "credentialPresent": false,
+            "modelCatalogReadable": false,
+            "requestValidation": "unknown",
+            "sandboxEnforcement": "unknown"
+          },
+          "installationError": "DSH_NOT_INSTALLED"
+        },
+        {
+          "engine": "cursor",
+          "installed": false,
+          "auth": "unknown",
+          "installationError": "CURSOR_NOT_INSTALLED"
+        }
+      ],
+      "antigravity": {
+        "supported": true,
+        "installed": false,
+        "version": null,
+        "envKeyAvailable": false,
+        "authSource": null,
+        "googleLogin": "available"
+      },
+      "install": {
+        "status": null,
+        "engine": null,
+        "command": null,
+        "message": null,
+        "mode": null
+      },
+      "accountRemove": {
+        "engine": "codex",
+        "account": null,
+        "status": null,
+        "message": null
+      },
+      "online": true,
+      "activeSessions": 0,
+      "commands": [],
+      "skills": [],
+      "publicId": "34o4OLI48NH2BX07FAYiw"
+    }
+  ]
+}
