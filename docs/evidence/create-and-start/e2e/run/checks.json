@@ -1,0 +1,172 @@
+{
+  "passed": 33,
+  "total": 33,
+  "pageErrors": [],
+  "checks": [
+    {
+      "name": "A: the card forecasts \"1 starts running within the minute\"",
+      "ok": true,
+      "detail": "📝 Confirm: create 1 task? | 1 starts running within the minute |  | EVIDENCE_JUDGMENT"
+    },
+    {
+      "name": "A: the card offers no Create and start (the task starts by itself)",
+      "ok": true,
+      "detail": "[\"Create itEnter\",\"💬 Chat about this\"]"
+    },
+    {
+      "name": "A: task_create answered without error",
+      "ok": true,
+      "detail": "{\n  \"id\": \"34oAroGJ1zcyZLVqcP2Fn\",\n  \"title\": \"E2E A: filed with startNow\",\n  \"description\": \"Filed with startNow: one approval creates and starts it.\\n\\nE2E-DO: commit\",\n  \"status\": \"OPEN\",\n  \"ownerI"
+    },
+    {
+      "name": "A: its answer says the task was started at once",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "A: the task has a session it started",
+      "ok": true,
+      "detail": "[\"4HK4QFa6KqNW438AMZnJdg RUNNING\"]"
+    },
+    {
+      "name": "B: the card forecasts a manual start",
+      "ok": true,
+      "detail": "📝 Confirm: create 1 task? | 1 needs a manual start — nothing will trigger it |  | EVIDENCE_JUDGMENT"
+    },
+    {
+      "name": "B: the card offers Create and start beside Create it",
+      "ok": true,
+      "detail": "[\"Create itEnter\",\"Create and start\",\"💬 Chat about this\"]"
+    },
+    {
+      "name": "B: task_create answered without error",
+      "ok": true,
+      "detail": "{\n  \"id\": \"34oArr2SPT8wJUaINDknP\",\n  \"title\": \"E2E B: approved with Create and start\",\n  \"description\": \"Filed without startNow; the owner presses Create and start.\\n\\nE2E-DO: commit\",\n  \"status\": \"OP"
+    },
+    {
+      "name": "B: its answer says the task was started at once",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "B: the task has a session it started",
+      "ok": true,
+      "detail": "[\"4iQ9kFOYQmQ0bwkEEohPeh RUNNING\"]"
+    },
+    {
+      "name": "C: task_create answered without error",
+      "ok": true,
+      "detail": "{\n  \"id\": \"34oArtonrhEAY3o3RD1eE\",\n  \"title\": \"E2E C: plain Create it (control)\",\n  \"description\": \"Filed without startNow; the owner presses the plain Create it.\\n\\nE2E-DO: commit\",\n  \"status\": \"OPEN"
+    },
+    {
+      "name": "C: its answer says nothing about a start",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D: the batch card counts the startNow item as starting within the minute",
+      "ok": true,
+      "detail": "🧩 Confirm: create 2 tasks? | 1 starts running within the minute | 1 needs a manual start — nothing will trigger it |  | TASKS — 2 INDEPENDENT TASKS"
+    },
+    {
+      "name": "D: the batch card has no Create and start",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "D: task_create_batch answered without error",
+      "ok": true,
+      "detail": "[\n  {\n    \"id\": \"34oArwYVwKf511ABe6USv\",\n    \"title\": \"E2E D1: batch item with startNow\",\n    \"description\": \"Batch item with startNow: the server's scan starts it within the minute.\\n\\nE2E-DO: commit"
+    },
+    {
+      "name": "D: the startNow item was started (by the scan) within the minute",
+      "ok": true,
+      "detail": "[\"7FbBK7vKoE5JKlsulqP6pp AWAITING_INPUT\"]"
+    },
+    {
+      "name": "D: the other item stays OPEN with no session",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "E: startNow beside runAt is refused",
+      "ok": true,
+      "detail": "startNow cannot be combined with runAt: startNow starts the task as soon as it is created, runAt schedules its start for a set time. Pass one of them"
+    },
+    {
+      "name": "E: no card was raised for it",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "C: a minute of schedule scans later the plain create is still OPEN, with no session and no runAt",
+      "ok": true,
+      "detail": "OPEN, sessions 0, runAt null"
+    },
+    {
+      "name": "wire: A's card was filed with a due runAt",
+      "ok": true,
+      "detail": "2026-10-29T06:15:32Z"
+    },
+    {
+      "name": "wire: B's card was filed with no runAt",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: each single-task card was filed declaring that its runner acts on Create and start",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "stored: A's card forecast startingNow 1",
+      "ok": true,
+      "detail": "{\"lists\":[],\"tasks\":[{\"ref\":null,\"title\":\"E2E A: filed with startNow\",\"listId\":null,\"dependsOnRefs\":[],\"dependsOnTaskIds\":[],\"listPublicId\":null,\"dependsOnTaskPublicIds\":[]}],\"blocked\":0,\"assignees\":[{\"id\":\"34oAq3xmR89F3JEnrSIe6\",\"name\":\"cas-e2e\",\"hasRunner\":true,\"publicId\":\"34oAq3xmR89F3JEnrSIe6\"}],\"scheduled\":0,\"taskCount\":1,\"startingNow\":1,\"externalEdges\":0,\"internalEdges\":0,\"notDispatchable\":0,\"titlesTruncated\":0,\"needsManualStart\":0,\"awaitingProjectStart\":0}"
+    },
+    {
+      "name": "stored: B's and C's cards forecast needsManualStart 1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "stored: the server recorded that declaration on each single-task card, and not on the batch card",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "stored: every card the owner answered here is ALLOWED",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: the Create and start decision reached the runner as startAfterCreate: true",
+      "ok": true,
+      "detail": "[\"ALLOWED\",\"ALLOWED+start\",\"ALLOWED\",\"ALLOWED\"]"
+    },
+    {
+      "name": "wire: no other decision carried a start",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: A's create carried the runAt its card showed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: B's create carried a runAt (the owner's start)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: C's create carried no runAt",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wire: exactly two immediate starts, for A and B",
+      "ok": true,
+      "detail": "[\"/api/runner/tasks/34oAroGJ1zcyZLVqcP2Fn/execute 201\",\"/api/runner/tasks/34oArr2SPT8wJUaINDknP/execute 201\"]"
+    }
+  ]
+}

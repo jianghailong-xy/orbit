@@ -116,6 +116,14 @@ final class CreateCardCopyParityTests: XCTestCase {
                        "the caption over the acceptance criteria")
     }
 
+    /// The single-task card's second yes reads the same on every client — web, iOS/macOS and Android.
+    func testCreateAndStartIsTheLabelTheWebCardDeclares() throws {
+        let web = try flat(Self.webCard)
+
+        assertContains(web, "export const CREATE_AND_START = '\(Approvals.createAndStartAction)';",
+                       "the single-task card's Create and start")
+    }
+
     /// Under a new project's criteria: approving the create is not confirming them — the project's
     /// start card asks that. Drawn under the criteria of a project create, and of nothing else.
     func testTheNoteUnderANewProjectsCriteriaMatchesTheWebCard() throws {

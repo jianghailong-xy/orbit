@@ -122,5 +122,11 @@ final class ApprovalRememberParityTests: XCTestCase {
         XCTAssertEqual(rules.count, 1)
         XCTAssertEqual(rules.first?["toolName"] as? String, "Bash")
         XCTAssertEqual(rules.first?["ruleContent"] as? String, "git add:*")
+
+        // Create and start's own key, or the press would quietly be a plain Create it.
+        let createAndStart = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(Approvals.createAndStartRequest)) as? [String: Any])
+        XCTAssertEqual(Set(createAndStart.keys).subtracting(declared), [],
+                       "Create and start sends keys the server does not read")
     }
 }

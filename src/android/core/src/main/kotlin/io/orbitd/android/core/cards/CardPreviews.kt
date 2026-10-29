@@ -180,7 +180,7 @@ object CardPreviews {
     enum class Phase { CARD, SENDING, RECORDED, CLOSED }
 
     private val allows = setOf(CardVerb.ALLOW, CardVerb.REMEMBER, CardVerb.ANSWER, CardVerb.APPROVE_PLAN, CardVerb.CREATE_TASK,
-        CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER)
+        CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER)
     private val denies = setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)
 
     /**
