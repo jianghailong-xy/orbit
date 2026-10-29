@@ -7,17 +7,17 @@
   {
     "name": "origin main is the cherry-pick, not the task's commit",
     "ok": true,
-    "detail": "main 2e33f82a53a8588f82fe989f7641f3e5253c9732"
+    "detail": "main cabb1af6c657a47640c046cfe134da6b9b8df37b"
   },
   {
     "name": "delivered_sha = the task branch's commit (not the cherry-pick)",
     "ok": true,
-    "detail": "8321239782714cf5ca3f565e83b293a96b258309"
+    "detail": "ba51f23a9d8880005c0c033def52ee908c074c27"
   },
   {
     "name": "LANDING_UNOBSERVED reason APPLIED_AS_OTHER_COMMITS, assigned to the COORDINATOR",
     "ok": true,
-    "detail": "COORDINATOR | LU:01a18540-25ca-747d-ad08-6e2d2e1649a6:8321239782714cf5ca3f565e83b293a96b258309 | APPLIED_AS_OTHER_COMMITS | 8321239782714cf5ca3f565e83b293a96b258309"
+    "detail": "COORDINATOR | LU:01a18571-8bea-73ac-8a80-63d16dd30e6b:ba51f23a9d8880005c0c033def52ee908c074c27 | APPLIED_AS_OTHER_COMMITS | ba51f23a9d8880005c0c033def52ee908c074c27"
   },
   {
     "name": "its title names the branch and the task",
@@ -37,7 +37,7 @@
   {
     "name": "integration_observe queued an observation",
     "ok": true,
-    "detail": "\"jobId\": \"7AtZSqMylIyWhZ6UmUHg9L\""
+    "detail": "\"jobId\": \"2k7UQweiKIihkrGUCmQ4Z6\""
   },
   {
     "name": "the item records the handling (H1) with the reason",
@@ -52,7 +52,7 @@
   {
     "name": "merge_receipt recorded",
     "ok": true,
-    "detail": "{   \"receipt\": {     \"id\": \"34o3gyjHJA4t8PPmPAW94\",     \"sessionId\": \"2Jz0d4y0DSdOoUED097BY7\",     \"taskId\": \"34o3fYBORoF4H2t5yfFO2\",     \"projectId\": \"34o3fY0BLFOUgQMiJa2PB\",     \"result\": \"ALREADY_M"
+    "detail": "{   \"receipt\": {     \"id\": \"34o51AtkDZMqVCvctLk6t\",     \"sessionId\": \"4gPt6D9WRgGBxRDz4pRjiF\",     \"taskId\": \"34o4zeEH0k1bJMRjPKytP\",     \"projectId\": \"34o4ze7LxHaYJS4TGzYWq\",     \"result\": \"ALREADY_M"
   },
   {
     "name": "LANDING_UNOBSERVED RESOLVED / LANDED",
@@ -62,7 +62,7 @@
   {
     "name": "S2-D started by itself (J10)",
     "ok": true,
-    "detail": "session 51y8ixUkOKDYKSliKscc7v"
+    "detail": "session 6Kpu9PkPX3A2wEjnBiQULZ"
   },
   {
     "name": "S2-D is DONE",

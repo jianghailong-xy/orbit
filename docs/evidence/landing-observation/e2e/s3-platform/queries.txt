@@ -1,49 +1,49 @@
 
-### S3 final — codebase  (2026-10-29T01:31:07.736Z)
+### S3 final — codebase  (2026-10-29T02:19:12.150Z)
 select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
-from project_codebase where project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)')
+from project_codebase where project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit')
 
-        canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode | delivery_mode_chosen_at |  integration_started_at   | merge_check_command 
-----------------------------------+-----------------+-----------------+-------------+---------------+-------------------------+---------------------------+---------------------
- /var/tmp/r29-13-e2e/a/origin/s3c | refs/heads/main | refs/heads/main | origin      | PLATFORM      |                         | 2026-10-29 01:29:17.98+00 | test -f README.md
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode | delivery_mode_chosen_at |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+-------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/a/origin/s3 | refs/heads/main | refs/heads/main | origin      | PLATFORM      |                         | 2026-10-29 02:17:16.191+00 | test -f README.md
 (1 row)
 
 
-### S3 final — tasks  (2026-10-29T01:31:07.783Z)
+### S3 final — tasks  (2026-10-29T02:19:12.197Z)
 select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
   t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
-from task t where t.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by t.created_at
+from task t where t.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by t.created_at
 
 -[ RECORD 1 ]------+------------------------------------------------------
 title              | S3-F: pushes its work straight to main
 status             | DONE
 auto_run           | f
-delivered_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-delivered_base_sha | a929c781829152498dccc0bb0725bbcb261f31df
-delivered_branch   | orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9
-delivered_at       | 2026-10-29 01:29:36.585+00
+delivered_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+delivered_base_sha | 2f364994772e4df10f2e996104f6b173c2366038
+delivered_branch   | orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30
+delivered_at       | 2026-10-29 02:17:39.805+00
 dispatch_refusal   | 
-created_at         | 2026-10-29 01:29:17.656
+created_at         | 2026-10-29 02:17:15.886
 -[ RECORD 2 ]------+------------------------------------------------------
 title              | S3-F2: starts once S3-F is on main
 status             | DONE
 auto_run           | t
-delivered_sha      | 1a75be60b38e6262703b89da00bad8ad059c4e37
-delivered_base_sha | b8a5e4913009a36bf443f584cece0e2457f88176
-delivered_branch   | orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689
-delivered_at       | 2026-10-29 01:30:06.579+00
+delivered_sha      | 9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3
+delivered_base_sha | 805d6d9f8a86b3093644323f27eff11c92df4314
+delivered_branch   | orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8
+delivered_at       | 2026-10-29 02:18:09.795+00
 dispatch_refusal   | 
-created_at         | 2026-10-29 01:29:17.669
+created_at         | 2026-10-29 02:17:15.896
 -[ RECORD 3 ]------+------------------------------------------------------
 title              | S3-E: only commits; the platform lands it
 status             | DONE
 auto_run           | f
-delivered_sha      | ca3d193d08f5763fe056d8d2a64304803e6abe58
-delivered_base_sha | b8a5e4913009a36bf443f584cece0e2457f88176
-delivered_branch   | orbit/task-s3-e-only-commits-the-platform-land-b8debc
-delivered_at       | 2026-10-29 01:30:06.702+00
+delivered_sha      | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+delivered_base_sha | 805d6d9f8a86b3093644323f27eff11c92df4314
+delivered_branch   | orbit/task-s3-e-only-commits-the-platform-land-bd5990
+delivered_at       | 2026-10-29 02:18:09.946+00
 dispatch_refusal   | 
-created_at         | 2026-10-29 01:29:17.681
+created_at         | 2026-10-29 02:17:15.908
 -[ RECORD 4 ]------+------------------------------------------------------
 title              | S3-E2: starts once S3-E has landed
 status             | DONE
@@ -53,63 +53,63 @@ delivered_base_sha |
 delivered_branch   | 
 delivered_at       | 
 dispatch_refusal   | 
-created_at         | 2026-10-29 01:29:17.693
+created_at         | 2026-10-29 02:17:15.913
 
 
-### S3 final — sessions  (2026-10-29T01:31:07.832Z)
+### S3 final — sessions  (2026-10-29T02:19:12.248Z)
 select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
   s.created_at, s.finished_at
-from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by s.created_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by s.created_at
 
 -[ RECORD 1 ]---+------------------------------------------------------
 task            | S3-F: pushes its work straight to main
 kind            | CONVERSATION
 status          | SUCCEEDED
 end_reason      | task_done
-worktree_branch | orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9
-base_sha        | a929c781829152498dccc0bb0725bbcb261f31df
-branch_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-created_at      | 2026-10-29 01:29:17.746
-finished_at     | 2026-10-29 01:29:36.57
+worktree_branch | orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30
+base_sha        | 2f364994772e4df10f2e996104f6b173c2366038
+branch_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+created_at      | 2026-10-29 02:17:15.965
+finished_at     | 2026-10-29 02:17:39.796
 -[ RECORD 2 ]---+------------------------------------------------------
 task            | S3-F2: starts once S3-F is on main
 kind            | CONVERSATION
 status          | SUCCEEDED
 end_reason      | task_done
-worktree_branch | orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689
-base_sha        | b8a5e4913009a36bf443f584cece0e2457f88176
-branch_sha      | 1a75be60b38e6262703b89da00bad8ad059c4e37
-created_at      | 2026-10-29 01:29:41.217
-finished_at     | 2026-10-29 01:30:06.562
+worktree_branch | orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8
+base_sha        | 805d6d9f8a86b3093644323f27eff11c92df4314
+branch_sha      | 9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3
+created_at      | 2026-10-29 02:17:42.259
+finished_at     | 2026-10-29 02:18:09.788
 -[ RECORD 3 ]---+------------------------------------------------------
 task            | S3-E: only commits; the platform lands it
 kind            | CONVERSATION
 status          | SUCCEEDED
 end_reason      | task_done
-worktree_branch | orbit/task-s3-e-only-commits-the-platform-land-b8debc
-base_sha        | b8a5e4913009a36bf443f584cece0e2457f88176
-branch_sha      | ca3d193d08f5763fe056d8d2a64304803e6abe58
-created_at      | 2026-10-29 01:29:41.644
-finished_at     | 2026-10-29 01:30:06.692
+worktree_branch | orbit/task-s3-e-only-commits-the-platform-land-bd5990
+base_sha        | 805d6d9f8a86b3093644323f27eff11c92df4314
+branch_sha      | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+created_at      | 2026-10-29 02:17:43.976
+finished_at     | 2026-10-29 02:18:09.93
 -[ RECORD 4 ]---+------------------------------------------------------
 task            | S3-E2: starts once S3-E has landed
 kind            | CONVERSATION
 status          | AWAITING_INPUT
 end_reason      | 
-worktree_branch | orbit/task-s3-e2-starts-once-s3-e-has-landed-ad7d7e
-base_sha        | ca3d193d08f5763fe056d8d2a64304803e6abe58
-branch_sha      | fc7c356c924f9a4ed1fb283e2cb36af3ae46a994
-created_at      | 2026-10-29 01:31:06.604
+worktree_branch | orbit/task-s3-e2-starts-once-s3-e-has-landed-5d662c
+base_sha        | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+branch_sha      | 6cb4e39f7fb39605191e0cefadeacb50fb5699aa
+created_at      | 2026-10-29 02:19:09.781
 finished_at     | 
 
 
-### S3 final — jobs  (2026-10-29T01:31:07.880Z)
+### S3 final — jobs  (2026-10-29T02:19:12.296Z)
 select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
   j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
   j.claimed_at, j.finished_at, j.idempotency_key
 from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
   left join task t on t.id = coalesce(j.task_id, pp.task_id)
-where j.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by j.created_at
+where j.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by j.created_at
 
 -[ RECORD 1 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | CHECK_PROMOTION
@@ -117,72 +117,72 @@ generation        | 1
 state             | ALREADY_LANDED
 phase             | MERGE
 task              | S3-F: pushes its work straight to main
-source_ref        | refs/heads/orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9
-source_sha        | b8a5e4913009a36bf443f584cece0e2457f88176
-upstream_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref        | refs/heads/orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30
+source_sha        | 805d6d9f8a86b3093644323f27eff11c92df4314
+upstream_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
 error_code        | 
 error_detail      | 
 observations      | 
-receipt_ids       | {01a18546-f01a-74de-997f-bb523f9bd907}
+receipt_ids       | {01a18572-e622-719a-9c76-388892734f8d}
 retry_of_job_id   | 
-claimed_at        | 2026-10-29 01:29:41.066+00
-finished_at       | 2026-10-29 01:29:41.157+00
-idempotency_key   | ij:v1:CHECK_PROMOTION:507cd4d1-a20e-489a-84e7-f4713c48173a:1
+claimed_at        | 2026-10-29 02:17:42.101+00
+finished_at       | 2026-10-29 02:17:42.19+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:6ffc7e66-ccde-4e50-8087-9bd787f40562:1
 -[ RECORD 2 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | CHECK_PROMOTION
 generation        | 1
 state             | READY
 phase             | CHECK
 task              | S3-F2: starts once S3-F is on main
-source_ref        | refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689
-source_sha        | 1a75be60b38e6262703b89da00bad8ad059c4e37
-upstream_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref        | refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8
+source_sha        | 9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3
+upstream_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
 error_code        | 
 error_detail      | 
 observations      | 
 receipt_ids       | {}
 retry_of_job_id   | 
-claimed_at        | 2026-10-29 01:30:11.069+00
-finished_at       | 2026-10-29 01:30:11.175+00
-idempotency_key   | ij:v1:CHECK_PROMOTION:1925e437-4f29-4e42-a64f-8de12a3201e0:1
+claimed_at        | 2026-10-29 02:18:12.105+00
+finished_at       | 2026-10-29 02:18:12.207+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:93aa86c8-b37c-4142-af0d-5ea608e61b38:1
 -[ RECORD 3 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | CHECK_PROMOTION
 generation        | 1
 state             | READY
 phase             | CHECK
 task              | S3-E: only commits; the platform lands it
-source_ref        | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc
-source_sha        | ca3d193d08f5763fe056d8d2a64304803e6abe58
-upstream_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref        | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990
+source_sha        | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+upstream_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
 error_code        | 
 error_detail      | 
 observations      | 
 receipt_ids       | {}
 retry_of_job_id   | 
-claimed_at        | 2026-10-29 01:30:41.07+00
-finished_at       | 2026-10-29 01:30:41.182+00
-idempotency_key   | ij:v1:CHECK_PROMOTION:1677aad7-a124-48d2-af16-a78f01a16a88:1
+claimed_at        | 2026-10-29 02:18:42.103+00
+finished_at       | 2026-10-29 02:18:42.215+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:e1befa47-d0e4-454c-9ed7-e67907cab2c9:1
 -[ RECORD 4 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | LAND_PROMOTION
 generation        | 1
 state             | LANDED
 phase             | VERIFY
 task              | S3-E: only commits; the platform lands it
-source_ref        | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc
-source_sha        | ca3d193d08f5763fe056d8d2a64304803e6abe58
-upstream_sha      | b8a5e4913009a36bf443f584cece0e2457f88176
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref        | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990
+source_sha        | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+upstream_sha      | 805d6d9f8a86b3093644323f27eff11c92df4314
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
 error_code        | 
 error_detail      | 
 observations      | 
-receipt_ids       | {01a18547-df2b-729d-b097-fd86d308c8b9}
+receipt_ids       | {01a18573-da7a-73cb-93a9-14a091de556a}
 retry_of_job_id   | 
-claimed_at        | 2026-10-29 01:30:42.24+00
-finished_at       | 2026-10-29 01:30:42.353+00
-idempotency_key   | ij:v1:LAND_PROMOTION:1677aad7-a124-48d2-af16-a78f01a16a88:1
+claimed_at        | 2026-10-29 02:18:44.623+00
+finished_at       | 2026-10-29 02:18:44.736+00
+idempotency_key   | ij:v1:LAND_PROMOTION:e1befa47-d0e4-454c-9ed7-e67907cab2c9:1
 -[ RECORD 5 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | OBSERVE_LANDING
 generation        | 1
@@ -191,23 +191,23 @@ phase             | OBSERVE
 task              | 
 source_ref        | refs/heads/main
 source_sha        | 
-upstream_sha      | ca3d193d08f5763fe056d8d2a64304803e6abe58
-target_sha_before | ca3d193d08f5763fe056d8d2a64304803e6abe58
+upstream_sha      | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+target_sha_before | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
 error_code        | 
 error_detail      | 
-observations      | [{"empty": false, "taskId": "01a18546-9465-76cd-8d32-e66dd3c86f83", "baseSha": "b8a5e4913009a36bf443f584cece0e2457f88176", "onUpstream": false, "deliveredSha": "1a75be60b38e6262703b89da00bad8ad059c4e37", "fullyApplied": false, "onIntegrationLine": null}]
+observations      | [{"empty": false, "taskId": "01a18572-7f78-769d-96d8-02db392e1a40", "baseSha": "805d6d9f8a86b3093644323f27eff11c92df4314", "onUpstream": false, "deliveredSha": "9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3", "fullyApplied": false, "onIntegrationLine": null}]
 receipt_ids       | {}
 retry_of_job_id   | 
-claimed_at        | 2026-10-29 01:31:06.85+00
-finished_at       | 2026-10-29 01:31:06.9+00
-idempotency_key   | ij:v1:OBSERVE_LANDING:01a18546-9402-7416-9405-72175e0ec699:1
+claimed_at        | 2026-10-29 02:19:10.04+00
+finished_at       | 2026-10-29 02:19:10.098+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18572-7f28-77eb-ac33-707e7ddbc241:1
 -[ RECORD 6 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | CHECK_PROMOTION
 generation        | 1
 state             | QUEUED
 phase             | 
 task              | S3-E2: starts once S3-E has landed
-source_ref        | refs/heads/orbit/task-s3-e2-starts-once-s3-e-has-landed-ad7d7e
+source_ref        | refs/heads/orbit/task-s3-e2-starts-once-s3-e-has-landed-5d662c
 source_sha        | 
 upstream_sha      | 
 target_sha_before | 
@@ -218,118 +218,142 @@ receipt_ids       | {}
 retry_of_job_id   | 
 claimed_at        | 
 finished_at       | 
-idempotency_key   | ij:v1:CHECK_PROMOTION:c8eb65cc-1a6f-4121-94a4-f6fba6c3aa3b:1
+idempotency_key   | ij:v1:CHECK_PROMOTION:093d995f-4b7c-48be-8cf6-f6b2ed16495a:1
 -[ RECORD 7 ]-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind              | OBSERVE_LANDING
 generation        | 2
-state             | QUEUED
-phase             | 
+state             | OBSERVED
+phase             | OBSERVE
 task              | 
 source_ref        | refs/heads/main
 source_sha        | 
-upstream_sha      | 
-target_sha_before | 
+upstream_sha      | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+target_sha_before | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
 error_code        | 
 error_detail      | 
-observations      | 
+observations      | [{"empty": false, "taskId": "01a18572-7f78-769d-96d8-02db392e1a40", "baseSha": "805d6d9f8a86b3093644323f27eff11c92df4314", "onUpstream": false, "deliveredSha": "9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3", "fullyApplied": false, "onIntegrationLine": null}]
 receipt_ids       | {}
 retry_of_job_id   | 
-claimed_at        | 
-finished_at       | 
-idempotency_key   | ij:v1:OBSERVE_LANDING:01a18546-9402-7416-9405-72175e0ec699:2
+claimed_at        | 2026-10-29 02:19:12.095+00
+finished_at       | 2026-10-29 02:19:12.141+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18572-7f28-77eb-ac33-707e7ddbc241:2
 
 
-### S3 final — receipts  (2026-10-29T01:31:07.926Z)
+### S3 final — receipts  (2026-10-29T02:19:12.345Z)
 select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
   r.target_sha_after, r.recorded_by, r.detail, r.created_at
 from session_merge_receipt r left join task t on t.id = r.task_id
-where r.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by r.created_at
+where r.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by r.created_at
 
 -[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 task              | S3-F: pushes its work straight to main
 result            | ALREADY_MERGED
-source_branch     | orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9
-source_sha        | b8a5e4913009a36bf443f584cece0e2457f88176
+source_branch     | orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30
+source_sha        | 805d6d9f8a86b3093644323f27eff11c92df4314
 target_branch     | main
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
 target_sha_after  | 
 recorded_by       | RUNNER
-detail            | {"observed": true, "integrationJobId": "a9370543-2539-4b3d-a442-2bc8c1a89a3a"}
-created_at        | 2026-10-29 01:29:41.146
+detail            | {"observed": true, "integrationJobId": "81e80389-3865-4a58-8d92-635edc0e6e00"}
+created_at        | 2026-10-29 02:17:42.178
 -[ RECORD 2 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 task              | S3-E: only commits; the platform lands it
 result            | MERGED
-source_branch     | orbit/task-s3-e-only-commits-the-platform-land-b8debc
-source_sha        | ca3d193d08f5763fe056d8d2a64304803e6abe58
+source_branch     | orbit/task-s3-e-only-commits-the-platform-land-bd5990
+source_sha        | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
 target_branch     | main
-target_sha_before | b8a5e4913009a36bf443f584cece0e2457f88176
-target_sha_after  | ca3d193d08f5763fe056d8d2a64304803e6abe58
+target_sha_before | 805d6d9f8a86b3093644323f27eff11c92df4314
+target_sha_after  | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
 recorded_by       | RUNNER
-detail            | {"source": "integration-job", "landedTreeSha": "866a0020f57a74791ed82c57d0c425c8adabebfa", "testedTreeSha": "866a0020f57a74791ed82c57d0c425c8adabebfa", "integrationJobId": "9b38c73b-4371-4676-aa38-39bc0f09bf1c"}
-created_at        | 2026-10-29 01:30:42.347
+detail            | {"source": "integration-job", "landedTreeSha": "6f35623690a4714048487bd5f3354df297cee378", "testedTreeSha": "6f35623690a4714048487bd5f3354df297cee378", "integrationJobId": "30fa6621-6f42-428f-bd0d-2cf8ccafcfb8"}
+created_at        | 2026-10-29 02:18:44.73
 
 
-### S3 final — promotions  (2026-10-29T01:31:07.974Z)
+### S3 final — promotions  (2026-10-29T02:19:12.393Z)
 select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
   p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
 from project_promotion p left join task t on t.id = p.task_id
-where p.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by p.created_at
+where p.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by p.created_at
 
 -[ RECORD 1 ]--------+-----------------------------------------------------------------
 task                 | S3-F: pushes its work straight to main
 source_kind          | TASK_BRANCH
 state                | SUPERSEDED
 blocked_reason       | 
-source_ref           | refs/heads/orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9
-source_sha           | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref           | refs/heads/orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30
+source_sha           | 805d6d9f8a86b3093644323f27eff11c92df4314
 upstream_sha_checked | 
 merged_sha           | 
 receipt_ids          | {}
-created_at           | 2026-10-29 01:29:17.983+00
-decided_at           | 2026-10-29 01:29:41.151+00
+created_at           | 2026-10-29 02:17:16.193+00
+decided_at           | 2026-10-29 02:17:42.182+00
 -[ RECORD 2 ]--------+-----------------------------------------------------------------
 task                 | S3-F2: starts once S3-F is on main
 source_kind          | TASK_BRANCH
 state                | READY
 blocked_reason       | 
-source_ref           | refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689
-source_sha           | 1a75be60b38e6262703b89da00bad8ad059c4e37
-upstream_sha_checked | b8a5e4913009a36bf443f584cece0e2457f88176
+source_ref           | refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8
+source_sha           | 9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3
+upstream_sha_checked | 805d6d9f8a86b3093644323f27eff11c92df4314
 merged_sha           | 
 receipt_ids          | {}
-created_at           | 2026-10-29 01:29:41.442+00
+created_at           | 2026-10-29 02:17:42.472+00
 decided_at           | 
 -[ RECORD 3 ]--------+-----------------------------------------------------------------
 task                 | S3-E: only commits; the platform lands it
 source_kind          | TASK_BRANCH
 state                | MERGED
 blocked_reason       | 
-source_ref           | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc
-source_sha           | ca3d193d08f5763fe056d8d2a64304803e6abe58
-upstream_sha_checked | b8a5e4913009a36bf443f584cece0e2457f88176
-merged_sha           | ca3d193d08f5763fe056d8d2a64304803e6abe58
-receipt_ids          | {01a18547-df2b-729d-b097-fd86d308c8b9}
-created_at           | 2026-10-29 01:29:41.857+00
-decided_at           | 2026-10-29 01:30:42.341+00
+source_ref           | refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990
+source_sha           | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+upstream_sha_checked | 805d6d9f8a86b3093644323f27eff11c92df4314
+merged_sha           | de7c79df43bbd9d2fb8eb78092692dc11d6ea937
+receipt_ids          | {01a18573-da7a-73cb-93a9-14a091de556a}
+created_at           | 2026-10-29 02:17:44.187+00
+decided_at           | 2026-10-29 02:18:44.724+00
 -[ RECORD 4 ]--------+-----------------------------------------------------------------
 task                 | S3-E2: starts once S3-E has landed
 source_kind          | TASK_BRANCH
 state                | CHECKING
 blocked_reason       | 
-source_ref           | refs/heads/orbit/task-s3-e2-starts-once-s3-e-has-landed-ad7d7e
+source_ref           | refs/heads/orbit/task-s3-e2-starts-once-s3-e-has-landed-5d662c
 source_sha           | 
 upstream_sha_checked | 
 merged_sha           | 
 receipt_ids          | {}
-created_at           | 2026-10-29 01:31:06.82+00
+created_at           | 2026-10-29 02:19:10.013+00
 decided_at           | 
 
 
-### S3 final — openItems  (2026-10-29T01:31:08.021Z)
+### S3 final — observationEvents  (2026-10-29T02:19:12.439Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation |   kind   |                                                                                                                           data                                                                                                                           |                    text                    |         created_at         
+------------+----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------------------------
+          1 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "TURN_COMPLETE", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 1}                                                                                                                 | Queued to look for finished work on main   | 2026-10-29 02:19:09.963+00
+          1 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                    | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:19:10.045+00
+          2 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "TURN_COMPLETE", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 2}                                                                                                                 | Queued to look for finished work on main   | 2026-10-29 02:19:10.063+00
+          1 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                          | Waiting for this runner's repository lock  | 2026-10-29 02:19:10.064+00
+          1 | ROUND    | {"round": 1}                                                                                                                                                                                                                                             | Round 1                                    | 2026-10-29 02:19:10.073+00
+          1 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                             | Fetching the repository                    | 2026-10-29 02:19:10.073+00
+          1 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                           | Looking for finished work on main          | 2026-10-29 02:19:10.085+00
+          1 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:19:10.098Z", "receiptIds": [], "upstreamSha": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937", "requestedState": "OBSERVED", "targetShaBefore": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937"} | Looked at main · de7c79d                   | 2026-10-29 02:19:10.097+00
+          2 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                    | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:19:12.099+00
+          2 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                          | Waiting for this runner's repository lock  | 2026-10-29 02:19:12.119+00
+          2 | ROUND    | {"round": 1}                                                                                                                                                                                                                                             | Round 1                                    | 2026-10-29 02:19:12.125+00
+          2 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                             | Fetching the repository                    | 2026-10-29 02:19:12.125+00
+          2 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                           | Looking for finished work on main          | 2026-10-29 02:19:12.135+00
+          2 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:19:12.141Z", "receiptIds": [], "upstreamSha": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937", "requestedState": "OBSERVED", "targetShaBefore": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937"} | Looked at main · de7c79d                   | 2026-10-29 02:19:12.141+00
+(14 rows)
+
+
+### S3 final — openItems  (2026-10-29T02:19:12.487Z)
 select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
   i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
 from project_open_item i left join task t on t.id = i.task_id
-where i.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit (run 3)') order by i.created_at
+where i.project_id = (select id from project where title = 'S3 PLATFORM: each candidate is named by its commit') order by i.created_at
 
 -[ RECORD 1 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind            | LANDED_WITHOUT_CONFIRMATION
@@ -337,15 +361,15 @@ state           | OPEN
 assignee        | OWNER
 assignee_reason | DEFAULT
 task            | S3-F: pushes its work straight to main
-dedupe_key      | UL:01a18546-9457-7609-b96f-ea548185ef06:01a18546-f01a-74de-997f-bb523f9bd907
+dedupe_key      | UL:01a18572-7f6e-708b-a63e-830e472af472:01a18572-e622-719a-9c76-388892734f8d
 title           | Reached main without your confirmation: S3-F: pushes its work straight to main
-payload         | {"observed": true, "receiptId": "01a18546-f01a-74de-997f-bb523f9bd907", "sourceSha": "b8a5e4913009a36bf443f584cece0e2457f88176", "recordedBy": "RUNNER", "targetBranch": "main"}
+payload         | {"observed": true, "receiptId": "01a18572-e622-719a-9c76-388892734f8d", "sourceSha": "805d6d9f8a86b3093644323f27eff11c92df4314", "recordedBy": "RUNNER", "targetBranch": "main"}
 resolution      | 
 resolved_by     | 
 resolution_note | 
 handling_reason | 
 handling_job_id | 
-created_at      | 2026-10-29 01:29:41.155+00
+created_at      | 2026-10-29 02:17:42.189+00
 resolved_at     | 
 -[ RECORD 2 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind            | PROMOTION_APPROVAL
@@ -353,15 +377,15 @@ state           | OPEN
 assignee        | OWNER
 assignee_reason | DEFAULT
 task            | 
-dedupe_key      | pr:v1:1925e437-4f29-4e42-a64f-8de12a3201e0
+dedupe_key      | pr:v1:93aa86c8-b37c-4142-af0d-5ea608e61b38
 title           | Merge 1 task into main?
-payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 11, "outputTail": "E2E_WORK_34o3qEuusiGlG3IxptUIQ.md\nE2E_WORK_34o3qEwHVp2KiS4aPsMaJ.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18546-9465-76cd-8d32-e66dd3c86f83"], "sourceRef": "refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689", "promotionId": "1925e437-4f29-4e42-a64f-8de12a3201e0", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "b8a5e4913009a36bf443f584cece0e2457f88176"}
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 12, "outputTail": "E2E_WORK_34o51EFBLrRgrYYpax4K2.md\nE2E_WORK_34o51EG9vshZbotUgjVpo.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 7, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18572-7f78-769d-96d8-02db392e1a40"], "sourceRef": "refs/heads/orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8", "promotionId": "93aa86c8-b37c-4142-af0d-5ea608e61b38", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "805d6d9f8a86b3093644323f27eff11c92df4314"}
 resolution      | 
 resolved_by     | 
 resolution_note | 
 handling_reason | 
 handling_job_id | 
-created_at      | 2026-10-29 01:30:11.176+00
+created_at      | 2026-10-29 02:18:12.21+00
 resolved_at     | 
 -[ RECORD 3 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 kind            | PROMOTION_APPROVAL
@@ -369,14 +393,14 @@ state           | RESOLVED
 assignee        | OWNER
 assignee_reason | DEFAULT
 task            | 
-dedupe_key      | pr:v1:1677aad7-a124-48d2-af16-a78f01a16a88
+dedupe_key      | pr:v1:e1befa47-d0e4-454c-9ed7-e67907cab2c9
 title           | Merge 1 task into main?
-payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 11, "outputTail": "E2E_WORK_34o3qEuusiGlG3IxptUIQ.md\nE2E_WORK_34o3qExS24PdtBEj9Dst4.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18546-9471-7696-9020-fe126712b0b6"], "sourceRef": "refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc", "promotionId": "1677aad7-a124-48d2-af16-a78f01a16a88", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "b8a5e4913009a36bf443f584cece0e2457f88176"}
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 12, "outputTail": "E2E_WORK_34o51EFBLrRgrYYpax4K2.md\nE2E_WORK_34o51EHKMerLt46xpDP0s.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18572-7f84-72a9-b287-7be82d6dde82"], "sourceRef": "refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990", "promotionId": "e1befa47-d0e4-454c-9ed7-e67907cab2c9", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "805d6d9f8a86b3093644323f27eff11c92df4314"}
 resolution      | APPROVED
 resolved_by     | USER
 resolution_note | 
 handling_reason | 
 handling_job_id | 
-created_at      | 2026-10-29 01:30:41.184+00
-resolved_at     | 2026-10-29 01:30:42.213+00
+created_at      | 2026-10-29 02:18:42.217+00
+resolved_at     | 2026-10-29 02:18:44.595+00
 

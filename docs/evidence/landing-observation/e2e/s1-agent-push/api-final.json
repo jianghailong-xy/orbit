@@ -1,17 +1,17 @@
 {
   "project": {
-    "id": "34o3bsUiFvQzkLtXepVbR",
+    "id": "34o4y7EWfvA6slGHd5pGm",
     "title": "S1 AGENT_PUSH: the agent pushes to main",
-    "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+    "ownerId": "34o4tWHWZA8WqPhG8QXO8",
     "goal": "Show that work an agent pushes straight to main is seen there and lets its dependents start.",
     "instructions": "R29-13 scenario 1. The fake engine follows the brief: it pushes HEAD to the line and never pushes its task branch.",
     "status": "DONE",
     "doneBy": "DERIVED",
-    "doneAt": "2026-10-29T01:20:41.168Z",
-    "doneCriteriaDigest": "4e6c142a6291e3f0d2bce8a10d006bfe103e950e5b527f0d3b703bcd3aac6597",
+    "doneAt": "2026-10-29T02:16:12.263Z",
+    "doneCriteriaDigest": "991bab674b576e241cd39309b11ca2763d4d2a9e35012976cea5800c679d4a4c",
     "acceptedGaps": [],
-    "coordinatorSessionId": "34o3bsaGk2fhfDrZeMALm",
-    "coordinatorWorkspaceId": "34o3UlvoYFxsb6Aer771z",
+    "coordinatorSessionId": "34o4y7K5832UDAjK7Q6V3",
+    "coordinatorWorkspaceId": "34o4tWfVIiIEIBYA7rcwj",
     "coordinatorEnabled": true,
     "maxConcurrentTasks": 2,
     "sessionBudgetPerDay": null,
@@ -20,12 +20,12 @@
     "attemptBudget": null,
     "unboundedAuthorizedBy": null,
     "exceptionEscalationSeconds": 7200,
-    "startedAt": "2026-10-29T01:19:51.576Z",
+    "startedAt": "2026-10-29T02:15:13.361Z",
     "pausedAt": null,
     "pausedReason": null,
-    "createdAt": "2026-10-29T01:19:51.322Z",
-    "updatedAt": "2026-10-29T01:20:41.169Z",
-    "coordinatorAgentId": "34o3UlvoYFxsb6Aer771z",
+    "createdAt": "2026-10-29T02:15:13.126Z",
+    "updatedAt": "2026-10-29T02:16:12.263Z",
+    "coordinatorAgentId": "34o4tWfVIiIEIBYA7rcwj",
     "coordinatorGeneration": "0",
     "_count": {
       "tasks": 2
@@ -35,12 +35,12 @@
     },
     "acceptanceCriteriaItems": [
       {
-        "id": "22vuGYwp97Qb4qTtRaWUeR",
+        "id": "sIOmf4WB8PizvmwlaAvWL",
         "ordinal": 1,
         "text": "The work is on main",
         "verificationMethod": "git merge-base --is-ancestor on the origin",
         "completionCriterionOverrideReason": null,
-        "key": "22vuGYwp97Qb4qTtRaWUeR",
+        "key": "sIOmf4WB8PizvmwlaAvWL",
         "revision": 1,
         "contentHash": "792021573c9af31cfe88cbaed5e0e8042cb450d4cdfc0ff16823c2c579d814bd",
         "semanticRevision": 1,
@@ -51,7 +51,7 @@
         "independence": "INDEPENDENT",
         "conflicts": [],
         "remedy": null,
-        "publicId": "22vuGYwp97Qb4qTtRaWUeR"
+        "publicId": "sIOmf4WB8PizvmwlaAvWL"
       }
     ],
     "blockers": {
@@ -64,20 +64,20 @@
       "lineAbsentReason": null,
       "ref": "main",
       "upstreamRef": "main",
-      "upstreamChosenAt": "2026-10-29T01:19:51.573Z",
+      "upstreamChosenAt": "2026-10-29T02:15:13.359Z",
       "source": "EXPLICIT",
       "locked": true,
-      "startedAt": "2026-10-29T01:19:51.958Z",
+      "startedAt": "2026-10-29T02:15:14.817Z",
       "mergeCheckCommand": null,
       "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
       "mergeCheckTimeoutSeconds": null,
       "escalationSeconds": 7200,
       "deliveryMode": "AGENT_PUSH",
-      "deliveryModeChosenAt": "2026-10-29T01:19:51.573Z",
+      "deliveryModeChosenAt": "2026-10-29T02:15:13.359Z",
       "lastMainBranch": {
         "branch": "main",
         "repository": "origin/s1",
-        "chosenAt": "2026-10-29T01:19:51.573Z"
+        "chosenAt": "2026-10-29T02:15:13.359Z"
       }
     },
     "derivedDone": {
@@ -86,7 +86,7 @@
       "withheld": [],
       "criteria": [
         {
-          "definitionId": "22vuGYwp97Qb4qTtRaWUeR",
+          "definitionId": "sIOmf4WB8PizvmwlaAvWL",
           "satisfied": true,
           "landing": "LANDED",
           "independence": "INDEPENDENT",
@@ -94,7 +94,7 @@
           "remedy": null,
           "landingReason": null,
           "withheld": [],
-          "definitionPublicId": "22vuGYwp97Qb4qTtRaWUeR"
+          "definitionPublicId": "sIOmf4WB8PizvmwlaAvWL"
         }
       ],
       "confirmation": "CONFIRMED",
@@ -112,31 +112,31 @@
         }
       }
     },
-    "publicId": "34o3bsUiFvQzkLtXepVbR",
-    "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
-    "coordinatorSessionPublicId": "34o3bsaGk2fhfDrZeMALm",
-    "coordinatorWorkspacePublicId": "34o3UlvoYFxsb6Aer771z",
-    "coordinatorAgentPublicId": "34o3UlvoYFxsb6Aer771z"
+    "publicId": "34o4y7EWfvA6slGHd5pGm",
+    "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
+    "coordinatorSessionPublicId": "34o4y7K5832UDAjK7Q6V3",
+    "coordinatorWorkspacePublicId": "34o4tWfVIiIEIBYA7rcwj",
+    "coordinatorAgentPublicId": "34o4tWfVIiIEIBYA7rcwj"
   },
   "integration": {
     "line": "MAIN",
     "lineAbsentReason": null,
     "ref": "main",
     "upstreamRef": "main",
-    "upstreamChosenAt": "2026-10-29T01:19:51.573Z",
+    "upstreamChosenAt": "2026-10-29T02:15:13.359Z",
     "source": "EXPLICIT",
     "locked": true,
-    "startedAt": "2026-10-29T01:19:51.958Z",
+    "startedAt": "2026-10-29T02:15:14.817Z",
     "mergeCheckCommand": null,
     "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
     "mergeCheckTimeoutSeconds": null,
     "escalationSeconds": 7200,
     "deliveryMode": "AGENT_PUSH",
-    "deliveryModeChosenAt": "2026-10-29T01:19:51.573Z",
+    "deliveryModeChosenAt": "2026-10-29T02:15:13.359Z",
     "lastMainBranch": {
       "branch": "main",
       "repository": "origin/s1",
-      "chosenAt": "2026-10-29T01:19:51.573Z"
+      "chosenAt": "2026-10-29T02:15:13.359Z"
     },
     "repository": "origin/s1",
     "branches": {
@@ -144,7 +144,7 @@
         "main"
       ],
       "workspaceName": "r2913-s1",
-      "reportedAt": "2026-10-29T01:20:41.120Z",
+      "reportedAt": "2026-10-29T02:16:12.198Z",
       "agentName": "r2913-s1"
     },
     "commitsAheadOfUpstream": null,
@@ -160,25 +160,25 @@
   },
   "tasks": {
     "A": {
-      "id": "34o3bsobCnQrV390daAiv",
+      "id": "34o4y7XdGMvBnz6hDR3nU",
       "title": "S1-A: write the work and push it to main",
       "description": "E2E-DO: push-upstream",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3UlvoYFxsb6Aer771z",
+      "assigneeId": "34o4tWfVIiIEIBYA7rcwj",
       "listId": null,
-      "projectId": "34o3bsUiFvQzkLtXepVbR",
+      "projectId": "34o4y7EWfvA6slGHd5pGm",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
       "sourceTaskId": null,
       "sourceSessionId": null,
       "parentTaskId": null,
-      "acceptanceCriteria": "E2E_WORK.md exists in the run's worktree when the run ends.",
-      "acceptanceCommand": "test -f E2E_WORK.md",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
       "acceptanceExpectedExitCode": 0,
       "acceptanceTimeoutSeconds": 60,
       "completionCriterion": "EXECUTABLE",
@@ -186,7 +186,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "22vuGYwp97Qb4qTtRaWUeR",
+      "criterionDefinitionId": "sIOmf4WB8PizvmwlaAvWL",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -230,37 +230,37 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "5edad645d699158d6071e2d3d792d271681ea832",
-      "deliveredBaseSha": "8e31b825d517e33333a9cab5033e1661a605828c",
-      "deliveredBranch": "orbit/task-s1-a-write-the-work-and-push-it-to-54780f",
-      "deliveredSessionId": "4XQSu4wTGymprYnnWYeWAU",
-      "deliveredAt": "2026-10-29T01:20:06.571Z",
-      "createdAt": "2026-10-29T01:19:51.526Z",
-      "updatedAt": "2026-10-29T01:20:06.571Z",
+      "deliveredSha": "56dd992f92e72d4844790684d7bd4acd97ae411a",
+      "deliveredBaseSha": "b24beb061bd2c9bf4e284b39f2f56b79326707af",
+      "deliveredBranch": "orbit/task-s1-a-write-the-work-and-push-it-to-70e845",
+      "deliveredSessionId": "3gfIzSddK68rxRCk2zzVl4",
+      "deliveredAt": "2026-10-29T02:15:39.987Z",
+      "createdAt": "2026-10-29T02:15:13.322Z",
+      "updatedAt": "2026-10-29T02:15:39.988Z",
       "assignee": {
-        "id": "34o3UlvoYFxsb6Aer771z",
+        "id": "34o4tWfVIiIEIBYA7rcwj",
         "name": "r2913-s1",
         "model": null,
-        "publicId": "34o3UlvoYFxsb6Aer771z"
+        "publicId": "34o4tWfVIiIEIBYA7rcwj"
       },
       "project": {
-        "id": "34o3bsUiFvQzkLtXepVbR",
+        "id": "34o4y7EWfvA6slGHd5pGm",
         "title": "S1 AGENT_PUSH: the agent pushes to main",
         "status": "DONE",
-        "publicId": "34o3bsUiFvQzkLtXepVbR"
+        "publicId": "34o4y7EWfvA6slGHd5pGm"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "4XQSu4wTGymprYnnWYeWAU",
+          "id": "3gfIzSddK68rxRCk2zzVl4",
           "title": "Task: S1-A: write the work and push it to main",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:20:06.520Z",
-          "archivedAt": "2026-10-29T01:20:06.520Z",
+          "completedAt": "2026-10-29T02:15:39.750Z",
+          "archivedAt": "2026-10-29T02:15:39.750Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:19:51.669Z",
+          "createdAt": "2026-10-29T02:15:13.467Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
@@ -272,7 +272,7 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "4XQSu4wTGymprYnnWYeWAU",
+          "publicId": "3gfIzSddK68rxRCk2zzVl4",
           "agent": {
             "name": "r2913-s1"
           }
@@ -282,19 +282,19 @@
       "dependsOn": [],
       "dependedOnBy": [
         {
-          "id": "34o3bsrifQoRn8Hydg8Ig",
-          "taskId": "34o3bsqk8jRX71WtixO6C",
-          "dependsOnTaskId": "34o3bsobCnQrV390daAiv",
-          "createdAt": "2026-10-29T01:19:51.558Z",
+          "id": "34o4y7ZyAtoWnyzqKFF06",
+          "taskId": "34o4y7ZNyaQMkbnjOHiy0",
+          "dependsOnTaskId": "34o4y7XdGMvBnz6hDR3nU",
+          "createdAt": "2026-10-29T02:15:13.346Z",
           "task": {
-            "id": "34o3bsqk8jRX71WtixO6C",
+            "id": "34o4y7ZNyaQMkbnjOHiy0",
             "title": "S1-B: starts by itself once S1-A is seen on main",
             "status": "DONE",
-            "publicId": "34o3bsqk8jRX71WtixO6C"
+            "publicId": "34o4y7ZNyaQMkbnjOHiy0"
           },
-          "publicId": "34o3bsrifQoRn8Hydg8Ig",
-          "taskPublicId": "34o3bsqk8jRX71WtixO6C",
-          "dependsOnTaskPublicId": "34o3bsobCnQrV390daAiv"
+          "publicId": "34o4y7ZyAtoWnyzqKFF06",
+          "taskPublicId": "34o4y7ZNyaQMkbnjOHiy0",
+          "dependsOnTaskPublicId": "34o4y7XdGMvBnz6hDR3nU"
         }
       ],
       "supersedes": [],
@@ -305,9 +305,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3bsobCnQrV390daAiv",
+        "taskId": "34o4y7XdGMvBnz6hDR3nU",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:19:51.526Z",
+        "epochStartedAt": "2026-10-29T02:15:13.322Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -315,7 +315,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3bsobCnQrV390daAiv"
+        "taskPublicId": "34o4y7XdGMvBnz6hDR3nU"
       },
       "modelHintOptions": [
         {
@@ -349,7 +349,7 @@
       ],
       "integration": {
         "state": "ON_UPSTREAM",
-        "since": "2026-10-29T01:20:11.147Z",
+        "since": "2026-10-29T02:15:42.357Z",
         "handler": null,
         "openItemId": null,
         "jobId": null,
@@ -364,43 +364,43 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3bsobCnQrV390daAiv",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o4y7XdGMvBnz6hDR3nU",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "4XQSu4wTGymprYnnWYeWAU",
+      "deliveredSessionPublicId": "3gfIzSddK68rxRCk2zzVl4",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "22vuGYwp97Qb4qTtRaWUeR",
+      "criterionDefinitionPublicId": "sIOmf4WB8PizvmwlaAvWL",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3bsUiFvQzkLtXepVbR",
-      "assigneePublicId": "34o3UlvoYFxsb6Aer771z",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o4y7EWfvA6slGHd5pGm",
+      "assigneePublicId": "34o4tWfVIiIEIBYA7rcwj",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     },
     "B": {
-      "id": "34o3bsqk8jRX71WtixO6C",
+      "id": "34o4y7ZNyaQMkbnjOHiy0",
       "title": "S1-B: starts by itself once S1-A is seen on main",
       "description": "E2E-DO: push-upstream",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3UlvoYFxsb6Aer771z",
+      "assigneeId": "34o4tWfVIiIEIBYA7rcwj",
       "listId": null,
-      "projectId": "34o3bsUiFvQzkLtXepVbR",
+      "projectId": "34o4y7EWfvA6slGHd5pGm",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
       "sourceTaskId": null,
       "sourceSessionId": null,
       "parentTaskId": null,
-      "acceptanceCriteria": "E2E_WORK.md exists in the run's worktree when the run ends.",
-      "acceptanceCommand": "test -f E2E_WORK.md",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
       "acceptanceExpectedExitCode": 0,
       "acceptanceTimeoutSeconds": 60,
       "completionCriterion": "EXECUTABLE",
@@ -408,7 +408,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "22vuGYwp97Qb4qTtRaWUeR",
+      "criterionDefinitionId": "sIOmf4WB8PizvmwlaAvWL",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -452,37 +452,37 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "387d0b9f9b97c49d3ecc6c6c5dd2b1cd2e6c063d",
-      "deliveredBaseSha": "5edad645d699158d6071e2d3d792d271681ea832",
-      "deliveredBranch": "orbit/task-s1-b-starts-by-itself-once-s1-a-is-808a48",
-      "deliveredSessionId": "1d0MIZgixtp5O5dLWABfW9",
-      "deliveredAt": "2026-10-29T01:20:36.567Z",
-      "createdAt": "2026-10-29T01:19:51.548Z",
-      "updatedAt": "2026-10-29T01:20:36.567Z",
+      "deliveredSha": "5c6d17939584825de21f4c82ee01fc22a6d19b4b",
+      "deliveredBaseSha": "56dd992f92e72d4844790684d7bd4acd97ae411a",
+      "deliveredBranch": "orbit/task-s1-b-starts-by-itself-once-s1-a-is-8bf606",
+      "deliveredSessionId": "6r7aQcD1jJHflWts7sO2m5",
+      "deliveredAt": "2026-10-29T02:16:09.775Z",
+      "createdAt": "2026-10-29T02:15:13.340Z",
+      "updatedAt": "2026-10-29T02:16:09.775Z",
       "assignee": {
-        "id": "34o3UlvoYFxsb6Aer771z",
+        "id": "34o4tWfVIiIEIBYA7rcwj",
         "name": "r2913-s1",
         "model": null,
-        "publicId": "34o3UlvoYFxsb6Aer771z"
+        "publicId": "34o4tWfVIiIEIBYA7rcwj"
       },
       "project": {
-        "id": "34o3bsUiFvQzkLtXepVbR",
+        "id": "34o4y7EWfvA6slGHd5pGm",
         "title": "S1 AGENT_PUSH: the agent pushes to main",
         "status": "DONE",
-        "publicId": "34o3bsUiFvQzkLtXepVbR"
+        "publicId": "34o4y7EWfvA6slGHd5pGm"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "1d0MIZgixtp5O5dLWABfW9",
+          "id": "6r7aQcD1jJHflWts7sO2m5",
           "title": "Task: S1-B: starts by itself once S1-A is seen on main",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:20:36.519Z",
-          "archivedAt": "2026-10-29T01:20:36.519Z",
+          "completedAt": "2026-10-29T02:16:09.733Z",
+          "archivedAt": "2026-10-29T02:16:09.733Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:20:11.195Z",
+          "createdAt": "2026-10-29T02:15:42.560Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
@@ -494,7 +494,7 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "1d0MIZgixtp5O5dLWABfW9",
+          "publicId": "6r7aQcD1jJHflWts7sO2m5",
           "agent": {
             "name": "r2913-s1"
           }
@@ -503,19 +503,19 @@
       "creatorSession": null,
       "dependsOn": [
         {
-          "id": "34o3bsrifQoRn8Hydg8Ig",
-          "taskId": "34o3bsqk8jRX71WtixO6C",
-          "dependsOnTaskId": "34o3bsobCnQrV390daAiv",
-          "createdAt": "2026-10-29T01:19:51.558Z",
+          "id": "34o4y7ZyAtoWnyzqKFF06",
+          "taskId": "34o4y7ZNyaQMkbnjOHiy0",
+          "dependsOnTaskId": "34o4y7XdGMvBnz6hDR3nU",
+          "createdAt": "2026-10-29T02:15:13.346Z",
           "dependsOnTask": {
-            "id": "34o3bsobCnQrV390daAiv",
+            "id": "34o4y7XdGMvBnz6hDR3nU",
             "title": "S1-A: write the work and push it to main",
             "status": "DONE",
-            "publicId": "34o3bsobCnQrV390daAiv"
+            "publicId": "34o4y7XdGMvBnz6hDR3nU"
           },
-          "publicId": "34o3bsrifQoRn8Hydg8Ig",
-          "taskPublicId": "34o3bsqk8jRX71WtixO6C",
-          "dependsOnTaskPublicId": "34o3bsobCnQrV390daAiv"
+          "publicId": "34o4y7ZyAtoWnyzqKFF06",
+          "taskPublicId": "34o4y7ZNyaQMkbnjOHiy0",
+          "dependsOnTaskPublicId": "34o4y7XdGMvBnz6hDR3nU"
         }
       ],
       "dependedOnBy": [],
@@ -527,9 +527,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3bsqk8jRX71WtixO6C",
+        "taskId": "34o4y7ZNyaQMkbnjOHiy0",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:19:51.548Z",
+        "epochStartedAt": "2026-10-29T02:15:13.340Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -537,7 +537,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3bsqk8jRX71WtixO6C"
+        "taskPublicId": "34o4y7ZNyaQMkbnjOHiy0"
       },
       "modelHintOptions": [
         {
@@ -571,7 +571,7 @@
       ],
       "integration": {
         "state": "ON_UPSTREAM",
-        "since": "2026-10-29T01:20:41.119Z",
+        "since": "2026-10-29T02:16:12.196Z",
         "handler": null,
         "openItemId": null,
         "jobId": null,
@@ -586,22 +586,22 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3bsqk8jRX71WtixO6C",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o4y7ZNyaQMkbnjOHiy0",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "1d0MIZgixtp5O5dLWABfW9",
+      "deliveredSessionPublicId": "6r7aQcD1jJHflWts7sO2m5",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "22vuGYwp97Qb4qTtRaWUeR",
+      "criterionDefinitionPublicId": "sIOmf4WB8PizvmwlaAvWL",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3bsUiFvQzkLtXepVbR",
-      "assigneePublicId": "34o3UlvoYFxsb6Aer771z",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o4y7EWfvA6slGHd5pGm",
+      "assigneePublicId": "34o4tWfVIiIEIBYA7rcwj",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     }
   },
   "openItems": {
@@ -616,16 +616,16 @@
   "receipts": {
     "A": [
       {
-        "id": "34o3cNfG0C15fGysVKPCs",
-        "sessionId": "4XQSu4wTGymprYnnWYeWAU",
-        "taskId": "34o3bsobCnQrV390daAiv",
-        "projectId": "34o3bsUiFvQzkLtXepVbR",
+        "id": "34o4yrBy3CUFipJcFSZ38",
+        "sessionId": "3gfIzSddK68rxRCk2zzVl4",
+        "taskId": "34o4y7XdGMvBnz6hDR3nU",
+        "projectId": "34o4y7EWfvA6slGHd5pGm",
         "result": "ALREADY_MERGED",
         "landed": true,
-        "sourceBranch": "orbit/task-s1-a-write-the-work-and-push-it-to-54780f",
-        "sourceSha": "5edad645d699158d6071e2d3d792d271681ea832",
+        "sourceBranch": "orbit/task-s1-a-write-the-work-and-push-it-to-70e845",
+        "sourceSha": "56dd992f92e72d4844790684d7bd4acd97ae411a",
         "targetBranch": "main",
-        "targetShaBefore": "5edad645d699158d6071e2d3d792d271681ea832",
+        "targetShaBefore": "56dd992f92e72d4844790684d7bd4acd97ae411a",
         "targetShaAfter": null,
         "rebaseBaseSha": null,
         "rebaseBaseShaAbsentReason": "NOT_REBASED",
@@ -633,33 +633,33 @@
         "recordedBy": "RUNNER",
         "detail": {
           "observed": true,
-          "integrationJobId": "7ie13yXhO55Op6DVWfNiHZ",
-          "integrationJobPublicId": "7ie13yXhO55Op6DVWfNiHZ"
+          "integrationJobId": "4UeHXA48SopoyI5iHr2OVI",
+          "integrationJobPublicId": "4UeHXA48SopoyI5iHr2OVI"
         },
-        "idempotencyKey": "7805d299f6165ddae38abc5873c9cb2ddf29aab0102b9fa76edecbc96a161c81",
+        "idempotencyKey": "5d45144d816abdc36f3cbd11e2ed9cf22b1dce86a9092408d0e639cc21dfb553",
         "checkpointId": null,
-        "createdAt": "2026-10-29T01:20:11.147Z",
-        "publicId": "34o3cNfG0C15fGysVKPCs",
-        "sessionPublicId": "4XQSu4wTGymprYnnWYeWAU",
-        "taskPublicId": "34o3bsobCnQrV390daAiv",
-        "projectPublicId": "34o3bsUiFvQzkLtXepVbR",
+        "createdAt": "2026-10-29T02:15:42.357Z",
+        "publicId": "34o4yrBy3CUFipJcFSZ38",
+        "sessionPublicId": "3gfIzSddK68rxRCk2zzVl4",
+        "taskPublicId": "34o4y7XdGMvBnz6hDR3nU",
+        "projectPublicId": "34o4y7EWfvA6slGHd5pGm",
         "checkpointPublicId": null
       }
     ],
     "B": {
-      "sessionId": "1d0MIZgixtp5O5dLWABfW9",
+      "sessionId": "6r7aQcD1jJHflWts7sO2m5",
       "receipts": [
         {
-          "id": "34o3d8mvgIImWW4kFCRwm",
-          "sessionId": "1d0MIZgixtp5O5dLWABfW9",
-          "taskId": "34o3bsqk8jRX71WtixO6C",
-          "projectId": "34o3bsUiFvQzkLtXepVbR",
+          "id": "34o4zc6fzO6O4AZCXmagq",
+          "sessionId": "6r7aQcD1jJHflWts7sO2m5",
+          "taskId": "34o4y7ZNyaQMkbnjOHiy0",
+          "projectId": "34o4y7EWfvA6slGHd5pGm",
           "result": "ALREADY_MERGED",
           "landed": true,
-          "sourceBranch": "orbit/task-s1-b-starts-by-itself-once-s1-a-is-808a48",
-          "sourceSha": "387d0b9f9b97c49d3ecc6c6c5dd2b1cd2e6c063d",
+          "sourceBranch": "orbit/task-s1-b-starts-by-itself-once-s1-a-is-8bf606",
+          "sourceSha": "5c6d17939584825de21f4c82ee01fc22a6d19b4b",
           "targetBranch": "main",
-          "targetShaBefore": "387d0b9f9b97c49d3ecc6c6c5dd2b1cd2e6c063d",
+          "targetShaBefore": "5c6d17939584825de21f4c82ee01fc22a6d19b4b",
           "targetShaAfter": null,
           "rebaseBaseSha": null,
           "rebaseBaseShaAbsentReason": "NOT_REBASED",
@@ -667,27 +667,27 @@
           "recordedBy": "RUNNER",
           "detail": {
             "observed": true,
-            "integrationJobId": "69mMLE1lRR8fNgDDaCOWBX",
-            "integrationJobPublicId": "69mMLE1lRR8fNgDDaCOWBX"
+            "integrationJobId": "1gkW82uxsEpDlQGkfqUxbk",
+            "integrationJobPublicId": "1gkW82uxsEpDlQGkfqUxbk"
           },
-          "idempotencyKey": "6f968ee4e952430608fad778b67e02e3425d38d90a4ae1b4451c65af626abeac",
+          "idempotencyKey": "08ef1bc13c0c567b7fc78a8e3b414fd32900316e80085b68d2e6682b067a5df3",
           "checkpointId": null,
-          "createdAt": "2026-10-29T01:20:41.119Z",
-          "publicId": "34o3d8mvgIImWW4kFCRwm",
-          "sessionPublicId": "1d0MIZgixtp5O5dLWABfW9",
-          "taskPublicId": "34o3bsqk8jRX71WtixO6C",
-          "projectPublicId": "34o3bsUiFvQzkLtXepVbR",
+          "createdAt": "2026-10-29T02:16:12.196Z",
+          "publicId": "34o4zc6fzO6O4AZCXmagq",
+          "sessionPublicId": "6r7aQcD1jJHflWts7sO2m5",
+          "taskPublicId": "34o4y7ZNyaQMkbnjOHiy0",
+          "projectPublicId": "34o4y7EWfvA6slGHd5pGm",
           "checkpointPublicId": null
         }
       ],
       "receiptsEmptyReason": null,
-      "sessionPublicId": "1d0MIZgixtp5O5dLWABfW9"
+      "sessionPublicId": "6r7aQcD1jJHflWts7sO2m5"
     }
   },
   "started": {
-    "projectId": "34o3bsUiFvQzkLtXepVbR",
-    "startedAt": "2026-10-29T01:19:51.576Z",
-    "criteriaDigest": "4e6c142a6291e3f0d2bce8a10d006bfe103e950e5b527f0d3b703bcd3aac6597",
+    "projectId": "34o4y7EWfvA6slGHd5pGm",
+    "startedAt": "2026-10-29T02:15:13.361Z",
+    "criteriaDigest": "991bab674b576e241cd39309b11ca2763d4d2a9e35012976cea5800c679d4a4c",
     "criteriaCount": 1,
     "lineLocked": false,
     "settings": {
@@ -700,10 +700,10 @@
     },
     "differsFromRequest": [],
     "coordinator": {
-      "sessionId": "34o3bsaGk2fhfDrZeMALm",
+      "sessionId": "34o4y7K5832UDAjK7Q6V3",
       "created": false,
-      "sessionPublicId": "34o3bsaGk2fhfDrZeMALm"
+      "sessionPublicId": "34o4y7K5832UDAjK7Q6V3"
     },
-    "projectPublicId": "34o3bsUiFvQzkLtXepVbR"
+    "projectPublicId": "34o4y7EWfvA6slGHd5pGm"
   }
 }

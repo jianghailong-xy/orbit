@@ -60,15 +60,15 @@ What is real and what is not:
 
 ## Scenario notes
 
-**1, `s1-agent-push/`:** S1-A DONE at 01:19:53. Its identity was frozen when its session finished, at 01:20:06.571 (O-L4
-3; `delivered_sha` = the pushed commit, `delivered_branch` = the task branch). OBSERVE_LANDING generation 1 was
-claimed at 01:20:11.072 (`observeTasks` in the wire log) and answered `onUpstream: true, fullyApplied: true`. The
-receipt was written at 01:20:11.147: `ALREADY_MERGED`, `target_branch main`, `target_sha_before` = U, `recorded_by
-RUNNER`, `detail {observed: true, integrationJobId}`. S1-B's session was created at 01:20:11.195 by J10, then S1-B was
+**1, `s1-agent-push/`:** S1-A DONE at 02:15:15. Its identity was frozen when its session finished, at 02:15:39.987 (O-L4
+3; `delivered_sha` = the pushed commit `56dd992f`, `delivered_branch` = the task branch). OBSERVE_LANDING generation 1
+was claimed at 02:15:42.123 (`observeTasks` in the wire log) and answered `onUpstream: true, fullyApplied: true`. The
+receipt was written at 02:15:42.357: `ALREADY_MERGED`, `target_branch main`, `target_sha_before` = U, `recorded_by
+RUNNER`, `detail {observed: true, integrationJobId}`. S1-B's session was created at 02:15:42.560 by J10, then S1-B was
 observed and received its own receipt (generation 2). No open item, no receipt other than the runner's, no retried job,
 no promotion candidate (O-L2). The origin has only `main`.
 
-**2, `s2-cherry-pick/`:** The task branch keeps `83212397`; main got the cherry-pick `2e33f82a`.
+**2, `s2-cherry-pick/`:** The task branch keeps `ba51f23a`; main got the cherry-pick `cabb1af6`.
 
 - The observation answered `onUpstream: false, fullyApplied: true` → LANDING_UNOBSERVED with reason
   `APPLIED_AS_OTHER_COMMITS`, assignee COORDINATOR, dedupe `LU:<task>:<sha>`, title `Not on main yet: …`.
@@ -81,7 +81,7 @@ The coordinator, through MCP:
 - `integration_observe` queued generation 2 and recorded the handling reason on the item (H1). It answered not seen
   again, and the item stayed the only one, OPEN.
 - `merge_receipt` (ALREADY_MERGED, S2-C's session, `sourceSha` = the cherry-pick) resolved the item `RESOLVED / LANDED`
-  at 01:23:12.456. S2-D's session was created at 01:23:12.495 (J10).
+  at 02:17:13.759. S2-D's session was created at 02:17:13.800 (J10).
 
 **3, `s3-platform/`:** Neither task branch was ever on the origin.
 
@@ -146,8 +146,8 @@ re-checks by O-L5).
 
 No product defect was found, so this task changes no product code. What came up:
 
-1. **Reported to the coordinating session, not fixed here: a BLOCKED candidate survives the deploy when the task
-   recorded its own receipt before DONE (S4-T3).**
+1. **A known historical residue, not a defect (the coordinator's ruling): a BLOCKED candidate survives the deploy when
+   the task recorded its own receipt before DONE (S4-T3).**
    - **How it arises.** The 0.1.239 server made T3's candidate at DONE, after T3's agent had already recorded its
      receipt, so M-T13 never retires it: it retires only candidates created before the receipt.
    - **Why the pass leaves it.** T3 is not NOT_KNOWN, so the pass neither freezes nor observes it. Its candidate stays
@@ -156,24 +156,27 @@ No product defect was found, so this task changes no product code. What came up:
    - **Impact.** No owner read on the stack surfaces it: no blocker, no withheld criterion, the criterion `LANDED`, and
      it is not the current promotion (`c-owner-reads.json`). Its INTEGRATION_ERROR item was already closed as handled
      before the deploy.
-   - **Production.** 10-28's project probably holds one such row, the candidate of its task whose agent recorded the one
-     receipt. R29-14's check counts only new SOURCE_BRANCH_MISSING candidates, so this one should not be read as a
-     failure of the backfill.
-   - **Decision left to the coordinator:** whether the pass should also retire BLOCKED candidates of tasks that already
-     have an upstream receipt. That is a contract change.
+   - **Production.** Expect one such row in production: the candidate of the task whose agent recorded the 10-28
+     project's only receipt. R29-14's check counts only new SOURCE_BRANCH_MISSING candidates, so this row is not a
+     failure of the backfill. The owner can decline or cancel it.
+   - **Ruling.** Reported to the coordinating session, which ruled on 2026-10-29: leave it, with no contract change.
+     Nothing waits on it, and O5 is not engaged. The shape only arises from a 0.1.239-era DONE that followed the agent's
+     own receipt. Under revision 29 such a candidate is named by its commit (O-L5), and its check on an
+     `integration-observe/v1` runner answers ALREADY_LANDED, which retires it (O-L6). New rows heal themselves.
 2. **Artifacts of the kit, not of Orbit:**
    - The coordinator's `DELIVERY_REVIEW` "Changed files it didn’t declare" for S4-T5 comes from the declared-scope
      heuristic (`declaredPaths` in `blocker-disposition.ts`). It reads the kit's `E2E-UPSTREAM: origin/feature/release-2`
      line as a declared path.
    - The J9 refusals answer HTTP 400, as they did before revision 29. §10.9 rewrites only the sentence.
-3. **Stopped by bugs in the kit, not in Orbit:**
-   - Two earlier scenario 3 attempts on stack A. In the first, a read helper took psql's `(0 rows)` for a value. In the
-     second, task titles were matched across projects. Their projects are still on stack A, untagged (`S3 PLATFORM:
-     candidates named by their commit`, `S3 PLATFORM: each candidate is named by its commit`), and the run kept here is
-     `(run 3)` on repository `s3c`. In both attempts the rows show the same product behaviour as run 3.
-   - Two earlier stack-B passes. Two of their checks expected the wrong thing: T3 frozen, and an owner read taken before
-     T5's own landing. Their start-runner also matched stack A's runner process, since fixed with a per-stack runner
-     binary path. Stack B was wiped, and scenarios 4 and 5 kept here come from one clean pass.
+3. **The kit was debugged on earlier passes; the evidence here comes from one clean pass per stack, run with the kit
+   as committed.** Both stacks were wiped (fresh database, runner and origins) before that pass. In the earlier passes
+   only the kit failed, never Orbit:
+   - A read helper took psql's `(0 rows)` for a value.
+   - Task titles were matched across projects.
+   - Two checks expected the wrong thing: T3 frozen, and an owner read taken before T5's own landing.
+   - Start-runner matched the other stack's runner process (since fixed with a per-stack runner binary path).
+
+   The product behaviour on those passes was the same as here.
 
 ## Not covered here
 
@@ -207,7 +210,7 @@ bash $K/stack.sh build-server old 18dfe8f1c
 # stack A: scenarios 1-3
 export R2913_STACK=a
 bash $K/stack.sh db new && bash $K/stack.sh start-api new && bash $K/stack.sh start-proxy
-node $K/bootstrap.mjs new s1 s2 s3c
+node $K/bootstrap.mjs new s1 s2 s3
 node $K/s1-agent-push.mjs && node $K/s2-cherry-pick.mjs && node $K/s3-platform.mjs
 # stack B: scenarios 4-5 (old world -> deploy -> runner upgrade)
 export R2913_STACK=b

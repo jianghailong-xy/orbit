@@ -17,11 +17,10 @@ import { dumpProject } from './queries.mjs';
 const ev = evidence('s3-platform');
 const state = readState();
 const T = await login();
-const REPO = process.env.S3_REPO || 's3c';
+const REPO = process.env.S3_REPO || 's3';
 const ws = state.workspaces[REPO];
-// Two earlier attempts (s3, s3b) were stopped by bugs in this script, not in Orbit; their projects keep the
-// untagged titles, so this run's title says which attempt it is.
-const TITLE = `S3 PLATFORM: each candidate is named by its commit (${process.env.S3_RUN || 'run 3'})`;
+// S3_RUN tags the title when the scenario runs again on a stack that already has it (titles key the queries).
+const TITLE = `S3 PLATFORM: each candidate is named by its commit${process.env.S3_RUN ? ` (${process.env.S3_RUN})` : ''}`;
 const marks = {
   runner: logSize(`${SD}/logs/runner.log`), wire: logSize(`${SD}/logs/runner-wire.jsonl`),
   fake: logSize(`${SD}/logs/fake-claude.jsonl`), api: logSize(`${SD}/logs/apiserver.log`),

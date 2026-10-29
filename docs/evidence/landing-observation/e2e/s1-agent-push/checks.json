@@ -2,7 +2,7 @@
   {
     "name": "delivery mode reads AGENT_PUSH on project_get",
     "ok": true,
-    "detail": "deliveryModeChosenAt 2026-10-29T01:19:51.573Z"
+    "detail": "deliveryModeChosenAt 2026-10-29T02:15:13.359Z"
   },
   {
     "name": "S1-A is DONE",
@@ -17,7 +17,7 @@
   {
     "name": "origin main is the agent's commit",
     "ok": true,
-    "detail": "5edad645d699158d6071e2d3d792d271681ea832"
+    "detail": "56dd992f92e72d4844790684d7bd4acd97ae411a"
   },
   {
     "name": "the task branch was never pushed",
@@ -27,12 +27,12 @@
   {
     "name": "delivered_sha frozen = the pushed commit",
     "ok": true,
-    "detail": "5edad645d699158d6071e2d3d792d271681ea832 on orbit/task-s1-a-write-the-work-and-push-it-to-54780f at 2026-10-29T01:20:06.571Z"
+    "detail": "56dd992f92e72d4844790684d7bd4acd97ae411a on orbit/task-s1-a-write-the-work-and-push-it-to-70e845 at 2026-10-29T02:15:39.987Z"
   },
   {
     "name": "receipt ALREADY_MERGED on main, recorded by the RUNNER, detail.observed",
     "ok": true,
-    "detail": "source 5edad645d699158d6071e2d3d792d271681ea832"
+    "detail": "source 56dd992f92e72d4844790684d7bd4acd97ae411a"
   },
   {
     "name": "S1-B was started without a person (J10)",

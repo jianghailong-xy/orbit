@@ -1,8 +1,8 @@
 {
   "project": {
-    "id": "34o3fY0BLFOUgQMiJa2PB",
+    "id": "34o4ze7LxHaYJS4TGzYWq",
     "title": "S2 AGENT_PUSH: the agent pushes a cherry-pick",
-    "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+    "ownerId": "34o4tWHWZA8WqPhG8QXO8",
     "goal": "Show that work pushed as a different commit is put in front of the coordinator, and what its doors do.",
     "instructions": "R29-13 scenario 2. The fake engine pushes a cherry-pick of its work to the line; the coordinator is the fake engine too, driven by E2E-MCP lines.",
     "status": "OPEN",
@@ -10,8 +10,8 @@
     "doneAt": null,
     "doneCriteriaDigest": null,
     "acceptedGaps": [],
-    "coordinatorSessionId": "34o3fY1Y0IjTWKoCMEHAm",
-    "coordinatorWorkspaceId": "34o3eFXLWbTfMBQRlvXMt",
+    "coordinatorSessionId": "34o4ze9IpYPQP05MNZxlZ",
+    "coordinatorWorkspaceId": "34o4v3VhRkqU5zi1DcyWO",
     "coordinatorEnabled": true,
     "maxConcurrentTasks": 2,
     "sessionBudgetPerDay": null,
@@ -20,12 +20,12 @@
     "attemptBudget": null,
     "unboundedAuthorizedBy": null,
     "exceptionEscalationSeconds": 7200,
-    "startedAt": "2026-10-29T01:22:16.169Z",
+    "startedAt": "2026-10-29T02:16:13.571Z",
     "pausedAt": null,
     "pausedReason": null,
-    "createdAt": "2026-10-29T01:22:16.023Z",
-    "updatedAt": "2026-10-29T01:23:12.493Z",
-    "coordinatorAgentId": "34o3eFXLWbTfMBQRlvXMt",
+    "createdAt": "2026-10-29T02:16:13.475Z",
+    "updatedAt": "2026-10-29T02:17:13.799Z",
+    "coordinatorAgentId": "34o4v3VhRkqU5zi1DcyWO",
     "coordinatorGeneration": "0",
     "_count": {
       "tasks": 2
@@ -35,12 +35,12 @@
     },
     "acceptanceCriteriaItems": [
       {
-        "id": "5uUrpBA81zd1b23jczIz4E",
+        "id": "25sDOLCXFVEPnAdJJaPMUr",
         "ordinal": 1,
         "text": "The work is on main",
         "verificationMethod": "git cherry on the origin",
         "completionCriterionOverrideReason": null,
-        "key": "5uUrpBA81zd1b23jczIz4E",
+        "key": "25sDOLCXFVEPnAdJJaPMUr",
         "revision": 1,
         "contentHash": "713834d8a6b48486d01a04d6bb694709522be968d948522775fef10d1916d41b",
         "semanticRevision": 1,
@@ -51,7 +51,7 @@
         "independence": "INDEPENDENT",
         "conflicts": [],
         "remedy": null,
-        "publicId": "5uUrpBA81zd1b23jczIz4E"
+        "publicId": "25sDOLCXFVEPnAdJJaPMUr"
       }
     ],
     "blockers": {
@@ -64,20 +64,20 @@
       "lineAbsentReason": null,
       "ref": "main",
       "upstreamRef": "main",
-      "upstreamChosenAt": "2026-10-29T01:22:16.167Z",
+      "upstreamChosenAt": "2026-10-29T02:16:13.570Z",
       "source": "EXPLICIT",
       "locked": true,
-      "startedAt": "2026-10-29T01:22:16.485Z",
+      "startedAt": "2026-10-29T02:16:13.918Z",
       "mergeCheckCommand": null,
       "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
       "mergeCheckTimeoutSeconds": null,
       "escalationSeconds": 7200,
       "deliveryMode": "AGENT_PUSH",
-      "deliveryModeChosenAt": "2026-10-29T01:22:16.167Z",
+      "deliveryModeChosenAt": "2026-10-29T02:16:13.570Z",
       "lastMainBranch": {
         "branch": "main",
         "repository": "origin/s2",
-        "chosenAt": "2026-10-29T01:22:16.167Z"
+        "chosenAt": "2026-10-29T02:16:13.570Z"
       }
     },
     "derivedDone": {
@@ -88,7 +88,7 @@
       ],
       "criteria": [
         {
-          "definitionId": "5uUrpBA81zd1b23jczIz4E",
+          "definitionId": "25sDOLCXFVEPnAdJJaPMUr",
           "satisfied": true,
           "landing": "UNKNOWN",
           "independence": "INDEPENDENT",
@@ -98,7 +98,7 @@
           "withheld": [
             "CRITERION_UNLANDED"
           ],
-          "definitionPublicId": "5uUrpBA81zd1b23jczIz4E"
+          "definitionPublicId": "25sDOLCXFVEPnAdJJaPMUr"
         }
       ],
       "confirmation": "CONFIRMED",
@@ -116,31 +116,31 @@
         }
       }
     },
-    "publicId": "34o3fY0BLFOUgQMiJa2PB",
-    "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
-    "coordinatorSessionPublicId": "34o3fY1Y0IjTWKoCMEHAm",
-    "coordinatorWorkspacePublicId": "34o3eFXLWbTfMBQRlvXMt",
-    "coordinatorAgentPublicId": "34o3eFXLWbTfMBQRlvXMt"
+    "publicId": "34o4ze7LxHaYJS4TGzYWq",
+    "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
+    "coordinatorSessionPublicId": "34o4ze9IpYPQP05MNZxlZ",
+    "coordinatorWorkspacePublicId": "34o4v3VhRkqU5zi1DcyWO",
+    "coordinatorAgentPublicId": "34o4v3VhRkqU5zi1DcyWO"
   },
   "integration": {
     "line": "MAIN",
     "lineAbsentReason": null,
     "ref": "main",
     "upstreamRef": "main",
-    "upstreamChosenAt": "2026-10-29T01:22:16.167Z",
+    "upstreamChosenAt": "2026-10-29T02:16:13.570Z",
     "source": "EXPLICIT",
     "locked": true,
-    "startedAt": "2026-10-29T01:22:16.485Z",
+    "startedAt": "2026-10-29T02:16:13.918Z",
     "mergeCheckCommand": null,
     "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
     "mergeCheckTimeoutSeconds": null,
     "escalationSeconds": 7200,
     "deliveryMode": "AGENT_PUSH",
-    "deliveryModeChosenAt": "2026-10-29T01:22:16.167Z",
+    "deliveryModeChosenAt": "2026-10-29T02:16:13.570Z",
     "lastMainBranch": {
       "branch": "main",
       "repository": "origin/s2",
-      "chosenAt": "2026-10-29T01:22:16.167Z"
+      "chosenAt": "2026-10-29T02:16:13.570Z"
     },
     "repository": "origin/s2",
     "branches": {
@@ -148,7 +148,7 @@
         "main"
       ],
       "workspaceName": "r2913-s2",
-      "reportedAt": "2026-10-29T01:23:12.458Z",
+      "reportedAt": "2026-10-29T02:17:13.760Z",
       "agentName": "r2913-s2"
     },
     "commitsAheadOfUpstream": null,
@@ -164,25 +164,25 @@
   },
   "tasks": {
     "C": {
-      "id": "34o3fYBORoF4H2t5yfFO2",
+      "id": "34o4zeEH0k1bJMRjPKytP",
       "title": "S2-C: push a cherry-pick of the work to main",
       "description": "E2E-DO: push-cherry-pick",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3eFXLWbTfMBQRlvXMt",
+      "assigneeId": "34o4v3VhRkqU5zi1DcyWO",
       "listId": null,
-      "projectId": "34o3fY0BLFOUgQMiJa2PB",
+      "projectId": "34o4ze7LxHaYJS4TGzYWq",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
       "sourceTaskId": null,
       "sourceSessionId": null,
       "parentTaskId": null,
-      "acceptanceCriteria": "E2E_WORK.md exists in the run's worktree when the run ends.",
-      "acceptanceCommand": "test -f E2E_WORK.md",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
       "acceptanceExpectedExitCode": 0,
       "acceptanceTimeoutSeconds": 60,
       "completionCriterion": "EXECUTABLE",
@@ -190,7 +190,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "5uUrpBA81zd1b23jczIz4E",
+      "criterionDefinitionId": "25sDOLCXFVEPnAdJJaPMUr",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -234,37 +234,37 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "8321239782714cf5ca3f565e83b293a96b258309",
-      "deliveredBaseSha": "11a1973eb32ec03c9d0870d62be68e5afef843cf",
-      "deliveredBranch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d",
-      "deliveredSessionId": "2Jz0d4y0DSdOoUED097BY7",
-      "deliveredAt": "2026-10-29T01:22:36.555Z",
-      "createdAt": "2026-10-29T01:22:16.138Z",
-      "updatedAt": "2026-10-29T01:22:36.555Z",
+      "deliveredSha": "ba51f23a9d8880005c0c033def52ee908c074c27",
+      "deliveredBaseSha": "d711affec78a0c91beac783cd286a1de27d58718",
+      "deliveredBranch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc",
+      "deliveredSessionId": "4gPt6D9WRgGBxRDz4pRjiF",
+      "deliveredAt": "2026-10-29T02:16:39.777Z",
+      "createdAt": "2026-10-29T02:16:13.546Z",
+      "updatedAt": "2026-10-29T02:16:39.777Z",
       "assignee": {
-        "id": "34o3eFXLWbTfMBQRlvXMt",
+        "id": "34o4v3VhRkqU5zi1DcyWO",
         "name": "r2913-s2",
         "model": null,
-        "publicId": "34o3eFXLWbTfMBQRlvXMt"
+        "publicId": "34o4v3VhRkqU5zi1DcyWO"
       },
       "project": {
-        "id": "34o3fY0BLFOUgQMiJa2PB",
+        "id": "34o4ze7LxHaYJS4TGzYWq",
         "title": "S2 AGENT_PUSH: the agent pushes a cherry-pick",
         "status": "OPEN",
-        "publicId": "34o3fY0BLFOUgQMiJa2PB"
+        "publicId": "34o4ze7LxHaYJS4TGzYWq"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "2Jz0d4y0DSdOoUED097BY7",
+          "id": "4gPt6D9WRgGBxRDz4pRjiF",
           "title": "Task: S2-C: push a cherry-pick of the work to main",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:22:36.514Z",
-          "archivedAt": "2026-10-29T01:22:36.514Z",
+          "completedAt": "2026-10-29T02:16:39.731Z",
+          "archivedAt": "2026-10-29T02:16:39.731Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:22:16.237Z",
+          "createdAt": "2026-10-29T02:16:13.629Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
@@ -276,7 +276,7 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "2Jz0d4y0DSdOoUED097BY7",
+          "publicId": "4gPt6D9WRgGBxRDz4pRjiF",
           "agent": {
             "name": "r2913-s2"
           }
@@ -286,19 +286,19 @@
       "dependsOn": [],
       "dependedOnBy": [
         {
-          "id": "34o3fYDFCx45aSvQQtQt4",
-          "taskId": "34o3fYCYx5NC3UOZkaWEp",
-          "dependsOnTaskId": "34o3fYBORoF4H2t5yfFO2",
-          "createdAt": "2026-10-29T01:22:16.157Z",
+          "id": "34o4zeFpi8pJv4BXcoHBZ",
+          "taskId": "34o4zeFLZVrqfLraHmphr",
+          "dependsOnTaskId": "34o4zeEH0k1bJMRjPKytP",
+          "createdAt": "2026-10-29T02:16:13.562Z",
           "task": {
-            "id": "34o3fYCYx5NC3UOZkaWEp",
+            "id": "34o4zeFLZVrqfLraHmphr",
             "title": "S2-D: waits for S2-C to be on main",
             "status": "DONE",
-            "publicId": "34o3fYCYx5NC3UOZkaWEp"
+            "publicId": "34o4zeFLZVrqfLraHmphr"
           },
-          "publicId": "34o3fYDFCx45aSvQQtQt4",
-          "taskPublicId": "34o3fYCYx5NC3UOZkaWEp",
-          "dependsOnTaskPublicId": "34o3fYBORoF4H2t5yfFO2"
+          "publicId": "34o4zeFpi8pJv4BXcoHBZ",
+          "taskPublicId": "34o4zeFLZVrqfLraHmphr",
+          "dependsOnTaskPublicId": "34o4zeEH0k1bJMRjPKytP"
         }
       ],
       "supersedes": [],
@@ -309,9 +309,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3fYBORoF4H2t5yfFO2",
+        "taskId": "34o4zeEH0k1bJMRjPKytP",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:22:16.138Z",
+        "epochStartedAt": "2026-10-29T02:16:13.546Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -319,7 +319,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3fYBORoF4H2t5yfFO2"
+        "taskPublicId": "34o4zeEH0k1bJMRjPKytP"
       },
       "modelHintOptions": [
         {
@@ -353,7 +353,7 @@
       ],
       "integration": {
         "state": "ON_UPSTREAM",
-        "since": "2026-10-29T01:23:12.456Z",
+        "since": "2026-10-29T02:17:13.759Z",
         "handler": null,
         "openItemId": null,
         "jobId": null,
@@ -368,43 +368,43 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3fYBORoF4H2t5yfFO2",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o4zeEH0k1bJMRjPKytP",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "2Jz0d4y0DSdOoUED097BY7",
+      "deliveredSessionPublicId": "4gPt6D9WRgGBxRDz4pRjiF",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "5uUrpBA81zd1b23jczIz4E",
+      "criterionDefinitionPublicId": "25sDOLCXFVEPnAdJJaPMUr",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3fY0BLFOUgQMiJa2PB",
-      "assigneePublicId": "34o3eFXLWbTfMBQRlvXMt",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o4ze7LxHaYJS4TGzYWq",
+      "assigneePublicId": "34o4v3VhRkqU5zi1DcyWO",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     },
     "D": {
-      "id": "34o3fYCYx5NC3UOZkaWEp",
+      "id": "34o4zeFLZVrqfLraHmphr",
       "title": "S2-D: waits for S2-C to be on main",
       "description": "E2E-DO: push-upstream",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3eFXLWbTfMBQRlvXMt",
+      "assigneeId": "34o4v3VhRkqU5zi1DcyWO",
       "listId": null,
-      "projectId": "34o3fY0BLFOUgQMiJa2PB",
+      "projectId": "34o4ze7LxHaYJS4TGzYWq",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
       "sourceTaskId": null,
       "sourceSessionId": null,
       "parentTaskId": null,
-      "acceptanceCriteria": "E2E_WORK.md exists in the run's worktree when the run ends.",
-      "acceptanceCommand": "test -f E2E_WORK.md",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "acceptanceCommand": "ls E2E_WORK_*.md",
       "acceptanceExpectedExitCode": 0,
       "acceptanceTimeoutSeconds": 60,
       "completionCriterion": "EXECUTABLE",
@@ -412,7 +412,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "5uUrpBA81zd1b23jczIz4E",
+      "criterionDefinitionId": "25sDOLCXFVEPnAdJJaPMUr",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -461,32 +461,32 @@
       "deliveredBranch": null,
       "deliveredSessionId": null,
       "deliveredAt": null,
-      "createdAt": "2026-10-29T01:22:16.150Z",
-      "updatedAt": "2026-10-29T01:23:12.709Z",
+      "createdAt": "2026-10-29T02:16:13.557Z",
+      "updatedAt": "2026-10-29T02:17:14.018Z",
       "assignee": {
-        "id": "34o3eFXLWbTfMBQRlvXMt",
+        "id": "34o4v3VhRkqU5zi1DcyWO",
         "name": "r2913-s2",
         "model": null,
-        "publicId": "34o3eFXLWbTfMBQRlvXMt"
+        "publicId": "34o4v3VhRkqU5zi1DcyWO"
       },
       "project": {
-        "id": "34o3fY0BLFOUgQMiJa2PB",
+        "id": "34o4ze7LxHaYJS4TGzYWq",
         "title": "S2 AGENT_PUSH: the agent pushes a cherry-pick",
         "status": "OPEN",
-        "publicId": "34o3fY0BLFOUgQMiJa2PB"
+        "publicId": "34o4ze7LxHaYJS4TGzYWq"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "51y8ixUkOKDYKSliKscc7v",
+          "id": "6Kpu9PkPX3A2wEjnBiQULZ",
           "title": "Task: S2-D: waits for S2-C to be on main",
           "status": "AWAITING_INPUT",
           "endReason": null,
           "completedAt": null,
           "archivedAt": null,
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:23:12.495Z",
+          "createdAt": "2026-10-29T02:17:13.800Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
@@ -498,7 +498,7 @@
           "lifecycleState": "OPEN",
           "filingState": "OPEN",
           "route": null,
-          "publicId": "51y8ixUkOKDYKSliKscc7v",
+          "publicId": "6Kpu9PkPX3A2wEjnBiQULZ",
           "agent": {
             "name": "r2913-s2"
           }
@@ -507,19 +507,19 @@
       "creatorSession": null,
       "dependsOn": [
         {
-          "id": "34o3fYDFCx45aSvQQtQt4",
-          "taskId": "34o3fYCYx5NC3UOZkaWEp",
-          "dependsOnTaskId": "34o3fYBORoF4H2t5yfFO2",
-          "createdAt": "2026-10-29T01:22:16.157Z",
+          "id": "34o4zeFpi8pJv4BXcoHBZ",
+          "taskId": "34o4zeFLZVrqfLraHmphr",
+          "dependsOnTaskId": "34o4zeEH0k1bJMRjPKytP",
+          "createdAt": "2026-10-29T02:16:13.562Z",
           "dependsOnTask": {
-            "id": "34o3fYBORoF4H2t5yfFO2",
+            "id": "34o4zeEH0k1bJMRjPKytP",
             "title": "S2-C: push a cherry-pick of the work to main",
             "status": "DONE",
-            "publicId": "34o3fYBORoF4H2t5yfFO2"
+            "publicId": "34o4zeEH0k1bJMRjPKytP"
           },
-          "publicId": "34o3fYDFCx45aSvQQtQt4",
-          "taskPublicId": "34o3fYCYx5NC3UOZkaWEp",
-          "dependsOnTaskPublicId": "34o3fYBORoF4H2t5yfFO2"
+          "publicId": "34o4zeFpi8pJv4BXcoHBZ",
+          "taskPublicId": "34o4zeFLZVrqfLraHmphr",
+          "dependsOnTaskPublicId": "34o4zeEH0k1bJMRjPKytP"
         }
       ],
       "dependedOnBy": [],
@@ -531,9 +531,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3fYCYx5NC3UOZkaWEp",
+        "taskId": "34o4zeFLZVrqfLraHmphr",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:22:16.150Z",
+        "epochStartedAt": "2026-10-29T02:16:13.557Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -541,7 +541,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3fYCYx5NC3UOZkaWEp"
+        "taskPublicId": "34o4zeFLZVrqfLraHmphr"
       },
       "modelHintOptions": [
         {
@@ -591,22 +591,22 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3fYCYx5NC3UOZkaWEp",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o4zeFLZVrqfLraHmphr",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
       "deliveredSessionPublicId": null,
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "5uUrpBA81zd1b23jczIz4E",
+      "criterionDefinitionPublicId": "25sDOLCXFVEPnAdJJaPMUr",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3fY0BLFOUgQMiJa2PB",
-      "assigneePublicId": "34o3eFXLWbTfMBQRlvXMt",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o4ze7LxHaYJS4TGzYWq",
+      "assigneePublicId": "34o4v3VhRkqU5zi1DcyWO",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     }
   },
   "openItems": {
@@ -620,17 +620,17 @@
   },
   "receipts": {
     "C": {
-      "sessionId": "2Jz0d4y0DSdOoUED097BY7",
+      "sessionId": "4gPt6D9WRgGBxRDz4pRjiF",
       "receipts": [
         {
-          "id": "34o3gyjHJA4t8PPmPAW94",
-          "sessionId": "2Jz0d4y0DSdOoUED097BY7",
-          "taskId": "34o3fYBORoF4H2t5yfFO2",
-          "projectId": "34o3fY0BLFOUgQMiJa2PB",
+          "id": "34o51AtkDZMqVCvctLk6t",
+          "sessionId": "4gPt6D9WRgGBxRDz4pRjiF",
+          "taskId": "34o4zeEH0k1bJMRjPKytP",
+          "projectId": "34o4ze7LxHaYJS4TGzYWq",
           "result": "ALREADY_MERGED",
           "landed": true,
-          "sourceBranch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-3f8c1d",
-          "sourceSha": "2e33f82a53a8588f82fe989f7641f3e5253c9732",
+          "sourceBranch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc",
+          "sourceSha": "cabb1af6c657a47640c046cfe134da6b9b8df37b",
           "targetBranch": "main",
           "targetShaBefore": null,
           "targetShaAfter": null,
@@ -641,18 +641,18 @@
           "detail": {
             "message": "S2-C reached main as a cherry-pick; this is the commit on main that carries it."
           },
-          "idempotencyKey": "b2a3c15d13abec8375657b5b30379cc3e3dc4502f341c83b066e8f637535731c",
+          "idempotencyKey": "b5aaec40b803505c4fd1cc3606bf5cfb9652cde45dd1ad942fd35b5e505d55bd",
           "checkpointId": null,
-          "createdAt": "2026-10-29T01:23:12.456Z",
-          "publicId": "34o3gyjHJA4t8PPmPAW94",
-          "sessionPublicId": "2Jz0d4y0DSdOoUED097BY7",
-          "taskPublicId": "34o3fYBORoF4H2t5yfFO2",
-          "projectPublicId": "34o3fY0BLFOUgQMiJa2PB",
+          "createdAt": "2026-10-29T02:17:13.759Z",
+          "publicId": "34o51AtkDZMqVCvctLk6t",
+          "sessionPublicId": "4gPt6D9WRgGBxRDz4pRjiF",
+          "taskPublicId": "34o4zeEH0k1bJMRjPKytP",
+          "projectPublicId": "34o4ze7LxHaYJS4TGzYWq",
           "checkpointPublicId": null
         }
       ],
       "receiptsEmptyReason": null,
-      "sessionPublicId": "2Jz0d4y0DSdOoUED097BY7"
+      "sessionPublicId": "4gPt6D9WRgGBxRDz4pRjiF"
     }
   },
   "j9": {

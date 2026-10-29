@@ -1,8 +1,8 @@
 {
   "project": {
-    "id": "34o3qEmd7D075QEuehC7F",
-    "title": "S3 PLATFORM: each candidate is named by its commit (run 3)",
-    "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+    "id": "34o51E8MSi0Nq05bVfUMj",
+    "title": "S3 PLATFORM: each candidate is named by its commit",
+    "ownerId": "34o4tWHWZA8WqPhG8QXO8",
     "goal": "Show a PLATFORM MAIN line naming each candidate by its commit, and a check that finds the work already on main.",
     "instructions": "R29-13 scenario 3. Nobody publishes a task branch. F pushes its work to main itself; E only commits.",
     "status": "OPEN",
@@ -10,8 +10,8 @@
     "doneAt": null,
     "doneCriteriaDigest": null,
     "acceptedGaps": [],
-    "coordinatorSessionId": "34o3qEoTs2n4q7xcJfPKD",
-    "coordinatorWorkspaceId": "34o3pIYSAUcp3Jj00IEuC",
+    "coordinatorSessionId": "34o51EAVGDszIMRkR6hg9",
+    "coordinatorWorkspaceId": "34o4waIlzRjizvBmDeSeH",
     "coordinatorEnabled": false,
     "maxConcurrentTasks": 2,
     "sessionBudgetPerDay": null,
@@ -20,12 +20,12 @@
     "attemptBudget": null,
     "unboundedAuthorizedBy": null,
     "exceptionEscalationSeconds": 7200,
-    "startedAt": "2026-10-29T01:29:17.703Z",
+    "startedAt": "2026-10-29T02:17:15.928Z",
     "pausedAt": null,
     "pausedReason": null,
-    "createdAt": "2026-10-29T01:29:17.570Z",
-    "updatedAt": "2026-10-29T01:31:06.603Z",
-    "coordinatorAgentId": "34o3pIYSAUcp3Jj00IEuC",
+    "createdAt": "2026-10-29T02:17:15.816Z",
+    "updatedAt": "2026-10-29T02:19:09.780Z",
+    "coordinatorAgentId": "34o4waIlzRjizvBmDeSeH",
     "coordinatorGeneration": "0",
     "_count": {
       "tasks": 4
@@ -35,12 +35,12 @@
     },
     "acceptanceCriteriaItems": [
       {
-        "id": "1Wi7RAma9w6lrE3IrGiaX1",
+        "id": "6x3gf0UBrOwwvyRxj5fxAe",
         "ordinal": 1,
         "text": "The work is on main",
         "verificationMethod": "git merge-base --is-ancestor on the origin",
         "completionCriterionOverrideReason": null,
-        "key": "1Wi7RAma9w6lrE3IrGiaX1",
+        "key": "6x3gf0UBrOwwvyRxj5fxAe",
         "revision": 1,
         "contentHash": "792021573c9af31cfe88cbaed5e0e8042cb450d4cdfc0ff16823c2c579d814bd",
         "semanticRevision": 1,
@@ -51,7 +51,7 @@
         "independence": "INDEPENDENT",
         "conflicts": [],
         "remedy": null,
-        "publicId": "1Wi7RAma9w6lrE3IrGiaX1"
+        "publicId": "6x3gf0UBrOwwvyRxj5fxAe"
       }
     ],
     "blockers": {
@@ -64,10 +64,10 @@
       "lineAbsentReason": null,
       "ref": "main",
       "upstreamRef": "main",
-      "upstreamChosenAt": "2026-10-29T01:29:17.702Z",
+      "upstreamChosenAt": "2026-10-29T02:17:15.927Z",
       "source": "EXPLICIT",
       "locked": true,
-      "startedAt": "2026-10-29T01:29:17.980Z",
+      "startedAt": "2026-10-29T02:17:16.191Z",
       "mergeCheckCommand": "test -f README.md",
       "mergeCheckCommandAbsentReason": null,
       "mergeCheckTimeoutSeconds": null,
@@ -76,8 +76,8 @@
       "deliveryModeChosenAt": null,
       "lastMainBranch": {
         "branch": "main",
-        "repository": "origin/s3c",
-        "chosenAt": "2026-10-29T01:29:17.702Z"
+        "repository": "origin/s3",
+        "chosenAt": "2026-10-29T02:17:15.927Z"
       }
     },
     "derivedDone": {
@@ -88,7 +88,7 @@
       ],
       "criteria": [
         {
-          "definitionId": "1Wi7RAma9w6lrE3IrGiaX1",
+          "definitionId": "6x3gf0UBrOwwvyRxj5fxAe",
           "satisfied": true,
           "landing": "UNKNOWN",
           "independence": "INDEPENDENT",
@@ -98,7 +98,7 @@
           "withheld": [
             "CRITERION_UNLANDED"
           ],
-          "definitionPublicId": "1Wi7RAma9w6lrE3IrGiaX1"
+          "definitionPublicId": "6x3gf0UBrOwwvyRxj5fxAe"
         }
       ],
       "confirmation": "CONFIRMED",
@@ -116,21 +116,21 @@
         }
       }
     },
-    "publicId": "34o3qEmd7D075QEuehC7F",
-    "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
-    "coordinatorSessionPublicId": "34o3qEoTs2n4q7xcJfPKD",
-    "coordinatorWorkspacePublicId": "34o3pIYSAUcp3Jj00IEuC",
-    "coordinatorAgentPublicId": "34o3pIYSAUcp3Jj00IEuC"
+    "publicId": "34o51E8MSi0Nq05bVfUMj",
+    "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
+    "coordinatorSessionPublicId": "34o51EAVGDszIMRkR6hg9",
+    "coordinatorWorkspacePublicId": "34o4waIlzRjizvBmDeSeH",
+    "coordinatorAgentPublicId": "34o4waIlzRjizvBmDeSeH"
   },
   "integration": {
     "line": "MAIN",
     "lineAbsentReason": null,
     "ref": "main",
     "upstreamRef": "main",
-    "upstreamChosenAt": "2026-10-29T01:29:17.702Z",
+    "upstreamChosenAt": "2026-10-29T02:17:15.927Z",
     "source": "EXPLICIT",
     "locked": true,
-    "startedAt": "2026-10-29T01:29:17.980Z",
+    "startedAt": "2026-10-29T02:17:16.191Z",
     "mergeCheckCommand": "test -f README.md",
     "mergeCheckCommandAbsentReason": null,
     "mergeCheckTimeoutSeconds": null,
@@ -139,17 +139,17 @@
     "deliveryModeChosenAt": null,
     "lastMainBranch": {
       "branch": "main",
-      "repository": "origin/s3c",
-      "chosenAt": "2026-10-29T01:29:17.702Z"
+      "repository": "origin/s3",
+      "chosenAt": "2026-10-29T02:17:15.927Z"
     },
-    "repository": "origin/s3c",
+    "repository": "origin/s3",
     "branches": {
       "names": [
         "main"
       ],
-      "workspaceName": "r2913-s3c",
-      "reportedAt": "2026-10-29T01:30:06.692Z",
-      "agentName": "r2913-s3c"
+      "workspaceName": "r2913-s3",
+      "reportedAt": "2026-10-29T02:18:09.930Z",
+      "agentName": "r2913-s3"
     },
     "commitsAheadOfUpstream": null,
     "commitsAheadOfUpstreamAbsentReason": "NO_LANDING_YET",
@@ -164,13 +164,13 @@
       "kind": "CHECK_PROMOTION",
       "phase": null,
       "state": "QUEUED",
-      "startedAt": "2026-10-29T01:31:06.823Z",
+      "startedAt": "2026-10-29T02:19:10.016Z",
       "heartbeatAt": null,
       "waitMs": null,
-      "jobId": "5bWNBIUFqWxKQCP1LvNjNc",
-      "landingSessionId": "b2e6155b-13bd-45cd-bae8-b3e6823228e0",
+      "jobId": "42tMBcb6azqPKxp6A7Pd9n",
+      "landingSessionId": "4067f7a6-ee3c-4780-9eb3-4b5727f5f6bc",
       "taskId": null,
-      "promotionId": "6782d4MVkD7FoPqWCKtRiV",
+      "promotionId": "HR54Unfu9n1TS64hThb6w",
       "runner": null,
       "claim": 0,
       "round": null,
@@ -184,23 +184,23 @@
         "code": "WAITING_TASK_WORK",
         "summary": "Waiting to land: the task’s work session is still running, and its branch can still move"
       },
-      "promotionPublicId": "6782d4MVkD7FoPqWCKtRiV",
+      "promotionPublicId": "HR54Unfu9n1TS64hThb6w",
       "taskPublicId": null,
-      "jobPublicId": "5bWNBIUFqWxKQCP1LvNjNc"
+      "jobPublicId": "42tMBcb6azqPKxp6A7Pd9n"
     },
     "inFlightJobs": [
       {
-        "jobId": "5bWNBIUFqWxKQCP1LvNjNc",
+        "jobId": "42tMBcb6azqPKxp6A7Pd9n",
         "kind": "CHECK_PROMOTION",
         "state": "QUEUED",
-        "landingSessionId": "b2e6155b-13bd-45cd-bae8-b3e6823228e0",
+        "landingSessionId": "4067f7a6-ee3c-4780-9eb3-4b5727f5f6bc",
         "phase": null,
         "taskId": null,
         "taskTitle": null,
-        "promotionId": "6782d4MVkD7FoPqWCKtRiV",
+        "promotionId": "HR54Unfu9n1TS64hThb6w",
         "generation": 1,
-        "startedAt": "2026-10-29T01:31:06.823Z",
-        "queuedAt": "2026-10-29T01:31:06.823Z",
+        "startedAt": "2026-10-29T02:19:10.016Z",
+        "queuedAt": "2026-10-29T02:19:10.016Z",
         "heartbeatAt": null,
         "runnerName": null,
         "retriedBy": null,
@@ -219,25 +219,25 @@
           "summary": "Waiting to land: the task’s work session is still running, and its branch can still move"
         },
         "retryable": false,
-        "promotionPublicId": "6782d4MVkD7FoPqWCKtRiV",
+        "promotionPublicId": "HR54Unfu9n1TS64hThb6w",
         "taskPublicId": null,
-        "jobPublicId": "5bWNBIUFqWxKQCP1LvNjNc"
+        "jobPublicId": "42tMBcb6azqPKxp6A7Pd9n"
       }
     ]
   },
   "tasks": {
     "F": {
-      "id": "34o3qEuusiGlG3IxptUIQ",
+      "id": "34o51EFBLrRgrYYpax4K2",
       "title": "S3-F: pushes its work straight to main",
       "description": "E2E-UPSTREAM: origin/main\nE2E-DO: push-upstream",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3pIYSAUcp3Jj00IEuC",
+      "assigneeId": "34o4waIlzRjizvBmDeSeH",
       "listId": null,
-      "projectId": "34o3qEmd7D075QEuehC7F",
+      "projectId": "34o51E8MSi0Nq05bVfUMj",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
@@ -253,7 +253,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionId": "6x3gf0UBrOwwvyRxj5fxAe",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -297,41 +297,41 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "b8a5e4913009a36bf443f584cece0e2457f88176",
-      "deliveredBaseSha": "a929c781829152498dccc0bb0725bbcb261f31df",
-      "deliveredBranch": "orbit/task-s3-f-pushes-its-work-straight-to-ma-c292a9",
-      "deliveredSessionId": "6vgyfPrvGkOszi80FUhZuT",
-      "deliveredAt": "2026-10-29T01:29:36.585Z",
-      "createdAt": "2026-10-29T01:29:17.656Z",
-      "updatedAt": "2026-10-29T01:29:36.585Z",
+      "deliveredSha": "805d6d9f8a86b3093644323f27eff11c92df4314",
+      "deliveredBaseSha": "2f364994772e4df10f2e996104f6b173c2366038",
+      "deliveredBranch": "orbit/task-s3-f-pushes-its-work-straight-to-ma-ff7c30",
+      "deliveredSessionId": "2MIcMEcDwprG7Era8adiGR",
+      "deliveredAt": "2026-10-29T02:17:39.805Z",
+      "createdAt": "2026-10-29T02:17:15.886Z",
+      "updatedAt": "2026-10-29T02:17:39.805Z",
       "assignee": {
-        "id": "34o3pIYSAUcp3Jj00IEuC",
-        "name": "r2913-s3c",
+        "id": "34o4waIlzRjizvBmDeSeH",
+        "name": "r2913-s3",
         "model": null,
-        "publicId": "34o3pIYSAUcp3Jj00IEuC"
+        "publicId": "34o4waIlzRjizvBmDeSeH"
       },
       "project": {
-        "id": "34o3qEmd7D075QEuehC7F",
-        "title": "S3 PLATFORM: each candidate is named by its commit (run 3)",
+        "id": "34o51E8MSi0Nq05bVfUMj",
+        "title": "S3 PLATFORM: each candidate is named by its commit",
         "status": "OPEN",
-        "publicId": "34o3qEmd7D075QEuehC7F"
+        "publicId": "34o51E8MSi0Nq05bVfUMj"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "6vgyfPrvGkOszi80FUhZuT",
+          "id": "2MIcMEcDwprG7Era8adiGR",
           "title": "Task: S3-F: pushes its work straight to main",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:29:36.524Z",
-          "archivedAt": "2026-10-29T01:29:36.524Z",
+          "completedAt": "2026-10-29T02:17:39.755Z",
+          "archivedAt": "2026-10-29T02:17:39.755Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:29:17.746Z",
+          "createdAt": "2026-10-29T02:17:15.965Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           },
           "runStatus": "SUCCEEDED",
           "sessionState": "COMPLETED",
@@ -339,9 +339,9 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "6vgyfPrvGkOszi80FUhZuT",
+          "publicId": "2MIcMEcDwprG7Era8adiGR",
           "agent": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           }
         }
       ],
@@ -349,19 +349,19 @@
       "dependsOn": [],
       "dependedOnBy": [
         {
-          "id": "34o3qEwrdNsZxwcQOUrkg",
-          "taskId": "34o3qEwHVp2KiS4aPsMaJ",
-          "dependsOnTaskId": "34o3qEuusiGlG3IxptUIQ",
-          "createdAt": "2026-10-29T01:29:17.675Z",
+          "id": "34o51EGkBs6oHwFwgLFxN",
+          "taskId": "34o51EG9vshZbotUgjVpo",
+          "dependsOnTaskId": "34o51EFBLrRgrYYpax4K2",
+          "createdAt": "2026-10-29T02:17:15.902Z",
           "task": {
-            "id": "34o3qEwHVp2KiS4aPsMaJ",
+            "id": "34o51EG9vshZbotUgjVpo",
             "title": "S3-F2: starts once S3-F is on main",
             "status": "DONE",
-            "publicId": "34o3qEwHVp2KiS4aPsMaJ"
+            "publicId": "34o51EG9vshZbotUgjVpo"
           },
-          "publicId": "34o3qEwrdNsZxwcQOUrkg",
-          "taskPublicId": "34o3qEwHVp2KiS4aPsMaJ",
-          "dependsOnTaskPublicId": "34o3qEuusiGlG3IxptUIQ"
+          "publicId": "34o51EGkBs6oHwFwgLFxN",
+          "taskPublicId": "34o51EG9vshZbotUgjVpo",
+          "dependsOnTaskPublicId": "34o51EFBLrRgrYYpax4K2"
         }
       ],
       "supersedes": [],
@@ -372,9 +372,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3qEuusiGlG3IxptUIQ",
+        "taskId": "34o51EFBLrRgrYYpax4K2",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:29:17.656Z",
+        "epochStartedAt": "2026-10-29T02:17:15.886Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -382,7 +382,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3qEuusiGlG3IxptUIQ"
+        "taskPublicId": "34o51EFBLrRgrYYpax4K2"
       },
       "modelHintOptions": [
         {
@@ -416,7 +416,7 @@
       ],
       "integration": {
         "state": "ON_UPSTREAM",
-        "since": "2026-10-29T01:29:41.146Z",
+        "since": "2026-10-29T02:17:42.178Z",
         "handler": null,
         "openItemId": null,
         "jobId": null,
@@ -431,35 +431,35 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3qEuusiGlG3IxptUIQ",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o51EFBLrRgrYYpax4K2",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "6vgyfPrvGkOszi80FUhZuT",
+      "deliveredSessionPublicId": "2MIcMEcDwprG7Era8adiGR",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionPublicId": "6x3gf0UBrOwwvyRxj5fxAe",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3qEmd7D075QEuehC7F",
-      "assigneePublicId": "34o3pIYSAUcp3Jj00IEuC",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o51E8MSi0Nq05bVfUMj",
+      "assigneePublicId": "34o4waIlzRjizvBmDeSeH",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     },
     "F2": {
-      "id": "34o3qEwHVp2KiS4aPsMaJ",
+      "id": "34o51EG9vshZbotUgjVpo",
       "title": "S3-F2: starts once S3-F is on main",
       "description": "E2E-DO: commit",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3pIYSAUcp3Jj00IEuC",
+      "assigneeId": "34o4waIlzRjizvBmDeSeH",
       "listId": null,
-      "projectId": "34o3qEmd7D075QEuehC7F",
+      "projectId": "34o51E8MSi0Nq05bVfUMj",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
@@ -475,7 +475,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionId": "6x3gf0UBrOwwvyRxj5fxAe",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -519,41 +519,41 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "1a75be60b38e6262703b89da00bad8ad059c4e37",
-      "deliveredBaseSha": "b8a5e4913009a36bf443f584cece0e2457f88176",
-      "deliveredBranch": "orbit/task-s3-f2-starts-once-s3-f-is-on-main-ad4689",
-      "deliveredSessionId": "4Kl4AjP8bTsWGCq0zClSGD",
-      "deliveredAt": "2026-10-29T01:30:06.579Z",
-      "createdAt": "2026-10-29T01:29:17.669Z",
-      "updatedAt": "2026-10-29T01:30:06.579Z",
+      "deliveredSha": "9db6f75bfcc5fff6a6ec2744b34cf360b363e7c3",
+      "deliveredBaseSha": "805d6d9f8a86b3093644323f27eff11c92df4314",
+      "deliveredBranch": "orbit/task-s3-f2-starts-once-s3-f-is-on-main-9328c8",
+      "deliveredSessionId": "29JmC5rnW2mAWiKEFFyncj",
+      "deliveredAt": "2026-10-29T02:18:09.795Z",
+      "createdAt": "2026-10-29T02:17:15.896Z",
+      "updatedAt": "2026-10-29T02:18:09.795Z",
       "assignee": {
-        "id": "34o3pIYSAUcp3Jj00IEuC",
-        "name": "r2913-s3c",
+        "id": "34o4waIlzRjizvBmDeSeH",
+        "name": "r2913-s3",
         "model": null,
-        "publicId": "34o3pIYSAUcp3Jj00IEuC"
+        "publicId": "34o4waIlzRjizvBmDeSeH"
       },
       "project": {
-        "id": "34o3qEmd7D075QEuehC7F",
-        "title": "S3 PLATFORM: each candidate is named by its commit (run 3)",
+        "id": "34o51E8MSi0Nq05bVfUMj",
+        "title": "S3 PLATFORM: each candidate is named by its commit",
         "status": "OPEN",
-        "publicId": "34o3qEmd7D075QEuehC7F"
+        "publicId": "34o51E8MSi0Nq05bVfUMj"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "4Kl4AjP8bTsWGCq0zClSGD",
+          "id": "29JmC5rnW2mAWiKEFFyncj",
           "title": "Task: S3-F2: starts once S3-F is on main",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:30:06.515Z",
-          "archivedAt": "2026-10-29T01:30:06.515Z",
+          "completedAt": "2026-10-29T02:18:09.734Z",
+          "archivedAt": "2026-10-29T02:18:09.734Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:29:41.217Z",
+          "createdAt": "2026-10-29T02:17:42.259Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           },
           "runStatus": "SUCCEEDED",
           "sessionState": "COMPLETED",
@@ -561,28 +561,28 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "4Kl4AjP8bTsWGCq0zClSGD",
+          "publicId": "29JmC5rnW2mAWiKEFFyncj",
           "agent": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           }
         }
       ],
       "creatorSession": null,
       "dependsOn": [
         {
-          "id": "34o3qEwrdNsZxwcQOUrkg",
-          "taskId": "34o3qEwHVp2KiS4aPsMaJ",
-          "dependsOnTaskId": "34o3qEuusiGlG3IxptUIQ",
-          "createdAt": "2026-10-29T01:29:17.675Z",
+          "id": "34o51EGkBs6oHwFwgLFxN",
+          "taskId": "34o51EG9vshZbotUgjVpo",
+          "dependsOnTaskId": "34o51EFBLrRgrYYpax4K2",
+          "createdAt": "2026-10-29T02:17:15.902Z",
           "dependsOnTask": {
-            "id": "34o3qEuusiGlG3IxptUIQ",
+            "id": "34o51EFBLrRgrYYpax4K2",
             "title": "S3-F: pushes its work straight to main",
             "status": "DONE",
-            "publicId": "34o3qEuusiGlG3IxptUIQ"
+            "publicId": "34o51EFBLrRgrYYpax4K2"
           },
-          "publicId": "34o3qEwrdNsZxwcQOUrkg",
-          "taskPublicId": "34o3qEwHVp2KiS4aPsMaJ",
-          "dependsOnTaskPublicId": "34o3qEuusiGlG3IxptUIQ"
+          "publicId": "34o51EGkBs6oHwFwgLFxN",
+          "taskPublicId": "34o51EG9vshZbotUgjVpo",
+          "dependsOnTaskPublicId": "34o51EFBLrRgrYYpax4K2"
         }
       ],
       "dependedOnBy": [],
@@ -594,9 +594,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3qEwHVp2KiS4aPsMaJ",
+        "taskId": "34o51EG9vshZbotUgjVpo",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:29:17.669Z",
+        "epochStartedAt": "2026-10-29T02:17:15.896Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -604,7 +604,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3qEwHVp2KiS4aPsMaJ"
+        "taskPublicId": "34o51EG9vshZbotUgjVpo"
       },
       "modelHintOptions": [
         {
@@ -653,35 +653,35 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3qEwHVp2KiS4aPsMaJ",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o51EG9vshZbotUgjVpo",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "4Kl4AjP8bTsWGCq0zClSGD",
+      "deliveredSessionPublicId": "29JmC5rnW2mAWiKEFFyncj",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionPublicId": "6x3gf0UBrOwwvyRxj5fxAe",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3qEmd7D075QEuehC7F",
-      "assigneePublicId": "34o3pIYSAUcp3Jj00IEuC",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o51E8MSi0Nq05bVfUMj",
+      "assigneePublicId": "34o4waIlzRjizvBmDeSeH",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     },
     "E": {
-      "id": "34o3qExS24PdtBEj9Dst4",
+      "id": "34o51EHKMerLt46xpDP0s",
       "title": "S3-E: only commits; the platform lands it",
       "description": "E2E-DO: commit",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3pIYSAUcp3Jj00IEuC",
+      "assigneeId": "34o4waIlzRjizvBmDeSeH",
       "listId": null,
-      "projectId": "34o3qEmd7D075QEuehC7F",
+      "projectId": "34o51E8MSi0Nq05bVfUMj",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
@@ -697,7 +697,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionId": "6x3gf0UBrOwwvyRxj5fxAe",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -741,41 +741,41 @@
       "codeless": false,
       "codelessReason": null,
       "dispatchRefusal": null,
-      "deliveredSha": "ca3d193d08f5763fe056d8d2a64304803e6abe58",
-      "deliveredBaseSha": "b8a5e4913009a36bf443f584cece0e2457f88176",
-      "deliveredBranch": "orbit/task-s3-e-only-commits-the-platform-land-b8debc",
-      "deliveredSessionId": "4J3WOoScwH6M47NSOQpavV",
-      "deliveredAt": "2026-10-29T01:30:06.702Z",
-      "createdAt": "2026-10-29T01:29:17.681Z",
-      "updatedAt": "2026-10-29T01:30:06.702Z",
+      "deliveredSha": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937",
+      "deliveredBaseSha": "805d6d9f8a86b3093644323f27eff11c92df4314",
+      "deliveredBranch": "orbit/task-s3-e-only-commits-the-platform-land-bd5990",
+      "deliveredSessionId": "3mcPEJtaZsfVMujTIPfnGA",
+      "deliveredAt": "2026-10-29T02:18:09.946Z",
+      "createdAt": "2026-10-29T02:17:15.908Z",
+      "updatedAt": "2026-10-29T02:18:09.946Z",
       "assignee": {
-        "id": "34o3pIYSAUcp3Jj00IEuC",
-        "name": "r2913-s3c",
+        "id": "34o4waIlzRjizvBmDeSeH",
+        "name": "r2913-s3",
         "model": null,
-        "publicId": "34o3pIYSAUcp3Jj00IEuC"
+        "publicId": "34o4waIlzRjizvBmDeSeH"
       },
       "project": {
-        "id": "34o3qEmd7D075QEuehC7F",
-        "title": "S3 PLATFORM: each candidate is named by its commit (run 3)",
+        "id": "34o51E8MSi0Nq05bVfUMj",
+        "title": "S3 PLATFORM: each candidate is named by its commit",
         "status": "OPEN",
-        "publicId": "34o3qEmd7D075QEuehC7F"
+        "publicId": "34o51E8MSi0Nq05bVfUMj"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "4J3WOoScwH6M47NSOQpavV",
+          "id": "3mcPEJtaZsfVMujTIPfnGA",
           "title": "Task: S3-E: only commits; the platform lands it",
           "status": "SUCCEEDED",
           "endReason": "task_done",
-          "completedAt": "2026-10-29T01:30:06.525Z",
-          "archivedAt": "2026-10-29T01:30:06.525Z",
+          "completedAt": "2026-10-29T02:18:09.747Z",
+          "archivedAt": "2026-10-29T02:18:09.747Z",
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:29:41.644Z",
+          "createdAt": "2026-10-29T02:17:43.976Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           },
           "runStatus": "SUCCEEDED",
           "sessionState": "COMPLETED",
@@ -783,9 +783,9 @@
           "lifecycleState": "COMPLETED",
           "filingState": "ARCHIVED",
           "route": null,
-          "publicId": "4J3WOoScwH6M47NSOQpavV",
+          "publicId": "3mcPEJtaZsfVMujTIPfnGA",
           "agent": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           }
         }
       ],
@@ -793,19 +793,19 @@
       "dependsOn": [],
       "dependedOnBy": [
         {
-          "id": "34o3qEyodTxEBUeDrnt5Q",
-          "taskId": "34o3qEycZUVTgUdRGyVJJ",
-          "dependsOnTaskId": "34o3qExS24PdtBEj9Dst4",
-          "createdAt": "2026-10-29T01:29:17.695Z",
+          "id": "34o51EIOqxU6NzXzjgBcr",
+          "taskId": "34o51EHoWVZoHKiU1dCuG",
+          "dependsOnTaskId": "34o51EHKMerLt46xpDP0s",
+          "createdAt": "2026-10-29T02:17:15.919Z",
           "task": {
-            "id": "34o3qEycZUVTgUdRGyVJJ",
+            "id": "34o51EHoWVZoHKiU1dCuG",
             "title": "S3-E2: starts once S3-E has landed",
             "status": "DONE",
-            "publicId": "34o3qEycZUVTgUdRGyVJJ"
+            "publicId": "34o51EHoWVZoHKiU1dCuG"
           },
-          "publicId": "34o3qEyodTxEBUeDrnt5Q",
-          "taskPublicId": "34o3qEycZUVTgUdRGyVJJ",
-          "dependsOnTaskPublicId": "34o3qExS24PdtBEj9Dst4"
+          "publicId": "34o51EIOqxU6NzXzjgBcr",
+          "taskPublicId": "34o51EHoWVZoHKiU1dCuG",
+          "dependsOnTaskPublicId": "34o51EHKMerLt46xpDP0s"
         }
       ],
       "supersedes": [],
@@ -816,9 +816,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3qExS24PdtBEj9Dst4",
+        "taskId": "34o51EHKMerLt46xpDP0s",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:29:17.681Z",
+        "epochStartedAt": "2026-10-29T02:17:15.908Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -826,7 +826,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3qExS24PdtBEj9Dst4"
+        "taskPublicId": "34o51EHKMerLt46xpDP0s"
       },
       "modelHintOptions": [
         {
@@ -860,7 +860,7 @@
       ],
       "integration": {
         "state": "ON_UPSTREAM",
-        "since": "2026-10-29T01:30:42.347Z",
+        "since": "2026-10-29T02:18:44.730Z",
         "handler": null,
         "openItemId": null,
         "jobId": null,
@@ -875,35 +875,35 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3qExS24PdtBEj9Dst4",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o51EHKMerLt46xpDP0s",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
-      "deliveredSessionPublicId": "4J3WOoScwH6M47NSOQpavV",
+      "deliveredSessionPublicId": "3mcPEJtaZsfVMujTIPfnGA",
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionPublicId": "6x3gf0UBrOwwvyRxj5fxAe",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3qEmd7D075QEuehC7F",
-      "assigneePublicId": "34o3pIYSAUcp3Jj00IEuC",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o51E8MSi0Nq05bVfUMj",
+      "assigneePublicId": "34o4waIlzRjizvBmDeSeH",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     },
     "E2": {
-      "id": "34o3qEycZUVTgUdRGyVJJ",
+      "id": "34o51EHoWVZoHKiU1dCuG",
       "title": "S3-E2: starts once S3-E has landed",
       "description": "E2E-DO: commit",
       "status": "DONE",
-      "ownerId": "34o3UlWlFzrK9XaLe3Njk",
+      "ownerId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorType": "USER",
-      "creatorId": "34o3UlWlFzrK9XaLe3Njk",
+      "creatorId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionId": null,
-      "assigneeId": "34o3pIYSAUcp3Jj00IEuC",
+      "assigneeId": "34o4waIlzRjizvBmDeSeH",
       "listId": null,
-      "projectId": "34o3qEmd7D075QEuehC7F",
+      "projectId": "34o51E8MSi0Nq05bVfUMj",
       "fixesOpenItemId": null,
       "discoveredFromProjectId": null,
       "triggerEvent": null,
@@ -919,7 +919,7 @@
       "completionCriterionOverrideReason": null,
       "ownerConfirmationReason": null,
       "ownerConfirmationReasonNote": null,
-      "criterionDefinitionId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionId": "6x3gf0UBrOwwvyRxj5fxAe",
       "criterionRevision": 1,
       "labels": [],
       "dueDate": null,
@@ -968,36 +968,36 @@
       "deliveredBranch": null,
       "deliveredSessionId": null,
       "deliveredAt": null,
-      "createdAt": "2026-10-29T01:29:17.693Z",
-      "updatedAt": "2026-10-29T01:31:06.812Z",
+      "createdAt": "2026-10-29T02:17:15.913Z",
+      "updatedAt": "2026-10-29T02:19:10.004Z",
       "assignee": {
-        "id": "34o3pIYSAUcp3Jj00IEuC",
-        "name": "r2913-s3c",
+        "id": "34o4waIlzRjizvBmDeSeH",
+        "name": "r2913-s3",
         "model": null,
-        "publicId": "34o3pIYSAUcp3Jj00IEuC"
+        "publicId": "34o4waIlzRjizvBmDeSeH"
       },
       "project": {
-        "id": "34o3qEmd7D075QEuehC7F",
-        "title": "S3 PLATFORM: each candidate is named by its commit (run 3)",
+        "id": "34o51E8MSi0Nq05bVfUMj",
+        "title": "S3 PLATFORM: each candidate is named by its commit",
         "status": "OPEN",
-        "publicId": "34o3qEmd7D075QEuehC7F"
+        "publicId": "34o51E8MSi0Nq05bVfUMj"
       },
       "comments": [],
       "attachments": [],
       "sessions": [
         {
-          "id": "395GoUcnjAHzo6qnripJa2",
+          "id": "5VBdmojDsKvo3gIQl6gigD",
           "title": "Task: S3-E2: starts once S3-E has landed",
           "status": "AWAITING_INPUT",
           "endReason": null,
           "completedAt": null,
           "archivedAt": null,
           "deletedAt": null,
-          "createdAt": "2026-10-29T01:31:06.604Z",
+          "createdAt": "2026-10-29T02:19:09.781Z",
           "model": "claude-opus-(r2913-fake)",
           "effort": null,
           "workspace": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           },
           "runStatus": "AWAITING_INPUT",
           "sessionState": "AWAITING_INPUT",
@@ -1005,28 +1005,28 @@
           "lifecycleState": "OPEN",
           "filingState": "OPEN",
           "route": null,
-          "publicId": "395GoUcnjAHzo6qnripJa2",
+          "publicId": "5VBdmojDsKvo3gIQl6gigD",
           "agent": {
-            "name": "r2913-s3c"
+            "name": "r2913-s3"
           }
         }
       ],
       "creatorSession": null,
       "dependsOn": [
         {
-          "id": "34o3qEyodTxEBUeDrnt5Q",
-          "taskId": "34o3qEycZUVTgUdRGyVJJ",
-          "dependsOnTaskId": "34o3qExS24PdtBEj9Dst4",
-          "createdAt": "2026-10-29T01:29:17.695Z",
+          "id": "34o51EIOqxU6NzXzjgBcr",
+          "taskId": "34o51EHoWVZoHKiU1dCuG",
+          "dependsOnTaskId": "34o51EHKMerLt46xpDP0s",
+          "createdAt": "2026-10-29T02:17:15.919Z",
           "dependsOnTask": {
-            "id": "34o3qExS24PdtBEj9Dst4",
+            "id": "34o51EHKMerLt46xpDP0s",
             "title": "S3-E: only commits; the platform lands it",
             "status": "DONE",
-            "publicId": "34o3qExS24PdtBEj9Dst4"
+            "publicId": "34o51EHKMerLt46xpDP0s"
           },
-          "publicId": "34o3qEyodTxEBUeDrnt5Q",
-          "taskPublicId": "34o3qEycZUVTgUdRGyVJJ",
-          "dependsOnTaskPublicId": "34o3qExS24PdtBEj9Dst4"
+          "publicId": "34o51EIOqxU6NzXzjgBcr",
+          "taskPublicId": "34o51EHoWVZoHKiU1dCuG",
+          "dependsOnTaskPublicId": "34o51EHKMerLt46xpDP0s"
         }
       ],
       "dependedOnBy": [],
@@ -1038,9 +1038,9 @@
       "verificationState": null,
       "verifier": null,
       "progress": {
-        "taskId": "34o3qEycZUVTgUdRGyVJJ",
+        "taskId": "34o51EHoWVZoHKiU1dCuG",
         "lifecycleEpoch": 0,
-        "epochStartedAt": "2026-10-29T01:29:17.693Z",
+        "epochStartedAt": "2026-10-29T02:17:15.913Z",
         "phase": null,
         "current": null,
         "total": null,
@@ -1048,7 +1048,7 @@
         "revision": 0,
         "lastProgressAt": null,
         "updatedAt": null,
-        "taskPublicId": "34o3qEycZUVTgUdRGyVJJ"
+        "taskPublicId": "34o51EHoWVZoHKiU1dCuG"
       },
       "modelHintOptions": [
         {
@@ -1097,44 +1097,44 @@
       "supersedesEmptyReason": "SUPERSEDES_NOTHING",
       "successorChain": [],
       "successorChainTruncated": false,
-      "publicId": "34o3qEycZUVTgUdRGyVJJ",
-      "ownerPublicId": "34o3UlWlFzrK9XaLe3Njk",
+      "publicId": "34o51EHoWVZoHKiU1dCuG",
+      "ownerPublicId": "34o4tWHWZA8WqPhG8QXO8",
       "creatorSessionPublicId": null,
       "deliveredSessionPublicId": null,
       "fixesOpenItemPublicId": null,
       "sourceTaskPublicId": null,
       "verifiesTaskPublicId": null,
       "supersededByTaskPublicId": null,
-      "criterionDefinitionPublicId": "1Wi7RAma9w6lrE3IrGiaX1",
+      "criterionDefinitionPublicId": "6x3gf0UBrOwwvyRxj5fxAe",
       "discoveredFromProjectPublicId": null,
       "sourceSessionPublicId": null,
       "parentTaskPublicId": null,
       "listPublicId": null,
-      "projectPublicId": "34o3qEmd7D075QEuehC7F",
-      "assigneePublicId": "34o3pIYSAUcp3Jj00IEuC",
-      "creatorPublicId": "34o3UlWlFzrK9XaLe3Njk"
+      "projectPublicId": "34o51E8MSi0Nq05bVfUMj",
+      "assigneePublicId": "34o4waIlzRjizvBmDeSeH",
+      "creatorPublicId": "34o4tWHWZA8WqPhG8QXO8"
     }
   },
   "openItems": {
     "needsYou": [
       {
-        "itemId": "34o3qprhMx276ZfL1aBQV",
+        "itemId": "34o51tbCYsEZFHkiGcYZG",
         "kind": "LANDED_WITHOUT_CONFIRMATION",
         "title": "Reached main without your confirmation: S3-F: pushes its work straight to main",
-        "detailLine": "b8a5e4913009 is on main · seen by Orbit",
+        "detailLine": "805d6d9f8a86 is on main · seen by Orbit",
         "question": null,
         "startRequest": null,
         "doneRequest": null,
         "facts": null,
         "assignee": "OWNER",
         "assigneeReason": "DEFAULT",
-        "waitingSince": "2026-10-29T01:29:41.155Z",
+        "waitingSince": "2026-10-29T02:17:42.188Z",
         "escalateAt": null,
         "escalatedAt": null,
         "handoverNote": null,
-        "taskId": "34o3qEuusiGlG3IxptUIQ",
+        "taskId": "34o51EFBLrRgrYYpax4K2",
         "handledBy": [],
-        "sessionId": "6vgyfPrvGkOszi80FUhZuT",
+        "sessionId": "2MIcMEcDwprG7Era8adiGR",
         "landingSessionId": null,
         "integrationJobId": null,
         "lease": null,
@@ -1155,20 +1155,20 @@
         "handling": null,
         "outcome": null,
         "chat": {
-          "sessionId": "34o3qEoTs2n4q7xcJfPKD",
+          "sessionId": "34o51EAVGDszIMRkR6hg9",
           "stage": "WITH_OWNER",
           "refusal": null,
-          "sessionPublicId": "34o3qEoTs2n4q7xcJfPKD"
+          "sessionPublicId": "34o51EAVGDszIMRkR6hg9"
         },
-        "sessionPublicId": "6vgyfPrvGkOszi80FUhZuT",
-        "itemPublicId": "34o3qprhMx276ZfL1aBQV",
+        "sessionPublicId": "2MIcMEcDwprG7Era8adiGR",
+        "itemPublicId": "34o51tbCYsEZFHkiGcYZG",
         "integrationJobPublicId": null,
         "promotionPublicId": null,
         "fuseEpisodePublicId": null,
-        "taskPublicId": "34o3qEuusiGlG3IxptUIQ"
+        "taskPublicId": "34o51EFBLrRgrYYpax4K2"
       },
       {
-        "itemId": "34o3rb49JpDNcRFSJ57BQ",
+        "itemId": "34o52enYY0aykutbfuqZ9",
         "kind": "PROMOTION_APPROVAL",
         "title": "Merge 1 task into main?",
         "detailLine": "",
@@ -1178,17 +1178,17 @@
         "facts": null,
         "assignee": "OWNER",
         "assigneeReason": "DEFAULT",
-        "waitingSince": "2026-10-29T01:30:11.176Z",
+        "waitingSince": "2026-10-29T02:18:12.209Z",
         "escalateAt": null,
         "escalatedAt": null,
         "handoverNote": null,
         "taskId": null,
         "handledBy": [],
-        "sessionId": "4Kl4AjP8bTsWGCq0zClSGD",
+        "sessionId": "29JmC5rnW2mAWiKEFFyncj",
         "landingSessionId": null,
         "integrationJobId": null,
         "lease": null,
-        "promotionId": "lS7j3TegWcnnKFBp5WZPM",
+        "promotionId": "4UdnmKRCkqQZ4D1Byznglc",
         "fuseEpisodeId": null,
         "delivery": {
           "state": "NOT_REQUIRED",
@@ -1204,15 +1204,15 @@
         "handling": null,
         "outcome": null,
         "chat": {
-          "sessionId": "34o3qEoTs2n4q7xcJfPKD",
+          "sessionId": "34o51EAVGDszIMRkR6hg9",
           "stage": "WITH_OWNER",
           "refusal": null,
-          "sessionPublicId": "34o3qEoTs2n4q7xcJfPKD"
+          "sessionPublicId": "34o51EAVGDszIMRkR6hg9"
         },
-        "sessionPublicId": "4Kl4AjP8bTsWGCq0zClSGD",
-        "itemPublicId": "34o3rb49JpDNcRFSJ57BQ",
+        "sessionPublicId": "29JmC5rnW2mAWiKEFFyncj",
+        "itemPublicId": "34o52enYY0aykutbfuqZ9",
         "integrationJobPublicId": null,
-        "promotionPublicId": "lS7j3TegWcnnKFBp5WZPM",
+        "promotionPublicId": "4UdnmKRCkqQZ4D1Byznglc",
         "fuseEpisodePublicId": null,
         "taskPublicId": null
       }
@@ -1226,23 +1226,23 @@
   },
   "promotionsMerged": [
     {
-      "promotionId": "gOWCI6iLw7VzEDO3eFzIG",
+      "promotionId": "6ryY8Wm9Eg9Loh2gyywPQf",
       "state": "MERGED",
       "sourceKind": "TASK_BRANCH",
-      "sourceRef": "refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc",
-      "sourceSha": "ca3d193d08f5763fe056d8d2a64304803e6abe58",
+      "sourceRef": "refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990",
+      "sourceSha": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937",
       "upstreamRef": "refs/heads/main",
       "commitsAhead": 1,
       "filesChanged": 1,
       "tasks": [
         {
-          "taskId": "34o3qExS24PdtBEj9Dst4",
+          "taskId": "34o51EHKMerLt46xpDP0s",
           "title": "S3-E: only commits; the platform lands it",
-          "taskPublicId": "34o3qExS24PdtBEj9Dst4"
+          "taskPublicId": "34o51EHKMerLt46xpDP0s"
         }
       ],
       "taskIds": [
-        "34o3qExS24PdtBEj9Dst4"
+        "34o51EHKMerLt46xpDP0s"
       ],
       "checks": [
         {
@@ -1250,8 +1250,8 @@
           "command": "ls E2E_WORK_*.md",
           "exitCode": 0,
           "timedOut": false,
-          "durationMs": 11,
-          "outputTail": "E2E_WORK_34o3qEuusiGlG3IxptUIQ.md\nE2E_WORK_34o3qExS24PdtBEj9Dst4.md\n",
+          "durationMs": 12,
+          "outputTail": "E2E_WORK_34o51EFBLrRgrYYpax4K2.md\nE2E_WORK_34o51EHKMerLt46xpDP0s.md\n",
           "expectedExitCode": 0
         },
         {
@@ -1270,28 +1270,28 @@
         "syncedAt": null,
         "conflicts": false
       },
-      "upstreamShaChecked": "b8a5e4913009a36bf443f584cece0e2457f88176",
-      "landsTreeSha": "866a0020f57a74791ed82c57d0c425c8adabebfa",
+      "upstreamShaChecked": "805d6d9f8a86b3093644323f27eff11c92df4314",
+      "landsTreeSha": "6f35623690a4714048487bd5f3354df297cee378",
       "landsAs": "FAST_FORWARD",
-      "askedAt": "2026-10-29T01:30:42.352Z",
+      "askedAt": "2026-10-29T02:18:44.735Z",
       "recheckedAt": null,
       "recheck": null,
-      "landingSessionId": "1ab2361e-3d83-44a2-ac7f-4953e718da2b",
+      "landingSessionId": "9c80d6ac-8f52-4557-8392-8e9e3e1cb8b5",
       "onPass": null,
       "execution": null,
       "cancelRequested": false,
       "pushBoundaryPassed": false,
-      "decidedAt": "2026-10-29T01:30:42.341Z",
+      "decidedAt": "2026-10-29T02:18:44.724Z",
       "merged": {
-        "sha": "ca3d193d08f5763fe056d8d2a64304803e6abe58",
-        "byUserId": "01a18539-a887-75da-9669-d6962ca1b6b8",
-        "at": "2026-10-29T01:30:42.341Z",
+        "sha": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937",
+        "byUserId": "01a1856d-dbf1-76ff-8c4e-59ce13e6934c",
+        "at": "2026-10-29T02:18:44.724Z",
         "automatic": false,
         "revert": null
       },
-      "promotionPublicId": "gOWCI6iLw7VzEDO3eFzIG",
+      "promotionPublicId": "6ryY8Wm9Eg9Loh2gyywPQf",
       "taskPublicIds": [
-        "34o3qExS24PdtBEj9Dst4"
+        "34o51EHKMerLt46xpDP0s"
       ]
     }
   ]

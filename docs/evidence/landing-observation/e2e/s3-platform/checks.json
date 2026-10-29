@@ -17,7 +17,7 @@
   {
     "name": "candidate source_sha = delivered_sha (O-L5)",
     "ok": true,
-    "detail": "b8a5e4913009a36bf443f584cece0e2457f88176"
+    "detail": "805d6d9f8a86b3093644323f27eff11c92df4314"
   },
   {
     "name": "the check answered ALREADY_LANDED",
@@ -32,7 +32,7 @@
   {
     "name": "a receipt: ALREADY_MERGED on main, by the RUNNER, detail.observed + integrationJobId",
     "ok": true,
-    "detail": "ALREADY_MERGED main RUNNER b8a5e4913009a36bf443f584cece0e2457f88176 {\"observed\": true, \"integrationJobId\": \"a9370543-2539-4b3d-a442-2bc8c1a89a3a\"}"
+    "detail": "ALREADY_MERGED main RUNNER 805d6d9f8a86b3093644323f27eff11c92df4314 {\"observed\": true, \"integrationJobId\": \"81e80389-3865-4a58-8d92-635edc0e6e00\"}"
   },
   {
     "name": "LANDED_WITHOUT_CONFIRMATION is the owner's, titled for the task",
@@ -47,7 +47,7 @@
   {
     "name": "S3-F2 started by itself (J9 released by the check's receipt, J10)",
     "ok": true,
-    "detail": "session 4Kl4AjP8bTsWGCq0zClSGD"
+    "detail": "session 29JmC5rnW2mAWiKEFFyncj"
   },
   {
     "name": "S3-E is DONE",
@@ -57,7 +57,7 @@
   {
     "name": "S3-E's candidate source_sha = its commit",
     "ok": true,
-    "detail": "ca3d193d08f5763fe056d8d2a64304803e6abe58"
+    "detail": "de7c79df43bbd9d2fb8eb78092692dc11d6ea937"
   },
   {
     "name": "the check by commit answered READY (no SOURCE_BRANCH_MISSING for the unpublished branch)",
@@ -67,7 +67,7 @@
   {
     "name": "the runner was handed the check with sourceSha = the commit (wire log)",
     "ok": true,
-    "detail": "CHECK_PROMOTION TASK_BRANCH refs/heads/orbit/task-s3-e-only-commits-the-platform-land-b8debc sourceSha=ca3d193d08f5763fe056d8d2a64304803e6abe58"
+    "detail": "CHECK_PROMOTION TASK_BRANCH refs/heads/orbit/task-s3-e-only-commits-the-platform-land-bd5990 sourceSha=de7c79df43bbd9d2fb8eb78092692dc11d6ea937"
   },
   {
     "name": "the owner's confirmation is accepted",
@@ -77,7 +77,7 @@
   {
     "name": "LAND_PROMOTION landed it",
     "ok": true,
-    "detail": "LANDED - ca3d193d08f5763fe056d8d2a64304803e6abe58"
+    "detail": "LANDED - de7c79df43bbd9d2fb8eb78092692dc11d6ea937"
   },
   {
     "name": "the runner was handed the landing with sourceSha = the commit (wire log)",
@@ -92,7 +92,7 @@
   {
     "name": "S3-E2 started by itself after the landing (J10)",
     "ok": true,
-    "detail": "session 395GoUcnjAHzo6qnripJa2"
+    "detail": "session 5VBdmojDsKvo3gIQl6gigD"
   },
   {
     "name": "no candidate BLOCKED",

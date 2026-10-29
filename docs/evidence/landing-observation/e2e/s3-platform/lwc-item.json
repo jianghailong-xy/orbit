@@ -1,21 +1,21 @@
 {
-  "itemId": "34o3qprhMx276ZfL1aBQV",
+  "itemId": "34o51tbCYsEZFHkiGcYZG",
   "kind": "LANDED_WITHOUT_CONFIRMATION",
   "title": "Reached main without your confirmation: S3-F: pushes its work straight to main",
-  "detailLine": "b8a5e4913009 is on main · seen by Orbit",
+  "detailLine": "805d6d9f8a86 is on main · seen by Orbit",
   "question": null,
   "startRequest": null,
   "doneRequest": null,
   "facts": null,
   "assignee": "OWNER",
   "assigneeReason": "DEFAULT",
-  "waitingSince": "2026-10-29T01:29:41.155Z",
+  "waitingSince": "2026-10-29T02:17:42.188Z",
   "escalateAt": null,
   "escalatedAt": null,
   "handoverNote": null,
-  "taskId": "34o3qEuusiGlG3IxptUIQ",
+  "taskId": "34o51EFBLrRgrYYpax4K2",
   "handledBy": [],
-  "sessionId": "6vgyfPrvGkOszi80FUhZuT",
+  "sessionId": "2MIcMEcDwprG7Era8adiGR",
   "landingSessionId": null,
   "integrationJobId": null,
   "lease": null,
@@ -36,15 +36,15 @@
   "handling": null,
   "outcome": null,
   "chat": {
-    "sessionId": "34o3qEoTs2n4q7xcJfPKD",
+    "sessionId": "34o51EAVGDszIMRkR6hg9",
     "stage": "WITH_OWNER",
     "refusal": null,
-    "sessionPublicId": "34o3qEoTs2n4q7xcJfPKD"
+    "sessionPublicId": "34o51EAVGDszIMRkR6hg9"
   },
-  "sessionPublicId": "6vgyfPrvGkOszi80FUhZuT",
-  "itemPublicId": "34o3qprhMx276ZfL1aBQV",
+  "sessionPublicId": "2MIcMEcDwprG7Era8adiGR",
+  "itemPublicId": "34o51tbCYsEZFHkiGcYZG",
   "integrationJobPublicId": null,
   "promotionPublicId": null,
   "fuseEpisodePublicId": null,
-  "taskPublicId": "34o3qEuusiGlG3IxptUIQ"
+  "taskPublicId": "34o51EFBLrRgrYYpax4K2"
 }

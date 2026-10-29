@@ -37,8 +37,8 @@ const key = p.acceptanceCriteriaItems[0].key;
 const taskBody = (title, extra) => ({
   projectId: p.id, assigneeId: ws.id, title, criterionKey: key,
   description: 'E2E-DO: push-upstream',
-  acceptanceCriteria: 'E2E_WORK.md exists in the run\'s worktree when the run ends.',
-  completionCriterion: 'EXECUTABLE', acceptanceCommand: 'test -f E2E_WORK.md', acceptanceExpectedExitCode: 0, acceptanceTimeoutSeconds: 60,
+  acceptanceCriteria: 'The run left its work file in the worktree.',
+  completionCriterion: 'EXECUTABLE', acceptanceCommand: 'ls E2E_WORK_*.md', acceptanceExpectedExitCode: 0, acceptanceTimeoutSeconds: 60,
   ...extra,
 });
 const A = await call('POST', '/tasks', T, taskBody('S1-A: write the work and push it to main', { autoRunWhenReady: false }));

@@ -1,21 +1,21 @@
 {
-  "itemId": "34o3gBRxSd1jjLTB4CIye",
+  "itemId": "34o50NCOpsNwI4R5xaVkm",
   "kind": "LANDING_UNOBSERVED",
   "title": "Not on main yet: S2-C: push a cherry-pick of the work to main",
-  "detailLine": "Its changes are there as other commits · delivered 832123978271",
+  "detailLine": "Its changes are there as other commits · delivered ba51f23a9d88",
   "question": null,
   "startRequest": null,
   "doneRequest": null,
   "facts": null,
   "assignee": "COORDINATOR",
   "assigneeReason": "DEFAULT",
-  "waitingSince": "2026-10-29T01:22:41.112Z",
+  "waitingSince": "2026-10-29T02:16:42.147Z",
   "escalateAt": null,
   "escalatedAt": null,
   "handoverNote": null,
-  "taskId": "34o3fYBORoF4H2t5yfFO2",
+  "taskId": "34o4zeEH0k1bJMRjPKytP",
   "handledBy": [],
-  "sessionId": "2Jz0d4y0DSdOoUED097BY7",
+  "sessionId": "4gPt6D9WRgGBxRDz4pRjiF",
   "landingSessionId": null,
   "integrationJobId": null,
   "lease": null,
@@ -23,9 +23,9 @@
   "fuseEpisodeId": null,
   "delivery": {
     "state": "DELIVERED",
-    "sessionId": "34o3fY1Y0IjTWKoCMEHAm",
-    "at": "2026-10-29T01:22:41.153Z",
-    "sessionPublicId": "34o3fY1Y0IjTWKoCMEHAm"
+    "sessionId": "34o4ze9IpYPQP05MNZxlZ",
+    "at": "2026-10-29T02:16:42.186Z",
+    "sessionPublicId": "34o4ze9IpYPQP05MNZxlZ"
   },
   "actions": [
     "OPEN_COORDINATOR",
@@ -38,15 +38,15 @@
   "handling": null,
   "outcome": null,
   "chat": {
-    "sessionId": "34o3fY1Y0IjTWKoCMEHAm",
+    "sessionId": "34o4ze9IpYPQP05MNZxlZ",
     "stage": "WITH_COORDINATOR",
     "refusal": null,
-    "sessionPublicId": "34o3fY1Y0IjTWKoCMEHAm"
+    "sessionPublicId": "34o4ze9IpYPQP05MNZxlZ"
   },
-  "sessionPublicId": "2Jz0d4y0DSdOoUED097BY7",
-  "itemPublicId": "34o3gBRxSd1jjLTB4CIye",
+  "sessionPublicId": "4gPt6D9WRgGBxRDz4pRjiF",
+  "itemPublicId": "34o50NCOpsNwI4R5xaVkm",
   "integrationJobPublicId": null,
   "promotionPublicId": null,
   "fuseEpisodePublicId": null,
-  "taskPublicId": "34o3fYBORoF4H2t5yfFO2"
+  "taskPublicId": "34o4zeEH0k1bJMRjPKytP"
 }
