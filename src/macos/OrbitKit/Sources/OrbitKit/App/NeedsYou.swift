@@ -18,7 +18,7 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// Where a tap goes: the session blocked the longest. Clearing it leaves the banner pointing at
     /// the next one, which is what makes this an inbox rather than a notification.
     public let target: Session
-    /// The bar's first line, what is waiting: one of the four by its word, or the sentence for a
+    /// The bar's first line, what is waiting: one of the five by its word, or the sentence for a
     /// blocked session ("wikova-develop needs you", "2 sessions need you").
     public let text: String
     /// The second line, where: the project an owner item stops, or the conversation a press opens.
@@ -28,9 +28,9 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// Since when the thing the first line names has waited (ISO-8601): an owner item's own `since`,
     /// or the conversation's last state move, which is when it stopped to ask.
     public let since: String?
-    /// The owner item the line is about, when the oldest thing waiting is one of the four (§7.6
+    /// The owner item the line is about, when the oldest thing waiting is one of the five (§7.6
     /// V13): the merge to confirm, the coordinator's question, the exception that became yours, the
-    /// pause to lift. Carried rather than re-derived so the press lands on the CARD — the target
+    /// pause to lift, the work that reached main without your confirmation. Carried rather than re-derived so the press lands on the CARD — the target
     /// conversation is where it is drawn, and this is which one it is. Nil when the oldest thing
     /// waiting is an ordinary blocked tool call, which is the bar as it always was.
     public let ownerItem: SessionOwnerItem?
@@ -54,8 +54,9 @@ public struct NeedsYouBanner: Equatable, Sendable {
     public var more: Int { ownerItem == nil ? 0 : max(0, count - 1) }
 }
 
-/// Which mark the needs-you bar draws in its circle: one per owner item kind, so the four read apart
-/// at a glance, and the raised hand for a blocked tool call. In the conversation on screen, the
+/// Which mark the needs-you bar draws in its circle: one per owner item kind, so they read apart at
+/// a glance — work that landed without the owner's confirmation shares the merge's — and the raised
+/// hand for a blocked tool call. In the conversation on screen, the
 /// question's mark while the card a press goes to is a question, and the warning's while it is an
 /// exception the reader answers by pressing.
 public enum NeedsYouGlyph: Equatable, Sendable {
@@ -67,7 +68,9 @@ public enum NeedsYouGlyph: Equatable, Sendable {
 
     init(_ kind: OwnerItemKind) {
         switch kind {
-        case .promotionApproval: self = .merge
+        // Work that reached main without the owner's confirmation is a merge that already happened:
+        // the merge's mark, as Android draws it.
+        case .promotionApproval, .landedWithoutConfirmation: self = .merge
         case .coordinatorQuestion: self = .question
         case .escalated: self = .warning
         case .fusePaused: self = .pause
@@ -228,7 +231,7 @@ public enum NeedsYouLogic {
     public static func banner(waiting: [Session], excluding focused: String? = nil) -> NeedsYouBanner? {
         let elsewhere = waiting.filter { $0.id != focused }
         // An owner item wins when there is one, whatever else is waiting: the other rows are a
-        // blocked tool call, which the drawer's badge and every list already say, while these four
+        // blocked tool call, which the drawer's badge and every list already say, while these five
         // are the things that stop a whole project and have nowhere else to be seen from here. The
         // oldest one is the one named, by the instant the server says it has been waiting since —
         // the same FIFO the session target below uses, and the same one the project page sorts by.
@@ -274,7 +277,7 @@ public enum NeedsYouLogic {
         return (found.session, found.item)
     }
 
-    /// What the bar's first line says about one owner item: which of the four (§7.6 V13), its merge
+    /// What the bar's first line says about one owner item: which of the five (§7.6 V13), its merge
     /// named by the main branch the item carries. The project goes on the second line — and not the
     /// item's own title, because the title is a sentence written for a card ("Coordinator asks:
     /// should the migration keep the old column?") and the bar has to answer "is this mine to go and
@@ -283,13 +286,14 @@ public enum NeedsYouLogic {
         kindWord(item.kind, main: RunSettings.mainBranchName(item.mainBranch)) ?? "Needs you"
     }
 
-    /// Which of the four, in the words the banner and the card share, and nothing else — no project,
+    /// Which of the five, in the words the banner and the card share, and nothing else — no project,
     /// no count. Nil for a kind this build does not know, which every caller falls back from rather
-    /// than naming (§7.6 V13).
+    /// than naming (§7.6 V13). The fifth (revision 29, owner 2026-10-28) is the browser's
+    /// `OWNER_ITEM_LANDED_WITHOUT_CONFIRMATION`, which all three clients say verbatim.
     ///
     /// Separate from `ownerItemText` because a session ROW says this half alone: a row has one line
     /// and the project it is about is the conversation the row already names. Both readers take the
-    /// words from here, so the row above a bar can never spell one of the four differently from the
+    /// words from here, so the row above a bar can never spell one of the five differently from the
     /// bar itself. A merge approval names the branch it merges into: `main`, the item's project's
     /// main branch by name (`SessionOwnerItem.mainBranch`).
     public static func kindWord(_ kind: OwnerItemKind,
@@ -299,6 +303,7 @@ public enum NeedsYouLogic {
         case .coordinatorQuestion: return "Question from coordinator"
         case .escalated: return "Escalated to you"
         case .fusePaused: return "Paused"
+        case .landedWithoutConfirmation: return "Landed without your confirmation"
         case .unknown: return nil
         }
     }
@@ -314,8 +319,9 @@ public enum NeedsYouLogic {
     /// An ESCALATED item says its `need` as well — `Escalated to you · the check on the combined
     /// tree failed` — because "Escalated to you" alone names the route and not the thing; the
     /// browser's row does the same and the two ends are held to each other by
-    /// `OwnerItemCardsTests`. The other three kinds carry no need, and one that is absent or blank
-    /// leaves the row with the word alone rather than trailing a separator.
+    /// `OwnerItemCardsTests`. The other kinds say their word alone — work that landed without the
+    /// owner's confirmation carries a `need` in the same words, which is not said twice — and a need
+    /// that is absent or blank leaves the row with the word alone rather than trailing a separator.
     public static func oldestItemWord(_ items: [SessionOwnerItem]?) -> String? {
         guard let items else { return nil }
         var oldest: (word: String, at: Date)?

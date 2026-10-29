@@ -878,6 +878,16 @@ struct ProjectDetailView: View {
                 if !row.detailLine.isEmpty {
                     Text(row.detailLine).font(.orbitLabel).foregroundStyle(.secondary)
                 }
+                // §4.7 H1 / §10.8: the rerun or observation handling it, while that is in flight —
+                // the row is still open, and says so rather than "handled", as the web's row does.
+                if let handling = row.handling {
+                    (Text(ExceptionCards.handlingLabel).fontWeight(.semibold).foregroundColor(.accentColor)
+                     + Text(" " + ExceptionCards.handlingLine(
+                        row, handling, now: now,
+                        main: store.integration.flatMap(RunSettings.storedMainBranch) ?? RunSettings.defaultMainBranch)))
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
             }
             .fixedSize(horizontal: false, vertical: true)
             Text(ProjectPage.waitingLabel(row, now: now))
@@ -1242,6 +1252,7 @@ struct ProjectDetailView: View {
                 if let view = store.integration {
                     lineSetting(store, view, document: document, now: now)
                     mainBranchSetting(store, view, now: now)
+                    deliverySetting(store, view)
                     automaticSetting(store, view, document: document)
                     atMostSetting(store, document: document)
                     mergeCheckSetting(store, view, document: document)
@@ -1293,8 +1304,9 @@ struct ProjectDetailView: View {
                 Text(RunSettings.tasksLandOn)
                 lineOption(store, view, .projectBranch, title: RunSettings.lineProjectBranch,
                            branch: RunSettings.shortBranch(branch), hint: RunSettings.lineProjectBranchHint)
+                // While the agent pushes, no merge into main asks anybody (§10.5 O-L2): its own words.
                 lineOption(store, view, .main, title: RunSettings.lineMain(main), branch: nil,
-                           hint: RunSettings.lineMainHint(main))
+                           hint: RunSettings.lineMainHint(view, main: main))
             }
         }
     }
@@ -1374,9 +1386,56 @@ struct ProjectDetailView: View {
         }
     }
 
+    /// Delivery (§10.5 O-L1): how a finished task's work reaches main — Orbit lands it, or the agent
+    /// pushes it there itself. It does not lock, and only a main line offers the agent's way: on a
+    /// project branch, or a line nobody decided, it is drawn but not offered, with the reason in
+    /// place of what it means. A press writes at once, as Tasks land on does; a line moved off main
+    /// takes the delivery back to Orbit's in its own write (`RunSettings.lineWrite`). A server that
+    /// predates it reports no mode, and draws no row.
+    @ViewBuilder
+    private func deliverySetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView) -> some View {
+        if RunSettings.deliveryShown(view) {
+            let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
+            let current = RunSettings.delivery(of: view)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(RunSettings.delivery)
+                ForEach(RunSettings.deliveryChoices(line: view.line, main: main)) { choice in
+                    deliveryOption(store, view, choice, chosen: choice.mode == current)
+                }
+            }
+        }
+    }
+
+    /// One of Delivery's two ways, ticked when it is the one — and, where the line does not allow
+    /// it, drawn faded and closed, saying why.
+    private func deliveryOption(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                _ choice: RunSettings.DeliveryChoice, chosen: Bool) -> some View {
+        Button {
+            Task { notice = await store.updateIntegration(RunSettings.deliveryWrite(view, to: choice.mode)) }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(chosen ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(choice.label).fontWeight(.semibold)
+                    Text(choice.hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .opacity(choice.offered ? 1 : 0.55)
+        }
+        .buttonStyle(.plain)
+        .disabled(store.busy || !choice.offered)
+    }
+
     /// Automatic, moved here from the coordinator card, with the start card's sentence for the line
-    /// the project is on — or a project branch while none is. It writes `automatic` and nothing
-    /// else: switching it off no longer stops the project (Pause project does).
+    /// the project is on — or a project branch while none is — and for who delivers the work. It
+    /// writes `automatic` and nothing else: switching it off no longer stops the project (Pause
+    /// project does).
     private func automaticSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
                                   document: ProjectDocument) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1390,7 +1449,7 @@ struct ProjectDetailView: View {
                     .toggleStyle(.switch)
                     .disabled(store.busy || document.configRevision == nil || document.coordinatorEnabled == nil)
             }
-            Text(RunSettings.automaticHint(view.line == .main ? .main : .projectBranch,
+            Text(RunSettings.automaticHint(view,
                                            main: RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)

@@ -112,6 +112,8 @@ final class OwnerItemCardsTests: XCTestCase {
             ("OWNER_ITEM_COORDINATOR_QUESTION", .coordinatorQuestion),
             ("OWNER_ITEM_ESCALATED", .escalated),
             ("OWNER_ITEM_PAUSED", .fusePaused),
+            // Revision 29's fifth (§10.7, owner 2026-10-28), said verbatim by all three clients.
+            ("OWNER_ITEM_LANDED_WITHOUT_CONFIRMATION", .landedWithoutConfirmation),
         ]
         for (name, kind) in pairs {
             XCTAssertEqual(try declaration(web, name), NeedsYouLogic.kindWord(kind),

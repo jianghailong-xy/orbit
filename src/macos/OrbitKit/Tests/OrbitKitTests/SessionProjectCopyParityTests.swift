@@ -132,10 +132,12 @@ final class SessionProjectCopyParityTests: XCTestCase {
                       "the row's silent word drifted")
     }
 
-    func testAllFiveCoordinatorLeadPhrasesAreTheWebsOwn() throws {
+    func testEveryCoordinatorLeadPhraseIsTheWebsOwn() throws {
         let web = try web()
         let kinds: [CoordinatorLeadKind] = [
             .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed, .deliveryReview,
+            // §10.7: work not seen on its line, in the words R29-10 settled.
+            .landingUnobserved,
         ]
         for kind in kinds {
             let copy = try XCTUnwrap(SessionProjectCopy.coordinatorLead(kind))
