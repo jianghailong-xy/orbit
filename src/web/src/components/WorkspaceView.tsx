@@ -5921,11 +5921,12 @@ export function WorkspaceView({
     answers?: Record<string, string[]>,
     message?: string,
     rememberRules?: PermissionRule[],
+    startAfterCreate?: boolean,
   ): Promise<void> => {
     if (!selectedId) return;
     setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
     try {
-      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules);
+      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
     } catch {
       listApprovals(selectedId)
         .then(setApprovals)

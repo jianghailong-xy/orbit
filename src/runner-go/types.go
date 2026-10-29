@@ -1677,6 +1677,10 @@ type ApprovalDecisionResponse struct {
 	// Deprecated: the primary (first) rule, kept for forward-compat with control planes
 	// that don't send the array yet. Prefer RememberRules.
 	RememberRule *PermissionRule `json:"rememberRule,omitempty"`
+	// The owner's "Create and start" on a single task create card (orbit_task_create): the yes
+	// also asks for the new task to be started at once, exactly as task_create's startNow does.
+	// The server sends it only on such an ALLOWED card; absent, the yes only creates.
+	StartAfterCreate bool `json:"startAfterCreate,omitempty"`
 }
 
 // resolveRememberRules prefers the array form, falling back to the deprecated singular

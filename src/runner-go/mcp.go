@@ -1016,6 +1016,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
+		startNow := getBool(args, "startNow")
+		if startNow {
+			if err := applyStartNow(body, time.Now()); err != nil {
+				return toolResult(err.Error(), true)
+			}
+		}
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -1027,10 +1034,16 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
-		if declined, err := askBeforeCreate(s.t, s.sessionID, taskCreateApprovalToolName, body); err != nil {
+		declined, startAfterCreate, err := askBeforeTaskCreate(s.t, s.sessionID, body)
+		if err != nil {
 			return toolResult(err.Error(), true)
 		} else if declined != "" {
 			return toolResult("the human rejected this task: "+declined, false)
+		}
+		// The owner's "Create and start" does what startNow does. It is their later and explicit
+		// answer, so it takes the place of any schedule the agent proposed on the card.
+		if startAfterCreate && !startNow {
+			body["runAt"] = dueNow(time.Now())
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
@@ -1038,6 +1051,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			// a handoff may be requested. This is the door where asking gets somewhere.
 			return toolResult("create task failed: "+err.Error()+
 				crossProjectCrossingGuidance(err), true)
+		}
+		if startNow || startAfterCreate {
+			started, deferred := startCreatedTask(s.t, raw)
+			return toolResult(startedTaskResult(raw, started, deferred), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1061,6 +1078,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			body := map[string]interface{}{"title": title}
 			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			// An item's startNow is its schedule alone: runAt = now, which the batch card already
+			// counts as starting within the minute. No item is started one by one — the server's
+			// once-a-minute scan starts them, so a batch stays one decision about how many runs begin.
+			if getBool(item, "startNow") {
+				if err := applyStartNow(body, time.Now()); err != nil {
+					return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
+				}
+			}
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -1894,8 +1919,42 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 // does not know — and a transport failure is never a silent yes: it is polled again (see
 // approvalPollIsAnswered), because the card is already in front of a human.
 func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}) (declined string, err error) {
+	dec, err := askCreateCard(t, sessionID, toolName, input)
+	if err != nil || dec == nil {
+		return "", err
+	}
+	return declinedReason(dec), nil
+}
+
+// askBeforeTaskCreate is askBeforeCreate for a single task create, the one card whose yes can carry a
+// second choice: the owner's "Create and start" (startAfterCreate), which asks for the task to be
+// started as soon as it is written (task_start_now.go). Anything but a yes carries no start.
+func askBeforeTaskCreate(t *Transport, sessionID string, body map[string]interface{}) (declined string, startAfterCreate bool, err error) {
+	dec, err := askCreateCard(t, sessionID, taskCreateApprovalToolName, body)
+	if err != nil || dec == nil {
+		return "", false, err
+	}
+	if declined := declinedReason(dec); declined != "" {
+		return declined, false, nil
+	}
+	return "", dec.StartAfterCreate, nil
+}
+
+// declinedReason is "" for a yes, and otherwise what to hand back in place of the write.
+func declinedReason(dec *ApprovalDecisionResponse) string {
+	if dec.Status == "ALLOWED" {
+		return ""
+	}
+	if dec.Message != "" {
+		return dec.Message
+	}
+	return "denied by the user"
+}
+
+// askCreateCard files the card and waits for its answer; nil, with nothing filed, when headless.
+func askCreateCard(t *Transport, sessionID, toolName string, input interface{}) (*ApprovalDecisionResponse, error) {
 	if sessionID == "" {
-		return "", nil
+		return nil, nil
 	}
 	body := map[string]interface{}{
 		"toolName": toolName,
@@ -1911,21 +1970,15 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 	}
 	id, err := t.createApproval(context.Background(), sessionID, body)
 	if err != nil {
-		return "", fmt.Errorf("could not register approval: %w", err)
+		return nil, fmt.Errorf("could not register approval: %w", err)
 	}
 	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a deadline
 	// here would turn "not answered yet" into a refusal nobody gave.
 	dec, err := awaitApprovalDecision(context.Background(), t, sessionID, id)
 	if err != nil {
-		return "", fmt.Errorf("approval poll failed: %w", err)
+		return nil, fmt.Errorf("approval poll failed: %w", err)
 	}
-	if dec.Status == "ALLOWED" {
-		return "", nil
-	}
-	if dec.Message != "" {
-		return dec.Message, nil
-	}
-	return "denied by the user", nil
+	return dec, nil
 }
 
 // awaitApprovalDecision reads a card until it is no longer PENDING, and is the one loop every reader
@@ -3044,6 +3097,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// prerequisites are DONE" reads as ready to anybody who has not been told (2026-10-16: two such
 	// tasks, left on the default true, sat OPEN for 12 minutes and 4 hours until somebody started them).
 	autoRunUnfiledNoPrerequisites := "A task in no project that has no prerequisites is never started by this flag, however ready it looks: start it with task_start, or give it a runAt."
+	// startNow, on the two create doors (task_start_now.go). Kept apart from autoRunWhenReady, which
+	// answers when prerequisites finish: startNow answers "the person wants this run now".
+	autoRunIsNotStartNow := "This flag waits for prerequisites; when the person wants the work run now, pass startNow instead."
+	startNowProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Start this task as soon as it is created. Pass it when the person wants the work run now: " +
+			"one approval then covers both the create and the start — the confirmation card reads \"1 starts running " +
+			"within the minute\", and once they approve, the task is created and started at once, the way task_start " +
+			"starts one — so do not ask them a second time, and do not call task_start after. It writes runAt = now " +
+			"into the create, so it cannot be combined with runAt. If that immediate start is refused (a prerequisite " +
+			"still open, the assignee's runner offline, its project not started…), the task is still created, the " +
+			"result says the start was deferred, and the server's once-a-minute scan starts it as soon as it can. Not " +
+			"autoRunWhenReady, which is about prerequisites finishing: startNow is about now.",
+	}
+	batchStartNowProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Start this item as soon as the batch is created. Pass it for the items the person wants run " +
+			"now: the item gets runAt = now, so the batch card counts it among those starting within the minute, and " +
+			"after the create the server's once-a-minute scan starts it — items are not started one by one. The one " +
+			"approval of the batch covers it, so do not ask them again. Cannot be combined with runAt. Not " +
+			"autoRunWhenReady, which is about prerequisites finishing.",
+	}
 	updateRunAtProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
@@ -3160,7 +3235,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
+				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " " + autoRunIsNotStartNow + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -3190,6 +3265,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	taskBatchItemProps := func() map[string]interface{} {
 		props := taskCreateProps()
+		props["startNow"] = batchStartNowProp
 		props["ref"] = map[string]interface{}{
 			"type":        "string",
 			"description": "A short label for this item, unique within the batch, so later items can depend on it via dependsOnRefs. Not stored — it only wires the batch together, and comes back on the created task so you can map it to the real id.",
@@ -4178,17 +4254,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Ask what would settle THIS task before you write it, and pass the answer as `acceptanceCriteria` — the observable result a reader who did not watch the work can verify, as opposed to `description`, which says what work to perform. If the person you are working with has not told you, do NOT call this tool yet: ask them in the conversation — offer what you would propose, if that helps them answer — and end your turn with the question. The criteria are theirs to state, and the confirmation card this call raises is not where they become theirs: it is a yes/no on a task whose criteria were already agreed by the time it appears. Filing criteria you wrote alone is the one way this goes wrong, because every later reader takes them for the person's own standard. Where a single command decides it — a test suite, a build, a lint — pass `acceptanceCommand` with `acceptanceExpectedExitCode` as well: the task's own session runs it, and the server derives DONE or FAILED from the exit code, so the task settles itself and no person is asked to read anything. That is what the question buys. A task filed with neither leaves the session that did the work no legal way to finish it, and the attempt ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — a human is handed the evidence to judge by hand, which is the outcome this field exists to make unnecessary. When the person genuinely cannot say yet what would prove the work done, file the task without one and record the criteria with task_update once the work says what they are — an unproven task is an ordinary task — but never write criteria they did not state. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — so declare MANUAL on a row that has work of its own. The server never files the verifier for you either: pass `verification: {title, assigneeId}` in this same call to write the check beside its subject. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. Declaring OWNER_CONFIRMED on a task in no project, or in a project whose Automatic is off, also takes ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF) — without one the call is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED. Work a test or a reviewer can settle is EVIDENCE_JUDGMENT instead, and outside a project it is yours to settle: each evidence revision its run submits is handed to this session as an <orbit-evidence-review> message to decide with task_evidence_decide, and the owner is asked only if you have not decided within 30 minutes or have ended. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES. Pass `codeless: true` for work that produces no code — a rollout, a walkthrough, a verification, research — so the acceptance criterion it serves does not wait for a commit that will never exist.",
+			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. When the person wants the work run now, pass `startNow: true`: one approval then covers the create and the start, so do not ask them a second time and do not call task_start after. Without it this only records the task; call task_start when it should run, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Ask what would settle THIS task before you write it, and pass the answer as `acceptanceCriteria` — the observable result a reader who did not watch the work can verify, as opposed to `description`, which says what work to perform. If the person you are working with has not told you, do NOT call this tool yet: ask them in the conversation — offer what you would propose, if that helps them answer — and end your turn with the question. The criteria are theirs to state, and the confirmation card this call raises is not where they become theirs: it is a yes/no on a task whose criteria were already agreed by the time it appears. Filing criteria you wrote alone is the one way this goes wrong, because every later reader takes them for the person's own standard. Where a single command decides it — a test suite, a build, a lint — pass `acceptanceCommand` with `acceptanceExpectedExitCode` as well: the task's own session runs it, and the server derives DONE or FAILED from the exit code, so the task settles itself and no person is asked to read anything. That is what the question buys. A task filed with neither leaves the session that did the work no legal way to finish it, and the attempt ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — a human is handed the evidence to judge by hand, which is the outcome this field exists to make unnecessary. When the person genuinely cannot say yet what would prove the work done, file the task without one and record the criteria with task_update once the work says what they are — an unproven task is an ordinary task — but never write criteria they did not state. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — so declare MANUAL on a row that has work of its own. The server never files the verifier for you either: pass `verification: {title, assigneeId}` in this same call to write the check beside its subject. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. Declaring OWNER_CONFIRMED on a task in no project, or in a project whose Automatic is off, also takes ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF) — without one the call is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED. Work a test or a reviewer can settle is EVIDENCE_JUDGMENT instead, and outside a project it is yours to settle: each evidence revision its run submits is handed to this session as an <orbit-evidence-review> message to decide with task_evidence_decide, and the owner is asked only if you have not decided within 30 minutes or have ended. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES. Pass `codeless: true` for work that produces no code — a rollout, a walkthrough, a verification, research — so the acceptance criterion it serves does not wait for a commit that will never exist.",
 			"inputSchema": func() map[string]interface{} {
 				props := taskCreateProps()
 				// On the single door only: see verificationProp.
 				props["verification"] = verificationProp
+				props["startNow"] = startNowProp
 				return obj(props, "title", "completionCriterion")
 			}(),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. An item declaring OWNER_CONFIRMED in no project, or in a project whose Automatic is off, carries ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF), or the whole batch is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED with that item's itemIndex; work a test or a reviewer can settle is EVIDENCE_JUDGMENT, which outside a project this session decides on each evidence revision it is handed. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Ask, per item, what would settle it — of the person you are working with, in the conversation, before writing the batch — and put their answer in that item's `acceptanceCriteria`. If they have not said it for every item, do NOT write the batch yet: ask, and end your turn with the question. An item's criteria are theirs to state, not yours to guess, and the card this call raises is a yes/no on the plan rather than where they are agreed — a plan filed with criteria of your own makes every later reader treat your guess as their standard. Where a single command decides it — a test suite, a build, a lint — give the item `acceptanceCommand` with `acceptanceExpectedExitCode` too, and the item settles itself from the exit code instead of waiting on a person to read its evidence. An item filed with neither leaves its session no legal way to finish, and it ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — so a plan that skips this question is a plan that comes back to a human one task at a time. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now, or give an item runAt to have the server start it at a set time. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. An item declaring OWNER_CONFIRMED in no project, or in a project whose Automatic is off, carries ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF), or the whole batch is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED with that item's itemIndex; work a test or a reviewer can settle is EVIDENCE_JUDGMENT, which outside a project this session decides on each evidence revision it is handed. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Ask, per item, what would settle it — of the person you are working with, in the conversation, before writing the batch — and put their answer in that item's `acceptanceCriteria`. If they have not said it for every item, do NOT write the batch yet: ask, and end your turn with the question. An item's criteria are theirs to state, not yours to guess, and the card this call raises is a yes/no on the plan rather than where they are agreed — a plan filed with criteria of your own makes every later reader treat your guess as their standard. Where a single command decides it — a test suite, a build, a lint — give the item `acceptanceCommand` with `acceptanceExpectedExitCode` too, and the item settles itself from the exit code instead of waiting on a person to read its evidence. An item filed with neither leaves its session no legal way to finish, and it ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — so a plan that skips this question is a plan that comes back to a human one task at a time. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded, except an item carrying `startNow: true` — pass it for the items the person wants run now, and the server's once-a-minute scan starts each within the minute without asking them again; for the rest, call task_start for one that should run now, or give an item runAt to have the server start it at a set time. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":     "array",

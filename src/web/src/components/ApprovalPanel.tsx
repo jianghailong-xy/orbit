@@ -156,6 +156,24 @@ export function createDetail(input: CreateInput): string {
 /** The caption over the field the owner is agreeing to. macOS/iOS: `Approvals.createDoneWhen`. */
 export const CREATE_DONE_WHEN = 'Done when';
 
+/** The single-task card's second yes: create the task and start its run in the same press, so the
+ *  owner is not asked again to start it. macOS/iOS: `Approvals.createAndStartAction`; Android:
+ *  `CardVerb.CREATE_AND_START`. */
+export const CREATE_AND_START = 'Create and start';
+
+/**
+ * Whether the single-task card offers Create and start: only when the server's forecast says nothing
+ * would start the task by itself (`needsManualStart` is 1). A task that starts on its own (now or at
+ * its runAt), waits on a prerequisite, cannot run, or waits for its project to start has nothing for
+ * the press to add, and a card whose forecast could not be read says nothing either way.
+ * macOS/iOS: `Approvals.offersCreateAndStart`; Android: `ApprovalRules.offersCreateAndStart`.
+ */
+export function offersCreateAndStart(a: ApprovalInfo): boolean {
+  if (!isTaskCreate(a)) return false;
+  const preview = ((a.input ?? {}) as { preview?: BatchPreview }).preview;
+  return preview?.needsManualStart === 1;
+}
+
 /** Under a new project's criteria: approving the create is not confirming them — the project's
  *  start card asks that, once its coordinator has a plan to start. */
 export const CREATE_CRITERIA_CONFIRMED_AT_START = 'You’ll confirm these when the project starts.';
@@ -451,6 +469,8 @@ type OnDecide = (
   answers?: Record<string, string[]>,
   message?: string,
   rememberRules?: PermissionRule[],
+  /** The single-task card's Create and start (`CREATE_AND_START`); every other press leaves it out. */
+  startAfterCreate?: boolean,
 ) => void;
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
@@ -626,6 +646,18 @@ export function ApprovalPanel({
                           : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
+        {/* A second yes, beside the first rather than in its place: the press above stays the
+            plain create it always was, Enter included. */}
+        {offersCreateAndStart(approval) && (
+          <CardActionButton
+            tone="accent"
+            disabled={!answerable}
+            title="Create the task and start its run now, so you are not asked again to start it."
+            onClick={() => onDecide(approval.id, 'allow', undefined, undefined, undefined, true)}
+          >
+            {CREATE_AND_START}
+          </CardActionButton>
+        )}
         {rules.length > 0 && (
           <CardActionButton
             tone="accent"

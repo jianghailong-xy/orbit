@@ -8,6 +8,7 @@ import {
 import {
   ApiError,
   api,
+  decideApproval,
   getSessionEventPage,
   getShareLink,
   listQueuedTurns,
@@ -381,5 +382,25 @@ describe('setAvatar', () => {
     const file = (init.body as FormData).get('file') as File;
     expect(file.name).toBe('avatar.jpg');
     expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff]));
+  });
+});
+
+describe('decideApproval', () => {
+  it('sends Create and start only when it was chosen, so every other answer reads as before', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 'a1', status: 'ALLOWED' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await decideApproval('s1', 'a1', 'allow', undefined, undefined, undefined, true);
+    await decideApproval('s1', 'a1', 'allow');
+    await decideApproval('s1', 'a1', 'allow', undefined, undefined, undefined, false);
+
+    const sent = fetchMock.mock.calls.map((call) => {
+      const [url, init] = call as unknown as [string, RequestInit];
+      return { url, body: JSON.parse(String(init.body)) as Record<string, unknown> };
+    });
+    expect(sent[0].url).toContain('/api/sessions/s1/approvals/a1/decision');
+    expect(sent[0].body).toEqual({ behavior: 'allow', startAfterCreate: true });
+    expect(sent[1].body).toEqual({ behavior: 'allow' });
+    expect(sent[2].body).toEqual({ behavior: 'allow' });
   });
 });

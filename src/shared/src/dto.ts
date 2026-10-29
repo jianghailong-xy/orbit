@@ -1994,6 +1994,10 @@ export interface ApprovalDecisionRequest {
   message?: string;
   answers?: QuestionAnswers;
   rememberRules?: PermissionRule[];
+  /** The single-task create card's "Create and start": the owner's yes also starts the new task's
+   *  run, so they are not asked again to start it. Accepted only on an `allow` of an
+   *  `orbit_task_create` card (400 on any other); absent or false is the plain yes. */
+  startAfterCreate?: boolean;
 }
 
 /** Control plane → runner: the resolved decision (returned by the approval
@@ -2008,6 +2012,10 @@ export interface ApprovalDecisionResponse {
   /** Deprecated: the first of `rememberRules`, kept so runners that predate the array
    *  form still remember at least the primary rule until they restart and self-update. */
   rememberRule?: PermissionRule;
+  /** Present (true) only when the owner allowed an `orbit_task_create` card with "Create and
+   *  start": the runner creates the task and starts it at once, as `task_create`'s `startNow` does.
+   *  A runner that predates the field ignores it and only creates the task. */
+  startAfterCreate?: boolean;
 }
 
 // 'reload' carries no user text: it tells the runner the session's model /

@@ -372,8 +372,9 @@ describe('an approval that arrived live outlives the question it was raised for'
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     });
+    // Enter is the plain yes: no Create and start (the last argument) rides with it.
     expect(vi.mocked(decideApproval).mock.calls).toEqual([
-      [SESSION_PUBLIC, 'approval-project', 'allow', undefined, undefined, undefined],
+      [SESSION_PUBLIC, 'approval-project', 'allow', undefined, undefined, undefined, undefined],
     ]);
     expect(mounted().querySelectorAll('.approval-card')).toHaveLength(1);
     expect(cardFor('Which branch?')).toBeTruthy();
