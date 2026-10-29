@@ -80,6 +80,8 @@ public enum CoordinatorLeadKind: String, Codable, Sendable, CaseIterable {
     case integrationError = "INTEGRATION_ERROR"
     case taskFailed = "TASK_FAILED"
     case deliveryReview = "DELIVERY_REVIEW"
+    /// A finished task's work not seen on its line yet (§10.7): the coordinator's first.
+    case landingUnobserved = "LANDING_UNOBSERVED"
     /// Forward-compatibility floor: the chip then says only that the coordinator is on something.
     case unknown = "UNKNOWN"
 
@@ -219,6 +221,21 @@ public enum IntegrationLine: String, Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = IntegrationLine(rawValue: raw) ?? .unknown
+    }
+}
+
+/// How a finished task's work reaches the project's main branch (§10.5 O-L1): Orbit lands it — the
+/// default, and what every project did before the choice existed — or the agent pushes it there
+/// itself, which only a project that lands directly into its main branch can choose. `@orbit/shared`'s
+/// `DeliveryMode`. A value this build does not know is `unknown`, which no row offers.
+public enum DeliveryMode: String, Codable, Sendable {
+    case platform = "PLATFORM"
+    case agentPush = "AGENT_PUSH"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = DeliveryMode(rawValue: raw) ?? .unknown
     }
 }
 

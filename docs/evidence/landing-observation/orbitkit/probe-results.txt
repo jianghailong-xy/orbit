@@ -1,0 +1,44 @@
+Probe run: https://github.com/jianghailong-xy/orbit/actions/runs/40814430757 (push-triggered on probe/r29-11-orbitkit, deleted afterwards)
+Probe commit: a145c7a5388cd88030c37d8b9d64b64969cfe3fc = b881b1e7e (this branch's code) + .lo-probe/ (probe-harness/) + its ci/client.probe.yml as .github/workflows/client.yml
+
+Jobs on that commit (gh run view):
+  Font tokens (bare system(size:) audit): success
+  Revision 29 probe (iPhone + Mac, light and dark): success
+  macOS OrbitKit test on the base commit (baseline): success
+  iOS (generate + build): success
+  Navigation (one push mechanism per stack): success
+  macOS (build + test): success
+  Push the results where a clone can read them: success
+
+macOS gate (Xcode 26.3, Apple Swift version 6.2.4):
+  test-orbitkit: success
+  build-orbitapp: success
+  OrbitKit swift test: Executed 4118 tests, with 5 tests skipped and 0 failures (0 unexpected)
+  OrbitApp swift build: Build complete! (193.79s)
+iOS gate: build-ios: success — ** BUILD SUCCEEDED **
+Baseline (OrbitKit swift test on the base commit 016a54c79, R29-10's): Executed 4092 tests, with 5 tests skipped and 0 failures (0 unexpected)
+
+Shots, ios (9 passed, 0 failed; each scene light and dark):
+  test0TheStartCardOffersTheAgentsWay: passed
+  test1HowItRunsOnAnAgentPushProject: passed
+  test2HowItRunsOnAProjectBranch: passed
+  test3TasksWaitingToBeSeenOnMain: passed
+  test4TheLandedCardIsAccepted: passed
+  test5ObserveAgainAsksWhyAndTheObservationShows: passed
+  test6TheNeedsYouBarNamesIt: passed
+  test7TheProjectsListChip: passed
+  test8TheConfirmationCardSaysTheAgentPushesIt: passed
+Shots, mac (8 passed, 0 failed; each scene light and dark):
+  test0TheStartCardOffersTheAgentsWay: passed
+  test1HowItRunsOnAnAgentPushProject: passed
+  test2HowItRunsOnAProjectBranch: passed
+  test3TasksWaitingToBeSeenOnMain: passed
+  test4TheLandedCardIsAccepted: passed
+  test5ObserveAgainAsksWhyAndTheObservationShows: passed
+  test7TheProjectsListChip: passed
+  test8TheConfirmationCardSaysTheAgentPushesIt: passed
+
+What the presses sent, as the stub decoded it (once per appearance, both platforms alike):
+  BODY /api/projects/P1/integration/observe {"reason": "I pushed the rebased commit to main by hand"}
+  BODY /api/projects/P2/open-items/L1/accept {}
+  BODY /api/projects/P5/start {"automatic": true, "criteriaDigest": "5d1a09c3be427777777777777777777777777777777777777777777777777777", "deliveryMode": "AGENT_PUSH", "line": "MAIN", "maxConcurrentTasks": 2, "mergeCheckCommand": "make test", "requestId": "I5", "upstreamRef": "refs/heads/main"}

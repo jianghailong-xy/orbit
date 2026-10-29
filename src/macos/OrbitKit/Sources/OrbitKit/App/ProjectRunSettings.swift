@@ -333,11 +333,49 @@ extension RunSettings {
     // MARK: the writes, one control at a time
 
     /// The line a press on Tasks land on writes — only while it can still move, and only when it is
-    /// a move: sending the value a locked line already holds is refused 409 by the trigger.
+    /// a move: sending the value a locked line already holds is refused 409 by the trigger. A line
+    /// leaving main takes an agent's delivery back to Orbit's in the same write, which is what the
+    /// door asks of it (§10.5 O-L1).
     public static func lineWrite(_ view: ProjectIntegrationView,
                                  to line: IntegrationLine) -> UpdateProjectIntegrationRequest? {
         guard !view.locked, line != .unknown, line != view.line else { return nil }
-        return UpdateProjectIntegrationRequest(line: line)
+        let delivery = view.deliveryMode == .agentPush && line != .main ? DeliveryMode.platform : nil
+        return UpdateProjectIntegrationRequest(line: line, deliveryMode: delivery)
+    }
+
+    /// The way the work reaches main a press on Delivery writes — it does not lock (§10.5 O-L1): only
+    /// to a server that reads it, only when it is a move, and the agent's way only on a main line.
+    public static func deliveryWrite(_ view: ProjectIntegrationView,
+                                     to mode: DeliveryMode) -> UpdateProjectIntegrationRequest? {
+        guard let stored = view.deliveryMode, mode != .unknown, mode != stored,
+              mode == .platform || view.line == .main else { return nil }
+        return UpdateProjectIntegrationRequest(deliveryMode: mode)
+    }
+
+    // MARK: Delivery (§10.5 O-L1)
+
+    /// Whether How it runs draws Delivery: a server that predates it reports no mode, and draws no row.
+    public static func deliveryShown(_ view: ProjectIntegrationView) -> Bool {
+        view.deliveryMode != nil
+    }
+
+    /// The way the project's work reaches main as How it runs reads it: the agent's only on a main
+    /// line.
+    public static func delivery(of view: ProjectIntegrationView) -> DeliveryMode {
+        delivery(line: view.line, mode: view.deliveryMode)
+    }
+
+    /// Directly into main's hint, for the delivery the project stands on: no merge into main asks
+    /// anybody while the agent pushes there (O-L2).
+    public static func lineMainHint(_ view: ProjectIntegrationView, main: String) -> String {
+        delivery(of: view) == .agentPush ? lineMainHintAgentPush(main) : lineMainHint(main)
+    }
+
+    /// Automatic's sentence, for the line and the delivery the project stands on — what Automatic
+    /// does with a merge into main depends on both.
+    public static func automaticHint(_ view: ProjectIntegrationView, main: String) -> String {
+        delivery(of: view) == .agentPush ? automaticHintAgentPush(main)
+                                         : automaticHint(view.line == .main ? .main : .projectBranch, main: main)
     }
 
     /// The main branch a pick in How it runs writes: only while it can still move (L4 locks it with
