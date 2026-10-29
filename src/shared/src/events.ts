@@ -223,6 +223,9 @@ export const USAGE_LIMIT_ERROR_MARKERS = [
   // (Europe/Berlin)". Arrives as plain `assistant` text with a `success` result — same path
   // as an API error, so nothing upstream treats the turn as failed.
   'hit your session limit',
+  // Claude Code 2.1.312 and later, the same window renamed: "You've hit your 5-hour limit ·
+  // resets 1:30pm (America/Los_Angeles)".
+  'hit your 5-hour limit',
   // Claude Code, 7-day window: "You've hit your weekly limit · resets 1pm (Europe/Berlin)".
   // The date is present only when the reset is not today ("resets Aug 3, 1pm (…)").
   'hit your weekly limit',

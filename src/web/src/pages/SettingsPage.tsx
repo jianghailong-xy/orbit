@@ -7,7 +7,6 @@ import { Card } from '../components/ui/Card';
 import { Segmented } from '../components/ui/Segmented';
 import { Select } from '../components/ui/Select';
 import { Switch } from '../components/ui/Switch';
-import { machineChipsOf } from '../components/RunnerEngines';
 import type { Runner } from '../components/TasksSidePanel';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
@@ -41,16 +40,13 @@ function Field({ label, hint, children }: { label: string; hint: ReactNode; chil
 
 /**
  * What the phone's Settings row for Machines & models says (SettingsHome.infrastructureValue in OrbitKit):
- * how many things on the page need a person — an engine signed out on a machine that is online (the
- * amber chip on its card), a machine offline, an account pool no session can start on — or, with none,
- * how many of the machines are online.
+ * how many things on the page need a person — a machine offline, an account pool no session can start
+ * on; an engine signed out is not one, as its machine's card draws it nothing — or, with none, how many
+ * of the machines are online.
  */
 function machinesValue(runners: Runner[], pools: ProviderPool[]): { text: string; needsYou: boolean } {
   const online = runners.filter((runner) => runner.online);
-  const needsYou =
-    online.reduce((n, runner) => n + machineChipsOf(runner).filter((chip) => chip.signedOut).length, 0) +
-    (runners.length - online.length) +
-    pools.filter((pool) => pool.unavailable).length;
+  const needsYou = runners.length - online.length + pools.filter((pool) => pool.unavailable).length;
   if (needsYou > 0) return { text: needsYou === 1 ? '1 needs you' : `${needsYou} need you`, needsYou: true };
   return { text: runners.length === 0 ? 'None' : `${online.length} of ${runners.length} online`, needsYou: false };
 }

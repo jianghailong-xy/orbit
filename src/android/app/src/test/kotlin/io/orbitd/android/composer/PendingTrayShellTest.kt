@@ -15,7 +15,8 @@ import org.junit.Test
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The tray above the composer on the session page (docs/mocks/steer-tray, decided 2026-10-16; OrbitKit PendingTrayWiringTests), over
+ * The tray above the composer on the session page (docs/mocks/steer-tray, decided 2026-10-16; the band's first card, above the parking
+ * strip, docs/mocks/pending-tray-above-parking, decided 2026-10-28; OrbitKit PendingTrayWiringTests), over
  * the controlled server: a message sent while a turn runs waits there and enters the conversation only when the model reads it; a
  * queued message can be Steered into the running turn; withdrawing one returns its words to the composer; and Send, held while a turn
  * runs, queues the message for the next turn instead.
@@ -42,15 +43,23 @@ class PendingTrayShellTest : ComposerShellTest() {
     private fun input() = compose.onNodeWithTag("composer-input").fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text
 
     @Test fun whatNothingHasReadWaitsInTheTrayAndEntersTheConversationWhereItIsRead() {
-        running(); signIn(); openSession()
+        running()
+        // A worktree session, so the branch bar is one of the parking strip's cards the tray stands above.
+        ComposerShell.session = ComposerShell.session + ComposerShell.fields("""{"isolationStatus":"worktree","branch":"orbit/export-fix",
+            "mergeTarget":"main","worktreeDirty":false,"changedFiles":[{"path":"export.py","additions":3,"deletions":1,"status":"M"}]}""")
+        signIn(); openSession()
         await { has(hasText("and update the changelog") and tray) }
         assertTrue(has(hasText("then push it to main") and tray))
         assertTrue(has(hasText("Waiting to be read") and tray))
         assertTrue(has(hasText("Queued for next turn") and tray))
         assertFalse("not part of the conversation yet", has(hasText("then push it to main") and conversation))
         assertFalse("nor of the queue's tail", has(hasTestTag("queued:$queuedId")))
+        // The band's first card, above the parking strip, which stands on the composer (docs/mocks/pending-tray-above-parking).
+        await { has(hasTestTag("worktree-bar")) }
         val trayBottom = compose.onNodeWithTag("pending-tray").fetchSemanticsNode().boundsInRoot.bottom
-        assertTrue("directly above the composer", trayBottom <= compose.onNodeWithTag("session-composer").fetchSemanticsNode().boundsInRoot.top)
+        val strip = compose.onNodeWithTag("worktree-bar").fetchSemanticsNode().boundsInRoot
+        assertTrue("above the parking strip", trayBottom <= strip.top)
+        assertTrue("which stands on the composer", strip.bottom <= compose.onNodeWithTag("session-composer").fetchSemanticsNode().boundsInRoot.top)
 
         // Claude reads it at its next boundary: it leaves the tray, and is drawn after what was written before the reading.
         ComposerShell.push("""{"type":"assistant","seq":4,"turnId":"t-0","payload":{"text":"The suite passed"}}""")

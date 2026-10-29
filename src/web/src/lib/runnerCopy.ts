@@ -193,6 +193,36 @@ export const RUNNER_DEVICE_CODE_FOOTER =
   'orbit register prints a code there. Enter it to approve the machine from this phone — its ' +
   'name and hostname show before you confirm.';
 export const RUNNER_APPROVE = 'Approve';
+/** Approve, for a request whose name a runner of this account already has. */
+export const RUNNER_REREGISTER = 'Re-register';
+export const RUNNER_DENY = 'Deny';
+
+// What became of a request looked up by its code, and a runner already of its name: the /enroll
+// page's words, which EnrollPage.test.tsx holds it to.
+
+export const RUNNER_DEVICE_APPROVED = 'Machine registered';
+
+export function runnerDeviceApprovedDetail(name: string): string {
+  return `${name} is on your account. Go back to the terminal — it finishes setting up by itself.`;
+}
+
+export const RUNNER_DEVICE_DENIED = 'Request denied';
+export const RUNNER_DEVICE_DENIED_DETAIL =
+  'Nothing was added to your account. orbit register in that terminal stops and says the request ' +
+  'was denied.';
+
+export function runnerDeviceNameTaken(name: string): string {
+  return `"${name}" is already on your account`;
+}
+
+/** When the runner already of that name last checked in: `3d ago`. */
+export function runnerDeviceLastOnline(when: string): string {
+  return `Last online ${when}.`;
+}
+
+export const RUNNER_DEVICE_NAME_TAKEN_DETAIL =
+  'Approving gives it a new credential and the old one stops working; its workspaces and history ' +
+  'stay. A different computer with the same name? Deny, then run orbit register --name <new-name> on it.';
 
 /** macOS and Linux: the same command as the web's RunnerRegisterGuide. */
 export function runnerInstallCommandUnix(origin: string): string {

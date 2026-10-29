@@ -260,7 +260,9 @@ func (s *mcpServer) err(id json.RawMessage, code int, msg string) rpcResponse {
 
 const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID unset)"
 
-const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration)"
+// Where the switch is: its own card on the web's and the Mac's Settings, and a row of the Sessions page
+// on the phones (docs/mocks/ios-settings-order).
+const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
 
 // How many tasks one task_create_batch call may create. Mirrors the server's
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
@@ -893,6 +895,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"in its place. If its runner may have pushed, the record says so and the merge may already "+
 			"have happened; the next job on this repository and branch can be claimed now.\n"+
 			prettyJSON(raw), false)
+
+	case "integration_observe":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required: the project whose line Orbit should look at again", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why the work may be on the line now — what changed "+
+				"since Orbit last looked. It stays on the items the observation handles", true)
+		}
+		// The acting session IS the authority, as it is for integration_retry: the server checks it
+		// against the project's own coordinator pointer, and refuses a project with no repository bound.
+		raw, err := s.t.observeIntegration(s.sessionID, id, reason)
+		if err != nil {
+			return toolResult("integration observe failed: "+err.Error(), true)
+		}
+		return toolResult("An observation of the project's line is queued, with your reason on it (queued: "+
+			"false means the one already queued takes it in). Your open items about work not yet seen on the "+
+			"line read as being handled until it reports: a task whose commit it sees is recorded as landed, "+
+			"its item closes and the tasks waiting on it start; an item about a commit it does not see stays "+
+			"open as it was. Read the project again once the observation has run.\n"+prettyJSON(raw), false)
 
 	case "integration_skip_merge_check":
 		id := getString(args, "projectId")
@@ -1624,6 +1648,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "runner_delete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		runnerID := getString(args, "runnerId")
+		if runnerID == "" {
+			return toolResult("runnerId is required", true)
+		}
+		if err := validatePathSegmentID(runnerID); err != nil {
+			return toolResult("runner "+err.Error(), true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, runnerDeleteApprovalToolName, map[string]interface{}{"runnerId": runnerID}); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+		}
+		raw, err := s.t.deleteRunner(s.sessionID, s.orchestrationToken, runnerID)
+		if err != nil {
+			return toolResult("delete runner failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -1656,6 +1702,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("update agent failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "agent_delete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "agentId")
+		if id == "" {
+			return toolResult("agentId is required", true)
+		}
+		if err := validatePathSegmentID(id); err != nil {
+			return toolResult("agent "+err.Error(), true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, agentDeleteApprovalToolName, map[string]interface{}{"agentId": id}); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this deletion, and nothing was deleted: "+declined, false)
+		}
+		raw, err := s.t.deleteAgent(s.sessionID, s.orchestrationToken, id)
+		if err != nil {
+			return toolResult("delete agent failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1721,7 +1789,7 @@ const projectIntegrationApprovalToolName = "orbit_project_update_integration"
 var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
-	"integration_skip_merge_check": true,
+	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else
@@ -3466,8 +3534,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteriaItems": projectCriteriaCreateProp,
 				"instructions": map[string]interface{}{
-					"type":        "string",
-					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
+					"type": "string",
+					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters. " +
+						"How work reaches a branch is not set here: it is the account owner's delivery setting, " +
+						"integration.deliveryMode in project_get (PLATFORM until the owner chooses) — AGENT_PUSH: agents " +
+						"push their own commits to the upstream; PLATFORM: Orbit lands the work and agents do not push the " +
+						"target branch. Read it before you write anything about how work reaches a branch; where these " +
+						"instructions and that setting disagree, the setting wins.",
 				},
 				"workspaceId": map[string]interface{}{
 					"type": "string",
@@ -3532,8 +3605,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"acceptanceCriteriaItems": projectCriteriaUpdateProp,
 				"instructions": map[string]interface{}{
-					"type":        []string{"string", "null"},
-					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions.",
+					"type": []string{"string", "null"},
+					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions. " +
+						"Before you write anything about how work reaches a branch, read integration.deliveryMode in " +
+						"project_get: AGENT_PUSH means agents push their own commits to the upstream, PLATFORM means Orbit " +
+						"lands the work and agents do not push the target branch. Where these instructions and that setting " +
+						"disagree, the setting wins.",
 				},
 				"status": map[string]interface{}{
 					"type":        "string",
@@ -3981,6 +4058,37 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"characters, and kept on the job as the record of why the work was given up.",
 				},
 			}, "projectId", "jobId", "reason"),
+		},
+		{
+			"name": "integration_observe",
+			"description": "Ask Orbit to look again, now, at whether your project's finished work is on its " +
+				"line, as the conversation that coordinates the project. Orbit records a task's work as " +
+				"landed when it sees the commit the task delivered there — an observation fetches and reads, " +
+				"and never merges, pushes or runs a check. It looks by itself after the facts that may move " +
+				"the line (a work session's turn, a recorded receipt); this is the door to look again when " +
+				"something else changed: an agent pushed after its task finished, a later task carried the " +
+				"work there, or a runner that could not fetch the repository can again. It queues one " +
+				"observation of the project, or joins the one already queued (the answer says queued: " +
+				"false), and every task waiting to be seen is looked at when a runner takes it. Your open " +
+				"\"Not on <branch> yet\" items (LANDING_UNOBSERVED) about those tasks read as being handled " +
+				"until it reports: when it sees a task's commit, the landing is recorded, the item closes as " +
+				"landed and the tasks waiting on it start; when it does not, the item stays open as it was — " +
+				"then name the commit on the line that carries the work with merge_receipt, or send the task " +
+				"back with task_reopen. An observation that succeeds also closes the item about the " +
+				"project's failing observations. It needs a runner that declares integration-observe/v1 with " +
+				"a checkout of the repository, and waits queued until there is one. Refused for a project " +
+				"with no repository bound, and unless you are the project's current coordinator conversation.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why the work may be on the line now — what changed since Orbit last " +
+						"looked. Required, up to 2000 characters, and kept on the items the observation handles.",
+				},
+			}, "projectId", "reason"),
 		},
 		{
 			"name": "integration_skip_merge_check",
@@ -4603,6 +4711,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				}, "agentId"),
 			},
 			map[string]interface{}{
+				"name": "agent_delete",
+				"description": "Delete one of this owner's agents/workspaces, named by the id agent_list shows. It leaves the account's list but is not erased: " +
+					"its sessions and tasks are kept and stay linked to it, as when it is deleted from its runner's page in the Orbit app. " +
+					"An agent that still coordinates a project is refused, and so is the agent this session runs in. " +
+					"It puts the agent — its name, its folder and its runner — on a confirmation card in front of the account owner and BLOCKS until they answer: " +
+					"nothing is deleted if they decline. Returns what was deleted.",
+				"inputSchema": obj(map[string]interface{}{
+					"agentId": map[string]interface{}{"type": "string", "description": "Agent id to delete, as agent_list shows it."},
+				}, "agentId"),
+			},
+			map[string]interface{}{
 				"name": "runner_list",
 				"description": "List this owner's runners — the machines that run sessions — including one no agent is bound to yet. Read-only. " +
 					"Use it to look up a runner's id to pass as runnerId to agent_create or agent_update. " +
@@ -4641,6 +4760,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"A finished install is cleared, status null again, by the heartbeat that reports its engine installed: runner_list then shows it among the runner's engines. A finished update stays until it is dismissed in the app.",
 				"inputSchema": obj(map[string]interface{}{
 					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to read. Use runner_list to look up a runner's id."},
+				}, "runnerId"),
+			},
+			map[string]interface{}{
+				"name": "runner_delete",
+				"description": "Delete one of this owner's runners — a machine runner_list shows — with every agent/workspace bound to it, as Delete on that runner's page in the Orbit app does. " +
+					"The machine itself is untouched: it can no longer reach Orbit, and registering it again adds it back; a rented machine still has to be released where it was rented. " +
+					"A managed runner is refused, and so is the runner this session runs on. " +
+					"It puts the runner — its name, whether it is online, and the workspaces that go with it — on a confirmation card in front of the account owner and BLOCKS until they answer: " +
+					"nothing is deleted if they decline. Returns what was deleted. Only available in a session with orchestration enabled.",
+				"inputSchema": obj(map[string]interface{}{
+					"runnerId": map[string]interface{}{"type": "string", "description": "The runner to delete. Use runner_list to look up a runner's id."},
 				}, "runnerId"),
 			},
 			// A project tool on the orchestration gate rather than beside the other project_* ones:

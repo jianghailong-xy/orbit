@@ -330,6 +330,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId }, body: { note: 'the census' } }),
     nested: ['itemId'],
   },
+  // The fixture's item is a question, which Accept does not answer: the owner is told 409, which is
+  // the door answering — another account's request finds no item at all.
+  'POST /projects/:id/open-items/:itemId/accept': {
+    request: (of) => ({ params: { id: of.projectId, itemId: of.openItemId } }),
+    nested: ['itemId'],
+  },
   'POST /projects/:id/done-requests/:itemId/decline': {
     request: (of) => ({ params: { id: of.projectId, itemId: of.doneRequestItemId }, body: { note: 'not yet' } }),
     nested: ['itemId'],
@@ -366,6 +372,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/tasks/:taskId/integration/stop': {
     request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
     nested: ['taskId'],
+  },
+  // §10.8's "look again", the owner's door: another account's project is a 404; on the owner's own
+  // project an observation is queued.
+  'POST /projects/:id/integration/observe': {
+    request: (of) => ({ params: { id: of.projectId }, body: { reason: 'the census' } }),
   },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),

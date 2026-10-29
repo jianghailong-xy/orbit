@@ -10,7 +10,7 @@ public enum WorktreeBarLogic {
     public enum Mode: Equatable {
         /// Nothing isolated, or an isolated worktree with no changes yet → the bar is hidden.
         case hidden
-        /// Ran in the shared workDir (no git) → the amber "enable isolation" nudge.
+        /// Ran in the shared workDir (no worktree) → the amber notice (`SharedFolderNotice`).
         case notIsolated
         /// A real worktree with changes → the branch + diff + Commit/Merge actions.
         case worktree
@@ -30,6 +30,101 @@ public enum WorktreeBarLogic {
             mergeStatus == "pending" || mergeStatus == "conflict" || mergeStatus == "error" ||
             commitStatus == "pending" || commitStatus == "error"
         return changedFileCount > 0 || actionableStatus || hasMergeRecovery ? .worktree : .hidden
+    }
+
+    // MARK: the notice for a session without a worktree
+
+    /// What the amber notice says for a `shared-nogit` session: the runner couldn't give it a
+    /// worktree, so it edits its workspace's folder directly. Mirrors web's `SharedFolderNotice`;
+    /// every word it shows is here, and the view only lays them out.
+    public enum SharedFolderNotice: Equatable {
+        /// The folder isn't a git repository: Initialize git…, and ✕ keeps it as a plain folder by
+        /// turning worktree isolation off for the workspace.
+        case notGit
+        /// The folder is a repository git couldn't add a worktree to: no Initialize git…, and ✕ only
+        /// hides the notice for this session.
+        case noBranch
+
+        /// The headline, with the folder kept apart so the view can set it in monospace:
+        /// `lead` + `path` + `tail`. A folder nobody named is said in words instead.
+        public func headline(workDir: String?) -> (lead: String, path: String?, tail: String) {
+            let path = workDir.flatMap { $0.isEmpty ? nil : $0 }
+            switch self {
+            case .notGit:
+                guard let path else { return ("⚠ This folder isn’t a git repository", nil, "") }
+                return ("⚠ ", path, " isn’t a git repository")
+            case .noBranch:
+                guard let path else { return ("⚠ No branch for this session: it edits the folder directly", nil, "") }
+                return ("⚠ No branch for this session: it edits ", path, " directly")
+            }
+        }
+
+        /// The second line: what editing the folder directly costs, or why git couldn't branch it.
+        public var detail: String {
+            switch self {
+            case .notGit:
+                return "Sessions here edit the folder directly: no branch or diff to review, and sessions"
+                    + " running at the same time can overwrite each other’s changes."
+            case .noBranch:
+                return "The folder is a git repository, but git couldn’t add a worktree for this session."
+                    + " A repository with no commits has nothing to branch from."
+            }
+        }
+
+        /// What the ✕ is called, and what a Mac says while the pointer rests on it.
+        public var closeLabel: String {
+            self == .notGit ? "Keep it as a plain folder" : "Hide for this session"
+        }
+
+        public var closeHelp: String {
+            self == .notGit ? "Keep it as a plain folder: turns off worktree isolation for this workspace" : closeLabel
+        }
+    }
+
+    /// Which notice a `shared-nogit` session shows, read off its workspace's record (web's
+    /// `sharedFolderOf`): none once the workspace has answered it — worktree isolation turned off, or
+    /// git setup queued. A folder nobody has probed (an older runner, or a record that isn't loaded)
+    /// reads as the common case: not a repository.
+    public static func sharedFolderNotice(workDirIsGit: Bool?, enableWorktree: Bool?,
+                                          autoInitGit: Bool?) -> SharedFolderNotice? {
+        if enableWorktree == false || autoInitGit == true { return nil }
+        return workDirIsGit == true ? .noBranch : .notGit
+    }
+
+    public static let initializeGit = "Initialize git…"
+    public static let initializeGitTitle = "Initialize git in this folder?"
+    public static let initializeGitConfirm = "Initialize git"
+
+    /// Initialize git…'s confirmation in the words of web's `InitializeGitSteps`: the folder, then what
+    /// the runner does to it when the workspace's next session starts. A folder nobody named is left out.
+    public static func initializeGitMessage(workDir: String?, workspaceName: String?) -> String {
+        let steps = """
+            When the next session starts in \(workspacePhrase(workspaceName)), Orbit will:
+            • run git init
+            • add a .gitignore for dependencies, build output and .env files, unless the folder has one
+            • commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.
+
+            Each new session then works on its own branch, with a diff you review and merge. This session keeps editing the folder directly.
+            """
+        guard let workDir, !workDir.isEmpty else { return steps }
+        return workDir + "\n\n" + steps
+    }
+
+    /// What the notice's two answers say once the server has them, or that it didn't take them (web's
+    /// `enableIsoMut` and `keepSharedMut`).
+    public static let gitSetupQueued = "Git will be set up when the next session starts"
+    public static let gitSetupFailed = "Couldn't turn on git setup"
+    public static func worktreeIsolationOff(workspaceName: String?) -> String {
+        "Worktree isolation is off for \(workspacePhrase(workspaceName))"
+    }
+    public static let worktreeIsolationOffDetail = "Its sessions keep editing the folder directly, without this"
+        + " notice. Turn it back on in the workspace’s settings."
+    public static let worktreeIsolationOffFailed = "Couldn't turn off worktree isolation"
+    public static let worktreeIsolationOnFailed = "Couldn't turn worktree isolation back on"
+
+    /// A workspace as these sentences name it: in quotes, or "this workspace" when it has no name here.
+    private static func workspacePhrase(_ name: String?) -> String {
+        name.flatMap { $0.isEmpty ? nil : "“\($0)”" } ?? "this workspace"
     }
 
     /// The primary action offered on the bar.

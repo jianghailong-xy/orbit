@@ -221,6 +221,8 @@ final class AutoRetryLogicTests: XCTestCase {
     func testQuotaWindowIsNamedByItsLength() {
         XCTAssertEqual(AutoRetryLogic.quotaWindow("You've hit your session limit · resets 6pm (UTC)").title,
                        "5-hour limit reached")
+        XCTAssertEqual(AutoRetryLogic.quotaWindow("You've hit your 5-hour limit · resets 6pm (UTC)").title,
+                       "5-hour limit reached")
         XCTAssertEqual(AutoRetryLogic.quotaWindow("You've hit your weekly limit · resets 1pm (UTC)").title,
                        "Weekly limit reached")
         XCTAssertEqual(AutoRetryLogic.quotaWindow("You've hit your usage limit.").title,

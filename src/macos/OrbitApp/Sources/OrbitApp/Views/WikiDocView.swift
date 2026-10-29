@@ -368,6 +368,13 @@ struct WikiDocPage: View {
                     .padding(10)
             }
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        case .diagram:
+            Label(WikiDocCopy.diagramOnWeb, systemImage: "flowchart")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         case .item:
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•")

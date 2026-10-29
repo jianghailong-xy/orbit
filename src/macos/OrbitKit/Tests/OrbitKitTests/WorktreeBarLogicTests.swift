@@ -33,6 +33,99 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: "orbit/x-abcdef", changedFileCount: 5), .worktree)
     }
 
+    // MARK: the notice for a session without a worktree (web's SharedFolderNotice)
+
+    private typealias Notice = WorktreeBarLogic.SharedFolderNotice
+
+    /// Worktree isolation turned off, or git setup queued: the workspace answered, so none of its
+    /// sessions shows the notice, whatever the folder is.
+    func testNoticeSettledOnceTheWorkspaceAnswered() {
+        for isGit in [true, false, nil] as [Bool?] {
+            XCTAssertNil(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: isGit, enableWorktree: false, autoInitGit: nil))
+            XCTAssertNil(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: isGit, enableWorktree: true, autoInitGit: true))
+            XCTAssertNil(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: isGit, enableWorktree: nil, autoInitGit: true))
+        }
+    }
+
+    func testNoticeVariantFollowsWhatTheRunnerFoundInTheFolder() {
+        XCTAssertEqual(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: true, enableWorktree: true, autoInitGit: false), .noBranch)
+        XCTAssertEqual(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: false, enableWorktree: true, autoInitGit: false), .notGit)
+        // A folder no runner probed, or a workspace record that isn't loaded: the common case.
+        XCTAssertEqual(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: nil, enableWorktree: true, autoInitGit: false), .notGit)
+        XCTAssertEqual(WorktreeBarLogic.sharedFolderNotice(workDirIsGit: nil, enableWorktree: nil, autoInitGit: nil), .notGit)
+    }
+
+    func testNoticeHeadlineKeepsTheFolderApartForMonospace() {
+        let notGit = Notice.notGit.headline(workDir: "/Users/alex/notes")
+        XCTAssertEqual(notGit.lead, "⚠ ")
+        XCTAssertEqual(notGit.path, "/Users/alex/notes")
+        XCTAssertEqual(notGit.tail, " isn’t a git repository")
+        let noBranch = Notice.noBranch.headline(workDir: "/Users/alex/new-app")
+        XCTAssertEqual(noBranch.lead, "⚠ No branch for this session: it edits ")
+        XCTAssertEqual(noBranch.path, "/Users/alex/new-app")
+        XCTAssertEqual(noBranch.tail, " directly")
+    }
+
+    func testNoticeHeadlineWithoutAFolderSaysItInWords() {
+        for workDir in [nil, ""] as [String?] {
+            let notGit = Notice.notGit.headline(workDir: workDir)
+            XCTAssertNil(notGit.path)
+            XCTAssertEqual(notGit.lead + notGit.tail, "⚠ This folder isn’t a git repository")
+            let noBranch = Notice.noBranch.headline(workDir: workDir)
+            XCTAssertNil(noBranch.path)
+            XCTAssertEqual(noBranch.lead + noBranch.tail, "⚠ No branch for this session: it edits the folder directly")
+        }
+    }
+
+    func testNoticeSecondLineAndClose() {
+        XCTAssertEqual(Notice.notGit.detail,
+                       "Sessions here edit the folder directly: no branch or diff to review, and sessions running at the same time can overwrite each other’s changes.")
+        XCTAssertEqual(Notice.noBranch.detail,
+                       "The folder is a git repository, but git couldn’t add a worktree for this session. A repository with no commits has nothing to branch from.")
+        XCTAssertEqual(Notice.notGit.closeLabel, "Keep it as a plain folder")
+        XCTAssertEqual(Notice.notGit.closeHelp, "Keep it as a plain folder: turns off worktree isolation for this workspace")
+        XCTAssertEqual(Notice.noBranch.closeLabel, "Hide for this session")
+        XCTAssertEqual(Notice.noBranch.closeHelp, "Hide for this session")
+        XCTAssertEqual(WorktreeBarLogic.initializeGit, "Initialize git…")
+    }
+
+    func testInitializeGitConfirmationSpellsOutWhatTheRunnerDoes() {
+        XCTAssertEqual(WorktreeBarLogic.initializeGitTitle, "Initialize git in this folder?")
+        XCTAssertEqual(WorktreeBarLogic.initializeGitConfirm, "Initialize git")
+        XCTAssertEqual(WorktreeBarLogic.initializeGitMessage(workDir: "/Users/alex/notes", workspaceName: "notes"),
+                       "/Users/alex/notes\n\n"
+                        + "When the next session starts in “notes”, Orbit will:\n"
+                        + "• run git init\n"
+                        + "• add a .gitignore for dependencies, build output and .env files, unless the folder has one\n"
+                        + "• commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.\n\n"
+                        + "Each new session then works on its own branch, with a diff you review and merge."
+                        + " This session keeps editing the folder directly.")
+    }
+
+    func testInitializeGitConfirmationWithoutANameOrAFolder() {
+        let unnamed = WorktreeBarLogic.initializeGitMessage(workDir: "/srv/notes", workspaceName: nil)
+        XCTAssertTrue(unnamed.hasPrefix("/srv/notes\n\nWhen the next session starts in this workspace, Orbit will:\n• run git init\n"),
+                      unnamed)
+        // No folder: the first line goes, and the message opens on the steps.
+        let nowhere = WorktreeBarLogic.initializeGitMessage(workDir: nil, workspaceName: "notes")
+        XCTAssertTrue(nowhere.hasPrefix("When the next session starts in “notes”, Orbit will:\n• run git init\n"), nowhere)
+        XCTAssertEqual(WorktreeBarLogic.initializeGitMessage(workDir: "", workspaceName: ""),
+                       WorktreeBarLogic.initializeGitMessage(workDir: nil, workspaceName: nil))
+        XCTAssertTrue(WorktreeBarLogic.initializeGitMessage(workDir: nil, workspaceName: nil)
+            .hasSuffix("orbit: baseline”. Nothing is pushed anywhere.\n\nEach new session then works on its own branch, with a diff you review and merge. This session keeps editing the folder directly."))
+    }
+
+    func testTheNoticesAnswersInTheirToasts() {
+        XCTAssertEqual(WorktreeBarLogic.gitSetupQueued, "Git will be set up when the next session starts")
+        XCTAssertEqual(WorktreeBarLogic.gitSetupFailed, "Couldn't turn on git setup")
+        XCTAssertEqual(WorktreeBarLogic.worktreeIsolationOff(workspaceName: "notes"), "Worktree isolation is off for “notes”")
+        XCTAssertEqual(WorktreeBarLogic.worktreeIsolationOff(workspaceName: nil), "Worktree isolation is off for this workspace")
+        XCTAssertEqual(WorktreeBarLogic.worktreeIsolationOffDetail,
+                       "Its sessions keep editing the folder directly, without this notice. Turn it back on in the workspace’s settings.")
+        XCTAssertEqual(WorktreeBarLogic.worktreeIsolationOffFailed, "Couldn't turn off worktree isolation")
+        XCTAssertEqual(WorktreeBarLogic.worktreeIsolationOnFailed, "Couldn't turn worktree isolation back on")
+    }
+
     // MARK: primary action
 
     func testPrimaryDirtyLiveShowsCommit() {

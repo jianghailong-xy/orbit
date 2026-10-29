@@ -15,6 +15,7 @@ import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerRunnersController } from './runner-runners.controller';
 import { RunnerEngineInstallController } from './runner-engine-install.controller';
+import { RunnerDeleteController } from './runner-delete.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
@@ -95,6 +96,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerRunnersController,
     // An engine CLI installed or updated on one of them (runner-engine-install.controller.ts).
     RunnerEngineInstallController,
+    // One of them, or one of the account's workspaces, deleted on the owner's card (runner-delete.controller.ts).
+    RunnerDeleteController,
     RunnerProvidersController,
     RunnerNotifyController,
     RunnerProjectsController,

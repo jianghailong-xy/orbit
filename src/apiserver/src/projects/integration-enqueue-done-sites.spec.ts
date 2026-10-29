@@ -25,6 +25,21 @@ import { test } from 'node:test';
  *
  * Bounded to `src/apiserver/src`. Migration 0193's `task_done_canonical_writer_fence` is the
  * database's own guard on the same column and is not in scope here.
+ *
+ * THE DELIVERED IDENTITY (revision 29, §10.5 O-L4, §10.9 item 8)
+ * ==============================================================
+ * Every DONE writer also freezes the commit the task's work is named by, and the obligation is
+ * checked the same way, for the same reason: a door that forgot it leaves a task the observation
+ * never looks for (§10.6), and in an AGENT_PUSH project a dependent that waits on J9 with nobody
+ * holding the wait. Three halves:
+ *
+ *   * the DONE writer states the identity in the statement that writes DONE
+ *     (`deliveredIdentityAtDone`) — or is listed in FREEZES_AT_FINISH with the fact that its work
+ *     cannot have settled when it writes;
+ *   * `enqueueForDoneTask`, which every DONE writer calls, settles it (`settleDeliveredIdentity`):
+ *     it announces what the DONE froze and opens what an unknown identity owes;
+ *   * every write of a session's `finished_at` settles it (`settleDeliveredIdentityAfterFinish`),
+ *     because the DONE of work still moving freezes when that work finishes (O-L4 3).
  */
 
 // Resolved against the package root: this runs from `build/projects`, and the subject is the
@@ -46,6 +61,17 @@ const DONE_VALUE = /TaskStatus\.DONE|'DONE'|"DONE"|`DONE`/;
 /** `status` in key position — a Prisma input field, not the word in prose. */
 const STATUS_KEY = /\bstatus\s*:/;
 const ENQUEUE_CALL = /\benqueueForDoneTask\s*\(/;
+/** The identity a DONE write states in its own statement (O-L4). */
+const IDENTITY_IN_DONE_WRITE = /\bdeliveredIdentityAtDone\s*\(/;
+/** The settlement `enqueueForDoneTask` makes after the route is queued. */
+const SETTLE_AFTER_DONE = /\bsettleDeliveredIdentity\s*\(/;
+/** The settlement a finish of a work session makes (O-L4 3). */
+const SETTLE_AFTER_FINISH = /\bsettleDeliveredIdentityAfterFinish\s*\(/;
+/** A Prisma write of the `session` model, whose data can carry `finishedAt`. */
+const PRISMA_SESSION_WRITE = /\.session\.(?:update|updateMany|upsert)\s*\(/g;
+/** `finishedAt` in key position with a value written — not a select (`true`), a filter (`{`) or a
+ *  revive clearing it (`null`). */
+const FINISHED_AT_WRITTEN = /\bfinishedAt\s*:(?!\s*(?:true\b|null\b|undefined\b|\{))/;
 
 const METHOD =
   /^ {2}(?:private |protected |public |static |readonly |abstract )*(?:async )?(?:\*)?([A-Za-z0-9_$]+)\s*[(<]/;
@@ -84,11 +110,53 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
     + 'the fact would be queueing an integration for a completion that did not happen.',
   ],
   [
+    'projects/project-integration-job.ts#settleDeliveredIdentity',
+    'It writes no status: the `status: TaskStatus.DONE` it names is the predicate of the freeze\'s '
+    + 'compare-and-set, which writes the five delivered_* columns of a task that is already DONE and '
+    + 'nothing else (§10.5 O-L4). It runs inside the enqueue a DONE door already called, and after the '
+    + 'finish of work a DONE was waiting for; queueing here would queue a second time for one DONE.',
+  ],
+  [
     'tasks/task-completion-test-helper.ts#completeHumanTaskForPgTest',
     'A pg-spec fixture, not a door: it drives a task to DONE through the VERIFICATION lane so a '
     + 'suite has a genuinely finished task to work with. It is reachable from no request, and a '
     + 'fixture that queued real integration jobs would give every suite that uses it a repository '
     + 'to fetch from.',
+  ],
+]);
+
+/**
+ * DONE writers whose statement does not state the delivered identity, each with the fact that makes
+ * its work unsettled at the moment it writes DONE — so there is nothing yet to state, and the finish
+ * of that work freezes it (O-L4 3). `enqueueForDoneTask` freezes it as well if the work ever had
+ * settled, so an entry here costs a second write of the task's row, never a missing identity.
+ */
+const FREEZES_AT_FINISH: ReadonlyMap<string, string> = new Map([
+  [
+    'runner-api/runner-api.controller.ts#turnComplete',
+    'The acceptance command runs in the task\'s own work session, which is live while this turn '
+    + 'completes — a live session\'s finished_at is null until its finalize writes it — so the work '
+    + 'has not settled when the comparison derives DONE, and that finalize freezes the identity. The '
+    + 'comparison is also held to writing `data: { status: derivedStatus }` and nothing else '
+    + '(runner-api/executable-exit-code-judgment.spec.ts).',
+  ],
+]);
+
+/**
+ * Writes of a session's finish whose transaction settles the identity in the declaration that owns
+ * the transaction, after writes of its own that have to come first: the finish site, the declaration
+ * that settles it, and why it is not the site itself.
+ */
+const SETTLED_BY_CALLER: ReadonlyMap<string, { by: string; why: string }> = new Map([
+  [
+    'projects/session-source.ts#freezeSessionSourcePin',
+    {
+      by: 'runner-api/runner-api.controller.ts#pinSessionSource',
+      why: 'The refusal this freeze closes the run on is recorded by its caller in the same '
+        + 'transaction, the project blocker (rank 40) first and the task (rank 50) second; a settle '
+        + 'inside the freeze could write the task before the project is taken, the cycle that order '
+        + 'exists to prevent.',
+    },
   ],
 ]);
 
@@ -143,13 +211,44 @@ export function doneWriteSites(sources: readonly ScannedSource[]): string[] {
 
 /** The declarations that call the enqueue. */
 export function enqueueSites(sources: readonly ScannedSource[]): string[] {
+  return declarationsCalling(sources, ENQUEUE_CALL);
+}
+
+/** The declarations whose code calls what `call` matches. */
+export function declarationsCalling(sources: readonly ScannedSource[], call: RegExp): string[] {
   const sites = new Set<string>();
   for (const source of sources) {
     const code = withoutComments(source.content);
     const units = unitsByLine(code);
     code.split('\n').forEach((line, index) => {
-      if (ENQUEUE_CALL.test(line)) sites.add(`${source.path}#${units[index]}`);
+      if (call.test(line)) sites.add(`${source.path}#${units[index]}`);
     });
+  }
+  return [...sites].sort();
+}
+
+/**
+ * Every `path#declaration` that writes a session's `finished_at`: a write of the `session` model whose
+ * arguments, read up to the parenthesis that closes the call, give `finishedAt` a value.
+ */
+export function finishWriteSites(sources: readonly ScannedSource[]): string[] {
+  const sites = new Set<string>();
+  for (const source of sources) {
+    const code = withoutComments(source.content);
+    const units = unitsByLine(code);
+    for (const match of code.matchAll(PRISMA_SESSION_WRITE)) {
+      const at = match.index ?? 0;
+      const open = at + match[0].length - 1;
+      let depth = 0;
+      let close = open;
+      for (; close < code.length; close += 1) {
+        if (code[close] === '(') depth += 1;
+        else if (code[close] === ')' && --depth === 0) break;
+      }
+      if (FINISHED_AT_WRITTEN.test(code.slice(open, close))) {
+        sites.add(`${source.path}#${units[code.slice(0, at).split('\n').length - 1]}`);
+      }
+    }
   }
   return [...sites].sort();
 }
@@ -230,4 +329,88 @@ test('prose about DONE is not a write of it', () => {
     ].join('\n'),
   }];
   assert.deepEqual(doneWriteSites(prose), []);
+});
+
+test('every declaration that writes task.status = DONE states the delivered identity in that write (§10.5 O-L4)', () => {
+  const sources = productionSources(SRC);
+  const writers = doneWriteSites(sources).filter((site) => !EXEMPT.has(site));
+  const stating = new Set(declarationsCalling(sources, IDENTITY_IN_DONE_WRITE));
+  const missing = writers.filter((site) => !stating.has(site) && !FREEZES_AT_FINISH.has(site));
+  assert.deepEqual(
+    missing,
+    [],
+    'these declarations write DONE without freezing the delivered identity in the same statement '
+      + '(contract §10.5 O-L4). Spread deliveredIdentityAtDone into the DONE write, or add the site to '
+      + `FREEZES_AT_FINISH with the fact that its work cannot have settled:\n  ${missing.join('\n  ')}`,
+  );
+  // An entry for a door that states the identity after all, or that no longer writes DONE, is a
+  // reason nobody needs any more.
+  const stale = [...FREEZES_AT_FINISH.keys()].filter((site) => !writers.includes(site) || stating.has(site));
+  assert.deepEqual(stale, [], 'FREEZES_AT_FINISH names a site that does not need it');
+});
+
+test('enqueueForDoneTask settles the identity, and so does every write of a work session\'s finish (O-L4 3)', () => {
+  const sources = productionSources(SRC);
+  assert.ok(
+    declarationsCalling(sources, SETTLE_AFTER_DONE).includes('projects/project-integration-job.ts#enqueueForDoneTask'),
+    'enqueueForDoneTask no longer settles the delivered identity, so no DONE door does (§10.5 O-L4)',
+  );
+  const finishes = finishWriteSites(sources);
+  assert.ok(
+    finishes.length >= 4,
+    `the census found only ${finishes.length} write(s) of a session's finish; it has stopped seeing them`,
+  );
+  const settling = new Set(declarationsCalling(sources, SETTLE_AFTER_FINISH));
+  const missing = finishes.filter((site) => {
+    if (settling.has(site)) return false;
+    const caller = SETTLED_BY_CALLER.get(site);
+    return !caller || !settling.has(caller.by);
+  });
+  assert.deepEqual(
+    missing,
+    [],
+    'these declarations write a session\'s finished_at without settling the delivered identity of '
+      + 'the task whose work it ends (contract §10.5 O-L4 3): a DONE that waited for this finish '
+      + `would never freeze. Call settleDeliveredIdentityAfterFinish in the same transaction:\n  ${missing.join('\n  ')}`,
+  );
+  const stale = [...SETTLED_BY_CALLER.keys()].filter((site) => !finishes.includes(site) || settling.has(site));
+  assert.deepEqual(stale, [], 'SETTLED_BY_CALLER names a site that does not need it');
+});
+
+test('the census notices a DONE that states no identity, and a finish that settles nothing', () => {
+  const forgetful: ScannedSource[] = [{
+    path: 'tasks/new-door.service.ts',
+    content: [
+      'export async function settle(tx: Prisma.TransactionClient, taskId: string) {',
+      '  await tx.task.updateMany({ where: { id: taskId }, data: { status: TaskStatus.DONE } });',
+      '  await enqueueForDoneTask(tx, ownerId, taskId);',
+      '}',
+      'export async function end(tx: Prisma.TransactionClient, sessionId: string) {',
+      '  await tx.session.updateMany({',
+      '    where: { id: sessionId, finishedAt: null },',
+      '    data: { status: RunStatus.CANCELLED, finishedAt: new Date() },',
+      '  });',
+      '}',
+      'export async function read(tx: Prisma.TransactionClient, sessionId: string) {',
+      '  await tx.session.update({ where: { id: sessionId }, data: { finishedAt: null } });',
+      '  return tx.session.findMany({ where: { finishedAt: { not: null } }, select: { finishedAt: true } });',
+      '}',
+    ].join('\n'),
+  }];
+  assert.deepEqual(doneWriteSites(forgetful), ['tasks/new-door.service.ts#settle']);
+  assert.deepEqual(declarationsCalling(forgetful, IDENTITY_IN_DONE_WRITE), []);
+  assert.deepEqual(finishWriteSites(forgetful), ['tasks/new-door.service.ts#end']);
+  assert.deepEqual(declarationsCalling(forgetful, SETTLE_AFTER_FINISH), []);
+
+  const corrected: ScannedSource[] = [{
+    path: forgetful[0].path,
+    content: forgetful[0].content
+      .replace(
+        'data: { status: TaskStatus.DONE } }',
+        'data: { status: TaskStatus.DONE, ...(await deliveredIdentityAtDone(tx, ownerId, taskId)) } }',
+      )
+      .replace('  });\n}\nexport async function read', '  });\n  await settleDeliveredIdentityAfterFinish(tx, sessionId);\n}\nexport async function read'),
+  }];
+  assert.deepEqual(declarationsCalling(corrected, IDENTITY_IN_DONE_WRITE), ['tasks/new-door.service.ts#settle']);
+  assert.deepEqual(declarationsCalling(corrected, SETTLE_AFTER_FINISH), ['tasks/new-door.service.ts#end']);
 });

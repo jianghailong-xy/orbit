@@ -137,6 +137,28 @@ whether or not it was registered to install engines on its own. Any session with
 therefore install a known engine CLI on every runner of the account. Personal access tokens are unchanged: one
 with `runners:read` can read the install status, and none can start, update or dismiss an install.
 
+### Deleting a runner or an agent
+
+With orchestration on, an agent can delete one of the account's runners, or one of its agents, from the
+conversation it works in:
+
+```bash
+orbit runner delete --runner-id <runner-id> --json
+orbit agent delete <agent-id> --json
+```
+
+The MCP tools are `runner_delete` and `agent_delete`. Each first puts the deletion on a confirmation card in
+that conversation and waits for the account owner's answer; nothing is deleted if they decline. The card shows
+what the server reads about the target, not what the agent sent: a runner's name, whether it is online, and
+every agent that goes with it; an agent's folder and runner. The server deletes only against a card the owner
+answered in that same conversation about that same runner or agent. A workspace's "always allow" never answers
+these cards, and a call that skips the card is refused with `DELETE_APPROVAL_REQUIRED`.
+
+The deletes are the ones a runner's page in the app makes. A runner goes with every agent bound to it. The
+machine itself is untouched: it can no longer reach Orbit, and registering it again adds it back. An agent
+leaves the list but is not erased, and its sessions and tasks stay linked to it. A managed runner, an agent that
+still coordinates a project, and the runner or agent the asking session runs on are refused.
+
 ## Providers
 
 `--provider` on `orbit session create`, `orbit task create` and `orbit task update` takes a built-in provider

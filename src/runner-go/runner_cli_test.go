@@ -104,6 +104,7 @@ func TestRunnerCLIRequiresALiveOrchestrationSession(t *testing.T) {
 				{"list"},
 				{"install", "--runner-id", "runner-2", "--engine", "claude"},
 				{"install-status", "--runner-id", "runner-2"},
+				{"delete", "--runner-id", "runner-2"},
 			} {
 				var out bytes.Buffer
 				err := cmdRunnerCLI(args, &out)
@@ -138,6 +139,9 @@ func TestRunnerCLIValidatesArguments(t *testing.T) {
 		{name: "unknown command", args: []string{"remove"}, wantError: "unknown command"},
 		{name: "trailing argument", args: []string{"list", "runner-2"}, wantError: "unexpected arguments: runner-2"},
 		{name: "unknown flag", args: []string{"list", "--all"}, wantError: "flag provided but not defined: -all"},
+		{name: "delete without a runner", args: []string{"delete"}, wantError: "--runner-id is required"},
+		{name: "delete of an id that is not one", args: []string{"delete", "--runner-id", "../sessions"}, wantError: "runner "},
+		{name: "delete with a stray argument", args: []string{"delete", "--runner-id", "runner-2", "now"}, wantError: "unexpected arguments: now"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
@@ -197,6 +201,7 @@ func TestRunnerCLICapabilitiesFollowTheOrchestrationGate(t *testing.T) {
 		{tool: "runner_list", action: "list", usage: "orbit runner list [--json]"},
 		{tool: "runner_engine_install", action: "install", usage: "orbit runner install --runner-id ID --engine ENGINE [--update] [--wait] [--json]", mutates: true},
 		{tool: "runner_engine_install_status", action: "install-status", usage: "orbit runner install-status --runner-id ID [--json]"},
+		{tool: "runner_delete", action: "delete", usage: "orbit runner delete --runner-id ID [--json]", mutates: true},
 	}
 	for _, verb := range verbs {
 		var descriptor map[string]interface{}

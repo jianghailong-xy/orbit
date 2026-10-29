@@ -44,7 +44,9 @@ import {
   CoordinatorQuestion,
   DELIVERY_REVIEW_KIND,
   INTEGRATION_ITEM_KINDS,
+  LANDED_WITHOUT_CONFIRMATION_KIND,
   LANDING_LEASE_EXPIRED_KIND,
+  LANDING_UNOBSERVED_KIND,
   MAX_OPEN_ITEM_RESOLUTION_NOTE,
   OpenItemAssignee,
   OpenItemAssigneeReason,
@@ -65,6 +67,7 @@ import {
   primaryAction,
   openItemFacts,
   type LandedFix,
+  landingLineOf,
   openItemMessage,
   openItemOwed,
   openItemTurnId,
@@ -76,7 +79,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
-import { mainBranchOf } from './project-criterion-landing';
+import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -115,6 +118,14 @@ import {
   notAnApprovalId,
 } from './project-integration-skip-check';
 import { requeuePromotionCheck } from './project-promotion.service';
+import {
+  INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+  INTEGRATION_OBSERVE_REASON_REQUIRED,
+  MAX_INTEGRATION_OBSERVE_REASON,
+  hasPendingObservation,
+  observableUnobservedItems,
+  queueLandingObservation,
+} from './landing-observation';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
   START_REQUEST_COORDINATOR_ONLY,
@@ -127,7 +138,7 @@ import {
   startRequestDetailLine,
   supersedeStaleStartRequest,
 } from './project-start-request';
-import { doorsForOpenItem } from './open-item-doors';
+import { doorsForOpenItem, openItemDoorMessageNames, sourceJobForOpenItem } from './open-item-doors';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
   DONE_REQUEST_DECLINE_NOTE_REQUIRED,
@@ -182,6 +193,11 @@ export const OPEN_ITEM_HAND_OVER_RACE = 'OPEN_ITEM_HAND_OVER_RACE';
 /** This kind is never delivered to a coordinator conversation, so it cannot be sent back to one
  *  (§4.6 X-E5, §4.4 X-D7): it is the owner's from birth, and the silence it reports is theirs. */
 export const OPEN_ITEM_NOT_RETURNABLE = 'OPEN_ITEM_NOT_RETURNABLE';
+/** O-X1 (§10.7): a task-landing integration item is not closed by hand while the wait it is about
+ *  still stands — the task NOT_KNOWN and a dependent still waiting on it. */
+export const OPEN_ITEM_CONDITION_STANDS = 'OPEN_ITEM_CONDITION_STANDS';
+/** The owner's own door, refused to a request made from a session whatever it carries (§4.7). */
+export const OPEN_ITEM_OWNER_ONLY = 'OPEN_ITEM_OWNER_ONLY';
 
 function normalizedDoneRequestDeclineNote(given: ProjectDoneRequestDeclineBody | undefined): string {
   const note = typeof given?.note === 'string' ? given.note.trim() : '';
@@ -213,11 +229,13 @@ function doneRequestDeclineNotOpen(): ConflictException {
  * The kinds this door ends, and what each ending is called (§4.2).
  *
  * The integration kinds come from the constant rather than being listed again, so a fifth
- * `INTEGRATION_*` state the pipeline can stop in does not arrive without a way to close it. The two
- * that are absent are absent on purpose: `PROMOTION_APPROVAL` is decided by confirming or declining
- * the merge and `FUSE_PAUSED` by resuming the project, and closing either by hand would leave what
- * it is about — a promotion nobody decided, a project standing still — with no card in front of
- * anybody.
+ * `INTEGRATION_*` state the pipeline can stop in does not arrive without a way to close it. The
+ * kinds that are absent are absent on purpose: `PROMOTION_APPROVAL` is decided by confirming or
+ * declining the merge and `FUSE_PAUSED` by resuming the project, and closing either by hand would
+ * leave what it is about — a promotion nobody decided, a project standing still — with no card in
+ * front of anybody. Revision 29's two (§10.7) are absent for the same reason: a
+ * `LANDING_UNOBSERVED` ends with a fact about its task, and a `LANDED_WITHOUT_CONFIRMATION` with
+ * the owner's Accept.
  */
 const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'>> = {
   ...Object.fromEntries(INTEGRATION_ITEM_KINDS.map((kind) => [kind, 'HANDLED' as const])),
@@ -303,6 +321,8 @@ export interface OpenItemRow {
     | 'ANSWER'
     | 'OPEN_LANDING'
     | 'ABANDON'
+    | 'ACCEPT'
+    | 'OBSERVE'
   >;
   /** The server's one-sentence next step, optional for rolling-version readers. */
   requiredAction?: string;
@@ -317,7 +337,9 @@ export interface OpenItemRow {
     | 'RESUME'
     | 'ANSWER'
     | 'OPEN_LANDING'
-    | 'ABANDON';
+    | 'ABANDON'
+    | 'ACCEPT'
+    | 'OBSERVE';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -378,6 +400,13 @@ export interface OpenItemResolved {
   resolution: 'HANDLED' | 'WITHDRAWN';
 }
 
+/** Work that reached the branch without the owner's confirmation, accepted by the owner (§10.8). */
+export interface OpenItemAccepted {
+  itemId: string;
+  state: 'RESOLVED';
+  resolution: 'ACCEPTED';
+}
+
 /** A failed landing the coordinator ran again (§2.3 J-T1b), as `integration_retry` answers it. */
 export interface IntegrationRetried {
   taskId: string;
@@ -396,6 +425,21 @@ export interface IntegrationRetried {
   /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
+  handlingItemIds: string[];
+}
+
+/** The project's line looked at again (§10.8, O-T5), as `integration_observe` answers it. */
+export interface IntegrationObserved {
+  projectId: string;
+  /** The OBSERVE_LANDING that will look: the one this press queued, or the one already queued. */
+  jobId: string;
+  generation: number;
+  /** False when the press folded into the observation already queued (§10.4). */
+  queued: boolean;
+  reason: string;
+  /** The asker's OPEN `LANDING_UNOBSERVED` items that observation can answer, now being handled by
+   *  it (§4.7 H1): OPEN until it reports, closed LANDED by the receipt it writes when it sees the
+   *  commit, and left as they were when it does not. */
   handlingItemIds: string[];
 }
 
@@ -1427,6 +1471,19 @@ export class ProjectOpenItemService {
           + 'or close it by hand.',
       });
     }
+    // §10.7: the owner's from birth and never delivered to a coordinator — it asks about authority,
+    // which no conversation holds — so there is nowhere to send it either. Undoing the work is a
+    // task the coordinator files when asked in "Chat about this", not this door.
+    if (item.kind === LANDED_WITHOUT_CONFIRMATION_KIND) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_RETURNABLE,
+        message:
+          'this item is never delivered to a coordinator conversation: it asks the account owner to '
+          + 'accept work that reached the branch without their confirmation, and only the owner can '
+          + 'accept it. To undo the work instead, use Chat about this to have the coordinator file a '
+          + 'task that reverts it.',
+      });
+    }
     if (item.state !== 'OPEN') {
       throw new ConflictException({
         code: OPEN_ITEM_NOT_OPEN,
@@ -1654,6 +1711,9 @@ export class ProjectOpenItemService {
         // names. Read for the settlement edge below.
         taskId: true,
         integrationJobId: true,
+        // The cell the refusals below name the doors of, and what O-X1 asks about.
+        promotionId: true,
+        payload: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -1667,13 +1727,7 @@ export class ProjectOpenItemService {
     if (item.state !== 'OPEN') throw notOpen();
     const resolution = HAND_CLOSABLE_RESOLUTIONS[item.kind];
     if (!resolution) {
-      throw new ConflictException({
-        code: OPEN_ITEM_HAS_ITS_OWN_DOOR,
-        message:
-          'this item is decided by a press of its own: confirm or decline the merge on its card, or '
-          + 'resume the project. Closing it here would leave what it is about undecided and with no '
-          + 'card in front of anybody.',
-      });
+      throw new ConflictException({ code: OPEN_ITEM_HAS_ITS_OWN_DOOR, message: ownDoorRefusal(item) });
     }
     const note = given.note?.trim();
     if (!note) {
@@ -1733,6 +1787,16 @@ export class ProjectOpenItemService {
       resolvedBySessionId = sessionId!;
     }
 
+    // O-X1 (§10.7): an item about a task's landing is not closed by hand while that landing is what
+    // a dependent is still waiting on — the wait would be left with nobody in front of it (O5) — and
+    // neither is the item a project's failing observations open (IE:observe) while a task of the
+    // project waits to be observed. Read once, before the write; the doors the refusal names are this
+    // item's cell's.
+    if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)
+        && await landingConditionStands(this.prisma, projectId, item)) {
+      throw new ConflictException({ code: OPEN_ITEM_CONDITION_STANDS, message: conditionStandsRefusal(item) });
+    }
+
     const settled = await this.prisma.projectOpenItem.updateMany({
       where: { id: itemId, state: 'OPEN' },
       data: {
@@ -1758,6 +1822,139 @@ export class ProjectOpenItemService {
       .catch((error) => this.logger.warn(
         `landing settlement after item ${itemId} closed failed: ${(error as Error)?.message ?? error}`));
     return { itemId, state: 'RESOLVED', resolution };
+  }
+
+  /**
+   * The account owner accepts work that reached the branch without their confirmation (§10.8): the
+   * one door that ends a `LANDED_WITHOUT_CONFIRMATION`, as RESOLVED / ACCEPTED by the USER.
+   *
+   * The owner's own: a request made from a session is refused 403 whatever credential came with it
+   * (the start door's rule), and the route takes no token (`@PatForbidden('OWNER_INTERACTIVE')`).
+   * Accept answers this one kind; any other item is decided by its own doors. One compare-and-set on
+   * the OPEN, still owed row, so a second press — or a fact that moved it meanwhile — is told it is no
+   * longer open rather than reporting an Accept it did not make. Undoing the work is not a door: the
+   * owner asks the coordinator for it in "Chat about this", and the coordinator files ordinary work.
+   */
+  async acceptOpenItem(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    actingSessionId?: string,
+  ): Promise<OpenItemAccepted> {
+    if (actingSessionId?.trim()) {
+      throw new ForbiddenException({
+        code: OPEN_ITEM_OWNER_ONLY,
+        message:
+          'accepting work that reached the branch without the owner\'s confirmation is the account '
+          + 'owner\'s own decision, so a request made from a session is refused whatever credential it '
+          + 'carries.',
+      });
+    }
+    const item = await this.prisma.projectOpenItem.findFirst({
+      where: { id: itemId, projectId, ownerId },
+      select: { id: true, kind: true, state: true },
+    });
+    if (!item) throw new NotFoundException('item not found');
+    if (item.kind !== LANDED_WITHOUT_CONFIRMATION_KIND) {
+      throw new ConflictException({
+        code: OPEN_ITEM_HAS_ITS_OWN_DOOR,
+        message:
+          'Accept answers only an item about work that reached the branch without your confirmation; '
+          + 'this item is decided by its own doors.',
+      });
+    }
+    const notOpen = (): ConflictException => new ConflictException({
+      code: OPEN_ITEM_NOT_OPEN,
+      message:
+        'this item is no longer open: it was accepted already, or its task was cancelled or replaced.',
+    });
+    if (item.state !== 'OPEN') throw notOpen();
+    const [accepted] = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      UPDATE "project_open_item" item
+         SET "state" = 'RESOLVED', "resolution" = 'ACCEPTED', "resolved_at" = now(),
+             "resolved_by" = 'USER', "resolved_by_user_id" = ${ownerId}::uuid, "updated_at" = now()
+       WHERE item."id" = ${itemId}::uuid
+         AND item."project_id" = ${projectId}::uuid AND item."owner_id" = ${ownerId}::uuid
+         AND item."kind" = ${LANDED_WITHOUT_CONFIRMATION_KIND} AND item."state" = 'OPEN'
+         AND ${openItemOwed('item')}
+       RETURNING item."id"`);
+    if (!accepted) throw notOpen();
+    return { itemId, state: 'RESOLVED', resolution: 'ACCEPTED' };
+  }
+
+  /**
+   * Look at the project's line again (`integration_observe`, §10.8; §10.6 O-T5): queue one
+   * OBSERVE_LANDING, or fold into the one already queued, as the conversation the project is
+   * coordinated from or as the account owner.
+   *
+   * WHO MAY ASK. The project's current coordinator conversation, named by the acting session, and
+   * nothing else on the runner door — a missing or blank header is not read as the account owner,
+   * whose own press is the user door (`{ kind: 'OWNER' }`, which the owner's controller sends only
+   * without an acting session). A reason is required, as on every integration door: it stays on the
+   * items the observation handles.
+   *
+   * WHAT IT WRITES. One transaction. `queueLandingObservation` under the binding's lock (rank 55) —
+   * the observation's own enqueue, which also ends a silent RUNNING one (J-T9) — then, by §4.7 H1,
+   * the asker's OPEN `LANDING_UNOBSERVED` items whose task that observation will look at, marked as
+   * being handled by it. They stay OPEN: the observation that sees a task's commit writes its landing
+   * receipt, which closes the item LANDED (O-R1), and one that does not leaves it as it was. An
+   * observation queues even with nothing waiting (O-T5); a project with no repository bound has no
+   * line to look at and is refused, with nothing written.
+   */
+  async observeIntegration(
+    ownerId: string,
+    projectId: string,
+    given: { reason?: unknown } | undefined,
+    actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  ): Promise<IntegrationObserved> {
+    const reason = observeReason(given);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actor.kind === 'SESSION' ? actor.sessionId.trim() : null;
+    if (actor.kind === 'SESSION' && (!asking || asking !== project.coordinatorSessionId)) {
+      throw observeCoordinatorOnly();
+    }
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const queued = await queueLandingObservation(tx, { ownerId, projectId, trigger: 'OBSERVE_DOOR' });
+      if (!queued) {
+        throw new ConflictException({
+          code: 'INTEGRATION_REPOSITORY_UNKNOWN',
+          message: 'this project has no repository bound yet, so there is no line to look at. Its first '
+            + 'landing binds one.',
+        });
+      }
+      if (asking) {
+        // Read again inside the transaction: the pointer can rotate while the call was on its way.
+        const current = await tx.project.findUniqueOrThrow({
+          where: { id: projectId },
+          select: { coordinatorSessionId: true },
+        });
+        if (current.coordinatorSessionId !== asking) throw observeCoordinatorOnly();
+      }
+      const handle = await observableUnobservedItems(tx, projectId, asking ? 'COORDINATOR' : 'OWNER');
+      await markOpenItemsHandling(tx, handle, {
+        jobId: queued.jobId,
+        sessionId: asking,
+        userId: asking ? null : ownerId,
+        reason,
+      });
+      const job = await tx.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: queued.jobId },
+        select: { generation: true },
+      });
+      return {
+        projectId,
+        jobId: queued.jobId,
+        generation: job.generation,
+        queued: queued.queued,
+        reason,
+        handlingItemIds: handle,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.observeIntegration'));
   }
 
   /**
@@ -2721,6 +2918,12 @@ export class ProjectOpenItemService {
    * going to land a task that is gone — and they name the fact they saw the way the item's own door
    * table names it: `SUCCESSOR_FILED` when a successor took the task over (`taskRepair`'s
    * `task_create`), `TASK_CLOSED` when it was cancelled (`task_update`'s cancel).
+   *
+   * Revision 29's two (§10.7) are the fourth and fifth statements. A `LANDING_UNOBSERVED` is answered
+   * by the task leaving the DONE delivery it is about — replaced, cancelled, declared codeless, sent
+   * back — and by its landing, which its receipt's own transaction usually wrote first
+   * (`resolveLandingUnobservedOnLanding`); a `LANDED_WITHOUT_CONFIRMATION` by the task being
+   * cancelled or replaced, and otherwise only by the owner's Accept.
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -2784,6 +2987,46 @@ export class ProjectOpenItemService {
            AND i."state" = 'OPEN'
            AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
            AND (t."status" <> 'DONE' OR t."superseded_by_task_id" IS NOT NULL)`);
+      // §10.7: what a `LANDING_UNOBSERVED` waits on is the DONE delivery it is about reaching the
+      // line; once the task is no longer that delivery, or its work landed, it is answered.
+      await this.prisma.$executeRaw(Prisma.sql`
+        UPDATE "project_open_item" i
+           SET "state" = 'RESOLVED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 WHEN t."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                 WHEN t."codeless" THEN 'CODELESS'
+                 WHEN t."status" <> 'DONE' THEN 'RETRIED'
+                 ELSE 'LANDED' END,
+               "resolved_at" = now(),
+               "resolved_by" = 'PLATFORM',
+               "updated_at" = now()
+          FROM "task" t
+         WHERE i."task_id" = t."id"
+           AND i."kind" = ${LANDING_UNOBSERVED_KIND}
+           AND i."state" = 'OPEN'
+           AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND (t."superseded_by_task_id" IS NOT NULL
+                OR t."status" <> 'DONE'
+                OR t."codeless"
+                OR (${Prisma.raw(taskLandingSql('t'))}) <> 'NOT_KNOWN')`);
+      // §10.7: work that reached main without confirmation is the owner's to accept for as long as
+      // its task stands; a task cancelled or replaced is gone, and so is the question.
+      await this.prisma.$executeRaw(Prisma.sql`
+        UPDATE "project_open_item" i
+           SET "state" = 'RESOLVED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 ELSE 'TASK_CLOSED' END,
+               "resolved_at" = now(),
+               "resolved_by" = 'PLATFORM',
+               "updated_at" = now()
+          FROM "task" t
+         WHERE i."task_id" = t."id"
+           AND i."kind" = ${LANDED_WITHOUT_CONFIRMATION_KIND}
+           AND i."state" = 'OPEN'
+           AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND (t."status" = 'CANCELLED' OR t."superseded_by_task_id" IS NOT NULL)`);
     });
   }
 
@@ -3407,6 +3650,36 @@ function rerunReason(given: { reason?: string } | undefined): string {
   return reason;
 }
 
+/** The reason `integration_observe` keeps (§10.8), trimmed and bounded — or its one 400. */
+function observeReason(given: { reason?: unknown } | undefined): string {
+  const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
+  if (!reason) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message:
+        'a reason is required: say why the work may be on the line now — what changed since Orbit '
+        + 'last looked. It stays on the items the observation handles.',
+    });
+  }
+  if (reason.length > MAX_INTEGRATION_OBSERVE_REASON) {
+    throw new BadRequestException({
+      code: INTEGRATION_OBSERVE_REASON_REQUIRED,
+      message: `a reason is at most ${MAX_INTEGRATION_OBSERVE_REASON} characters`,
+    });
+  }
+  return reason;
+}
+
+/** Only the conversation the project is coordinated from asks for its line to be looked at. */
+function observeCoordinatorOnly(): ForbiddenException {
+  return new ForbiddenException({
+    code: INTEGRATION_OBSERVE_COORDINATOR_ONLY,
+    message:
+      'only the conversation this project is coordinated from may ask for its line to be looked at '
+      + 'again; the account owner asks on their own door.',
+  });
+}
+
 /** Only the conversation the project is coordinated from reruns any of its integrations. */
 function rerunCoordinatorOnly(): ForbiddenException {
   return new ForbiddenException({
@@ -3423,6 +3696,121 @@ function unique(ids: ReadonlyArray<string | null | undefined>): string[] {
 }
 
 /** A key for a caller that sent none: one question per call, which is what asking once means. */
+/** An item as the refusals below read it: the columns its door cell is keyed by. */
+interface RefusedItem {
+  kind: string;
+  taskId: string | null;
+  promotionId: string | null;
+  payload: unknown;
+}
+
+/** The doors this item's cell holds, by the names the coordinator's messages use
+ *  (`openItemDoorMessageNames`): a refusal names nothing the cell does not have. */
+function messageDoorsOf(item: RefusedItem) {
+  const payload = (item.payload ?? {}) as { phase?: string; jobKind?: string; failureClass?: string };
+  return openItemDoorMessageNames({
+    kind: item.kind,
+    assignee: 'COORDINATOR',
+    taskId: item.taskId,
+    promotionId: item.promotionId,
+    payload: item.payload,
+    phase: payload.phase ?? null,
+    jobKind: payload.jobKind ?? null,
+    failureClass: payload.failureClass ?? null,
+  });
+}
+
+/**
+ * Why `open_item_resolve` does not end this kind (§4.2, §4.7), and what does. A merge card and a
+ * pause have a press of their own; revision 29's two end with a fact (§10.7) — the work landing, the
+ * task moving on — or the owner's Accept.
+ */
+function ownDoorRefusal(item: RefusedItem): string {
+  if (item.kind === LANDING_UNOBSERVED_KIND) {
+    const doors = messageDoorsOf(item);
+    const line = landingLineOf(item.payload) ?? 'its line';
+    const ways = [
+      doors.mergeReceiptMcp == null ? null
+        : `record the commit on ${line} that carries the work with ${doors.mergeReceiptMcp}`,
+      doors.taskReopenMcp == null ? null : `send the task back to push it with ${doors.taskReopenMcp}`,
+      doors.handOverMcp == null ? null : `hand the item to the account owner with ${doors.handOverMcp}`,
+    ].filter((way): way is string => way != null);
+    return `this item is not closed by hand: it ends when its task's work is on ${line}, or when the task `
+      + 'is sent back, replaced, cancelled or declared codeless. Marking it handled would leave the tasks '
+      + `waiting on that work with nobody in front of the wait.${ways.length > 0 ? ` To move it: ${ways.join('; ')}.` : ''}`;
+  }
+  if (item.kind === LANDED_WITHOUT_CONFIRMATION_KIND) {
+    return 'this item is decided by the account owner\'s Accept on its card. Closing it here would leave '
+      + 'the work that reached the branch without their confirmation with no decision recorded.';
+  }
+  return 'this item is decided by a press of its own: confirm or decline the merge on its card, or '
+    + 'resume the project. Closing it here would leave what it is about undecided and with no '
+    + 'card in front of anybody.';
+}
+
+/**
+ * O-X1's condition (§10.7), from committed rows: the task this item's landing is about — its own,
+ * or the one a `TASK_BRANCH` candidate offers — is still NOT_KNOWN (§1.4, `taskLandingSql`), and a
+ * task that has not ended (neither DONE nor CANCELLED, nor replaced) depends on it. Either half gone
+ * — the work landed, or nothing waits on it any more — and the item closes by hand as before.
+ *
+ * The item a project's failing observations open (`IE:observe`, §10.6 O-J4) is about no one task: it
+ * is in front of somebody for every task of the project waiting to be observed, so its condition is
+ * that any of them still waits (`landingPendingObservationSql`) — until each has landed, been
+ * cancelled or replaced, or stopped being code work.
+ */
+async function landingConditionStands(
+  prisma: PrismaService,
+  projectId: string,
+  item: RefusedItem,
+): Promise<boolean> {
+  if (observationFailureItem(item)) return hasPendingObservation(prisma, projectId);
+  const [row] = await prisma.$queryRaw<Array<{ stands: boolean }>>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM "task" waited_on
+       WHERE waited_on."id" = COALESCE(
+               ${item.taskId}::uuid,
+               (SELECT candidate."task_id" FROM "project_promotion" candidate
+                 WHERE candidate."id" = ${item.promotionId}::uuid
+                   AND candidate."source_kind" = 'TASK_BRANCH'))
+         AND (${Prisma.raw(taskLandingSql('waited_on'))}) = 'NOT_KNOWN'
+         AND EXISTS (
+           SELECT 1 FROM "task_dependency" waiting_edge
+             JOIN "task" waiting ON waiting."id" = waiting_edge."task_id"
+            WHERE waiting_edge."depends_on_task_id" = waited_on."id"
+              AND waiting."status" NOT IN ('DONE', 'CANCELLED')
+              AND waiting."superseded_by_task_id" IS NULL)
+    ) AS "stands"`);
+  return row?.stands === true;
+}
+
+/** Whether this is the item a project's failing observations open (§10.6 O-J4): the cell whose
+ *  source job is OBSERVE_LANDING. */
+function observationFailureItem(item: RefusedItem): boolean {
+  return sourceJobForOpenItem({ ...item, assignee: 'COORDINATOR' }) === 'OBSERVE_LANDING';
+}
+
+/** O-X1's refusal: the wait still stands, and the doors of this item's cell that answer it — of
+ *  `integration_retry`, `integration_observe`, `merge_receipt`, `task_reopen` and
+ *  `open_item_hand_over`, only the ones the cell really has (§4.7 T17). */
+function conditionStandsRefusal(item: RefusedItem): string {
+  const doors = messageDoorsOf(item);
+  const named = [doors.retryMcp, doors.observeMcp, doors.mergeReceiptMcp, doors.taskReopenMcp, doors.handOverMcp]
+    .filter((name): name is string => name != null);
+  if (observationFailureItem(item)) {
+    return 'this item stands for the tasks of this project still waiting to be observed: until an observation '
+      + 'of the line succeeds, their work is not recorded as landed, and this item is what puts that wait in '
+      + 'front of somebody. Marking it handled would leave the wait with nobody in front of it.'
+      + (named.length > 0 ? ` Move it with one of this item's doors: ${named.join(', ')}.` : '')
+      + ' Once no task of the project waits to be observed any more, it closes by hand as before.';
+  }
+  return 'this item is about a task\'s landing, and the wait it is about still stands: the work is not on '
+    + 'the line yet, and a task that depends on it is still waiting. Marking it handled would leave that '
+    + 'wait with nobody in front of it.'
+    + (named.length > 0 ? ` Move it with one of this item's doors: ${named.join(', ')}.` : '')
+    + ' Once the work lands, or nothing waits on it any more, it closes by hand as before.';
+}
+
 function randomKey(): string {
   return randomUUID();
 }
@@ -3434,6 +3822,8 @@ function detailLine(kind: string, payload: unknown): string {
   if (kind === 'FUSE_PAUSED') return fusePausedDetailLine(payload as FusePausedPayload);
   if (kind === LANDING_LEASE_EXPIRED_KIND) return leaseExpiredDetailLine(payload);
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
+  if (kind === LANDING_UNOBSERVED_KIND) return landingUnobservedDetailLine(payload);
+  if (kind === LANDED_WITHOUT_CONFIRMATION_KIND) return landedWithoutConfirmationDetailLine(payload);
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;
@@ -3447,6 +3837,28 @@ function detailLine(kind: string, payload: unknown): string {
     ? ` · exit ${failure.exitCode}, expected ${failure.expectedExitCode ?? 0}`
     : '';
   return `${howInEnglish(failure.how)}${exit} · attempt ${attempt} of ${limit} in this chain`;
+}
+
+/** The line under a `LANDING_UNOBSERVED`'s title: what was seen, and the commit it is about. */
+function landingUnobservedDetailLine(payload: unknown): string {
+  const row = (payload ?? {}) as { reason?: unknown; deliveredSha?: unknown };
+  const reading = row.reason === 'APPLIED_AS_OTHER_COMMITS' ? 'Its changes are there as other commits'
+    : row.reason === 'WORK_ELSEWHERE' ? 'Its branch has no commits of its own'
+      : row.reason === 'IDENTITY_UNKNOWN' ? 'Orbit could not tell which commit it delivered'
+        : 'Its commit was not found on the line';
+  const delivered = typeof row.deliveredSha === 'string' && row.deliveredSha
+    ? ` · delivered ${row.deliveredSha.slice(0, 12)}`
+    : '';
+  return `${reading}${delivered}`;
+}
+
+/** The line under a `LANDED_WITHOUT_CONFIRMATION`'s title: the commit that reached the branch, and
+ *  how Orbit knows. */
+function landedWithoutConfirmationDetailLine(payload: unknown): string {
+  const row = (payload ?? {}) as { sourceSha?: unknown; targetBranch?: unknown; observed?: unknown };
+  const sha = typeof row.sourceSha === 'string' && row.sourceSha ? row.sourceSha.slice(0, 12) : 'its commit';
+  const branch = typeof row.targetBranch === 'string' && row.targetBranch ? row.targetBranch : 'the branch';
+  return `${sha} is on ${branch} · ${row.observed === true ? 'seen by Orbit' : 'recorded by a merge receipt'}`;
 }
 
 /** The line under X-E5's title: which runner went quiet, and when it last said anything. */

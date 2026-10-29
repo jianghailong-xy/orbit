@@ -87,6 +87,20 @@ internal object RunnerCopy {
     const val DEVICE_CODE_FOOTER = "orbit register prints a code there. Enter it to approve the machine from this phone — its " +
         "name and hostname show before you confirm."
     const val APPROVE = "Approve"
+    /** Approve, for a request whose name a runner of this account already has. */
+    const val REREGISTER = "Re-register"
+    const val DENY = "Deny"
+    // What became of a request looked up by its code, and a runner already of its name: the web /enroll page's words, held to runnerCopy.ts's
+    // by AddRunnerCopyParityTest.
+    const val DEVICE_APPROVED = "Machine registered"
+    fun deviceApprovedDetail(name: String) = "$name is on your account. Go back to the terminal — it finishes setting up by itself."
+    const val DEVICE_DENIED = "Request denied"
+    const val DEVICE_DENIED_DETAIL = "Nothing was added to your account. orbit register in that terminal stops and says the request was denied."
+    fun deviceNameTaken(name: String) = "\"$name\" is already on your account"
+    /** When the runner already of that name last checked in: `3d ago`. */
+    fun deviceLastOnline(whenText: String) = "Last online $whenText."
+    const val DEVICE_NAME_TAKEN_DETAIL = "Approving gives it a new credential and the old one stops working; its workspaces and history stay. " +
+        "A different computer with the same name? Deny, then run orbit register --name <new-name> on it."
     fun installCommandUnix(origin: String) = "curl -fsSL $origin/install.sh | bash"
     fun installCommandWindows(origin: String) = "irm $origin/install.ps1 | iex"
     const val REPAIR = "Repair"
@@ -716,11 +730,8 @@ internal object RunnerPage {
     }
 
     /** green online, amber while it drains, grey offline. */
-    fun presence(runner: JsonObject, nowMs: Long) = when {
-        isOffline(runner, nowMs) -> "offline"
-        runner.str("status") == "DRAINING" -> "draining"
-        else -> "online"
-    }
+    /** The status dot, by the web's rule: "online" or "offline" — a machine that drains is online. */
+    fun presence(runner: JsonObject, nowMs: Long) = if (isOffline(runner, nowMs)) "offline" else "online"
 
     /** A list row's `4/12`: none for an offline machine or one with no limit reported. */
     fun slots(runner: JsonObject, nowMs: Long): Pair<Int, Int>? {
@@ -1151,6 +1162,13 @@ internal object RunnerPage {
         if (characters.length != 10 || characters.any { it.code > 127 }) return null
         return "${characters.take(5)}-${characters.takeLast(5)}"
     }
+
+    /** The notice under a request whose name a runner of this account already has (OrbitKit deviceNameTakenDetail): when that runner was
+     * last online, if the server says, then what re-registering does. */
+    fun deviceNameTakenDetail(device: JsonObject, nowMs: Long): String =
+        device.str("existingLastSeenAt")?.takeIf { it.isNotEmpty() }
+            ?.let { "${RunnerCopy.deviceLastOnline(ago(it, nowMs))} ${RunnerCopy.DEVICE_NAME_TAKEN_DETAIL}" }
+            ?: RunnerCopy.DEVICE_NAME_TAKEN_DETAIL
 
     /** AccountPause.minutes: 1 minute to 168 hours, in whole minutes. */
     fun pauseMinutes(hours: String): Int? {

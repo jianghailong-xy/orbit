@@ -111,8 +111,7 @@ final class ProjectLandingHeadTests: XCTestCase {
                     typicalMs: Int? = nil, claim: Int? = 1, round: Int? = 1,
                     stepAgo: TimeInterval = 110.5, heartbeatAgo: TimeInterval = 0,
                     outputAgo: TimeInterval = 6.4, timedOut: Bool = false, limitSeconds: Int? = nil,
-                    firstStartedAgo: TimeInterval? = nil) -> ProjectPage.LandingLine {
-        let now = Date()
+                    firstStartedAgo: TimeInterval? = nil, now: Date = Date()) -> ProjectPage.LandingLine {
         let taskTitle = kind == "LAND_TASK" ? "C5 · 托管 runner" : nil
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
@@ -224,11 +223,19 @@ final class ProjectLandingHeadTests: XCTestCase {
     }
 
     func testATakeoverNamesTheFirstStartTheClaimRowStillCarries() {
-        let line = v6(liveness: "LIVE", check: acceptance, claim: 2, firstStartedAgo: 470)
-        let claimedAt = ProjectPage.landingClockTime(Date().addingTimeInterval(-110))
-        let first = ProjectPage.landingClockTime(Date().addingTimeInterval(-470))
-        XCTAssertTrue(line.head.detail.contains("Taken over \(claimedAt) · first started \(first)"),
-                      line.head.detail)
+        // Each clock time is read off the fixture's own instants: the claim `stepAgo` (110.5 s) before
+        // `now`, the first start 470 s before it. Read off a second `Date()` 110 s back, the claim's
+        // minute came out one ahead of the line's whenever the claim sat in a minute's last
+        // half-second (main's Swift core, 2026-10-27: "Taken over 15:23" against 15:24). The second
+        // `now` below is that case.
+        let minute = (Date().timeIntervalSinceReferenceDate / 60).rounded(.down) * 60
+        for now in [Date(), Date(timeIntervalSinceReferenceDate: minute + 110.3)] {
+            let line = v6(liveness: "LIVE", check: acceptance, claim: 2, firstStartedAgo: 470, now: now)
+            let claimedAt = ProjectPage.landingClockTime(now.addingTimeInterval(-110.5))
+            let first = ProjectPage.landingClockTime(now.addingTimeInterval(-470))
+            XCTAssertTrue(line.head.detail.contains("Taken over \(claimedAt) · first started \(first)"),
+                          line.head.detail)
+        }
         // A promotion lands no task: no landTask row, so no first start to name.
         let promotion = v6(kind: "CHECK_PROMOTION", liveness: "LIVE", check: mergeCheck,
                            typicalMs: 18 * 60_000, claim: 2)
@@ -258,6 +265,6 @@ final class ProjectLandingHeadTests: XCTestCase {
             ProjectIntegrationView(integratingCount: 0, queuedCount: 0, inFlight: nil, inFlightJobs: [job]),
             now: now, updatedAt: now)[0].detail
         XCTAssertEqual(detail, "Runner wikova took it at "
-            + "\(ProjectPage.landingClockTime(Date().addingTimeInterval(-110))) · stopped at checking")
+            + "\(ProjectPage.landingClockTime(now.addingTimeInterval(-110))) · stopped at checking")
     }
 }

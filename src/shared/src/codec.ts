@@ -126,6 +126,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
   // `claimGeneration` and `claimLeaseOwner`.
   'landingId',
+  // The session a task's delivery identity was read from (migration 0453, contract §10.4): an
+  // address a reader follows from the task to the work session. A history reference with no foreign
+  // key, so it may 404 — never a fence: nothing echoes it back to be compared.
+  'deliveredSessionId',
   'confirmedByUserId',
   'openItemId',
   'receiptIds',

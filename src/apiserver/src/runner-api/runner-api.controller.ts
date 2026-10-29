@@ -16,6 +16,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   Res,
   StreamableFile,
   UploadedFile as UploadedFileParam,
@@ -23,7 +24,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
@@ -219,7 +220,8 @@ import {
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
-import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
+import { queueLandingObservationAfterCommit } from '../projects/landing-observation';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -376,6 +378,7 @@ import {
 import { AdmitsLinkCallItself, readAdmittedLinkRunner, RunnerAuthGuard, runnerLinkTokenRevoked } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
+import { visitorAddress } from '../shared/public-surface.guard';
 import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
 import {
   heartbeatAnswerHandsOut,
@@ -458,6 +461,7 @@ import {
   type SessionEngineFacts,
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -1532,13 +1536,16 @@ export class RunnerApiController {
     return { runnerId: runner.id, runnerToken, name: runner.name };
   }
 
-  /** `orbit register` (no token) — open a device-login session for browser approval. */
+  /**
+   * `orbit register` (no token) — open a device-login session for browser approval, noting the
+   * address it came from for the approval page.
+   */
   @StaysOnHttps()
   @Post('device/start')
-  async deviceStart(@Body() dto: DeviceStartRequest): Promise<DeviceStartResponse> {
+  async deviceStart(@Body() dto: DeviceStartRequest, @Req() req: Request): Promise<DeviceStartResponse> {
     if (!dto?.name) throw new BadRequestException('name is required');
     const deviceCode = generateToken(32);
-    const userCode = await this.createDeviceSession(dto, deviceCode);
+    const userCode = await this.createDeviceSession(dto, deviceCode, visitorAddress(req) || null);
     return {
       deviceCode,
       userCode,
@@ -1578,7 +1585,7 @@ export class RunnerApiController {
   }
 
   /** Insert a device session, regenerating the short code on the rare collision. */
-  private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string): Promise<string> {
+  private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string, requesterIp: string | null): Promise<string> {
     const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
       const userCode = generateUserCode();
@@ -1594,6 +1601,7 @@ export class RunnerApiController {
             version: dto.version,
             agents: [],
             workDir: dto.workDir,
+            requesterIp,
             expiresAt,
           },
         });
@@ -2555,7 +2563,9 @@ export class RunnerApiController {
       // somebody has to look at. Both are announcements of rows that are already committed, so a
       // failure here is logged and never raised — the runner's result was taken either way.
       await this.mergeReceipts
-        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskId)
+        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
+          observed: after.observed === true,
+        })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
       if (after.openItemIds.length > 0) {
         await this.openItems?.deliverForItems(after.openItemIds)
@@ -3947,6 +3957,12 @@ export class RunnerApiController {
             { code: frozen.refused.code, reason: frozen.refused.reason },
             at,
           );
+          // The refusal ended the run, and that finish may be the one a DONE task's identity was
+          // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
+          await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+            where: { id: sessionId },
+            select: { ownerId: true, taskId: true, startsTaskWork: true },
+          }));
         }
         return frozen;
       },
@@ -5491,7 +5507,7 @@ export class RunnerApiController {
           // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
           // agent that waits for a card nobody can ever be shown.
           toolName: stripNul(dto.toolName),
-          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input),
+          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId }),
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
@@ -5554,8 +5570,15 @@ export class RunnerApiController {
     ownerId: string,
     toolName: string,
     raw: unknown,
+    asker: { runnerId: string; sessionId: string },
   ): Promise<Prisma.InputJsonValue> {
     const input = stripNul(raw ?? {}) as Record<string, unknown>;
+    // A delete card says what the server reads, not what the asker sent: the runner or workspace its
+    // id names, under this session's owner (runner-delete-approval.ts). Not best-effort, unlike the
+    // preview below: a card about something that is not the account's, or that is the asking
+    // session's own, is refused before it is filed, since no answer to it could be acted on.
+    const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
+    if (deleting) return deleting as unknown as Prisma.InputJsonValue;
     if (toolName !== RunnerApiController.taskCreateApprovalToolName || input.preview || !this.tasks) {
       return input as Prisma.InputJsonValue;
     }
@@ -5578,7 +5601,7 @@ export class RunnerApiController {
     }
   }
 
-  /** The MCP tool name a single create asks under — the one card this controller enriches. */
+  /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
   private static readonly taskCreateApprovalToolName = 'orbit_task_create';
 
   /**
@@ -5593,6 +5616,9 @@ export class RunnerApiController {
     dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
+    // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
+    // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
+    if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = await sessionEngine(this.prisma, session);
@@ -5885,6 +5911,7 @@ export class RunnerApiController {
         select: {
           status: true,
           taskId: true,
+          startsTaskWork: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -6859,6 +6886,10 @@ export class RunnerApiController {
       }
       if (failSession) {
         await retireSessionInboxGeneration(tx, sessionId);
+        // The park above wrote this session's finish, which may be the one a DONE task's identity was
+        // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
+        // turn's own exception items.
+        await settleDeliveredIdentityAfterFinish(tx, current);
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
       // request it has read and not answered is closed with its last words — unless something will
@@ -7093,6 +7124,10 @@ export class RunnerApiController {
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).
       await this.openItems?.deliverOwedTo(sessionId);
+      // O-T2 (§10.6): a work session of a project's task finished a turn — its agent may just have
+      // pushed — so the project's tasks waiting to be seen on the line are looked at again. After
+      // this commit, in a transaction of its own; it never raises.
+      if ('taskId' in finalized && finalized.taskId) await this.observeAfterWorkTurn(sessionId, finalized.taskId);
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
       await this.evidenceQueue?.deliverOwedTo(sessionId);
@@ -7183,6 +7218,24 @@ export class RunnerApiController {
       this.queue.notifySessionQueued(runner.id);
     }
     return { ok: true, status: finalized.status };
+  }
+
+  /**
+   * O-T2 (§10.6): queue an observation of the project whose task this work session's turn belongs to,
+   * when that project has tasks waiting to be observed. Read after the turn committed; logged and
+   * never raised, because the turn is answered either way and the next trigger asks again.
+   */
+  private async observeAfterWorkTurn(sessionId: string, taskId: string): Promise<void> {
+    try {
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { startsTaskWork: true, task: { select: { id: true, projectId: true } } },
+      });
+      if (!session?.startsTaskWork || session.task?.id !== taskId || !session.task.projectId) return;
+      await queueLandingObservationAfterCommit(this.prisma, { projectId: session.task.projectId, trigger: 'TURN_COMPLETE' });
+    } catch (error) {
+      this.logger.warn(`observation after a turn of ${sessionId} not queued: ${(error as Error)?.message ?? error}`);
+    }
   }
 
   /**
@@ -8471,6 +8524,10 @@ export class RunnerApiController {
           // The worktree's actual HEAD branch at completion → the bar flags divergence from the
           // tracked `branch` / offers Adopt for a session that finished on a checkout -b branch.
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+          // And that branch's tip after the finalize commit, which the delivered identity of a DONE
+          // task is frozen from below (§10.5 O-L4). Written when reported: an older runner, and a park
+          // checkpoint the next resume undoes, leave the tip the last live report gave.
+          ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? {
@@ -8506,6 +8563,9 @@ export class RunnerApiController {
       });
       const retryAt = quotaRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
+      // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
+      // once every work session has finished (§10.5 O-L4 3).
+      const delivered = await settleDeliveredIdentityAfterFinish(tx, current);
       await retireSessionInboxGeneration(tx, sessionId);
       // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
       // off the session payload, fetched on demand when a file's diff is opened.
@@ -8621,6 +8681,7 @@ export class RunnerApiController {
         retryAt,
         taskReclaimed,
         dispatchRefused,
+        identityUnknown: delivered === 'IDENTITY_UNKNOWN',
         taskId: current.taskId,
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
@@ -8638,6 +8699,10 @@ export class RunnerApiController {
       this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
       // this door reclaimed the task and told nobody at all.
+      await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
+    if ('identityUnknown' in outcome && outcome.identityUnknown && outcome.taskId) {
       await this.openItems?.deliverForTasks([outcome.taskId]);
     }
     // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
@@ -8858,6 +8923,7 @@ export class RunnerApiController {
           mergeCheckpointId: string | null;
           mergeRecoveryAction: string | null;
           mergeRecovery: unknown;
+          mergeRequestedBy: string | null;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -8868,7 +8934,8 @@ export class RunnerApiController {
                "branch", "merge_target" AS "mergeTarget",
                "merge_checkpoint_id" AS "mergeCheckpointId",
                "merge_recovery_action" AS "mergeRecoveryAction",
-               "merge_recovery" AS "mergeRecovery"
+               "merge_recovery" AS "mergeRecovery",
+               "merge_requested_by" AS "mergeRequestedBy"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -9033,6 +9100,10 @@ export class RunnerApiController {
           conflicts: dto.status === 'conflict' ? (dto.conflicts ?? []) : [],
           message: dto.message ?? null,
           operationId: dto.operationId ?? null,
+          // §10.6 O-R3: who pressed Merge, as the door recorded it when it queued this operation.
+          requestedBy: current.mergeRequestedBy === 'USER' || current.mergeRequestedBy === 'AGENT'
+            ? current.mergeRequestedBy
+            : null,
           // CP4: which verified point this landing is about, when there is one. Null for every
           // merge not under convergence management, which is almost all of them.
           // The checkpoint the SERVER authorised, for a landing it has just proved is that

@@ -292,6 +292,7 @@ public enum AutoRetryLogic {
     public static func quotaWindowKind(_ message: String) -> QuotaWindow {
         let m = message.lowercased()
         if m.contains("hit your session limit") { return .fiveHour }
+        if m.contains("hit your 5-hour limit") { return .fiveHour }
         if m.contains("hit your weekly limit") { return .weekly }
         return .other
     }

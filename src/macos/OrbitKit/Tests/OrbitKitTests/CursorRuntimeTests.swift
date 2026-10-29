@@ -239,11 +239,11 @@ final class CursorRuntimeTests: XCTestCase {
         // Counted beside the other engines this machine signs in (Claude Code, Codex and Kimi Code here).
         XCTAssertEqual(Infrastructure.machineLine(ready, now: now), "2 of 4 signed in")
 
-        // Signed out on a machine that runs it: Needs you says so, and the machine counts it.
+        // Signed out on a machine that runs it: no line in Needs you, as the web's card draws it nothing, and
+        // the machine's line says where its engines stand.
         let signedOut = try runner(cursor: cursorHealth(auth: "no", accounts: false))
-        XCTAssertEqual(Infrastructure.attention(runners: [signedOut], memberPools: [], ownPools: [], now: now).map(\.line),
-                       ["Cursor CLI is signed out on hpc"])
-        XCTAssertEqual(Infrastructure.machineLine(signedOut, now: now), "1 engine signed out")
+        XCTAssertEqual(Infrastructure.attention(runners: [signedOut], memberPools: [], ownPools: [], now: now), [])
+        XCTAssertEqual(Infrastructure.machineLine(signedOut, now: now), "1 of 4 signed in")
         // A machine that can't run it at all says so on its row instead, and is not counted against.
         let older = try runner(id: "old", name: "mac-studio", caps: [])
         XCTAssertEqual(Infrastructure.attention(runners: [older], memberPools: [], ownPools: [], now: now), [])

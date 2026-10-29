@@ -90,6 +90,7 @@ public enum EngineErrors {
     static let usageLimitMarkers = [
         "hit your usage limit",     // Codex app-server
         "hit your session limit",   // Claude Code, rolling 5-hour window
+        "hit your 5-hour limit",    // Claude Code 2.1.312+, the same window renamed
         "hit your weekly limit",    // Claude Code, 7-day window
     ]
 

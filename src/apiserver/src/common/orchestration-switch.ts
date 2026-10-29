@@ -1,6 +1,7 @@
 /**
  * Whether an account's sessions may orchestrate: spawn and drive other sessions through `orbit
- * mcp`, and use the tools that spend the same grant (Settings → Session orchestration).
+ * mcp`, and use the tools that spend the same grant (Settings → Session orchestration; on the phones,
+ * Settings → Sessions).
  *
  * One switch per account, read live wherever the grant is decided — the claim and reclaim that
  * advertise the tools and issue the credential, the authorizer every call goes through, and the

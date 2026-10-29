@@ -39,6 +39,7 @@ import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
@@ -462,7 +463,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = model::retry) { Text("Retry") }
                 }
                 }
-                // A08-5: a run that never started says why, first in the band above the composer — and stays while a phone types.
+                // The reader's messages nothing has read yet: the conversation's next lines, so the band's first card, right under the
+                // conversation and above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
+                // a phone types, as it is about the messages being typed into; out of the way with the composer while a card's form
+                // holds the keyboard.
+                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionPendingTray(composer, state.session, unreadSteers) }
+                // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
                 SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
                     chat = {
                         // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
@@ -496,8 +502,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
-                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
-                    unreadSteers = unreadSteers) }
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
             }
         }
         }

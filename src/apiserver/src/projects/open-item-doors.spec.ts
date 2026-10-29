@@ -18,7 +18,13 @@ import {
   type OpenItemDoorCell,
   type OpenItemDoorInput,
 } from './open-item-doors';
-import { OPEN_ITEM_KINDS, openItemMessage, type OpenItemMessageSource } from './project-open-item';
+import {
+  OPEN_ITEM_KINDS,
+  openItemMessage,
+  openItemRequiredAction,
+  primaryAction,
+  type OpenItemMessageSource,
+} from './project-open-item';
 
 /**
  * A capability census, rather than a test of one particular open item.
@@ -176,11 +182,37 @@ const EPISODE_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71';
 const FIX_TASK_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a72';
 const FIX_JOB_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a73';
 
+/** The kinds whose row names a task: the ones a task's landing or failure opens, and revision 29's
+ *  two (§10.7) — each about one task's work. An observation's failure (§10.6 O-J4) is the project's:
+ *  `IE:observe:<projectId>` names no task, so its cell's row does not either. */
+function aboutATask(todoType: string, sourceJob?: string): boolean {
+  if (sourceJob === 'OBSERVE_LANDING') return false;
+  return todoType.startsWith('INTEGRATION_') || todoType === 'TASK_FAILED' || todoType === 'DELIVERY_REVIEW'
+    || todoType === 'LANDING_UNOBSERVED' || todoType === 'LANDED_WITHOUT_CONFIRMATION';
+}
+
+/** §10.7's payloads for revision 29's two kinds, as the doors that open them write them. */
+function landingPayload(todoType: string): Record<string, unknown> {
+  if (todoType === 'LANDING_UNOBSERVED') {
+    return {
+      reason: 'APPLIED_AS_OTHER_COMMITS', deliveredSha: 'c'.repeat(40), baseSha: 'd'.repeat(40),
+      branch: 'orbit/task-fixture', upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main',
+      observedUpstreamSha: 'e'.repeat(40), observedLineSha: 'e'.repeat(40),
+      observedAt: '2026-10-28T12:33:00.000Z', jobId: FIX_JOB_ID,
+    };
+  }
+  if (todoType === 'LANDED_WITHOUT_CONFIRMATION') {
+    return {
+      receiptId: FIX_TASK_ID, recordedBy: 'AGENT', targetBranch: 'main', sourceSha: 'f'.repeat(40), observed: true,
+    };
+  }
+  return {};
+}
+
 /** A row that lands on exactly this cell, for both projections the table feeds. */
 function sampleFor(cell: OpenItemDoorCell) {
   const promotionSource = cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION';
-  const task = cell.todoType.startsWith('INTEGRATION_') || cell.todoType === 'TASK_FAILED'
-    || cell.todoType === 'DELIVERY_REVIEW';
+  const task = aboutATask(cell.todoType, cell.sourceJob);
   return {
     kind: cell.todoType,
     assignee: cell.assignee,
@@ -200,6 +232,7 @@ function sampleFor(cell: OpenItemDoorCell) {
       reason: cell.todoType === 'DELIVERY_REVIEW' ? 'OUTSIDE_DECLARED_SCOPE' : undefined,
       paths: cell.todoType === 'DELIVERY_REVIEW' ? ['src/undeclared.ts'] : undefined,
       declaredPaths: cell.todoType === 'DELIVERY_REVIEW' ? ['src/declared'] : undefined,
+      ...landingPayload(cell.todoType),
     },
   };
 }
@@ -385,8 +418,7 @@ test('open-item assignment paths never offer a door to somebody who does not hol
  */
 function rowForCell(cell: OpenItemDoorCell): OpenItemDoorInput {
   const promotionSource = cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION';
-  const taskKind = cell.todoType === 'TASK_FAILED' || cell.todoType === 'DELIVERY_REVIEW'
-    || cell.todoType.startsWith('INTEGRATION_');
+  const taskKind = aboutATask(cell.todoType, cell.sourceJob);
   return {
     kind: cell.todoType,
     assignee: cell.assignee,
@@ -479,7 +511,10 @@ test('OPEN_LANDING is the last action of every integration cell that names a lan
   const routes = allRouteMetadata();
   const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
   const canExecute = executableByRegistry(routes, names);
-  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => cell.todoType.startsWith('INTEGRATION_'));
+  // An observation opens no landing session (§10.6, A-Q23), so the item its failures open never
+  // names one: its cell is held to having no landing door at all, below.
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => cell.todoType.startsWith('INTEGRATION_')
+    && (cell.sourceJob as string) !== 'OBSERVE_LANDING');
   assert.ok(cells.length > 0);
   assert.deepEqual([...new Set(cells.map((cell) => cell.assignee))].sort(), ['COORDINATOR', 'OWNER'],
     'both holders of an integration cell must be in the census');
@@ -655,4 +690,216 @@ test('the landing session, round and moved commits move no delivery text', () =>
       }
     }
   }
+});
+
+/**
+ * §10.7 / §10.8: revision 29's two kinds and their cells.
+ *
+ * `LANDING_UNOBSERVED` is the coordinator's first (Automatic with a live conversation), the owner's
+ * otherwise, so it has a cell for each holder; its endings are facts — a landing receipt the
+ * coordinator can name with `merge_receipt`, the task sent back with `task_reopen`, cancelled,
+ * replaced, or declared codeless — and it is handed to the owner with `open_item_hand_over`. It has
+ * no hand-close: `open_item_resolve` refuses it (OPEN_ITEM_HAS_ITS_OWN_DOOR).
+ *
+ * `LANDED_WITHOUT_CONFIRMATION` is the owner's from birth: one cell, OWNER, whose resolving door is
+ * the owner's own Accept route. Never delivered to a coordinator, so it has neither a hand-over nor
+ * a way back to one, and no hand-close either.
+ */
+test('§10.7 §10.8: LANDING_UNOBSERVED has a cell for each holder, with the doors that end it and none that close it by hand', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => (cell.todoType as string) === 'LANDING_UNOBSERVED');
+  assert.deepEqual(cells.map((cell) => cell.assignee).sort(), ['COORDINATOR', 'OWNER']);
+  for (const cell of cells) {
+    const where = `LANDING_UNOBSERVED/${cell.assignee}`;
+    assert.equal(cell.sourceJob, 'DIRECT', `${where}: it is about a task's work, not a kind of job`);
+    assert.equal(cell.failureClass, 'ERROR', `${where}: the failure class is the cell's sentinel`);
+    assert.equal(cellForOpenItem(rowForCell(cell)), cell);
+    const receipt = cell.doors.find((door) => door.name === 'merge_receipt' && door.implemented);
+    assert.ok(receipt, `${where}: no merge_receipt door`);
+    assert.equal(receipt.kind, cell.assignee === 'OWNER' ? 'ROUTE' : 'MCP',
+      `${where}: the coordinator records it with the tool, the owner on their own route`);
+    assert.deepEqual([...receipt.outcomes], ['LANDED']);
+    assert.equal(receipt.resolving, true);
+    assert.ok(canExecute(receipt), `${where}: no registry dispatches merge_receipt`);
+    assert.ok(cell.doors.some((door) => door.mcp === 'task_reopen' && door.outcomes.includes('RETRIED') && door.resolving),
+      `${where}: task_reopen does not end it RETRIED`);
+    assert.ok(cell.doors.some((door) => door.mcp === 'task_update' && door.outcomes.includes('CODELESS') && door.resolving),
+      `${where}: declaring the task codeless does not end it CODELESS`);
+    assert.ok(cell.doors.some((door) => door.outcomes.includes('TASK_CLOSED') && door.resolving),
+      `${where}: cancelling the task does not end it`);
+    assert.ok(cell.doors.some((door) => door.outcomes.includes('SUCCESSOR_FILED') && door.resolving),
+      `${where}: replacing the task does not end it`);
+    assert.ok(cell.doors.some((door) => door.name === 'open_item_hand_over' && door.implemented),
+      `${where}: the hand-over is not in this cell's allow-list (§10.8)`);
+    assert.equal(cell.doors.some((door) => door.name === 'open_item_resolve'), false,
+      `${where}: the hand-close is a door this item refuses`);
+    assert.equal(cell.doors.some((door) => door.mcp === 'integration_retry'), false,
+      `${where}: there is no landing to rerun`);
+    assert.equal(openItemActionsFromDoors(sampleFor(cell)).includes('OPEN_LANDING'), false);
+    // §10.8's "look again": an observation that sees the delivered commit lands the task (O-R1),
+    // which ends the item LANDED. The coordinator asks with the tool, the owner on their own route,
+    // and the card projects it as OBSERVE.
+    const observe = cell.doors.find((door) => door.name === 'integration_observe' && door.implemented);
+    assert.ok(observe, `${where}: no integration_observe door (§10.8)`);
+    assert.equal(observe.holder, cell.assignee);
+    if (cell.assignee === 'COORDINATOR') {
+      assert.equal(observe.kind, 'MCP', `${where}: the coordinator looks again with the tool`);
+      assert.equal(observe.mcp, 'integration_observe');
+      assert.equal(observe.route, '/runner/projects/:id/integration/observe');
+    } else {
+      assert.equal(observe.kind, 'ROUTE', `${where}: the owner looks again on their own route`);
+      assert.equal(observe.mcp, undefined);
+      assert.equal(observe.route, '/projects/:id/integration/observe');
+    }
+    assert.deepEqual([...observe.outcomes], ['LANDED']);
+    assert.equal(observe.resolving, true);
+    assert.equal(observe.action, 'OBSERVE');
+    assert.ok(canExecute(observe), `${where}: no registry dispatches integration_observe`);
+    assert.ok((openItemActionsFromDoors(sampleFor(cell)) as string[]).includes('OBSERVE'),
+      `${where}: the card does not project the look-again press`);
+  }
+  // The coordinator is told it can look again, by the tool's name.
+  const told = openItemMessage({
+    id: ITEM_ID, kind: 'LANDING_UNOBSERVED', title: 'Not on main yet: the fixture', projectId: PROJECT_ID,
+    taskId: TASK_ID, promotionId: null, payload: landingPayload('LANDING_UNOBSERVED'),
+  });
+  assert.match(told, /\bintegration_observe\b/, 'the message does not name the look-again door');
+  // The required action names only what the cell holds, and never the hand-close.
+  for (const assignee of ['COORDINATOR', 'OWNER'] as const) {
+    const sentence = openItemRequiredAction({
+      kind: 'LANDING_UNOBSERVED', assignee, taskId: TASK_ID, payload: landingPayload('LANDING_UNOBSERVED'),
+      state: 'OPEN', mainBranch: 'main',
+    });
+    assert.match(sentence, /not on main yet/i, `${assignee}: the next step does not say where the work is missing`);
+  }
+});
+
+test('§10.7 §10.8: LANDED_WITHOUT_CONFIRMATION has one cell, the owner\'s, led by Accept — its one resolving door', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => (cell.todoType as string) === 'LANDED_WITHOUT_CONFIRMATION');
+  assert.equal(cells.length, 1, 'it is the owner\'s from birth: one cell');
+  const [cell] = cells;
+  assert.equal(cell!.assignee, 'OWNER');
+  assert.equal(cell!.sourceJob, 'DIRECT');
+  assert.equal(cellForOpenItem(rowForCell(cell!)), cell);
+  const accept = cell!.doors.find((door) => (door.action as string | undefined) === 'ACCEPT');
+  assert.ok(accept, 'the cell has no Accept door');
+  assert.equal(accept.kind, 'ROUTE');
+  assert.equal(accept.route, '/projects/:id/open-items/:itemId/accept');
+  assert.equal(accept.holder, 'OWNER');
+  assert.deepEqual([...accept.outcomes], ['ACCEPTED']);
+  assert.equal(accept.resolving, true);
+  assert.equal(accept.implemented, true);
+  assert.ok(canExecute(accept), 'no controller answers the Accept route');
+  assert.deepEqual(cell!.doors.filter((door) => door.resolving).map((door) => door.id), [accept.id],
+    'Accept is the only door that ends it');
+  for (const name of ['open_item_resolve', 'open_item_hand_over', 'return-to-coordinator']) {
+    assert.equal(cell!.doors.some((door) => door.name === name), false, `the cell holds ${name}`);
+  }
+  const row = sampleFor(cell!);
+  assert.deepEqual(openItemActionsFromDoors(row), ['ACCEPT', 'OPEN_TASK_SESSION']);
+  assert.equal(primaryAction({ ...row, state: 'OPEN' }), 'ACCEPT');
+  // No coordinator cell: a row that somehow names one finds nothing to offer.
+  assert.equal(cellForOpenItem({ ...rowForCell(cell!), assignee: 'COORDINATOR' }), null);
+  assert.match(openItemRequiredAction({ ...row, state: 'OPEN', mainBranch: 'main' }), /without your confirmation/);
+});
+
+/**
+ * §10.6 O-J4 · §10.8: the item a project's failing observations open, `IE:observe:<projectId>` — an
+ * INTEGRATION_ERROR from an OBSERVE_LANDING, about the project's line rather than one task. Its one
+ * resolving door is `integration_observe`: the next observation that succeeds ends it JOB_MOVED_ON.
+ * It carries the hand-over (in the allow-list, which is what lets `open_item_hand_over` accept it),
+ * the fix task every integration cell offers and, for the coordinator, `ask_owner`. No hand-close:
+ * while it is open it is what keeps the tasks waiting to be observed in front of somebody (O5). No
+ * landing door: an observation opens no landing session (A-Q23).
+ */
+test('§10.6 O-J4 §10.8: IE:observe has a cell for each holder whose one resolving door is integration_observe, and its message names it', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  // The payload `observationFailed` writes (R29-5).
+  const payload = {
+    jobKind: 'OBSERVE_LANDING', phase: 'FETCH', targetRef: 'refs/heads/main', errorCode: 'FETCH_FAILED',
+    errorDetail: { message: 'could not read from remote repository' }, failureClass: 'ERROR', failures: 3, generation: 3,
+  };
+  const row = { kind: 'INTEGRATION_ERROR', taskId: null, promotionId: null, fuseEpisodeId: null, askable: true, payload };
+
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => (cell.sourceJob as string) === 'OBSERVE_LANDING');
+  assert.deepEqual(cells.map((cell) => `${cell.todoType}/${cell.failureClass}/${cell.assignee}`).sort(),
+    ['INTEGRATION_ERROR/ERROR/COORDINATOR', 'INTEGRATION_ERROR/ERROR/OWNER'],
+    'an observation fails one way, and the item it opens has a cell for each holder');
+
+  for (const assignee of ['COORDINATOR', 'OWNER'] as const) {
+    const where = `IE:observe/${assignee}`;
+    const cell = cellForOpenItem({ ...row, assignee });
+    assert.ok(cell, `${where}: the item has no cell`);
+    assert.equal(cell.todoType, 'INTEGRATION_ERROR');
+    assert.equal(cell.sourceJob as string, 'OBSERVE_LANDING');
+    assert.equal(cell.failureClass, 'ERROR');
+    assert.equal(cell.assignee, assignee);
+    assert.deepEqual(knownGapsForCell(cell), []);
+
+    const observe = cell.doors.find((door) => door.name === 'integration_observe' && door.implemented);
+    assert.ok(observe, `${where}: no integration_observe door`);
+    if (assignee === 'COORDINATOR') {
+      assert.equal(observe.kind, 'MCP');
+      assert.equal(observe.mcp, 'integration_observe');
+      assert.equal(observe.route, '/runner/projects/:id/integration/observe');
+    } else {
+      assert.equal(observe.kind, 'ROUTE');
+      assert.equal(observe.route, '/projects/:id/integration/observe');
+    }
+    assert.deepEqual([...observe.outcomes], ['JOB_MOVED_ON']);
+    assert.ok(canExecute(observe), `${where}: no registry dispatches integration_observe`);
+    assert.deepEqual(cell.doors.filter((door) => door.implemented && door.resolving).map((door) => door.id), [observe.id],
+      `${where}: the observation that succeeds is the one door that ends it`);
+
+    assert.ok(cell.doors.some((door) => door.name === 'open_item_hand_over' && door.implemented),
+      `${where}: the hand-over is not in this cell's allow-list`);
+    assert.ok(cell.doors.some((door) => door.id === 'task-create-fix'), `${where}: no fix-task door`);
+    assert.equal(cell.doors.some((door) => door.mcp === 'ask_owner'), assignee === 'COORDINATOR',
+      `${where}: ask_owner is the coordinator's door`);
+    for (const absent of ['open_item_resolve', 'integration_retry', 'task_reopen']) {
+      assert.equal(cell.doors.some((door) => door.name === absent), false, `${where}: the cell holds ${absent}`);
+    }
+    const withSession = { ...row, assignee, payload: { ...payload, landingSessionId: LANDING_SESSION_ID } };
+    assert.equal(doorsForOpenItem(withSession).some((door) => door.action === 'OPEN_LANDING'), false,
+      `${where}: an observation has no landing session to open`);
+    // The card's one press is the observation, and it leads.
+    assert.equal(observe.action as string, 'OBSERVE');
+    assert.deepEqual(openItemActionsFromDoors({ ...row, assignee }), ['OBSERVE']);
+    assert.equal(primaryAction({ ...row, assignee, state: 'OPEN' }) as string, 'OBSERVE');
+
+    const sentence = openItemRequiredAction({ ...row, assignee, state: 'OPEN', mainBranch: 'main' });
+    assert.equal(sentence,
+      'Finished work is not recorded as landed until an observation of main succeeds — let a runner reach the repository, then look again.',
+      `${where}: the next step is not the observation's`);
+  }
+
+  // The coordinator's message names the door that ends it, and none the cell does not hold.
+  const item: OpenItemMessageSource = {
+    id: ITEM_ID, kind: 'INTEGRATION_ERROR', title: 'Integration error: observing main', projectId: PROJECT_ID,
+    taskId: null, promotionId: null, payload,
+  };
+  const message = openItemMessage(item);
+  assert.match(message, /\bintegration_observe\b/, 'the message does not name integration_observe');
+  assert.match(message, /\bopen_item_hand_over\b/, 'the message does not name the hand-over the cell holds');
+  assert.doesNotMatch(message, /\bopen_item_resolve\b/);
+  assert.doesNotMatch(message, /\bnull\b/, 'the message wrote a door the cell does not hold as null');
+  // Re-keyed once a fix task attached to it landed (§4.4 X-D4 5): the preface's next step is the
+  // observation, never a hand-close this cell does not hold.
+  const rekeyed = openItemMessage({
+    ...item,
+    landedFixes: [{
+      taskId: FIX_TASK_ID, jobId: FIX_JOB_ID, state: 'LANDED',
+      targetRef: 'refs/heads/project/34YhlsSkybFDaTXbOfcxM', landedSha: 'a'.repeat(40),
+    }],
+  });
+  assert.match(rekeyed, /\bintegration_observe\b/);
+  assert.doesNotMatch(rekeyed, /\bopen_item_resolve\b/);
+  assert.doesNotMatch(rekeyed, /\bnull\b/, 'the re-keyed preface wrote a door the cell does not hold as null');
 });

@@ -3,7 +3,7 @@ import type { TaskStartCard, TaskStartCriterion } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { isAutomaticTaskRunToken, taskRunResumeToken } from './task-run-identity';
-import { buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 
 /**
  * The card a task run's opening turn is drawn as (`TaskStartCard`), or null for every other turn.
@@ -41,7 +41,8 @@ export async function readTaskStartCard(
       isForeman: true,
       verifiesTaskId: true,
       list: { select: { instructions: true } },
-      project: { select: { id: true, title: true } },
+      codeless: true,
+      project: { select: { id: true, title: true, ...TASK_DELIVERY_SELECT } },
     },
   });
   if (!task || buildTaskExecutionPrompt(task) !== turn.content) return null;

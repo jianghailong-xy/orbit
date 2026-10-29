@@ -13,9 +13,8 @@ import XCTest
 /// Sessions row, which regroup the web's cards for a phone; "Default permission", the
 /// web's "Default permission mode" shortened to leave its row room for a value; and the words only a
 /// phone has to say — this device's own switch, the alerts that are always sent, the card shown
-/// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading, its
-/// row's "1 needs you" and a machine's "1 engine signed out" (03-ios.png's own; the web draws Needs
-/// attention with no heading, and its machine card no such count).
+/// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading and its
+/// row's "1 needs you" (03-ios.png's own; the web draws Needs attention with no heading).
 final class SettingsCopyParityTests: XCTestCase {
 
     private static let settings = "src/web/src/pages/SettingsPage.tsx"
@@ -260,25 +259,20 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(Infrastructure.summary(try runner(all)), "All signed in")
     }
 
-    /// Needs you: each line and what it means, and the press at its end. The web drew the same lines in
-    /// `NeedsAttention` until docs/mocks/infrastructure-focus (2026-10-25), which moved a signed-out engine
-    /// onto its machine's card — since 2026-10-28 only onto its row, once the card is open — and left an
-    /// offline machine and an unavailable pool to their own cards; iOS keeps the block until its own page
-    /// is redrawn. What is still the web's: the press, and the machine named as the web names it.
+    /// Needs you: each line and what it means. The web drew the same lines in `NeedsAttention` until
+    /// docs/mocks/infrastructure-focus (2026-10-25), which left an offline machine and an unavailable pool
+    /// to their own cards; iOS keeps the block for those until its own page is redrawn, and since
+    /// 2026-10-29 lists no engine signed out, as the web's machine card draws it nothing. What is still the
+    /// web's: the machine named as the web names it.
     func testNeedsYouSaysWhatTheWebSays() throws {
-        XCTAssertEqual(Infrastructure.signedOutLine(engine: .codex, machine: "Mac Studio"), "Codex is signed out on Mac Studio")
-        XCTAssertEqual(Infrastructure.signedOutLine(engine: .antigravity, machine: "HPC"), "Antigravity CLI is signed out on HPC")
         XCTAssertEqual(Infrastructure.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
         XCTAssertEqual(Infrastructure.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
                        "Never checked in · its subscriptions are unavailable until it’s back")
         XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
         XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
                        "No account can run · no session can start on it")
-        // A signed-out engine's row signs it in with the same word.
-        let engines = try web(Self.engines)
-        assertSays(engines, "> \(Infrastructure.signIn) </Button>", in: Self.engines)
         // The machine named as the web's card names it: its alias, else its own name.
-        assertSays(engines, "const name = runner.displayName || runner.name;", in: Self.engines)
+        assertSays(try web(Self.engines), "const name = runner.displayName || runner.name;", in: Self.engines)
     }
 
     /// The engines, as the web names them: every engine a session can run on, in the pickers' order and by

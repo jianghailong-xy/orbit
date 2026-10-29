@@ -387,6 +387,7 @@ function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now:
     MERGE: 'preparing the combined tree',
     VERIFY: 'verifying the tested tree',
     PUSH: `publishing the tested tree to ${upstream}`,
+    OBSERVE: 'observing the branches',
   };
   return (
     <>

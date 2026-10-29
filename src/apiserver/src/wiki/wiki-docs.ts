@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   toUuid,
+  WIKI_DOC_DIAGRAM_RULES,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
   WIKI_DOC_LEAD_RULES,
@@ -49,6 +50,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
+import { parseDiagram } from './wiki-doc-diagram';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { withdrawDocSentencesByPath } from './wiki-docs-affected';
 import { ownerEnvLiterals } from './wiki-dossier';
@@ -423,7 +425,7 @@ export interface BodySentence {
   notes: number[];
 }
 
-/** A block as stored (`wiki_doc_section.blocks`): a heading's or a code block's text; sentences live apart. */
+/** A block as stored (`wiki_doc_section.blocks`): a heading's, a code block's or a diagram's text; sentences live apart. */
 export interface BodyBlock {
   kind: WikiDocBlockKind;
   text?: string;
@@ -434,10 +436,14 @@ export interface SectionBody {
   sentences: BodySentence[];
   markersDropped: number;
   chars: number;
+  /** Its diagram blocks, each with the texts it shows, for `keepSourcedDiagrams`. */
+  diagrams: Array<{ block: number; labels: string[] }>;
+  /** Mermaid blocks that were no diagram (contract `docs.diagram.syntax`), and diagrams the check took out. */
+  diagramsDropped: number;
 }
 
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/u;
-const FENCE = /^\s{0,3}(```|~~~)/u;
+const FENCE = /^\s{0,3}(```|~~~)\s*([^\s`]*)/u;
 const ITEM = /^\s{0,3}(?:[-*+]|\d{1,3}[.)、])\s+(.*)$/u;
 const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/u;
 const QUOTED = /^\s{0,3}>\s?(.*)$/u;
@@ -445,8 +451,9 @@ const QUOTED = /^\s{0,3}>\s?(.*)$/u;
 /**
  * A section's Markdown cut into blocks and sentences (contract `docs.markdown`). A first line that is a
  * heading is the section's own title — the plan names it — and is dropped. A fenced block is code and is
- * not checked; a heading line is a heading block; a list item is an item block, which an indented line
- * under it continues; the other lines up to a blank line are one paragraph. Paragraphs and items are cut
+ * not checked, and one whose info string is mermaid is a diagram (`parseDiagram`) or, when it is not the
+ * flowchart the contract reads, nothing; a heading line is a heading block; a list item is an item block,
+ * which an indented line under it continues; the other lines up to a blank line are one paragraph. Paragraphs and items are cut
  * into sentences exactly as the articles are (`splitSentences`), so a ； ends nothing. A marker [n]
  * names footnote n of the section; one outside 1 to `footnotes` names none and is dropped.
  */
@@ -458,7 +465,7 @@ export function parseSectionBody(markdown: string, footnotes: number): SectionBo
 
   const drafts: Array<{ kind: WikiDocBlockKind; text: string }> = [];
   let paragraph: string[] = [];
-  let fence: { marker: string; lines: string[] } | null = null;
+  let fence: { marker: string; kind: 'code' | 'diagram'; lines: string[] } | null = null;
   const flush = (): void => {
     if (paragraph.length > 0) drafts.push({ kind: 'paragraph', text: paragraph.join(' ') });
     paragraph = [];
@@ -467,7 +474,7 @@ export function parseSectionBody(markdown: string, footnotes: number): SectionBo
     const line = lines[i];
     if (fence) {
       if (line.trim().startsWith(fence.marker)) {
-        drafts.push({ kind: 'code', text: fence.lines.join('\n') });
+        drafts.push({ kind: fence.kind, text: fence.lines.join('\n') });
         fence = null;
       } else {
         fence.lines.push(line);
@@ -477,7 +484,7 @@ export function parseSectionBody(markdown: string, footnotes: number): SectionBo
     const opens = FENCE.exec(line);
     if (opens) {
       flush();
-      fence = { marker: opens[1], lines: [] };
+      fence = { marker: opens[1], kind: opens[2].toLowerCase() === 'mermaid' ? 'diagram' : 'code', lines: [] };
       continue;
     }
     if (line.trim() === '') {
@@ -508,11 +515,21 @@ export function parseSectionBody(markdown: string, footnotes: number): SectionBo
     const quoted = QUOTED.exec(line);
     paragraph.push((quoted ? quoted[1] : line).trim());
   }
-  if (fence) drafts.push({ kind: 'code', text: fence.lines.join('\n') });
+  if (fence) drafts.push({ kind: fence.kind, text: fence.lines.join('\n') });
   flush();
 
-  const body: SectionBody = { blocks: [], sentences: [], markersDropped: 0, chars: 0 };
+  const body: SectionBody = { blocks: [], sentences: [], markersDropped: 0, chars: 0, diagrams: [], diagramsDropped: 0 };
   for (const draft of drafts) {
+    if (draft.kind === 'diagram') {
+      const diagram = parseDiagram(draft.text);
+      if (!diagram) {
+        body.diagramsDropped += 1;
+        continue;
+      }
+      body.diagrams.push({ block: body.blocks.length, labels: diagram.labels });
+      body.blocks.push({ kind: 'diagram', text: diagram.source });
+      continue;
+    }
     if (draft.kind === 'code') {
       if (draft.text.trim() !== '') body.blocks.push({ kind: 'code', text: draft.text });
       continue;
@@ -548,6 +565,58 @@ export function parseSectionBody(markdown: string, footnotes: number): SectionBo
     if (kept > 0) body.blocks.push({ kind: draft.kind });
   }
   return body;
+}
+
+/**
+ * A fact token as a diagram's check compares it (contract `docs.diagram.check`): a word of letters without its
+ * ending — -ies and -ied read as -i, then -ing, -ed, -es or -s, then a last -e, and a last -y read as -i — so
+ * "stored", "stores" and "store" are one word, and so are "retried" and "retry". A code name, a path or a number is
+ * compared as it is.
+ */
+export function diagramWord(token: string): string {
+  if (!/^[a-z]{3,}$/u.test(token)) return token;
+  let word = token;
+  if (/i(?:es|ed)$/u.test(word) && word.length > 4) word = `${word.slice(0, -3)}i`;
+  else if (word.endsWith('ing') && word.length > 5) word = word.slice(0, -3);
+  else if (word.endsWith('ed') && word.length > 4) word = word.slice(0, -2);
+  else if (word.endsWith('es') && word.length > 4) word = word.slice(0, -2);
+  else if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) word = word.slice(0, -1);
+  if (word.endsWith('e')) word = word.slice(0, -1);
+  if (word.endsWith('y')) word = `${word.slice(0, -1)}i`;
+  return word;
+}
+
+/**
+ * A section's diagrams kept as far as its sourced sentences go (contract `docs.diagram.check`): one whose every label's
+ * fact tokens are, ending aside (`diagramWord`), among those of the sentences that carry a verified footnote —
+ * `verified[i]` for the section's footnote i — or are a flowchart's own words; the first that is, as `perSection`
+ * allows. Every other one is taken out with its block, the sentences after it moving up a block.
+ */
+export function keepSourcedDiagrams(body: SectionBody, verified: readonly boolean[]): SectionBody {
+  if (body.diagrams.length === 0) return body;
+  const known = new Set<string>(WIKI_DOC_DIAGRAM_RULES.structureWords.map(diagramWord));
+  for (const sentence of body.sentences) {
+    if (sentence.notes.some((n) => verified[n])) for (const token of factTokens(sentence.text)) known.add(diagramWord(token));
+  }
+  const dropped = new Set<number>();
+  let kept = 0;
+  for (const diagram of body.diagrams) {
+    const sourced = diagram.labels.every((label) => factTokens(label).every((token) => known.has(diagramWord(token))));
+    if (sourced && kept < WIKI_DOC_DIAGRAM_RULES.perSection) kept += 1;
+    else dropped.add(diagram.block);
+  }
+  if (dropped.size === 0) return body;
+  const moved = new Map<number, number>();
+  body.blocks.forEach((_, b) => {
+    if (!dropped.has(b)) moved.set(b, moved.size);
+  });
+  return {
+    ...body,
+    blocks: body.blocks.filter((_, b) => !dropped.has(b)),
+    sentences: body.sentences.map((sentence) => ({ ...sentence, block: moved.get(sentence.block)! })),
+    diagrams: body.diagrams.filter((diagram) => !dropped.has(diagram.block)).map((diagram) => ({ ...diagram, block: moved.get(diagram.block)! })),
+    diagramsDropped: body.diagramsDropped + dropped.size,
+  };
 }
 
 // ── Quotes: folded, then found ──────────────────────────────────────────────────────────────────
@@ -1094,9 +1163,9 @@ export class WikiDocs {
     const sectionOf = new Map(planDoc.sections.map((section) => [section.key, section]));
     const prepared: PreparedSection[] = [];
     for (const section of request.sections) {
-      const parsedBody = bodies.get(section.at)!;
       const footnotes: FootnoteRow[] = [];
       for (const footnote of section.footnotes) footnotes.push(await this.checkFootnote(ownerId, footnote, literals));
+      const parsedBody = keepSourcedDiagrams(bodies.get(section.at)!, footnotes.map((footnote) => footnote.verdict === 'verified'));
       const stats: WikiDocSectionStats = {
         sentences: parsedBody.sentences.length,
         footnotes: footnotes.length,
@@ -1106,6 +1175,8 @@ export class WikiDocs {
         unresolved: footnotes.filter((f) => f.verdict === 'unresolved').length,
         markersDropped: parsedBody.markersDropped,
         chars: parsedBody.chars,
+        diagrams: parsedBody.diagrams.length,
+        diagramsDropped: parsedBody.diagramsDropped,
       };
       prepared.push({
         key: section.key,

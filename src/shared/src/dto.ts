@@ -2476,6 +2476,11 @@ export interface RunFinalizeRequest {
   /** The worktree's actual HEAD branch at completion (see SessionLiveState.worktreeBranch); lets
    *  the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch. */
   worktreeBranch?: string;
+  /** The tip of that branch once finalization has committed what the session left, the finalize
+   *  commit included: what a finished task's work is frozen as (contract §10.5 O-L4). Absent on a
+   *  park checkpoint, which the next resume undoes, and from older runners — the tip the last live
+   *  report gave then stands. */
+  branchSha?: string;
   /** Why the session's work did NOT reach its branch — the runner could not stage or could not
    *  commit it. Absent on every finalize that captured the work, and from runners too old to say.
    *
@@ -2708,20 +2713,24 @@ export interface EventSearchResponse {
 
 // ── integration jobs (docs/project-integration-line-contract.md §2) ────────────────────────────
 
-/** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3. */
-export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION';
+/** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3.
+ *  `OBSERVE_LANDING` puts nothing anywhere: it reads whether delivered commits are already on the
+ *  line (§10.6, 0453). */
+export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION' | 'OBSERVE_LANDING';
 
 /** Where a job is, or stopped. The three failures differ because they need different people.
  *  `NOTHING_TO_LAND` is neither: the branch the line was handed carried nothing of the task's, so
  *  there was no landing to make (0300). It is not `ALREADY_LANDED`, which an empty branch reaches
- *  trivially — every branch's fork point is in the target it forked from. */
+ *  trivially — every branch's fork point is in the target it forked from. `OBSERVED` is how an
+ *  `OBSERVE_LANDING` job ends when it has looked (§10.6, 0453). */
 export type IntegrationJobState =
   | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
-  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED';
+  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED';
 
-/** The step the runner is on, or the one it stopped at. */
+/** The step the runner is on, or the one it stopped at. `OBSERVE` is an `OBSERVE_LANDING` job's
+ *  step after its fetch (§10.6, 0453). */
 export type IntegrationJobPhase =
-  'FETCH' | 'MAIN_SYNC' | 'REBASE' | 'MERGE' | 'CHECK' | 'VERIFY' | 'PUSH';
+  'FETCH' | 'MAIN_SYNC' | 'REBASE' | 'MERGE' | 'CHECK' | 'VERIFY' | 'PUSH' | 'OBSERVE';
 
 /** One command run on the combined tree before anything is pushed (§2.4 J-S5). */
 export interface IntegrationCheckSpec {
@@ -2802,6 +2811,34 @@ export interface IntegrationJobCommand {
    *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
    *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
   reportBeforePush?: true;
+  /** OBSERVE_LANDING only (§10.6 O-J2): the tasks the claim found waiting to be observed, each with
+   *  the commit its work was delivered as and the commit that work forked from. Sent only to a runner
+   *  that declared `integration-observe/v1`; absent on every other kind. */
+  observeTasks?: IntegrationObserveTask[];
+}
+
+/** One task an OBSERVE_LANDING looks for (§10.6 O-S2): its frozen delivered identity (O-L4). */
+export interface IntegrationObserveTask {
+  taskId: string;
+  deliveredSha: string;
+  /** Null when no fork point was recorded. */
+  baseSha: string | null;
+}
+
+/** What an OBSERVE_LANDING saw of one task (§10.4, §10.6 O-S2), in the command's order. */
+export interface IntegrationObservation {
+  taskId: string;
+  deliveredSha: string;
+  baseSha: string | null;
+  /** `delivered_sha` is an ancestor of the upstream tip the job fetched. */
+  onUpstream: boolean;
+  /** The same of the integration line's tip; null on a MAIN line, where the line is the upstream. */
+  onIntegrationLine: boolean | null;
+  /** `delivered_sha` equals its fork point: the branch carried no commit of its own. */
+  empty: boolean;
+  /** `git cherry` found every change of base..delivered in the upstream; null when the runner did not
+   *  have those commits. */
+  fullyApplied: boolean | null;
 }
 
 /** One earlier landing the control plane could not read the push outcome of, as a command names it
@@ -2959,6 +2996,9 @@ export interface IntegrationJobResultRequest {
   /** What this job's fetch found about the earlier unknown pushes its command named (J12): only the
    *  entries git could answer for. */
   unknownPushes?: IntegrationUnknownPushCheck[];
+  /** With OBSERVED, and only there (§10.6 O-S3): one observation per task the command named. The two
+   *  tips it observed are `upstreamSha` (U) and `targetShaBefore` (T). */
+  observations?: IntegrationObservation[];
 }
 
 /** The commits that moved the upstream under a landing, as the runner measured them on the

@@ -1,0 +1,8 @@
+// Evidence kit for task 34no050naUDViWDBEtXaZ: compiles src/AddRunnerDenyShotsTest.kt (kept in this directory) into the androidTest
+// APK, so nothing under src/android/app/src/androidTest changes. Pass it as a second -I beside the build-dir init script, with
+// `gradlew -p src/android`: the path is taken from the Android project's root.
+allprojects { p ->
+    p.plugins.withId('com.android.application') {
+        p.android.sourceSets.androidTest.java.srcDir(new File(p.rootProject.projectDir, '../../docs/evidence/native-add-runner-deny/android/kit/src').canonicalFile)
+    }
+}

@@ -175,7 +175,7 @@ interface Workspace {
    *  item with a Repair. */
   repoHealth?: RunnerRepoHealth | null;
   /** The runner `git init`s a non-git workDir on the next run (set by the in-session
-   *  "Enable isolation" action), which changes what a non-git path means here. */
+   *  "Initialize git…" action), which changes what a non-git path means here. */
   autoInitGit?: boolean;
 }
 

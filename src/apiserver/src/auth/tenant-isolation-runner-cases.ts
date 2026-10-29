@@ -571,6 +571,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     }),
     nested: ['jobId'],
   },
+  // The coordinator's "look again" (§10.8): the acting session is the project's current coordinator, as
+  // on the doors above, and the owner's own machine has an observation queued.
+  'POST /runner/projects/:id/integration/observe': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+  },
   'DELETE /runner/projects/:id': { as: RUNNER, request: (of) => ({ params: { id: of.spare.projectId } }) },
 
   // ── watches, service tokens, workspaces, providers ───────────────────────────────────────────────
@@ -593,6 +603,9 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   // An engine CLI installed on a runner of the account at an orchestrating session's request, and its relay read back.
   'POST /runner/runners/:id/engine-install': { as: SESSION, request: (of) => ({ params: { id: of.runnerId }, body: { engine: 'claude' } }) },
   'GET /runner/runners/:id/engine-install': { as: SESSION, request: (of) => ({ params: { id: of.runnerId } }) },
+  // The spares: a delete takes them away. Each owner's goes on the card its calling session holds for it.
+  'DELETE /runner/runners/:id': { as: SESSION, request: (of) => ({ params: { id: of.spare.runnerId } }) },
+  'DELETE /runner/workspaces/:id': { as: SESSION, request: (of) => ({ params: { id: of.spare.workspaceId } }) },
   'PATCH /runner/providers/:slug': { as: RUNNER, request: (of) => ({ params: { slug: of.runner.providerSlug }, body: { label: 'renamed by the census' } }) },
   'DELETE /runner/providers/:slug': { as: RUNNER, request: (of) => ({ params: { slug: of.runner.spareProviderSlug } }) },
 
@@ -706,6 +719,8 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
   'GET /runner/runners': () => ({ params: {} }),
   'POST /runner/runners/:id/engine-install': (mine) => ({ params: { id: mine.runnerId }, body: { engine: 'claude' } }),
   'GET /runner/runners/:id/engine-install': (mine) => ({ params: { id: mine.runnerId } }),
+  'DELETE /runner/runners/:id': (mine) => ({ params: { id: mine.spare.runnerId } }),
+  'DELETE /runner/workspaces/:id': (mine) => ({ params: { id: mine.spare.workspaceId } }),
   'POST /runner/projects/:id/coordinator/ensure': (mine) => ({ params: { id: mine.projectId } }),
   'POST /runner/projects/:id/coordinator/messages': (mine) => ({ params: { id: mine.projectId }, body: { message: 'from the census' } }),
 };
@@ -740,6 +755,10 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   }),
   'POST /runner/projects/:id/integration/jobs/:jobId/abandon': (mine) => ({
     params: { id: mine.projectId, jobId: mine.runner.integrationJobId },
+    body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/integration/observe': (mine) => ({
+    params: { id: mine.projectId },
     body: { reason: 'the census' },
   }),
 };
@@ -1166,6 +1185,11 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'which turn the polling process says it is running, read on a runner link call only: compared, for inequality, '
     + 'with the turns of the path\'s session, already locked as this runner\'s, so another account\'s turn under that '
     + 'id is neither read nor written (runner-api.controller.ts:4270)',
+  'POST /runner/integration-jobs/:jobId/result body observations[].taskId':
+    'a task the control plane itself listed in this claim\'s OBSERVE_LANDING command (§10.6 O-J2), read again only '
+    + 'among the claiming job\'s own project\'s tasks of the job\'s owner, and answered for only while it still waits '
+    + 'with the commit named: another account\'s task under that id is not found, and nothing of it is read or '
+    + 'written (landing-observation-result.ts:155)',
   'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
@@ -1301,7 +1325,8 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/sessions/:id/approvals body input': {
     reads: [],
     reading: 'the tool call\'s own input, shown on the approval card; what it is read for — a project-create card\'s '
-      + 'reviews and a task-create preview — is read under the session\'s own owner (runner-api.controller.ts:3879, :3976)',
+      + 'reviews, a task-create preview, and the runner or workspace a delete card names — is read under the session\'s '
+      + 'own owner (runner-api.controller.ts:3879, :3976; runner-delete-approval.ts:80, :123)',
   },
   'POST /runner/sessions/:id/events body events[].payload.*': {
     reads: [

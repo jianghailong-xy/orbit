@@ -442,3 +442,38 @@ describe('a message sent the other way while a turn runs', { timeout: 60_000 }, 
     expect(mounted().querySelector('.composer-queue-offer')).toBeNull();
   });
 });
+
+describe('where the tray stands', { timeout: 60_000 }, () => {
+  // docs/mocks/pending-tray-above-parking (decided 2026-10-28): the conversation's next lines, so the
+  // band's first card, right under the conversation and above the parking strip — no longer on the
+  // composer's top edge, under it.
+  it('is the first card above the composer, over the parking strip', async () => {
+    events = [
+      RUNNING[0],
+      {
+        seq: 2,
+        type: 'tool_use',
+        turnId: 'turn-run',
+        ts: '2026-10-15T09:40:30Z',
+        payload: { id: 'bg1', name: 'Bash', input: { command: 'make backfill', description: 'Backfill the events', run_in_background: true } },
+      },
+      {
+        seq: 3,
+        type: 'tool_result',
+        turnId: 'turn-run',
+        ts: '2026-10-15T09:40:31Z',
+        payload: { toolUseId: 'bg1', content: 'Command running in background with ID: bq1x7m. Output is being written to: /tmp/bq1x7m.output' },
+      },
+      ...RUNNING.slice(1).map((event) => ({ ...event, seq: event.seq + 2 })),
+    ];
+    await mountSession(() => {
+      expect(rowState(trayRow('push into main'))).toBe('Waiting to be read');
+      expect(mounted().querySelector('.bg-tray')?.textContent).toContain('Background processes');
+    });
+    const band = mounted().querySelector('.workspace-composer')!;
+    const tray = band.querySelector('.pending-tray')!;
+    expect(band.firstElementChild).toBe(tray);
+    expect(tray.compareDocumentPosition(band.querySelector('.bg-tray')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tray.nextElementSibling?.classList.contains('composer-box')).toBe(false);
+  });
+});

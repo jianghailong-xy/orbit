@@ -9,7 +9,8 @@ import {
   openTaskLanding,
   type OpenedLanding,
 } from './landing-session';
-import { startOnFirstIntegration } from './project-integration-line';
+import { taskLandingSql, workOnProjectRepository } from './project-criterion-landing';
+import { isCodeTask, startOnFirstIntegration } from './project-integration-line';
 import {
   appendIntegrationJobEvent,
   enqueuedText,
@@ -19,9 +20,12 @@ import {
 import {
   INTEGRATION_ITEM_KINDS,
   markOpenItemsHandling,
+  recordLandingUnobserved,
   resolveLeaseExpiredItems,
   type OpenItemHandlingStart,
 } from './project-open-item';
+import { checkpointLandingGate, latestAcceptedCheckpoint } from './task-checkpoint.service';
+import { queueLandingObservationIfPending } from './landing-observation';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
@@ -40,8 +44,10 @@ import type { PromotionSourceKind, PromotionState } from './project-promotion';
  * new state is a migration, not a deploy that starts writing a value the database has never seen.
  */
 
-/** What a job is putting where (§2.1). Only LAND_TASK has a producer today; promotions are §3. */
-export const INTEGRATION_JOB_KINDS = ['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const;
+/** What a job is putting where (§2.1). Only LAND_TASK has a producer today; promotions are §3.
+ *  OBSERVE_LANDING puts nothing anywhere: it reads whether delivered commits are on the line
+ *  (§10.6, 0453). */
+export const INTEGRATION_JOB_KINDS = ['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION', 'OBSERVE_LANDING'] as const;
 export type IntegrationJobKind = (typeof INTEGRATION_JOB_KINDS)[number];
 
 /**
@@ -67,6 +73,9 @@ export const INTEGRATION_JOB_STATES = [
   'ERROR',
   'CANCELLED',
   'SUPERSEDED',
+  // How an OBSERVE_LANDING job ends when it has looked (§10.6 O-J3, 0453). Final like every state
+  // but the first two.
+  'OBSERVED',
 ] as const;
 export type IntegrationJobState = (typeof INTEGRATION_JOB_STATES)[number];
 
@@ -79,6 +88,8 @@ export const INTEGRATION_JOB_PHASES = [
   'CHECK',
   'VERIFY',
   'PUSH',
+  // An OBSERVE_LANDING job's step after its fetch (§10.6 O-S2, 0453).
+  'OBSERVE',
 ] as const;
 export type IntegrationJobPhase = (typeof INTEGRATION_JOB_PHASES)[number];
 
@@ -105,6 +116,9 @@ export const INTEGRATION_ERROR_CODES = [
   // (§2.2 J-T4) — never got its answer inside the lease window. The runner does not push in that
   // case, so the job ends here with the target untouched.
   'PUSH_REPORT_UNREACHABLE',
+  // A TASK_BRANCH candidate's check or landing named by its commit (§10.5 O-L5) found that commit
+  // missing from the claiming runner's object store. Nothing is fetched to look for it elsewhere.
+  'WORK_COMMIT_MISSING',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
@@ -115,11 +129,47 @@ export type IntegrationJobStep = (typeof INTEGRATION_JOB_STEPS)[number];
 /** A job the runner is not going to touch again. */
 const TERMINAL_STATES: ReadonlySet<string> = new Set<IntegrationJobState>([
   'LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'READY', 'CONFLICT', 'CHECK_FAILED', 'ERROR',
-  'CANCELLED', 'SUPERSEDED',
+  'CANCELLED', 'SUPERSEDED', 'OBSERVED',
 ]);
 
 export function isTerminalJobState(state: string): boolean {
   return TERMINAL_STATES.has(state);
+}
+
+/**
+ * What a runner may report through the job doors: the whole closed sets, now that an OBSERVE_LANDING
+ * job is handed out (§10.6). Which of them fits a job is the job's kind, decided where the row is read:
+ * OBSERVED and the OBSERVE step are an observation's alone (`observationRefusal`), and an observation
+ * ends only OBSERVED, ERROR or CANCELLED — accepted on a landing or a promotion, an OBSERVED would be
+ * written down as a job that ended without a word about its work.
+ */
+export const REPORTABLE_JOB_STATES: readonly IntegrationJobState[] = INTEGRATION_JOB_STATES;
+export const REPORTABLE_JOB_PHASES: readonly IntegrationJobPhase[] = INTEGRATION_JOB_PHASES;
+
+/** The states an OBSERVE_LANDING ends in (§10.6 O-J3, O-J4), and the steps it reports. */
+const OBSERVATION_RESULT_STATES: ReadonlySet<string> = new Set(['OBSERVED', 'ERROR', 'CANCELLED']);
+const OBSERVATION_PHASES: ReadonlySet<string> = new Set(['FETCH', 'OBSERVE']);
+
+/**
+ * Why a reported state or step does not fit this job's kind, or null when it does: OBSERVED and
+ * OBSERVE belong to an observation alone, and an observation reports nothing a landing does — it
+ * merges, checks and pushes nothing (§10.6).
+ */
+export function observationRefusal(kind: string, report: { state?: string; phase?: string | null }): string | null {
+  const observes = kind === 'OBSERVE_LANDING';
+  if (report.state !== undefined) {
+    if (observes && !OBSERVATION_RESULT_STATES.has(report.state)) {
+      return `${report.state} is not a result of an OBSERVE_LANDING job`;
+    }
+    if (!observes && report.state === 'OBSERVED') return `OBSERVED is not a result of a ${kind} job`;
+  }
+  if (report.phase != null) {
+    if (observes && !OBSERVATION_PHASES.has(report.phase)) {
+      return `an OBSERVE_LANDING job has no ${report.phase} step`;
+    }
+    if (!observes && report.phase === 'OBSERVE') return `a ${kind} job has no OBSERVE step`;
+  }
+  return null;
 }
 
 /** The two states a receipt is written for (§2.5 J8). */
@@ -313,6 +363,15 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
 
 /**
+ * The capability a runner declares, beside `integration-job/v1`, before it is handed an OBSERVE_LANDING
+ * (§10.6): it knows the command's `observeTasks` and answers OBSERVED. A job no such runner can claim
+ * stays QUEUED, as a landing waits for a runner that takes integration jobs (C-T2). The same capability
+ * says the runner takes a TASK_BRANCH command named by its commit (O-L5). Its runner twin is
+ * `integrationObserveCapabilityV1` in `src/runner-go/integrate.go`.
+ */
+export const INTEGRATION_OBSERVE_CLAIM = 'integration-observe/v1';
+
+/**
  * The capability a runner declares when it speaks the periodic progress protocol (§2.2 J-T4): a
  * report inside every 30 seconds, a synchronous `phase = PUSH` report before it pushes, and a stop
  * read off every answer. A claim made by a runner that declared it records `progress_protocol = 'v2'`;
@@ -366,7 +425,8 @@ export const MAX_CHECK_OUTPUT_TAIL = 16 * 1_024;
  * J1's serial key: the repository and the ref being written, so that two PROJECTS landing into the
  * same branch of the same repository are serialised against each other and not merely two tasks of
  * one project. A promotion's own check runs against no ref and takes a key of its own rather than
- * occupying main's slot while it runs.
+ * occupying main's slot while it runs, and so does an observation, which writes no ref at all
+ * (§10.4: `canonical_repo_url || '#observe:' || project_id`).
  */
 export function integrationSerialKey(input: {
   kind: IntegrationJobKind;
@@ -374,6 +434,7 @@ export function integrationSerialKey(input: {
   targetRef: string;
   projectId: string;
 }): string {
+  if (input.kind === 'OBSERVE_LANDING') return `${input.canonicalRepoUrl}#observe:${input.projectId}`;
   return input.kind === 'CHECK_PROMOTION'
     ? `${input.canonicalRepoUrl}#check:${input.projectId}`
     : `${input.canonicalRepoUrl}#${input.targetRef}`;
@@ -538,8 +599,11 @@ export function integrationItemTitle(
   mainBranch: string | null = null,
 ): string {
   // A promotion's failure is not about one task — it is about the branch the owner was going to be
-  // asked to merge — so it is named after that rather than after whichever task landed last.
-  const subject = kind === 'LAND_TASK' ? taskTitle : `merging the project branch into ${mainBranch ?? 'main'}`;
+  // asked to merge — so it is named after that rather than after whichever task landed last. An
+  // observation's is about the line it could not look at (§10.6 O-J4).
+  const subject = kind === 'LAND_TASK' ? taskTitle
+    : kind === 'OBSERVE_LANDING' ? `looking for finished work on ${mainBranch ?? 'main'}`
+      : `merging the project branch into ${mainBranch ?? 'main'}`;
   switch (state) {
     case 'CONFLICT': return `Merge conflict: ${subject}`;
     case 'CHECK_FAILED': return `Checks failed on the combined tree: ${subject}`;
@@ -858,8 +922,9 @@ export function timedOutErrorCode(job: {
   progressProtocol: string | null;
   pushReportedGeneration: bigint | null;
 }): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
-  // A check answers READY before the push step exists for it, so nothing about it can have pushed.
-  if (job.kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
+  // A check answers READY before the push step exists for it, so nothing about it can have pushed;
+  // an observation only reads (§10.6), so neither can it.
+  if (job.kind === 'CHECK_PROMOTION' || job.kind === 'OBSERVE_LANDING') return 'RUNNER_LOST';
   // LAND_TASK / LAND_PROMOTION: only a v2 claim that never recorded a PUSH can prove the negative.
   if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL && job.pushReportedGeneration == null) {
     return 'RUNNER_LOST';
@@ -1012,6 +1077,301 @@ export async function queueLandingRetry(
   };
 }
 
+// ── the delivered identity (§10.5 O-L4) ────────────────────────────────────────────────────────
+
+/** The five columns of a task's delivered identity (§10.4, O1), as one write states them. */
+export interface DeliveredIdentityColumns {
+  deliveredSha: string | null;
+  deliveredBaseSha: string | null;
+  deliveredBranch: string | null;
+  deliveredSessionId: string | null;
+  deliveredAt: Date | null;
+}
+
+/**
+ * The five columns with nothing frozen in them: what `task_reopen` writes (O-L4), what every other
+ * write that takes a task out of DONE writes too — a task that is not DONE has delivered nothing
+ * (§10.4) — and what a DONE whose work is still moving, or whose identity is unknown, writes.
+ */
+export const DELIVERED_IDENTITY_CLEARED: DeliveredIdentityColumns = {
+  deliveredSha: null,
+  deliveredBaseSha: null,
+  deliveredBranch: null,
+  deliveredSessionId: null,
+  deliveredAt: null,
+};
+
+/** The commit a code task's work is named by (O1), the commit it forked from, and where both were read. */
+export interface DeliveredIdentity {
+  sha: string;
+  baseSha: string | null;
+  /** A short branch name, as a receipt's `source_branch` spells it. */
+  branch: string;
+  sessionId: string | null;
+}
+
+/**
+ * What O-L4 can say about a task's delivered identity, from committed rows:
+ *
+ *   * NOT_A_CODE_TASK — §1.1 `isCodeTask` is false, the repository condition (O-L7) included; there
+ *     is nothing to freeze.
+ *   * WORK_MOVING — a work session of the task has not finished (`landingWorkHasSettled`, J-T1e), so
+ *     the commit it will end on is not known yet; the finish freezes it (O-L4 3).
+ *   * UNKNOWN — the work has settled and still names no commit: under convergence management no
+ *     checkpoint is one `checkpointLandingGate` accepts; otherwise the session the work ended on
+ *     reported no tip (`branch_sha`). The runner reports that tip for the branch its checkout is on,
+ *     in the report that names the branch (`worktree_branch`), so a `branch_sha` beside a
+ *     `worktree_branch` other than `branch` is that branch's tip, and "its tip was not reported" is a
+ *     missing `branch_sha`.
+ *   * KNOWN — the identity.
+ */
+export type DeliveredIdentityReading =
+  | { kind: 'NOT_A_CODE_TASK' }
+  | { kind: 'WORK_MOVING' }
+  | {
+      kind: 'UNKNOWN';
+      projectId: string;
+      sessionId: string | null;
+      branch: string | null;
+      baseSha: string | null;
+    }
+  | { kind: 'KNOWN'; projectId: string; identity: DeliveredIdentity };
+
+/** A commit id the identity can hold: 40 lowercase hex characters, the shape every SHA column keeps. */
+function deliveredShaOf(value: string | null | undefined): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/.test(value) ? value : null;
+}
+
+/**
+ * O-L4's reading of a task's delivered identity. Reads only; `deliveredIdentityAtDone` and
+ * `settleDeliveredIdentity` write what it says.
+ *
+ * 1. Under convergence management (the task has a `task_checkpoint`): the checkpoint the DONE rests
+ *    on, which is the latest ACCEPTED one when `checkpointLandingGate` accepts its commit — the
+ *    commit, its base and its branch, read from the session that recorded it.
+ * 2. Otherwise: the session the work ended on (`workBranchEndedOn`) — its `branch_sha` and
+ *    `base_sha`, on `worktree_branch`, else `branch`.
+ */
+export async function readDeliveredIdentity(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+): Promise<DeliveredIdentityReading> {
+  const task = await db.task.findFirst({ where: { id: taskId, ownerId }, select: { projectId: true } });
+  if (!task?.projectId || !(await isCodeTask(db, ownerId, taskId))) return { kind: 'NOT_A_CODE_TASK' };
+  const projectId = task.projectId;
+  const sessions = await db.session.findMany({
+    where: { taskId, startsTaskWork: true, deletedAt: null },
+    select: {
+      id: true, branch: true, worktreeBranch: true, finishedAt: true, assignedRunnerId: true,
+      branchSha: true, baseSha: true,
+    },
+  });
+  const work = sessions.map((row) => ({
+    sessionId: row.id,
+    branch: row.branch,
+    worktreeBranch: row.worktreeBranch,
+    finishedAt: row.finishedAt,
+    runnerId: row.assignedRunnerId,
+  }));
+  if (!landingWorkHasSettled(work)) return { kind: 'WORK_MOVING' };
+
+  const [managed] = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id" FROM "task_checkpoint"
+     WHERE "task_id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+     LIMIT 1`);
+  if (managed) {
+    const checkpoint = await latestAcceptedCheckpoint(db, ownerId, taskId);
+    const gate = checkpoint
+      ? await checkpointLandingGate(db, { ownerId, taskId, sourceSha: checkpoint.commitSha })
+      : null;
+    if (!checkpoint || (gate !== null && gate.decision !== 'ALLOWED')) {
+      return { kind: 'UNKNOWN', projectId, sessionId: null, branch: null, baseSha: null };
+    }
+    return {
+      kind: 'KNOWN',
+      projectId,
+      identity: {
+        sha: checkpoint.commitSha,
+        baseSha: deliveredShaOf(checkpoint.baseSha),
+        branch: shortBranchName(checkpoint.branch),
+        sessionId: checkpoint.sessionId,
+      },
+    };
+  }
+
+  const ended = workBranchEndedOn(work);
+  const session = ended ? sessions.find((row) => row.id === ended.sessionId) : undefined;
+  const sha = deliveredShaOf(session?.branchSha);
+  if (!ended || !session || !sha) {
+    return {
+      kind: 'UNKNOWN',
+      projectId,
+      sessionId: ended?.sessionId ?? null,
+      branch: ended?.branch ?? null,
+      baseSha: deliveredShaOf(session?.baseSha),
+    };
+  }
+  return {
+    kind: 'KNOWN',
+    projectId,
+    identity: { sha, baseSha: deliveredShaOf(session.baseSha), branch: ended.branch, sessionId: session.id },
+  };
+}
+
+/** The columns an identity is frozen as, at this instant. */
+function frozenColumns(identity: DeliveredIdentity): DeliveredIdentityColumns {
+  return {
+    deliveredSha: identity.sha,
+    deliveredBaseSha: identity.baseSha,
+    deliveredBranch: identity.branch,
+    deliveredSessionId: identity.sessionId,
+    deliveredAt: new Date(),
+  };
+}
+
+/**
+ * The five columns a DONE write states (O-L4), for the door to put in the statement that writes the
+ * DONE: the identity when the work has settled and names its commit, and nothing otherwise, which is
+ * left for `settleDeliveredIdentity` — the finish of the work still moving, or the item an unknown
+ * identity owes.
+ *
+ * In the DONE's own statement rather than in a second one, because a second write of a row this
+ * transaction already wrote re-runs every foreign key of `task` (`common/lock-order.ts` I3, said of
+ * `session` there): FOR KEY SHARE on the owner, the creator session, the project and the rest, taken
+ * after the task's own rank-50 lock. Read before the DONE is written, from committed rows; the
+ * statement that writes it is the compare-and-set that decides whether any of it lands.
+ */
+export async function deliveredIdentityAtDone(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+): Promise<DeliveredIdentityColumns> {
+  const reading = await readDeliveredIdentity(db, ownerId, taskId);
+  return reading.kind === 'KNOWN' ? frozenColumns(reading.identity) : DELIVERED_IDENTITY_CLEARED;
+}
+
+/** What `settleDeliveredIdentity` found, so a caller knows whether an item waits to be delivered. */
+export type DeliveredIdentitySettlement =
+  | 'FROZEN'
+  | 'STANDING'
+  | 'WORK_MOVING'
+  | 'IDENTITY_UNKNOWN'
+  | 'NOT_A_CODE_TASK'
+  | 'NOT_DONE';
+
+/**
+ * O-L4's freeze, and what an identity that cannot be frozen owes, in the caller's transaction.
+ *
+ * Two kinds of caller, told apart by `after`:
+ *
+ *   * `DONE` — `enqueueForDoneTask`, in the transaction that wrote the DONE. The DONE's statement has
+ *     already stated the identity (`deliveredIdentityAtDone`); a standing one is announced
+ *     (`deliveredIdentityFrozen`, O-T1). A door that wrote DONE without stating it gets the freeze
+ *     here, as a second write of the row — the one door that does not state it (turnComplete) writes
+ *     DONE while the session that ran the acceptance is still live, so its work has not settled.
+ *   * `WORK_FINISHED` — a transaction that wrote a work session's `finished_at` (O-L4 3): the runner's
+ *     finalize, a turn that failed the session, the reaper's forced finalize, the end of a session
+ *     that never ran, a refused start. A DONE task whose identity was left unfrozen because that work
+ *     was still moving is frozen here; one already standing is left as the DONE froze it.
+ *
+ * An identity that the settled work cannot name (O-L4's second case) opens `LANDING_UNOBSERVED`
+ * (`IDENTITY_UNKNOWN`) in an AGENT_PUSH project (O-T1) — nobody else will see that work on the line —
+ * unless a receipt already says the work landed; a PLATFORM project leaves `delivered_at` NULL and
+ * its own landing goes on by branch. The caller delivers the item after the commit
+ * (`ProjectOpenItemService.deliverForTasks`).
+ */
+export async function settleDeliveredIdentity(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' },
+): Promise<DeliveredIdentitySettlement> {
+  const { ownerId, taskId } = input;
+  const task = await tx.task.findFirst({
+    where: { id: taskId, ownerId },
+    select: { status: true, projectId: true, deliveredAt: true },
+  });
+  if (task?.status !== TaskStatus.DONE) return 'NOT_DONE';
+  if (task.deliveredAt) {
+    if (input.after === 'DONE' && task.projectId) {
+      await deliveredIdentityFrozen(tx, { ownerId, projectId: task.projectId, taskId });
+    }
+    return 'STANDING';
+  }
+  const reading = await readDeliveredIdentity(tx, ownerId, taskId);
+  if (reading.kind === 'NOT_A_CODE_TASK' || reading.kind === 'WORK_MOVING') return reading.kind;
+  if (reading.kind === 'KNOWN') {
+    const frozen = await tx.task.updateMany({
+      where: { id: taskId, ownerId, status: TaskStatus.DONE, deliveredAt: null },
+      data: frozenColumns(reading.identity),
+    });
+    if (frozen.count > 0) {
+      await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
+    }
+    return 'FROZEN';
+  }
+  const binding = await tx.projectCodebase.findFirst({
+    where: { projectId: reading.projectId, slot: 'primary' },
+    select: { deliveryMode: true },
+  });
+  if (binding?.deliveryMode === 'AGENT_PUSH') {
+    const [landing] = await tx.$queryRaw<Array<{ landing: string }>>(Prisma.sql`
+      SELECT (${Prisma.raw(taskLandingSql('landed_task'))}) AS "landing"
+        FROM "task" landed_task
+       WHERE landed_task."id" = ${taskId}::uuid`);
+    if (landing?.landing === 'NOT_KNOWN') {
+      await recordLandingUnobserved(tx, {
+        taskId,
+        reason: 'IDENTITY_UNKNOWN',
+        deliveredSha: null,
+        baseSha: reading.baseSha,
+        branch: reading.branch,
+        sessionId: reading.sessionId,
+      });
+    }
+  }
+  return 'IDENTITY_UNKNOWN';
+}
+
+/**
+ * O-L4 3 in a transaction that has just written a session's `finished_at`: when the session is work
+ * of a task, its finish may be the one that task's DONE was waiting for. Null for any other session,
+ * which reads nothing.
+ */
+export async function settleDeliveredIdentityAfterFinish(
+  tx: Prisma.TransactionClient,
+  session: { ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
+): Promise<DeliveredIdentitySettlement | null> {
+  if (!session?.taskId || !session.startsTaskWork) return null;
+  return settleDeliveredIdentity(tx, {
+    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED',
+  });
+}
+
+/**
+ * O-T1 (§10.6): a code task's delivered identity stands frozen, in the transaction that froze it —
+ * the DONE's, or the one that ended the work the DONE waited for (O-L4 3). An AGENT_PUSH project's
+ * work reaches its line by the agent's own push, which nothing of the platform's carries, so the
+ * observation is queued here (or folded into the one already queued); a PLATFORM project's DONE has
+ * its own route and waits for O-T2 or O-T3 to be looked at — and on a MAIN line, the candidate that
+ * route made while the work still moved is named by the frozen commit here (O-L5).
+ */
+async function deliveredIdentityFrozen(
+  tx: Prisma.TransactionClient,
+  frozen: { ownerId: string; projectId: string; taskId: string },
+): Promise<void> {
+  const binding = await tx.projectCodebase.findFirst({
+    where: { projectId: frozen.projectId, slot: 'primary' },
+    select: { deliveryMode: true, integrationRef: true, upstreamRef: true },
+  });
+  if (binding?.deliveryMode !== 'AGENT_PUSH') {
+    if (binding && binding.integrationRef === binding.upstreamRef) await nameCandidatesByDeliveredCommit(tx, frozen);
+    return;
+  }
+  await queueLandingObservationIfPending(tx, {
+    ownerId: frozen.ownerId, projectId: frozen.projectId, trigger: 'IDENTITY_FROZEN',
+  });
+}
+
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1047,8 +1407,10 @@ export type EnqueueOutcome =
        * ALREADY_QUEUED — J3's index already holds a landing for this task, or the candidate's own
        *   index (§3.2) already holds a live promotion of this task's branch.
        * INTEGRATION_REPOSITORY_UNKNOWN — the caller opens an INTEGRATION_ERROR item (§4.2).
+       * AGENT_PUSH — the project's agents push their own work to the upstream (§10.5 O-L2): no
+       *   candidate; the observation sees the work there.
        */
-      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN';
+      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN' | 'AGENT_PUSH';
       projectId: string | null;
     };
 
@@ -1082,14 +1444,16 @@ function workSessionsOfTaskSelect() {
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: LANDING_SESSION_CANDIDATES,
-    select: WORK_SESSION_SELECT,
+    // And the repository each ran in, for §1.1's repository condition (O-L7).
+    select: { ...WORK_SESSION_SELECT, workspace: { select: { repoUrl: true } } },
   } satisfies Prisma.Task$sessionsArgs;
 }
 
 /**
  * What a DONE of this task hands its project's integration line: the project, and the work session
  * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, a codeless
- * one, or one none of whose work sessions took a worktree on a branch.
+ * one, one none of whose work sessions took a worktree on a branch, or one whose branch is in another
+ * repository than the project's line (O-L7).
  *
  * Writes nothing. `enqueueForDoneTask` acts on it, and the owner's confirmation card reads it as the
  * landing confirming starts (`landing: NONE` when there is no work).
@@ -1105,11 +1469,17 @@ export async function doneTaskLandingWork(
       projectId: true,
       codeless: true,
       sessions: workSessionsOfTaskSelect(),
+      project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
     },
   });
   const work = landingWorkSession(task?.sessions ?? []);
   if (!task?.projectId || task.codeless || !work?.branch) {
     return { projectId: task?.projectId ?? null, work: null };
+  }
+  // A branch in another repository than the one the project's line is bound to is not this line's
+  // code work (§1.1 O-L7): it has no route here — no LAND_TASK, no candidate, nothing to observe.
+  if (!workOnProjectRepository(work.workspace?.repoUrl, task.project?.codebases[0])) {
+    return { projectId: task.projectId, work: null };
   }
   return { projectId: task.projectId, work: { ...work, branch: work.branch } };
 }
@@ -1121,8 +1491,9 @@ export async function doneTaskLandingWork(
  * Which route depends on the line, and that is the whole of the difference: a `PROJECT_BRANCH`
  * project queues a `LAND_TASK` and the platform replays the task onto its own branch (§2.3), while a
  * `MAIN` project — whose integration ref IS its upstream — queues a candidate for a promotion the
- * owner confirms (§3.4 M-F2). Neither is a message to anybody: both are rows, and the platform
- * carries them from there.
+ * owner confirms (§3.4 M-F2), unless its agents push their own work there (AGENT_PUSH, §10.5 O-L2),
+ * when it queues nothing and the observation sees the work. Neither is a message to anybody: both are
+ * rows, and the platform carries them from there.
  *
  * Does nothing for work that has no branch: a codeless task, a task in no project, a task none of
  * whose work sessions took a worktree. Those are the majority of DONE writes, and the check is
@@ -1136,8 +1507,25 @@ export async function doneTaskLandingWork(
  * lands decides it here, once, and the same transaction back-queues the project's other finished
  * code tasks — without that, they would have landed nowhere and their dependents would wait on J9
  * for a landing that was never going to be queued.
+ *
+ * And the DONE's delivered identity (revision 29, §10.5 O-L4): once the route is queued, with the line
+ * bound, `settleDeliveredIdentity` announces the identity the DONE's statement froze, freezes one the
+ * door did not state, or opens what an unknown one owes (O-T1). Whatever the route's outcome — a task
+ * already queued, or whose repository is unknown, still has the commit its work is named by.
  */
 export async function enqueueForDoneTask(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+  doneSource?: DoneTaskSource | null,
+): Promise<EnqueueOutcome> {
+  const outcome = await queueForDoneTask(tx, ownerId, taskId, doneSource);
+  await settleDeliveredIdentity(tx, { ownerId, taskId, after: 'DONE' });
+  return outcome;
+}
+
+/** `enqueueForDoneTask`'s route: the landing or the candidate, and the line it starts (J-T1a, L3). */
+async function queueForDoneTask(
   tx: Prisma.TransactionClient,
   ownerId: string,
   taskId: string,
@@ -1156,9 +1544,17 @@ export async function enqueueForDoneTask(
 
   const codebase = await tx.projectCodebase.findFirst({
     where: { projectId, slot: 'primary' },
-    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true, deliveryMode: true },
   });
   if (!codebase) return { enqueued: false, reason: 'INTEGRATION_REPOSITORY_UNKNOWN', projectId };
+  // O-L2 (§3.4 M-F2): the owner authorized this project's agents to push their work to the upstream
+  // themselves, so a DONE builds no candidate and queues no check — the observation the frozen identity
+  // queues (O-T1) sees the work there. Nor does the beat that starts the line back-fill candidates. The
+  // reopen marker this DONE answers has no route of the platform's to be consumed by, so it goes here.
+  if (codebase.deliveryMode === 'AGENT_PUSH') {
+    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    return { enqueued: false, reason: 'AGENT_PUSH', projectId };
+  }
 
   const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
   // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself. Asked of the
@@ -1545,6 +1941,8 @@ async function backfillFinishedCodeTasks(
   for (const candidate of candidates) {
     const work = landingWorkSession(candidate.sessions);
     if (!work?.branch) continue;
+    // Work in another repository is not this line's (O-L7), as it is not at its own DONE.
+    if (!workOnProjectRepository(work.workspace?.repoUrl, input.codebase)) continue;
     if (candidate.mergeReceipts.length > 0) continue;
     const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
     if (input.line === 'MAIN') {
@@ -1583,10 +1981,13 @@ async function backfillFinishedCodeTasks(
  * `CHECK_PROMOTION` job is queued beside it: nothing here decides whether the merge is any good, and
  * the owner is not asked until a check has said it is.
  *
- * `source_sha` is left NULL on purpose. Where the task's branch points is not a fact any table here
- * holds — the session records the branch and the fork point it came from, not where it has got to —
- * so it is resolved by the runner that fetches the ref, reported on the check's result, and written
- * onto this row then (0293). Everything the owner is shown comes after that.
+ * `source_sha` is the commit the task delivered (revision 29, §10.5 O-L5): the identity its DONE froze
+ * (O-L4), when that identity is the work this candidate offers — the same session, the same branch.
+ * The check and the landing then take that commit out of the source session's runner instead of
+ * fetching a branch nobody was asked to publish. Left NULL otherwise, as it was before (0293): an
+ * identity not frozen yet names the candidate when the finish that freezes it does
+ * (`nameCandidatesByDeliveredCommit`), and a branch the delivered commit is not on is checked by its
+ * branch, whose tip the runner resolves and reports on the check's result.
  *
  * Answers null when the partial unique index already holds a live candidate for this ref: one branch
  * is one question, and the one already standing is the one being asked.
@@ -1610,6 +2011,11 @@ export async function queueTaskBranchCandidate(
 ): Promise<{ promotionId: string; jobId: string } | null> {
   const promotionId = randomUUID();
   const sourceRef = `refs/heads/${input.session.branch}`;
+  const delivered = await tx.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId },
+    select: DELIVERED_WORK_COLUMNS,
+  });
+  const sourceSha = deliveredCommitOffered(delivered, input.session);
   const [created] = await tx.projectPromotion.createManyAndReturn({
     data: [{
       id: promotionId,
@@ -1620,7 +2026,7 @@ export async function queueTaskBranchCandidate(
       taskId: input.taskId,
       sessionId: input.session.id,
       sourceRef,
-      sourceSha: null,
+      sourceSha,
       upstreamRef: input.codebase.upstreamRef,
       // The one task this merge would carry. On a MAIN line a candidate is one task's branch, so
       // there is no set to derive the way M-F1 derives one off the receipts.
@@ -1640,7 +2046,7 @@ export async function queueTaskBranchCandidate(
       ownerId: input.ownerId,
       codebaseId: input.codebase.id,
       sourceRef,
-      sourceSha: null,
+      sourceSha,
       upstreamRef: input.codebase.upstreamRef,
       sessionId: input.session.id,
     },
@@ -1651,6 +2057,78 @@ export async function queueTaskBranchCandidate(
   return { promotionId, jobId };
 }
 
+/** The task columns that name its delivered work (§10.4): the commit, and where it was read. */
+const DELIVERED_WORK_COLUMNS = { deliveredSha: true, deliveredBranch: true, deliveredSessionId: true } as const;
+
+/**
+ * The commit a TASK_BRANCH candidate offering `session`'s `branch` is named by (§10.5 O-L5): the
+ * task's frozen delivered identity, when it is that work — read from that session, on that branch.
+ * Null when nothing is frozen yet, or when the delivered commit is another session's or another
+ * branch's: such a candidate is checked by its branch, as every candidate was before revision 29.
+ */
+function deliveredCommitOffered(
+  task: { deliveredSha: string | null; deliveredBranch: string | null; deliveredSessionId: string | null } | null,
+  session: { id: string | null; branch: string },
+): string | null {
+  if (!task?.deliveredSha) return null;
+  return task.deliveredSessionId === session.id && task.deliveredBranch === session.branch ? task.deliveredSha : null;
+}
+
+/**
+ * O-L5 for a candidate its DONE inserted while the work still moved (O-L4 3): the transaction that
+ * freezes the task's identity names the candidate, and the check queued for it, by the frozen commit.
+ * Nothing has looked at it yet — the claim guard holds a check until the task's work has settled, and
+ * the finish that settles it is this transaction — so the first check is already the one by commit.
+ *
+ * Only a candidate still waiting for that first check (CHECKING, nothing named, its check QUEUED), and
+ * only one that offers the delivered work (`deliveredCommitOffered`). Any other is left as it was
+ * inserted, to be checked by its branch.
+ */
+async function nameCandidatesByDeliveredCommit(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<void> {
+  const task = await tx.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId },
+    select: DELIVERED_WORK_COLUMNS,
+  });
+  if (!task?.deliveredSha) return;
+  const waiting = await tx.projectPromotion.findMany({
+    where: {
+      projectId: input.projectId,
+      taskId: input.taskId,
+      sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+      state: 'CHECKING' satisfies PromotionState,
+      sourceSha: null,
+      checkJobId: { not: null },
+    },
+    select: { id: true, sessionId: true, sourceRef: true, checkJobId: true },
+  });
+  for (const candidate of waiting) {
+    const sourceSha = deliveredCommitOffered(task, {
+      id: candidate.sessionId,
+      branch: shortBranchName(candidate.sourceRef),
+    });
+    if (!sourceSha) continue;
+    // A check already claimed is resolving the branch, and its answer names the candidate.
+    const check = await tx.projectIntegrationJob.findUnique({
+      where: { id: candidate.checkJobId! },
+      select: { state: true, sourceSha: true },
+    });
+    if (check?.state !== 'QUEUED' || check.sourceSha !== null) continue;
+    // The candidate before its check, the order every writer of both takes them in (rank 60).
+    const named = await tx.projectPromotion.updateMany({
+      where: { id: candidate.id, state: 'CHECKING', sourceSha: null },
+      data: { sourceSha },
+    });
+    if (named.count === 0) continue;
+    await tx.projectIntegrationJob.updateMany({
+      where: { id: candidate.checkJobId!, state: 'QUEUED', sourceSha: null },
+      data: { sourceSha },
+    });
+  }
+}
+
 /** What a promotion job needs to exist, whichever of the two it is. */
 export interface PromotionJobSubject {
   id: string;
@@ -1658,7 +2136,7 @@ export interface PromotionJobSubject {
   ownerId: string;
   codebaseId: string;
   sourceRef: string;
-  /** Null only for a `TASK_BRANCH` candidate whose check has not run yet (0293). */
+  /** Null only for a `TASK_BRANCH` candidate no delivered commit names whose check has not run yet (0293). */
   sourceSha: string | null;
   upstreamRef: string;
   sessionId: string | null;
@@ -1674,7 +2152,8 @@ export interface PromotionJobSubject {
  * task's acceptance command from (M-S3).
  *
  * A job whose `source_sha` is null leaves the runner to resolve the source ref itself and report the
- * commit it resolved — the only way a `TASK_BRANCH` candidate's source is knowable (0293).
+ * commit it resolved (0293) — what a `TASK_BRANCH` candidate no delivered commit names still does
+ * (§10.5 O-L5).
  *
  * `confirmedAutomatically` marks a LAND_PROMOTION the project's Automatic setting queued rather than
  * the owner's press (M-T11) — on the job itself, because the job is the record of what was sent out

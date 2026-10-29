@@ -70,10 +70,13 @@ import {
 } from '../projects/task-aggregation-writer';
 import {
   INTEGRATION_ITEM_KINDS,
+  LANDING_UNOBSERVED_KIND,
   SESSION_ENDING_SELECT,
+  openItemOwed,
   recordTaskFailure,
   sessionHasEnded,
 } from '../projects/project-open-item';
+import { branchName } from '../projects/project-criterion-landing';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -182,6 +185,7 @@ import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
+import { DELIVERED_IDENTITY_CLEARED } from '../projects/project-integration-job';
 import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
 import {
   settleTaskSegmentAfterCancel,
@@ -273,6 +277,7 @@ import {
   dependenciesSatisfiedSql,
   everyPrerequisiteDoneOrRetiredSql,
   prerequisiteLanded,
+  prerequisiteNotOnLineMessage,
   PREREQUISITE_NOT_LANDED_MESSAGE,
   dependencyEpochGate,
   dependencyEpochStalled,
@@ -321,7 +326,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
-import { buildTaskExecutionPrompt } from './task-execution-prompt';
+import { TASK_DELIVERY_SELECT, buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -3075,6 +3080,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // The completion asked about ahead of time reads as finished with nothing left of its own —
       // whether its landing will hold its dependents is the caller's to say (`dependentRelease`).
       entry.id === assumeDone ? { status: TaskStatus.DONE } : {
+        taskId: entry.id,
         status: entry.status,
         verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
         verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
@@ -3082,6 +3088,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // means: a prerequisite with no landing to do (`task-dependencies.ts`).
         landed: landing.get(entry.id),
       }))]));
+  }
+
+  /**
+   * J9's refusal in words (§10.9): what the wait is waiting for.
+   *
+   * An OPEN `LANDING_UNOBSERVED` on a prerequisite that has not landed is named, by the line its
+   * title names. Otherwise a job in flight that will answer — the prerequisite's landing, the check or
+   * landing of a candidate carrying it, or its project's observation — keeps the sentence J9 always
+   * said. With neither, nobody is behind the wait (§10.3 O5 says that should not happen): the same
+   * sentence, and a warn line naming the prerequisite.
+   */
+  private async prerequisiteNotLandedRefusal(
+    ownerId: string,
+    dependentId: string,
+    facts: readonly DependencyPrerequisiteFact[],
+  ): Promise<string> {
+    const waitingOn = [...new Set(facts.filter((fact) => fact.landed === false && fact.taskId)
+      .map((fact) => fact.taskId!))];
+    if (waitingOn.length === 0) return PREREQUISITE_NOT_LANDED_MESSAGE;
+    const ids = Prisma.join(waitingOn.map((taskId) => Prisma.sql`${taskId}::uuid`));
+    const [unobserved] = await this.prisma.$queryRaw<Array<{ integrationRef: string }>>(Prisma.sql`
+      SELECT line."integration_ref" AS "integrationRef"
+        FROM "project_open_item" item
+        JOIN "project_codebase" line ON line."project_id" = item."project_id" AND line."slot" = 'primary'
+       WHERE item."owner_id" = ${ownerId}::uuid
+         AND item."kind" = ${LANDING_UNOBSERVED_KIND}
+         AND item."state" = 'OPEN'
+         AND item."task_id" IN (${ids})
+         AND ${openItemOwed('item')}
+       ORDER BY item."waiting_since", item."id"
+       LIMIT 1`);
+    if (unobserved) return prerequisiteNotOnLineMessage(branchName(unobserved.integrationRef));
+    const [inFlight] = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT job."id"
+        FROM "task" waited_on
+        JOIN "project_integration_job" job
+          ON job."state" IN ('QUEUED', 'RUNNING')
+         AND (job."task_id" = waited_on."id"
+              OR (job."kind" = 'OBSERVE_LANDING' AND job."project_id" = waited_on."project_id")
+              OR job."promotion_id" IN (
+                   SELECT candidate."id" FROM "project_promotion" candidate
+                    WHERE candidate."task_id" = waited_on."id"
+                       OR waited_on."id" = ANY(candidate."included_task_ids")))
+       WHERE waited_on."id" IN (${ids}) AND waited_on."owner_id" = ${ownerId}::uuid
+       LIMIT 1`);
+    if (!inFlight) {
+      this.logger.warn(`J9 refused task ${dependentId}: prerequisite ${waitingOn.join(', ')} is finished and not `
+        + 'landed, and no OPEN LANDING_UNOBSERVED or integration job in flight is behind the wait (§10.9, O5)');
+    }
+    return PREREQUISITE_NOT_LANDED_MESSAGE;
   }
 
   /**
@@ -3109,17 +3165,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             select: {
               codebases: {
                 where: { slot: 'primary' },
-                select: { upstreamRef: true, integrationRef: true, integrationStartedAt: true },
+                select: {
+                  upstreamRef: true, integrationRef: true, integrationStartedAt: true, canonicalRepoUrl: true,
+                },
               },
             },
           },
           // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
-          // whose latest one did not is judged by the latest.
+          // whose latest one did not is judged by the latest — and by the repository its workspace
+          // names (O-L7).
           sessions: {
             where: { startsTaskWork: true, deletedAt: null },
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { isolationStatus: true, branch: true },
+            select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
           },
           mergeReceipts: { select: { result: true, targetBranch: true } },
         },
@@ -3129,11 +3188,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // than merely stated: a double that answers `task.findMany` with rows it wrote before this
         // read existed carries none of these, and indexing into an absent list would turn "this
         // fixture says nothing about landing" into a crash on the task page.
+        const work = row.sessions?.[0];
         landed.set(row.id, prerequisiteLanded({
           codeless: row.codeless,
           projectId: row.projectId,
           codebase: row.project?.codebases?.[0] ?? null,
-          work: row.sessions?.[0] ?? null,
+          work: work
+            ? { isolationStatus: work.isolationStatus, branch: work.branch, repoUrl: work.workspace?.repoUrl }
+            : null,
           receipts: row.mergeReceipts ?? [],
         }));
       }
@@ -9803,6 +9865,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
     }
     if (projectedVerifierStatus != null) data.status = projectedVerifierStatus as TaskStatus;
+    // A task that is not DONE has delivered nothing (§10.4): `task_reopen`, and every other write that
+    // leaves it anything but DONE, clears its delivered identity in the same statement, and its next
+    // DONE freezes one again (§10.5 O-L4).
+    if (data.status !== undefined && data.status !== TaskStatus.DONE) {
+      Object.assign(data, DELIVERED_IDENTITY_CLEARED);
+    }
     // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
     // a defect subtask, a downstream block — is recorded against the subject this task named at
     // the time. Re-pointing it afterwards would leave the ledger asserting conclusions about a
@@ -14596,6 +14664,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
+        // How the run's work reaches its line, which the prompt says (§10.5 O-L3).
+        codeless: true,
+        project: { select: TASK_DELIVERY_SELECT },
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -14739,7 +14810,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // they are complete — and a person told that about a task whose prerequisite finished
             // an hour ago goes looking for work that nobody owes.
             : depFacts.some((fact) => fact.landed === false)
-              ? PREREQUISITE_NOT_LANDED_MESSAGE
+              ? await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)
               : 'Prerequisites are not all complete yet, cannot run',
       );
     }
@@ -15061,6 +15132,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     isForeman?: boolean;
     verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;
+    codeless?: boolean | null;
+    project?: Parameters<typeof buildTaskExecutionPrompt>[0]['project'];
   }): string {
     // Neither a foreman nor a verifier is performing the list's work — one coordinates it, the
     // other checks it — so the standing instructions, which say how that work is done, would be
@@ -15183,8 +15256,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion: true,
         children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
-        // Whether its project was cancelled — the gate `execute` applies third, classified here.
-        project: { select: { status: true } },
+        // Whether its project was cancelled — the gate `execute` applies third, classified here —
+        // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
+        codeless: true,
+        project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

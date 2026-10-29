@@ -31,6 +31,9 @@ function sweepWithCancelledSession(status: RunStatus, taskId: string | null) {
         return { count: 1 };
       },
       count: async () => 0,
+      // The finish settles a DONE task's delivered identity (§10.5 O-L4 3) from the session's own
+      // row; this fixture's task is not DONE, so there is nothing for it to read further.
+      findUnique: async () => null,
     },
     task: { updateMany: async () => ({ count: 1 }) },
     taskComment: { create: async () => ({}) },

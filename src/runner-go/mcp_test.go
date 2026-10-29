@@ -257,6 +257,87 @@ func TestMCPIntegrationAbandonRequiresTheJobAndAReason(t *testing.T) {
 	}
 }
 
+// integration_observe (contract §10.8): the coordinator asks for its project's line to be looked at
+// again. The project and the reason travel; the acting session is the authority the server checks.
+func TestMCPIntegrationObservePostsTheProjectUnderTheCoordinatingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "integration_observe") {
+		t.Fatalf("integration_observe missing from the base tools")
+	}
+	if got := mcpToolRequired(t, toolDescriptors(false, false), "integration_observe"); strings.Join(got, ",") != "projectId,reason" {
+		t.Fatalf("integration_observe requires %v", got)
+	}
+	var gotMethod, gotPath, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"projectId":"p1","jobId":"j1","generation":2,"queued":true,"reason":"pushed after DONE","handlingItemIds":["i1"]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("integration_observe", map[string]interface{}{
+		"projectId": "p1", "reason": "  pushed after DONE  ",
+	})
+	if res["isError"] == true {
+		t.Fatalf("integration_observe returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/projects/p1/integration/observe" {
+		t.Fatalf("integration_observe hit %s %s", gotMethod, gotPath)
+	}
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+	if gotBody["reason"] != "pushed after DONE" {
+		t.Fatalf("the reason sent = %#v", gotBody["reason"])
+	}
+	if len(gotBody) != 1 {
+		t.Fatalf("the body carries more than the reason: %#v", gotBody)
+	}
+	if text := resultText(res); !strings.Contains(text, `"jobId":"j1"`) && !strings.Contains(text, `"jobId": "j1"`) {
+		t.Fatalf("the answer does not carry the server's reply: %s", text)
+	}
+}
+
+func TestMCPIntegrationObserveRequiresTheProjectAndAReason(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for name, args := range map[string]map[string]interface{}{
+		"no reason":    {"projectId": "p1"},
+		"blank reason": {"projectId": "p1", "reason": " \n "},
+		"no project":   {"reason": "pushed after DONE"},
+	} {
+		res := mcp.callTool("integration_observe", args)
+		if res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the door was reached without the project and the reason it needs")
+	}
+}
+
+// §10.5 O-L3, the coordinator's half: how work reaches a branch is the owner's delivery setting, so
+// whoever writes a project's instructions reads it first, and the setting wins over the prose.
+func TestMCPProjectInstructionsDeferToTheDeliveryMode(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, name := range []string{"project_create", "project_update"} {
+		description := mcpToolPropertyDescription(t, tools, name, "instructions")
+		for _, want := range []string{"integration.deliveryMode", "project_get", "AGENT_PUSH", "PLATFORM", "the setting wins"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("%s's instructions do not say %q: %s", name, want, description)
+			}
+		}
+	}
+}
+
 func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T) {
 	if !hasMCPTool(toolDescriptors(false, false), "project_integration_get") {
 		t.Fatalf("project_integration_get missing from the base tools")

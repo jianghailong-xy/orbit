@@ -1305,6 +1305,10 @@ export interface DeviceEnrollment {
   labels: string[];
   maxConcurrent: number;
   status: 'PENDING' | 'APPROVED' | 'DENIED';
+  /** The address `orbit register` ran from, as the server reads it behind its proxies; null if not recorded. */
+  requesterIp: string | null;
+  /** This page was read from that same address, and it is a public one. */
+  sameNetwork: boolean;
   /** A runner of this name is already on the account, so approving re-issues its credential. */
   nameConflict: boolean;
   /** When that runner was last heard from; null without one, or before its first heartbeat. */
@@ -1984,6 +1988,11 @@ export const refreshSessionRecap = (idOrPublicId: string) =>
  *  commit) on the workspace's next run, after which sessions isolate on their own branch. */
 export const enableWorkspaceIsolation = (workspaceId: string) =>
   api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { autoInitGit: true } });
+
+/** Turn a workspace's worktree isolation on or off: the no-branch notice's ✕ keeps a folder that is
+ *  not a repository as it is (off), and its Undo puts the setting back (on). */
+export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolean) =>
+  api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { enableWorktree } });
 
 /** Ask this workspace's runner to clean up the shared checkout it works in: the runner saves whatever
  *  the checkout is holding onto an `orbit/rescue-*` branch, then returns it to HEAD. Queued for

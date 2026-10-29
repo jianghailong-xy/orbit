@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Twenty-five statements, and every one of them is per RELATION rather than per row:
+ * Twenty-eight statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -98,6 +98,12 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      work ever took a worktree branch is what tells CODELESS from NO_RECEIPT, and it is §1.1
  *      `isCodeTask`'s half the landing fold deliberately does not read. A level, like the two
  *      above it, so it is one statement at either size;
+ *   3  §1.1's repository condition at that same lane (revision 29, §10.5 O-L7), added 2026-10-29:
+ *      the workspace the newest work session ran in, one level under the session above, and the
+ *      binding of each serving task's project, two levels (the project, then its codebase), so the
+ *      fold can tell work in another repository — which it takes out of the conjunction as it takes
+ *      out codeless work (`workInAnotherRepository`) — from this line's own. Levels, like the ones
+ *      above, so three statements at either size;
  *   1  this project's landings and merges into the upstream that are queued or running, added with
  *      the same reasons: the one input of a reason (IN_FLIGHT) that is not about any one
  *      criterion's work. One `findMany` by project and state, bounded by the queue, not the work;
@@ -151,7 +157,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 25;
+const STATEMENTS_PER_READ = 28;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,

@@ -26,12 +26,10 @@ internal object Infrastructure {
     const val NEEDS_YOU = "Needs you"
     const val MACHINES = "Machines"
     const val MACHINES_DETAIL = "Subscriptions signed in here are spent only by sessions on that machine."
-    const val SIGN_IN = "Sign in"
     const val DETAILS = "Details"
     const val MANAGE = "Manage"
     /** A key that is switched off — listed, and nothing runs on it. */
     const val DISABLED = "Disabled"
-    const val SIGNED_OUT_DETAIL = "Sessions there can’t use it"
     const val ACCOUNT_POOLS = "Account pools"
     const val ACCOUNT_POOLS_DETAIL = "Several accounts under one name."
     const val API_KEYS = "API keys"
@@ -41,8 +39,6 @@ internal object Infrastructure {
     const val INSTALLING = "Installing…"
     const val RETRY = "Retry"
 
-    /** "Antigravity CLI is signed out on HPC": the engine by its CLI's name, as every list on the page names it. */
-    fun signedOutLine(engine: String, machine: String) = "${ProviderEngines.cliName(engine)} is signed out on $machine"
     fun offlineLine(machine: String) = "$machine is offline"
     /** "Last seen 1d ago · its subscriptions are unavailable until it’s back". */
     fun offlineDetail(lastHeartbeatAt: String?, nowMs: Long) =
@@ -69,34 +65,26 @@ internal object Infrastructure {
 
     // Needs you
 
-    /** Where a line of Needs you goes: an engine signed out on a machine online is signed in again on its page; a machine offline is
-     * its record; a pool no session can start on is its page — one of the account's own, or one it is in. */
+    /** Where a line of Needs you goes: a machine offline is its record; a pool no session can start on is its page — one of the
+     * account's own, or one it is in. */
     sealed interface Kind {
-        data class SignedOut(val runnerId: String, val engine: String) : Kind
         data class Offline(val runnerId: String) : Kind
         data class PoolUnavailable(val poolId: String, val own: Boolean) : Kind
     }
 
-    /** One line of what waits on a person (web's NeedsAttention): "Codex is signed out on Mac Studio", the names it sets in bold, and
-     * what it means under it. */
+    /** One line of what waits on a person (web's NeedsAttention): "ThinkPad is offline", the names it sets in bold, and what it means
+     * under it. */
     data class Attention(val kind: Kind, val line: String, val names: List<String>, val detail: String) {
         val id: String get() = when (kind) {
-            is Kind.SignedOut -> "out:${kind.runnerId}/${kind.engine}"
             is Kind.Offline -> "offline:${kind.runnerId}"
             is Kind.PoolUnavailable -> "pool:${kind.poolId}"
         }
     }
 
-    /** What needs a person, a line each, in the web's order: each engine signed out on a machine that is online, each machine offline,
-     * then each pool no session can start on — the ones the account is in before its own, as the page lists them. */
+    /** What needs a person, a line each: each machine offline, then each pool no session can start on — the ones the account is in
+     * before its own, as the page lists them. An engine signed out on a machine is no line, as the web's machine card draws it nothing:
+     * the machine's own page says so, and signs it in (OrbitKit `Infrastructure.attention`). */
     fun attention(runners: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>, nowMs: Long): List<Attention> {
-        val signedOut = runners.flatMap { runner ->
-            val machine = RunnerPage.displayName(runner)
-            signedOutEngines(runner).map { engine ->
-                Attention(Kind.SignedOut(runner.text("id"), engine), signedOutLine(engine, machine), listOf(ProviderEngines.cliName(engine), machine),
-                    SIGNED_OUT_DETAIL)
-            }
-        }
         val offline = runners.filter { it.bool("online") != true }.map { runner ->
             val machine = RunnerPage.displayName(runner)
             Attention(Kind.Offline(runner.text("id")), offlineLine(machine), listOf(machine), offlineDetail(runner.str("lastHeartbeatAt"), nowMs))
@@ -105,24 +93,7 @@ internal object Infrastructure {
             val reason = pool.unavailable ?: return@mapNotNull null
             Attention(Kind.PoolUnavailable(pool.id, own), poolLine(pool.label), listOf(pool.label), poolDetail(reason))
         }
-        return signedOut + offline + unavailable
-    }
-
-    /** The engines signed out on a machine that is online — the ones Needs you lists for it, so a machine's row and that list never
-     * disagree. None for a machine offline: its line says so instead. */
-    fun signedOutEngines(runner: JsonObject): List<String> =
-        if (runner.bool("online") != true) emptyList() else RunnerPage.loginEngines.filter { signedOut(runner, it) }
-
-    /** Whether this engine is signed out on this machine (web's signedOutOn): installed, the CLI's own answer is no, and no account of it
-     * is signed in either — with one that is, sessions there still run on it. Antigravity only where its Google sign-in can be started,
-     * the one way back in there is; Cursor CLI only where the machine can run it, which signing in would not change. */
-    private fun signedOut(runner: JsonObject, engine: String): Boolean {
-        val health = engineHealth(runner, engine)
-        if (rowKind(health, runner.obj("install"), engine) != RowKind.SIGNED_OUT) return false
-        val antigravity = runner.obj("antigravity")
-        if (engine == ProviderEngines.ANTIGRAVITY && (antigravity?.bool("supported") == false || antigravity?.str("googleLogin") != "available")) return false
-        if (engine == ProviderEngines.CURSOR && CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) return false
-        return health?.list("accounts").orEmpty().none { it.str("auth") == "yes" }
+        return offline + unavailable
     }
 
     // A key's model
@@ -153,16 +124,14 @@ internal object Infrastructure {
 
     /** "2 / 4 running" — the slots taken on a machine that is online. */
     fun running(active: Int, max: Int) = "$active / $max running"
-    fun signedOutCount(count: Int) = if (count == 1) "1 engine signed out" else "$count engines signed out"
 
-    /** A machine's line in the list: how many of its slots are taken while it is online and has a limit, then how many of its engines are
-     * signed out — Needs you's rule — or, with none, where its engines stand. */
+    /** A machine's line in the list: how many of its slots are taken while it is online and has a limit, then where its engines stand —
+     * never a count of the ones signed out, which the web's card leaves to the machine's own page too. */
     fun machineLine(runner: JsonObject, nowMs: Long): String {
         val parts = mutableListOf<String>()
         val max = runner.int("maxConcurrent")
         if (runner.bool("online") == true && max != null && max > 0) parts += running(runner.int("activeSessions") ?: 0, max)
-        val out = signedOutEngines(runner).size
-        parts += if (out > 0) signedOutCount(out) else summary(runner, nowMs)
+        parts += summary(runner, nowMs)
         return parts.joinToString(RunnerCopy.SEP)
     }
 

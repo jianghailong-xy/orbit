@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css"><script src="kit.js"></script></head>
+<body><div class="board">
+  <h1 class="title">现状：代码早已在 feature/v1.1.1 上，Orbit 的账上却没有落地记录</h1>
+  <p class="subtitle">以 2026-10-28 一个外部账号的 MAIN 线项目里的任务 #3 为例（生产库只读查询，UTC 12:33）。红圈数字是根因编号，见最下方。</p>
+  <div class="canvas" style="height:800px">
+    <div class="lane" style="left:0;top:0;width:560px;height:686px;background:#eaf4ff"><div class="lab" style="color:#0550ae">Orbit 账上记的</div></div>
+    <div class="lane" style="left:600px;top:0;width:568px;height:500px;background:#f6edff"><div class="lab" style="color:#6639ba">Git 里实际发生的</div></div>
+
+    <div class="node orbit" id="b1" style="left:24px;top:48px;width:512px"><div class="h">任务 #3 DONE（08:59）</div></div>
+    <div class="node orbit" id="b2" style="left:24px;top:124px;width:512px"><div class="h">MAIN 线：建一张等 owner 确认的晋升候选<span class="badge">4</span></div>
+      <div class="s"><code>source_kind = TASK_BRANCH</code><br><code>source_ref = orbit/task-0854ba</code><br><code>source_sha</code> 为空，等检查去解析<span class="badge">2</span></div></div>
+    <div class="node orbit" id="b3" style="left:24px;top:262px;width:512px"><div class="h">CHECK_PROMOTION：去 origin 拉 <code>orbit/task-0854ba</code><span class="badge">2</span></div></div>
+    <div class="node bad" id="b4" style="left:24px;top:346px;width:512px"><div class="h">✗ SOURCE_BRANCH_MISSING</div><div class="s">origin 上没有这个分支：它只在 Mac 上，从来没人推过</div></div>
+    <div class="node bad" id="b5" style="left:24px;top:450px;width:512px"><div class="h">候选 BLOCKED，开集成异常</div><div class="s">coordinator 按 HANDLED 关掉，门禁照样关着<span class="badge">5</span></div><div class="s">#1 补推分支后重查，结果是 ALREADY_LANDED（代码已在 main 上），也照样记成 BLOCKED<span class="badge">3</span></div></div>
+    <div class="node bad" id="b6" style="left:24px;top:610px;width:512px"><div class="h">session_merge_receipt：没有 #3 的回执<span class="badge">1</span></div></div>
+
+    <div class="node note" id="a0" style="left:624px;top:48px;width:520px">项目说明<span class="badge">4</span>：agent 只在 feature/v1.1.1 上工作，阶段完成即提交推送</div>
+    <div class="node agent" id="a1" style="left:624px;top:150px;width:520px"><div class="h">任务 #3 的 agent 在 worktree 里提交</div><div class="s">分支 <code>orbit/task-0854ba</code>，只在这台 Mac 上</div></div>
+    <div class="node fact big" id="a2" style="left:624px;top:362px;width:520px"><div class="h">origin/feature/v1.1.1</div><div class="s" style="color:#116329">✓ 已包含 #3 的提交（#1、#4、#7、#9、#10 也一样）</div></div>
+
+    <div class="node orbit big" id="g1" style="left:624px;top:597px;width:520px"><div class="h">J9 依赖门禁：只认回执<span class="badge">1</span></div><div class="s">不看 git 里的事实</div></div>
+    <div class="node bad big" id="g2" style="left:624px;top:712px;width:520px"><div class="h">#5（依赖 #3、#4）起不来</div><div class="s">prerequisite not landed · 08:59 起一直等，blocker 0 条，界面看不出来<span class="badge">5</span></div></div>
+  </div>
+  <div class="legend">
+    <div><span class="badge" style="margin:0 8px 0 0">1</span>「已落地」= 有回执，而不是「提交已在线上」</div>
+    <div><span class="badge" style="margin:0 8px 0 0">2</span>工作的身份是分支名，而这个分支没人负责推到 origin（runner 从不推任务分支）</div>
+    <div><span class="badge" style="margin:0 8px 0 0">3</span>事实和授权绑在一起：检查看到代码已在 main 上，没走确认，也只能记 BLOCKED</div>
+    <div><span class="badge" style="margin:0 8px 0 0">4</span>交付方式没有声明：项目说明要 agent 直推，MAIN 线却照样建等确认的候选</div>
+    <div><span class="badge" style="margin:0 8px 0 0">5</span>等待没有生产者：异常能按 HANDLED 关掉，门禁却永远关着，界面上看不出来</div>
+  </div>
+</div>
+<script>drawWires([
+  {from:'b1',to:'b2',fs:'bottom',ts:'top',color:'blue'},
+  {from:'b2',to:'b3',fs:'bottom',ts:'top',color:'blue'},
+  {from:'b3',to:'b4',fs:'bottom',ts:'top',color:'red'},
+  {from:'b4',to:'b5',fs:'bottom',ts:'top',color:'red'},
+  {from:'b5',to:'b6',fs:'bottom',ts:'top',color:'red'},
+  {from:'a1',to:'a2',fs:'bottom',ts:'top',color:'purple',label:'<code>git push HEAD:feature/v1.1.1</code>'},
+  {from:'a2',to:'g1',fs:'bottom',ts:'top',color:'red',dash:true,label:'✗ 门禁不读这里'},
+  {from:'b6',to:'g1',fs:'right',ts:'left',color:'blue',label:'只读这里',ly:-16},
+  {from:'g1',to:'g2',fs:'bottom',ts:'top',color:'red'},
+]);</script>
+</body></html>

@@ -2,11 +2,12 @@ import { useState, type ReactNode } from 'react';
 import { AttachmentImage, ChatImage, type TurnImage } from './Transcript';
 
 /**
- * The messages the reader sent that nothing has read yet, on the composer's top edge, one row each
- * (docs/mocks/steer-tray, decided 2026-10-16). They are not part of the conversation until the
- * engine reads them, so the transcript leaves them out (Transcript `UnreadSteer`); what is still
- * open about each — where it is going, how far it got, the way to take it back — is said here,
- * where the reader is typing the next one.
+ * The messages the reader sent that nothing has read yet, one row each (docs/mocks/steer-tray,
+ * decided 2026-10-16), as the first card above the composer: right under the conversation, above the
+ * parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28). They are not part of the
+ * conversation until the engine reads them, so the transcript leaves them out (Transcript
+ * `UnreadSteer`); what is still open about each — where it is going, how far it got, the way to take
+ * it back — is said here, over the composer the reader is typing the next one in.
  *
  * A row is headed into the turn running now (a steer: ↳) or queued for the next one (≡). A queued
  * row on an engine that takes a message mid-turn offers Steer, which sends it into the current

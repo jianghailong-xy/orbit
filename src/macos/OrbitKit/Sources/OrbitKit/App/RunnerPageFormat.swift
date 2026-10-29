@@ -18,10 +18,9 @@ public enum RunnerPageFormat {
 
     // MARK: presence
 
-    /// The status dot: green online, amber while it drains, grey offline.
+    /// The status dot, by the web's rule: green online, grey offline — a machine that drains is online.
     public enum Presence: Equatable, Sendable {
         case online
-        case draining
         case offline
     }
 
@@ -30,8 +29,7 @@ public enum RunnerPageFormat {
     }
 
     public static func presence(_ runner: Runner, now: Date) -> Presence {
-        if isOffline(runner, now: now) { return .offline }
-        return runner.status == .draining ? .draining : .online
+        isOffline(runner, now: now) ? .offline : .online
     }
 
     /// The name the list and the page head show: the alias, else the machine's own name.
@@ -907,5 +905,16 @@ public enum RunnerPageFormat {
         let characters = typed.uppercased().filter { $0.isLetter || $0.isNumber }
         guard characters.count == 10, characters.allSatisfy({ $0.isASCII }) else { return nil }
         return "\(characters.prefix(5))-\(characters.suffix(5))"
+    }
+
+    /// The notice under a request whose name a runner of this account already has, as the web's
+    /// /enroll page words it: when that runner was last online, if the server says, then what
+    /// re-registering does.
+    public static func deviceNameTakenDetail(_ device: DeviceInfo, now: Date) -> String {
+        guard let seen = device.existingLastSeenAt, !seen.isEmpty else {
+            return RunnerPageCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL
+        }
+        let lastOnline = RunnerPageCopy.runnerDeviceLastOnline(when: RunnerAttention.ago(seen, nowMs: nowMs(now)))
+        return "\(lastOnline) \(RunnerPageCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL)"
     }
 }

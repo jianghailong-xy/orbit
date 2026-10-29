@@ -46,7 +46,10 @@ import {
  * footnotes with their quotes found in the files, the quote repair and the rewrite asked for, the ledger and the
  * overview — and of a quote's lines, a line's sentences and a sentence's fact tokens. This holds the server's port
  * to the same bytes, step for step in the order the build takes them. The Go side's test
- * (wiki_docs_build_fixture_test.go) wrote the file; P11 deleted it with the Go code, and the file is frozen since.
+ * (wiki_docs_build_fixture_test.go) wrote the file; P11 deleted it with the Go code, and the file is frozen since —
+ * but for the diagram offer (contract `docs.diagram`, 2026-10-28), which changed the fingerprint and the write prompt
+ * of each section of a kind it is made to, and the overview's: those values were written from this port, and every
+ * other value was checked to be the one the runner wrote.
  *
  * The fingerprint matters most: a section whose stored fingerprint is the one its material gives is not written
  * again, so a space moved from the runner's build to the server's kept every section the runner wrote.

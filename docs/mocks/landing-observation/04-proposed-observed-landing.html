@@ -1,0 +1,34 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css"><script src="kit.js"></script></head>
+<body><div class="board">
+  <h1 class="title">建议的设计：「已落地」是观测出来的状态，不是流水线的副产品</h1>
+  <p class="subtitle">工作身份 = 提交号；落地 = 这个提交是否已在线上；回执退回成观测记录；授权另走一条线。</p>
+  <div class="canvas" style="height:840px">
+    <div class="node" id="m0" style="left:0;top:0;width:1168px;border-color:#59636e"><div class="h">前提：owner 声明交付方式（和集成线设置同一个入口）</div>
+      <span class="chip" style="background:#fbefff;color:#6639ba">agent 直推：agent 自己推到 feature/v1.1.1（这个项目）</span><span class="chip" style="background:#ddf4ff;color:#0550ae">平台合入：agent 不碰目标分支，平台按提交号合入</span></div>
+
+    <div class="node orbit" id="n1" style="left:0;top:132px;width:300px;height:172px"><div class="h">① 任务 DONE：冻结身份</div><div class="s"><code>delivered_base_sha</code>、<code>delivered_sha</code></div><div class="s">取会话报的 <code>branch_sha</code>，收敛任务取 checkpoint 提交；之后只认提交号</div></div>
+    <div class="node orbit big" id="n2" style="left:360px;top:132px;width:440px;height:172px"><div class="h">② 落地观测作业（runner，只读，批量）</div><div class="s">fetch 线和 upstream，判断 <code>delivered_sha</code> 是否已被包含</div>
+      <span class="chip">DONE 时</span><span class="chip">agent 一轮结束时</span><span class="chip">回执写下时</span><span class="chip">手动再看一次</span><div class="s">只由已提交事实触发，不加时钟</div></div>
+    <div class="node fact" id="n3" style="left:860px;top:132px;width:308px;height:172px"><div class="h">③ 写一张平台观测回执</div><div class="s"><code>ALREADY_MERGED · observed</code></div><div class="s">回执只是观测记录，不再是唯一的事实</div></div>
+    <div class="node fact big" id="n4" style="left:860px;top:364px;width:308px"><div class="h">派发下游</div><div class="s">例：#5 立刻启动</div></div>
+    <div class="node warn" id="n5" style="left:360px;top:364px;width:440px"><div class="h">④ LANDING_UNOBSERVED 待办</div>
+      <div class="s">agent 直推模式下没看到时开出。先交协调会话：再看一次、用 <code>merge_receipt</code> 指明带着改动的提交、打回去推；处理不了再交给 owner</div>
+      <div class="s">条件没消失就不能按 HANDLED 关掉</div>
+      <div class="s">平台合入模式：没看到就交给它自己的流水线；候选按 <code>delivered_sha</code> 合入，源会话所在的 runner 本机就有这个提交</div></div>
+
+    <div class="node warn" id="g1" style="left:0;top:624px;width:420px;height:118px"><div class="h">⑤ 平台合入模式下，观测到工作没走确认就已经在 main 上</div></div>
+    <div class="node fact" id="g2" style="left:500px;top:624px;width:300px;height:118px"><div class="h">事实：记为已落地</div><div class="s">下游照常放行</div></div>
+    <div class="node warn" id="g3" style="left:860px;top:624px;width:308px;height:118px"><div class="h">授权：owner 待办</div><div class="s"><code>LANDED_WITHOUT_CONFIRMATION</code>：owner 按 Accept；要回退另建任务。不再记 BLOCKED</div></div>
+    <div class="node note" id="x1" style="left:0;top:774px;width:1168px">去掉的东西：任务分支必须在 origin 上 · ALREADY_LANDED 记成 BLOCKED · HANDLED 关掉了还在死等 · 误挂进项目的任务被拿去晋升 · M-T13 / 0411 / #146 这类对齐补丁</div>
+  </div>
+</div>
+<script>drawWires([
+  {from:'n1',to:'n2',color:'blue'},
+  {from:'n2',to:'n3',color:'green',label:'已包含',ly:-16},
+  {from:'n3',to:'n4',fs:'bottom',ts:'top',color:'green'},
+  {from:'n2',to:'n5',fs:'bottom',ts:'top',color:'amber',label:'没包含'},
+  {from:'n5',to:'n2',fs:'left',ts:'left',color:'amber',dash:true,mx:-22,too:56,label:'推上去 / 指明提交后再观测',lx:-124},
+  {from:'g1',to:'g2',color:'green'},
+  {from:'g2',to:'g3',color:'amber',dash:true},
+]);</script>
+</body></html>

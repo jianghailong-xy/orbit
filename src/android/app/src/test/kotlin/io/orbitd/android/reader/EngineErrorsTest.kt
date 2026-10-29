@@ -63,6 +63,7 @@ class EngineErrorsTest {
 
     @Test fun usageLimitMustOpenTheReply() {
         assertTrue(EngineErrors.isUsageLimitErrorText("You've hit your session limit · resets 6:20pm (Europe/Berlin)"))
+        assertTrue(EngineErrors.isUsageLimitErrorText("You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)"))
         assertTrue(EngineErrors.isUsageLimitErrorText("You've hit your weekly limit · resets 1pm (UTC)"))
         assertTrue(EngineErrors.isUsageLimitErrorText("You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage"))
         assertFalse(EngineErrors.isUsageLimitErrorText("I checked the logs and the run failed because the account had hit your usage limit yesterday."))
@@ -71,6 +72,7 @@ class EngineErrorsTest {
     @Test fun autoRetryRowsAreTitledAsTheCardIs() {
         assertEquals("Provider unavailable", EngineErrors.autoRetryTitle(false, "API Error: 529"))
         assertEquals("5-hour limit reached", EngineErrors.autoRetryTitle(true, "You've hit your session limit · resets 6:20pm (Europe/Berlin)"))
+        assertEquals("5-hour limit reached", EngineErrors.autoRetryTitle(true, "You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)"))
         assertEquals("Weekly limit reached", EngineErrors.autoRetryTitle(true, "You've hit your weekly limit · resets 1pm (UTC)"))
         assertEquals("Usage limit reached", EngineErrors.autoRetryTitle(true, "You've hit your usage limit."))
     }

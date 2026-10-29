@@ -98,10 +98,11 @@ class CursorEngineTest {
         // A machine that predates it has a row too, with the fleet in view: nothing reported, so it says to update the runner.
         assertEquals(listOf("claude", "antigravity", "cursor"), rows(older(claude), listOf(older(claude), withCursor)))
         assertEquals("Update runner" to "warn", RunnerPage.engineStatus(RunnerPage.engines(older(claude), listOf(withCursor)).last(), older(claude)))
-        // Signed out under a workspace that runs on it: the runner page raises it, and so does Infrastructure's Needs you.
+        // Signed out under a workspace that runs on it: the runner page raises it — Infrastructure's Needs you does not, as the web's
+        // machine card draws it nothing.
         val items = RunnerPage.attention(withCursor, listOf(onCursor), now, latestVersion = null)
         assertEquals(listOf("Cursor CLI signed out"), items.filter { it.kind == "engineSignedOut" }.map { it.short })
-        assertEquals(listOf("Cursor CLI is signed out on hpc"), Infrastructure.attention(listOf(withCursor), emptyList(), emptyList(), now).map { it.line })
+        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(withCursor), emptyList(), emptyList(), now))
         // Cursor CLI's update note is the pinned build's: a fortnight behind the release it doesn't follow is still worth a person.
         assertTrue(items.any { it.kind == "engineNotUpdating" && it.short == "Cursor CLI update failed" })
     }

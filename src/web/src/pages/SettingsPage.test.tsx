@@ -95,6 +95,11 @@ describe('the way into Machines & models (docs/mocks/machines-and-models, 02)', 
     expect(html).toMatch(/class="settings-machines-value" style="[^"]*color:var\(--warning\)/);
     expect(value(render({}, { runners: [online('a'), { id: 'b', name: 'b', online: false }], pools: [] }))).toBe('1 needs you');
   });
+
+  it('counts no engine signed out, as the machine cards and the phone’s row draw it nothing', () => {
+    const out = { ...online('a'), engines: [{ engine: 'codex', installed: true, auth: 'no' }] };
+    expect(value(render({}, { runners: [out], pools: [] }))).toBe('1 of 1 online');
+  });
 });
 
 describe('the order of the cards', () => {

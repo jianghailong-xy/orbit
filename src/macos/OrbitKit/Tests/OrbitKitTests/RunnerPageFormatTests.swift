@@ -145,8 +145,9 @@ final class RunnerPageFormatTests: XCTestCase {
     }
 
     func testDrainingAndAFullMachine() throws {
+        // A machine that drains is online, its dot green, as the web's card draws it.
         let draining = try runner(Self.wikovaJSON, ["status": "DRAINING"])
-        XCTAssertEqual(RunnerPageFormat.presence(draining, now: now), .draining)
+        XCTAssertEqual(RunnerPageFormat.presence(draining, now: now), .online)
 
         let full = try runner(Self.wikovaJSON, ["activeSessions": 12])
         XCTAssertEqual(RunnerPageFormat.slots(full, now: now)?.full, true)

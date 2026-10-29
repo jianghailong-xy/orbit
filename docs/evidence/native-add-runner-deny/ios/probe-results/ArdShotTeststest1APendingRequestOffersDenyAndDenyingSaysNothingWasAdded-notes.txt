@@ -1,0 +1,9 @@
+pending-settings-row: in view after 0 drag(s) at (16.0, 326.0, 370.0, 52.0)
+pending-add: in view after 0 drag(s) at (16.0, 305.33333333333337, 370.0, 51.99999999999994)
+pending-code: in view after 0 drag(s) at (32.0, 585.3333129882812, 338.0, 22.66668701171875)
+pending: code field 49 label="Code" value="ABCD-1234" frame=(32.0, 585.3333129882812, 338.0, 22.66668701171875) hittable=true
+pending-deny: in view after 1 drag(s) at (16.0, 724.3333333333334, 370.0, 52.0)
+pending: 9 label="Approve" value="" frame=(16.0, 672.3333333333334, 370.0, 52.0) hittable=true; 9 label="Deny" value="" frame=(16.0, 724.3333333333334, 370.0, 52.0) hittable=true
+in flight: Approve enabled false, Deny enabled false
+denied: decisions sent ["POST /api/runners/device/ABCDE-FGH23/deny"]
+denied: in view after 0 drag(s) at (32.0, 727.6666666666666, 338.0, 33.66666666666674)

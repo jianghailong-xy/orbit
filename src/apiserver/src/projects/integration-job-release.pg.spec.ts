@@ -118,7 +118,9 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
       data: {
         ownerId,
         projectId,
-        canonicalRepoUrl: `ssh://git@example.invalid/integration-job-release-${projectId}`,
+        // The repository the runner's workspace names: work done in any other is not this line's
+        // to land (§10.5 O-L7).
+        canonicalRepoUrl: 'ssh://git@example.invalid/integration-job-release',
         upstreamRef: 'refs/heads/main',
         integrationRef: `refs/heads/project/${projectId}`,
         refAuthority: 'REMOTE',

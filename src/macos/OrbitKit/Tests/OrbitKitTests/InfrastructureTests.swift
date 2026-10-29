@@ -79,37 +79,20 @@ final class InfrastructureTests: XCTestCase {
 
     // MARK: - Needs you
 
-    /// An engine signed out on a machine that is online gets a line, signed in again on its page; the
-    /// same engine signed out on a machine that is offline doesn't — the machine's line is its line.
-    func testAnEngineSignedOutOnAMachineOnlineIsALine() throws {
-        let lines = attention(try fleet(), own: [claudePool()])
-        XCTAssertEqual(says(lines[0]), "Codex is signed out on Mac Studio · Sessions there can’t use it")
-        XCTAssertEqual(lines[0].kind, .signedOut(runnerID: "mac", engine: .codex))
-        XCTAssertEqual(lines[0].names, ["Codex", "Mac Studio"], "the names the line sets in bold")
-        XCTAssertEqual(lines.filter { $0.line.contains("signed out") }.count, 1)
-        XCTAssertEqual(Infrastructure.signedOutEngines(try thinkPad()), [], "offline: its line says so instead")
-    }
-
-    /// Nothing for an engine still signed in on another account, one whose CLI would not say, or one not
-    /// installed — and no block at all while nothing needs a person.
-    func testNothingForAnEngineStillInOnAnotherAccountOrOneThatWouldNotSay() throws {
-        let box = try runner(#"""
-        {"id":"hpc","name":"HPC","online":true,"engines":[
-          {"engine":"claude","installed":true,"auth":"no","accounts":[
-            {"id":"default","auth":"no"},{"id":"slot-2","name":"Work","auth":"yes"}]},
-          {"engine":"codex","installed":true,"auth":"unknown"},
-          {"engine":"kimi","installed":false,"auth":"no"}]}
-        """#)
-        XCTAssertEqual(attention([box]), [])
+    /// An engine signed out is no line: the web's machine card draws it nothing, and the machine's own page
+    /// says so and signs it in. Mac Studio's Codex is out, and only ThinkPad, offline, needs a person — no
+    /// block at all while nothing does.
+    func testAnEngineSignedOutIsNoLine() throws {
+        XCTAssertEqual(attention(try fleet(), own: [claudePool()]).map(\.kind), [.offline(runnerID: "thinkpad")])
         XCTAssertEqual(attention([try hpc()], own: [claudePool()]), [], "nothing needs a person")
     }
 
     /// A machine that is offline: when it was last seen, and that its subscriptions are gone with it.
     func testAMachineOfflineIsALine() throws {
         let lines = attention(try fleet(), own: [claudePool()])
-        XCTAssertEqual(says(lines[1]),
+        XCTAssertEqual(says(lines[0]),
                        "ThinkPad is offline · Last seen 1d ago · its subscriptions are unavailable until it’s back")
-        XCTAssertEqual(lines[1].kind, .offline(runnerID: "thinkpad"))
+        XCTAssertEqual(lines[0].kind, .offline(runnerID: "thinkpad"))
         let never = try runner(#"{"id":"new","name":"New box","online":false}"#)
         XCTAssertEqual(says(attention([never])[0]),
                        "New box is offline · Never checked in · its subscriptions are unavailable until it’s back")
@@ -119,39 +102,13 @@ final class InfrastructureTests: XCTestCase {
     /// which come first, as the page lists them.
     func testAPoolNoSessionCanStartOnIsALine() throws {
         let lines = attention(try fleet(), own: [claudePool(unavailable: "No account can run")])
-        XCTAssertEqual(says(lines[2]), "Claude keys is unavailable · No account can run · no session can start on it")
-        XCTAssertEqual(lines[2].kind, .poolUnavailable(poolID: "pool", own: true))
+        XCTAssertEqual(says(lines[1]), "Claude keys is unavailable · No account can run · no session can start on it")
+        XCTAssertEqual(lines[1].kind, .poolUnavailable(poolID: "pool", own: true))
 
         let shared = ProviderPool(id: "shared", slug: "team", label: "Team Codex", unavailable: "No keys", engine: "codex")
         let both = attention([], own: [claudePool(unavailable: "No account can run")], member: [shared])
         XCTAssertEqual(both.map(\.kind), [.poolUnavailable(poolID: "shared", own: false),
                                           .poolUnavailable(poolID: "pool", own: true)])
-    }
-
-    /// Antigravity is only a line where its Google sign-in can be started — the one way back in.
-    func testAntigravitySignedOutIsALineOnlyWhereGoogleSignInCanStart() throws {
-        let json = { (login: String) in #"""
-            {"id":"r","name":"Box","online":true,
-             "antigravity":{"supported":true,"installed":true,"envKeyAvailable":false,"googleLogin":"\#(login)"},
-             "engines":[{"engine":"antigravity","installed":true,"auth":"no"}]}
-            """# }
-        XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("available"))), [.antigravity])
-        let line = attention([try runner(json("available"))])[0]
-        XCTAssertEqual(says(line), "Antigravity CLI is signed out on Box · Sessions there can’t use it")
-        XCTAssertEqual(line.names, ["Antigravity CLI", "Box"], "the engine by its CLI's name, as every list names it")
-        XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("needs_update"))), [])
-        XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("unsupported_platform"))), [])
-    }
-
-    /// Antigravity on a machine's own Gemini key: the server's answer stands for its install and its
-    /// credential, and Default on that key is no engine signed out.
-    func testAntigravityOnTheMachinesOwnKeyIsNotSignedOut() throws {
-        let box = try runner(#"""
-        {"id":"r","name":"Box","online":true,
-         "antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"googleLogin":"available"},
-         "engines":[{"engine":"antigravity","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"no"}]}]}
-        """#)
-        XCTAssertEqual(Infrastructure.signedOutEngines(box), [])
     }
 
     // MARK: - A key's row
@@ -174,13 +131,13 @@ final class InfrastructureTests: XCTestCase {
 
     // MARK: - A machine's row (03-ios.png)
 
-    /// "2 / 4 running · 1 engine signed out"; "5 / 8 running · All signed in"; offline, where its engines
-    /// stood: "1 of 3 signed in".
-    func testAMachinesLineSaysItsSlotsAndItsEnginesSignedOut() throws {
-        XCTAssertEqual(Infrastructure.machineLine(try macStudio(), now: Self.now), "2 / 4 running · 1 engine signed out")
+    /// "2 / 4 running · 1 of 3 signed in" — Mac Studio's Codex is signed out, and the line says where its
+    /// engines stand rather than counting that, as the web's card does; "5 / 8 running · All signed in";
+    /// offline, where its engines stood: "1 of 3 signed in".
+    func testAMachinesLineSaysItsSlotsAndWhereItsEnginesStand() throws {
+        XCTAssertEqual(Infrastructure.machineLine(try macStudio(), now: Self.now), "2 / 4 running · 1 of 3 signed in")
         XCTAssertEqual(Infrastructure.machineLine(try hpc(), now: Self.now), "5 / 8 running · All signed in")
         XCTAssertEqual(Infrastructure.machineLine(try thinkPad(), now: Self.now), "1 of 3 signed in")
-        XCTAssertEqual(Infrastructure.signedOutCount(2), "2 engines signed out")
         XCTAssertEqual(Infrastructure.machinesCount(try fleet()), "3 machines · 7 / 12 slots busy")
         XCTAssertEqual(Infrastructure.machinesCount([try hpc()]), "1 machine · 5 / 8 slots busy")
         XCTAssertNil(Infrastructure.machinesCount([]))

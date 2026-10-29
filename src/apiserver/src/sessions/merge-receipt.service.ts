@@ -43,7 +43,12 @@ import {
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
+import { resolveLandingUnobservedOnLanding } from '../projects/project-open-item';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
+import {
+  openLandedWithoutConfirmationIfOwed,
+  queueLandingObservationAfterCommit,
+} from '../projects/landing-observation';
 
 /**
  * The sessions a landing clears the merge recovery of (S3 of the merge-recovery repair loop): it still holds a
@@ -210,14 +215,19 @@ export class MergeReceiptService {
    */
   async deliverProjectFactsAfterCommit(
     projectId: string | null | undefined,
-    landedTaskId?: string | null,
+    /** The tasks whose landing this commit recorded: one for most doors, several for an observation. */
+    landedTaskIds?: string | ReadonlyArray<string> | null,
+    /** Set by the observation's own result: it has just looked at the line (O-T3 below). */
+    options: { observed?: boolean } = {},
   ): Promise<void> {
     if (!projectId) return;
+    const landed = [...new Set(typeof landedTaskIds === 'string' ? [landedTaskIds] : landedTaskIds ?? [])];
     await this.deliverCompletionInputs(projectId);
     // LAST, and outside the router's own guard: this one is not a delivery to a coordinator, it is
     // the platform starting the next task (§2.5 J10). A receipt that could not be announced to
     // anybody still landed the work that the tasks downstream of it were waiting for.
-    const undecided = await this.dispatchWhatThisLandingReleased(landedTaskId);
+    const undecided: string[] = [];
+    for (const taskId of landed) undecided.push(...await this.dispatchWhatThisLandingReleased(taskId));
     // And what the dispatch just skipped on purpose: a released dependent that does not start by
     // itself (`autoRunWhenReady = false`) is a decision for the coordinator, and this receipt is the
     // fact that puts it there. Last, so the facts above reach a coordinator in the order they always
@@ -226,6 +236,13 @@ export class MergeReceiptService {
       await this.completionInputs?.routeReadyDependents(undecided).catch((e) =>
         this.logger.warn(`ready-dependent delivery failed after a merge receipt: ${e?.message ?? e}`),
       );
+    }
+    // O-T3 (§10.6), at the very end: a landing receipt committed, so the line may have moved, and the
+    // project's tasks still waiting to be seen on it are looked at again. Not after an observation's
+    // own receipts — it has just looked at the line, and a second look would see the same tips. Logged
+    // and never raised inside, like every other knock here.
+    if (landed.length > 0 && !options.observed) {
+      await queueLandingObservationAfterCommit(this.prisma, { projectId, trigger: 'RECEIPT' });
     }
   }
 
@@ -319,181 +336,8 @@ export class MergeReceiptService {
     recordedBy: MergeReceiptRecorder,
     tx?: Prisma.TransactionClient,
   ): Promise<{ receipt: ReturnType<typeof mergeReceiptRow>; created: boolean }> {
-    // The closed set a door may record, said here as well as by the DTO now that the table admits a
-    // fifth: MATCHED_BY_CONTENT is written by the owner's Done alone, from a check that found it (0432).
-    if (!(MERGE_RECEIPT_RESULTS as readonly string[]).includes(input.result)) {
-      throw new BadRequestException(`result must be one of ${MERGE_RECEIPT_RESULTS.join(', ')}`);
-    }
-    const run = async (db: Prisma.TransactionClient) => {
-      const session = await db.session.findFirst({
-        where: { id: sessionId, ownerId },
-        select: { id: true, branch: true, taskId: true, mergeStatus: true, sessionKind: true, task: { select: { projectId: true } } },
-      });
-      if (!session) throw new NotFoundException('session not found');
-      // A landing session has no branch of its own to record a merge against (§2.9 LS6).
-      assertEngineSession(session);
-
-      const sourceBranch = (input.sourceBranch ?? session.branch ?? '').trim();
-      const targetBranch = (input.targetBranch ?? '').trim();
-      if (sourceBranch === '') {
-        throw new BadRequestException(
-          'sourceBranch is required — this session has no recorded branch to fall back to',
-        );
-      }
-      if (targetBranch === '') throw new BadRequestException('targetBranch is required');
-
-      let sourceSha: string | null;
-      let targetShaBefore: string | null;
-      let targetShaAfter: string | null;
-      let rebaseBaseSha: string | null;
-      try {
-        sourceSha = normalizeSha(input.sourceSha, 'sourceSha');
-        targetShaBefore = normalizeSha(input.targetShaBefore, 'targetShaBefore');
-        targetShaAfter = normalizeSha(input.targetShaAfter, 'targetShaAfter');
-        rebaseBaseSha = normalizeSha(input.rebaseBaseSha, 'rebaseBaseSha');
-      } catch (e) {
-        throw new BadRequestException((e as Error).message);
-      }
-      if (!sourceSha) throw new BadRequestException('sourceSha is required');
-      // The database says this too (0128's merged_target_check); said here as well so the caller
-      // gets the reason rather than a constraint name.
-      if (input.result === 'MERGED' && !targetShaAfter) {
-        throw new BadRequestException(
-          'a MERGED receipt must name targetShaAfter — a merge that cannot say where the target ' +
-            'ended up is a claim, not a receipt',
-        );
-      }
-      const conflicts =
-        input.result === 'CONFLICT'
-          ? (input.conflicts ?? []).map((p) => String(p)).slice(0, MERGE_RECEIPT_MAX_CONFLICTS)
-          : [];
-
-      // `[K6]` §7 CP3, for a caller that CLAIMS the work landed.
-      //
-      // Only a landed claim is gated. A `CONFLICT` or an `ERROR` about a commit that should never
-      // have been merged is still the truth about an attempt somebody made, and refusing to record
-      // it would delete the audit of the very thing this gate exists to prevent — which is also why
-      // an older CONFLICT receipt is never rewritten when the merge later succeeds: the two are
-      // separate rows about separate events.
-      if (resultLanded(input.result)) {
-        const gate = await checkpointLandingGate(db, {
-          ownerId,
-          taskId: session.taskId,
-          sourceSha,
-          evidenceDigest: input.evidenceDigest ?? null,
-        });
-        if (gate && gate.decision !== 'ALLOWED') {
-          throw new ConflictException(`${gate.decision}: ${gate.detail}`);
-        }
-      }
-
-      const checkpointId = await checkpointIdForCommit(db, {
-        ownerId,
-        taskId: session.taskId,
-        commitSha: sourceSha,
-      });
-
-      // CP4: keyed on the CHECKPOINT when there is one, and the caller does not get a vote.
-      //
-      // MR4's key is scoped to a session, which makes a redelivery from the same session a no-op
-      // and is the right answer for a merge nobody planned. It is the wrong answer for verified
-      // work: a checkpoint outlives the session that produced it, so the same landing re-reported
-      // by a takeover, by a recovery on another runner, or by the retry of a request whose response
-      // was lost mints a SECOND receipt for one landing. `result` stays in both keys — a conflict
-      // and a successful merge of one checkpoint are two things that happened, not one reported
-      // twice.
-      //
-      // The caller's own key is OVERRIDDEN here rather than preferred, and that is the whole of
-      // "exactly once" across the two doors. A supplied key says "these two reports are the same
-      // report"; a checkpoint says the same thing more strongly, across sessions and across
-      // processes. Letting the weaker claim win is not a tie broken politely — the runner's door
-      // derives the checkpoint key unconditionally, so one caller key on the agent's door is a
-      // SECOND row in the unique index for one landing, which is the exact defect CP4 exists to
-      // prevent. Nothing is lost: what the caller asked for is kept on the receipt's `detail`, and
-      // the key it actually got comes back on the row.
-      const callerKey = (input.idempotencyKey ?? '').trim();
-      const idempotencyKey = checkpointId
-        ? checkpointMergeReceiptKey({ checkpointId, targetBranch, result: input.result })
-        : callerKey ||
-          mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result });
-      const overriddenKey = checkpointId && callerKey && callerKey !== idempotencyKey ? callerKey : null;
-
-      // Looked up by whichever identity this receipt HAS. Reading by session when the row is keyed
-      // by checkpoint would miss the receipt a different session already wrote, and the insert
-      // below would then lose to the partial unique index instead of returning the original — a
-      // 500 where the correct answer is "yes, that already landed".
-      const existing = await db.sessionMergeReceipt.findFirst({
-        where: checkpointId ? { checkpointId, idempotencyKey } : { sessionId, idempotencyKey },
-      });
-      if (existing) {
-        // A replay ends what the first recording would have ended (M-T13), so a candidate left
-        // standing beside this receipt — by a build older than the rule — is retired by recording
-        // the same merge again. Only candidates older than the receipt: a replay never answers a
-        // question asked after the merge.
-        await retireCandidatesLandedByReceipt(db, existing);
-        return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
-      }
-
-      const created = await db.sessionMergeReceipt.create({
-        data: {
-          ownerId,
-          sessionId,
-          taskId: session.taskId,
-          checkpointId,
-          // Denormalised from the task at write time so a project's acceptance read is one indexed
-          // lookup and stays answerable after the task is re-filed or deleted.
-          projectId: session.task?.projectId ?? null,
-          result: input.result,
-          sourceBranch,
-          sourceSha,
-          targetBranch,
-          targetShaBefore,
-          targetShaAfter,
-          rebaseBaseSha,
-          conflicts,
-          recordedBy,
-          detail: {
-            ...(input.detail ?? {}),
-            // Kept rather than dropped: an audit asking why this row is not under the key the
-            // caller asked for gets the answer on the row instead of having to infer it.
-            ...(overriddenKey ? { callerIdempotencyKey: overriddenKey } : {}),
-          } as Prisma.InputJsonValue,
-          idempotencyKey,
-        },
-      });
-
-      // Make the columns every client already reads stop being blank (MR5).
-      //
-      // Skipped while an Orbit merge is in flight: `pending` carries the operation fence the
-      // runner echoes back, and overwriting it here would let a receipt cancel a merge that is
-      // still running. The receipt is recorded either way — the durable half never depends on
-      // whether the transient half could be updated.
-      //
-      // A landing also ends the merge recovery the session was holding, in this same write: the
-      // work it was recovering is in, and a recovery left behind keeps asking for it (S3 of the
-      // merge-recovery repair loop). The fence above keeps a check in flight its own.
-      if (session.mergeStatus !== 'pending') {
-        const landed = resultLanded(input.result);
-        await db.session.update({
-          where: { id: sessionId },
-          data: {
-            mergeStatus: mergeStatusForResult(input.result),
-            mergeTarget: targetBranch,
-            mergeError: landed ? null : (MergeReceiptService.errorText(input) ?? null),
-            mergedAt: landed ? created.createdAt : null,
-            ...(landed ? {
-              branchMerged: true, mergedSourceSha: sourceSha, mergeRecovery: Prisma.DbNull, mergeRecoveryAction: null,
-            } : {}),
-          },
-        });
-      }
-
-      // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
-      // this branch, so the card stops asking — in the transaction that recorded it.
-      await retireCandidatesLandedByReceipt(db, created);
-
-      return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
-    };
+    const run = (db: Prisma.TransactionClient) =>
+      MergeReceiptService.recordIn(db, ownerId, sessionId, input, recordedBy);
 
     // A caller holding its own transaction owns the commit, and therefore owns the delivery too.
     // Knocking here would read a world this receipt is not yet part of and derive the facts
@@ -523,6 +367,205 @@ export class MergeReceiptService {
     }).catch((error) => this.logger.warn(
       `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
     return recorded;
+  }
+
+  /**
+   * `record`'s write, in the caller's transaction: the receipt row, the session's merge columns (MR5),
+   * M-T13's retirement and the two §10 edges beside it. Static so a transaction that is not this
+   * service's — an observation's result (§10.6 O-R1) — writes a receipt exactly as the doors do; the
+   * delivery after the commit is that caller's (`deliverProjectFactsAfterCommit`).
+   */
+  static async recordIn(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    sessionId: string,
+    input: RecordMergeReceiptInput,
+    recordedBy: MergeReceiptRecorder,
+    /** A check whose answer this transaction is writing (§10.5 O-L6): M-T13 does not ask it to stop. */
+    options: { keepJobIds?: readonly string[] } = {},
+  ): Promise<{ receipt: ReturnType<typeof mergeReceiptRow>; created: boolean }> {
+    // The closed set a door may record, said here as well as by the DTO now that the table admits a
+    // fifth: MATCHED_BY_CONTENT is written by the owner's Done alone, from a check that found it (0432).
+    if (!(MERGE_RECEIPT_RESULTS as readonly string[]).includes(input.result)) {
+      throw new BadRequestException(`result must be one of ${MERGE_RECEIPT_RESULTS.join(', ')}`);
+    }
+    const session = await db.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true, branch: true, taskId: true, mergeStatus: true, sessionKind: true, task: { select: { projectId: true } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // A landing session has no branch of its own to record a merge against (§2.9 LS6).
+    assertEngineSession(session);
+
+    const sourceBranch = (input.sourceBranch ?? session.branch ?? '').trim();
+    const targetBranch = (input.targetBranch ?? '').trim();
+    if (sourceBranch === '') {
+      throw new BadRequestException(
+        'sourceBranch is required — this session has no recorded branch to fall back to',
+      );
+    }
+    if (targetBranch === '') throw new BadRequestException('targetBranch is required');
+
+    let sourceSha: string | null;
+    let targetShaBefore: string | null;
+    let targetShaAfter: string | null;
+    let rebaseBaseSha: string | null;
+    try {
+      sourceSha = normalizeSha(input.sourceSha, 'sourceSha');
+      targetShaBefore = normalizeSha(input.targetShaBefore, 'targetShaBefore');
+      targetShaAfter = normalizeSha(input.targetShaAfter, 'targetShaAfter');
+      rebaseBaseSha = normalizeSha(input.rebaseBaseSha, 'rebaseBaseSha');
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+    if (!sourceSha) throw new BadRequestException('sourceSha is required');
+    // The database says this too (0128's merged_target_check); said here as well so the caller
+    // gets the reason rather than a constraint name.
+    if (input.result === 'MERGED' && !targetShaAfter) {
+      throw new BadRequestException(
+        'a MERGED receipt must name targetShaAfter — a merge that cannot say where the target ' +
+          'ended up is a claim, not a receipt',
+      );
+    }
+    const conflicts =
+      input.result === 'CONFLICT'
+        ? (input.conflicts ?? []).map((p) => String(p)).slice(0, MERGE_RECEIPT_MAX_CONFLICTS)
+        : [];
+
+    // `[K6]` §7 CP3, for a caller that CLAIMS the work landed.
+    //
+    // Only a landed claim is gated. A `CONFLICT` or an `ERROR` about a commit that should never
+    // have been merged is still the truth about an attempt somebody made, and refusing to record
+    // it would delete the audit of the very thing this gate exists to prevent — which is also why
+    // an older CONFLICT receipt is never rewritten when the merge later succeeds: the two are
+    // separate rows about separate events.
+    if (resultLanded(input.result)) {
+      const gate = await checkpointLandingGate(db, {
+        ownerId,
+        taskId: session.taskId,
+        sourceSha,
+        evidenceDigest: input.evidenceDigest ?? null,
+      });
+      if (gate && gate.decision !== 'ALLOWED') {
+        throw new ConflictException(`${gate.decision}: ${gate.detail}`);
+      }
+    }
+
+    const checkpointId = await checkpointIdForCommit(db, {
+      ownerId,
+      taskId: session.taskId,
+      commitSha: sourceSha,
+    });
+
+    // CP4: keyed on the CHECKPOINT when there is one, and the caller does not get a vote.
+    //
+    // MR4's key is scoped to a session, which makes a redelivery from the same session a no-op
+    // and is the right answer for a merge nobody planned. It is the wrong answer for verified
+    // work: a checkpoint outlives the session that produced it, so the same landing re-reported
+    // by a takeover, by a recovery on another runner, or by the retry of a request whose response
+    // was lost mints a SECOND receipt for one landing. `result` stays in both keys — a conflict
+    // and a successful merge of one checkpoint are two things that happened, not one reported
+    // twice.
+    //
+    // The caller's own key is OVERRIDDEN here rather than preferred, and that is the whole of
+    // "exactly once" across the two doors. A supplied key says "these two reports are the same
+    // report"; a checkpoint says the same thing more strongly, across sessions and across
+    // processes. Letting the weaker claim win is not a tie broken politely — the runner's door
+    // derives the checkpoint key unconditionally, so one caller key on the agent's door is a
+    // SECOND row in the unique index for one landing, which is the exact defect CP4 exists to
+    // prevent. Nothing is lost: what the caller asked for is kept on the receipt's `detail`, and
+    // the key it actually got comes back on the row.
+    const callerKey = (input.idempotencyKey ?? '').trim();
+    const idempotencyKey = checkpointId
+      ? checkpointMergeReceiptKey({ checkpointId, targetBranch, result: input.result })
+      : callerKey ||
+        mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result });
+    const overriddenKey = checkpointId && callerKey && callerKey !== idempotencyKey ? callerKey : null;
+
+    // Looked up by whichever identity this receipt HAS. Reading by session when the row is keyed
+    // by checkpoint would miss the receipt a different session already wrote, and the insert
+    // below would then lose to the partial unique index instead of returning the original — a
+    // 500 where the correct answer is "yes, that already landed".
+    const existing = await db.sessionMergeReceipt.findFirst({
+      where: checkpointId ? { checkpointId, idempotencyKey } : { sessionId, idempotencyKey },
+    });
+    if (existing) {
+      // A replay ends what the first recording would have ended (M-T13), so a candidate left
+      // standing beside this receipt — by a build older than the rule — is retired by recording
+      // the same merge again. Only candidates older than the receipt: a replay never answers a
+      // question asked after the merge.
+      await retireCandidatesLandedByReceipt(db, existing, options.keepJobIds);
+      // §10.7: and answers what was open about the work not being on the line, as the first did.
+      await resolveLandingUnobservedOnLanding(db, [session.taskId]);
+      return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
+    }
+
+    const created = await db.sessionMergeReceipt.create({
+      data: {
+        ownerId,
+        sessionId,
+        taskId: session.taskId,
+        checkpointId,
+        // Denormalised from the task at write time so a project's acceptance read is one indexed
+        // lookup and stays answerable after the task is re-filed or deleted.
+        projectId: session.task?.projectId ?? null,
+        result: input.result,
+        sourceBranch,
+        sourceSha,
+        targetBranch,
+        targetShaBefore,
+        targetShaAfter,
+        rebaseBaseSha,
+        conflicts,
+        recordedBy,
+        detail: {
+          ...(input.detail ?? {}),
+          // Kept rather than dropped: an audit asking why this row is not under the key the
+          // caller asked for gets the answer on the row instead of having to infer it.
+          ...(overriddenKey ? { callerIdempotencyKey: overriddenKey } : {}),
+        } as Prisma.InputJsonValue,
+        idempotencyKey,
+      },
+    });
+
+    // Make the columns every client already reads stop being blank (MR5).
+    //
+    // Skipped while an Orbit merge is in flight: `pending` carries the operation fence the
+    // runner echoes back, and overwriting it here would let a receipt cancel a merge that is
+    // still running. The receipt is recorded either way — the durable half never depends on
+    // whether the transient half could be updated.
+    //
+    // A landing also ends the merge recovery the session was holding, in this same write: the
+    // work it was recovering is in, and a recovery left behind keeps asking for it (S3 of the
+    // merge-recovery repair loop). The fence above keeps a check in flight its own.
+    if (session.mergeStatus !== 'pending') {
+      const landed = resultLanded(input.result);
+      await db.session.update({
+        where: { id: sessionId },
+        data: {
+          mergeStatus: mergeStatusForResult(input.result),
+          mergeTarget: targetBranch,
+          mergeError: landed ? null : (MergeReceiptService.errorText(input) ?? null),
+          mergedAt: landed ? created.createdAt : null,
+          ...(landed ? {
+            branchMerged: true, mergedSourceSha: sourceSha, mergeRecovery: Prisma.DbNull, mergeRecoveryAction: null,
+          } : {}),
+        },
+      });
+    }
+
+    // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
+    // this branch, so the card stops asking — in the transaction that recorded it.
+    await retireCandidatesLandedByReceipt(db, created, options.keepJobIds);
+    // §10.7 O-R1: a receipt that puts the task's work on its line answers the `LANDING_UNOBSERVED`
+    // about it, in this same transaction (one on some other branch leaves it open).
+    await resolveLandingUnobservedOnLanding(db, [session.taskId]);
+    // §10.6 O-R3, in the transaction of M-T13's retirement: work an agent or an observation put on a
+    // PLATFORM project's main without the owner's confirmation is put in front of the owner. The rules
+    // are the receipt's (`openLandedWithoutConfirmationIfOwed`); the owner's own receipt raises nothing.
+    await openLandedWithoutConfirmationIfOwed(db, created.id);
+
+    return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
   }
 
   /** One session's receipts, newest first. */
@@ -565,6 +608,12 @@ export class MergeReceiptService {
       operationId: string | null;
       /** `[K6]` CP4: the §7 checkpoint this landing is about, when the work has one. */
       checkpointId?: string | null;
+      /**
+       * Who pressed Merge (§10.6 O-R3), as the Merge door recorded it when it queued the operation:
+       * `USER` for a request carrying the owner's credential, `AGENT` for one made from a session.
+       * Null for an operation queued before the door recorded it, which O-R3 does not judge.
+       */
+      requestedBy?: 'USER' | 'AGENT' | null;
     },
   ): Promise<void> {
     // CP4: the same identity the other door derives. Both doors report the same landings — the
@@ -585,7 +634,7 @@ export class MergeReceiptService {
         });
     // createMany + skipDuplicates rather than a find-then-create: the runner retries a merge result
     // on redelivery, and the unique index is the thing that has to decide, not a read that raced.
-    await tx.sessionMergeReceipt.createMany({
+    const written = await tx.sessionMergeReceipt.createMany({
       data: [
         {
           ownerId: args.ownerId,
@@ -609,6 +658,7 @@ export class MergeReceiptService {
             source: 'merge-result',
             ...(args.message ? { message: args.message } : {}),
             ...(args.operationId ? { operationId: args.operationId } : {}),
+            ...(args.requestedBy ? { requestedBy: args.requestedBy } : {}),
           } as Prisma.InputJsonValue,
           idempotencyKey,
           checkpointId: args.checkpointId ?? null,
@@ -626,10 +676,17 @@ export class MergeReceiptService {
           ? { checkpointId: args.checkpointId, idempotencyKey }
           : { sessionId: args.sessionId, idempotencyKey },
         select: {
-          projectId: true, taskId: true, result: true, sourceBranch: true, targetBranch: true, createdAt: true,
+          id: true, projectId: true, taskId: true, result: true, sourceBranch: true, targetBranch: true, createdAt: true,
         },
       });
       if (recorded) await retireCandidatesLandedByReceipt(tx, recorded);
+      // §10.7 O-R1: the Merge button put the work on a branch; on the project's line, that is the
+      // landing a `LANDING_UNOBSERVED` waits for.
+      await resolveLandingUnobservedOnLanding(tx, [args.taskId]);
+      // §10.6 O-R3, beside M-T13: a Merge pressed from a session put the work on a PLATFORM project's
+      // main without the owner's confirmation. Only for the receipt this result wrote — a redelivered
+      // result found it already there and was judged the first time.
+      if (recorded && written.count > 0) await openLandedWithoutConfirmationIfOwed(tx, recorded.id);
     }
   }
 
@@ -728,6 +785,9 @@ export class MergeReceiptService {
       skipDuplicates: true,
       select: { id: true },
     });
+    // §10.7 O-R1: the platform's landing is the task's landing (J-T5 writes its receipt here), and
+    // what was open about its work not being on the line is answered in the same transaction.
+    await resolveLandingUnobservedOnLanding(tx, [args.taskId]);
     return created.map((row) => row.id);
   }
 

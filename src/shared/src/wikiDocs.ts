@@ -113,9 +113,28 @@ export const WIKI_DOCS_BUILD_JOB = {
   readAttempts: 3,
 } as const;
 
-/** A section's blocks: paragraphs and list items hold sentences; a heading or a code block its text. */
-export const WIKI_DOC_BLOCK_KINDS = ['paragraph', 'item', 'heading', 'code'] as const;
+/** A section's blocks: paragraphs and list items hold sentences; a heading, a code block or a diagram its text. */
+export const WIKI_DOC_BLOCK_KINDS = ['paragraph', 'item', 'heading', 'code', 'diagram'] as const;
 export type WikiDocBlockKind = (typeof WIKI_DOC_BLOCK_KINDS)[number];
+
+/**
+ * A section's diagram (contract `docs.diagram`): a Mermaid flowchart the writer is offered for the section kinds
+ * below, kept only when every fact token of its labels is one the section's sourced sentences carry.
+ */
+export const WIKI_DOC_DIAGRAM_RULES = {
+  /** The section kinds whose prompt offers a diagram, and whose fingerprint carries `version`. */
+  kinds: ['overview', 'concepts', 'flow', 'data'],
+  /** Raised when what a diagram is asked to be changes, so every section of those kinds is written once more. */
+  version: 1,
+  /** The diagrams a section keeps: the first that passes the check. */
+  perSection: 1,
+  nodesMax: 30,
+  edgesMax: 60,
+  /** One label's characters, after the markers, backticks and line breaks are taken out of it. */
+  labelMaxChars: 80,
+  /** Words a flowchart's shape needs that state no fact: no sourced sentence has to carry them. */
+  structureWords: ['yes', 'true', 'false', 'start', 'end'],
+} as const;
 
 /** The numbers a document write is held to (contract `docs.rules`). */
 export const WIKI_DOC_RULES = {
@@ -259,6 +278,10 @@ export interface WikiDocSectionStats {
   markersDropped: number;
   /** Characters (code points) of its sentences, markers left out. */
   chars: number;
+  /** Diagrams kept (contract `docs.diagram`). */
+  diagrams: number;
+  /** Diagrams taken out: not the flowchart the rules read, past their sizes, naming what no sourced sentence says, or one too many. */
+  diagramsDropped: number;
 }
 
 /** The write's answer. */
@@ -351,7 +374,10 @@ export interface WikiDocSentenceView {
 
 export interface WikiDocBlockView {
   kind: WikiDocBlockKind;
-  /** A heading's or a code block's text; null for a paragraph or a list item, which hold sentences. */
+  /**
+   * A heading's or a code block's text, or a diagram's Mermaid source as the server wrote it out; null for a
+   * paragraph or a list item, which hold sentences.
+   */
   text: string | null;
   sentences: WikiDocSentenceView[];
 }

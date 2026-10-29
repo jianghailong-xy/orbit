@@ -24,6 +24,7 @@ import {
   AskOwnerDto,
   CreateProjectDto,
   HandOverOpenItemDto,
+  ObserveIntegrationDto,
   RecordMergeEvidenceDto,
   RequestProjectDoneDto,
   RequestProjectStartDto,
@@ -705,6 +706,31 @@ export class RunnerProjectsController {
     } catch (error) {
       throw integrationAbandonHttpError(error);
     }
+  }
+
+  /**
+   * A coordinator asking for its project's line to be looked at again (`integration_observe`,
+   * contract §10.8, §10.6 O-T5): one OBSERVE_LANDING queued, or the one already queued joined, and the
+   * coordinator's OPEN `LANDING_UNOBSERVED` items that observation can answer marked as being handled
+   * by it (§4.7 H1).
+   *
+   * Held to the retry doors' rules, by the service: a reason, and the acting session checked against
+   * the project's coordinator pointer — a missing or blank header is NOT read as the account owner,
+   * whose own press is the user API's. No orchestration credential: it starts no session, and the
+   * observation only reads.
+   */
+  @Post('projects/:id/integration/observe')
+  @HttpCode(200)
+  observeIntegration(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ObserveIntegrationDto,
+  ) {
+    return this.openItems.observeIntegration(runner.ownerId, id, dto, {
+      kind: 'SESSION',
+      sessionId: sessionId?.trim() ?? '',
+    });
   }
 
   /**

@@ -726,6 +726,61 @@ test("a usage limit no other account has room for is armed for the first account
   assert.ok(withinJitterOf(await codex(true), WORK_RESET), 'a Codex run pinned to Work waits for Work');
 });
 
+// Claude Code 2.1.312 renamed its 5-hour window: "You've hit your 5-hour limit". Read as an ordinary
+// failure, a session it stopped moved to no account with room and armed no retry: it sat FAILED.
+test("a Claude session its 5-hour limit stopped moves to an account with room, in either of the runtime's words for it", async () => {
+  const controller = new RunnerApiController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  // Default's 5 hours spent, Work's with room.
+  const planUsage: PlanUsage = {
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      fiveHour: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: 19, resetsAt: WORK_RESET } } },
+    },
+  };
+  for (const text of [
+    "You've hit your session limit · resets 1:30pm (America/Los_Angeles)",
+    "You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)",
+  ]) {
+    const tx = transactionDouble<RetryPlanTransaction>({
+      session: {
+        findUnique: async () => ({
+          ownerId: 'owner-1',
+          provider: AgentProvider.CLAUDE,
+          retryAttempts: 0,
+          codexAccount: null,
+          claudeAccount: 'default',
+          claudeAccountPinned: false,
+          kimiAccount: null,
+          poolSwitchNotice: null,
+          workspace: { env: null, codexAccount: null, claudeAccount: null, kimiAccount: null },
+        }),
+      },
+      runner: {
+        findUnique: async () => ({
+          planUsage, engines: ENGINES, accountNames: null, accountPauses: null, defaultRemoved: [], capabilities: [CLAUDE_ACCOUNT_MOVE_V1],
+        }),
+      },
+    });
+    const plan = await (
+      controller as unknown as {
+        retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null; claudeAccount?: string; poolSwitchNotice?: string }>;
+      }
+    ).retryPlanFor(tx, 'session-1', RUNNER.id, text);
+    assert.equal(plan.claudeAccount, WORK, text);
+    assert.ok(plan.retryAt instanceof Date && plan.retryAt.getTime() <= Date.now(), `re-sent at once: ${text}`);
+    assert.equal(plan.poolSwitchNotice, 'Switched to Work — the usage limit on Default is reached', text);
+  }
+});
+
 test('the line a moved session carries names both accounts the way the picker names them', () => {
   const runner = { engines: ENGINES, accountNames: null };
   assert.equal(accountSwitchNotice('codex', { from: 'default', to: WORK }, runner), 'Switched to Work — the usage limit on Default is reached');

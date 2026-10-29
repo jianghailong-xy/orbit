@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
+  type DeliveryMode,
   type IntegrationCheckResult,
   type IntegrationJobGeneration,
   type IntegrationJobState,
@@ -27,7 +28,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { branchName } from './project-criterion-landing';
+import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
@@ -45,6 +46,7 @@ import {
   type IntegrationTimelineActorInput,
 } from './project-integration-event';
 import { readProjectIntegrationLog } from './project-integration-log';
+import { queueLandingObservationIfPending } from './landing-observation';
 import { medianMs } from './project-promotion';
 import {
   queueBlockingSummary,
@@ -52,6 +54,10 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+
+// SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
+// are served from here too, where the line's readers have always found them.
+export { canonicalRepoUrl, workOnProjectRepository };
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -123,25 +129,6 @@ export function projectBranchRef(projectId: string): string {
 }
 
 /**
- * A remote URL as repository identity (PSC SR36): trimmed, scheme and host lower-cased, any
- * `user@` dropped, the scp form `git@host:owner/repo` spelled as `ssh://host/owner/repo`, and no
- * trailing `/` or `.git`. Used to compare and to satisfy `project_codebase_canonical_url_chk`, never
- * to clone. Null when nothing is left.
- */
-export function canonicalRepoUrl(raw: string): string | null {
-  let url = raw.trim();
-  const scp = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(\S+)$/.exec(url);
-  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `ssh://${scp[1]}/${scp[2]}`;
-  const remote = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([^/]*)(.*)$/i.exec(url);
-  if (remote) url = `${remote[1]!.toLowerCase()}://${remote[2]!.toLowerCase()}${remote[3]}`;
-  for (let trimmed = url.replace(/\/+$/, '').replace(/\.git$/, ''); trimmed !== url;
-    trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '')) {
-    url = trimmed;
-  }
-  return url === '' ? null : url;
-}
-
-/**
  * A repository as a person names it: the last two segments of its canonical URL, so
  * `ssh://github.com/acme/payments-api` is `acme/payments-api`. For showing only — identity is the
  * canonical URL.
@@ -160,6 +147,8 @@ const LINE_COLUMNS = {
   integrationStartedAt: true,
   mergeCheckCommand: true,
   mergeCheckTimeoutSeconds: true,
+  deliveryMode: true,
+  deliveryModeChosenAt: true,
 } satisfies Prisma.ProjectCodebaseSelect;
 
 export type ProjectCodebaseLine = Prisma.ProjectCodebaseGetPayload<{ select: typeof LINE_COLUMNS }>;
@@ -220,7 +209,10 @@ export async function readProjectListBindings(
     select: {
       ...LINE_COLUMNS,
       projectId: true,
-      _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+      // An observation is not an integration attempt (§10.6, A-Q23): it is not counted here.
+      _count: { select: { integrationJobs: {
+        where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+      } } },
     },
   });
   // The line's job is the one the integration view describes, read through that view's own function
@@ -296,6 +288,9 @@ export function projectIntegrationView(
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
     escalationSeconds,
+    // The column's default when there is no row: the mode a binding starts with (§10.4).
+    deliveryMode: (row?.deliveryMode ?? 'PLATFORM') as DeliveryMode,
+    deliveryModeChosenAt: row?.deliveryModeChosenAt ?? null,
   };
 }
 
@@ -352,7 +347,9 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  const jobs = await readInFlightJobs(prisma, projectId);
+  // The Landings window's jobs: an observation is not an integration attempt (§10.6, A-Q23), so it is
+  // left out here and on the project list, while the line's own queue still holds it.
+  const jobs = (await readInFlightJobsForProjects(prisma, [projectId])).get(projectId) ?? [];
   // Each current LAND_TASK through the task read model, so this page and the task's own describe
   // one landing in the same words (§2.7a).
   const landTasks = await readProjectLandTaskViews(prisma, projectId);
@@ -872,6 +869,10 @@ async function readInFlightJobsForProjects(
   projectIds: readonly string[],
   /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
   jobId?: string,
+  /** Whether the project's OBSERVE_LANDING jobs are read too. An observation is not an integration
+   *  attempt (§10.6, A-Q23), so the Landings window and the project list leave it out; the queue's own
+   *  readers — its timeouts (J-T9), its doors and the integration line's queue — read every job. */
+  observations: 'INCLUDE' | 'EXCLUDE' = 'EXCLUDE',
 ): Promise<Map<string, ProjectIntegrationJob<Date>[]>> {
   if (projectIds.length === 0) return new Map();
   const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
@@ -952,6 +953,9 @@ async function readInFlightJobsForProjects(
           LEFT JOIN "workspace" source_workspace ON source_workspace."id" = source_session."workspace_id"
           LEFT JOIN "runner" runner ON runner."id" = source_workspace."runner_id"
          WHERE j."state" = 'QUEUED'
+           -- An observation names no session: any observing runner that reaches the repository
+           -- may claim it (§10.6), so no one runner's absence is its wait.
+           AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
       -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
@@ -982,6 +986,7 @@ async function readInFlightJobsForProjects(
       ) running_block ON true
      WHERE j."project_id" IN (${ids})
        AND j."state" IN ('RUNNING', 'QUEUED')
+       ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
      ORDER BY j."project_id" ASC,
               (j."state" = 'RUNNING') DESC,
@@ -999,14 +1004,16 @@ async function readInFlightJobsForProjects(
   return byProject;
 }
 
-/** Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`). */
+/** Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`), its
+ *  observations included: the queue's own read, for its timeouts, its doors and the integration
+ *  line's queue. The Landings window's `inFlightJobs` leaves observations out (A-Q23). */
 export async function readInFlightJobs(
   prisma: Pick<PrismaService, '$queryRaw'>,
   projectId: string,
   /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
   jobId?: string,
 ): Promise<ProjectIntegrationJob<Date>[]> {
-  return (await readInFlightJobsForProjects(prisma, [projectId], jobId)).get(projectId) ?? [];
+  return (await readInFlightJobsForProjects(prisma, [projectId], jobId, 'INCLUDE')).get(projectId) ?? [];
 }
 
 /** The page selectors `GET /runner/projects/:id/integration` reserves for the timeline and log
@@ -1462,6 +1469,8 @@ export interface IntegrationSettings {
   mergeCheckTimeoutSeconds?: number | null;
   /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
   exceptionEscalationSeconds?: number;
+  /** How finished work reaches the upstream (§10.5 O-L1). Not locked by L4; `AGENT_PUSH` needs `MAIN`. */
+  deliveryMode?: DeliveryMode;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -1476,7 +1485,9 @@ async function lockCodebase(
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
            "merge_check_command" AS "mergeCheckCommand",
-           "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds"
+           "merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
+           "delivery_mode" AS "deliveryMode",
+           "delivery_mode_chosen_at" AS "deliveryModeChosenAt"
       FROM "project_codebase"
      WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
        FOR UPDATE`);
@@ -1580,7 +1591,8 @@ export async function projectRepository(
  * `integration` on a project create or update (the CLI's `--upstream-ref` among them) and the start
  * door through `startProjectLine` — so this is where the choice is recorded: a request that names
  * `upstreamRef` writes `upstream_ref_chosen_at` with it, which is what the next binding of the same
- * repository starts from (L6).
+ * repository starts from (L6). The delivery mode is recorded the same way, `delivery_mode_chosen_at`
+ * in the UPDATE that writes `deliveryMode` (§10.5 O-L1).
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
@@ -1610,7 +1622,8 @@ export async function configureProjectIntegration(
     || settings.projectBranchName !== undefined
     || settings.upstreamRef !== undefined
     || settings.mergeCheckCommand !== undefined
-    || settings.mergeCheckTimeoutSeconds !== undefined;
+    || settings.mergeCheckTimeoutSeconds !== undefined
+    || settings.deliveryMode !== undefined;
   if (!bindingNamed) {
     return projectIntegrationView(
       await readProjectCodebase(tx, projectId),
@@ -1651,6 +1664,18 @@ export async function configureProjectIntegration(
         + `To change it, merge the project branch into ${branchName(row.upstreamRef)} or abandon it first.`,
     });
   }
+  // The delivery mode moves no ref, so L4 does not lock it (O-L1). What it may not do is leave
+  // AGENT_PUSH on anything but a MAIN line — and a line nobody decided is not one yet: the default
+  // rule may still put it on a project branch at its first integration (L3), where 0453's CHECK
+  // would refuse that transaction, and the DONE that queued it with it.
+  const deliveryMode = settings.deliveryMode ?? (row.deliveryMode as DeliveryMode);
+  if (deliveryMode === 'AGENT_PUSH' && (chosen ?? decided) !== 'MAIN') {
+    throw deliveryModeNeedsMainLine(
+      chosen ?? decided,
+      integrationRef,
+      settings.deliveryMode === undefined,
+    );
+  }
 
   const written = await tx.projectCodebase.update({
     where: { id: row.id },
@@ -1666,15 +1691,55 @@ export async function configureProjectIntegration(
       ...(settings.mergeCheckTimeoutSeconds !== undefined
         ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds }
         : {}),
+      // Recorded like the upstream: named is chosen, even where it is the mode already there.
+      ...(settings.deliveryMode !== undefined
+        ? { deliveryMode: settings.deliveryMode, deliveryModeChosenAt: new Date() }
+        : {}),
     },
     select: LINE_COLUMNS,
   });
+  if (settings.deliveryMode === 'AGENT_PUSH' && row.deliveryMode !== 'AGENT_PUSH') {
+    await deliveryModeTurnedAgentPush(tx, { ownerId, projectId });
+  }
   return projectIntegrationView(written, await escalationWindow(tx, projectId));
 }
 
 /**
+ * O-T4 (§10.6): the owner turned this project's delivery mode to AGENT_PUSH. Called inside the
+ * transaction that wrote it, under the binding's lock (rank 55), so the observation it queues commits
+ * with the choice or not at all: the project's finished tasks are looked for on the line, now that
+ * nothing of the platform's will carry them there. With none waiting there is nothing to look for.
+ */
+async function deliveryModeTurnedAgentPush(
+  tx: Prisma.TransactionClient,
+  change: { ownerId: string; projectId: string },
+): Promise<void> {
+  await queueLandingObservationIfPending(tx, { ...change, trigger: 'DELIVERY_MODE' });
+}
+
+/** 409 `DELIVERY_MODE_NEEDS_MAIN_LINE` (O-L1): AGENT_PUSH asked for, or kept, off a MAIN line. */
+function deliveryModeNeedsMainLine(
+  line: IntegrationLine | null,
+  integrationRef: string,
+  kept: boolean,
+): ConflictException {
+  const message = line === null
+    ? 'AGENT_PUSH needs a project that lands straight on its main branch, and this project\'s line '
+      + 'is not decided yet: its first integration could still put it on a project branch. Send '
+      + 'line: MAIN in the same request.'
+    : kept
+      ? 'this project delivers by AGENT_PUSH, which needs it to land straight on its main branch. '
+        + 'Set deliveryMode to PLATFORM in the same request to move it onto a project branch.'
+      : `AGENT_PUSH needs a project that lands straight on its main branch, and this one lands on `
+        + `${branchName(integrationRef)}: its agents would push past the project branch. Keep `
+        + 'PLATFORM, or send line: MAIN with it while the line can still change.';
+  return new ConflictException({ statusCode: 409, code: 'DELIVERY_MODE_NEEDS_MAIN_LINE', message });
+}
+
+/**
  * The session that did a code task's work, when the task is one (§1.1 `isCodeTask`): filed under a
- * project, not codeless, and its latest work session ran in a worktree on a branch.
+ * project, not codeless, and its latest work session ran in a worktree on a branch, in no
+ * repository known to differ from the one the project's line is bound to (O-L7).
  */
 async function codeTaskWork(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -1686,6 +1751,9 @@ async function codeTaskWork(
     select: {
       projectId: true,
       codeless: true,
+      project: {
+        select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } },
+      },
       sessions: {
         where: { startsTaskWork: true, deletedAt: null },
         orderBy: { createdAt: 'desc' },
@@ -1698,7 +1766,9 @@ async function codeTaskWork(
   if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
     return null;
   }
-  return { repoUrl: work.workspace?.repoUrl ?? null };
+  const repoUrl = work.workspace?.repoUrl ?? null;
+  if (!workOnProjectRepository(repoUrl, task.project?.codebases[0])) return null;
+  return { repoUrl };
 }
 
 /**
@@ -1739,6 +1809,11 @@ export interface StartLineSettings {
    * the project's check stands on once the start is done.
    */
   mergeCheckTimeoutSeconds?: number | null;
+  /**
+   * How finished work reaches the upstream (§10.5 O-L1), recorded as the owner's choice when asked
+   * for — on a line that has started too, since L4 does not lock it. Never in the answer.
+   */
+  deliveryMode?: DeliveryMode;
 }
 
 /**
@@ -1775,18 +1850,20 @@ export async function defaultStartLine(
  * transaction and holds the project row. Three ways it goes:
  *
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
- *     merge check — its command and the budget that check runs on — and says so — `locked`, with the
- *     line the project is actually on. A main branch the start asked for is not written either, and
- *     not recorded as a choice.
+ *     merge check — its command and the budget that check runs on — and the delivery mode it names,
+ *     which L4 does not lock (O-L1), and says so — `locked`, with the line the project is actually
+ *     on. A main branch the start asked for is not written either, and not recorded as a choice.
  *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
  *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
- *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
- *     a project branch, a main branch or a merge check — a budget with no command among them — is
+ *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing — `PLATFORM`
+ *     delivery included, which is the mode a binding starts with; one asking for a project branch,
+ *     a main branch, a merge check — a budget with no command among them — or `AGENT_PUSH` is
  *     refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without
  *     them would drop what the owner chose.
  *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding,
  *     on the owner's last main branch for the repository — together with the merge check, and the
- *     main branch when the start names one, which records it as the owner's choice (L6).
+ *     main branch when the start names one, which records it as the owner's choice (L6), as it does
+ *     the delivery mode the start names (O-L1).
  *
  * Answers with the line, the main branch and the check as they stand once it is done.
  */
@@ -1806,20 +1883,22 @@ export async function startProjectLine(
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
-      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined) {
+      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined
+      || settings.deliveryMode === 'AGENT_PUSH') {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
-        + 'no project branch, main branch or merge check: its coordination workspace has no '
-        + 'recorded remote. Wait for the runner to detect origin, or set Repository URL in the '
-        + 'workspace settings. A project without a repository can start on main with no merge '
-        + 'check.');
+        + 'no project branch, main branch, merge check or AGENT_PUSH delivery: its coordination '
+        + 'workspace has no recorded remote. Wait for the runner to detect origin, or set '
+        + 'Repository URL in the workspace settings. A project without a repository can start on '
+        + 'main with no merge check.');
     }
     return { line: 'MAIN', mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
   }
+  const namedDelivery = settings.deliveryMode !== undefined ? { deliveryMode: settings.deliveryMode } : {};
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
     settings: locked
-      ? { mergeCheckCommand, ...namedTimeout }
+      ? { mergeCheckCommand, ...namedTimeout, ...namedDelivery }
       : {
         line: settings.line,
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
@@ -1828,6 +1907,7 @@ export async function startProjectLine(
         ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
         ...namedTimeout,
+        ...namedDelivery,
       },
   });
   const written = (await readProjectCodebase(tx, projectId))!;

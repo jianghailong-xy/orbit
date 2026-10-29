@@ -267,6 +267,14 @@ describe('isUsageLimitErrorText', () => {
     expect(isUsageLimitErrorText(codex)).toBe(true);
     expect(isUsageLimitErrorText(codex.toUpperCase())).toBe(true);
   });
+  // Claude Code 2.1.312 renamed its 5-hour window: "session limit" became "5-hour limit".
+  // Read as an ordinary failure, it armed no retry and moved the session to no other account.
+  it('flags both names Claude Code has given its 5-hour window', () => {
+    expect(isUsageLimitErrorText("You've hit your session limit · resets 6:20pm (Europe/Berlin)")).toBe(true);
+    expect(isUsageLimitErrorText("You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)")).toBe(
+      true,
+    );
+  });
   it('ignores failures that are about the run itself', () => {
     expect(isUsageLimitErrorText('API Error: 500')).toBe(false);
     expect(isUsageLimitErrorText('run failed')).toBe(false);

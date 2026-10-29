@@ -31,6 +31,8 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /projects/:id/open-items/:itemId/answer',
   'POST /projects/:id/open-items/:itemId/return-to-coordinator',
   'POST /projects/:id/open-items/:itemId/resolve',
+  // §10.8's Accept: work that reached the branch without the owner's confirmation, accepted by them.
+  'POST /projects/:id/open-items/:itemId/accept',
   // The integration line: every field of this route is the one `PATCH /projects/:id` refuses a token
   // as `integration`, and an agent session as INTEGRATION_SETTINGS_OWNER_ONLY. That last one is
   // this route's rule and no longer the update route's: a session may propose a project's MERGE
@@ -44,6 +46,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // and a coordinator that wants work stopped reopens the task instead.
   'POST /projects/:id/integration/jobs/:jobId/abandon',
   'POST /projects/:id/tasks/:taskId/integration/stop',
+  // §10.8's "look again", the owner's door annotated and registered as the abandon door is: it refuses
+  // an acting session, and a coordinator asks through `integration_observe`.
+  'POST /projects/:id/integration/observe',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',

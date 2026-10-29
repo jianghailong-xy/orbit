@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Inter; src: url(/var/tmp/landing-mock-render/fonts/Inter.ttf); }
+@font-face { font-family: 'Noto Sans SC'; src: url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf); }
+@font-face { font-family: 'JetBrains Mono'; src: url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf); }
+body { margin: 0; background: #eef0f3; font-family: Inter, 'Noto Sans SC', sans-serif; color: #1f2329; }
+.board { width: 1560px; }
+.b-part { padding: 40px 48px 36px; }
+.b-part + .b-part { border-top: 1px dashed #c9ced6; }
+h1 { font-size: 28px; margin: 0 0 8px; }
+h2 { font-size: 21px; margin: 0 0 14px; }
+.lead { font-size: 15px; color: #4b5563; line-height: 1.65; margin: 0 0 26px; max-width: 1380px; }
+.b-row { display: flex; gap: 28px; align-items: flex-start; }
+.b-col { display: flex; flex-direction: column; gap: 22px; }
+.b-cell { display: flex; flex-direction: column; gap: 10px; }
+.cap { font-size: 15px; line-height: 1.5; }
+.cap b { font-size: 16px; }
+.cap .n { display: inline-block; width: 24px; height: 24px; border-radius: 12px; background: #2f6bff; color: #fff; text-align: center; line-height: 24px; font-size: 13px; font-weight: 600; margin-right: 6px; }
+.cap .n.today { background: #8a919c; }
+.cap .sub { display: block; color: #5b6472; font-size: 13.5px; margin-top: 2px; }
+.b-shot { position: relative; }
+.b-shot img { display: block; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.10); }
+.b-stack { display: flex; flex-direction: column; gap: 6px; }
+.b-gap { text-align: center; color: #8a919c; font-size: 13px; line-height: 1; }
+.mk { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #2f6bff; color: #fff;
+  font: 600 12.5px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+ol.b-notes, ul.b-notes { margin: 4px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.6; color: #2b313a; }
+.b-notes li { display: flex; gap: 8px; margin: 0 0 6px; }
+.b-notes .k { flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 10px; background: #2f6bff; color: #fff; font: 600 11.5px/20px Inter, sans-serif; text-align: center; }
+.b-notes .k.dot { background: #8a919c; }
+.b-note { font-size: 13.5px; color: #4b5563; line-height: 1.65; }
+code { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: #e3e6ea; padding: 1px 5px; border-radius: 4px; }
+q { quotes: none; font-family: Inter, sans-serif; background: #fff4e0; color: #8a4b00; padding: 0 4px; border-radius: 3px; }
+q.en { background: #e8eefc; color: #1d3f9e; }
+table.b-rules { border-collapse: collapse; font-size: 14px; line-height: 1.5; width: 100%; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.b-rules th, .b-rules td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid #e6e9ee; }
+.b-rules th { background: #f6f7f9; font-size: 13px; color: #5b6472; font-weight: 600; }
+.b-rules td.new { background: #f3f7ff; }
+.b-card { background: #fff; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 14px; line-height: 1.65; }
+.b-card h3 { margin: 0 0 8px; font-size: 16.5px; }
+.b-card .rec { display: inline-block; font-size: 12px; font-weight: 600; color: #fff; background: #1f9d55; border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }
+.b-card p { margin: 0 0 6px; }
+.b-card ul { margin: 4px 0 8px; padding-left: 20px; }
+.b-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.b-pro { color: #1f7a45; } .b-con { color: #a15c00; }
+</style></head><body><div class="board">
+
+<section class="b-part" id="part-1">
+<h1>输入框上方的「目录不是 git 仓库」提示：说清原因、点之前知道会 git init、能关掉</h1>
+<p class="lead">这条琥珀色提示在什么时候出现：工作区开了 <b>Worktree isolation</b>，但工作区的目录不是 git 仓库，runner 没法给会话单独建 worktree，只好让会话直接改这个目录。今天有三个问题：
+①文案 <q class="en">Shared workDir — not isolated</q> 看不出是「这个目录不是 git 仓库」；②按钮 <q class="en">Enable isolation</q> 看不出会执行 <code>git init</code>（点开确认框才说，而且说得抽象）；③关不掉，这个工作区的每个会话都挂着它。<br>
+以下都是真实构建的 web 界面截图（方案代码 + 仓库 UI 测试数据，示例目录 <code>/Users/alex/notes</code>），不是手绘。深色主题，和你的截图一致。</p>
+
+<div class="b-row">
+  <div class="b-cell" style="width:663px">
+    <div class="cap"><span class="n today">①</span><b>今天</b><span class="sub">只说 shared / not isolated，没说哪个目录、为什么、有什么后果</span></div>
+    <div class="b-shot"><img src="frames/1-today.png" width="663"></div>
+  </div>
+  <div class="b-cell" style="width:663px">
+    <div class="cap"><span class="n">②</span><b>建议</b><span class="sub">两行：第一行说事实，第二行说后果；右边是修复办法和 ✕</span></div>
+    <div class="b-shot"><img src="frames/2-notice.png" width="663">
+      <span class="mk" style="left:2px;top:186px">1</span>
+      <span class="mk" style="left:2px;top:223px">2</span>
+      <span class="mk" style="left:567px;top:166px">3</span>
+      <span class="mk" style="left:635px;top:166px">4</span>
+    </div>
+    <ol class="b-notes">
+      <li><span class="k">1</span><span>标题直接写出目录和事实：<q class="en">/Users/alex/notes isn’t a git repository</q>。目录取自工作区设置；runner 每次心跳都会探测这个目录是不是 git 仓库，服务端已经存着结果，不用加接口。</span></li>
+      <li><span class="k">2</span><span>第二行写后果：会话直接改这个目录，没有分支和 diff 可以审，同时跑的会话会互相覆盖。</span></li>
+      <li><span class="k">3</span><span>按钮改成 <q class="en">Initialize git…</q>：名字就是它要做的事；省略号表示还会弹确认框（③）。</span></li>
+      <li><span class="k">4</span><span>✕：选「这个目录就不用 git 了」，关掉这个工作区的 Worktree isolation，以后的会话都不再出现（⑤⑥，含义见下方「待定 1」）。</span></li>
+    </ol>
+  </div>
+</div>
+</section>
+
+<section class="b-part" id="part-2">
+<h2>③ 点 Initialize git… 后的确认框</h2>
+<div class="b-row">
+  <div class="b-cell" style="width:456px">
+    <div class="cap"><span class="n today">今</span><b>今天（点 Enable isolation）</b><span class="sub">说了 git init，但只是「workspace’s working directory」「on its next run」，没有具体目录和步骤</span></div>
+    <div class="b-shot"><img src="frames/3a-today-confirm.png" width="456"></div>
+  </div>
+  <div class="b-cell" style="width:500px">
+    <div class="cap"><span class="n">③</span><b>建议</b><span class="sub">标题 <q class="en">Initialize git in this folder?</q>，按钮 <q class="en">Initialize git</q></span></div>
+    <div class="b-shot"><img src="frames/3b-confirm.png" width="500">
+      <span class="mk" style="left:252px;top:84px">5</span>
+      <span class="mk" style="left:58px;top:152px">6</span>
+      <span class="mk" style="left:58px;top:282px">7</span>
+      <span class="mk" style="left:403px;top:323px">8</span>
+    </div>
+  </div>
+  <div class="b-cell" style="width:420px">
+    <ol class="b-notes" style="margin-top:58px">
+      <li><span class="k">5</span><span>写出是哪个目录。</span></li>
+      <li><span class="k">6</span><span>逐条写 runner 会做什么（就是 runner 现在的 <code>initGitRepo</code>，不改）：<code>git init</code>；目录里没有 <code>.gitignore</code> 时加一个默认的（依赖、构建产物、<code>.env</code>）；把现有文件提交成 <q class="en">orbit: baseline</q>。并说明只在本地，不推送到任何地方。</span></li>
+      <li><span class="k">7</span><span>说明之后的变化：新会话各自在自己的分支上工作，改动有 diff 可审、可合并；<b>当前这个会话不受影响</b>，继续直接改目录。</span></li>
+      <li><span class="k">8</span><span>按钮名和提示条上的按钮一致。</span></li>
+    </ol>
+  </div>
+</div>
+</section>
+
+<section class="b-part" id="part-3">
+<h2>点了之后：确认 Initialize git，或点 ✕</h2>
+<div class="b-row">
+  <div class="b-cell" style="width:470px">
+    <div class="cap"><span class="n">④</span><b>确认 Initialize git 之后</b><span class="sub">右上角 toast <q class="en">Git will be set up when the next session starts</q> + 目录；提示条消失（这个工作区已经选过了）</span></div>
+    <div class="b-stack"><img src="frames/4a-confirmed-toast.png" width="470" style="border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.1)"><div class="b-gap">⋮</div><img src="frames/4b-confirmed-band.png" width="470" style="border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.1)"></div>
+    <div class="b-note">下一个会话启动时 runner 执行 git init，之后的会话都有自己的分支。<br>今天点完按钮，提示条原样还在，看不出点没点过。</div>
+  </div>
+  <div class="b-cell" style="width:470px">
+    <div class="cap"><span class="n">⑤</span><b>鼠标悬停在 ✕ 上</b><span class="sub">提示 ✕ 会做什么：<q class="en">Keep it as a plain folder: turns off worktree isolation for this workspace</q></span></div>
+    <div class="b-shot"><img src="frames/5-close-tip.png" width="470"></div>
+  </div>
+  <div class="b-cell" style="width:470px">
+    <div class="cap"><span class="n">⑥</span><b>点 ✕ 之后</b><span class="sub">提示条消失；toast 说明关掉了什么，带 <q class="en">Undo</q></span></div>
+    <div class="b-stack"><img src="frames/6a-closed-toast.png" width="470" style="border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.1)"><div class="b-gap">⋮</div><img src="frames/6b-closed-band.png" width="470" style="border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.1)"></div>
+    <div class="b-note">这个工作区以后的会话在所有设备上都不再出现。要恢复：Undo，或在工作区设置里重新打开 Worktree isolation。<br>会话本身的行为不变，本来就在直接改目录。</div>
+  </div>
+</div>
+</section>
+
+<section class="b-part" id="part-4">
+<h2>少见情况 · 手机宽度 · 浅色主题</h2>
+<div class="b-row">
+  <div class="b-col" style="width:560px">
+    <div class="b-cell">
+      <div class="cap"><span class="n">⑦</span><b>目录是 git 仓库，但这个会话没拿到分支</b><span class="sub">例如仓库还没有任何提交。这时 git init 没用，所以不显示 Initialize git…；✕ 只隐藏这个会话里的提示</span></div>
+      <div class="b-shot"><img src="frames/7-repo.png" width="560"></div>
+      <div class="b-note">今天这种情况也显示同一条 Shared workDir，点 Enable isolation 也修不好：runner 只对「不是 git 仓库」的目录 init。</div>
+    </div>
+    <div class="b-cell">
+      <div class="cap"><span class="n">⑨</span><b>浅色主题</b></div>
+      <div class="b-shot"><img src="frames/9-light.png" width="560"></div>
+    </div>
+  </div>
+  <div class="b-cell" style="width:300px">
+    <div class="cap"><span class="n today">今</span><b>手机 · 今天</b></div>
+    <div class="b-shot"><img src="frames/8a-phone-today.png" width="300"></div>
+  </div>
+  <div class="b-cell" style="width:300px">
+    <div class="cap"><span class="n">⑧</span><b>手机 · 建议</b><span class="sub">标题和说明自动换行，按钮和 ✕ 不挤掉</span></div>
+    <div class="b-shot"><img src="frames/8b-phone-notice.png" width="300"></div>
+  </div>
+</div>
+</section>
+
+<section class="b-part" id="part-5">
+<h2>什么时候出现</h2>
+<table class="b-rules">
+  <tr><th style="width:36%">工作区设置 / 目录</th><th style="width:30%">今天</th><th>建议</th></tr>
+  <tr><td>Worktree isolation 关</td><td>不显示</td><td>不显示（不变）</td></tr>
+  <tr><td>Worktree isolation 开，目录是正常的 git 仓库</td><td>分支条</td><td>分支条（不变）</td></tr>
+  <tr><td>Worktree isolation 开，目录不是 git 仓库，还没选过</td><td>Shared workDir — not isolated + Enable isolation</td><td class="new">② 写明目录和后果 + Initialize git… + ✕</td></tr>
+  <tr><td>…点过 Initialize git…</td><td>原样继续显示</td><td class="new">不显示；下一个会话启动时 git init</td></tr>
+  <tr><td>…点过 ✕</td><td>（没有 ✕）</td><td class="new">不显示（隔离已关，所有设备、所有会话）</td></tr>
+  <tr><td>目录是 git 仓库，但这个会话没拿到分支（例如还没有提交）</td><td>同一条 Shared workDir，点按钮也没用</td><td class="new">⑦ 说明原因，不给 Initialize；✕ 只隐藏这个会话</td></tr>
+</table>
+
+<h2 style="margin-top:30px">待定 · 要你拍板</h2>
+<div class="b-two">
+  <div class="b-card">
+    <h3>1. ✕ 的含义</h3>
+    <p><b>方案 A</b><span class="rec">推荐</span>：✕ = 「这个目录不用 git」→ 关掉这个工作区的 Worktree isolation，toast 带 Undo（⑤⑥ 就是这个方案）。</p>
+    <ul>
+      <li class="b-pro">不加新字段。这个工作区以后的会话在 web、macOS、iOS、Android 都不再出现。</li>
+      <li class="b-pro">设置页显示的就是真实状态（隔离 = 关）；会话行为不变，本来就在直接改目录。</li>
+      <li class="b-con">✕ 顺带改了一个设置（悬停提示和 toast 都说明了，可以 Undo）。以后自己 git init 了，要回设置页把隔离打开。</li>
+    </ul>
+    <p><b>方案 B</b>：✕ 只隐藏，记在这台设备上（按工作区 + 目录）。</p>
+    <ul>
+      <li class="b-pro">纯界面，不碰任何设置。</li>
+      <li class="b-con">每台设备、每个客户端要各关一次；隔离仍开着，设置页继续警告「sessions will share it」。</li>
+    </ul>
+    <p class="b-note">不建议：只隐藏这个会话。新会话又会出现，「关不掉」等于没解决。</p>
+  </div>
+  <div class="b-card">
+    <h3>2. 原生客户端这次一起改吗</h3>
+    <p>macOS / iOS 和 Android 今天显示同一句 <q class="en">⚠ Shared workDir — not isolated</q>，<b>连按钮都没有</b>。</p>
+    <p><b>方案 A</b><span class="rec">推荐</span>：同一轮改三端：同样的两行文案、Initialize git…（同样内容的确认框）、✕。</p>
+    <p><b>方案 B</b>：先上 web，原生端下一轮跟进。</p>
+    <h3 style="margin-top:14px">落地（按代价排）</h3>
+    <ul>
+      <li><b>Web</b>：<code>SessionOutputs.tsx</code>（提示组件、显示规则）、<code>WorkspaceView.tsx</code>（确认框、✕ 和 Undo）、<code>api.ts</code>、<code>index.css</code>，加单测。服务端和 runner 都不改：工作区列表已经带 <code>workDir</code> / <code>workDirIsGit</code> / <code>autoInitGit</code> / <code>enableWorktree</code>。方案代码见 <code>prototype.patch</code>。</li>
+      <li><b>Android</b>：<code>WorktreeBar.kt</code> + <code>WorktreeBarLogic.kt</code>，加测试。</li>
+      <li><b>macOS / iOS</b>：<code>WorktreeBar.swift</code>（提示 + 确认 sheet）+ OrbitKit <code>WorktreeBarLogic</code>，加测试。</li>
+      <li><b>以后再说</b>：让 runner 上报具体原因（没有提交 / worktree 建不出来 / git init 失败），⑦ 的文案就能写得更准；git init 失败目前只记在 runner 日志里。</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+</div></body></html>

@@ -22,6 +22,13 @@ export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
  *  integration (§1.2 L1 / L2). */
 export type IntegrationRefSource = 'EXPLICIT' | 'DEFAULT_RULE';
 
+/**
+ * How a finished task's work reaches the upstream (§10.3 O4, §10.5 O-L1): `PLATFORM` — Orbit lands
+ * it and the agent does not touch the target branch — or `AGENT_PUSH` — the agent pushes its commits
+ * to the upstream itself, which only a `MAIN` line allows. The account owner's to choose.
+ */
+export type DeliveryMode = 'PLATFORM' | 'AGENT_PUSH';
+
 /** The check results of the latest finished task landing attempt (§1.6).
  *  `UNKNOWN` means that attempt has no complete check verdict. */
 export type MergeCheckTipState = 'PASSING' | 'FAILING' | 'UNKNOWN';
@@ -62,6 +69,15 @@ export interface ProjectIntegrationSettings<Instant = string> {
   mergeCheckTimeoutSeconds: number | null;
   /** How long an exception item may wait on the coordinator before it becomes the owner's (§4.6). */
   escalationSeconds: number;
+  /**
+   * How this project's finished work reaches its upstream (§10.5 O-L1) — `PLATFORM` for a project
+   * with no binding, which is what it gets once it has one. Not locked once integration starts.
+   * Absent on servers that predate it.
+   */
+  deliveryMode?: DeliveryMode;
+  /** When the account owner last wrote `deliveryMode` — null while nobody ever chose it. Absent on
+   *  servers that predate it. */
+  deliveryModeChosenAt?: Instant | null;
 }
 
 /** An account's last choice of main branch for one repository (§1.2 L6). */
@@ -716,6 +732,11 @@ export interface ProjectManualReady {
  * `NOT_APPLICABLE` is the state of most rows in most projects and is not a gap: a codeless task, or
  * one in a project that has not started integrating, has nothing to land, and a row that said
  * "queued" about it would be describing work nobody is going to do.
+ *
+ * `AWAITING_OBSERVATION` is a DONE task of an `AGENT_PUSH` project whose work has not been seen on the
+ * line yet (§10.9): its agent pushes, so no job of the platform's carries it, and the view names the
+ * commit it waits to see (`deliveredSha`). Once a receipt says it is there, the task reads
+ * `ON_UPSTREAM` like any other.
  */
 export type TaskIntegrationState =
   | 'NOT_APPLICABLE'
@@ -725,6 +746,7 @@ export type TaskIntegrationState =
   | 'CHECK_FAILED'
   | 'ERROR'
   | 'AWAITING_OWNER'
+  | 'AWAITING_OBSERVATION'
   | 'ON_INTEGRATION_LINE'
   | 'ON_UPSTREAM';
 
@@ -830,6 +852,13 @@ export interface TaskIntegrationView<Instant = string> {
    * bound. Absent from an older server.
    */
   mainBranch?: string | null;
+  /**
+   * With `AWAITING_OBSERVATION`: the commit the task's work was delivered as (`task.delivered_sha`,
+   * §10.4), which the observation waits to see on the line. Null while the identity is not frozen
+   * (the work is still moving, or it could not be named). Absent in every other state and from an
+   * older server.
+   */
+  deliveredSha?: string | null;
 }
 
 /**
@@ -861,7 +890,9 @@ export interface ProjectIntegrationBuckets {
  * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), plus
  * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision, and
  * `LANDING_LEASE_EXPIRED`, the owner's item about a landing attempt whose runner stopped reporting
- * (§4.6 X-E5).
+ * (§4.6 X-E5). `LANDING_UNOBSERVED` is a finished task's work not yet seen on its line, and
+ * `LANDED_WITHOUT_CONFIRMATION` the owner's item about work that reached main without their
+ * confirmation (§10.7, 0453).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -875,7 +906,9 @@ export type OpenItemKind =
   | 'START_REQUEST'
   | 'DONE_REQUEST'
   | 'DELIVERY_REVIEW'
-  | 'LANDING_LEASE_EXPIRED';
+  | 'LANDING_LEASE_EXPIRED'
+  | 'LANDING_UNOBSERVED'
+  | 'LANDED_WITHOUT_CONFIRMATION';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
@@ -890,6 +923,9 @@ export type OpenItemKind =
  *
  * The array is the runtime half: the server builds its read's `IN` list from it, so the phrase a
  * client prints and the rows a server counts cannot be about different sets.
+ *
+ * `LANDING_UNOBSERVED` is here because it goes to the coordinator first (§10.7);
+ * `LANDED_WITHOUT_CONFIRMATION` is not, because it is the owner's from birth.
  */
 export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_CONFLICT',
@@ -897,6 +933,7 @@ export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_ERROR',
   'TASK_FAILED',
   'DELIVERY_REVIEW',
+  'LANDING_UNOBSERVED',
 ] as const;
 export type CoordinatorLeadKind = (typeof COORDINATOR_LEAD_KINDS)[number];
 
@@ -944,7 +981,14 @@ export type OpenItemAction =
   | 'ANSWER'
   | 'OPEN_LANDING'
   /** §4.7 J-T10: end a landing attempt whose runner stopped reporting. Owner-only. */
-  | 'ABANDON';
+  | 'ABANDON'
+  /** §10.8: accept work that reached main without the owner's confirmation
+   *  (`LANDED_WITHOUT_CONFIRMATION`). Owner-only. */
+  | 'ACCEPT'
+  /** §10.8: look at the project's line again (`integration_observe`), with a reason — on a
+   *  `LANDING_UNOBSERVED` and on the item a project's failing observations open. The owner's press is
+   *  `POST /projects/:id/integration/observe`. */
+  | 'OBSERVE';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {
@@ -1021,9 +1065,10 @@ export interface OpenItemHandling<Instant = string> {
   /** Why it said the rerun would come out differently, as it said it. */
   reason: string;
   startedAt: Instant;
-  /** The job the rerun queued: a task's next landing, or a blocked candidate's next check. */
+  /** The job the rerun queued: a task's next landing, or a blocked candidate's next check — or, for
+   *  a `LANDING_UNOBSERVED`, the observation `integration_observe` queued or joined (§10.8). */
   jobId: string;
-  jobKind: 'LAND_TASK' | 'CHECK_PROMOTION';
+  jobKind: 'LAND_TASK' | 'CHECK_PROMOTION' | 'OBSERVE_LANDING';
   generation: number;
   /** Where that job is: waiting for its turn, or running on a runner. */
   state: 'QUEUED' | 'RUNNING';
@@ -1661,7 +1706,8 @@ export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
-  /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
+  /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity, and
+   *  neither is an observation (OBSERVE_LANDING, §10.6 A-Q23). */
   activeJobCount?: number;
   /** The job the project page's landing line would describe, chosen by the same rule; absent when
    *  nothing is in flight and on older servers. The session list's project row states it. */

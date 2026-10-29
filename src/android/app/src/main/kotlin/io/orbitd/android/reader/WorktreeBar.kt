@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,8 +47,8 @@ private fun JsonObject.flag(key: String) = (get(key) as? JsonPrimitive)?.takeIf 
  * work lives on — a coordinator's project integration line (A06-8) — with its `+/−` summary opening the
  * changed files, and the git-state-driven action on the right: Commit while the tree is dirty, Merge once
  * it is clean, then the runner's answer (Merging…, ✓ Merged, ✓ In main, Resolve in session, Retry merge).
- * A session whose directory is not a git repository gets the amber "not isolated" nudge instead. [sending] is the composer's
- * message on its way, which holds Merge back before the record says the turn is queued (A06-14).
+ * A session without a worktree, which edits its workspace's folder directly, gets the amber notice instead. [sending] is the
+ * composer's message on its way, which holds Merge back before the record says the turn is queued (A06-14).
  */
 @Composable
 internal fun WorktreeBar(model: WorktreeModel, sending: Boolean = false, open: (String) -> Unit) {
@@ -57,12 +58,70 @@ internal fun WorktreeBar(model: WorktreeModel, sending: Boolean = false, open: (
     val recovery = (d["mergeRecovery"] as? JsonObject)?.let { MergeRecovery.of(it) }
     when (WorktreeBarLogic.mode(d.string("isolationStatus"), d.string("branch"), files.size, d.string("mergeStatus"), d.string("commitStatus"), recovery != null)) {
         WorktreeBarLogic.Mode.HIDDEN -> Unit
-        WorktreeBarLogic.Mode.NOT_ISOLATED -> Text("⚠ Shared workDir — not isolated", Modifier.fillMaxWidth().padding(bottom = 6.dp)
-            .clip(RoundedCornerShape(8.dp)).background(LocalOrbitColors.current.needsYou.copy(alpha = 0.12f))
-            .border(1.dp, LocalOrbitColors.current.needsYou.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
-            color = LocalOrbitColors.current.needsYou, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        WorktreeBarLogic.Mode.NOT_ISOLATED -> SharedFolderNotice(model, state, d)
         WorktreeBarLogic.Mode.WORKTREE -> Pill(model, state, d, d.string("branch")!!, files, recovery, sending, open)
     }
+}
+
+/**
+ * The notice of a session without a worktree (web's `SharedFolderNotice`, docs/mocks/nogit-folder-notice): which folder it edits
+ * directly and why, what that costs, and the way out — Initialize git… for a folder that is not a repository — with ✕, which keeps
+ * such a folder as it is for the whole workspace, or hides a repository git couldn't branch for this session. Gone once the
+ * workspace has answered it, and held back until its record has been read, so an answered notice doesn't flash up; with no
+ * workspace known, it only says so.
+ */
+@Composable
+private fun SharedFolderNotice(model: WorktreeModel, state: WorktreeState, d: JsonObject) {
+    val workspaceId = (d["workspace"] as? JsonObject)?.string("id")
+    var read by remember(workspaceId) { mutableStateOf(workspaceId == null) }
+    LaunchedEffect(workspaceId) { workspaceId?.let { model.loadWorkspace(it) }; read = true }
+    var hidden by rememberSaveable { mutableStateOf(false) }
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    val ws = state.workspace
+    val notice = WorktreeBarLogic.sharedFolder(ws?.flag("workDirIsGit"), ws?.flag("autoInitGit"), ws?.flag("enableWorktree"))
+    if (!read || hidden || notice == WorktreeBarLogic.SharedFolder.HIDDEN) return
+    val notGit = notice == WorktreeBarLogic.SharedFolder.NOT_GIT
+    val path = ws?.string("workDir")
+    val warning = LocalOrbitColors.current.needsYou
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(shape).background(warning.copy(alpha = 0.12f))
+        .border(1.dp, warning.copy(alpha = 0.4f), shape).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val (before, folder, after) = SharedFolderCopy.headline(notice, path)
+            // The headline takes what the actions leave, wrapping on a phone; Initialize git… and ✕ keep their size.
+            Text(buildAnnotatedString {
+                append(before)
+                if (path == null) append(folder) else withStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)) { append(folder) }
+                append(after)
+            }, Modifier.weight(1f), color = warning, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            if (workspaceId != null) {
+                if (notGit) PillButton(SharedFolderCopy.INITIALIZE, tint = warning, enabled = !state.busy) { confirming = true }
+                Text("✕", Modifier.clickable(role = Role.Button) { if (notGit) model.keepShared(workspaceId) else hidden = true }
+                    .semantics { contentDescription = if (notGit) SharedFolderCopy.KEEP_PLAIN else SharedFolderCopy.HIDE_HERE }
+                    .padding(horizontal = 4.dp, vertical = 2.dp), color = secondary, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        Text(if (notGit) SharedFolderCopy.NOT_GIT_DETAIL else SharedFolderCopy.NO_BRANCH_DETAIL, color = secondary, style = MaterialTheme.typography.bodySmall)
+    }
+    if (confirming && workspaceId != null) InitializeGitDialog(path, ws?.string("name"), { confirming = false; model.initializeGit(workspaceId) }) { confirming = false }
+}
+
+/** Initialize git…'s confirmation (web's `askEnableIsolation`): the folder, then what the runner will do to it, step by step. */
+@Composable
+private fun InitializeGitDialog(path: String?, workspace: String?, confirm: () -> Unit, close: () -> Unit) {
+    AlertDialog(onDismissRequest = close, title = { Text(SharedFolderCopy.CONFIRM_TITLE) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                path?.let { Text(it, Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .padding(horizontal = 6.dp, vertical = 1.dp), fontFamily = FontFamily.Monospace) }
+                Text(SharedFolderCopy.confirmLead(workspace))
+                SharedFolderCopy.confirmSteps.forEach { step -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("•"); Text(step) } }
+                Text(SharedFolderCopy.CONFIRM_AFTER)
+            }
+        },
+        confirmButton = { TextButton(onClick = confirm) { Text(SharedFolderCopy.CONFIRM) } },
+        dismissButton = { TextButton(onClick = close) { Text("Cancel") } })
 }
 
 @OptIn(ExperimentalFoundationApi::class)

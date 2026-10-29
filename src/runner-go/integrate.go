@@ -19,6 +19,14 @@ import (
 // INTEGRATION_JOB_CLAIM in src/apiserver/src/projects/project-integration-job.ts.
 const integrationJobCapabilityV1 = "integration-job/v1"
 
+// The capability that says this runner carries out what revision 29 adds to the queue
+// (docs/project-integration-line-contract.md §10.5 O-L5, §10.6): OBSERVE_LANDING, the read-only look
+// at whether each delivered commit is on the line (integrate_observe.go), and a TASK_BRANCH promotion
+// named by its commit, which takes that commit out of this machine's object store instead of fetching
+// a task branch nobody published (promoteOnce). The control plane hands either only to a runner that
+// declared it; any other runner keeps the paths it has today.
+const integrationObserveCapabilityV1 = "integration-observe/v1"
+
 // The capability that says this runner speaks the periodic progress protocol
 // (docs/project-integration-line-contract.md §2.2 J-T4): a report inside every 30 seconds while it
 // works, a synchronous phase = PUSH report before it pushes, and a stop request read off every
@@ -158,6 +166,8 @@ type integrationResult struct {
 	// UnknownPushes is what the fetch found about the earlier unknown pushes the command named (J12):
 	// only the entries git could answer for.
 	UnknownPushes []IntegrationUnknownPushCheck
+	// Observations is an OBSERVED job's answer, one per task its command named (§10.6 O-S2).
+	Observations []IntegrationObservation
 	// Interrupted is a job this runner stopped because the runner itself is stopping
 	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
 	// Phase says where it was. Never part of a report.
@@ -234,7 +244,7 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 		defer progress.close()
 	}
 	// The local lock is what a second job of this process waits on; v2 says so while it waits.
-	lock := integrationLock(repoRoot, cmd.TargetRef)
+	lock := integrationLock(repoRoot, integrationLockRef(cmd))
 	if progress != nil {
 		progress.beginStep("FETCH", "WAITING_LOCAL_LOCK", nil, nil)
 	}
@@ -242,6 +252,18 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 		return integrationStoppedResult(jobCtx, "FETCH")
 	}
 	defer lock.Unlock()
+	reached := report
+	if progress != nil {
+		reached = progress.phaseReached
+	}
+	if cmd.Kind == "OBSERVE_LANDING" {
+		// §10.6: an observation only reads, so there is no scratch worktree to stage and no round to
+		// go back for — one pass, reported the way every job's steps are.
+		if progress != nil {
+			progress.setRound(1)
+		}
+		return observeLanding(jobCtx, cmd, repoRoot, reached)
+	}
 
 	scratch := integrationScratchPath(cmd)
 	if err := os.MkdirAll(filepath.Dir(scratch), 0o755); err != nil {
@@ -264,10 +286,6 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 		// task onto the line (§3.4). Same loop around it, and for the same reason: the one failure
 		// worth trying again inside a single job is losing a race for the ref it is writing.
 		one = promoteOnce
-	}
-	reached := report
-	if progress != nil {
-		reached = progress.phaseReached
 	}
 	rounds := integrationRefetchRounds
 	if cmd.Kind == "LAND_PROMOTION" {
@@ -703,6 +721,13 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	}
 	local := cmd.RefAuthority == "RUNNER_LOCAL"
 	landing := cmd.Kind == "LAND_PROMOTION"
+	// O-L5: a TASK_BRANCH source named by its commit IS that commit. The source session's runner made
+	// it, and it is the runner this job is handed to, so the commit is read out of this machine's
+	// object store and the task branch is not fetched: nobody was ever asked to publish it, and a
+	// branch only one machine has is what answered SOURCE_BRANCH_MISSING for work already done
+	// (§10.1). A TASK_BRANCH candidate whose check names no commit yet, and every PROJECT_BRANCH
+	// source, fetch their branch as they always have.
+	byCommit := cmd.PromotionSourceKind == "TASK_BRANCH" && strings.TrimSpace(cmd.SourceSha) != ""
 
 	// ── M-S1 FETCH ────────────────────────────────────────────────────────────────────────────
 	report("FETCH", nil)
@@ -710,8 +735,10 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
 			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
-			return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
+		if !byCommit {
+			if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
+				return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
+			}
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -726,6 +753,14 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	if sourceSha == "" {
 		sourceSha, err = integrationTip(repoRoot, remote, cmd.SourceRef, local)
 	} else if _, probe := git(repoRoot, "rev-parse", "--verify", "--quiet", sourceSha+"^{commit}"); probe != nil {
+		if byCommit {
+			// The work is a commit, not a branch, so its absence says nothing about a branch: this
+			// machine does not hold the commit the task delivered (J12 WORK_COMMIT_MISSING).
+			return errorResult("FETCH", "WORK_COMMIT_MISSING", map[string]any{
+				"sha": sourceSha, "ref": cmd.SourceRef,
+				"detail": "commit " + sourceSha + " is not in this runner's repository",
+			})
+		}
 		err = probe
 		sourceSha = ""
 	}
@@ -2107,6 +2142,10 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		ErrorDetail:          result.ErrorDetail,
 		UpstreamMovedCommits: result.UpstreamMovedCommits,
 		UnknownPushes:        result.UnknownPushes,
+	}
+	if result.State == "OBSERVED" {
+		observations := append([]IntegrationObservation{}, result.Observations...)
+		body.Observations = &observations
 	}
 	deliverIntegrationResult(stop, t, job.JobID, body)
 }

@@ -236,7 +236,7 @@ class MemoryServer {
       status: 'ok',
       sections: request.sections.map((section) => ({
         key: section.key, outcome: 'written',
-        stats: { sentences: 3, footnotes: section.footnotes.length, verified: 0, notFound: 0, noQuote: 0, unresolved: 0, markersDropped: 0, chars: 0 },
+        stats: { sentences: 3, footnotes: section.footnotes.length, verified: 0, notFound: 0, noQuote: 0, unresolved: 0, markersDropped: 0, chars: 0, diagrams: 0, diagramsDropped: 0 },
       })),
       counts: { sentences: 9, sourced: 8, transition: 1, unsourced: 0, unverified: 0, withdrawn: 0 },
     };
@@ -551,6 +551,24 @@ test('a section the plan gives no material is written from one call, its footnot
   assert.ok(h.model.prompts[0].includes('No material is left after the merge') && !h.model.prompts[0].includes('the "merge"'));
   const s4 = h.server.written('s4');
   assert.deepEqual([s4.footnotes, s4.dispositions, s4.markdown], [[], [], 'This document covers only how a session runs; how tasks are dispatched has a document of its own.']);
+});
+
+test('a flow section and the overview are offered a diagram, and the one drawn reaches the write as drawn: the markers around it numbered, its own backticks out (docs.diagram)', async () => {
+  const h = harness();
+  h.model.write['turn 怎么投递'] = ['### How a turn is delivered\n'
+    + 'A turn is stored before it is delivered, and delivered at least once[D1].\n\n'
+    + '```mermaid\nflowchart LR\n  A["`turn` stored [D1]"] --> B["delivered"]\n```\n\n'
+    + 'The runner opens no inbound port[C1].\n\n'
+    + 'Quotes:\n[D1] "A turn is stored before it is delivered"\n[C1] "It never opens an inbound port."\n'];
+  await build(h, new MemoryRepo(HEAD, files()));
+  const writing = (title: string) => h.model.prompts.filter((prompt) => prompt.includes('# Task: write the document') && prompt.includes(`## This section\n«${title}»`));
+  assert.ok(writing('turn 怎么投递').every((prompt) => prompt.includes('## Diagram\nThis section may carry one diagram')), 'a flow section is offered one');
+  assert.ok(writing('约定').every((prompt) => !prompt.includes('## Diagram')), 'conventions are not');
+  const overview = h.model.prompts.find((prompt) => prompt.includes('(the overview, about')) ?? '';
+  assert.ok(overview.includes('## Diagram\nThis overview may carry one diagram of the whole document'));
+  assert.ok(!overview.includes('A["turn stored'), 'the overview is written from the sections\' sentences, not their diagrams');
+  assert.equal(h.server.written('s2').markdown, 'A turn is stored before it is delivered, and delivered at least once[1].\n\n'
+    + '```mermaid\nflowchart LR\n  A["turn stored [D1]"] --> B["delivered"]\n```\n\nThe runner opens no inbound port[2].');
 });
 
 test('sections that name one file all wait for its read: a plan of v27\'s shape is built through the space\'s runner (2026-10-09)', async () => {

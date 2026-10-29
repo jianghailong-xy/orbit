@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -174,6 +175,46 @@ export function mainBranchOf(codebase: { upstreamRef: string } | null | undefine
   return codebase ? branchName(codebase.upstreamRef) : null;
 }
 
+/**
+ * A remote URL as repository identity (PSC SR36): trimmed, scheme and host lower-cased, any
+ * `user@` dropped, the scp form `git@host:owner/repo` spelled as `ssh://host/owner/repo`, and no
+ * trailing `/` or `.git`. Used to compare and to satisfy `project_codebase_canonical_url_chk`, never
+ * to clone. Null when nothing is left.
+ */
+export function canonicalRepoUrl(raw: string): string | null {
+  let url = raw.trim();
+  const scp = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/)(\S+)$/.exec(url);
+  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `ssh://${scp[1]}/${scp[2]}`;
+  const remote = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/]*@)?([^/]*)(.*)$/i.exec(url);
+  if (remote) url = `${remote[1]!.toLowerCase()}://${remote[2]!.toLowerCase()}${remote[3]}`;
+  for (let trimmed = url.replace(/\/+$/, '').replace(/\.git$/, ''); trimmed !== url;
+    trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '')) {
+    url = trimmed;
+  }
+  return url === '' ? null : url;
+}
+
+/**
+ * §1.1 `isCodeTask`'s repository condition (revision 29, §10.5 O-L7): no repository is KNOWN to
+ * differ from the one the project's line is bound to — the workspace a work session ran in names,
+ * through SR36, that repository, or names none. Only a known, different repository takes work off
+ * the line. A project with no binding has none to differ from — its first integration binds it to
+ * this work's repository (L3) — and a session with no workspace, or a workspace with no `repo_url`,
+ * names none: that work stays this line's, queued, waited on and in its criterion's conjunction, so
+ * a repository nobody recorded is answered where it always was rather than read as nothing to land.
+ * The binding's own URL is read through SR36 as well: that changes nothing for one `bind()` wrote,
+ * which is canonical already, and keeps one written by hand comparable. `workOnProjectRepositorySql`
+ * is the same condition in SQL, where a NULL on either side of its `<>` holds.
+ */
+export function workOnProjectRepository(
+  repoUrl: string | null | undefined,
+  binding: { canonicalRepoUrl?: string | null } | null | undefined,
+): boolean {
+  const bound = binding?.canonicalRepoUrl ? canonicalRepoUrl(binding.canonicalRepoUrl) : null;
+  const repository = repoUrl ? canonicalRepoUrl(repoUrl) : null;
+  return bound === null || repository === null || repository === bound;
+}
+
 /** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
 export function landingBranchesFor(codebase: LandingCodebase | null): LandingBranches {
   if (!codebase) return LEGACY_LANDING_BRANCHES;
@@ -243,12 +284,19 @@ export interface LandingJobSessionFacts {
  * identity on purpose — a task is named here only when something can be said about it, and "has no
  * receipt" is not something that can be said.
  *
- * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it.
+ * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it,
+ * together with the repository condition revision 29 added to that same half (O-L7).
  */
 export interface LandingServingTask {
   codeless: boolean;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
   integrationJobs: ReadonlyArray<LandingJobFacts>;
+  /** §1.1's repository condition (revision 29, O-L7) as this lane reads it: the task's newest work
+   *  session — the workspace whose `repo_url` it ran in — and the binding of the project the task is
+   *  filed under (`workInAnotherRepository`). A reader that did not select them has nothing to say
+   *  about the repository, which reads as work in the project's own. */
+  sessions?: ReadonlyArray<{ workspace?: { repoUrl: string | null } | null }>;
+  project?: { codebases: ReadonlyArray<{ canonicalRepoUrl: string }> } | null;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -328,10 +376,11 @@ export function taskLandingSql(alias: string): string {
 /**
  * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
  *
- * Its newest work session ran in a worktree on a branch, and the row is not declared codeless. The
- * negation of the middle two disjuncts of `prerequisiteLandedSql`, stated positively because this
- * asks the question the other way round — that one asks "is there nothing left to wait for", this
- * asks "is this the kind of work that lands".
+ * Its newest work session ran in a worktree on a branch, in no repository known to differ from the
+ * one the project's line is bound to (revision 29, §10.5 O-L7), and the row is not declared codeless. The negation of the
+ * middle two disjuncts of `prerequisiteLandedSql`, stated positively because this asks the question
+ * the other way round — that one asks "is there nothing left to wait for", this asks "is this the
+ * kind of work that lands".
  */
 export function isCodeTaskSql(alias: string): string {
   return `(
@@ -339,6 +388,7 @@ export function isCodeTaskSql(alias: string): string {
       AND ${alias}."codeless" = false
       AND EXISTS (
         SELECT 1 FROM "session" code_work
+          LEFT JOIN "workspace" code_workspace ON code_workspace."id" = code_work."workspace_id"
          WHERE code_work."id" = (
                  SELECT newest_work."id" FROM "session" newest_work
                   WHERE newest_work."task_id" = ${alias}."id"
@@ -349,8 +399,52 @@ export function isCodeTaskSql(alias: string): string {
                )
            AND code_work."isolation_status" = 'worktree'
            AND code_work."branch" IS NOT NULL
+           AND ${workOnProjectRepositorySql(`${alias}."project_id"`, 'code_workspace."repo_url"')}
       )
     )`;
+}
+
+/**
+ * `canonicalRepoUrl` (PSC SR36, `project-integration-line.ts`) as one SQL expression over `raw`, step
+ * for step: trimmed; the scp form `git@host:owner/repo` spelled `ssh://host/owner/repo`; scheme and
+ * host lower-cased and any `user@` dropped; every trailing `/` and `.git` taken off; NULL when
+ * nothing is left. The two are held to one corpus by `delivered-identity.pg.spec.ts`, because a
+ * predicate that compares repositories in the database has to reach the answer the TypeScript does.
+ */
+export function canonicalRepoUrlSql(raw: string): string {
+  // No CASE: the scp spelling is skipped by a lookahead for a scheme, and a URL with no scheme to
+  // lower-case falls through COALESCE as it is — a `WHEN` here would land inside the readiness arms
+  // that embed this, which their own readers delimit by `WHEN`.
+  return `(SELECT NULLIF(regexp_replace(repo_lowered."url", '(/|\\.git)+$', ''), '')
+      FROM (SELECT COALESCE(lower(repo_parts."parts"[1]) || '://' || lower(repo_parts."parts"[2])
+                              || repo_parts."parts"[3],
+                            repo_parts."url") AS "url"
+              FROM (SELECT repo_spelled."url",
+                           regexp_match(repo_spelled."url",
+                                        '^([a-z][a-z0-9+.-]*)://(?:[^@/]*@)?([^/]*)(.*)$', 'i') AS "parts"
+                      FROM (SELECT regexp_replace(repo_trimmed."url",
+                                     '^(?![a-z][a-z0-9+.-]*://)(?:[^@/[:space:]]+@)?([^:/[:space:]]+):(?!/)([^[:space:]]+)$',
+                                     'ssh://\\1/\\2', 'i') AS "url"
+                              FROM (SELECT regexp_replace(${raw}, '^[[:space:]]+|[[:space:]]+$', '', 'g') AS "url")
+                                   repo_trimmed) repo_spelled) repo_parts) repo_lowered)`;
+}
+
+/**
+ * `isCodeTask`'s repository condition (revision 29, §10.5 O-L7) as SQL: no binding of the project
+ * names a repository KNOWN to differ from the one `repoUrl` — a work session's workspace `repo_url` —
+ * reads as through SR36. A project with no binding has none to differ from: its first integration
+ * binds it to this work's repository (L3). A session with no workspace, or a workspace with no
+ * `repo_url`, names no repository, and `<>` against its NULL is not true, so the condition holds:
+ * only a known, different repository takes work off the line. The binding's URL is read through
+ * SR36 too, as `workOnProjectRepository` reads it.
+ */
+export function workOnProjectRepositorySql(projectId: string, repoUrl: string): string {
+  return `NOT EXISTS (
+        SELECT 1 FROM "project_codebase" work_line
+         WHERE work_line."project_id" = ${projectId}
+           AND work_line."slot" = 'primary'
+           AND ${canonicalRepoUrlSql('work_line."canonical_repo_url"')} <> ${canonicalRepoUrlSql(repoUrl)}
+      )`;
 }
 
 /** `lineStarted` (§1.1) as SQL: this task's project has a binding that has begun integrating. */
@@ -590,8 +684,10 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
 }
 
 /**
- * Whether this work has nothing to land at all — and there are two ways for that to be true: the
- * task DECLARES it needs no code, or the line's own record says it never had a commit of its own.
+ * Whether this work has nothing to land at all — and there are three ways for that to be true: the
+ * task DECLARES it needs no code, its work was done in another repository than the one its line is
+ * bound to (`workInAnotherRepository`), or the line's own record says it never had a commit of its
+ * own.
  *
  * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
  * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
@@ -639,11 +735,32 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
  * whole record is "there was nothing of it to land" gets anything out — and a declaration, which is
  * §1.1's first half and authoritative wherever this lane reads it.
  *
- * The one session this does read is not that half either: `jobSawTheFinishedBranch` looks at the
+ * The sessions this does read are not that half either. `jobSawTheFinishedBranch` looks at the
  * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
+ * `workInAnotherRepository` reads the newest work session for its REPOSITORY alone (O-L7), never
+ * for whether it ran a branch, and it takes a task out as the declaration does. It reads the newest
+ * session because §1.1 does, and no receipt overrides it: a task that landed on the project branch
+ * from one attempt and ran its newest attempt in another repository leaves the conjunction, MERGED
+ * receipt and all.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless || lineSawNothingToLand(task);
+  return task.codeless || workInAnotherRepository(task) || lineSawNothingToLand(task);
+}
+
+/**
+ * Whether the task's work was done in another repository than the one its project's line is bound to
+ * (§1.1 `isCodeTask`'s repository condition, revision 29 §10.5 O-L7), read off the NEWEST work
+ * session as §1.1 reads it. No commit of such work can ever be on this line, and the task cannot be
+ * declared codeless either — it has commits (`TASK_CODELESS_HAS_COMMITS`) — so without this a criterion
+ * it serves would wait for a landing that never comes. It leaves the conjunction exactly as codeless
+ * work does (§1.4 "有提交可落"). A task with no work session, one whose newest work session names no
+ * repository (no workspace, or no `repo_url`), or one in a project with no binding has none KNOWN to
+ * differ, and stays in.
+ */
+export function workInAnotherRepository(task: LandingServingTask): boolean {
+  const newest = task.sessions?.[0];
+  if (!newest) return false;
+  return !workOnProjectRepository(newest.workspace?.repoUrl, task.project?.codebases?.[0]);
 }
 
 /**
@@ -654,7 +771,8 @@ export function taskHasNothingToLand(task: LandingServingTask): boolean {
  * Work with nothing to land (`taskHasNothingToLand`) is not delivery and does not take part in
  * either: it neither withholds LANDED nor supplies it. So a criterion served by three tasks, two of
  * them on `main` and the third an acceptance task that declares it needs no code — or, since this
- * unit, one the line looked at and found no commit of its own on — is LANDED, and before this rule it
+ * unit, one the line looked at and found no commit of its own on, or (O-L7) one whose work was done
+ * in another repository — is LANDED, and before this rule it
  * could not be, at any time, by any receipt, which left every project holding
  * such a task unable to reach DONE (2026-09-22: 48 finished tasks, one of them a criteria-12
  * acceptance task, and still 48 of them after the declaration alone was honoured, because that task
@@ -740,6 +858,14 @@ export async function readCriterionLandingFacts(
   }));
 }
 
+/** The newest session that started a task's work, with the repository its workspace names (O-L7). */
+export const NEWEST_WORK_REPOSITORY = {
+  where: { startsTaskWork: true, deletedAt: null },
+  orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  take: 1,
+  select: { workspace: { select: { repoUrl: true } } },
+} satisfies Prisma.Task$sessionsArgs;
+
 /**
  * What the fold reads about one serving task, as a Prisma `select`.
  *
@@ -747,9 +873,10 @@ export async function readCriterionLandingFacts(
  * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
  * against. A reader that wrote its own copy would be a second author of the fold's input, and the
  * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
- * which is what these two facts are: SR5's escape hatch and the merges recorded against the task.
+ * which is what these facts are: SR5's escape hatch, the merges recorded against the task, and
+ * where its newest work ran beside where its project's line is bound (O-L7).
  *
- * The third one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
+ * The last one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
  * the task rather than ON it, and it is read beside this select by `readLandingJobsByTask`. An empty
  * `integrationJobs` in this shape is not "the task has none" but "they have not been attached yet" —
  * a distinction nothing can enforce, which is why every caller in this tree attaches them in the same
@@ -758,6 +885,10 @@ export async function readCriterionLandingFacts(
 export const LANDING_SERVING_WORK_SELECT = {
   codeless: true,
   mergeReceipts: { select: { result: true, targetBranch: true } },
+  // §1.1's repository condition (O-L7): where the newest work session ran, and where the project's
+  // line is bound. Two relation levels each, not a statement per task (`workInAnotherRepository`).
+  sessions: NEWEST_WORK_REPOSITORY,
+  project: { select: { codebases: { where: { slot: 'primary' }, select: { canonicalRepoUrl: true } } } },
 } as const;
 
 /**

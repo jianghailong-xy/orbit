@@ -6,10 +6,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type DeviceEnrollment } from '../api';
 import { meQuery } from '../lib/queries';
+import * as runnerCopy from '../lib/runnerCopy';
 
 /**
  * /enroll?code= — the browser half of `orbit register`, in a real document over what
- * GET /runners/device/:userCode answers: the machine a terminal asks to add, approved or denied, a
+ * GET /runners/device/:userCode answers: the machine a terminal asks to add and where it asked from, approved or denied, a
  * runner of the same name already there, a request already decided, and one that ran out.
  */
 
@@ -34,6 +35,8 @@ const enrollment = (over: Partial<DeviceEnrollment> = {}): DeviceEnrollment => (
   labels: [],
   maxConcurrent: 16,
   status: 'PENDING',
+  requesterIp: null,
+  sameNetwork: false,
   nameConflict: false,
   existingLastSeenAt: null,
   runnerId: null,
@@ -46,6 +49,10 @@ const enrollment = (over: Partial<DeviceEnrollment> = {}): DeviceEnrollment => (
 const row = (within: ParentNode, label: string): string | undefined =>
   [...within.querySelectorAll('.enroll-facts > div')].find((r) => r.querySelector('dt')?.textContent === label)
     ?.querySelector('dd')?.textContent ?? undefined;
+
+/** The facts list's labels, top to bottom. */
+const labels = (within: ParentNode): string[] =>
+  [...within.querySelectorAll('.enroll-facts > div > dt')].map((dt) => dt.textContent ?? '');
 
 const details = (info: DeviceEnrollment, extra: { account?: string; expiresIn?: number | null } = {}) => {
   const html = document.createElement('div');
@@ -75,6 +82,31 @@ describe('what the approval page shows of the machine', () => {
     expect(row(html, 'Account')).toBe('alex@example.com');
     expect(row(html, 'Expires')).toBe('in 9:41');
     expect(html.querySelector('.enroll-fact-warning')).toBeNull();
+  });
+
+  it('says where the request came from, directly above the account, and when that is this browser\'s network', () => {
+    const html = details(enrollment({ requesterIp: '203.0.113.24', sameNetwork: true }), {
+      account: 'alex@example.com',
+      expiresIn: 581_000,
+    });
+    expect(labels(html)).toEqual(['Machine', 'Hostname', 'From', 'Account', 'Expires']);
+    expect(row(html, 'From')).toBe('203.0.113.24 · same network as this browser');
+    expect(html.querySelector('.enroll-fact-ok')?.textContent).toBe(' · same network as this browser');
+  });
+
+  it('shows the address alone when the request came from another one, an IPv6 address as the server spells it', () => {
+    for (const requesterIp of ['198.51.100.7', '2001:db8:abcd::24']) {
+      const html = details(enrollment({ requesterIp, sameNetwork: false }), { account: 'alex@example.com' });
+      expect(labels(html), requesterIp).toEqual(['Machine', 'Hostname', 'From', 'Account']);
+      expect(row(html, 'From'), requesterIp).toBe(requesterIp);
+      expect(html.querySelector('.enroll-fact-ok'), requesterIp).toBeNull();
+    }
+  });
+
+  it('leaves the row out when the server recorded no address', () => {
+    const html = details(enrollment({ requesterIp: null }), { account: 'alex@example.com' });
+    expect(row(html, 'From')).toBeUndefined();
+    expect(labels(html)).toEqual(['Machine', 'Hostname', 'Account']);
   });
 
   it('marks the last minute', () => {
@@ -162,8 +194,8 @@ afterEach(async () => {
 });
 
 describe('/enroll', { timeout: 30_000 }, () => {
-  it('reads the request the code names: the code to compare, the machine, the account it joins and the time left', async () => {
-    vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment());
+  it('reads the request the code names: the code to compare, the machine, where it came from, the account it joins and the time left', async () => {
+    vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment({ requesterIp: '203.0.113.24', sameNetwork: true }));
     const page = await open(`?code=${CODE}`);
 
     expect(getDeviceEnrollment).toHaveBeenCalledWith(CODE);
@@ -171,7 +203,9 @@ describe('/enroll', { timeout: 30_000 }, () => {
     expect(page.textContent).toContain('Approve only if that was you, just now.');
     expect(page.querySelector('.enroll-code')?.textContent).toBe(CODE);
     expect(page.textContent).toContain('It should match the code in your terminal.');
+    expect(labels(page)).toEqual(['Machine', 'Hostname', 'From', 'Account', 'Expires']);
     expect(row(page, 'Machine')).toBe('devbox');
+    expect(row(page, 'From')).toBe('203.0.113.24 · same network as this browser');
     expect(row(page, 'Account')).toBe('alex@example.comSwitch');
     expect(row(page, 'Expires')).toMatch(/^in 9:4\d$/);
     expect(button(page, 'Approve')!.disabled).toBe(false);
@@ -229,6 +263,43 @@ describe('/enroll', { timeout: 30_000 }, () => {
       const page = await open(`?code=${CODE}`);
       expect(page.querySelector('h1')?.textContent, status).toBe(says);
       expect(button(page, 'Approve'), status).toBeUndefined();
+      await close();
+    }
+  });
+
+  // The native Add Runner dialogs approve and deny by code with this page's words, which they hold one to
+  // one with runnerCopy.ts (OrbitKit's RunnerPageCopy, Android's RunnerCopy): this holds runnerCopy.ts to
+  // what the page says.
+  it('says what runnerCopy.ts gives the native Add Runner dialogs, word for word', async () => {
+    const said = (element: Element | null | undefined) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment());
+    const pending = await open(`?code=${CODE}`);
+    expect(button(pending, runnerCopy.RUNNER_APPROVE)).toBeTruthy();
+    expect(button(pending, runnerCopy.RUNNER_DENY)).toBeTruthy();
+    await close();
+
+    for (const [status, title, detail] of [
+      ['APPROVED', runnerCopy.RUNNER_DEVICE_APPROVED, runnerCopy.runnerDeviceApprovedDetail('devbox')],
+      ['DENIED', runnerCopy.RUNNER_DEVICE_DENIED, runnerCopy.RUNNER_DEVICE_DENIED_DETAIL],
+    ] as const) {
+      vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment({ status, runnerId: status === 'APPROVED' ? RUNNER_ID : null }));
+      const page = await open(`?code=${CODE}`);
+      expect(said(page.querySelector('h1')), status).toBe(title);
+      expect(said(page.querySelector('.login-subtitle')), status).toBe(detail);
+      await close();
+    }
+
+    for (const lastSeen of [new Date(Date.now() - 3 * 86_400_000).toISOString(), null]) {
+      vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment({ nameConflict: true, existingLastSeenAt: lastSeen }));
+      const page = await open(`?code=${CODE}`);
+      expect(said(page.querySelector('.orbit-alert-title'))).toBe(runnerCopy.runnerDeviceNameTaken('devbox'));
+      expect(said(page.querySelector('.orbit-alert-description'))).toBe(
+        lastSeen
+          ? `${runnerCopy.runnerDeviceLastOnline('3d ago')} ${runnerCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL}`
+          : runnerCopy.RUNNER_DEVICE_NAME_TAKEN_DETAIL,
+      );
+      expect(button(page, runnerCopy.RUNNER_REREGISTER)).toBeTruthy();
+      expect(button(page, runnerCopy.RUNNER_DENY)).toBeTruthy();
       await close();
     }
   });

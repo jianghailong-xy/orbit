@@ -556,6 +556,10 @@ type IntegrationJobCommand struct {
 	// pushes, the runner reports phase = PUSH synchronously and waits for the answer. Absent on a
 	// legacy claim, whose runner reports the phase best-effort and pushes without asking.
 	ReportBeforePush bool `json:"reportBeforePush,omitempty"`
+	// ObserveTasks is what an OBSERVE_LANDING looks for (§10.6 O-J2): the tasks the claim found
+	// waiting to be observed, each with the commit its work was delivered as. Absent on every other
+	// kind. TargetRef and SourceRef both name the integration line on such a job.
+	ObserveTasks []IntegrationObserveTask `json:"observeTasks,omitempty"`
 	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
 	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
 	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
@@ -575,6 +579,29 @@ type IntegrationJobCommand struct {
 	outputEvery      time.Duration
 	outputChunkBytes int
 	outputRedactor   *integrationOutputRedactor
+}
+
+// IntegrationObserveTask is one task an OBSERVE_LANDING looks for (§10.6 O-S2): the commit its work
+// was delivered as, frozen when it went DONE (O-L4), and the commit that work forked from. BaseSha is
+// empty when none was recorded.
+type IntegrationObserveTask struct {
+	TaskID       string `json:"taskId"`
+	DeliveredSha string `json:"deliveredSha"`
+	BaseSha      string `json:"baseSha"`
+}
+
+// IntegrationObservation is what an OBSERVE_LANDING found for one task (§10.4, §10.6 O-S2), beside the
+// commits it was asked about. The two nullable answers are sent as null rather than left out.
+type IntegrationObservation struct {
+	TaskID       string  `json:"taskId"`
+	DeliveredSha string  `json:"deliveredSha"`
+	BaseSha      *string `json:"baseSha"`
+	OnUpstream   bool    `json:"onUpstream"`
+	// Null on a MAIN line, where the integration line is the upstream itself.
+	OnIntegrationLine *bool `json:"onIntegrationLine"`
+	Empty             bool  `json:"empty"`
+	// git cherry's answer; null when this machine does not have base..delivered.
+	FullyApplied *bool `json:"fullyApplied"`
 }
 
 // IntegrationUnknownPush is one earlier landing the control plane could not read the push outcome
@@ -747,6 +774,10 @@ type IntegrationJobResultRequest struct {
 	// What this job's fetch found about the earlier unknown pushes its command named (J12): only the
 	// ones git could answer for, and whether their tested commit is on the target.
 	UnknownPushes []IntegrationUnknownPushCheck `json:"unknownPushes,omitempty"`
+	// With OBSERVED, and only there: one observation per task the command named, in its order
+	// (§10.6 O-S3). A pointer so an observation of no task still says so with an empty list, while
+	// every other answer leaves the field out.
+	Observations *[]IntegrationObservation `json:"observations,omitempty"`
 }
 
 // IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
@@ -1553,6 +1584,11 @@ type RunFinalizeRequest struct {
 	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
 	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// BranchSha is the tip of the effective branch once finalizeWorktree has committed what the
+	// session left (see SessionLiveState.BranchSha): the commit a finished task's work is frozen as
+	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
+	// undoes, and whenever git cannot resolve the tip.
+	BranchSha string `json:"branchSha,omitempty"`
 	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
 	// stage or could not commit. Empty on every finalize that captured the work.
 	//

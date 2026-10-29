@@ -642,6 +642,26 @@ export class ProjectsController {
    * the platform could not verify, so the sentence is the whole of what the record gains — and the
    * item must still be open, because an ending is final (its row is guarded against rewrite).
    */
+  /**
+   * The owner accepting work that reached the branch without their confirmation (contract §10.8):
+   * the one door that ends a `LANDED_WITHOUT_CONFIRMATION`, RESOLVED / ACCEPTED in their name.
+   *
+   * The owner's alone, on the start door's rule: the header an agent's request carries,
+   * `X-Orbit-Session-Id`, is handed on so a request made from a session is refused 403
+   * OPEN_ITEM_OWNER_ONLY whatever credential came with it, and the runner door has no route to it.
+   * Undoing the work is not a press: the owner asks the coordinator for it in Chat about this.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/open-items/:itemId/accept')
+  acceptOpenItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.openItems.acceptOpenItem(user.userId, id, itemId, actingSessionId);
+  }
+
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/open-items/:itemId/resolve')
   resolveOpenItem(
@@ -681,7 +701,9 @@ export class ProjectsController {
    * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.
    *
    * Closed to tokens whole: every field here is the one `PATCH :id` refuses a token as `integration`
-   * (docs/personal-access-token-design.md §5).
+   * (docs/personal-access-token-design.md §5). And to sessions: the header an agent's request
+   * carries, `X-Orbit-Session-Id`, is handed on and refused 403 `INTEGRATION_SETTINGS_OWNER_ONLY`
+   * whatever credential came with it (L5, O-L1).
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Patch(':id/integration')
@@ -689,8 +711,9 @@ export class ProjectsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: UpdateProjectIntegrationDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
-    return this.projects.configureIntegration(user.userId, id, dto);
+    return this.projects.configureIntegration(user.userId, id, dto, actingSessionId);
   }
 
   /**

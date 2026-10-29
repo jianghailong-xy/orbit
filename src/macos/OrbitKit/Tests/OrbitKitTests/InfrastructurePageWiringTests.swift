@@ -142,11 +142,11 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let agents = code(try appSource("AgentsModel.swift"))
         XCTAssertTrue(agents.contains("ownKeys = try await api.personalProviders()"),
                       "the keys are the account's own, as the web page reads them")
-        // Every press stays in the app: an engine's page, a machine's record, a pool's page.
+        // Every press stays in the app: a machine's record, a pool's page. An engine signed out is no line.
         let page = try XCTUnwrap(try lists().first?.code)
         let presses = try slice(page, from: "private func openAttention(",
-                                to: "model.push(.runnerEngine(runnerID: runnerID, engine: engine))")
-        for piece in ["openEngine(runnerID, engine.rawValue)", "model.selectedRunnerID = runnerID",
+                                to: "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))")
+        for piece in ["model.selectedRunnerID = runnerID",
                       "model.push(.runnerDetail(runnerID: runnerID))",
                       "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))"] {
             XCTAssertTrue(presses.contains(piece), "the page's presses lost \(piece)")
@@ -183,17 +183,17 @@ final class InfrastructurePageWiringTests: XCTestCase {
         }
     }
 
-    /// ②–⑤ Dot, name, the slots' bar — or Offline — then "2 / 4 running · 1 engine signed out" in amber
-    /// (03-ios.png), and the third line only when something needs a person — `RunnerAttention`'s.
+    /// ②–⑤ Dot — the web card's, ringed — name, the slots' bar — or Offline — then "2 / 4 running · 1 of 3
+    /// signed in" in grey (03-ios.png, without the count of engines signed out the web's card dropped), and
+    /// the third line only when something needs a person — `RunnerAttention`'s.
     func testTheRowIsTheMocksRow() throws {
         let row = code(try slice(try runners(), from: "struct RunnerRow: View {", to: "struct RunnerDetailView: View {"))
-        for piece in ["RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now))",
+        XCTAssertFalse(row.contains("signedOut"), "a machine's row counts no engine signed out")
+        for piece in ["RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now), ringed: true)",
                       "if let slots = RunnerPageFormat.slots(runner, now: now) {",
                       "RunnerSlotBar(slots: slots)",
                       "Text(RunnerPageCopy.RUNNER_OFFLINE)",
                       "Text(Infrastructure.machineLine(runner, now: now))",
-                      "let signedOut = !Infrastructure.signedOutEngines(runner).isEmpty",
-                      ".foregroundStyle(signedOut ? RunnerInk.amber : Color.secondary)",
                       "if let line = RunnerAttention.listAttentionLine(items) {",
                       "Image(systemName: \"exclamationmark.triangle.fill\")",
                       "RunnerInk.attention(RunnerPageFormat.listTone(items) ?? .warn)",
@@ -247,13 +247,50 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "let result = await runners.device(userCode)",
                       "LabeledContent(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, value: host)",
                       "if device.nameConflict == true {",
-                      "let failure = await runners.approveDevice(userCode)"] {
+                      "failure = await runners.approveDevice(userCode)"] {
             XCTAssertTrue(sheet.contains(piece), "the sheet lost \(piece)")
         }
         try assertInOrder(sheet, ["commandSection", "waitSection", "deviceSection"], "the sheet's order")
         let model = code(try appSource("RunnersModel.swift"))
         XCTAssertTrue(model.contains("api.deviceEnrollment(userCode: userCode)"))
         XCTAssertTrue(model.contains("self.api.approveDevice(userCode: userCode)"))
+    }
+
+    /// The web /enroll page's Deny and its words: a request still to decide offers Deny beside Approve,
+    /// both wait while either press is in flight, and a request approved or denied — read so, or decided
+    /// here — says what became of it in place of the presses. A refusal is said where failures show.
+    func testTheAddRunnerSheetDeniesAndSaysWhatBecameOfTheRequest() throws {
+        let sheet = code(try appSource("Views/AddRunnerSheet.swift"))
+        let rows = try slice(sheet, from: "@ViewBuilder private func deviceRows(", to: "private var command: String {")
+        try assertInOrder(rows, ["if approved {",
+                                 "Label(RunnerPageCopy.RUNNER_DEVICE_APPROVED, systemImage: \"checkmark.circle.fill\")",
+                                 "Text(RunnerPageCopy.runnerDeviceApprovedDetail(name: name))",
+                                 "} else if denied {",
+                                 "Label(RunnerPageCopy.RUNNER_DEVICE_DENIED, systemImage: \"xmark.circle.fill\")",
+                                 "runnerStyledText(RunnerPageCopy.RUNNER_DEVICE_DENIED_DETAIL, code: [\"orbit register\"])",
+                                 "} else {",
+                                 "Text(RunnerPageCopy.runnerDeviceNameTaken(name: name))",
+                                 "RunnerPageFormat.deviceNameTakenDetail(device, now: Date())",
+                                 "decide(approve: true)",
+                                 "RunnerPageCopy.RUNNER_REREGISTER : RunnerPageCopy.RUNNER_APPROVE",
+                                 ".disabled(deciding)",
+                                 "Button(RunnerPageCopy.RUNNER_DENY) { decide(approve: false) }",
+                                 ".disabled(deciding)"],
+                          "the request's rows")
+        for old in ["is now registered", "Re-register machine", "re-issues its credential", "already registered on your account"] {
+            XCTAssertFalse(sheet.contains(old), "the sheet still says the old page's \(old)")
+        }
+        let decide = try slice(sheet, from: "private func decide(approve: Bool) {", to: "private func open(_ runner: Runner) {")
+        try assertInOrder(decide, ["deciding = true", "message = nil",
+                                   "failure = await runners.approveDevice(userCode)",
+                                   "failure = await runners.denyDevice(userCode)",
+                                   "deciding = false", "guard lookedUp == userCode else { return }",
+                                   "message = failure", "approved = true", "denied = true"],
+                          "a press")
+        let lookUp = try slice(sheet, from: "private func lookUp(_ userCode: String) {", to: "private func decide(")
+        try assertInOrder(lookUp, ["denied = false", "approved = info.status == \"APPROVED\"",
+                                   "denied = info.status == \"DENIED\""], "a lookup")
+        XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("self.api.denyDevice(userCode: userCode)"))
     }
 
     /// The list's own move and delete, a move saved as the web list's drag order is, and a delete

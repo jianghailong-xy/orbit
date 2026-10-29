@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css"><script src="kit.js"></script>
+<style>.flowcol .node{font-size:16px}</style></head>
+<body><div class="board">
+  <h1 class="title">PR #146：在检查里开了一条窄口子</h1>
+  <p class="subtitle">左边是 PR 之后的 CHECK_PROMOTION，右边是放到实际情况里的结果。</p>
+  <div class="canvas flowcol" style="height:612px">
+    <div class="node orbit" id="s1" style="left:0;top:0;width:520px"><div class="h">CHECK_PROMOTION（TASK_BRANCH 候选）</div></div>
+    <div class="node orbit" id="s2" style="left:0;top:78px;width:520px"><div class="h">fetch upstream（feature/v1.1.1）</div></div>
+    <div class="node warn big" id="d1" style="left:0;top:158px;width:520px"><div class="h">PR 新增：下面这些条件全部成立？</div>
+      <div class="s">· 会话已结束，记着 <code>base_sha</code></div>
+      <div class="s">· 会话报的 tip（<code>branch_sha</code>）≠ <code>base_sha</code></div>
+      <div class="s">· tip 是 base 的后代，而且已在 upstream 上</div>
+      <div class="s">· 服务端再核一遍：tip 之后没再动过</div></div>
+    <div class="node warn" id="y1" style="left:0;top:388px;width:248px"><div class="h">是 → ALREADY_LANDED</div><div class="s">写回执，候选退役成 SUPERSEDED；不问 owner <span class="wa">⚠</span></div></div>
+    <div class="node orbit" id="n1" style="left:272px;top:388px;width:248px"><div class="h">否 → 照旧去 origin 拉 <code>orbit/task-*</code></div></div>
+    <div class="node bad" id="n2" style="left:272px;top:520px;width:248px"><div class="h">SOURCE_BRANCH_MISSING → BLOCKED</div><div class="s">和以前一模一样</div></div>
+
+    <div style="position:absolute;left:580px;top:0;width:588px">
+      <table class="grid">
+        <tr><th style="width:56%">情况</th><th>结果</th></tr>
+        <tr><td>推的就是 worktree 的 tip，检查在推送之后才跑</td><td class="ok">✓ 解开</td></tr>
+        <tr class="hl"><td>cherry-pick，或从另一个 checkout 推<br><span style="color:#59636e;font-size:15px">本项目里本地 feature/v1.1.1 上就有过未推送提交</span></td><td class="no">✗ 落回 SOURCE_BRANCH_MISSING</td></tr>
+        <tr class="hl"><td>检查跑在推送之前，或代码由后面的任务推</td><td class="no">✗ 只查一次，没人重查就一直 BLOCKED</td></tr>
+        <tr><td>agent 没经确认就推进了 main</td><td class="wa">⚠ 悄悄退役成 SUPERSEDED，不提示 owner</td></tr>
+        <tr class="hl"><td>检查报错之后</td><td class="no">✗ 仍能按 HANDLED 关掉，blocker 仍是 0 条</td></tr>
+        <tr class="hl"><td>已经卡住的候选（本项目 8 条）</td><td class="no">✗ 不回填，要人逐条重检</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="legend"><span class="ok">方向对：</span>认提交号，不认分支名。<span class="no">做法错：</span>在检查里又开一条特例分支，「落地 = 回执」的模型没变，等待也还是没有生产者。</div>
+</div>
+<script>drawWires([
+  {from:'s1',to:'s2',fs:'bottom',ts:'top',color:'blue'},
+  {from:'s2',to:'d1',fs:'bottom',ts:'top',color:'blue'},
+  {from:'d1',to:'y1',fs:'bottom',ts:'top',color:'amber',label:'是'},
+  {from:'d1',to:'n1',fs:'bottom',ts:'top',color:'blue',label:'否'},
+  {from:'n1',to:'n2',fs:'bottom',ts:'top',color:'red'},
+]);</script>
+</body></html>

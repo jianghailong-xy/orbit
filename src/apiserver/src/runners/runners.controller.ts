@@ -9,11 +9,14 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { isLoginEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { visitorAddress } from '../shared/public-surface.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
@@ -60,8 +63,8 @@ export class RunnersController {
 
   @PatForbidden('RUNNER_CREDENTIALS')
   @Get('device/:userCode')
-  deviceInfo(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
-    return this.runners.getDeviceEnrollment(user.userId, userCode);
+  deviceInfo(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string, @Req() req: Request) {
+    return this.runners.getDeviceEnrollment(user.userId, userCode, visitorAddress(req));
   }
 
   @PatForbidden('RUNNER_CREDENTIALS')
