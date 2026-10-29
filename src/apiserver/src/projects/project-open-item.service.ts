@@ -569,8 +569,12 @@ export class ProjectOpenItemService {
       // instead (§7.6 V12). Read the same way the deliveries above are: from the committed rows,
       // so a door that does not know whether it opened one is still right. A repeat is collapsed
       // on the item by APNs rather than stacking a second banner about one waiting thing.
+      // Not a `LANDED_WITHOUT_CONFIRMATION`: it is no failure, and it is pushed exactly once, after
+      // the commit of the receipt that opened it (`MergeReceiptService.deliverProjectFactsAfterCommit`).
       const mine = await this.prisma.projectOpenItem.findMany({
-        where: { taskId: { in: ids }, state: 'OPEN', assignee: 'OWNER' },
+        where: {
+          taskId: { in: ids }, state: 'OPEN', assignee: 'OWNER', kind: { not: LANDED_WITHOUT_CONFIRMATION_KIND },
+        },
         select: { id: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
@@ -3855,7 +3859,19 @@ function landingUnobservedDetailLine(payload: unknown): string {
 /** The line under a `LANDED_WITHOUT_CONFIRMATION`'s title: the commit that reached the branch, and
  *  how Orbit knows. */
 function landedWithoutConfirmationDetailLine(payload: unknown): string {
-  const row = (payload ?? {}) as { sourceSha?: unknown; targetBranch?: unknown; observed?: unknown };
+  const row = (payload ?? {}) as {
+    sourceSha?: unknown; targetBranch?: unknown; observed?: unknown; receipts?: unknown;
+  };
+  // The deploy-time pass's one item per project (§10.9): the tasks it saw there, by title.
+  if (Array.isArray(row.receipts)) {
+    const titles = row.receipts
+      .map((receipt) => (receipt as { title?: unknown } | null)?.title)
+      .filter((title): title is string => typeof title === 'string' && title !== '');
+    const branch = typeof row.targetBranch === 'string' && row.targetBranch ? row.targetBranch : 'the branch';
+    const named = titles.slice(0, 3).join(', ');
+    const more = titles.length > 3 ? ` and ${titles.length - 3} more` : '';
+    return `On ${branch}: ${named || 'its tasks\' work'}${more} · seen by Orbit`;
+  }
   const sha = typeof row.sourceSha === 'string' && row.sourceSha ? row.sourceSha.slice(0, 12) : 'its commit';
   const branch = typeof row.targetBranch === 'string' && row.targetBranch ? row.targetBranch : 'the branch';
   return `${sha} is on ${branch} · ${row.observed === true ? 'seen by Orbit' : 'recorded by a merge receipt'}`;

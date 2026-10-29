@@ -21,7 +21,7 @@ export interface OwnerItemAlertInput {
 
 /** What an owner item says on a lock screen, or null for "this is nobody's phone's business". */
 export interface OwnerItemAlert {
-  /** Which of the four this is, in the words the chips and the clients route by (§7.6 V12). */
+  /** Which of the five this is, in the words the chips and the clients route by (§7.6 V12). */
   kind: OwnerItemPushKind;
   title: string;
   body: string;
@@ -41,9 +41,10 @@ const MAX_BODY_CHARS = 200;
  * Pure, so every wording below is testable without Prisma or APNs, and separate from the delivery
  * decision (registered devices, the provider token, collapsing) which `PushService` owns.
  *
- * THE NEGATIVE CASE IS THE POINT. Four kinds ring a phone, and only four (owner decision 10): the
+ * THE NEGATIVE CASE IS THE POINT. Five kinds ring a phone, and only five (owner decision 10): the
  * merge the owner has to confirm, the question their coordinator asked them, the exception that
- * became theirs, and the pause they are the only one who can lift. An exception the coordinator is
+ * became theirs, the pause they are the only one who can lift, and work that reached main without
+ * their confirmation (owner 2026-10-28, §10.7). An exception the coordinator is
  * still working on is not one of them — it has an assignee who is not the owner, it is on the
  * project page under "With the coordinator", and pushing it would be interrupting somebody about
  * work that is already being done. So this answers null for it, and the caller sends nothing.
@@ -77,6 +78,8 @@ function alertTitle(kind: OwnerItemKind, item: OwnerItemAlertInput): string {
       return FUSE_PAUSED_TITLE;
     case 'ESCALATED':
       return escalationTitle(item);
+    case 'LANDED_WITHOUT_CONFIRMATION':
+      return LANDED_WITHOUT_CONFIRMATION_TITLE;
   }
 }
 
@@ -94,6 +97,9 @@ function alertBody(kind: OwnerItemKind, item: OwnerItemAlertInput): string {
       // Which spend crossed and against which limit — the first clause of the card's own line.
       return fusePausedWhy(item.payload as FusePausedPayload);
     case 'ESCALATED':
+    case 'LANDED_WITHOUT_CONFIRMATION':
+      // §7.6 V12: the item's own title, `Reached <branch> without your confirmation: <task>` — or, for
+      // the deploy-time pass's one item per project, the number of tasks it names.
       return item.title;
   }
 }
@@ -141,6 +147,8 @@ function silentMinutes(item: OwnerItemAlertInput): number {
 const COORDINATOR_QUESTION_TITLE = 'The coordinator has a question';
 /** The title the pause card was opened with (`project-fuse.FUSE_PAUSED_TITLE`). */
 const FUSE_PAUSED_TITLE = 'The coordinator paused itself';
+/** The kind word every client draws for this item (§7.6 V12/V13, §10.7), as the push's title. */
+const LANDED_WITHOUT_CONFIRMATION_TITLE = 'Landed without your confirmation';
 
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;

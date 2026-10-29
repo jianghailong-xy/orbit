@@ -43,12 +43,26 @@ import {
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
-import { resolveLandingUnobservedOnLanding } from '../projects/project-open-item';
+import {
+  recordLandedWithoutConfirmation,
+  resolveLandingUnobservedOnLanding,
+  type LandedWithoutConfirmation,
+} from '../projects/project-open-item';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import {
+  landedWithoutConfirmationOwed,
   openLandedWithoutConfirmationIfOwed,
   queueLandingObservationAfterCommit,
 } from '../projects/landing-observation';
+import { PushService } from '../push/push.service';
+
+/**
+ * How the owner's devices are told about an owner item a committed receipt opened (§7.6 V12):
+ * `PushService.notifyOwnerItem`, typed structurally so a pg fixture can hand in its own.
+ */
+export interface OwnerItemNotifier {
+  notifyOwnerItem(itemId: string): Promise<void>;
+}
 
 /**
  * The sessions a landing clears the merge recovery of (S3 of the merge-recovery repair loop): it still holds a
@@ -156,7 +170,26 @@ export class MergeReceiptService {
      */
     @Optional()
     private readonly moduleRef?: ModuleRef,
+    /**
+     * Who tells the owner's devices about an item a committed receipt opened (§7.6 V12), for a caller
+     * that hands one in — a pg fixture. The running server's is `PushService`, resolved through
+     * `ModuleRef` at call time for the reason the dispatcher is: SessionsModule does not import
+     * PushModule.
+     */
+    @Optional()
+    private readonly ownerItems?: OwnerItemNotifier,
   ) {}
+
+  /** Who tells the owner's devices about an item, or nothing if there is nobody to tell them. */
+  private ownerItemNotifier(): OwnerItemNotifier | undefined {
+    if (this.ownerItems) return this.ownerItems;
+    try {
+      return this.moduleRef?.get(PushService, { strict: false });
+    } catch {
+      // No PushService in this application context: the item is committed and counted either way.
+      return undefined;
+    }
+  }
 
   /** The dispatcher this receipt should release work through, or nothing if there is none. */
   private landingDispatcher(): LandingDispatcher | undefined {
@@ -217,9 +250,20 @@ export class MergeReceiptService {
     projectId: string | null | undefined,
     /** The tasks whose landing this commit recorded: one for most doors, several for an observation. */
     landedTaskIds?: string | ReadonlyArray<string> | null,
-    /** Set by the observation's own result: it has just looked at the line (O-T3 below). */
-    options: { observed?: boolean } = {},
+    options: {
+      /** Set by the observation's own result: it has just looked at the line (O-T3 below). */
+      observed?: boolean;
+      /** The owner items this commit opened — `LANDED_WITHOUT_CONFIRMATION`, by any of the doors that
+       *  open it (`recordLandedWithoutConfirmation`) — to be pushed once (§7.6 V12). */
+      ownerItemIds?: ReadonlyArray<string> | null;
+    } = {},
   ): Promise<void> {
+    // FIRST, and once per item: §7.6 V12's push of an owner item this commit opened (owner 2026-10-28).
+    // Only the items the commit says it opened — a replay opens none, so it rings nothing — and never
+    // from inside a transaction: `notifyOwnerItem` re-reads the row, which only a commit makes real.
+    // Fire-and-forget like every other push; it never fails the receipt.
+    const notifier = (options.ownerItemIds?.length ?? 0) > 0 ? this.ownerItemNotifier() : undefined;
+    for (const itemId of new Set(options.ownerItemIds ?? [])) void notifier?.notifyOwnerItem(itemId);
     if (!projectId) return;
     const landed = [...new Set(typeof landedTaskIds === 'string' ? [landedTaskIds] : landedTaskIds ?? [])];
     await this.deliverCompletionInputs(projectId);
@@ -344,7 +388,10 @@ export class MergeReceiptService {
     // WITHOUT it — worse than not knocking, because it would spend each key on the old answer.
     // `deliverProjectFactsAfterCommit` is public for exactly that caller to call once it commits;
     // `runner-api.controller.ts`'s merge-result is the one that does.
-    if (tx) return run(tx);
+    if (tx) {
+      const recorded = await run(tx);
+      return { receipt: recorded.receipt, created: recorded.created };
+    }
     // Retried whole, but only on the branch that OWNS the transaction. When a caller passes `tx`
     // this is part of THEIR unit of work and theirs to re-run — a nested retry would re-run a
     // closure inside a transaction the server has already thrown away. The receipt is keyed by
@@ -355,8 +402,11 @@ export class MergeReceiptService {
     // the same transaction that wrote the row. Delivered for a redelivery (`created: false`) as
     // well as for a new row: an idempotent replay is exactly the state a caller retrying a request
     // whose response was lost is in, and the first attempt's delivery is the one that may have been
-    // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
-    await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId);
+    // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read. The
+    // owner items it opened are this commit's alone: a replay opened none.
+    await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId, {
+      ownerItemIds: recorded.ownerItemIds,
+    });
     // §2.9 LS3 / errata E5: a landed receipt is the task segment's landing fact, whichever door
     // recorded it — including the replay of one already recorded, which is what retires a candidate
     // an older build left standing (M-T13). Its own transaction, after the receipt committed.
@@ -366,7 +416,7 @@ export class MergeReceiptService {
       result: recorded.receipt.result,
     }).catch((error) => this.logger.warn(
       `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
-    return recorded;
+    return { receipt: recorded.receipt, created: recorded.created };
   }
 
   /**
@@ -381,9 +431,24 @@ export class MergeReceiptService {
     sessionId: string,
     input: RecordMergeReceiptInput,
     recordedBy: MergeReceiptRecorder,
-    /** A check whose answer this transaction is writing (§10.5 O-L6): M-T13 does not ask it to stop. */
-    options: { keepJobIds?: readonly string[] } = {},
-  ): Promise<{ receipt: ReturnType<typeof mergeReceiptRow>; created: boolean }> {
+    options: {
+      /** A check whose answer this transaction is writing (§10.5 O-L6): M-T13 does not ask it to stop. */
+      keepJobIds?: readonly string[];
+      /**
+       * The deploy-time pass's round (§10.9): O-R3's item is not opened for this receipt here; the
+       * receipt it would be about comes back as `unconfirmed`, and the caller opens one item for the
+       * project (`recordLandedWithoutConfirmation` with the round's receipts).
+       */
+      collectUnconfirmed?: boolean;
+    } = {},
+  ): Promise<{
+    receipt: ReturnType<typeof mergeReceiptRow>;
+    created: boolean;
+    /** The owner items this write opened (O-R3), for the caller's commit to push once (§7.6 V12). */
+    ownerItemIds: string[];
+    /** With `collectUnconfirmed`: the receipt O-R3 owes the owner a word about, or null. */
+    unconfirmed: LandedWithoutConfirmation | null;
+  }> {
     // The closed set a door may record, said here as well as by the DTO now that the table admits a
     // fifth: MATCHED_BY_CONTENT is written by the owner's Done alone, from a check that found it (0432).
     if (!(MERGE_RECEIPT_RESULTS as readonly string[]).includes(input.result)) {
@@ -497,7 +562,12 @@ export class MergeReceiptService {
       await retireCandidatesLandedByReceipt(db, existing, options.keepJobIds);
       // §10.7: and answers what was open about the work not being on the line, as the first did.
       await resolveLandingUnobservedOnLanding(db, [session.taskId]);
-      return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
+      return {
+        receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow),
+        created: false,
+        ownerItemIds: [],
+        unconfirmed: null,
+      };
     }
 
     const created = await db.sessionMergeReceipt.create({
@@ -562,10 +632,19 @@ export class MergeReceiptService {
     await resolveLandingUnobservedOnLanding(db, [session.taskId]);
     // §10.6 O-R3, in the transaction of M-T13's retirement: work an agent or an observation put on a
     // PLATFORM project's main without the owner's confirmation is put in front of the owner. The rules
-    // are the receipt's (`openLandedWithoutConfirmationIfOwed`); the owner's own receipt raises nothing.
-    await openLandedWithoutConfirmationIfOwed(db, created.id);
+    // are the receipt's (`landedWithoutConfirmationOwed`); the owner's own receipt raises nothing. The
+    // deploy-time pass's round collects them instead, for one item per project (§10.9).
+    const unconfirmed = await landedWithoutConfirmationOwed(db, created.id);
+    const opened = unconfirmed && !options.collectUnconfirmed
+      ? await recordLandedWithoutConfirmation(db, unconfirmed)
+      : null;
 
-    return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
+    return {
+      receipt: mergeReceiptRow(created as unknown as MergeReceiptRow),
+      created: true,
+      ownerItemIds: opened ? [opened.itemId] : [],
+      unconfirmed: options.collectUnconfirmed ? unconfirmed : null,
+    };
   }
 
   /** One session's receipts, newest first. */
@@ -615,7 +694,10 @@ export class MergeReceiptService {
        */
       requestedBy?: 'USER' | 'AGENT' | null;
     },
-  ): Promise<void> {
+  ): Promise<{
+    /** The owner items this result opened (O-R3), for the caller's commit to push once (§7.6 V12). */
+    ownerItemIds: string[];
+  }> {
     // CP4: the same identity the other door derives. Both doors report the same landings — the
     // runner's own merge and an agent recording one it made itself — so a key that differed between
     // them would put two rows in the table for one merge, which is the exact thing MR4 exists to
@@ -686,8 +768,12 @@ export class MergeReceiptService {
       // §10.6 O-R3, beside M-T13: a Merge pressed from a session put the work on a PLATFORM project's
       // main without the owner's confirmation. Only for the receipt this result wrote — a redelivered
       // result found it already there and was judged the first time.
-      if (recorded && written.count > 0) await openLandedWithoutConfirmationIfOwed(tx, recorded.id);
+      if (recorded && written.count > 0) {
+        const opened = await openLandedWithoutConfirmationIfOwed(tx, recorded.id);
+        return { ownerItemIds: opened ? [opened] : [] };
+      }
     }
+    return { ownerItemIds: [] };
   }
 
   /**

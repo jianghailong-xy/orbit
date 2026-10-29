@@ -373,6 +373,7 @@ const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
   'coordinator-question': 1,
   'escalated-to-you': 1,
   'fuse-paused': 1,
+  'landed-without-confirmation': 1,
   'ready-to-start': 1,
   'done-request': 1,
   'needs-user': 2,
@@ -451,6 +452,7 @@ const OWNER_ITEM_SAYS: Record<OwnerItemKind, (item: ProjectOwnerItem, main: stri
     `Needs you · ${item.count} question${item.count === 1 ? '' : 's'} from coordinator`,
   ESCALATED: (item) => `Needs you · ${item.count} escalated to you`,
   FUSE_PAUSED: () => 'Paused · coordinator stopped itself',
+  LANDED_WITHOUT_CONFIRMATION: () => 'Needs you · Landed without your confirmation',
 };
 
 /** The fifth, in the words the coordinator's session row and its pinned strip say it

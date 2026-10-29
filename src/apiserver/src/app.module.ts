@@ -27,6 +27,7 @@ import { ShareLinksModule } from './share-links/share-links.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { ProviderEngineMigrationModule } from './providers/provider-engine-migration.module';
+import { LandingObservationBackfillModule } from './projects/landing-observation-backfill.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
@@ -65,6 +66,8 @@ import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
     ProvidersModule,
     // The provider/engine data migration, once per start, before the server listens (API server only).
     ProviderEngineMigrationModule,
+    // Revision 29's deploy-time landing pass (§10.9), once per start, before the server listens.
+    LandingObservationBackfillModule,
     OutcomeReconcilerHttpModule,
     WatchEvaluatorModule,
     WatchDeliveryModule,
