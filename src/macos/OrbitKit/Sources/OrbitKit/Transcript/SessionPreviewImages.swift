@@ -90,7 +90,7 @@ public enum SessionPreviewImages {
                 for (index, data) in toolImages(card).enumerated() {
                     add(toolKey(cardID: card.id, index: index), .data(data))
                 }
-            case .interrupt, .error, .authError, .autoRetry, .notice:
+            case .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic:
                 break
             }
         }

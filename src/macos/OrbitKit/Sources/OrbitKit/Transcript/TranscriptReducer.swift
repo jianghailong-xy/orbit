@@ -155,11 +155,11 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
-    /// The same for recoverable diagnostics, keyed as web's `diagnosticSeen` keys them (see
-    /// `EngineStderr.diagnosticFoldKey`): Codex retries a failed model-catalog refresh on every later
-    /// model request, so one incident logs its line again and again, and gets one row with a count
-    /// rather than a row per attempt. Transient like `stderrSeen`.
-    private var diagnosticSeen: [String: (id: String, message: String, count: Int)] = [:]
+    /// The `.diagnostic` row each recoverable diagnostic was given, keyed as web's `diagnosticSeen` keys
+    /// them (see `EngineStderr.diagnosticFoldKey`): Codex retries a failed model-catalog refresh on every
+    /// later model request, so one incident logs its line again and again, and gets one row with a
+    /// count rather than a row per attempt. Transient like `stderrSeen`.
+    private var diagnosticSeen: [String: String] = [:]
     /// The most recent stderr row that may receive continuation lines. Tool failures from
     /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
     /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
@@ -329,9 +329,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.items.append(.notice(id: nextID(), message: notice))
             } else if let diagnostic = recoverableDiagnostic(ev) {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
-                // a recoverable diagnostic as a calm notice on native too; an unclassified stderr
-                // line still follows appendEngineStderr and remains an error.
-                appendDiagnosticNotice(diagnostic)
+                // a recoverable diagnostic as a calm row of its own kind on native too; an
+                // unclassified stderr line still follows appendEngineStderr and remains an error.
+                appendDiagnostic(diagnostic)
                 lastStderr = nil
                 lastToolFailure = nil
             } else {
@@ -344,12 +344,12 @@ public struct TranscriptReducer: Sendable, Codable {
         }
     }
 
-    /// Convert a structured diagnostic that is explicitly recoverable/degraded into the native
-    /// notice row, with the key its repeats fold on. The runner keeps the raw stderr alongside this
-    /// metadata for older clients, so malformed or unknown diagnostics deliberately return nil and
-    /// retain the old error path. An event stored before the runner sent the metadata is read
-    /// through `EngineStderr.legacyRecoverableDiagnostic`, as on web.
-    private func recoverableDiagnostic(_ ev: RunEvent) -> (message: String, key: String)? {
+    /// Read a structured diagnostic that is explicitly recoverable/degraded: its label, the logged
+    /// line, and the key its repeats fold on. The runner keeps the raw stderr alongside this metadata
+    /// for older clients, so malformed or unknown diagnostics deliberately return nil and retain the
+    /// old error path. An event stored before the runner sent the metadata is read through
+    /// `EngineStderr.legacyRecoverableDiagnostic`, as on web.
+    private func recoverableDiagnostic(_ ev: RunEvent) -> (label: String, message: String, key: String)? {
         guard let rawMessage = str(ev, "stderr") else { return nil }
         let message = EngineStderr.clean(rawMessage)
         guard !message.isEmpty else { return nil }
@@ -379,21 +379,24 @@ public struct TranscriptReducer: Sendable, Codable {
             component: string("component"), phase: string("phase"), severity: string("severity"),
             impact: string("impact"), recoverable: recoverable, code: string("code"),
             message: string("message") ?? message)
-        return (message: label.isEmpty ? message : label + ": " + message, key: key)
+        return (label: label, message: message, key: key)
     }
 
-    /// A recoverable diagnostic's notice row. A repeat bumps the first row's count instead of taking
-    /// a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
-    private mutating func appendDiagnosticNotice(_ diagnostic: (message: String, key: String)) {
-        if let seen = diagnosticSeen[diagnostic.key], let i = state.items.firstIndex(where: { $0.id == seen.id }) {
-            let count = seen.count + 1
-            diagnosticSeen[diagnostic.key] = (id: seen.id, message: seen.message, count: count)
-            state.items[i] = .notice(id: seen.id, message: "\(seen.message) ×\(count)")
+    /// A recoverable diagnostic's `.diagnostic` row. A repeat bumps the first row's count instead of
+    /// taking a row of its own, as a repeated stderr line does (web parity: `structuredDiagnostic`).
+    private mutating func appendDiagnostic(_ diagnostic: (label: String, message: String, key: String)) {
+        if let id = diagnosticSeen[diagnostic.key],
+           let i = state.items.firstIndex(where: { $0.id == id }),
+           case .diagnostic(var row) = state.items[i] {
+            row.repeats += 1
+            state.items[i] = .diagnostic(row)
             return
         }
         let id = nextID()
-        diagnosticSeen[diagnostic.key] = (id: id, message: diagnostic.message, count: 1)
-        state.items.append(.notice(id: id, message: diagnostic.message))
+        diagnosticSeen[diagnostic.key] = id
+        state.items.append(.diagnostic(DiagnosticNotice(id: id, label: diagnostic.label,
+                                                        text: EngineStderr.logText(diagnostic.message),
+                                                        message: diagnostic.message)))
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -614,7 +617,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .interrupt(_, let s, _):   seq = s
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
-        case .notice:                   seq = nil
+        case .notice, .diagnostic:      seq = nil
         }
         return (seq ?? 0) > 0 ? seq : nil
     }
@@ -2002,6 +2005,20 @@ private enum EngineStderr {
 
     /// The key two occurrences of one line fold on: the line minus its leading ISO-8601 timestamp.
     static func foldKey(_ line: String) -> String { strip(leadingTimestamp, from: line) }
+
+    /// A tracing-style logger's whole preamble — stamp, level, the module that logged it — and the
+    /// words after it (web's `TRACING_LINE`).
+    private static let tracingLine = try? NSRegularExpression(
+        pattern: "^(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z?)\\s+(TRACE|DEBUG|INFO|WARN|ERROR)\\s+([\\w:]+):\\s+([\\s\\S]+)$")
+
+    /// A logged line's words for a person: what follows the preamble, or the whole line when it has
+    /// none (web's `parseEngineLogLine`).
+    static func logText(_ line: String) -> String {
+        guard let tracingLine,
+              let match = tracingLine.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let words = Range(match.range(at: 4), in: line) else { return line }
+        return String(line[words])
+    }
 
     /// A verification error whose explanation continues on the following stderr event ends in a
     /// colon. A timestamped line always starts a new logger record, even if its text also ends in

@@ -28,6 +28,10 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
     /// broken (web parity: `NoticeNode`).
     case notice(id: String, message: String)
+    /// A runtime diagnostic its runner marked recoverable: an auxiliary path degraded while the turn
+    /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
+    /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
+    case diagnostic(DiagnosticNotice)
 
     public var id: String {
         switch self {
@@ -40,7 +44,31 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
         case .notice(let id, _): return id
+        case .diagnostic(let d): return d.id
         }
+    }
+}
+
+/// One recoverable diagnostic, with the repeats of it folded into its row (web parity: `DiagnosticNode`).
+public struct DiagnosticNotice: Equatable, Sendable, Codable, Identifiable {
+    public let id: String
+    /// What it is about, as web labels it: "model_catalog · timeout",
+    /// "Startup · model_catalog · token_invalidated". Empty when the diagnostic names none of it.
+    public let label: String
+    /// The engine's words: the logged line without the stamp, level and module a logger opens it
+    /// with (web's `parseEngineLogLine`), or the whole line when it has no such preamble.
+    public let text: String
+    /// The line as the engine logged it the first time, preamble included.
+    public let message: String
+    /// How many reports folded into this row; 1 when it was seen once.
+    public var repeats: Int
+
+    public init(id: String, label: String, text: String, message: String, repeats: Int = 1) {
+        self.id = id
+        self.label = label
+        self.text = text
+        self.message = message
+        self.repeats = repeats
     }
 }
 

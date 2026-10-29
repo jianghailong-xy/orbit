@@ -99,7 +99,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
         "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
         "error", "auth_error" -> "Error"
-        "notice" -> "Notice"
+        "notice", "diagnostic" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
@@ -208,7 +208,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
-        } else if (event.type in setOf("error", "notice", "auto_retry")) {
+        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry")) {
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
@@ -297,7 +297,10 @@ internal fun SteerStateLine(steer: SteerOutcome, why: String? = null, putBack: (
     }
 }
 
-/** A failure or heads-up the engine reported, drawn as iOS's label: red for an error, the warning tone at label size for a notice. */
+/**
+ * A failure or heads-up the engine reported, drawn as iOS's label: red for an error, the warning tone at label size for a notice,
+ * and a recoverable diagnostic grey behind the warning mark ([DiagnosticLine]).
+ */
 @Composable
 private fun EngineLine(event: RunEvent) {
     val text = event.body()
@@ -305,8 +308,31 @@ private fun EngineLine(event: RunEvent) {
         "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
             ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
         "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
+            (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
         else -> GlyphLine("◷", text, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/**
+ * A recoverable diagnostic, drawn as web draws `.chat-notice.chat-diagnostic` (iOS `DiagnosticNoticeRow`): only the mark keeps the
+ * warning tone; the label is dim, the engine's words are in the secondary text colour, and the repeats folded into the row are a
+ * dimmed count after them. "Copy message" copies the whole logged line.
+ */
+@Composable
+private fun DiagnosticLine(label: String, text: String, repeats: Int) {
+    val warning = LocalOrbitColors.current.needsYou
+    val dim = MaterialTheme.colorScheme.outline
+    val style = MaterialTheme.typography.labelLarge
+    val small = MaterialTheme.typography.bodySmall
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("⚠", Modifier.alignByBaseline().clearAndSetSemantics { }, color = warning, style = style)
+        if (label.isNotEmpty()) Text(label, Modifier.alignByBaseline(), color = dim, style = small)
+        SelectionContainer(Modifier.alignByBaseline().weight(1f, fill = false)) {
+            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = style)
+        }
+        if (repeats > 1) Text("×$repeats", Modifier.alignByBaseline(), color = warning.copy(alpha = 0.7f), style = small)
     }
 }
 

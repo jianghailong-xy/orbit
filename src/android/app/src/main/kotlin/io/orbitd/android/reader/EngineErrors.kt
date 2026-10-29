@@ -161,13 +161,15 @@ internal object EngineStderr {
         return null
     }
 
-    /** A recoverable diagnostic's notice text, and the key its repeats fold on ([diagnosticFoldKey]). */
-    internal data class Diagnostic(val text: String, val key: String)
+    /**
+     * A recoverable diagnostic: what it is about, as web labels it ("model_catalog · timeout"; empty when it names none of it), the
+     * engine's line, and the key its repeats fold on ([diagnosticFoldKey]).
+     */
+    internal data class Diagnostic(val label: String, val line: String, val key: String)
 
     /**
-     * A structured diagnostic that says it is recoverable or degraded, as the notice it reads as
-     * ("Startup · model_catalog · token_invalidated: …"). Nil keeps the old error path: the runner keeps
-     * the raw stderr beside the metadata, so an unknown or malformed diagnostic stays an error.
+     * A structured diagnostic that says it is recoverable or degraded, read for its own row. Nil keeps the old error path: the runner
+     * keeps the raw stderr beside the metadata, so an unknown or malformed diagnostic stays an error.
      */
     fun recoverableDiagnostic(payload: JsonObject): Diagnostic? {
         val message = clean(payload.string("stderr") ?: return null)
@@ -183,8 +185,14 @@ internal object EngineStderr {
         val label = listOfNotNull(phase, field("component"), field("code")).joinToString(" · ")
         val key = diagnosticFoldKey(field("component"), field("phase"), field("severity"), field("impact"), recoverable, field("code"),
             field("message") ?: message)
-        return Diagnostic(if (label.isEmpty()) message else "$label: $message", key)
+        return Diagnostic(label, message, key)
     }
+
+    /** A tracing-style logger's whole preamble — stamp, level, the module that logged it — and the words after it (web's `TRACING_LINE`). */
+    private val tracingLine = Regex("^(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z?)\\s+(TRACE|DEBUG|INFO|WARN|ERROR)\\s+([\\w:]+):\\s+([\\s\\S]+)$")
+
+    /** A logged line's words for a person: what follows the preamble, or the whole line when it has none (web's `parseEngineLogLine`). */
+    fun logText(line: String): String = tracingLine.matchEntire(line)?.groupValues?.get(4) ?: line
 
     private val requestId = Regex("request id:\\s*\\S+", RegexOption.IGNORE_CASE)
     private val cfRay = Regex("cf-ray:\\s*\\S+", RegexOption.IGNORE_CASE)

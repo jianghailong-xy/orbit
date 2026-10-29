@@ -1932,6 +1932,8 @@ struct TranscriptItemView: View {
             // behind the triangle.
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+        case .diagnostic(let notice):
+            DiagnosticNoticeRow(notice: notice)
         }
     }
 
@@ -1949,6 +1951,30 @@ struct TranscriptItemView: View {
     private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
         guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
         return { Task { await console.putBack(bubble) } }
+    }
+}
+
+/// A recoverable runtime diagnostic, drawn as web draws `.chat-notice.chat-diagnostic`: only the mark
+/// keeps the warning tone; the label is dim, the engine's words are in the secondary text colour, and
+/// the repeats folded into the row are a dimmed count after them. The whole logged line, stamp and
+/// module included, is the row's help text, as it is web's tooltip.
+struct DiagnosticNoticeRow: View {
+    let notice: DiagnosticNotice
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            if !notice.label.isEmpty {
+                Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+            }
+            Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
+            if notice.repeats > 1 {
+                Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
+                    .foregroundStyle(Color.orange.opacity(0.7))
+            }
+        }
+        .font(.orbitLabel)
+        .help(notice.message)
     }
 }
 

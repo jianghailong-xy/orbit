@@ -65,7 +65,7 @@ public enum TranscriptRecordAnchor {
         case .toolCall(let c):         return [c.inputSeq] + (c.resultSeq.map { [$0] } ?? [])
         case .interrupt(_, let seq, _): return [seq]
         case .autoRetry(let n):        return [n.seq]
-        case .user, .error, .authError, .notice: return []
+        case .user, .error, .authError, .notice, .diagnostic: return []
         }
     }
 }

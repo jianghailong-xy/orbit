@@ -100,10 +100,10 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
 
 /**
  * What the engine's own reports turn into, read in event order the way OrbitKit's `TranscriptReducer`
- * folds them: a `system` event's notice or recoverable diagnostic is a notice row (a repeated diagnostic
- * folded as "×N"), its stderr an error row (repeats folded as "×N", continuation lines joined, a tool's
- * failure settling that call), and a reply or error event that is really the provider failing becomes an
- * error row or an auto-retry row.
+ * folds them: a `system` event's notice is a notice row, a recoverable diagnostic a diagnostic row (its
+ * repeats counted on it), its stderr an error row (repeats folded as "×N", continuation lines joined, a
+ * tool's failure settling that call), and a reply or error event that is really the provider failing
+ * becomes an error row or an auto-retry row.
  */
 internal class EngineReading(events: List<RunEvent>) {
     /** Each listed event's own row in its place, or null where it draws none (silent, benign, folded). */
@@ -112,17 +112,17 @@ internal class EngineReading(events: List<RunEvent>) {
     val toolFailures = HashMap<String, RunEvent>()
 
     private class Stderr(val event: RunEvent, var message: String)
-    private class Notice(val event: RunEvent, val text: String) { var count = 1 }
+    private class Diagnostic(val event: RunEvent, val diagnostic: EngineStderr.Diagnostic) { var repeats = 1 }
     private class Failure(val seq: Long, val toolId: String, var message: String)
     private class Retry(val event: RunEvent, val message: String, val quota: Boolean, val afterUserMsg: Boolean) { var stale = false }
 
     init {
         val stderrRows = mutableListOf<Stderr>()
-        val diagnosticRows = mutableListOf<Notice>()
+        val diagnosticRows = mutableListOf<Diagnostic>()
         val failures = mutableListOf<Failure>()
         val retries = mutableListOf<Retry>()
         val seen = HashMap<String, Triple<Stderr, String, Int>>()
-        val diagnosticsSeen = HashMap<String, Notice>()
+        val diagnosticsSeen = HashMap<String, Diagnostic>()
         var lastStderr: Triple<Stderr, Long, Boolean>? = null
         var lastFailure: Failure? = null
         val open = LinkedHashMap<String, String>()
@@ -165,7 +165,7 @@ internal class EngineReading(events: List<RunEvent>) {
                 "system" -> {
                     // A new engine run: as on web, a diagnostic it reports again starts a row of its own.
                     if (e.fields.string("subtype") == "resumed") { lastStderr = null; lastFailure = null; diagnosticsSeen.clear() }
-                    // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic reads the same way.
+                    // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic is a calm row of its own kind.
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {
                         rows[e.seq] = e.row("notice") { put("text", notice) }
@@ -177,8 +177,8 @@ internal class EngineReading(events: List<RunEvent>) {
                         // A repeat bumps the first row's count (web `diagnosticSeen`): codex retries a failed catalog refresh on every
                         // later model request, so one incident logs its line again and again.
                         val first = diagnosticsSeen[diagnostic.key]
-                        if (first != null) { first.count++; rows[e.seq] = null } else {
-                            diagnosticsSeen[diagnostic.key] = Notice(e, diagnostic.text).also { diagnosticRows += it }
+                        if (first != null) { first.repeats++; rows[e.seq] = null } else {
+                            diagnosticsSeen[diagnostic.key] = Diagnostic(e, diagnostic).also { diagnosticRows += it }
                             lastRow = e
                         }
                         lastStderr = null; lastFailure = null
@@ -222,7 +222,9 @@ internal class EngineReading(events: List<RunEvent>) {
             }
         }
         stderrRows.forEach { row -> rows[row.event.seq] = row.event.row("error") { put("text", row.message) } }
-        diagnosticRows.forEach { n -> rows[n.event.seq] = n.event.row("notice") { put("text", if (n.count > 1) "${n.text} ×${n.count}" else n.text) } }
+        diagnosticRows.forEach { d -> rows[d.event.seq] = d.event.row("diagnostic") {
+            put("label", d.diagnostic.label); put("text", d.diagnostic.line); put("repeats", d.repeats)
+        } }
         failures.forEach { f -> toolFailures[f.toolId] = RunEvent("tool_result", f.seq, buildJsonObject {
             put("toolUseId", f.toolId); put("content", f.message); put("isError", true)
         }) }
