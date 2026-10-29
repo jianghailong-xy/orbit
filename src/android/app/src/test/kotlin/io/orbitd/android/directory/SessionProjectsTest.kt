@@ -242,7 +242,9 @@ class SessionProjectsTest {
 
     @Test fun everyCoordinatorExceptionUsesProjectWordsAndAge() {
         for ((kind, text) in listOf("INTEGRATION_CONFLICT" to "Resolving a merge conflict", "INTEGRATION_CHECK_FAILED" to "Checks failed",
-            "INTEGRATION_ERROR" to "Handling an integration error", "TASK_FAILED" to "Handling a failed task", "DELIVERY_REVIEW" to "Reviewing a delivery")) {
+            "INTEGRATION_ERROR" to "Handling an integration error", "TASK_FAILED" to "Handling a failed task", "DELIVERY_REVIEW" to "Reviewing a delivery",
+            // §10.7: work not seen on its line goes to the coordinator first, in the words R29-10 settled.
+            "LANDING_UNOBSERVED" to "Handling work not on the line yet")) {
             val row = listing(listOf(coordinator()), projects = listOf(project(held(kind, ago(18))))).projects.first()
             assertEquals(SessionLine("$text · 18m", Tone.RUNNING), row.line)
             assertEquals(Target.Session("coordinator"), row.target)

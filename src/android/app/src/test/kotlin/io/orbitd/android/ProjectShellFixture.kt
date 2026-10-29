@@ -151,6 +151,8 @@ internal object ProjectShell {
     @Volatile var maxConcurrentTasks = 2
     /** The crossings `projects/:id/handoffs` lists, as a JSON array; null answers as before, which the page cannot read. */
     @Volatile var crossings: String? = null
+    /** Launch's task rows (`projects/:id/tasks/page`), as a JSON array; null answers as before, with none. */
+    @Volatile var tasks: String? = null
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
@@ -166,7 +168,7 @@ internal object ProjectShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
-        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null
+        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -339,6 +341,7 @@ internal object ProjectShell {
                 answer
             }
             path == "projects/$LAUNCH/handoffs" && crossings != null -> ok(crossings!!)
+            path == "projects/$LAUNCH/tasks/page" && tasks != null -> ok("""{"items":$tasks,"nextCursor":null}""")
             method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") -> decide(api.path[3])
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)

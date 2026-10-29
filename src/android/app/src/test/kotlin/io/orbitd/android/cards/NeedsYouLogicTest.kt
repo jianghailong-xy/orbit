@@ -161,7 +161,7 @@ class NeedsYouLogicTest {
 
     @Test fun nothingBelowIsNoBar() = assertNull(NeedsYouLogic.below(emptyList(), null))
 
-    // the four owner items (contract §7.6 V13)
+    // the five owner items (contract §7.6 V13; the fifth, owner 2026-10-28)
 
     private fun coordinator(id: String, project: String?, items: List<JsonObject>, approvals: Int? = null) = buildJsonObject {
         put("id", id); put("title", "Project coordinator"); put("status", "AWAITING_INPUT"); put("agentId", "orbit")
@@ -178,7 +178,9 @@ class NeedsYouLogicTest {
         listOf(Triple("PROMOTION_APPROVAL", "Approve merge to main", NeedsYouGlyph.MERGE),
             Triple("COORDINATOR_QUESTION", "Question from coordinator", NeedsYouGlyph.QUESTION),
             Triple("ESCALATED", "Escalated to you", NeedsYouGlyph.WARNING),
-            Triple("FUSE_PAUSED", "Paused", NeedsYouGlyph.PAUSE)).forEach { (kind, text, glyph) ->
+            Triple("FUSE_PAUSED", "Paused", NeedsYouGlyph.PAUSE),
+            // §10.7: work that reached main without the owner's confirmation wears the merge's mark — a merge into main is what it is about.
+            Triple("LANDED_WITHOUT_CONFIRMATION", "Landed without your confirmation", NeedsYouGlyph.MERGE)).forEach { (kind, text, glyph) ->
             val session = coordinator("c1", "Integration line", listOf(ownerItem(kind, "2026-09-13T10:00:00Z")))
             assertTrue(kind, NeedsYouLogic.needsYou(session))
             val banner = NeedsYouLogic.banner(listOf(session))
@@ -192,6 +194,8 @@ class NeedsYouLogicTest {
         }
         assertEquals("promotion:", NeedsYouLogic.cardKey(OwnerItem("i", "PROMOTION_APPROVAL", "", "")))
         assertEquals("item:i", NeedsYouLogic.cardKey(OwnerItem("i", "ESCALATED", "", "")))
+        assertEquals("its card is the coordinator conversation's exception card", "item:i",
+            NeedsYouLogic.cardKey(OwnerItem("i", "LANDED_WITHOUT_CONFIRMATION", "", "")))
     }
 
     /** A08-17: a session ROW says an escalated item's need after its word (iOS `NeedsYouLogic.itemWord`); the banner keeps the word and
@@ -205,6 +209,8 @@ class NeedsYouLogicTest {
         assertEquals("a blank need leaves the word alone", "Escalated to you", row(item("ESCALATED", "  ")))
         assertEquals("an older server's item has none", "Escalated to you", row(item("ESCALATED", null)))
         assertEquals("Paused", row(item("FUSE_PAUSED", "not the pause's")))
+        assertEquals("its need is its own word, said once", "Landed without your confirmation",
+            row(item("LANDED_WITHOUT_CONFIRMATION", "Landed without your confirmation")))
         val banner = NeedsYouLogic.banner(listOf(coordinator("c1", "Integration line", listOf(item("ESCALATED", "the check failed")))))
         assertEquals("the bar's first line is the word alone", "Escalated to you", banner?.text)
         assertEquals("and its second line the project, not the need (the owner, 2026-10-21)", "Integration line", banner?.detail)

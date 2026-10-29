@@ -54,10 +54,10 @@ class ExceptionCardViewTest {
     private fun card(row: JsonObject) = CardCatalog.project("s1", "p1", mapOf("project" to buildJsonObject { put("id", "p1") },
         "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row) }; putJsonArray("withCoordinator") {} })).single()
 
-    private fun show(card: InteractionCard, mergeCard: String? = null) {
+    private fun show(card: InteractionCard, mergeCard: String? = null, main: String = "main") {
         compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
             ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = mergeCard, open = { opened += it }, discuss = null,
-                review = { reviewed += it }) { verb, input -> pressed += verb to input }
+                review = { reviewed += it }, main = main) { verb, input -> pressed += verb to input }
         } } } }
         compose.waitForIdle()
     }
@@ -190,6 +190,55 @@ class ExceptionCardViewTest {
         compose.onNodeWithTag("$key:MARK_HANDLED").assertDoesNotExist()
         compose.onNodeWithTag("$key:RESUME").performClick()
         assertEquals(listOf(CardVerb.RESUME), pressed.map { it.first })
+    }
+
+    /** §10.7: work that reached main without the owner's confirmation is theirs from birth — its own kind word heads the card, its
+     * §10.7 title is the first line, Accept leads and sends the owner's door, and nothing closes it by hand. */
+    @Test fun workThatLandedWithoutYourConfirmationIsAcceptedFromItsCard() {
+        show(card(row("LANDED_WITHOUT_CONFIRMATION", listOf("ACCEPT", "OPEN_TASK_SESSION"), reason = "DEFAULT", primaryAction = "ACCEPT",
+            title = "Reached main without your confirmation: Fix the login redirect",
+            requiredAction = "This work reached main without your confirmation — accept it, or use Chat about this to have the coordinator file a task that reverts it.")))
+        compose.onNodeWithTag("$key:title", useUnmergedTree = true).assertTextEquals("Landed without your confirmation")
+        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Reached main without your confirmation: Fix the login redirect")
+        compose.onNodeWithTag("$key:ACCEPT").assertTextEquals("Accept")
+        compose.onNodeWithTag("$key:ACCEPT:consequence", useUnmergedTree = true).assertTextEquals("You accept the work as it landed, and this item closes.")
+        assertTrue("Accept leads", top("$key:ACCEPT") < top("$key:OPEN_TASK_SESSION"))
+        compose.onNodeWithTag("$key:MARK_HANDLED").assertDoesNotExist()
+        compose.onNodeWithTag("$key:handling").assertDoesNotExist()
+        compose.onNodeWithTag("$key:ACCEPT").performClick()
+        assertEquals(listOf(CardVerb.ACCEPT), pressed.map { it.first })
+    }
+
+    /** §10.7's work not seen on its line, handed to the owner while the observation it asked for runs: the escalation heads the card
+     * with the §10.7 title under it, the handling line names the project's main branch with the reason given, and Observe again — a
+     * quiet door beside the way back to the coordinator — asks for its reason in place and sends nothing until it has one. */
+    @Test fun workNotSeenOnTheLineIsLookedAtAgainWithAReason() {
+        val unobserved = buildJsonObject {
+            row("LANDING_UNOBSERVED", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OBSERVE", "CANCEL_TASK"), reason = "HANDED_OVER",
+                primaryAction = "ASK_COORDINATOR_AGAIN", title = "Not on main yet: Draw the observation cards").forEach { (k, v) -> put(k, v) }
+            putJsonObject("handling") { put("sessionId", JsonNull); put("userId", "u1"); put("reason", "I pushed the rebased commit to main by hand")
+                put("startedAt", java.time.Instant.now().minusSeconds(150).toString()); put("jobId", "j1"); put("jobKind", "OBSERVE_LANDING")
+                put("generation", 2); put("state", "RUNNING") }
+        }
+        show(card(unobserved), main = "master")
+        compose.onNodeWithTag("$key:title", useUnmergedTree = true).assertTextEquals("Escalated to you")
+        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Now yours — the coordinator handed it over")
+        compose.onNode(hasText("Not on main yet: Draw the observation cards") and hasAnyAncestor(hasTestTag("$key:facts")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Observing master… — running · asked 2m ago") and hasAnyAncestor(hasTestTag("$key:fact:Handling")), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("I pushed the rebased commit to main by hand") and hasAnyAncestor(hasTestTag("$key:fact:Reason")), useUnmergedTree = true).assertExists()
+        assertTrue("the handling comes after the facts", top("$key:facts") < top("$key:handling"))
+        compose.onNodeWithTag("$key:OBSERVE").assertTextEquals("Observe again")
+        compose.onNodeWithTag("$key:OBSERVE:consequence", useUnmergedTree = true).assertTextEquals("An observation of the line is queued with your reason.")
+        assertTrue("the way back to the coordinator leads", top("$key:RETURN_COORDINATOR") < top("$key:OBSERVE"))
+        compose.onNodeWithTag("$key:MARK_HANDLED").assertDoesNotExist()
+        compose.onNodeWithTag("$key:OBSERVE").performClick()
+        assertTrue("the press asks first", pressed.isEmpty())
+        compose.onNodeWithText(ExceptionCards.observeTitle).assertExists()
+        compose.onNodeWithText(ExceptionCards.observeBody).assertExists()
+        compose.onNodeWithTag("$key:observe-confirm").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("$key:observe-reason").performScrollTo().performTextInput("The runner can reach the repository again")
+        compose.onNodeWithTag("$key:observe-confirm").performScrollTo().assertIsEnabled().assertTextEquals("Observe again").performClick()
+        assertEquals(CardVerb.OBSERVE to "The runner can reach the repository again", pressed.single().let { it.first to it.second.text })
     }
 
     @Test fun aCardWhoseItemWentSaysSoAndOffersNothing() {

@@ -39,9 +39,11 @@ class ProjectCopyParityTest {
     @Test fun projectPageWords() = assertIn(ProjectPage, swift("${kit}ProjectPage.swift", "${kit}ProjectPageSections.swift", "${views}ProjectsView.swift"))
     @Test fun startWords() = assertIn(StartProjectCopy, swift("${kit}StartProject.swift", "${kit}ProjectRunSettings.swift", "${kit}CriteriaDecision.swift"))
     /** The main branch's own words are new on every client at once: MainBranchCopyTest holds them to the web's projectStart.ts,
-     * whose words the Swift parity tests hold OrbitKit's to. */
+     * whose words the Swift parity tests hold OrbitKit's to. So are the delivery mode's (R29-12): LandingObservationCopyTest holds
+     * them to the same file, since OrbitKit gains them in its own task. */
     @Test fun runSettingsWords() = assertIn(RunSettings, swift("${kit}ProjectRunSettings.swift", "${kit}StartProject.swift"),
-        composed = setOf("defaultMainBranch", "mainBranch", "mainBranchHint", "lastChosen", "typeABranch"))
+        composed = setOf("defaultMainBranch", "mainBranch", "mainBranchHint", "lastChosen", "typeABranch",
+            "delivery", "deliveryPlatform", "deliveryAgentPush"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
     @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
@@ -57,13 +59,17 @@ class ProjectCopyParityTest {
         assertTrue("lane words not in ProjectAttention.swift: $lanes", lanes.isEmpty())
     }
     /** The coordinator chip's words for what it holds: every kind ProjectAttention.swift's `coordinatorLeadCopy` names — a delivery
-     * review included (A05-6, iOS 164d91245) — and the chip they make. */
+     * review included (A05-6, iOS 164d91245) — and the chip they make. Work not seen on its line (§10.7) is new on every client at
+     * once: LandingObservationCopyTest holds Android's words to the web's, and this test holds them to the Swift's once OrbitKit names
+     * the kind too. */
     @Test fun coordinatorChipWords() {
         val block = swift("${kit}ProjectAttention.swift").substringAfter("private static func coordinatorLeadCopy").substringBefore("\n    }\n")
         val words = Regex("""case \.(\w+): return "([^"]+)"""").findAll(block).associate { it.groupValues[1] to it.groupValues[2] }
         val kinds = mapOf("integrationConflict" to "INTEGRATION_CONFLICT", "integrationCheckFailed" to "INTEGRATION_CHECK_FAILED",
-            "integrationError" to "INTEGRATION_ERROR", "taskFailed" to "TASK_FAILED", "deliveryReview" to "DELIVERY_REVIEW")
-        assertEquals(kinds.keys, words.keys)
+            "integrationError" to "INTEGRATION_ERROR", "taskFailed" to "TASK_FAILED", "deliveryReview" to "DELIVERY_REVIEW",
+            "landingUnobserved" to "LANDING_UNOBSERVED")
+        assertTrue("ProjectAttention.swift names a kind Android does not: ${words.keys - kinds.keys}", kinds.keys.containsAll(words.keys))
+        assertTrue(words.keys.containsAll(kinds.keys - "landingUnobserved"))
         val now = Instant.parse("2026-10-05T00:00:00Z")
         words.forEach { (case, said) ->
             val project = Json.parseToJsonElement("""{"id":"p","title":"P","status":"OPEN","_count":{"tasks":1},"buckets":{"ready":1},

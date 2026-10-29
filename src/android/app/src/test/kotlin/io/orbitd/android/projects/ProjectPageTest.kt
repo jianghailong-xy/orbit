@@ -602,6 +602,31 @@ class ProjectPageTest {
         assertEquals(listOf("On main"), ProjectPage.rowTags(j("""{"status":"DONE","workState":"DONE","integration":{"state":"ON_UPSTREAM"}}"""), "Landed", null, "main").map { it.text })
     }
 
+    /** §10.9: an AGENT_PUSH task, finished, whose commit no observation has seen on its line yet waits in Pending landing as "Waiting
+     * to be seen on <branch> · <sha7>" — the words alone while the commit is not frozen — and once a receipt says it is there, it
+     * landed: On <branch>. Not seen is not landed (the browser's `projectTaskIntegrationTag`, ProjectsPage.test.tsx). */
+    @Test fun anAgentPushTaskWaitsToBeSeenOnTheLineThenIsOnIt() {
+        val rows = listOf(
+            """{"id":"o1","title":"Pushed by its agent, not seen yet","status":"DONE","workState":"DONE",
+                "integration":{"state":"AWAITING_OBSERVATION","since":"2026-10-29T02:40:00Z","deliveredSha":"9f1c2ab7e4d0b5a6c3f8e1d2a7b4c9e0f1a2b3c4","mainBranch":"main"}}""",
+            """{"id":"o2","title":"Pushed by its agent, still moving","status":"DONE","workState":"DONE",
+                "integration":{"state":"AWAITING_OBSERVATION","deliveredSha":null,"mainBranch":"main"}}""",
+            """{"id":"o3","title":"Pushed by its agent and seen there","status":"DONE","workState":"DONE","integration":{"state":"ON_UPSTREAM","mainBranch":"main"}}""",
+        ).map(::j)
+        val groups = ProjectPage.taskGroups(rows)
+        assertEquals(listOf("integrating" to listOf("o1", "o2"), "landed" to listOf("o3")), groups.map { group -> group.key to group.tasks.map { it.text("id") } })
+        assertEquals("Pending landing", groups.first().heading)
+        assertEquals(listOf("Waiting to be seen on main · 9f1c2ab"), ProjectPage.rowTags(rows[0], "Pending landing", "main", "main").map { it.text })
+        assertEquals(listOf("Waiting to be seen on main"), ProjectPage.rowTags(rows[1], "Pending landing", "main", "main").map { it.text })
+        assertEquals(listOf("On main"), ProjectPage.rowTags(rows[2], "Landed", "main", "main").map { it.text })
+        assertEquals(TagTone.NEUTRAL, ProjectPage.integrationTag(rows[0], "main", "main")?.tone)
+        // The branch the project lands on, whatever it is called; main where the page does not know it.
+        assertEquals("Waiting to be seen on feature/v1.1.1 · 0123456",
+            ProjectPage.integrationTag(j("""{"integration":{"state":"AWAITING_OBSERVATION","deliveredSha":"0123456789abcdef0123456789abcdef01234567"}}"""),
+                "feature/v1.1.1", "feature/v1.1.1")?.text)
+        assertEquals("Waiting to be seen on main", ProjectPage.integrationTag(rows[1], null, null)?.text)
+    }
+
     // MARK: blockers
 
     private val whoNotInTeam = j("""{"id":"b1","kind":"WHO_NOT_IN_TEAM","owner":"USER","severity":"CRITICAL","requiredAction":"Add the assigned agent to this project team, or reassign the task.",

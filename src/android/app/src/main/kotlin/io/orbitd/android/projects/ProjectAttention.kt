@@ -18,11 +18,13 @@ enum class ProjectLane(val title: String, val note: String) {
     val defaultCollapsed get() = this == COMPLETED
 }
 
-/** OrbitKit `ProjectAttentionReason`; `rank` is the one tier the four owner items and a coordinator's request to start the project
+/** OrbitKit `ProjectAttentionReason`; `rank` is the one tier the five owner items and a coordinator's request to start the project
  * or to record it done share. DONE_REQUEST is that request ("Needs you · Ready to close"); READY_TO_CLOSE a project whose tasks all
- * settled and that nobody asked about. */
+ * settled and that nobody asked about. LANDED_WITHOUT_CONFIRMATION is work that reached main without the owner's confirmation (§10.7),
+ * counted like a merge approval or a question (owner 2026-10-28). */
 enum class AttentionReason(val rank: Int, val ownerItem: Boolean = false) {
     APPROVE_MERGE_TO_MAIN(1, true), COORDINATOR_QUESTION(1, true), ESCALATED_TO_YOU(1, true), FUSE_PAUSED(1, true),
+    LANDED_WITHOUT_CONFIRMATION(1, true),
     READY_TO_START(1), DONE_REQUEST(1), NEEDS_USER(2), AUTO_REMEDIATION(3), NO_ACTIVITY_RUNNING(4), NO_ACTIVITY_READY(5),
     READY_TO_CLOSE(6), COORDINATOR_HANDLING(7);
     val needsYou get() = ownerItem || this == READY_TO_START || this == DONE_REQUEST
@@ -53,7 +55,8 @@ object ProjectAttention {
     private const val MINUTE = 60.0
     private const val HOUR = 3_600.0
     private const val DAY = 86_400.0
-    private val ownerItemOrder = listOf("PROMOTION_APPROVAL", "COORDINATOR_QUESTION", "ESCALATED", "FUSE_PAUSED")
+    /** The five owner items in the order a tie between them is settled — the contract's own order (§7.1 V1). */
+    private val ownerItemOrder = listOf("PROMOTION_APPROVAL", "COORDINATOR_QUESTION", "ESCALATED", "FUSE_PAUSED", "LANDED_WITHOUT_CONFIRMATION")
     const val readyToStartSays = "Needs you · ${StartProjectCopy.readyToStart}"
     /** The sixth, in the words the coordinator's session row and the project page say it: its coordinator asked to record it done. */
     const val readyToCloseSays = "Needs you · ${ProjectDone.readyToClose}"
@@ -123,14 +126,14 @@ object ProjectAttention {
     private fun startRequest(project: JsonObject) = project.obj("attention")?.obj("startRequest")?.takeIf { it.text("waitingSince") != null }
     /** The coordinator's open request to record this project done; the server sends it only while the project is OPEN. */
     private fun doneRequest(project: JsonObject) = project.obj("attention")?.obj("doneRequest")?.takeIf { it.text("waitingSince") != null }
-    /** The start request leads when it has waited longest — the four first on a tie — unless a request to close waited longer still. */
+    /** The start request leads when it has waited longest — the five first on a tie — unless a request to close waited longer still. */
     private fun startRequestLeads(project: JsonObject): Boolean {
         val start = startRequest(project) ?: return false
         doneRequest(project)?.let { done -> if (byInstantAsc(done.text("waitingSince"), start.text("waitingSince")) < 0) return false }
         val lead = leadOwnerItem(project) ?: return true
         return byInstantAsc(start.text("waitingSince"), lead.text("oldestWaitingSince")) < 0
     }
-    /** The request to record the project done leads when it has waited longest — after the four and after a start on a tie. */
+    /** The request to record the project done leads when it has waited longest — after the five and after a start on a tie. */
     private fun doneRequestLeads(project: JsonObject): Boolean {
         val done = doneRequest(project) ?: return false
         startRequest(project)?.let { start -> if (byInstantAsc(start.text("waitingSince"), done.text("waitingSince")) <= 0) return false }
@@ -147,12 +150,13 @@ object ProjectAttention {
         "COORDINATOR_QUESTION" -> AttentionReason.COORDINATOR_QUESTION
         "ESCALATED" -> AttentionReason.ESCALATED_TO_YOU
         "FUSE_PAUSED" -> AttentionReason.FUSE_PAUSED
+        "LANDED_WITHOUT_CONFIRMATION" -> AttentionReason.LANDED_WITHOUT_CONFIRMATION
         else -> null
     }
 
     // The drawer (OrbitKit `ProjectAttention`, `MARK: the drawer`).
 
-    /** The four owner items this project is waiting on the reader for, of the kinds this build names. */
+    /** The five owner items this project is waiting on the reader for, of the kinds this build names. */
     private fun waitingOwnerItems(project: JsonObject): List<JsonObject> {
         if (!open(project)) return emptyList()
         return project.obj("attention")?.objects("ownerItems").orEmpty().filter { it.text("kind") in ownerItemOrder && (it.number("count") ?: 0) > 0 }
@@ -162,15 +166,15 @@ object ProjectAttention {
     /** The coordinator's request to record this project done, while it is open and waiting on the reader. */
     private fun waitingDoneRequest(project: JsonObject) = if (open(project)) doneRequest(project) else null
 
-    /** How many things wait on the reader in this project — a merge to approve, a question, an escalation, a pause, and a coordinator
-     * asking to start it or to record it done — together: the drawer row's amber count (`ProjectAttention.needsYouItemCount`, web's
-     * `projectNeedsYouCount`). An owner item of a kind this build does not name counts nothing, and a closed project asks nothing,
-     * whatever it still carries. */
+    /** How many things wait on the reader in this project — a merge to approve, a question, an escalation, a pause, work that landed
+     * without their confirmation, and a coordinator asking to start it or to record it done — together: the drawer row's amber count
+     * (`ProjectAttention.needsYouItemCount`, web's `projectNeedsYouCount`). An owner item of a kind this build does not name counts
+     * nothing, and a closed project asks nothing, whatever it still carries. */
     fun needsYouItemCount(project: JsonObject): Int =
         waitingOwnerItems(project).sumOf { it.number("count") ?: 0 } + (if (waitingStartRequest(project) != null) 1 else 0) +
             (if (waitingDoneRequest(project) != null) 1 else 0)
 
-    /** Whether anything is waiting on the reader in this project: one of the four owner items, or its coordinator asking to start it
+    /** Whether anything is waiting on the reader in this project: one of the five owner items, or its coordinator asking to start it
      * or to record it done. */
     fun needsYou(project: JsonObject) = needsYouItemCount(project) > 0
 
@@ -322,6 +326,8 @@ object ProjectAttention {
         "INTEGRATION_ERROR" -> "handling an integration error"
         "TASK_FAILED" -> "handling a failed task"
         "DELIVERY_REVIEW" -> "reviewing a delivery"
+        // §10.7: work not seen on its line, in the words its `need` uses (the browser's `COORDINATOR_LEAD_COPY`, settled by R29-10).
+        "LANDING_UNOBSERVED" -> "handling work not on the line yet"
         else -> null
     }
 
@@ -333,6 +339,7 @@ object ProjectAttention {
             "COORDINATOR_QUESTION" -> "Needs you · $count question${if (count == 1) "" else "s"} from coordinator"
             "ESCALATED" -> "Needs you · $count escalated to you"
             "FUSE_PAUSED" -> "Paused · coordinator stopped itself"
+            "LANDED_WITHOUT_CONFIRMATION" -> "Needs you · Landed without your confirmation"
             else -> null
         }
     }
@@ -347,7 +354,8 @@ object ProjectAttention {
         return when (reason) {
             AttentionReason.READY_TO_START -> AttentionChip(true, joined(readyToStartSays, elapsedLabel(startRequest(project)?.text("waitingSince"), now)))
             AttentionReason.DONE_REQUEST -> AttentionChip(true, joined(readyToCloseSays, elapsedLabel(doneRequest(project)?.text("waitingSince"), now)))
-            AttentionReason.APPROVE_MERGE_TO_MAIN, AttentionReason.COORDINATOR_QUESTION, AttentionReason.ESCALATED_TO_YOU, AttentionReason.FUSE_PAUSED -> {
+            AttentionReason.APPROVE_MERGE_TO_MAIN, AttentionReason.COORDINATOR_QUESTION, AttentionReason.ESCALATED_TO_YOU, AttentionReason.FUSE_PAUSED,
+            AttentionReason.LANDED_WITHOUT_CONFIRMATION -> {
                 val item = leadOwnerItem(project) ?: return null
                 // The row's `mainBranch` (`GET /projects`): the project's main branch, null with no repository bound.
                 val says = ownerItemSays(item, RunSettings.mainBranchName(project.text("mainBranch"))) ?: return null

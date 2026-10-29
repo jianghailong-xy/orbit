@@ -725,6 +725,8 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                     val done = ProjectDone.pageRow(doc, items)
                     val needsYou = ProjectPage.needsYouRows(items)
                     val withCoordinator = items.objects("withCoordinator")
+                    // The main branch a rerun of a merge check, or an observation of the line, names.
+                    val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
                     Column(Modifier.padding(end = 8.dp)) {
                         if (needsYou.isNotEmpty() || start != null || done != null) {
                             GroupLabel(ProjectPage.needsYouGroup)
@@ -747,11 +749,11 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                                     "project-done-own", recordDone)
                                 null -> Unit
                             }
-                            needsYou.forEach { row -> OpenItemRow(row, now, enabled, perform) { perform("REVIEW", row) } }
+                            needsYou.forEach { row -> OpenItemRow(row, now, main, enabled, perform) { perform("REVIEW", row) } }
                         }
                         if (withCoordinator.isNotEmpty()) {
                             GroupLabel(ProjectPage.withCoordinatorGroup)
-                            withCoordinator.forEach { row -> OpenItemRow(row, now, enabled, perform) { perform("OPEN_COORDINATOR", row) } }
+                            withCoordinator.forEach { row -> OpenItemRow(row, now, main, enabled, perform) { perform("OPEN_COORDINATOR", row) } }
                         }
                         if (summary.count == 0 && start == null && done == null)
                             Text(ProjectPage.nothingWaiting, Modifier.padding(top = 12.dp).testTag("project-open-items-empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -808,10 +810,11 @@ private fun OwnRow(title: String, note: String, ink: Color, enabled: Boolean, ta
     }
 }
 
-/** One open item (iOS `openItem`): whose it is, the item's own words, how long it has waited, and its first press across the row;
- * the whole row opens the card it is answered on, in the coordinator conversation. */
+/** One open item (iOS `openItem`): whose it is, the item's own words — and what is handling it while that runs (§4.7 H1), a rerun or
+ * an observation of [main] — how long it has waited, and its first press across the row; the whole row opens the card it is answered
+ * on, in the coordinator conversation. */
 @Composable
-private fun OpenItemRow(row: JsonObject, now: Instant, enabled: Boolean, perform: (String, JsonObject) -> Unit, tap: () -> Unit) {
+private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Boolean, perform: (String, JsonObject) -> Unit, tap: () -> Unit) {
     val owner = row.text("assignee") != "COORDINATOR"
     val action = ProjectPage.primaryAction(row)
     val tag = "open-item:${row.text("itemId")}"
@@ -824,6 +827,13 @@ private fun OpenItemRow(row: JsonObject, now: Instant, enabled: Boolean, perform
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(row.text("title").orEmpty(), fontWeight = FontWeight.SemiBold)
             row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            ExceptionCards.handlingLine(row, now, main)?.let { line ->
+                Row(Modifier.testTag("$tag:handling"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(ExceptionCards.handlingLabel, Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(line, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
         Text(ProjectPage.waitingLabel(row, now), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         action?.let { verb -> ProjectPage.actionLabel(verb)?.let { label ->
