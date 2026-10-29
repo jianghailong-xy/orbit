@@ -175,20 +175,23 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     }
 }
 
-/// Which of the four things a project waits on its OWNER in person for (contract §7.6 V13).
+/// Which of the five things a project waits on its OWNER in person for (contract §7.6 V13).
 ///
 /// The server's `ownerItemKind`: the merge they confirm, the question their coordinator asked, the
-/// exception that became theirs however it got there, and the pause only they can lift. An
-/// exception the coordinator is still working on is not one of these and never arrives here — the
-/// owner is not told about work that is already being done.
+/// exception that became theirs however it got there, the pause only they can lift, and work that
+/// reached main without their confirmation. An exception the coordinator is still working on is not
+/// one of these and never arrives here — the owner is not told about work that is already being done.
 ///
 /// A kind this client does not know decodes as ``unknown``, which the banner skips rather than
-/// naming: a control plane that learns a fifth kind must not make a session row fail to decode.
+/// naming: a control plane that learns a sixth kind must not make a session row fail to decode.
 public enum OwnerItemKind: String, Codable, Sendable {
     case promotionApproval = "PROMOTION_APPROVAL"
     case coordinatorQuestion = "COORDINATOR_QUESTION"
     case escalated = "ESCALATED"
     case fusePaused = "FUSE_PAUSED"
+    /// Work that reached main without the owner's confirmation (§10.7): the owner's from birth, and
+    /// counted like the four above (owner 2026-10-28, §7.6 V13).
+    case landedWithoutConfirmation = "LANDED_WITHOUT_CONFIRMATION"
     /// Forward-compatibility floor.
     case unknown = "UNKNOWN"
 

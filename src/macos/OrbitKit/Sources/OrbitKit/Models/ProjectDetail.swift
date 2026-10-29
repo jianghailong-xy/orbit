@@ -767,6 +767,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// first — so the first is the job `inFlight` describes. What pressing the landing row lists.
     /// Nil from a server that predates it, which is not the same as none in flight.
     public let inFlightJobs: [ProjectIntegrationJob]?
+    /// How the project's finished work reaches its main branch (§10.5 O-L1): `platform` for a
+    /// project with no binding. Not locked once integration starts. Nil from a server that predates
+    /// it, which draws no Delivery row.
+    public let deliveryMode: DeliveryMode?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 upstreamChosenAt: String? = nil, lastMainBranch: ProjectLastMainBranch? = nil,
@@ -776,7 +780,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
                 startedAt: String? = nil, mergeCheckCommand: String? = nil,
                 escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
-                inFlightJobs: [ProjectIntegrationJob]? = nil) {
+                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
@@ -796,6 +800,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.inFlight = inFlight
         self.landTasks = landTasks
         self.inFlightJobs = inFlightJobs
+        self.deliveryMode = deliveryMode
     }
 
     public init(from decoder: Decoder) throws {
@@ -823,6 +828,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         // A list this build cannot read is an older server's absence, not a failed integration
         // read: the landing row and How it runs still draw from the rest.
         inFlightJobs = try? c.decodeIfPresent([ProjectIntegrationJob].self, forKey: .inFlightJobs)
+        deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? nil
     }
 }
 
@@ -1145,7 +1151,8 @@ public struct ProjectCoordinatorOpened: Codable, Equatable, Sendable {
 /// Where one task stands between "done" and "on main".
 public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// `NOT_APPLICABLE`, `QUEUED`, `RUNNING`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `AWAITING_OWNER`,
-    /// `ON_INTEGRATION_LINE` or `ON_UPSTREAM`; a value this build does not know draws nothing.
+    /// `AWAITING_OBSERVATION`, `ON_INTEGRATION_LINE` or `ON_UPSTREAM`; a value this build does not
+    /// know draws nothing.
     public let state: String
     /// `COORDINATOR` or `OWNER`, while somebody has to act.
     public let handler: String?
@@ -1153,13 +1160,18 @@ public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// The task's newest `LAND_TASK` generation, when the server sends it — what the landing's own
     /// row says beside the state. Nil on an older server and on a task with no landing.
     public let landTask: LandTaskIntegrationView?
+    /// With `AWAITING_OBSERVATION` (§10.9): the commit the task's work was delivered as, which the
+    /// observation waits to see on the line. Nil while the identity is not frozen, in every other
+    /// state, and from an older server.
+    public let deliveredSha: String?
 
     public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil,
-                landTask: LandTaskIntegrationView? = nil) {
+                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil) {
         self.state = state
         self.handler = handler
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
+        self.deliveredSha = deliveredSha
     }
 }
 
@@ -1305,22 +1317,27 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     /// `.some(nil)` removes the check; nil leaves it alone.
     public let mergeCheckCommand: String??
     public let exceptionEscalationSeconds: Int?
+    /// How the work reaches main (§10.5 O-L1); nil leaves it alone. `agentPush` only with a main
+    /// line, which a line leaving main answers with `platform` in the same write.
+    public let deliveryMode: DeliveryMode?
 
     public init(line: IntegrationLine? = nil, upstreamRef: String? = nil, mergeCheckCommand: String?? = nil,
-                exceptionEscalationSeconds: Int? = nil) {
+                exceptionEscalationSeconds: Int? = nil, deliveryMode: DeliveryMode? = nil) {
         self.line = line
         self.upstreamRef = upstreamRef
         self.mergeCheckCommand = mergeCheckCommand
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
+        self.deliveryMode = deliveryMode
     }
 
     /// Whether it says anything at all — a Save with nothing changed at this door sends nothing.
     public var isEmpty: Bool {
         line == nil && upstreamRef == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
+            && deliveryMode == nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case line, upstreamRef, mergeCheckCommand, exceptionEscalationSeconds
+        case line, upstreamRef, mergeCheckCommand, exceptionEscalationSeconds, deliveryMode
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -1331,6 +1348,7 @@ public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
             if let check { try c.encode(check, forKey: .mergeCheckCommand) } else { try c.encodeNil(forKey: .mergeCheckCommand) }
         }
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
+        try c.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
     }
 }
 

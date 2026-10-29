@@ -229,9 +229,11 @@ public struct ProjectStartRequest: Codable, Equatable, Sendable {
 
 /// The body of `POST /projects/:id/start`: the version of the criteria the owner read, and the
 /// settings on the card. Encoded by hand because the door is exact about absence: the branch name
-/// rides only with a project branch (it refuses one on a line that has none) and the main branch
-/// only where the card offered one (it refuses one for a project with no repository), while the
-/// merge check and the request are sent either way, null when there is none.
+/// rides only with a project branch (it refuses one on a line that has none), the main branch only
+/// where the card offered one (it refuses one for a project with no repository) and the delivery
+/// mode only with a main line (it refuses `AGENT_PUSH` anywhere else, 409
+/// `DELIVERY_MODE_NEEDS_MAIN_LINE`), while the merge check and the request are sent either way, null
+/// when there is none.
 public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public let criteriaDigest: String
     public let line: IntegrationLine
@@ -242,10 +244,14 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public let maxConcurrentTasks: Int
     public let mergeCheckCommand: String?
     public let requestId: String?
+    /// How the work reaches main (§10.5 O-L1): recorded as the owner's choice; left out, the project
+    /// keeps the one it has.
+    public let deliveryMode: DeliveryMode?
 
     public init(criteriaDigest: String, line: IntegrationLine, projectBranchName: String? = nil,
                 upstreamRef: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
-                mergeCheckCommand: String? = nil, requestId: String? = nil) {
+                mergeCheckCommand: String? = nil, requestId: String? = nil,
+                deliveryMode: DeliveryMode? = nil) {
         self.criteriaDigest = criteriaDigest
         self.line = line
         self.projectBranchName = projectBranchName
@@ -254,11 +260,12 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
         self.requestId = requestId
+        self.deliveryMode = deliveryMode
     }
 
     enum CodingKeys: String, CodingKey {
         case criteriaDigest, line, projectBranchName, upstreamRef, automatic, maxConcurrentTasks
-        case mergeCheckCommand, requestId
+        case mergeCheckCommand, requestId, deliveryMode
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -279,6 +286,7 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
         } else {
             try c.encodeNil(forKey: .requestId)
         }
+        try c.encodeIfPresent(deliveryMode, forKey: .deliveryMode)
     }
 }
 
@@ -449,16 +457,18 @@ public enum StartProject {
     /// and so does every problem; a branch merges into main on the owner's word unless Automatic is
     /// on, and a project that lands directly on main never merges by itself; with Automatic on, a
     /// problem reaches the owner only after the project's escalation window. The merges name the
-    /// project's main branch, `main`.
+    /// project's main branch, `main`. An agent that pushes its own work to main asks nobody to merge
+    /// it (§10.5 O-L2), so no merge comes to the owner on that line.
     public static func comesToYou(automatic: Bool, line: IntegrationLine,
                                   ownerConfirmed: [StartPlanNamedTask], evidenceJudged: Int,
                                   escalationSeconds: Int,
-                                  main: String = RunSettings.defaultMainBranch) -> [ComesToYouItem] {
+                                  main: String = RunSettings.defaultMainBranch,
+                                  deliveryMode: DeliveryMode = .platform) -> [ComesToYouItem] {
         let confirms: [ComesToYouItem] = ownerConfirmed.count > 3
             ? [ComesToYouItem(text: tasksYouConfirm(ownerConfirmed.count))]
             : ownerConfirmed.map { ComesToYouItem(text: "\($0.label) · \($0.title)", detail: youConfirm) }
         let merges: [ComesToYouItem] = line == .main
-            ? [ComesToYouItem(text: eachMergeInto(main))]
+            ? deliveryMode == .agentPush ? [] : [ComesToYouItem(text: eachMergeInto(main))]
             : automatic ? [] : [ComesToYouItem(text: mergingInto(main))]
         let criteria = ComesToYouItem(text: criteriaChanges)
         if automatic {
@@ -661,7 +671,9 @@ public enum StartProject {
     /// coordinator named rides only with a project branch — the door refuses a branch name on a
     /// line that has none — and an empty merge check is none. The main branch on the card is the
     /// owner's choice once pressed, so it rides whenever the card offered one: a project with no
-    /// repository has none, and the door refuses one for it.
+    /// repository has none, and the door refuses one for it. The delivery mode rides with a main
+    /// line only — the door refuses `AGENT_PUSH` anywhere else (409 `DELIVERY_MODE_NEEDS_MAIN_LINE`)
+    /// — and a card that offered no choice records none.
     public static func body(request: ProjectStartRequest, draft: StartSettingsDraft,
                             requestId: String?) -> StartProjectRequestBody {
         let branch = request.settings.projectBranchName ?? ""
@@ -675,7 +687,8 @@ public enum StartProject {
             automatic: draft.automatic,
             maxConcurrentTasks: draft.maxConcurrentTasks,
             mergeCheckCommand: check.isEmpty ? nil : check,
-            requestId: requestId)
+            requestId: requestId,
+            deliveryMode: draft.line == .main ? draft.deliveryMode : nil)
     }
 
     /// The main branch a start opens with, by name: the first of the one this project's owner
@@ -831,21 +844,27 @@ public struct StartSettingsDraft: Equatable, Sendable {
     public var automatic: Bool
     public var maxConcurrentTasks: Int
     public var mergeCheckCommand: String
+    /// How the work reaches main (§10.5 O-L1, A-Q21) — nil where the card offers no choice: a read
+    /// that does not say, or a server that predates it. `agentPush` only while the line is main.
+    public var deliveryMode: DeliveryMode?
 
     public init(line: IntegrationLine, upstream: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
-                mergeCheckCommand: String = "") {
+                mergeCheckCommand: String = "", deliveryMode: DeliveryMode? = nil) {
         self.line = line
         self.upstream = upstream
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
+        self.deliveryMode = deliveryMode
     }
 
     /// The card's draft of what a suggestion says — with Automatic on whatever was suggested:
     /// delegating is the owner's default (the owner, 2026-10-07), and a coordinator that would keep it
     /// off says so in its own words, which the card quotes. The main branch is the first that
     /// `StartProject.mainBranch` finds, and only for a project the integration read (`standing`)
-    /// says has a repository: a read that does not say whether it has one offers none.
+    /// says has a repository: a read that does not say whether it has one offers none. Delivery is
+    /// offered once that read says the server takes it: what the project already chose when that is
+    /// the agent's way on a line that stays main, and otherwise Orbit's — the default (A-Q21).
     public init(_ settings: ProjectStartSettings, standing: ProjectIntegrationView? = nil) {
         let repository = standing?.repository ?? ""
         self.init(line: settings.line,
@@ -853,7 +872,34 @@ public struct StartSettingsDraft: Equatable, Sendable {
                       : StartProject.mainBranch(suggested: settings.upstreamRef, standing: standing),
                   automatic: true,
                   maxConcurrentTasks: settings.maxConcurrentTasks,
-                  mergeCheckCommand: settings.mergeCheckCommand ?? "")
+                  mergeCheckCommand: settings.mergeCheckCommand ?? "",
+                  deliveryMode: standing?.deliveryMode == nil ? nil
+                      : RunSettings.delivery(line: settings.line, mode: standing?.deliveryMode))
+    }
+
+    /// Whether the agent pushes its own work here: only on a main line (§10.5 O-L2), where no merge
+    /// into main then asks anybody.
+    public var agentPushes: Bool {
+        RunSettings.delivery(line: line, mode: deliveryMode) == .agentPush
+    }
+
+    /// Move the line, and with it the delivery: off a main line the agent cannot push, so the way
+    /// the work reaches main goes back to Orbit's — the browser's line menu does the same.
+    public mutating func chooseLine(_ line: IntegrationLine) {
+        self.line = line
+        if line != .main, deliveryMode != nil { deliveryMode = .platform }
+    }
+
+    /// The sentence under Automatic: who decides what, for the line, merge check and delivery chosen.
+    public var automaticSays: String {
+        agentPushes ? RunSettings.automaticSaysAgentPush(automatic: automatic, main: main)
+                    : RunSettings.automaticSays(automatic: automatic, line: line,
+                                                hasMergeCheck: hasMergeCheck, main: main)
+    }
+
+    /// The line under Delivery: why the agent may not push here, or what the chosen way means.
+    public var deliveryHint: String {
+        RunSettings.deliveryHint(line: line, mode: deliveryMode, main: main)
     }
 
     /// The branch every sentence about where work goes names: the one on the card, or main for a
@@ -933,6 +979,80 @@ public enum RunSettings {
     }
     public static func lineMainHint(_ main: String) -> String {
         "For a single task or an urgent fix. Every merge into \(main) asks you."
+    }
+
+    /// How a finished task's work reaches main (§10.5 O-L1, A-Q21) — web's `RUN_DELIVERY*`: Orbit
+    /// lands it — the default, and what every project did before the choice existed — or the agent
+    /// pushes it there itself, which only a project that lands directly into its main branch can
+    /// choose (409 `DELIVERY_MODE_NEEDS_MAIN_LINE` otherwise). Each hint is the owner's half of the
+    /// sentence the task prompt tells the agent (O-L3).
+    public static let delivery = "Delivery"
+    public static let deliveryPlatform = "Orbit lands it"
+    public static let deliveryAgentPush = "The agent pushes it"
+    public static func deliveryPlatformHint(_ main: String = defaultMainBranch) -> String {
+        "The agent doesn’t push to \(main): Orbit lands its branch once the work is accepted."
+    }
+    public static func deliveryAgentPushHint(_ main: String = defaultMainBranch) -> String {
+        "The agent pushes to \(main) itself, and Orbit checks the commits are there."
+    }
+    /// Why the agent may not push here: the project lands on a project branch, or no line is decided.
+    public static func deliveryNeedsMainLine(_ main: String = defaultMainBranch) -> String {
+        "The agent can push only on a project that lands directly into \(main). On a project branch, "
+            + "Orbit lands the work."
+    }
+    /// Directly into main's hint once the agent pushes there: no merge into main asks anybody (O-L2).
+    public static func lineMainHintAgentPush(_ main: String = defaultMainBranch) -> String {
+        "For a single task or an urgent fix. The agent pushes each task’s work to \(main) itself."
+    }
+
+    /// The way a project's work reaches main on a line: the agent's only on a main line, and Orbit's
+    /// on any other — a project branch, or none decided — whatever was chosen while it was main.
+    /// Web's `draftDelivery`.
+    public static func delivery(line: IntegrationLine?, mode: DeliveryMode?) -> DeliveryMode {
+        line == .main && mode == .agentPush ? .agentPush : .platform
+    }
+
+    /// The line under Delivery: why the agent may not push here, or what the way it stands on means.
+    public static func deliveryHint(line: IntegrationLine?, mode: DeliveryMode?,
+                                    main: String = defaultMainBranch) -> String {
+        guard line == .main else { return deliveryNeedsMainLine(main) }
+        return delivery(line: line, mode: mode) == .agentPush ? deliveryAgentPushHint(main)
+                                                              : deliveryPlatformHint(main)
+    }
+
+    /// One of Delivery's two ways, as a row or a menu offers it: its words, what it means, and
+    /// whether it can be chosen on the line — the agent's way is drawn but not offered off main,
+    /// with the reason in place of what it means.
+    public struct DeliveryChoice: Equatable, Sendable, Identifiable {
+        public let mode: DeliveryMode
+        public let label: String
+        public let hint: String
+        public let offered: Bool
+        public var id: String { mode.rawValue }
+
+        public init(mode: DeliveryMode, label: String, hint: String, offered: Bool) {
+            self.mode = mode
+            self.label = label
+            self.hint = hint
+            self.offered = offered
+        }
+    }
+
+    /// Both ways, Orbit's first, for a project on `line`.
+    public static func deliveryChoices(line: IntegrationLine?,
+                                       main: String = defaultMainBranch) -> [DeliveryChoice] {
+        [
+            DeliveryChoice(mode: .platform, label: deliveryPlatform, hint: deliveryPlatformHint(main),
+                           offered: true),
+            DeliveryChoice(mode: .agentPush, label: deliveryAgentPush,
+                           hint: line == .main ? deliveryAgentPushHint(main) : deliveryNeedsMainLine(main),
+                           offered: line == .main),
+        ]
+    }
+
+    /// A way's words alone: what a menu's title shows.
+    public static func deliveryLabel(_ mode: DeliveryMode) -> String {
+        mode == .agentPush ? deliveryAgentPush : deliveryPlatform
     }
     public static let automatic = "Automatic"
     /// What Automatic means, on a project branch: the coordinator runs the project, merges included.
@@ -1015,6 +1135,20 @@ public enum RunSettings {
                 + "passes — with a receipt you can revert."
             : "The coordinator decides when each task is done and merges into \(main) by itself — with a "
                 + "receipt you can revert."
+    }
+
+    /// The start card's sentence under the switch for a project whose agent pushes its own work
+    /// (§10.5 O-L2): no merge into main asks anybody, because Orbit merges nothing there.
+    public static func automaticSaysAgentPush(automatic: Bool, main: String = defaultMainBranch) -> String {
+        "\(automatic ? "The coordinator decides" : "You decide") when each task is done. The agent "
+            + "pushes each task’s work to \(main) itself."
+    }
+
+    /// How it runs' Automatic sentence for the same project: the merging half is the agent's.
+    public static func automaticHintAgentPush(_ main: String = defaultMainBranch) -> String {
+        "The coordinator runs it for you: it decides when each task is done and handles failed tasks "
+            + "and work not seen on \(main). The agent pushes each task’s work to \(main) itself. The criteria "
+            + "and anything irreversible stay yours."
     }
 
     /// The merge check's row on the start card, folded to its value, and what an empty one means.

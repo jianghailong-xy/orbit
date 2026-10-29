@@ -3048,6 +3048,12 @@ struct StartProjectCard: View {
                 Divider()
                 mainBranchRow(upstream, editable: editable)
             }
+            // How the work reaches main (§10.5 O-L1, A-Q21). A read that does not say — a server
+            // that predates it — offers no choice, and no row.
+            if draft.deliveryMode != nil {
+                Divider()
+                deliveryRow(editable: editable)
+            }
             Divider()
             mergeCheckRow(editable: editable)
             Divider()
@@ -3064,8 +3070,8 @@ struct StartProjectCard: View {
         onDraft(next)
     }
 
-    /// Automatic, the sentence for the line and merge check chosen, the coordinator a start opens
-    /// when the project has none, and the list of what still comes to the owner.
+    /// Automatic, the sentence for the line, merge check and delivery chosen, the coordinator a start
+    /// opens when the project has none, and the list of what still comes to the owner.
     private func automaticRow(editable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             // The label is its own Text and the switch trails it, on both platforms: macOS draws a
@@ -3080,8 +3086,9 @@ struct StartProjectCard: View {
                     .toggleStyle(.switch)
                     .disabled(!editable)
             }
-            Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,
-                                           hasMergeCheck: draft.hasMergeCheck, main: draft.main))
+            // Under the agent's delivery no merge into main asks anybody (§10.5 O-L2): the draft's
+            // sentence says which.
+            Text(draft.automaticSays)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if opensCoordinator {
@@ -3099,7 +3106,8 @@ struct StartProjectCard: View {
         let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
-                                            escalationSeconds: escalationSeconds, main: draft.main)
+                                            escalationSeconds: escalationSeconds, main: draft.main,
+                                            deliveryMode: draft.agentPushes ? .agentPush : .platform)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)
@@ -3204,7 +3212,59 @@ struct StartProjectCard: View {
                 set: { on in
                     guard on else { return }
                     PlatformHaptics.tap()
-                    update { $0.line = line }
+                    // Off a main line the agent cannot push, so the delivery goes back to Orbit's.
+                    update { $0.chooseLine(line) }
+                })
+    }
+
+    /// How the work reaches main (§10.5 O-L1, A-Q21), picked from the platform's own menu as Tasks
+    /// land on is: each way with what it means, the one chosen ticked. Only a main line offers the
+    /// agent's way — on a project branch the menu stays on Orbit's, and the line under it says why.
+    private func deliveryRow(editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(RunSettings.delivery).font(.orbitProse)
+                Spacer(minLength: 8)
+                Menu {
+                    Toggle(isOn: deliveryBinding(.platform, draft)) {
+                        Text(RunSettings.deliveryPlatform)
+                        Text(RunSettings.deliveryPlatformHint(draft.main))
+                    }
+                    Toggle(isOn: deliveryBinding(.agentPush, draft)) {
+                        Text(RunSettings.deliveryAgentPush)
+                        Text(RunSettings.deliveryAgentPushHint(draft.main))
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(RunSettings.deliveryLabel(draft.agentPushes ? .agentPush : .platform))
+                            .lineLimit(1)
+                        #if os(iOS)
+                        Image(systemName: "chevron.up.chevron.down").font(.orbitMeta)
+                        #endif
+                    }
+                    .font(.orbitProse)
+                    .foregroundStyle(Color.blue)
+                }
+                .borderlessMenuStyle()
+                #if os(macOS)
+                .fixedSize()
+                #endif
+                .disabled(!editable || draft.line != .main)
+            }
+            Text(draft.deliveryHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .startRow()
+    }
+
+    private func deliveryBinding(_ mode: DeliveryMode, _ draft: StartSettingsDraft) -> Binding<Bool> {
+        Binding(get: { (draft.agentPushes ? DeliveryMode.agentPush : .platform) == mode },
+                set: { on in
+                    guard on else { return }
+                    PlatformHaptics.tap()
+                    update { $0.deliveryMode = mode }
                 })
     }
 
@@ -4144,16 +4204,31 @@ private struct OwnerItemCardView: View {
     /// Whether a failed check's log is drawn whole rather than folded to its last lines.
     @State private var expandedTail = false
     @State private var expandedFacts: Set<String> = []
+    /// Whether Observe again's question is up (§10.8): it asks for the reason the door requires.
+    @State private var observing = false
+    /// The kind the item was last read as, so a card whose item went — accepted here or elsewhere —
+    /// keeps the header it was drawn with.
+    @State private var lastKind: ProjectOpenItemKind?
 
     @Environment(\.openURL) private var openURL
 
     private var standing: OwnerItemStanding { console.ownerItemStanding(itemID) }
 
+    /// The kind the header is drawn for: the item as the read publishes it, or as it was last read.
+    private var shownKind: ProjectOpenItemKind? {
+        if case .open(let row) = standing { return row.kind }
+        return lastKind
+    }
+
     var body: some View {
         let standing = self.standing
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: isPause ? "pause.circle.fill" : "exclamationmark.triangle.fill",
-                           title: isPause ? ExceptionCards.pauseTitle : ExceptionCards.escalatedTitle,
+            // Work that reached main without the owner's confirmation is no escalation: it wears its
+            // own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
+            ApprovalHeader(symbol: isPause ? "pause.circle.fill"
+                               : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
+                               : "exclamationmark.triangle.fill",
+                           title: ExceptionCards.title(shownKind, isPause: isPause),
                            tone: .orange)
             Text(ExceptionCards.provenance)
                 .font(.orbitLabel).foregroundStyle(.secondary)
@@ -4171,7 +4246,11 @@ private struct OwnerItemCardView: View {
                 // for the same reason.
                 nextBlock(row)
                 factBlock(row)
+                handlingBlock(row)
                 if askingToHandle { markHandledPanel() }
+                if observing {
+                    ObserveAgainPanel(console: console, sending: $sending) { observing = false }
+                }
                 Text(ExceptionCards.ownerLine(row))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -4186,6 +4265,9 @@ private struct OwnerItemCardView: View {
             }
         }
         .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
+        .onChange(of: standing, initial: true) { _, now in
+            if case .open(let row) = now { lastKind = row.kind }
+        }
     }
 
     /// The decision block a card opens with (§7.5, T9): the server's one sentence about what has to
@@ -4327,6 +4409,20 @@ private struct OwnerItemCardView: View {
         }
     }
 
+    /// The rerun or observation handling the item while it is in flight (§4.7 H1, §10.8) — the
+    /// browser's `ItemHandlingRows`: `Handling` and its line, then the reason it was asked with, in
+    /// the fact block's own row shape. An observation names the project's main branch, which the
+    /// console's read of the project carries.
+    @ViewBuilder private func handlingBlock(_ row: ProjectOpenItemRow) -> some View {
+        let rows = ExceptionCards.handlingRows(
+            row, main: console.projectDone?.main ?? RunSettings.defaultMainBranch)
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(rows, id: \.label) { fact in factRow(fact) }
+            }
+        }
+    }
+
     /// One row of the fact block: the mock's label column and the value beside it, in the faces the
     /// model gave each run — the browser's own two spans (`project-open-item-mono` on a command,
     /// `project-open-item-bad` on a check's verdict). A row of one string could only be all one
@@ -4448,8 +4544,29 @@ private struct OwnerItemCardView: View {
             // §4.6 X-E5's lead: end the attempt whose runner stopped reporting (J-T10).
             guard ExceptionCards.addressed(row, .abandon) else { return nil }
             return { abandon(row) }
+        case .accept:
+            // §10.8: the owner's one door on work that reached main without their confirmation. No
+            // second confirmation — nothing is reverted or re-run, and the line beside the press
+            // says what it records.
+            guard ExceptionCards.addressed(row, .accept) else { return nil }
+            return { accept(row) }
+        case .observe:
+            // §10.8: look at the line again — after the reason the door requires, asked in place.
+            return { PlatformHaptics.tap(); observing = true }
         default:
             return nil
+        }
+    }
+
+    /// The Accept press: no second press while it is on its way, and the receipt once the door took
+    /// it — the read that follows publishes the item gone.
+    private func accept(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await console.acceptItem(row) { receipt = ExceptionCards.accepted }
+            sending = false
         }
     }
 
