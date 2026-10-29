@@ -1,0 +1,71 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "EAD31F06-46E1-4D70-AAD7-6F6C1707A788.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "DiagnosticRowShotTeststestTheRefreshIsOneGreyRowBesideTheNoticeAndTheError-notes_0_8B788FC3-2F79-4F0F-9CB4-06FEBAE9CFFA.txt",
+        "timestamp" : 1793254105.005
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "FA456700-AF64-416F-BAF5-666D3ACA795E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-diagnostic-row-dark_0_CD01D8C6-91A1-44C4-A204-22379653DC13.txt",
+        "timestamp" : 1793254103.96
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "7EB54EF9-0825-45D4-9612-823F1DDAED28.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-diagnostic-row-dark_0_7ECB2F96-41B8-4B04-9BA1-F88D4A346124.png",
+        "timestamp" : 1793254103.504
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "45AE623E-25D1-40A7-B019-562C17C55766.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-diagnostic-row-dark_0_25C96E3C-9D1B-4752-92F8-2277B7B222F0.txt",
+        "timestamp" : 1793254094.849
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "E7A65F8F-98FF-44E5-80CA-F83C14D1663B.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-diagnostic-row-light_0_DBFDFBAD-CEAF-4055-B53F-62E62EF76507.txt",
+        "timestamp" : 1793254076.437
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C26E6F28-9FE0-4ED7-A181-9C260041DFA1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-diagnostic-row-light_0_EE2370F6-A00C-44CB-9536-7B59BE37D703.png",
+        "timestamp" : 1793254076.24
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "3f1194bcfac9b8b8fc6f91ac49937c5015ab7fee",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "7026E31D-C97B-4D19-99DD-54982F8BCBB2.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-diagnostic-row-light_0_F9ABF3E4-254F-4C54-AFAD-21430BF412FF.txt",
+        "timestamp" : 1793254063.636
+      }
+    ],
+    "testIdentifier" : "DiagnosticRowShotTests/testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError()",
+    "testIdentifierURL" : "test://com.apple.xcode/LandingProbe/LandingMacProbeUITests/DiagnosticRowShotTests/testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError"
+  }
+]

@@ -1,0 +1,300 @@
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Intermediates.noindex/LandingProbe.build/Debug/LandingMacProbeUITests.build/LandingMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app/Contents/PlugIns/LandingMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app (in target 'LandingMacProbeUITests' from project 'LandingProbe')
+    cd /Users/runner/work/orbit/orbit/.cr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Intermediates.noindex/LandingProbe.build/Debug/LandingMacProbeUITests.build/LandingMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.cr-probe/.dd-mac/Build/Products/Debug/LandingMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-29 06:07:23.270294+0000 LandingMacProbeUITests-Runner[15632:49533] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-29 06:07:24.493.
+Test Suite 'LandingMacProbeUITests.xctest' started at 2026-10-29 06:07:24.494.
+Test Suite 'DiagnosticRowShotTests' started at 2026-10-29 06:07:24.494.
+Test Case '-[LandingMacProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' started.
+    t =     0.00s Start Test at 2026-10-29 06:07:24.496
+    t =     1.29s Set Up
+    t =     1.81s Open io.orbitd.landingmacprobe
+    t =     1.81s     Launch io.orbitd.landingmacprobe
+2026-10-29 06:07:26.768 xcodebuild[4822:20322] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-29 06:07:26.768 xcodebuild[4822:20322] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.29s         Wait for accessibility to load
+    t =     3.50s         Setting up automation session
+    t =     3.53s         Wait for io.orbitd.landingmacprobe to idle
+    t =     3.54s Get number of matches for: Descendants matching type Window
+    t =     4.25s Get number of matches for: Descendants matching type Window
+    t =     4.78s Get number of matches for: Descendants matching type Window
+    t =     5.30s Get number of matches for: Descendants matching type Window
+    t =     5.83s Get number of matches for: Descendants matching type Window
+    t =     6.36s Get number of matches for: Descendants matching type Window
+    t =     6.88s Get number of matches for: Descendants matching type Window
+    t =     7.41s Get number of matches for: Descendants matching type Window
+    t =     7.93s Get number of matches for: Descendants matching type Window
+    t =     8.46s Get number of matches for: Descendants matching type Window
+    t =     8.99s Get number of matches for: Descendants matching type Window
+    t =     9.51s Get number of matches for: Descendants matching type Window
+    t =    10.04s Get number of matches for: Descendants matching type Window
+    t =    10.60s Get number of matches for: Descendants matching type Window
+    t =    11.12s Get number of matches for: Descendants matching type Window
+    t =    11.65s Get number of matches for: Descendants matching type Window
+    t =    12.17s Get number of matches for: Descendants matching type Window
+    t =    12.69s Get number of matches for: Descendants matching type Window
+    t =    13.22s Get number of matches for: Descendants matching type Window
+    t =    13.75s Get number of matches for: Descendants matching type Window
+    t =    14.27s Get number of matches for: Descendants matching type Window
+    t =    14.79s Get number of matches for: Descendants matching type Window
+    t =    15.31s Get number of matches for: Descendants matching type Window
+    t =    15.83s Get number of matches for: Descendants matching type Window
+    t =    16.35s Get number of matches for: Descendants matching type Window
+    t =    16.87s Get number of matches for: Descendants matching type Window
+    t =    17.40s Get number of matches for: Descendants matching type Window
+    t =    17.91s Get number of matches for: Descendants matching type Window
+    t =    18.44s Get number of matches for: Descendants matching type Window
+    t =    18.96s Requesting snapshot of accessibility hierarchy for app with pid 16069
+    t =    19.07s Requesting snapshot of accessibility hierarchy for app with pid 16069
+    t =    19.14s Added attachment named 'no-window-diagnostic-row-light.txt'
+    t =    19.16s Type 'n' key with modifiers '⌘' (0x10)
+    t =    19.16s     Wait for io.orbitd.landingmacprobe to idle
+    t =    19.17s     Find the Target Application 'io.orbitd.landingmacprobe'
+    t =    19.19s     Check for interrupting elements affecting "LandingMacProbe" Application
+    t =    19.19s     Synthesize event
+    t =    21.33s     Wait for io.orbitd.landingmacprobe to idle
+    t =    21.33s Get number of matches for: Descendants matching type Window
+    t =    21.45s Get number of matches for: Descendants matching type Window
+    t =    21.74s Checking existence of `Any (First Match)`
+    t =    21.97s Checking existence of `StaticText (First Match)`
+    t =    22.03s Checking existence of `Any (First Match)`
+    t =    22.59s Checking existence of `Any (First Match)`
+    t =    22.67s Checking existence of `StaticText (First Match)`
+    t =    22.73s Checking existence of `Any (First Match)`
+    t =    23.30s Checking existence of `Any (First Match)`
+    t =    23.34s Checking existence of `StaticText (First Match)`
+    t =    23.38s Checking existence of `Any (First Match)`
+    t =    23.92s Checking existence of `Any (First Match)`
+    t =    24.32s Checking existence of `StaticText (First Match)`
+    t =    24.39s Checking existence of `Any (First Match)`
+    t =    24.94s Checking existence of `Any (First Match)`
+    t =    24.99s Checking existence of `StaticText (First Match)`
+    t =    25.04s Checking existence of `Any (First Match)`
+    t =    25.59s Checking existence of `Any (First Match)`
+    t =    25.64s Checking existence of `StaticText (First Match)`
+    t =    25.69s Checking existence of `Any (First Match)`
+    t =    26.24s Checking existence of `Any (First Match)`
+    t =    26.31s Checking existence of `StaticText (First Match)`
+    t =    26.37s Checking existence of `Any (First Match)`
+    t =    26.96s Checking existence of `Any (First Match)`
+    t =    27.21s Checking existence of `StaticText (First Match)`
+    t =    27.45s Checking existence of `Any (First Match)`
+    t =    28.01s Checking existence of `Any (First Match)`
+    t =    28.07s Checking existence of `StaticText (First Match)`
+    t =    28.11s Checking existence of `StaticText (First Match)`
+    t =    30.16s Checking existence of `Any (First Match)`
+    t =    30.57s Checking existence of `StaticText (First Match)`
+    t =    30.64s Checking existence of `StaticText (First Match)`
+    t =    30.71s Checking existence of `Any (First Match)`
+    t =    30.79s Checking existence of `StaticText (First Match)`
+    t =    30.86s Checking existence of `StaticText (First Match)`
+    t =    30.92s Checking existence of `Any (First Match)`
+    t =    30.98s Checking existence of `StaticText (First Match)`
+    t =    31.05s Checking existence of `StaticText (First Match)`
+    t =    31.11s Checking existence of `Any (First Match)`
+    t =    31.16s Checking existence of `StaticText (First Match)`
+    t =    31.21s Checking existence of `StaticText (First Match)`
+    t =    31.26s Checking existence of `Any (First Match)`
+    t =    31.31s Checking existence of `StaticText (First Match)`
+    t =    31.36s Checking existence of `Any (First Match)`
+    t =    31.41s Checking existence of `Any (First Match)`
+    t =    31.46s Checking existence of `StaticText (First Match)`
+    t =    31.51s Checking existence of `StaticText (First Match)`
+    t =    31.56s Find the StaticText (First Match)
+    t =    31.61s Find the Window (First Match)
+    t =    31.75s Added attachment named 'mac-diagnostic-row-light'
+    t =    31.75s Requesting snapshot of accessibility hierarchy for app with pid 16069
+    t =    31.85s Requesting snapshot of accessibility hierarchy for app with pid 16069
+    t =    31.94s Added attachment named 'tree-mac-diagnostic-row-light.txt'
+    t =    31.94s Terminate io.orbitd.landingmacprobe:16069
+    t =    33.05s Open io.orbitd.landingmacprobe
+    t =    33.05s     Launch io.orbitd.landingmacprobe
+2026-10-29 06:07:57.610 xcodebuild[4822:20322] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-29 06:07:57.610 xcodebuild[4822:20322] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    34.47s         Wait for accessibility to load
+    t =    34.69s         Setting up automation session
+    t =    34.77s         Wait for io.orbitd.landingmacprobe to idle
+    t =    34.79s Get number of matches for: Descendants matching type Window
+    t =    35.39s Get number of matches for: Descendants matching type Window
+    t =    35.92s Get number of matches for: Descendants matching type Window
+    t =    36.45s Get number of matches for: Descendants matching type Window
+    t =    36.98s Get number of matches for: Descendants matching type Window
+    t =    37.51s Get number of matches for: Descendants matching type Window
+    t =    38.05s Get number of matches for: Descendants matching type Window
+    t =    38.57s Get number of matches for: Descendants matching type Window
+    t =    39.10s Get number of matches for: Descendants matching type Window
+    t =    39.63s Get number of matches for: Descendants matching type Window
+    t =    40.16s Get number of matches for: Descendants matching type Window
+    t =    40.70s Get number of matches for: Descendants matching type Window
+    t =    41.23s Get number of matches for: Descendants matching type Window
+    t =    41.78s Get number of matches for: Descendants matching type Window
+    t =    42.30s Get number of matches for: Descendants matching type Window
+    t =    42.83s Get number of matches for: Descendants matching type Window
+    t =    43.35s Get number of matches for: Descendants matching type Window
+    t =    43.88s Get number of matches for: Descendants matching type Window
+    t =    44.40s Get number of matches for: Descendants matching type Window
+    t =    44.99s Get number of matches for: Descendants matching type Window
+    t =    45.51s Get number of matches for: Descendants matching type Window
+    t =    46.04s Get number of matches for: Descendants matching type Window
+    t =    46.56s Get number of matches for: Descendants matching type Window
+    t =    47.08s Get number of matches for: Descendants matching type Window
+    t =    47.60s Get number of matches for: Descendants matching type Window
+    t =    48.12s Get number of matches for: Descendants matching type Window
+    t =    48.63s Get number of matches for: Descendants matching type Window
+    t =    49.15s Get number of matches for: Descendants matching type Window
+    t =    49.67s Get number of matches for: Descendants matching type Window
+    t =    50.20s Requesting snapshot of accessibility hierarchy for app with pid 17286
+    t =    50.29s Requesting snapshot of accessibility hierarchy for app with pid 17286
+    t =    50.35s Added attachment named 'no-window-diagnostic-row-dark.txt'
+    t =    50.36s Type 'n' key with modifiers '⌘' (0x10)
+    t =    50.36s     Wait for io.orbitd.landingmacprobe to idle
+    t =    50.36s     Find the Target Application 'io.orbitd.landingmacprobe'
+    t =    50.38s     Check for interrupting elements affecting "LandingMacProbe" Application
+    t =    50.38s     Synthesize event
+    t =    51.22s     Wait for io.orbitd.landingmacprobe to idle
+    t =    51.22s Get number of matches for: Descendants matching type Window
+    t =    51.48s Get number of matches for: Descendants matching type Window
+    t =    51.56s Checking existence of `Any (First Match)`
+    t =    51.84s Checking existence of `StaticText (First Match)`
+    t =    52.43s Checking existence of `Any (First Match)`
+    t =    53.04s Checking existence of `Any (First Match)`
+    t =    53.09s Checking existence of `StaticText (First Match)`
+    t =    53.15s Checking existence of `Any (First Match)`
+    t =    53.70s Checking existence of `Any (First Match)`
+    t =    53.75s Checking existence of `StaticText (First Match)`
+    t =    53.79s Checking existence of `Any (First Match)`
+    t =    54.35s Checking existence of `Any (First Match)`
+    t =    54.39s Checking existence of `StaticText (First Match)`
+    t =    54.44s Checking existence of `Any (First Match)`
+    t =    55.00s Checking existence of `Any (First Match)`
+    t =    55.08s Checking existence of `StaticText (First Match)`
+    t =    55.13s Checking existence of `StaticText (First Match)`
+    t =    57.18s Checking existence of `Any (First Match)`
+    t =    57.25s Checking existence of `StaticText (First Match)`
+    t =    57.30s Checking existence of `StaticText (First Match)`
+    t =    57.37s Checking existence of `Any (First Match)`
+    t =    57.42s Checking existence of `StaticText (First Match)`
+    t =    57.47s Checking existence of `StaticText (First Match)`
+    t =    57.53s Checking existence of `Any (First Match)`
+    t =    57.58s Checking existence of `StaticText (First Match)`
+    t =    57.64s Checking existence of `StaticText (First Match)`
+    t =    57.70s Checking existence of `Any (First Match)`
+    t =    57.76s Checking existence of `StaticText (First Match)`
+    t =    57.82s Checking existence of `StaticText (First Match)`
+    t =    57.95s Checking existence of `Any (First Match)`
+    t =    58.06s Checking existence of `StaticText (First Match)`
+    t =    58.22s Checking existence of `Any (First Match)`
+    t =    58.46s Checking existence of `Any (First Match)`
+    t =    58.56s Checking existence of `StaticText (First Match)`
+    t =    58.71s Checking existence of `StaticText (First Match)`
+    t =    58.79s Find the StaticText (First Match)
+    t =    58.87s Find the Window (First Match)
+    t =    59.01s Added attachment named 'mac-diagnostic-row-dark'
+    t =    59.01s Requesting snapshot of accessibility hierarchy for app with pid 17286
+    t =    59.25s Requesting snapshot of accessibility hierarchy for app with pid 17286
+    t =    59.47s Added attachment named 'tree-mac-diagnostic-row-dark.txt'
+    t =    59.47s Terminate io.orbitd.landingmacprobe:17286
+    t =    60.51s Tear Down
+    t =    60.51s     Added attachment named 'DiagnosticRowShotTeststestTheRefreshIsOneGreyRowBesideTheNoticeAndTheError-notes.txt'
+Test Case '-[LandingMacProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' passed (61.594 seconds).
+Test Suite 'DiagnosticRowShotTests' passed at 2026-10-29 06:08:26.092.
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.598) seconds
+Test Suite 'LandingMacProbeUITests.xctest' passed at 2026-10-29 06:08:26.096.
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.602) seconds
+Test Suite 'All tests' passed at 2026-10-29 06:08:26.097.
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.604) seconds
+2026-10-29 06:08:27.272 xcodebuild[4822:20322] [MT] IDETestOperationsObserverDebug: 67.893 elapsed -- Testing started completed.
+2026-10-29 06:08:27.273 xcodebuild[4822:20322] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-29 06:08:27.273 xcodebuild[4822:20322] [MT] IDETestOperationsObserverDebug: 67.893 sec, +67.893 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.cr-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

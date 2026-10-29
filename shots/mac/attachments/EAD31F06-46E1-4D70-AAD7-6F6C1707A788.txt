@@ -1,0 +1,16 @@
+diagnostic-row-light: no window after launch; pressing ⌘N
+diagnostic-row-light: 1 window(s)
+diagnostic-row-light: shows "model_catalog · timeout"
+diagnostic-row-light: shows "×10"
+diagnostic-row-light: shows "Switched to Wikova · Pro"
+diagnostic-row-light: shows "stream error: request timed out"
+diagnostic-row-light: the logged preamble on screen: false
+diagnostic-row-light: in view after 0 move(s) at (471.0, 206.0, 296.0, 17.0)
+diagnostic-row-dark: no window after launch; pressing ⌘N
+diagnostic-row-dark: 1 window(s)
+diagnostic-row-dark: shows "model_catalog · timeout"
+diagnostic-row-dark: shows "×10"
+diagnostic-row-dark: shows "Switched to Wikova · Pro"
+diagnostic-row-dark: shows "stream error: request timed out"
+diagnostic-row-dark: the logged preamble on screen: false
+diagnostic-row-dark: in view after 0 move(s) at (471.0, 206.0, 296.0, 17.0)

@@ -1,0 +1,61 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E39FA4B3-0D79-463E-A24B-13BFE3D34569.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "DiagnosticRowShotTeststestTheRefreshIsOneGreyRowBesideTheNoticeAndTheError-notes_0_756A9D77-0BE1-427C-B71F-058412F3C03E.txt",
+        "timestamp" : 1793254589.521
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "145C1AEA-5B76-4224-95EB-88165BB3DB78.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-diagnostic-row-dark_0_7FCC3AFD-248D-4689-8537-43F5A19AA784.txt",
+        "timestamp" : 1793254588.502
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C3B42F57-4226-4607-8CA5-03C3AB074B5C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-diagnostic-row-dark_0_CB068746-2DEE-437A-A1B4-479BB3EC2AF2.png",
+        "timestamp" : 1793254587.783
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "8139CFD1-A9E2-41E5-85A0-3FD21F490312.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-diagnostic-row-light_0_D2C549C4-8429-4ADB-8E0F-7F88B3EE92EE.txt",
+        "timestamp" : 1793254568.972
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0C9CDC6B-7AFC-4018-A2E4-5DBBA065D91C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-diagnostic-row-light_0_E7D94FF1-ADD4-4755-A614-26240242B544.png",
+        "timestamp" : 1793254567.891
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "77AA4492-C787-4EEE-A772-05D4B3E9ECCD",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "82255CE1-4B88-4829-B504-B80E4D566D44.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "DiagnosticRowShotTests/testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError()",
+    "testIdentifierURL" : "test://com.apple.xcode/LandingProbe/LandingProbeUITests/DiagnosticRowShotTests/testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError"
+  }
+]

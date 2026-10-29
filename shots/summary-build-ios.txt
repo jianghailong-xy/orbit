@@ -1,0 +1,6 @@
+Test Case '-[LandingProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' started.
+Test Case '-[LandingProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' passed (72.396 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.398) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.399) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.401) seconds
+** TEST SUCCEEDED **

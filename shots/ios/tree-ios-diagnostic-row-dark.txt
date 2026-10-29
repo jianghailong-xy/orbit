@@ -1,0 +1,254 @@
+Attributes: Application, 0x118b43480, pid: 36538, label: 'LandingProbe'
+Element subtree:
+ →Application, 0x118b43480, pid: 36538, label: 'LandingProbe'
+    Window (Main), 0x118b435c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x118b43700, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x118b43840, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x118b43980, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x118b43ac0, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x118b43c00, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x118b43d40, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x118b43e80, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x118b41f40, {{0.0, -1364.0}, {305.7, 3419.3}}
+                Cell, 0x118b42080, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118b421c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118b42300, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118b42440, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x118b42580, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x118b426c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x118b42800, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x118b42940, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects, 3 waiting on you'
+                          Image, 0x118b42a80, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x118b42bc0, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                          StaticText, 0x118b42d00, {{276.0, 143.5}, {7.3, 13.3}}, label: '3 waiting on you'
+                Cell, 0x118b42e40, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118b42f80, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118b430c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118b43200, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x118b43340, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x118b60000, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x118b60140, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x118b60280, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x118b603c0, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x118b60500, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x118b60640, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118b60780, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118b608c0, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118b60a00, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x118b60b40, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x118b60c80, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x118b60dc0, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x118b60f00, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x118b61040, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x118b61180, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x118b612c0, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118b61400, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118b61540, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118b61680, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x118b617c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x118b61900, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x118b61a40, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x118b61b80, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x118b61cc0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118b61e00, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118b61f40, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118b62080, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x118b621c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x118b62300, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x118b62440, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x118b62580, {{0.0, 305.7}, {305.3, 44.3}}, label: 'payments-api,  · hpc, 2 waiting for you'
+                          Other, 0x118b626c0, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118b62800, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118b62940, {{58.0, 317.7}, {105.0, 20.3}}, label: 'payments-api'
+                          StaticText, 0x118b62a80, {{163.0, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                          StaticText, 0x118b62bc0, {{262.0, 319.3}, {21.3, 17.3}}, label: '2 waiting for you'
+                Cell, 0x118b62d00, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x118b62e40, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x118b62f80, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x118b630c0, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x118b63200, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x118b63340, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x118b63480, {{0.0, 350.0}, {305.3, 36.0}}
+                        StaticText, 0x118b635c0, {{22.0, 364.0}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x118b63700, {{89.0, 366.3}, {7.3, 13.3}}, label: '4'
+                Cell, 0x118b63840, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x118b63980, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x118b63ac0, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x118b63c00, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x118b63d40, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x118b63e80, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x118b64000, {{0.0, 386.0}, {305.3, 44.3}}
+                        Button, 0x118b64140, {{0.0, 386.0}, {305.3, 44.3}}, label: 'Refund service, 1 waiting for you'
+                          StaticText, 0x118b64280, {{22.0, 398.0}, {113.7, 20.3}}, label: 'Refund service'
+                          StaticText, 0x118b643c0, {{262.0, 399.7}, {21.3, 17.3}}, label: '1 waiting for you'
+                Cell, 0x118b64500, {{0.0, 430.3}, {305.3, 44.3}}
+                  Other, 0x118b64640, {{0.0, 430.3}, {305.3, 44.3}}
+                    Other, 0x118b64780, {{0.0, 430.3}, {305.3, 44.3}}
+                      Other, 0x118b648c0, {{0.0, 430.3}, {305.3, 44.3}}
+                  Other, 0x118b64a00, {{0.0, 430.3}, {305.3, 44.3}}
+                    Other, 0x118b64b40, {{0.0, 430.3}, {305.3, 44.3}}
+                      Other, 0x118b64c80, {{0.0, 430.3}, {305.3, 44.3}}
+                        Button, 0x118b64dc0, {{0.0, 430.3}, {305.3, 44.3}}, label: 'Ledger export, 1 waiting for you'
+                          StaticText, 0x118b64f00, {{22.0, 442.3}, {106.7, 20.3}}, label: 'Ledger export'
+                          StaticText, 0x118b65040, {{262.0, 444.0}, {21.3, 17.3}}, label: '1 waiting for you'
+                Cell, 0x118b65180, {{0.0, 474.7}, {305.3, 44.3}}
+                  Other, 0x118b652c0, {{0.0, 474.7}, {305.3, 44.3}}
+                    Other, 0x118b65400, {{0.0, 474.7}, {305.3, 44.3}}
+                      Other, 0x118b65540, {{0.0, 474.7}, {305.3, 44.3}}
+                  Other, 0x118b65680, {{0.0, 474.7}, {305.3, 44.3}}
+                    Other, 0x118b657c0, {{0.0, 474.7}, {305.3, 44.3}}
+                      Other, 0x118b65900, {{0.0, 474.7}, {305.3, 44.3}}
+                        Button, 0x118b65a40, {{0.0, 474.7}, {305.3, 44.3}}, label: 'Payments gateway rollout, 1 waiting for you'
+                          StaticText, 0x118b65b80, {{22.0, 486.7}, {195.0, 20.3}}, label: 'Payments gateway rollout'
+                          StaticText, 0x118b65cc0, {{262.0, 488.3}, {21.3, 17.3}}, label: '1 waiting for you'
+                Cell, 0x118b65e00, {{0.0, 519.0}, {305.3, 44.3}}
+                  Other, 0x118b65f40, {{0.0, 519.0}, {305.3, 44.3}}
+                    Other, 0x118b66080, {{0.0, 519.0}, {305.3, 44.3}}
+                      Other, 0x118b661c0, {{0.0, 519.0}, {305.3, 44.3}}
+                  Other, 0x118b66300, {{0.0, 519.0}, {305.3, 44.3}}
+                    Other, 0x118b66440, {{0.0, 519.0}, {305.3, 44.3}}
+                      Other, 0x118b66580, {{0.0, 519.0}, {305.3, 44.3}}
+                        Button, 0x118b666c0, {{0.0, 519.0}, {305.3, 44.3}}, label: 'Checkout redesign'
+                Other, 0x118b66800, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118b66940, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x118b66a80, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118b66bc0, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x118b66d00, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x118b66e40, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x118b66f80, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x118b670c0, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x118b67200, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x118b67340, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x118b67480, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x118b675c0, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Session actions'
+                    Other, 0x118b67700, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x118b67840, {{350.0, 66.0}, {28.0, 36.0}}, label: 'Session actions'
+                        Button, 0x118b67980, {{350.0, 66.0}, {28.0, 36.0}}
+                          Image, 0x118b67ac0, {{354.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x118b67c00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118b67d40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x118b67e80, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x118b68000, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x118b68140, {{0.0, 166.0}, {402.0, 573.0}}
+                        CollectionView, 0x118b68280, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x118b683c0, {{0.0, -1582.0}, {402.0, 3821.7}}
+                          Other, 0x118b68500, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x118b68640, {{0.0, 0.0}, {402.0, 230.8}}
+                            Other, 0x118b68780, {{0.0, 674.2}, {402.0, 199.8}}
+                          Other, 0x118b688c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x118b68a00, {{0.0, 166.0}, {402.0, 69.0}}
+                            Other, 0x118b68b40, {{0.0, 166.0}, {402.0, 69.0}}
+                              Other, 0x118b68c80, {{0.0, 166.0}, {402.0, 69.0}}
+                                Other, 0x118b68dc0, {{0.0, 166.0}, {402.0, 69.0}}
+                            Other, 0x118b68f00, {{0.0, 166.0}, {402.0, 69.0}}
+                              Other, 0x118b69040, {{0.0, 166.0}, {402.0, 69.0}}
+                                Other, 0x118b69180, {{0.0, 166.0}, {402.0, 69.0}}
+                                  TextView, 0x118b692c0, {{100.0, 180.0}, {274.0, 22.0}}, value: Which models can t...
+                                    TextView, 0x118b69400, {{100.0, 180.0}, {273.3, 22.0}}, label: 'Which models can this session use?'
+                                    Other, 0x118b69540, {{341.0, 180.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b69680, {{368.0, 163.0}, {3.0, 36.0}}
+                                    Other, 0x118b697c0, {{100.0, 188.0}, {274.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b69900, {{103.0, 196.0}, {268.0, 3.0}}
+                                  Button, 0x118b69a40, {{307.7, 213.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x118b69b80, {{341.7, 214.3}, {44.3, 13.3}}, label: '21m ago'
+                          Cell, 0x118b69cc0, {{0.0, 235.0}, {402.0, 34.0}}
+                            Other, 0x118b69e00, {{0.0, 235.0}, {402.0, 34.0}}
+                              Other, 0x118b69f40, {{0.0, 235.0}, {402.0, 34.0}}
+                                Other, 0x118b6a080, {{0.0, 235.0}, {402.0, 34.0}}
+                            Other, 0x118b6a1c0, {{0.0, 235.0}, {402.0, 34.0}}
+                              Other, 0x118b6a300, {{0.0, 235.0}, {402.0, 34.0}}
+                                Other, 0x118b6a440, {{0.0, 235.0}, {402.0, 34.0}}
+                                  TextView, 0x118b6a580, {{16.0, 241.0}, {208.0, 22.0}}, value: Reading the model ...
+                                    TextView, 0x118b6a6c0, {{16.0, 241.0}, {207.4, 22.0}}, label: 'Reading the model catalog.'
+                                    Other, 0x118b6a800, {{191.0, 241.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b6a940, {{218.0, 224.0}, {3.0, 36.0}}
+                                    Other, 0x118b6aa80, {{16.0, 249.0}, {208.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b6abc0, {{19.0, 257.0}, {202.0, 3.0}}
+                          Cell, 0x118b6ad00, {{0.0, 269.0}, {402.0, 45.7}}
+                            Other, 0x118b6ae40, {{0.0, 269.0}, {402.0, 45.7}}
+                              Other, 0x118b6af80, {{0.0, 269.0}, {402.0, 45.7}}
+                                Other, 0x118b6b0c0, {{0.0, 269.0}, {402.0, 45.7}}
+                            Other, 0x118b6b200, {{0.0, 269.0}, {402.0, 45.7}}
+                              Other, 0x118b6b340, {{0.0, 269.0}, {402.0, 45.7}}
+                                Other, 0x118b6b480, {{0.0, 269.0}, {402.0, 45.7}}
+                                  Image, 0x118b6b5c0, {{17.3, 276.3}, {13.3, 12.3}}, identifier: 'exclamationmark.triangle.fill', label: 'Warning'
+                                  StaticText, 0x118b6b700, {{38.0, 277.0}, {127.0, 13.3}}, label: 'model_catalog · timeout'
+                                  StaticText, 0x118b6b840, {{171.0, 275.0}, {158.7, 33.7}}, label: 'failed to refresh available models: request timed out'
+                                  StaticText, 0x118b6b980, {{335.7, 277.0}, {21.0, 13.3}}, label: '×10'
+                          Cell, 0x118b6bac0, {{0.0, 314.7}, {402.0, 45.7}}
+                            Other, 0x118b6bc00, {{0.0, 314.7}, {402.0, 45.7}}
+                              Other, 0x118b6bd40, {{0.0, 314.7}, {402.0, 45.7}}
+                                Other, 0x118b6be80, {{0.0, 314.7}, {402.0, 45.7}}
+                            Other, 0x118b70000, {{0.0, 314.7}, {402.0, 45.7}}
+                              Other, 0x118b70140, {{0.0, 314.7}, {402.0, 45.7}}
+                                Other, 0x118b70280, {{0.0, 314.7}, {402.0, 45.7}}
+                                  Image, 0x118b703c0, {{19.3, 329.7}, {17.3, 15.7}}, identifier: 'exclamationmark.triangle.fill', label: 'Warning'
+                                  StaticText, 0x118b70500, {{0.0, 314.7}, {402.0, 45.7}}, label: 'Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent'
+                          Cell, 0x118b70640, {{0.0, 360.3}, {402.0, 76.3}}
+                            Other, 0x118b70780, {{0.0, 360.3}, {402.0, 76.3}}
+                              Other, 0x118b708c0, {{0.0, 360.3}, {402.0, 76.3}}
+                                Other, 0x118b70a00, {{0.0, 360.3}, {402.0, 76.3}}
+                            Other, 0x118b70b40, {{0.0, 360.3}, {402.0, 76.3}}
+                              Other, 0x118b70c80, {{0.0, 360.3}, {402.0, 76.3}}
+                                Other, 0x118b70dc0, {{0.0, 360.3}, {402.0, 76.3}}
+                                  Image, 0x118b70f00, {{16.7, 388.3}, {22.7, 20.3}}, identifier: 'exclamationmark.triangle.fill', label: 'Warning'
+                                  StaticText, 0x118b71040, {{0.0, 360.3}, {402.0, 76.3}}, label: '2026-10-28T15:23:07.112233Z ERROR codex_core::codex: stream error: request timed out'
+                          Cell, 0x118b71180, {{0.0, 436.7}, {402.0, 34.0}}
+                            Other, 0x118b712c0, {{0.0, 436.7}, {402.0, 34.0}}
+                              Other, 0x118b71400, {{0.0, 436.7}, {402.0, 34.0}}
+                                Other, 0x118b71540, {{0.0, 436.7}, {402.0, 34.0}}
+                            Other, 0x118b71680, {{0.0, 436.7}, {402.0, 34.0}}
+                              Other, 0x118b717c0, {{0.0, 436.7}, {402.0, 34.0}}
+                                Other, 0x118b71900, {{0.0, 436.7}, {402.0, 34.0}}
+                                  TextView, 0x118b71a40, {{16.0, 442.7}, {360.0, 22.0}}, value: The catalog is the...
+                                    TextView, 0x118b71b80, {{16.0, 442.7}, {359.1, 22.0}}, label: 'The catalog is the one this session already had.'
+                                    Other, 0x118b71cc0, {{343.0, 442.7}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x118b71e00, {{370.0, 425.7}, {3.0, 36.0}}
+                                    Other, 0x118b71f40, {{16.0, 450.7}, {360.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118b72080, {{19.0, 458.7}, {354.0, 3.0}}
+                          Cell, 0x118b721c0, {{0.0, 470.7}, {402.0, 21.0}}
+                            Other, 0x118b72300, {{0.0, 470.7}, {402.0, 21.0}}
+                              Other, 0x118b72440, {{0.0, 470.7}, {402.0, 21.0}}
+                                Other, 0x118b72580, {{0.0, 470.7}, {402.0, 21.0}}
+                            Other, 0x118b726c0, {{0.0, 470.7}, {402.0, 21.0}}
+                              Other, 0x118b72800, {{0.0, 470.7}, {402.0, 21.0}}
+                                Other, 0x118b72940, {{0.0, 470.7}, {402.0, 21.0}}
+                                  Other, 0x118b72a80, {{0.0, 470.7}, {402.0, 21.0}}
+                          Other, 0x118b72bc0, {{369.0, 166.0}, {30.0, 573.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118b72d00, {{396.0, 721.0}, {3.0, 15.0}}
+                          Other, 0x118b72e40, {{369.0, 166.0}, {30.0, 573.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118b72f80, {{396.0, 721.0}, {3.0, 15.0}}
+                        Other, 0x118b730c0, {{0.0, 0.0}, {0.0, 0.0}}
+                        TextView, 0x118b73200, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x118b73340, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x118b73480, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118b735c0, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x118b73700, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x118b73840, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x118b73980, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x118b73ac0, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x118b73c00, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x118b73d40, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                          Button, 0x118b73e80, {{64.0, 797.0}, {51.0, 18.0}}
+                            StaticText, 0x118b74000, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                        Button, 0x118b74140, {{157.7, 797.0}, {156.3, 18.0}}, label: 'Model claude-opus-5-5, effort Max'
+                          Button, 0x118b74280, {{157.7, 797.0}, {156.3, 18.0}}
+                            StaticText, 0x118b743c0, {{157.7, 797.0}, {122.7, 18.0}}, label: 'claude-opus-5-5'
+                            StaticText, 0x118b74500, {{285.3, 797.0}, {28.7, 18.0}}, label: 'Max'
+                        Button, 0x118b74640, {{322.0, 798.0}, {16.0, 16.0}}, label: 'Context window not reported yet'
+                        Button, 0x118b74780, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                        Button, 0x118b748c0, {{16.0, 116.0}, {370.0, 44.0}}, identifier: 'needs-you-bar', label: 'Landed without your confirmation, Refund service, +1'
+                          Image, 0x118b74a00, {{23.0, 123.0}, {30.0, 30.0}}, identifier: 'arrow.triangle.merge', label: 'Merge'
+                          StaticText, 0x118b74b40, {{63.0, 121.2}, {241.7, 18.0}}, label: 'Landed without your confirmation'
+                          StaticText, 0x118b74c80, {{327.0, 125.2}, {13.0, 13.3}}, label: '+1'
+                          StaticText, 0x118b74dc0, {{354.0, 123.2}, {16.0, 15.7}}, label: '2h'
+                          StaticText, 0x118b74f00, {{63.0, 139.2}, {90.7, 15.7}}, label: 'Refund service'
+                Other, 0x118b75040, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118b75180, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x118b43480, pid: 36538, label: 'LandingProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.landingprobe'
+  Output: {
+    Application, 0x118b752c0, pid: 36538, label: 'LandingProbe'
+  }

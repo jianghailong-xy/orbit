@@ -1,0 +1,46 @@
+==> iPhone 77AA4492-C787-4EEE-A772-05D4B3E9ECCD
+==> stub ready on 127.0.0.1:8765 (pid 4714, after 5s); {"line": "MAIN", "lineAbsentReason": null, "ref": "main", "upstreamRef": "main",
+==> mac
+Test Case '-[LandingMacProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' started.
+Test Case '-[LandingMacProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' passed (61.594 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.598) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.602) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 61.594 (61.604) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 18710, after 2s); {"line": "MAIN", "lineAbsentReason": null, "ref": "main", "upstreamRef": "main",
+==> ios
+Test Case '-[LandingProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' started.
+Test Case '-[LandingProbeUITests.DiagnosticRowShotTests testTheRefreshIsOneGreyRowBesideTheNoticeAndTheError]' passed (72.396 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.398) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.399) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 72.396 (72.401) seconds
+** TEST SUCCEEDED **
+.cr-probe/run.sh: line 84: 18710 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.cr-probe/shots/ios:
+total 2320
+drwxr-xr-x  13 runner  staff     416 Oct 29 06:17 .
+drwxr-xr-x   4 runner  staff     128 Oct 29 05:56 ..
+drwxr-xr-x   9 runner  staff     288 Oct 29 06:17 attachments
+-rw-r--r--@  1 runner  staff     735 Oct 29 06:16 DiagnosticRowShotTeststestTheRefreshIsOneGreyRowBesideTheNoticeAndTheError-notes.txt
+-rw-r--r--   1 runner  staff  206877 Oct 29 06:16 ios-diagnostic-row-dark.png
+-rw-r--r--   1 runner  staff  232421 Oct 29 06:16 ios-diagnostic-row-light.png
+-rw-r--r--   1 runner  staff     378 Oct 29 06:17 not-served.txt
+-rw-r--r--   1 runner  staff    6829 Oct 29 06:16 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 29 06:08 requests.log.out
+-rw-r--r--@  1 runner  staff   22014 Oct 29 06:16 tree-ios-diagnostic-row-dark.txt
+-rw-r--r--@  1 runner  staff   22014 Oct 29 06:16 tree-ios-diagnostic-row-light.txt
+-rw-r--r--   1 runner  staff      80 Oct 29 06:17 writes.txt
+-rw-r--r--   1 runner  staff  668398 Oct 29 06:17 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.cr-probe/shots/mac:
+total 1800
+drwxr-xr-x  10 runner  staff     320 Oct 29 06:17 .
+drwxr-xr-x   4 runner  staff     128 Oct 29 05:56 ..
+drwxr-xr-x  10 runner  staff     320 Oct 29 06:08 attachments
+-rw-r--r--   1 runner  staff  113492 Oct 29 06:08 mac-diagnostic-row-dark.png
+-rw-r--r--   1 runner  staff  122435 Oct 29 06:08 mac-diagnostic-row-light.png
+-rw-r--r--   1 runner  staff     378 Oct 29 06:17 not-served.txt
+-rw-r--r--   1 runner  staff    5662 Oct 29 06:08 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 29 05:59 requests.log.out
+-rw-r--r--   1 runner  staff      80 Oct 29 06:17 writes.txt
+-rw-r--r--   1 runner  staff  662323 Oct 29 06:08 xcodebuild-mac.log
