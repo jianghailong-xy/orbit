@@ -741,6 +741,19 @@ from the database instead.
   `gave up reading back seq 3-14`. It tells the session's streams to fetch the transcript again: the web and the apps
   drop the part they hold and load its newest page. The owner's session lists that follow that apiserver get the
   session's row again, read from the database.
+- **When its listener drops.** Each apiserver hears the others' notices on a connection of its own, which it opens
+  again 2 seconds after losing it. A notice sent in between never reaches it, and the database keeps no copy.
+  - Once the connection is back, the apiserver checks whether another apiserver ran meanwhile, that is, wrote its row
+    in `apiserver_process` during the gap or in the 30 seconds before it. If one did, the apiserver handles every
+    session it has a stream of open as if it had given up a read: the streams fetch the transcript again, and the
+    owner's lists there get the session's row again.
+  - It logs one line, with how long and how many sessions:
+    `LISTEN/NOTIFY back after 2345 ms without it: 1 other apiserver(s) ran meanwhile and what they announced did not reach this one, so this apiserver's streams of 3 session(s) were told to re-fetch`.
+  - An apiserver that is alone missed nothing. It logs that no other apiserver ran, and sends nothing.
+  - A database restart drops every apiserver's listener at once, so afterwards every session stream in the deployment
+    loads its newest page again, within a few seconds.
+  - The owner's lists are not re-read for the sessions it has no stream of. If another apiserver changed one of them in
+    those seconds, the change shows at the session's next change, or when the list is next loaded.
 
 **Turning the switch off.** Before turning `RUNNER_LINK_REQUIRED` off, put every session stream back on the first
 apiserver, where runners that go back to HTTPS post their deltas. Either remove the gateway's lines from
@@ -791,6 +804,8 @@ apiserver, and this section says how each works:
 - Recaps, approval alerts and agents' notifications are decided on the database rows they are about.
 - An upgrade recreates every apiserver.
 - A batch another apiserver stored reaches a session's streams, or they are told to fetch the transcript again.
+- When an apiserver's listener comes back, the session streams on it fetch the transcript again if another apiserver
+  ran meanwhile.
 
 ### Database connections
 
