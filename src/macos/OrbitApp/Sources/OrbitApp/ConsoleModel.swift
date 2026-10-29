@@ -3904,8 +3904,11 @@ final class ConsoleModel {
         }
     }
 
+    /// `startAfterCreate` is the single-task create card's Create and start: the yes that also starts
+    /// the new task's run.
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
-                answers: [String: [String]]? = nil, remember: Bool = false) async {
+                answers: [String: [String]]? = nil, remember: Bool = false,
+                startAfterCreate: Bool = false) async {
         var rules: [PermissionRule]?
         if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
@@ -3915,7 +3918,11 @@ final class ConsoleModel {
         reducer.removeApproval(id: approval.id)
         publishStateNow()
         approvalAnswers[approval.id] = .sending
-        let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
+        // Create and start sends its own body; every other press sends the one it always has, with
+        // no startAfterCreate key in it at all.
+        let req = startAfterCreate
+            ? Approvals.createAndStartRequest
+            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
             approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,

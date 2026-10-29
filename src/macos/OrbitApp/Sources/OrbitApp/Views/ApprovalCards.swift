@@ -164,9 +164,13 @@ struct ApprovalActions<Content: View>: View {
 /// a fumbled tap and a deliberate one feel identical. No-op on macOS.
 private func decide(_ console: ConsoleModel, _ approval: PendingApproval,
                     _ behavior: ApprovalBehavior,
-                    answers: [String: [String]]? = nil, remember: Bool = false) {
+                    answers: [String: [String]]? = nil, remember: Bool = false,
+                    startAfterCreate: Bool = false) {
     PlatformHaptics.tap()
-    Task { await console.decide(approval, behavior: behavior, answers: answers, remember: remember) }
+    Task {
+        await console.decide(approval, behavior: behavior, answers: answers, remember: remember,
+                             startAfterCreate: startAfterCreate)
+    }
 }
 
 /// Trimmed-non-empty, so a field that is present but blank doesn't render an empty row.
@@ -321,6 +325,9 @@ struct ToolApprovalCard: View {
     private var actions: some View {
         ApprovalActions {
             allowButton
+            if Approvals.offersCreateAndStart(toolName: approval.toolName ?? "", input: approval.input) {
+                createAndStartButton
+            }
             if !rememberRules.isEmpty { rememberButton(rememberRules) }
             denyButton
         }
@@ -419,6 +426,17 @@ struct ToolApprovalCard: View {
         if dag != nil { return "Apply changes" }
         if blocker != nil { return "Resolve it" }
         return "Allow"
+    }
+    /// The single-task card's second yes, offered only when nothing would start the task otherwise and
+    /// the runner that filed the card acts on the choice (`Approvals.offersCreateAndStart`): it creates
+    /// the task and starts its run in the same press. Bordered, so Create it stays the card's one filled
+    /// answer.
+    private var createAndStartButton: some View {
+        Button { decide(console, approval, .allow, startAfterCreate: true) } label: {
+            Text(Approvals.createAndStartAction)
+                .approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.

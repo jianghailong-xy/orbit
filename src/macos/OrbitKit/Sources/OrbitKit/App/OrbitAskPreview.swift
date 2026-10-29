@@ -192,6 +192,28 @@ public extension Approvals {
     /// that are shared and `CreateCardCopyParityTests` is what keeps them shared.
     static let createHeading = "Create 1 task?"
 
+    /// The single-task card's second yes: create the task and start its run in the same press, so
+    /// the owner is not asked again to start it. Web's `CREATE_AND_START`; Android's
+    /// `CardVerb.CREATE_AND_START`.
+    static let createAndStartAction = "Create and start"
+
+    /// Whether the single-task card offers Create and start: only when the server's forecast says
+    /// nothing would start the task by itself (`needsManualStart` is 1). A task that starts on its
+    /// own (now or at its runAt), waits on a prerequisite, cannot run, or waits for its project to
+    /// start has nothing for the press to add, and a card whose forecast could not be read says
+    /// nothing either way. Nor a card the server did not mark `acceptsStartAfterCreate`: its runner,
+    /// or the server itself, predates the choice and would only create the task. Web's
+    /// `offersCreateAndStart`.
+    static func offersCreateAndStart(toolName: String, input: JSONValue?) -> Bool {
+        guard isTaskCreate(toolName: toolName), let input,
+              input["acceptsStartAfterCreate"]?.boolValue == true else { return false }
+        return batchPreview(from: input)?.needsManualStart == 1
+    }
+
+    /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
+    /// remember rules, none of which a create card carries.
+    static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
+
     /// The fold's own line, carrying its length the way the evidence card's claim fold does: this is
     /// the longest field on the card and the least decisive, and how much of it there is is exactly
     /// what decides whether to open it.

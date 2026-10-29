@@ -1321,12 +1321,18 @@ public struct ApprovalDecisionRequest: Codable, Sendable {
     /// single `rememberRule` this used to send has not been read by the server since June 2026,
     /// which made every "Allow & remember" a plain Allow.
     public let rememberRules: [PermissionRule]?
+    /// The single-task create card's Create and start (`Approvals.createAndStartRequest`): the yes
+    /// also starts the new task's run. Nil leaves the key out of the JSON altogether, so every other
+    /// answer, that card's own Create it included, is the body it was before the choice existed.
+    public let startAfterCreate: Bool?
     public init(behavior: ApprovalBehavior, message: String? = nil,
-                answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil) {
+                answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil,
+                startAfterCreate: Bool? = nil) {
         self.behavior = behavior
         self.message = message
         self.answers = answers
         self.rememberRules = rememberRules
+        self.startAfterCreate = startAfterCreate
     }
 }
 
