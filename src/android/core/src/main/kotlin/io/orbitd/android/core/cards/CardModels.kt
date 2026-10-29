@@ -31,10 +31,12 @@ data class CriteriaDecision(val commitToken: String, val decision: String, val b
 @Serializable
 data class OwnerAnswer(val key: String, val option: Int? = null, val text: String? = null)
 /** `upstreamRef` is the project's main branch as a full `refs/heads/…` ref: the owner's choice on a press, a suggestion on a
- * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). */
+ * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). `deliveryMode` is how the
+ * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. */
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
-    val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null)
+    val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
+    val deliveryMode: String? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER,
@@ -57,6 +59,8 @@ enum class CardVerb(val label: String) {
     MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"), ABANDON("Abandon"),
     /** RETRY on an integration item (A08-17): its task's landing queued again, or the merge candidate's check run again. */
     RETRY_INTEGRATION("Retry"), RERUN_CHECK("Re-run the check"),
+    /** §10.8: the owner accepts work that reached main without their confirmation, or has the project's line looked at again. */
+    ACCEPT("Accept"), OBSERVE("Observe again"),
     CONFIRM_MERGE("Merge"), DECLINE_MERGE("Not now"), CANCEL_MERGE("Cancel merge"),
     WIKI_ACCEPT("Accept"), WIKI_EDIT("Save edit"), WIKI_REJECT("Reject"), WIKI_CONFIRM("Confirm entry"),
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
@@ -275,6 +279,9 @@ object CardCatalog {
                 if ("CANCEL_TASK" in verbs && row.text("taskId") != null) add(CardVerb.CANCEL_TASK)
                 // §2.9 LS6's reading door opens a session, so it carries no verb; J-T10's Abandon ends the one job the item names.
                 if ("ABANDON" in verbs && !row.text("integrationJobId").isNullOrEmpty()) add(CardVerb.ABANDON)
+                // §10.8: Accept answers the item itself, and Observe again looks at the project's line — neither needs more of the row.
+                if ("ACCEPT" in verbs) add(CardVerb.ACCEPT)
+                if ("OBSERVE" in verbs) add(CardVerb.OBSERVE)
                 if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW",
                         "LANDING_LEASE_EXPIRED")) add(CardVerb.MARK_HANDLED)
             }

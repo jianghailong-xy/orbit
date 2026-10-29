@@ -25,6 +25,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.JsonObject
 import java.util.UUID
@@ -34,31 +35,42 @@ import java.util.UUID
  * draws it (A08-17; iOS `OwnerItemCardView`). It opens with what has to happen next — the server's own sentence, who is already
  * fixing it, and the doors the server listed in their three weights, the server's `primaryAction` first, each with the line under it
  * saying what pressing it does — then the item's facts, then who owes the answer and for how long. `Review` is drawn only where the
- * merge card it points at is in this conversation ([mergeCard]) and brings it into view ([review]). The owner's own ending comes last
- * and quietest, and asks for the reason it is not allowed to go without. A card whose item the read no longer carries says so.
+ * merge card it points at is in this conversation ([mergeCard]) and brings it into view ([review]). A rerun or an observation in
+ * flight is said under the facts (§4.7 H1), naming the project's main branch, [main]. The owner's own ending comes last and quietest,
+ * and asks for the reason it is not allowed to go without, as Observe again asks for its own. A card whose item the read no longer
+ * carries says so.
  */
 @Composable
 internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardActionState, mergeCard: String?, open: (String) -> Unit,
-    discuss: ((String) -> Unit)?, review: (String) -> Unit, submit: (CardVerb, CardInput) -> Unit) {
+    discuss: ((String) -> Unit)?, review: (String) -> Unit, main: String = RunSettings.defaultMainBranch, submit: (CardVerb, CardInput) -> Unit) {
     val row = card.source
-    val pause = row.text("kind") == "FUSE_PAUSED"
     val gone = card.status == CardPreviews.stale
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
     // The reason a "Mark as handled" press would carry, and whether its panel is up: closing the panel keeps what was typed, and
-    // only the door taking it clears it.
+    // only the door taking it clears it. Observe again's reason is kept the same way.
     var asking by rememberSaveable(card.key) { mutableStateOf(false) }
     var reason by rememberSaveable(card.key) { mutableStateOf("") }
     var marking by remember(card.key) { mutableStateOf(false) }
+    var lookingAgain by rememberSaveable(card.key) { mutableStateOf(false) }
+    var why by rememberSaveable(card.key) { mutableStateOf("") }
+    var observing by remember(card.key) { mutableStateOf(false) }
     var cancelling by remember(card.key) { mutableStateOf(false) }
     LaunchedEffect(marking, result.settled) { if (marking && result.settled) { reason = ""; asking = false; marking = false } }
+    LaunchedEffect(observing, result.settled) { if (observing && result.settled) { why = ""; lookingAgain = false; observing = false } }
     val tone = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().testTag(card.key).alpha(if (gone) 0.72f else 1f)
         .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
         .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(painterResource(if (pause) R.drawable.ic_pause else R.drawable.ic_warning), null, Modifier.size(18.dp), tint = tone)
-            Text(if (pause) ExceptionCards.pauseTitle else ExceptionCards.escalatedTitle, Modifier.testTag("${card.key}:title"),
+            // Work that landed without the owner's confirmation is about a merge into main, and wears the merge's mark.
+            val glyph = when (row.text("kind")) {
+                "FUSE_PAUSED" -> R.drawable.ic_pause
+                "LANDED_WITHOUT_CONFIRMATION" -> R.drawable.ic_merge
+                else -> R.drawable.ic_warning
+            }
+            Icon(painterResource(glyph), null, Modifier.size(18.dp), tint = tone)
+            Text(ExceptionCards.title(row), Modifier.testTag("${card.key}:title"),
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
         }
         Text(ExceptionCards.provenance, style = MaterialTheme.typography.labelSmall, color = secondary)
@@ -83,6 +95,8 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 val pressed: (() -> Unit)? = when {
                     verb != null -> if (verb !in card.actions) null else ({
                         if (verb == CardVerb.CANCEL_TASK) cancelling = true
+                        // The observation door requires a reason: the press asks for it first.
+                        else if (verb == CardVerb.OBSERVE) lookingAgain = true
                         else submit(verb, CardInput(triggerId = if (verb == CardVerb.RETRY_TASK) UUID.randomUUID().toString() else null))
                     })
                     press.action == "OPEN_TASK_SESSION" -> ExceptionCards.openTaskSessionLink(row)?.let { link -> { open(link) } }
@@ -118,7 +132,21 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
             if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
         ExceptionFacts(card.key, row)
-        if (asking) MarkHandledPanel(card.key, reason, { reason = it.take(ExceptionCards.markHandledMaxLength) }, enabled, back = { asking = false }) {
+        // §4.7 H1: what is handling it while that runs — a rerun, or an observation of the line — and the reason it was asked for.
+        ExceptionCards.handlingLine(row, main = main)?.let { line ->
+            Column(Modifier.testTag("${card.key}:handling"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FactRowView(card.key, ExceptionCards.FactRow(ExceptionCards.handlingLabel, line))
+                ExceptionCards.handlingReason(row)?.let { FactRowView(card.key, ExceptionCards.FactRow(ExceptionCards.reasonLabel, it)) }
+            }
+        }
+        if (lookingAgain) ReasonPanel("${card.key}:observe", "${card.key}:observe-reason", ExceptionCards.observeTitle, ExceptionCards.observeBody,
+            ExceptionCards.observeReason, ExceptionCards.observeAgain, why, { why = it.take(ExceptionCards.observeReasonMaxLength) }, enabled,
+            back = { lookingAgain = false }) {
+            observing = true; submit(CardVerb.OBSERVE, CardInput(text = why))
+        }
+        if (asking) ReasonPanel("${card.key}:mark-handled", "${card.key}:reason", ExceptionCards.markHandledTitle, ExceptionCards.markHandledBody,
+            ExceptionCards.markHandledReason, ExceptionCards.markHandled, reason, { reason = it.take(ExceptionCards.markHandledMaxLength) }, enabled,
+            back = { asking = false }) {
             marking = true; submit(CardVerb.MARK_HANDLED, CardInput(text = reason))
         }
         Text(ExceptionCards.ownerLine(row), Modifier.testTag("${card.key}:owner"), style = MaterialTheme.typography.labelSmall, color = secondary)
@@ -219,20 +247,23 @@ private fun LogTail(key: String, tail: ExceptionCards.CheckTail) {
     }
 }
 
-/** The reason the owner's own ending requires, asked for in place. The confirm waits for one: an empty reason is not a press. */
+/** A reason a door requires, asked for in place — the owner's own ending's, and Observe again's: what the press does, the field, and
+ * the press itself, which waits for a reason because an empty one is not a press. [tag] names the panel and its two buttons, [field]
+ * the field. */
 @Composable
-private fun MarkHandledPanel(key: String, reason: String, edit: (String) -> Unit, enabled: Boolean, back: () -> Unit, confirm: () -> Unit) {
+private fun ReasonPanel(tag: String, field: String, title: String, body: String, label: String, confirmLabel: String, reason: String,
+    edit: (String) -> Unit, enabled: Boolean, back: () -> Unit, confirm: () -> Unit) {
     val line = MaterialTheme.colorScheme.onSurface
     Column(Modifier.fillMaxWidth().background(line.copy(alpha = 0.04f), RoundedCornerShape(8.dp)).border(1.dp, line.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-        .padding(horizontal = 10.dp, vertical = 9.dp).testTag("$key:mark-handled-panel"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(ExceptionCards.markHandledTitle, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-        Text(ExceptionCards.markHandledBody, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(reason, edit, Modifier.fillMaxWidth().testTag("$key:reason"), enabled = enabled, minLines = 2, maxLines = 5,
-            label = { Text(ExceptionCards.markHandledReason) })
+        .padding(horizontal = 10.dp, vertical = 9.dp).testTag("$tag-panel"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(reason, edit, Modifier.fillMaxWidth().testTag(field), enabled = enabled, minLines = 2, maxLines = 5,
+            label = { Text(label) })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(back, Modifier.heightIn(min = 48.dp).testTag("$key:mark-handled-back")) { Text("Back") }
-            Button(confirm, Modifier.heightIn(min = 48.dp).testTag("$key:mark-handled-confirm"), enabled = enabled && reason.isNotBlank()) {
-                Text(ExceptionCards.markHandled)
+            OutlinedButton(back, Modifier.heightIn(min = 48.dp).testTag("$tag-back")) { Text("Back") }
+            Button(confirm, Modifier.heightIn(min = 48.dp).testTag("$tag-confirm"), enabled = enabled && reason.isNotBlank()) {
+                Text(confirmLabel)
             }
         }
     }

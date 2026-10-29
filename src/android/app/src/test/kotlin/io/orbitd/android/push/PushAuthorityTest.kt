@@ -166,6 +166,31 @@ class PushAuthorityTest {
         }
     }
 
+    /** Revision 29's fifth owner item (§7.6 V12, owner 2026-10-28): `landed-without-confirmation` is handled as the other owner items
+     * are — it names its project and its item or is no notification, it is a reminder, it opens the coordinator conversation its card
+     * is in (its project's page without one), and it stands only while the item is the owner's and open: Accept ends it. */
+    @Test fun workThatLandedWithoutYourConfirmationIsPushedAsAnOwnerItem() = runBlocking {
+        val push = message("landed-without-confirmation", "sessionID" to sid, "projectID" to pid, "openItemID" to iid)
+        assertTrue(push.payload.isOwnerItem); assertTrue(push.payload.isReminder)
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL), push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertEquals(OrbitRoute(Destination.PROJECT, pid, origin = Origin.EXTERNAL),
+            message("landed-without-confirmation", "projectID" to pid, "openItemID" to iid).link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull("an owner item names its project and its item", PushMessage.parse(fixtureData() + ("payload" to
+            """{"title":"Landed without your confirmation","body":"Fix the login redirect · Launch","kind":"landed-without-confirmation","sessionID":"$sid","projectID":"$pid"}""")))
+        authorityFixture { authority, server, _ ->
+            var open = true
+            server.respond = { request -> when (request.path) {
+                "/api/projects/$pid" -> response("""{"id":"$pid","coordinatorSessionId":"$sid"}""")
+                "/api/sessions/$sid" -> response("""{"id":"$sid","status":"AWAITING_INPUT","lifecycleState":"OPEN"}""")
+                "/api/projects/$pid/open-items" -> response("""{"needsYou":${if (open) """[{"itemId":"$iid","kind":"LANDED_WITHOUT_CONFIRMATION","assignee":"OWNER"}]""" else "[]"},"withCoordinator":[]}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            open = false
+            assertEquals(PushCheck.STALE, authority.check(push))
+        }
+    }
+
     @Test fun watchNeedsExactMatchGenerationAndConfirmationNeedsActualProblemsRecord() = runBlocking {
         authorityFixture { authority, server, _ ->
             val watch = message("watch-matched", "watchID" to wid, "generation" to 2)

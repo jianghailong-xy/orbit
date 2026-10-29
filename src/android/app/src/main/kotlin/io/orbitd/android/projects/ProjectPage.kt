@@ -597,7 +597,8 @@ object ProjectPage {
         return when (val status = t.text("status")) { "DONE", "CANCELLED", "FAILED" -> status; "IN_PROGRESS" -> "RUNNING"; else -> "BLOCKED" }
     }
     fun waitsForLanding(t: JsonObject) = t.text("dependencyState") != "READY" && (t.number("landingWaitCount") ?: 0) > 0
-    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER")
+    /** An AGENT_PUSH task not yet seen on its line (§10.9) has no receipt either, so it waits with the work still landing. */
+    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION")
     private val landedStates = setOf("ON_INTEGRATION_LINE", "ON_UPSTREAM")
     /** "integrating" / "landed" for a done task, by its integration state. */
     fun integrationStage(t: JsonObject): String? {
@@ -627,10 +628,18 @@ object ProjectPage {
             "CHECK_FAILED" -> Tag("Checks failed · $who", TagTone.DANGER)
             "ERROR" -> Tag("Integration error · $who", TagTone.DANGER)
             "AWAITING_OWNER" -> Tag("Awaiting your approval", TagTone.WARNING)
+            "AWAITING_OBSERVATION" -> Tag(waitingToBeSeenOn(upstreamRef ?: "main", integration.text("deliveredSha")), TagTone.NEUTRAL)
             "ON_INTEGRATION_LINE" -> Tag("On ${ref ?: "the project branch"}", TagTone.SUCCESS)
             "ON_UPSTREAM" -> Tag("On ${upstreamRef ?: "main"}", TagTone.SUCCESS)
             else -> null
         }
+    }
+    /** §10.9's second segment for an AGENT_PUSH task its line has not been seen to carry yet: "Waiting to be seen on main · 9f1c2ab" —
+     * the commit it was delivered as, short — and the words alone while that commit is not frozen (`deliveredSha` null). Once seen, the
+     * row reads `On <branch>` (the browser's `waitingToBeSeenOn`). */
+    fun waitingToBeSeenOn(branch: String, deliveredSha: String?): String {
+        val words = "Waiting to be seen on $branch"
+        return if (deliveredSha.isNullOrEmpty()) words else "$words · ${deliveredSha.take(7)}"
     }
     /** The web's bands, the server's order kept inside each (`taskGroups`). */
     fun taskGroups(items: List<JsonObject>): List<TaskGroup> {
@@ -954,12 +963,14 @@ object StartProjectCopy {
     /** An escalation window as the list says it: "30 min", "2 h". */
     fun within(seconds: Int) = if (seconds < 3600) "${max(1, (seconds / 60.0).roundToInt())} min" else "${(seconds / 3600.0).roundToInt()} h"
     data class ComesToYouItem(val text: String, val detail: String? = null)
-    /** The Automatic switch's consequence, listed (`StartProject.comesToYou`); the merges name the project's main branch. */
+    /** The Automatic switch's consequence, listed (`StartProject.comesToYou`); the merges name the project's main branch. An agent
+     * that pushes its own work to main ([deliveryMode] AGENT_PUSH) asks nobody to merge it (§10.5 O-L2): no merge comes to the owner. */
     fun comesToYou(automatic: Boolean, line: String, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
-        main: String = RunSettings.defaultMainBranch): List<ComesToYouItem> {
+        main: String = RunSettings.defaultMainBranch, deliveryMode: String? = null): List<ComesToYouItem> {
         val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
             else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
-        val merges = if (line == "MAIN") listOf(ComesToYouItem(eachMergeInto(main))) else if (automatic) emptyList() else listOf(ComesToYouItem(mergingInto(main)))
+        val merges = if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
+            else if (automatic) emptyList() else listOf(ComesToYouItem(mergingInto(main)))
         val criteria = ComesToYouItem(criteriaChanges)
         if (automatic) return confirms + merges + criteria + ComesToYouItem(problemsUnresolved(within(escalationSeconds)))
         return listOf(ComesToYouItem(decideDone, if (evidenceJudged > 0) reviews(evidenceJudged) else null)) + confirms +
@@ -1135,21 +1146,27 @@ object StartProjectCopy {
     }
     /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). `upstream` is
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
-     * repository, which has no main branch to choose, and for an integration read that did not answer. */
+     * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
+     * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
     data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
-        val upstream: String? = null) {
+        val upstream: String? = null, val deliveryMode: String? = null) {
         val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
+        /** The agent pushes its own work only on a main line (§10.5 O-L2): then no merge into main asks anybody. */
+        val agentPushes get() = RunSettings.delivery(line, deliveryMode) == "AGENT_PUSH"
         companion object {
-            /** [view] is the project's integration read: only a project with a repository has a main branch to choose. */
+            /** [view] is the project's integration read: only a project with a repository has a main branch to choose, and only a read
+             * that says how the work reaches it offers that choice — opened on what the project already chose when that is AGENT_PUSH
+             * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
-                if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null)
+                if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
+                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) })
         }
     }
     /** `StartProject.body`: the seal, every setting, and the request answered — the branch only with a project branch, a blank check
-     * as none, and the main branch whenever the card offered one: it is the owner's choice once pressed. */
+     * as none, the main branch whenever the card offered one: it is the owner's choice once pressed — and how the work reaches it. */
     fun body(request: Request, draft: Draft, requestId: String?): JsonObject = buildJsonObject {
         val branch = request.settings.projectBranchName.orEmpty()
         val check = draft.mergeCheckCommand.trim()
@@ -1158,6 +1175,8 @@ object StartProjectCopy {
         draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
+        // With a main line only: the door refuses AGENT_PUSH anywhere else, and a card that offered no choice records none.
+        if (draft.line == "MAIN") draft.deliveryMode?.let { put("deliveryMode", it) }
         put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
     }
 
@@ -1189,6 +1208,24 @@ object RunSettings {
     /** The two above, said of the project's main branch. */
     fun lineMain(main: String) = "Directly into $main"
     fun lineMainHint(main: String) = "For a single task or an urgent fix. Every merge into $main asks you."
+    /** Directly into main's hint once the agent pushes there: no merge into main asks anybody (§10.5 O-L2). */
+    fun lineMainHintAgentPush(main: String) = "For a single task or an urgent fix. The agent pushes each task’s work to $main itself."
+
+    // How a finished task's work reaches the main branch (§10.5 O-L1, A-Q21): Orbit lands it — the default, and what every project did
+    // before the choice existed — or the agent pushes it there itself, which only a project that lands directly into its main branch
+    // can choose (409 `DELIVERY_MODE_NEEDS_MAIN_LINE` otherwise). Each hint is the owner's half of what the task prompt tells the agent
+    // (O-L3). Web's lib/projectStart.ts, word for word.
+    const val delivery = "Delivery"
+    const val deliveryPlatform = "Orbit lands it"
+    const val deliveryAgentPush = "The agent pushes it"
+    fun deliveryPlatformHint(main: String) = "The agent doesn’t push to $main: Orbit lands its branch once the work is accepted."
+    fun deliveryAgentPushHint(main: String) = "The agent pushes to $main itself, and Orbit checks the commits are there."
+    /** Why the agent may not push here: the project lands on a project branch, or no line is decided. */
+    fun deliveryNeedsMainLine(main: String) = "The agent can push only on a project that lands directly into $main. On a project branch, " +
+        "Orbit lands the work."
+    /** The delivery a line stands for: the agent pushes only on a main line, so on any other — a project branch, or none decided — it
+     * is Orbit's, whatever was chosen while the line was main. */
+    fun delivery(line: String?, mode: String?) = if (line == "MAIN" && mode == "AGENT_PUSH") "AGENT_PUSH" else "PLATFORM"
 
     // The main branch: the branch a project's tasks start from and its finished work ends up on (`project_codebase.upstream_ref`),
     // main until the owner chooses another. Every sentence here that says where work goes names the project's own, so a project on
@@ -1241,6 +1278,14 @@ object RunSettings {
             else "The coordinator decides when each task is done and merges into $main by itself — with a " +
             "receipt you can revert."
     }
+    /** The start card's sentence under the switch for a project whose agent pushes its own work (§10.5 O-L2): no merge into main asks
+     * anybody, because Orbit merges nothing there. */
+    fun automaticSaysAgentPush(automatic: Boolean, main: String = defaultMainBranch) =
+        "${if (automatic) "The coordinator decides" else "You decide"} when each task is done. The agent pushes each task’s work to $main itself."
+    /** How it runs' Automatic sentence for the same project: the merging half is the agent's. */
+    fun automaticHintAgentPush(main: String = defaultMainBranch) = "The coordinator runs it for you: it decides when each task is done and " +
+        "handles failed tasks and work not seen on $main. The agent pushes each task’s work to $main itself. The criteria and anything " +
+        "irreversible stay yours."
     /** The start card's merge check row, folded to its value, and what an empty one means. */
     const val mergeCheckSet = "Set"
     const val mergeCheckNone = "None"
@@ -1307,9 +1352,20 @@ object RunSettings {
         return "$minutes minute${if (minutes == 1) "" else "s"}"
     }
     fun escalationOptions(current: Int) = if (escalationChoices.any { it.first == current }) escalationChoices else escalationChoices + (current to escalationLabel(current))
-    /** One control, one write; null when nothing would change. */
+    /** One control, one write; null when nothing would change. A line moved off main while the agent pushes takes the delivery back
+     * to Orbit's in the same write, which is what the door asks of it (409 `DELIVERY_MODE_NEEDS_MAIN_LINE` otherwise). */
     fun lineWrite(view: JsonObject, to: String): JsonObject? =
-        if (view.flag("locked") || to == view.text("line")) null else buildJsonObject { put("line", to) }
+        if (view.flag("locked") || to == view.text("line")) null else buildJsonObject {
+            put("line", to)
+            if (to != "MAIN" && view.text("deliveryMode") == "AGENT_PUSH") put("deliveryMode", "PLATFORM")
+        }
+    /** How the work reaches main, chosen (§10.5 O-L1): written whether or not the line has locked, and only where it can hold — the
+     * agent pushes only on a main line. Null when nothing would change, and on a server that reports no mode. */
+    fun deliveryWrite(view: JsonObject, to: String): JsonObject? {
+        val stored = view.text("deliveryMode") ?: return null
+        if (to == stored || (to == "AGENT_PUSH" && view.text("line") != "MAIN")) return null
+        return buildJsonObject { put("deliveryMode", to) }
+    }
     /** The main branch, chosen by name: written as a full ref, and only while the line can still move — a locked line and its main
      * branch are refused together. Choosing it is the owner's choice, and the one their next project in the repository starts with. */
     fun mainBranchWrite(view: JsonObject, to: String): JsonObject? =

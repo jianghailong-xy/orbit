@@ -349,6 +349,106 @@ class ExceptionCardsTest {
         assertFalse(CardVerb.MARK_HANDLED in cards(row(kind = "DELIVERY_REVIEW", assignee = "COORDINATOR")).single().actions)
     }
 
+    // MARK: revision 29's two items (§10.7, §10.8)
+
+    private val landedRequired = "This work reached main without your confirmation — accept it, or use Chat about this to have the " +
+        "coordinator file a task that reverts it."
+    private fun landed(taskId: String? = "t1", sessionId: String? = null, actions: List<String> = listOf("ACCEPT", "OPEN_TASK_SESSION")) =
+        row(kind = "LANDED_WITHOUT_CONFIRMATION", reason = "DEFAULT", escalatedAt = null, taskId = taskId, sessionId = sessionId, actions = actions,
+            primaryAction = "ACCEPT", requiredAction = landedRequired, title = "Reached main without your confirmation: Fix the login redirect",
+            detailLine = "7d3e9b01c2a4 is on main · seen by Orbit")
+
+    /** LANDED_WITHOUT_CONFIRMATION is the owner's from birth: its card wears its own kind word, is headed by its §10.7 title, leads with
+     * Accept — the one door that ends it, through the owner's own route — and offers no hand-close. The deploy-time pass's one item per
+     * project names no task, and offers Accept alone. */
+    @Test fun workThatLandedWithoutYourConfirmationLeadsWithAccept() {
+        val item = landed()
+        assertEquals(ExceptionCards.landedTitle, ExceptionCards.title(item))
+        assertEquals("Reached main without your confirmation: Fix the login redirect", ExceptionCards.headingLine(item, now))
+        assertNull("it never became the owner's, so no escalation story heads it", ExceptionCards.subject(item, now))
+        assertEquals(ExceptionCards.Facts.DetailLine("7d3e9b01c2a4 is on main · seen by Orbit"), ExceptionCards.facts(item))
+        assertEquals(landedRequired, ExceptionCards.requiredAction(item))
+        assertEquals(listOf(
+            ExceptionCards.CardPress("ACCEPT", ExceptionCards.PressTier.PRIMARY, "Accept", "You accept the work as it landed, and this item closes."),
+            ExceptionCards.CardPress("OPEN_TASK_SESSION", ExceptionCards.PressTier.SECONDARY, "Open task session", "Open the task session to repair the branch."),
+        ), ExceptionCards.presses(item))
+        assertEquals("orbit-task:t1", ExceptionCards.openTaskSessionLink(item))
+        val card = cards(item).single()
+        assertEquals("Accept is its one ending: no Mark as handled", listOf(CardVerb.ACCEPT), card.actions)
+        assertFalse(ExceptionCards.markable(item))
+        val accept = CardRequests.build(card, CardVerb.ACCEPT)
+        assertEquals(HttpMethod.POST, accept.method)
+        assertEquals(listOf("projects", "p1", "open-items", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4", "accept"), accept.path)
+        assertEquals(ExceptionCards.notAccepted, ExceptionCards.refusalHeadline(CardVerb.ACCEPT))
+        val backfill = landed(taskId = null, actions = listOf("ACCEPT"))
+        assertEquals(listOf("ACCEPT"), ExceptionCards.drawn(backfill))
+        assertEquals(listOf(CardVerb.ACCEPT), cards(backfill).single().actions)
+        assertEquals("the escalation's and the pause's words are theirs", listOf(ExceptionCards.escalatedTitle, ExceptionCards.pauseTitle),
+            listOf(ExceptionCards.title(row()), ExceptionCards.title(row(kind = "FUSE_PAUSED"))))
+    }
+
+    /** LANDING_UNOBSERVED, handed to the owner: an escalation like any other, headed by how it became theirs with its §10.7 title under
+     * it, and Observe again among its doors — quiet beside the way back to the coordinator — whose press needs a reason. The item a
+     * project's failing observations open (`IE:observe`) names no task, and Observe again is its one, leading door. */
+    @Test fun workNotSeenOnItsLineIsLookedAtAgainWithAReason() {
+        val unobserved = row(kind = "LANDING_UNOBSERVED", reason = "HANDED_OVER", actions = listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OBSERVE", "CANCEL_TASK"),
+            primaryAction = "ASK_COORDINATOR_AGAIN", title = "Not on main yet: Draw the observation cards",
+            detailLine = "Its commit was not found on the line · delivered 3b7e0d91a6c2")
+        assertEquals(ExceptionCards.escalatedTitle, ExceptionCards.title(unobserved))
+        assertEquals("Now yours — the coordinator handed it over", ExceptionCards.headingLine(unobserved, now))
+        assertEquals("Not on main yet: Draw the observation cards", ExceptionCards.subject(unobserved, now))
+        val presses = ExceptionCards.presses(unobserved)
+        assertEquals(listOf("ASK_COORDINATOR_AGAIN" to ExceptionCards.PressTier.PRIMARY, "OPEN_TASK_SESSION" to ExceptionCards.PressTier.SECONDARY,
+            "OBSERVE" to ExceptionCards.PressTier.LINK, "CANCEL_TASK" to ExceptionCards.PressTier.LINK), presses.map { it.action to it.tier })
+        assertEquals("Observe again" to "An observation of the line is queued with your reason.", presses[2].label to presses[2].consequence)
+        assertEquals(CardVerb.OBSERVE, ExceptionCards.verb(unobserved, "OBSERVE"))
+        val card = cards(unobserved).single()
+        assertEquals(listOf(CardVerb.RETURN_COORDINATOR, CardVerb.CANCEL_TASK, CardVerb.OBSERVE), card.actions)
+        assertFalse("a fact about the task ends it, never a hand-close", ExceptionCards.markable(unobserved))
+        // The door requires a reason: none, a blank one or one longer than the door takes is no request.
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(card, CardVerb.OBSERVE) }
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(card, CardVerb.OBSERVE, CardInput(text = "   ")) }
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(card, CardVerb.OBSERVE, CardInput(text = "x".repeat(2_001))) }
+        val observe = CardRequests.build(card, CardVerb.OBSERVE, CardInput(text = "  I pushed the rebased commit to main by hand  "))
+        assertEquals(HttpMethod.POST, observe.method)
+        assertEquals(listOf("projects", "p1", "integration", "observe"), observe.path)
+        assertEquals("I pushed the rebased commit to main by hand", body(observe).text("reason"))
+        assertEquals(ExceptionCards.notObserved, ExceptionCards.refusalHeadline(CardVerb.OBSERVE))
+        val failing = row(kind = "INTEGRATION_ERROR", taskId = null, sessionId = null, actions = listOf("OBSERVE"), primaryAction = "OBSERVE")
+        assertEquals(listOf(ExceptionCards.CardPress("OBSERVE", ExceptionCards.PressTier.PRIMARY, "Observe again",
+            "An observation of the line is queued with your reason.")), ExceptionCards.presses(failing))
+        assertTrue(CardVerb.OBSERVE in cards(failing).single().actions)
+    }
+
+    /** §4.7 H1's line while it runs, the browser's `handlingLine`: an observation says its own words, naming the project's main
+     * branch; a rerun says which, which generation and where it is; both say since when it was asked, and with what reason. */
+    @Test fun theHandlingLineSaysAnObservationInItsOwnWords() {
+        fun handled(jobKind: String, state: String, startedAt: String = "2026-09-21T11:58:00Z", promotionId: String? = null) = buildJsonObject {
+            row(kind = "LANDING_UNOBSERVED", promotionId = promotionId).forEach { (key, value) -> put(key, value) }
+            putJsonObject("handling") { put("sessionId", JsonNull); put("userId", "u1"); put("reason", "I pushed the rebased commit to main by hand")
+                put("startedAt", startedAt); put("jobId", "j1"); put("jobKind", jobKind); put("generation", 3); put("state", state) }
+        }
+        assertEquals("Observing main… — running · asked 2m ago", ExceptionCards.handlingLine(handled("OBSERVE_LANDING", "RUNNING"), now))
+        assertEquals("Observing feature/v1.1.1… — queued · asked just now",
+            ExceptionCards.handlingLine(handled("OBSERVE_LANDING", "QUEUED", startedAt = "2026-09-21T11:59:55Z"), now, "feature/v1.1.1"))
+        assertEquals("the rerun of the landing — generation 3 is queued · asked 2m ago", ExceptionCards.handlingLine(handled("LAND_TASK", "QUEUED"), now))
+        assertEquals("the re-check of the merge into master — generation 3 is running · asked 2m ago",
+            ExceptionCards.handlingLine(handled("CHECK_PROMOTION", "RUNNING", promotionId = "pr1"), now, "master"))
+        assertEquals("I pushed the rebased commit to main by hand", ExceptionCards.handlingReason(handled("OBSERVE_LANDING", "RUNNING")))
+        assertNull("nothing is handling it", ExceptionCards.handlingLine(row(), now))
+        assertNull(ExceptionCards.handlingReason(row()))
+    }
+
+    /** The two doors are the owner's own routes in the server's door table (`open-item-doors.ts`) and its controllers. */
+    @Test fun acceptAndObserveAreTheDoorTablesOwnRoutes() {
+        val table = File(root(), "src/apiserver/src/projects/open-item-doors.ts").readText()
+        listOf("action: 'ACCEPT',", "route: '/projects/:id/open-items/:itemId/accept',", "action: 'OBSERVE',",
+            "route: owner ? '/projects/:id/integration/observe' : '/runner/projects/:id/integration/observe',",
+        ).forEach { assertTrue("open-item-doors.ts no longer says $it", table.contains(it)) }
+        assertTrue(File(root(), "src/apiserver/src/projects/projects.controller.ts").readText().contains("@Post(':id/open-items/:itemId/accept')"))
+        assertTrue(File(root(), "src/apiserver/src/projects/project-integration-retry.controller.ts").readText().contains("@Post(':id/integration/observe')"))
+    }
+
     // MARK: the facts
 
     @Test fun aFailedCheckDrawsItsCommandMonoItsVerdictRedAndItsLogUnderTheCheckRow() {

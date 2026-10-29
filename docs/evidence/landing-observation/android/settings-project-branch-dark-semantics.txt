@@ -1,0 +1,119 @@
+Printing with useUnmergedTree = 'false'
+Node #329 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #382 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #383 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #384 at (l=32.0, t=32.0, r=790.0, b=2112.0)px, Tag: 'project-settings'
+          |-Node #386 at (l=32.0, t=68.0, r=204.0, b=108.0)px
+          | Text = '[How it runs]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #387 at (l=220.0, t=73.0, r=790.0, b=103.0)px
+          | Text = '[applies from the next task]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #389 at (l=32.0, t=140.0, r=242.0, b=188.0)px
+          | Text = '[Tasks land on]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #390 at (l=32.0, t=204.0, r=790.0, b=322.0)px, Tag: 'project-line:PROJECT_BRANCH'
+          | Focused = 'false'
+          | Role = 'RadioButton'
+          | Text = '[A project branch,  · project/check…, Recommended when tasks depend on each other: they land here first and are checked together.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #397 at (l=32.0, t=338.0, r=790.0, b=456.0)px, Tag: 'project-line:MAIN'
+          | Focused = 'false'
+          | Role = 'RadioButton'
+          | Text = '[Directly into main, For a single task or an urgent fix. Every merge into main asks you.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #406 at (l=32.0, t=530.0, r=644.0, b=578.0)px
+          | Text = '[Main branch]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #407 at (l=644.0, t=514.0, r=790.0, b=594.0)px, Tag: 'project-main-branch'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Text = '[main]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #411 at (l=32.0, t=610.0, r=790.0, b=676.0)px
+          | Text = '[Tasks start from it, and the project’s work ends up on it. New projects in acme/checkout start with your last choice.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #413 at (l=32.0, t=726.0, r=790.0, b=1042.0)px, Tag: 'project-delivery'
+          |  |-Node #414 at (l=32.0, t=726.0, r=151.0, b=774.0)px
+          |  | Text = '[Delivery]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #415 at (l=32.0, t=790.0, r=790.0, b=908.0)px, Tag: 'project-delivery:PLATFORM'
+          |  | Focused = 'false'
+          |  | Role = 'RadioButton'
+          |  | Text = '[Orbit lands it, The agent doesn’t push to main: Orbit lands its branch once the work is accepted.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #420 at (l=32.0, t=924.0, r=790.0, b=1042.0)px, Tag: 'project-delivery:AGENT_PUSH'
+          |    Role = 'RadioButton'
+          |    Text = '[The agent pushes it, The agent can push only on a project that lands directly into main. On a project branch, Orbit lands the work.]'
+          |    [Disabled]
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #428 at (l=32.0, t=1116.0, r=686.0, b=1164.0)px
+          | Text = '[Automatic]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #429 at (l=686.0, t=1108.0, r=790.0, b=1172.0)px, Tag: 'project-automatic'
+          | ContentDescription = '[Automatic]'
+          | Focused = 'false'
+          | Role = 'Switch'
+          | ToggleableState = 'On'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |-Node #431 at (l=32.0, t=1196.0, r=790.0, b=1334.0)px
+          | Text = '[The coordinator runs it for you: it decides when each task is done, handles conflicts and failed checks, and merges the branch into main once the merge check passes — with a receipt you can revert. The criteria and anything irreversible stay yours.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #434 at (l=32.0, t=1408.0, r=151.0, b=1456.0)px
+          | Text = '[At most]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #436 at (l=300.0, t=1408.0, r=550.0, b=1456.0)px, Tag: 'project-at-most'
+          | Text = '[3 tasks at a time]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #437 at (l=558.0, t=1384.0, r=790.0, b=1480.0)px
+          |  |-Node #438 at (l=558.0, t=1392.0, r=674.0, b=1472.0)px, Tag: 'project-at-most-minus'
+          |  | ContentDescription = '[At most: fewer]'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[−]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #441 at (l=674.0, t=1392.0, r=790.0, b=1472.0)px, Tag: 'project-at-most-plus'
+          |    ContentDescription = '[At most: more]'
+          |    Focused = 'false'
+          |    Role = 'Button'
+          |    Text = '[+]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #445 at (l=32.0, t=1530.0, r=790.0, b=1708.0)px, Tag: 'project-merge-check'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Text = '[Merge check, ›, npm test, Runs on the combined tree before anything lands — on the project branch and again before main.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #454 at (l=32.0, t=1782.0, r=608.0, b=1830.0)px
+          | Text = '[Escalate after]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #456 at (l=608.0, t=1766.0, r=790.0, b=1846.0)px, Tag: 'project-escalation'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Text = '[2 hours ▾]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #459 at (l=32.0, t=1862.0, r=704.0, b=1892.0)px
+          | Text = '[Items the coordinator hasn’t handled by then come to you.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #462 at (l=32.0, t=1950.0, r=241.0, b=2030.0)px, Tag: 'project-pause'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Text = '[Pause project]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #465 at (l=32.0, t=2046.0, r=790.0, b=2112.0)px
+            Text = '[Stops new tasks, wake-ups and merges into main. Running tasks finish.]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

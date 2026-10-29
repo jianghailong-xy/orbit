@@ -19,7 +19,17 @@ import kotlin.math.roundToLong
 object ExceptionCards {
     const val escalatedTitle = "Escalated to you"
     const val pauseTitle = "Paused"
+    /** Work that reached main without the owner's confirmation (§10.7, owner 2026-10-28) is theirs from birth and never escalates, so
+     * its card wears its own kind word — the browser's `OWNER_ITEM_LANDED_WITHOUT_CONFIRMATION`. */
+    const val landedTitle = "Landed without your confirmation"
     const val provenance = "FROM ORBIT"
+
+    /** The word a card is headed by: a pause's, work that landed without the owner's confirmation, else an escalation's. */
+    fun title(row: JsonObject): String = when (row.text("kind")) {
+        "FUSE_PAUSED" -> pauseTitle
+        "LANDED_WITHOUT_CONFIRMATION" -> landedTitle
+        else -> escalatedTitle
+    }
     /** What a card whose item the read no longer carries says about itself. */
     const val gone = "This exception is no longer open."
 
@@ -52,10 +62,14 @@ object ExceptionCards {
     /** RETRY's two names: a task's landing (or a failed task's run) again, and a merge candidate's check again. */
     const val retry = "Retry"
     const val rerunCheck = "Re-run the check"
+    /** §10.8's two doors (revision 29): the owner's answer to work that reached main without their confirmation, and another look at
+     * the line — on work not seen there, and on the item a project's failing observations open. */
+    const val accept = "Accept"
+    const val observeAgain = "Observe again"
     private val actionLabels = mapOf("REVIEW" to "Review", "ANSWER" to "Answer", "RESUME" to "Resume",
         "OPEN_COORDINATOR" to "Open coordinator", "OPEN_TASK_SESSION" to openTaskSession, "RETRY" to retry,
         "CANCEL_TASK" to "Cancel task", "ASK_COORDINATOR_AGAIN" to "Ask the coordinator again",
-        "OPEN_LANDING" to openLanding, "ABANDON" to abandon)
+        "OPEN_LANDING" to openLanding, "ABANDON" to abandon, "ACCEPT" to accept, "OBSERVE" to observeAgain)
     private val actionConsequences = mapOf(
         "REVIEW" to "Open the current merge card.",
         "ANSWER" to "Record your answer on the coordinator question.",
@@ -66,7 +80,9 @@ object ExceptionCards {
         "CANCEL_TASK" to "The task is cancelled and its open item closes.",
         "ASK_COORDINATOR_AGAIN" to "It goes back to the coordinator with a fresh escalation clock.",
         "OPEN_LANDING" to "Open the landing: every attempt, step by step.",
-        "ABANDON" to "Ends this attempt. Nothing was pushed, and nothing is queued again.")
+        "ABANDON" to "Ends this attempt. Nothing was pushed, and nothing is queued again.",
+        "ACCEPT" to "You accept the work as it landed, and this item closes.",
+        "OBSERVE" to "An observation of the line is queued with your reason.")
     const val promotionRetryConsequence = "The current candidate is checked again with your reason."
     const val taskRunAgainConsequence = "The task runs again and this item closes with it."
     /** J12's other half, for a claim Orbit cannot prove never pushed (a legacy claim, a v2 one that recorded a push, or a row that
@@ -125,7 +141,8 @@ object ExceptionCards {
     /** Whether the row carries the address a press needs. [mergeCard] is the merge candidate whose card this conversation draws:
      * `Review` scrolls to that card, so it is drawn only where the card is. */
     fun addressed(row: JsonObject, action: String, mergeCard: String? = null): Boolean = when (action) {
-        "ASK_COORDINATOR_AGAIN", "ANSWER", "RESUME" -> true
+        // Accept answers the item itself; Observe again is the project's door, onto the line the card's project names (§10.8).
+        "ASK_COORDINATOR_AGAIN", "ANSWER", "RESUME", "ACCEPT", "OBSERVE" -> true
         "RETRY" -> row.text("taskId") != null || row.text("promotionId") != null
         "CANCEL_TASK" -> row.text("taskId") != null
         "REVIEW" -> row.text("promotionId") != null && row.text("promotionId") == mergeCard
@@ -186,6 +203,8 @@ object ExceptionCards {
         "RESUME" -> CardVerb.RESUME
         // OPEN_LANDING only looks (it opens a session), so it has no verb: the card opens it where it is pressed.
         "ABANDON" -> CardVerb.ABANDON
+        "ACCEPT" -> CardVerb.ACCEPT
+        "OBSERVE" -> CardVerb.OBSERVE
         else -> null
     }
 
@@ -206,6 +225,16 @@ object ExceptionCards {
     /** Whether the owner may close this item themselves: it is theirs, and its kind is one the door closes by hand. */
     fun markable(row: JsonObject): Boolean = row.text("assignee") == "OWNER" && row.text("kind") in handClosableKinds
 
+    // MARK: Observe again's reason (§10.8)
+
+    /** The door requires a reason, so the press asks for one first, as Mark as handled does, and says what an observation does. */
+    const val observeTitle = "Look at the line again?"
+    const val observeBody = "A runner fetches the line and looks for each finished task’s commit on it. Whatever it finds is recorded as " +
+        "landed, and the tasks waiting on that work start. Your reason goes on the record."
+    const val observeReason = "Why look again?"
+    /** The door's own ceiling: blank or longer is 400 `INTEGRATION_OBSERVE_REASON_REQUIRED`. */
+    const val observeReasonMaxLength = 2_000
+
     // What a refused press says, by the door it went through (the browser's headlines).
     const val notMarkedHandled = "The item was not closed"
     const val notRerunCheck = "The check was not re-run"
@@ -214,6 +243,8 @@ object ExceptionCards {
     const val notReturned = "That item was not sent back"
     const val notResumed = "The coordinator was not resumed"
     const val notAbandoned = "The attempt was not ended"
+    const val notAccepted = "The work was not accepted"
+    const val notObserved = "No observation was queued"
 
     /** The headline a refusal of [verb] is said under, ahead of the server's reason; null for a verb this card does not press. */
     fun refusalHeadline(verb: CardVerb): String? = when (verb) {
@@ -224,7 +255,42 @@ object ExceptionCards {
         CardVerb.RETURN_COORDINATOR -> notReturned
         CardVerb.RESUME -> notResumed
         CardVerb.ABANDON -> notAbandoned
+        CardVerb.ACCEPT -> notAccepted
+        CardVerb.OBSERVE -> notObserved
         else -> null
+    }
+
+    // MARK: the coordinator's handling (§4.7 H1)
+
+    /** The rows a card draws while a rerun or an observation it asked for is in flight: what is running, and the reason given for it. */
+    const val handlingLabel = "Handling"
+    const val reasonLabel = "Reason"
+
+    /** "Observing main…": an observation lands nothing and re-runs nothing, it only looks (§10.8), so it says its own words. */
+    fun observing(branch: String) = "Observing $branch…"
+
+    /** §4.7 H1 in one line (the browser's `handlingLine`): which rerun, which generation, where it is and since when it was asked —
+     * "the rerun of the landing — generation 3 is queued · asked 2m ago" — and for an observation, "Observing main… — running · asked
+     * 2m ago". [main] is the project's main branch by name: an observation only ever handles work not seen there. Null when nothing
+     * is handling the item. */
+    fun handlingLine(row: JsonObject, now: Instant = Instant.now(), main: String = "main"): String? {
+        val handling = row.obj("handling") ?: return null
+        val running = handling.text("state") == "RUNNING"
+        val asked = "asked ${ago(handling.text("startedAt"), now)}"
+        if (handling.text("jobKind") == "OBSERVE_LANDING") return "${observing(main)} — ${if (running) "running" else "queued"} · $asked"
+        val check = handling.text("jobKind")?.let { it == "CHECK_PROMOTION" } ?: (row.text("promotionId") != null)
+        val rerun = if (check) "the re-check of the merge into $main" else "the rerun of the landing"
+        return "$rerun — generation ${handling.number("generation")} ${if (running) "is running" else "is queued"} · $asked"
+    }
+
+    /** The reason the rerun or observation was asked for, as its asker gave it; null when nothing is handling the item. */
+    fun handlingReason(row: JsonObject): String? = row.obj("handling")?.text("reason")?.takeIf { it.isNotBlank() }
+
+    /** The browser's `ago`: "just now" under ten seconds, then "12m ago". */
+    private fun ago(iso: String?, now: Instant): String {
+        val at = parse(iso) ?: return if (iso == null) "never" else "unknown"
+        val seconds = Duration.between(at, now).seconds
+        return if (seconds < 10) "just now" else "${span(Duration.ofSeconds(seconds))} ago"
     }
 
     // MARK: the heading and the footer

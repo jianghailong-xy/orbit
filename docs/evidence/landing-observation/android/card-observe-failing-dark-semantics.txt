@@ -1,0 +1,70 @@
+Printing with useUnmergedTree = 'false'
+Node #239 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #292 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #293 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #294 at (l=32.0, t=32.0, r=790.0, b=980.0)px, Tag: 'item:34R29ItemObserveFail003'
+          |-Node #297 at (l=112.0, t=60.0, r=361.0, b=100.0)px, Tag: 'item:34R29ItemObserveFail003:title'
+          | Text = '[Escalated to you]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #298 at (l=60.0, t=120.0, r=187.0, b=145.0)px
+          | Text = '[FROM ORBIT]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #299 at (l=60.0, t=165.0, r=619.0, b=200.0)px, Tag: 'item:34R29ItemObserveFail003:heading'
+          | Text = '[Now yours — no one acted on this for 38m]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #300 at (l=80.0, t=238.0, r=742.0, b=801.0)px, Tag: 'item:34R29ItemObserveFail003:next'
+          |  |-Node #301 at (l=80.0, t=238.0, r=742.0, b=357.0)px, Tag: 'item:34R29ItemObserveFail003:required'
+          |  | Text = '[Finished work is not recorded as landed until an observation of main succeeds — let a runner reach the repository, then look again.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #303 at (l=80.0, t=373.0, r=393.0, b=469.0)px, Tag: 'item:34R29ItemObserveFail003:OBSERVE'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Observe again]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #306 at (l=80.0, t=475.0, r=693.0, b=505.0)px, Tag: 'item:34R29ItemObserveFail003:OBSERVE:consequence'
+          |  | Text = '[An observation of the line is queued with your reason.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #307 at (l=80.0, t=521.0, r=405.0, b=617.0)px
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Chat about this]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #311 at (l=80.0, t=641.0, r=315.0, b=721.0)px, Tag: 'item:34R29ItemObserveFail003:MARK_HANDLED'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Mark as handled]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #314 at (l=80.0, t=735.0, r=742.0, b=801.0)px, Tag: 'item:34R29ItemObserveFail003:MARK_HANDLED:consequence'
+          |    Text = '[Only if you dealt with it yourself. Your reason goes on the record.]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #315 at (l=60.0, t=839.0, r=762.0, b=907.0)px, Tag: 'item:34R29ItemObserveFail003:facts'
+          |  |-Node #316 at (l=60.0, t=839.0, r=762.0, b=869.0)px, Tag: 'item:34R29ItemObserveFail003:fact:Into'
+          |  |  |-Node #317 at (l=60.0, t=839.0, r=184.0, b=869.0)px
+          |  |  | Text = '[Into]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #319 at (l=196.0, t=839.0, r=253.0, b=869.0)px
+          |  |    Focused = 'false'
+          |  |    Actions = [RequestFocus]
+          |  |     |-Node #321 at (l=196.0, t=839.0, r=253.0, b=869.0)px
+          |  |       Text = '[main]'
+          |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #322 at (l=60.0, t=877.0, r=762.0, b=907.0)px, Tag: 'item:34R29ItemObserveFail003:fact:Error'
+          |     |-Node #323 at (l=60.0, t=877.0, r=184.0, b=907.0)px
+          |     | Text = '[Error]'
+          |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |     |-Node #325 at (l=196.0, t=877.0, r=388.0, b=907.0)px
+          |       Focused = 'false'
+          |       Actions = [RequestFocus]
+          |        |-Node #327 at (l=196.0, t=877.0, r=388.0, b=907.0)px
+          |          Text = '[FETCH_FAILED]'
+          |          Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #328 at (l=60.0, t=927.0, r=572.0, b=952.0)px, Tag: 'item:34R29ItemObserveFail003:owner'
+            Text = '[Owner: you · waiting 40m · came to the owner at 38m]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
