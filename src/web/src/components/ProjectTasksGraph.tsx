@@ -1,5 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { lazy } from 'react';
 import type { ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
+import { LazyBoundary } from './ErrorBoundary';
 import './ui/Typography.css';
 
 /**
@@ -61,13 +62,14 @@ export function ProjectTasksGraph({
         </span>
       </div>
 
-      <Suspense
+      <LazyBoundary
         fallback={
           <div style={{ padding: 48, textAlign: 'center' }} data-testid="project-graph-loading" />
         }
+        failed={null}
       >
         <LazyProjectDependencyGraph projectId={projectId} data={data} />
-      </Suspense>
+      </LazyBoundary>
       {footnote ? <div className="pdg-footnote">{footnote}</div> : null}
     </div>
   );

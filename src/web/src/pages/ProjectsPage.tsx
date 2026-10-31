@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
@@ -20,6 +20,7 @@ import {
 } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
+import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
@@ -1355,9 +1356,9 @@ export function ProjectDetailPage() {
         </>
       ) : null}
       {id && openTaskId ? (
-        <Suspense fallback={null}>
+        <LazyBoundary fallback={null}>
           <LazyProjectTaskPanel projectId={id} taskId={openTaskId} />
-        </Suspense>
+        </LazyBoundary>
       ) : null}
     </div>
   );

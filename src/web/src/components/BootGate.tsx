@@ -14,6 +14,9 @@ import {
   setupStatusQuery,
 } from '../lib/queries';
 import { workspaceRunnerId, firstOpenableWorkspace } from '../lib/workspaceOrder';
+import { ErrorBoundary } from './ErrorBoundary';
+import { Button } from './ui/Button';
+import { Result } from './ui/Result';
 
 // Routes that render their own loaders and have no first-screen data to wait on. The privacy policy
 // has no data at all, and opens on any deployment — even one still waiting for its first-run setup.
@@ -35,6 +38,25 @@ const finishBoot = () => (window as BootWindow).__bootDone?.();
 // straight from a reload lands in WorkspaceView, whose first screen needs the runner-scoped
 // session data — not the global lists the home view waits on.
 type DeepLink = { kind: 'session' | 'agent'; id: string };
+
+/** What is left when the app itself has thrown. The splash goes too: it covers the page, and a throw
+ *  behind it would otherwise read as a bar that stopped moving. */
+function AppFailed() {
+  useEffect(() => finishBoot(), []);
+  return (
+    <Result
+      status="warning"
+      title="Something went wrong"
+      subTitle="Orbit hit an error and can't show this page. Reload to try again."
+      extra={<Button variant="primary" onClick={() => window.location.reload()}>Reload</Button>}
+    />
+  );
+}
+
+/** Around the whole app, so that a render that throws is a page saying so and not an empty one. */
+export function AppBoundary({ children }: { children: React.ReactNode }) {
+  return <ErrorBoundary fallback={<AppFailed />}>{children}</ErrorBoundary>;
+}
 
 /**
  * Holds the app behind the index.html boot splash until the data the *first screen*
