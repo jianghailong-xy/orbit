@@ -1,10 +1,14 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.cards.AnsweredQuestions
+import io.orbitd.android.core.cards.CardCatalog
 import io.orbitd.android.core.cards.CardFamily
+import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -57,10 +61,22 @@ class QueuedTailTest {
         assertTrue(turn.cancelable)
     }
 
-    /** The owner's answer handed to the coordinator waits as the line its echo will be, and can be withdrawn like any queued turn. */
-    @Test fun aQueuedOwnerAnswerIsItsLine() {
-        val answer = """{"itemId":"01a0d6a9-d763-70e1-b4cf-8793e971b511","kind":"COORDINATOR_QUESTION",
-            "sessionId":"01a0d6a9-d763-70e1-b4cf-8793e971b512","deliveredAt":"2026-10-09T00:29:37.104Z"}"""
+    /** The ended questions a coordinator conversation holds, as its rail's records. */
+    private fun records(vararg items: String): List<InteractionCard> = CardCatalog.project("s1", "p1", mapOf(
+        "project" to buildJsonObject { put("id", "p1") },
+        "openItems" to buildJsonObject { putJsonArray("needsYou") {}; putJsonArray("closedQuestions") { items.forEach { item -> addJsonObject {
+            put("itemId", item); putJsonObject("question") { put("question", "Merge now?"); putJsonArray("options") {} }
+            put("resolution", "ANSWERED"); put("resolvedBy", "USER"); put("resolvedAt", "2026-10-09T00:29:36.828Z")
+            putJsonObject("answer") { put("option", JsonNull); put("text", "Wait") }; put("delivery", JsonNull)
+        } } } }))
+    private fun ownerAnswer(item: String, kind: String = "COORDINATOR_QUESTION") = """{"itemId":"$item","kind":"$kind",
+        "sessionId":"01a0d6a9-d763-70e1-b4cf-8793e971b512","deliveredAt":"2026-10-09T00:29:37.104Z"}"""
+
+    /** The owner's answer handed to the coordinator waits as what its echo will be. Drawn as its line, it can be withdrawn like any queued
+     * turn; drawn as its question's card, where the conversation holds the question, it has no way out (OwnerAnswerLineViewTest), and the
+     * conversation's rail leaves that card to it. */
+    @Test fun aQueuedOwnerAnswerIsWhatItsEchoWillBe() {
+        val answer = ownerAnswer("01a0d6a9-d763-70e1-b4cf-8793e971b511")
         val turn = queuedTail(rows("""[{"turnId":"t5","kind":"message","content":"From Orbit · owner answer: you asked \"Merge now?\".",
             "attachments":[],"ownerAnswer":$answer,"authoredByOrbit":true}]"""), emptyList()).single()
         val card = turn.cards.single()
@@ -73,6 +89,36 @@ class QueuedTailTest {
             put("ownerAnswer", Wire.json.parseToJsonElement(answer))
         }, "t5")
         assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
+        val record = records("01a0d6a9-d763-70e1-b4cf-8793e971b511").single()
+        val answered = AnsweredQuestions(listOf(record), listOf(turn.event)) {}
+        assertSame("the queued turn draws its question's card", record, answered.record(card.source))
+        assertTrue("so the rail does not draw it again", answered.leftToItsTurn(record))
+        assertSame("and its review folds what this turn told the coordinator", turn.event, answered.told(record))
+    }
+
+    /** Which questions the turns hand over (web `answersHandedOver`): an answer echoed or still on the queue, its item matched whichever
+     * spelling each read was served — never a Not yet… to a request to record the project done, which has no card, nor an ownerAnswer
+     * on anything but a user turn. A record no turn names stays the rail's, and a question no record holds is no card. */
+    @Test fun theQuestionsTheTurnsHandOverAreTheirsToDraw() {
+        val echoed = "01a0d6a9-d763-70e1-b4cf-8793e971b511"
+        val queuedItem = "01a0d6a9-d763-70e1-b4cf-8793e971b5aa"
+        val notYet = "01a0d6a9-d763-70e1-b4cf-8793e971b5bb"
+        val agents = "01a0d6a9-d763-70e1-b4cf-8793e971b5cc"
+        val untold = "01a0d6a9-d763-70e1-b4cf-8793e971b5dd"
+        // The open-items read names the echoed item by its public id; the turn's card carries the UUID.
+        val held = records(ObjectId.toPublic(echoed), queuedItem, notYet, agents, untold)
+        fun turn(type: String, answer: String) = RunEvent(type, 9, buildJsonObject {
+            put("text", "From Orbit · owner answer"); put("ownerAnswer", Wire.json.parseToJsonElement(answer)) }, "t-$type")
+        val queued = queuedTail(rows("""[{"turnId":"t7","kind":"message","content":"told","attachments":[],"ownerAnswer":${ownerAnswer(queuedItem)},
+            "authoredByOrbit":true},{"turnId":"t8","kind":"message","content":"plain","attachments":[]}]"""), emptyList())
+        val answered = AnsweredQuestions(held, listOf(turn("user", ownerAnswer(echoed)), turn("user", ownerAnswer(notYet, "DONE_REQUEST")),
+            turn("assistant", ownerAnswer(agents))) + queued.map { it.event }) {}
+        val byItem = held.associateBy { it.objectId }
+        assertEquals(setOf(ObjectId.toPublic(echoed), queuedItem), held.filter(answered::leftToItsTurn).map { it.objectId }.toSet())
+        assertSame(byItem[ObjectId.toPublic(echoed)], answered.record(Wire.json.parseToJsonElement(ownerAnswer(echoed)).jsonObject))
+        assertNull("a question no record holds is no card", answered.record(Wire.json.parseToJsonElement(
+            ownerAnswer("01a0d6a9-d763-70e1-b4cf-8793e971b5ee")).jsonObject))
+        assertNull("a record no turn names folds no words", answered.told(byItem.getValue(untold)))
     }
 
     /** A fact told to this session waits as the line its echo will be, can be withdrawn like any queued turn, and is nobody's words: the

@@ -1,0 +1,5 @@
+scope=A15c device journeys over controlled HTTP fixtures (MockWebServer in each test); not a deployment
+classes=OwnerAnswerCardDeviceTest
+started_utc=2026-10-27T16:52:52Z
+exit_code=0
+finished_utc=2026-10-27T16:53:26Z

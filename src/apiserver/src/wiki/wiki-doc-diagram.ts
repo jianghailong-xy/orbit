@@ -22,6 +22,8 @@ const HEADER = /^(?:flowchart|graph)(?:\s+(\S+))?$/u;
 const SKIPPED = /^(?:style|classDef|class|linkStyle|click)\b/u;
 const ID = /^[A-Za-z0-9_]+(?:[-.][A-Za-z0-9_]+)*/u;
 const CLASS_SUFFIX = /^:::[A-Za-z0-9_-]+/u;
+/** What joins the nodes of one end of a link: `A & B --> C`. */
+const AND = /^[\t ]*&[\t ]*/u;
 /** -->, ---, -.->, -.-, ==>, === and the two-headed ones; a longer run of - or = is the same link. */
 const LINK = /^(<?)(-{2,}|={2,}|-\.+-)(>?)/u;
 /** `-- text -->` and its kin: the label between the link's opening and its end. */
@@ -152,11 +154,25 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
     return { id, next };
   };
 
-  /** A chain of nodes joined by links: false when the line is not one. */
+  /** The nodes one end of a link names, joined with `&`, and where the statement goes on; null when there is none. */
+  const readEnd = (line: string, at: number): { ids: string[]; next: number } | null => {
+    const ids: string[] = [];
+    let from = at;
+    for (;;) {
+      const node = readNode(line, from);
+      if (!node) return null;
+      ids.push(node.id);
+      const joined = AND.exec(line.slice(node.next));
+      if (!joined) return { ids, next: node.next };
+      from = node.next + joined[0].length;
+    }
+  };
+
+  /** A chain of nodes joined by links: false when the line is not one, or its links are past the rules' size. */
   const readStatement = (line: string): boolean => {
-    const first = readNode(line, 0);
+    const first = readEnd(line, 0);
     if (!first) return false;
-    let from = first.id;
+    let from = first.ids;
     let at = first.next;
     for (;;) {
       while (line[at] === ' ' || line[at] === '\t') at += 1;
@@ -182,10 +198,12 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
         }
       }
       while (line[at] === ' ' || line[at] === '\t') at += 1;
-      const to = readNode(line, at);
+      const to = readEnd(line, at);
       if (!to) return false;
-      links.push({ from, to: to.id, op, label });
-      from = to.id;
+      // Each node of one end to each of the other: a short line can ask for far more links than it holds.
+      if (links.length + from.length * to.ids.length > WIKI_DOC_DIAGRAM_RULES.edgesMax) return false;
+      for (const start of from) for (const end of to.ids) links.push({ from: start, to: end, op, label });
+      from = to.ids;
       at = to.next;
     }
   };
@@ -232,16 +250,16 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
   }
   if (open.length > 0) return null;
 
-  // A link's end that is a subgraph's id is the subgraph — unless the diagram gave that id a label of its own.
+  // A link's end that is a subgraph's id is the subgraph — unless the diagram gave that id a label of its own: then
+  // it is a node beside the subgraph, which is written out under an id of its own.
   const groupOf = new Map(groups.filter((group) => group.id !== null).map((group) => [group.id!, group]));
   const endOf = new Map<string, string>();
   for (const node of nodes.values()) {
     const group = groupOf.get(node.id);
-    if (!group) {
+    if (!group || node.label !== null) {
       endOf.set(node.id, node.n);
       continue;
     }
-    if (node.label !== null) return null;
     endOf.set(node.id, group.s);
     nodes.delete(node.id);
     const remove = (items: Array<Node | Group>): void => {
@@ -251,7 +269,7 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
     };
     remove(top);
   }
-  if (nodes.size === 0 || nodes.size > WIKI_DOC_DIAGRAM_RULES.nodesMax || links.length > WIKI_DOC_DIAGRAM_RULES.edgesMax) return null;
+  if (nodes.size === 0 || nodes.size > WIKI_DOC_DIAGRAM_RULES.nodesMax) return null;
 
   const labels: string[] = [];
   const shown = (raw: string): string | null => {

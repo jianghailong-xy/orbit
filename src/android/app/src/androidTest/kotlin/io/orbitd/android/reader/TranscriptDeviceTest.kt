@@ -192,8 +192,10 @@ class TranscriptDeviceTest {
         list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
         // The diagnostic is brought into view too: at 360×640 dp over API 29's three-button bar, the stderr row ends just
         // above the reader's bottom bar and the row after it is not composed.
-        list.performScrollToNode(hasText("Startup · model_catalog · codex_model_catalog_auth:", substring = true))
-        compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
+        // It is a diagnostic row: its label stands apart from the engine's words, which lose the log's preamble.
+        list.performScrollToNode(hasText("Startup · model_catalog · codex_model_catalog_auth"))
+        compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth").assertExists()
+        compose.onNodeWithText("failed to refresh available models: unexpected status 401 Unauthorized").assertExists()
         list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
         compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
         // The notice is a row of its own, brought into view as the others are: since A07c's auto-retry card, the 429 is

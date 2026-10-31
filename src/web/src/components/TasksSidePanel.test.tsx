@@ -203,6 +203,32 @@ describe('TasksSidePanel workspace navigation', () => {
   });
 });
 
+describe('TasksSidePanel scrolling', () => {
+  /** The declarations of the stylesheet's one top-level rule for exactly this selector. */
+  const rule = (selector: string) =>
+    styles.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+
+  it('scrolls Workspaces and Projects as one under the fixed entries, or only Projects while pinned', () => {
+    // The middle itself no longer scrolls: the fixed entries stay put above the list.
+    expect(rule('.tp-scroll')).not.toMatch(/overflow/);
+    expect(rule('.tp-lists')).toMatch(/overflow-y:\s*auto;/);
+    expect(rule('.tp-lists.pin-workspaces')).toMatch(/overflow:\s*hidden;/);
+    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects')).toMatch(/overflow-y:\s*auto;/);
+    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head')).toMatch(/position:\s*sticky;/);
+  });
+
+  it('keeps one scrollbar gutter on every block, so ⌘P lines up with ⌘1 whichever one scrolls', () => {
+    for (const selector of [
+      '.tp-scroll > .tp-section',
+      '.tp-lists',
+      '.tp-lists.pin-workspaces > .tp-group-workspaces',
+      '.tp-lists.pin-workspaces > .tp-group-projects',
+    ]) {
+      expect(rule(selector)).toMatch(/scrollbar-gutter:\s*stable;/);
+    }
+  });
+});
+
 describe('TasksSidePanel workspace rows', () => {
   it('keeps workspace and runner metadata on one row', () => {
     const html = renderToStaticMarkup(

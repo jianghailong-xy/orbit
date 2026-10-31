@@ -9,8 +9,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * The owner's answer handed to the coordinator is drawn from the card recorded beside the turn (`ownerAnswer`) as one line — "Sent to the
- * coordinator · 08:29" — never from the words, which stay what the agent read (OrbitKit OwnerAnswerTests, web OwnerAnswerLine.test.tsx).
+ * The owner's answer handed to the coordinator is drawn from the card recorded beside the turn (`ownerAnswer`) — as the question's own
+ * card where the conversation holds the question it names, else as one line, "Sent to the coordinator · 08:29" — never from the words,
+ * which stay what the agent read (OrbitKit OwnerAnswerTests, web OwnerAnswerLine.test.tsx).
  */
 class OwnerAnswerLineTest {
     private val card = """{"itemId":"01a0d6a9-d763-70e1-b4cf-8793e971b511","kind":"COORDINATOR_QUESTION",
@@ -52,5 +53,17 @@ class OwnerAnswerLineTest {
         assertEquals("Sent to the coordinator · 10/9 08:29", OwnerAnswerLine.line(source, Instant.parse("2026-10-12T01:00:00Z"), zone))
         assertEquals(CoordinatorQueue.sentLine(OwnerReview.receiptTime("2026-10-09T00:29:37.104Z", Instant.parse("2026-10-09T01:00:00Z"), zone)),
             OwnerAnswerLine.line(source, Instant.parse("2026-10-09T01:00:00Z"), zone))
+    }
+
+    /** The question a turn hands the answer to, by its item, which the conversation draws in the turn's place. A Not yet… to a request to
+     * record the project done has no question card to be, and names none; nor does anything but a whole card on a user turn (web
+     * `answersHandedOver`). */
+    @Test fun aTurnNamesTheQuestionItHandsTheAnswerTo() {
+        assertEquals("01a0d6a9-d763-70e1-b4cf-8793e971b511", OwnerAnswerLine.question(echo(card)))
+        assertEquals("01a0d6a9-d763-70e1-b4cf-8793e971b511", OwnerAnswerLine.question(transcriptCards(echo(card)).single().source))
+        assertNull("a Not yet… has no question card", OwnerAnswerLine.question(echo(card.replace("COORDINATOR_QUESTION", "DONE_REQUEST"))))
+        assertNull("half a card names nothing", OwnerAnswerLine.question(echo(card.replace("2026-10-09T00:29:37.104Z", "yesterday"))))
+        assertNull("an ordinary message names nothing", OwnerAnswerLine.question(echo(null)))
+        assertNull("only a user turn hands an answer over", OwnerAnswerLine.question(echo(card).copy(type = "assistant")))
     }
 }

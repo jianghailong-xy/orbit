@@ -52,6 +52,9 @@ public enum CoordinatorQuestions {
     public static let answeredHeading = "Answered"
     public static let deliveredToCoordinator = "Delivered to the current coordinator"
     public static let waitingForCoordinator = "Waiting for this project’s next coordinator"
+    /// An answer on the queue behind the turn its coordinator is running: told, but not read yet — what
+    /// the question's card says while the turn handing it over waits (`OwnerAnswer.record`).
+    public static let queuedForCoordinator = "Queued — the coordinator reads it when its current turn ends"
     /// What a card whose question the read no longer carries says about itself.
     public static let gone = "This question is no longer open."
     public static let unreadable = "Couldn’t read this question — pull to retry."
@@ -173,6 +176,22 @@ public enum CoordinatorQuestions {
                 return a.offset < b.offset
             }
             .map { Receipt(record: $0.record) }
+    }
+
+    /// The ended questions a conversation holds, by item key (`OwnerAnswer.itemKey`): the records it
+    /// draws — which keep one the read has since let go of, and the copy drawn from a press here until
+    /// the read has it — else the read's, as `ConsoleModel.questionRecord` reads them. What a turn
+    /// handing one's answer to the coordinator is drawn as (`OwnerAnswer.record`).
+    public static func held(drawn: [DeliveredDecisionCard],
+                            read: ProjectOpenItemsView?) -> [String: ProjectClosedQuestion] {
+        var held: [String: ProjectClosedQuestion] = [:]
+        for record in read?.closedQuestions ?? [] { held[OwnerAnswer.itemKey(record.itemId)] = record }
+        for card in drawn {
+            if case .coordinatorQuestionRecord(let record) = card.kind {
+                held[OwnerAnswer.itemKey(record.itemId)] = record
+            }
+        }
+        return held
     }
 
     /// The answer THIS device just sent, as the record the read will publish: what was asked, what

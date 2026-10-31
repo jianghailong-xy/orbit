@@ -921,8 +921,8 @@ flowchart LR
     C
   end
 \`\`\`
-- Only \`flowchart LR\` or \`flowchart TB\`: nodes as \`id["label"]\`, \`id("label")\`, \`id[("label")]\` for a store or \`id{"label"}\` for a decision; links as \`-->\`, \`-.->\` or \`-->|"label"|\`; \`subgraph id["label"]\` … \`end\` to group parts. No styles, no classes, no \`&\`, no other kind of diagram.
-- Write the labels in the language your sentences are written in (Chinese sentences, Chinese labels), and take every word of a label from your sentences that carry ids (another ending of the same word, such as "claim" for "claims", is the same word); beyond those, a label may use only ${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}. A label with any other word of three letters or more drops the whole diagram. No ids inside the diagram.
+- Only \`flowchart LR\` or \`flowchart TB\`: nodes as \`id["label"]\`, \`id("label")\`, \`id[("label")]\` for a store or \`id{"label"}\` for a decision; links as \`-->\`, \`-.->\` or \`-->|"label"|\`; \`subgraph id["label"]\` … \`end\` to group parts. No styles, no classes, no other kind of diagram.
+- Write the labels in the language your sentences are written in (Chinese sentences, Chinese labels), and take every word of a label from your sentences that carry ids (another ending of the same word, such as "claim" for "claims", is the same word, and so is a word inside a code name, such as "session" in \`sessionId\`); beyond those, a label may use only ${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}. A label with any other word of three letters or more drops the whole diagram. No ids inside the diagram.
 - A dozen nodes or so, never more than ${WIKI_DOC_DIAGRAM_RULES.nodesMax}; each label a few words.
 
 `;

@@ -1,0 +1,14 @@
+2026-10-27T16:53:19.182490Z fixture at http://localhost:39099/
+2026-10-27T16:53:19.408112Z signed in to the fixture
+2026-10-27T16:53:19.924565Z PASS the coordinator conversation
+2026-10-27T16:53:19.940680Z PASS the answered question's card
+2026-10-27T16:53:19.957792Z PASS tag queued:64e75310-61e9-8e6b-22bd-8b946d2fdf71
+2026-10-27T16:53:20.711519Z PASS the Answered card is drawn in the turn's place
+2026-10-27T16:53:20.724188Z PASS its heading is Answered
+2026-10-27T16:53:20.745873Z PASS its answer is the option chosen
+2026-10-27T16:53:20.757672Z PASS no line says it was sent
+2026-10-27T16:53:20.774310Z PASS the words are no bubble
+2026-10-27T16:53:20.790880Z PASS the card is drawn once
+2026-10-27T16:53:20.807673Z PASS the rail holds no second card
+2026-10-27T16:53:20.824248Z PASS it says it is queued
+2026-10-27T16:53:20.858721Z PASS the queue's Cancel is gone

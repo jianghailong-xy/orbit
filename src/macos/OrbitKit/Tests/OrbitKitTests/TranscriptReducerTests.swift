@@ -1865,10 +1865,11 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "--dangerously-skip-permissions cannot be used with root/sudo privileges")
     }
 
-    func testRecoverableStructuredStderrBecomesANoticeRow() {
+    func testRecoverableStructuredStderrBecomesADiagnosticRow() {
         var r = TranscriptReducer()
+        let line = "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized"
         r.apply(RunEvent(seq: 1, type: .system, payload: .object([
-            "stderr": .string("2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized"),
+            "stderr": .string(line),
             "diagnostic": .object([
                 "component": .string("model_catalog"),
                 "phase": .string("startup"),
@@ -1879,23 +1880,19 @@ final class TranscriptReducerTests: XCTestCase {
             ])
         ])))
 
-        guard case .notice(_, let message)? = r.state.items.last else {
-            return XCTFail("expected a notice row, got \(String(describing: r.state.items.last))")
-        }
-        XCTAssertTrue(message.hasPrefix("Startup · model_catalog · codex_model_catalog_auth:"))
-        XCTAssertFalse(r.state.items.contains { if case .error = $0 { return true }; return false })
+        XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
+            label: "Startup · model_catalog · codex_model_catalog_auth",
+            text: "failed to refresh available models: unexpected status 401 Unauthorized", message: line)])
     }
 
-    func testPersistedLegacyRecoverableStderrBecomesANoticeRow() {
+    func testPersistedLegacyRecoverableStderrBecomesADiagnosticRow() {
         var r = TranscriptReducer()
-        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
-            "stderr": .string("2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated")
-        ])))
+        let line = "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated"
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
 
-        guard case .notice(_, let message)? = r.state.items.last else {
-            return XCTFail("expected a notice row, got \(String(describing: r.state.items.last))")
-        }
-        XCTAssertTrue(message.hasPrefix("Startup · model_catalog · token_invalidated:"))
+        XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
+            label: "Startup · model_catalog · token_invalidated",
+            text: "failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated", message: line)])
     }
 
     func testUnknownStructuredStderrKeepsTheErrorPath() {
@@ -1914,6 +1911,108 @@ final class TranscriptReducerTests: XCTestCase {
             return XCTFail("expected an error row, got \(String(describing: r.state.items.last))")
         }
         XCTAssertEqual(message, "engine failed to start")
+    }
+
+    /// Codex logs a failed model-catalog refresh and keeps the catalog it had, so the turn goes on.
+    /// It retries on every later model request, so one session repeats the line (web parity:
+    /// Transcript.test.tsx "engine stderr").
+    private static func refreshFailed(_ ts: String, _ reason: String) -> String {
+        "\(ts) ERROR codex_models_manager::manager: failed to refresh available models: \(reason)"
+    }
+    private static let timedOut = "request timed out"                                // 2026-10-28, an iOS screenshot
+    private static let childTimeout = "timeout waiting for child process to exit"   // 2026-08-12, web
+    /// What a current runner attaches to either line (runner-go `codexStderrDiagnostic`).
+    private static let refreshTimeout: JSONValue = .object([
+        "component": .string("model_catalog"), "severity": .string("WARN"), "impact": .string("degraded"),
+        "recoverable": .bool(true), "code": .string("timeout"),
+    ])
+
+    func testCatalogRefreshFailureFromACurrentRunnerBecomesADiagnosticRow() {
+        for reason in [Self.timedOut, Self.childTimeout] {
+            var r = TranscriptReducer()
+            let line = Self.refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+                "stderr": .string(line), "diagnostic": Self.refreshTimeout])))
+
+            XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
+                label: "model_catalog · timeout", text: "failed to refresh available models: \(reason)", message: line)])
+        }
+    }
+
+    func testPersistedCatalogRefreshFailureBecomesADiagnosticRow() {
+        for (reason, code) in [(Self.timedOut, "timeout"), (Self.childTimeout, "timeout"),
+                               ("unexpected status 503 Service Unavailable", "refresh_failed")] {
+            var r = TranscriptReducer()
+            let line = Self.refreshFailed("2026-08-12T15:31:40.112363Z", reason)
+            r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+            XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
+                label: "model_catalog · \(code)", text: "failed to refresh available models: \(reason)", message: line)])
+        }
+    }
+
+    /// One row per incident, counted on the first occurrence's row, as web folds it. Until a
+    /// `resumed`: a new engine run starts its own row, as on web.
+    func testRepeatedCatalogRefreshFailureFoldsIntoOneDiagnosticRow() {
+        for (reason, times) in [(Self.timedOut, 10), (Self.childTimeout, 3)] {
+            var r = TranscriptReducer()
+            for i in 0..<times {
+                // The first half as an older runner stored them, the rest with the diagnostic after its upgrade.
+                var payload: [String: JSONValue] = ["stderr": .string(Self.refreshFailed("2026-10-28T15:\(13 + i):06.979719Z", reason))]
+                if i >= times / 2 { payload["diagnostic"] = Self.refreshTimeout }
+                r.apply(RunEvent(seq: i + 1, type: .system, payload: .object(payload)))
+            }
+
+            let words = "failed to refresh available models: \(reason)"
+            let first = DiagnosticRead(label: "model_catalog · timeout", text: words,
+                                       message: Self.refreshFailed("2026-10-28T15:13:06.979719Z", reason), repeats: times)
+            XCTAssertEqual(r.state.items.map(\.asDiagnostic), [first])
+
+            r.apply(RunEvent(seq: 100, type: .system, payload: .object(["subtype": .string("resumed")])))
+            let again = Self.refreshFailed("2026-10-28T16:00:06.979719Z", reason)
+            r.apply(RunEvent(seq: 101, type: .system, payload: .object(["stderr": .string(again)])))
+            XCTAssertEqual(r.state.items.map(\.asDiagnostic),
+                           [first, DiagnosticRead(label: "model_catalog · timeout", text: words, message: again)])
+        }
+    }
+
+    /// The runner's deliberate heads-up and an engine's recoverable diagnostic are rows of two kinds,
+    /// as on web (`NoticeNode`, `DiagnosticNode`): the notice keeps the warning tone, the diagnostic is
+    /// drawn grey (`DiagnosticNoticeRow`).
+    func testANoticeAndADiagnosticAreRowsOfTwoKinds() {
+        var r = TranscriptReducer()
+        let notice = "Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent"
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "subtype": .string("init"), "notice": .string(notice), "noticeKind": .string("pool-member-switched")])))
+        let line = Self.refreshFailed("2026-10-28T15:13:06.979719Z", Self.timedOut)
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object(["stderr": .string(line)])))
+        r.apply(RunEvent(seq: 3, type: .system, payload: .object([
+            "stderr": .string(line), "diagnostic": Self.refreshTimeout])))
+
+        XCTAssertEqual(r.state.items.map(\.asNotice), [notice, nil])
+        XCTAssertEqual(r.state.items.map(\.asDiagnostic), [nil, DiagnosticRead(
+            label: "model_catalog · timeout", text: "failed to refresh available models: request timed out",
+            message: line, repeats: 2)])
+    }
+
+    /// A line no logger stamped is shown whole: there is no preamble to take off it.
+    func testADiagnosticLineWithoutALogPreambleIsShownWhole() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("model refresh 401 request id: req_first"),
+            "diagnostic": .object(["component": .string("mcp"), "recoverable": .bool(true)])])))
+
+        XCTAssertEqual(r.state.items.map(\.asDiagnostic), [DiagnosticRead(
+            label: "mcp", text: "model refresh 401 request id: req_first", message: "model refresh 401 request id: req_first")])
+    }
+
+    func testUnrelatedErrorStderrStaysAnErrorRow() {
+        // A timeout logged by anything but the catalog refresh can be the turn's own failure.
+        let line = "2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out"
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["stderr": .string(line)])))
+
+        XCTAssertEqual(r.state.items.map(\.asError), [line])
     }
 
     /// apply_patch writes its verification explanation over adjacent stderr events. The reducer
@@ -2465,4 +2564,16 @@ extension TranscriptItem {
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
     var asError: String? { if case .error(_, let m) = self { return m }; return nil }
     var asNotice: String? { if case .notice(_, let m) = self { return m }; return nil }
+    var asDiagnostic: DiagnosticRead? {
+        guard case .diagnostic(let d) = self else { return nil }
+        return DiagnosticRead(label: d.label, text: d.text, message: d.message, repeats: d.repeats)
+    }
+}
+
+/// A `.diagnostic` row as these tests compare it: everything but the id the reducer minted.
+struct DiagnosticRead: Equatable {
+    let label: String
+    let text: String
+    let message: String
+    var repeats = 1
 }

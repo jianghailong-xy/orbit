@@ -1,0 +1,12 @@
+2026-10-27T16:53:13.829614Z fixture at http://localhost:57557/
+2026-10-27T16:53:14.034909Z signed in to the fixture
+2026-10-27T16:53:14.443656Z PASS the coordinator conversation
+2026-10-27T16:53:14.459204Z PASS the answered question's card
+2026-10-27T16:53:14.990744Z PASS the Answered card is drawn in the turn's place
+2026-10-27T16:53:15.007393Z PASS its heading is Answered
+2026-10-27T16:53:15.024022Z PASS its answer is the option chosen
+2026-10-27T16:53:15.040830Z PASS no line says it was sent
+2026-10-27T16:53:15.057583Z PASS the words are no bubble
+2026-10-27T16:53:15.073986Z PASS the card is drawn once
+2026-10-27T16:53:15.090740Z PASS the rail holds no second card
+2026-10-27T16:53:15.144773Z PASS a delivered answer says nothing more

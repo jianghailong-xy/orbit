@@ -695,11 +695,57 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--text-1);
 }
+/* The rail's middle: the fixed entries stay put, and under them Workspaces and Projects scroll as
+   one (.tp-lists), unless every workspace fits with the Projects head still showing under them:
+   then the workspaces stay put too and only Projects scrolls (.pin-workspaces, which
+   TasksSidePanel sets from its measurements). */
 .tp-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   padding-bottom: 12px;
+}
+/* Every block keeps the same scrollbar gutter, scrolling or not, so ⌘P lines up with ⌘1 whichever
+   one scrolls and no row shifts when the layout switches. */
+.tp-scroll > .tp-section {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+.tp-scroll > .tp-divider {
+  flex: none;
+}
+.tp-lists {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.tp-lists.pin-workspaces {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.tp-lists.pin-workspaces > * {
+  flex: none;
+}
+.tp-lists.pin-workspaces > .tp-group-workspaces {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+.tp-lists.pin-workspaces > .tp-group-projects {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-raised);
 }
 .tp-section {
   padding: 0 8px;

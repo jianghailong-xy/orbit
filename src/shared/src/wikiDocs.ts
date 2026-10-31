@@ -125,7 +125,7 @@ export const WIKI_DOC_DIAGRAM_RULES = {
   /** The section kinds whose prompt offers a diagram, and whose fingerprint carries `version`. */
   kinds: ['overview', 'concepts', 'flow', 'data'],
   /** Raised when what a diagram is asked to be changes, so every section of those kinds is written once more. */
-  version: 1,
+  version: 2,
   /** The diagrams a section keeps: the first that passes the check. */
   perSection: 1,
   nodesMax: 30,
