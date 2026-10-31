@@ -44,7 +44,10 @@ of its own: the same one-slot relay as the Claude history relay (`requestClaudeH
 - **Capability:** a runner that answers declares `dir-probe/v1` (`DIR_PROBE_CAPABILITY`) in
   `x-orbit-runner-capabilities`; `GET /runners` shows it in `capabilities`. A client does not ask a runner
   that has not declared it: the setup card says that machine will update itself first. The server does not
-  refuse such a request; a runner that does not know the field never answers it.
+  refuse such a request; a runner that does not know the field never answers it. A runner that has not
+  heartbeat yet has declared nothing, but reads `online: false` (with `engines: null`), so it is never taken
+  for one that has to update: registering leaves that to its first beat, sent as soon as `orbit run` has
+  reclaimed its sessions.
 - **One slot per runner** (`runner.dir_probe_path`, `dir_probe_status`, `dir_probe_at`,
   `dir_probe_result`). A new question replaces the previous one. The previous answer stays in the row, but
   it is only ever returned for the path it answers.
@@ -68,8 +71,9 @@ Body `{ "path": string }`: the path as typed, `~` allowed. Trimmed.
 | 404 `runner not found` | Not one of the caller's runners. |
 | 403 | A personal access token (`RUNNER_CONTROL`, like every relay of a machine). |
 
-The ask moves the runner's change count (`RealtimeService.markRunnerChanged`), so a runner on the link
-reconciles in full on its next beat and is handed the question there.
+The ask wakes the runner (`RealtimeService.notifyRunnerWake`, as a sign-in does): it heartbeats now
+rather than at its next tick, over HTTPS from its wake long-poll. The same call moves its change count, so
+on the link the hint brings a beat that reconciles in full and is handed the question there.
 
 ### 2.2 Read: `GET /runners/:id/dir-probe?path=<path>`
 

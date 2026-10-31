@@ -10,10 +10,10 @@ import { APISERVER_PROCESS_LOCK_PREFIX, ControlPlaneLeader } from '../realtime/c
  *
  * A runner's beats are kept in two places. `runner_presence` (migration 0444, UNLOGGED) holds the
  * latest one: every heartbeat upserts the runner's row there. `runner.last_heartbeat_at` is the
- * runner's own low-frequency record, written at registration and by a heartbeat at most every
- * RUNNER_DURABLE_BEAT_EVERY_MS. A reading takes the later of the two, so it never goes back in time:
- * a presence row PostgreSQL emptied in a crash or a failover leaves the runner's own record to answer,
- * and a runner that has not beaten since it registered is read from the record registration wrote.
+ * runner's own low-frequency record, written by a heartbeat at most every RUNNER_DURABLE_BEAT_EVERY_MS.
+ * A reading takes the later of the two, so it never goes back in time: a presence row PostgreSQL
+ * emptied in a crash or a failover leaves the runner's own record to answer. Registering writes
+ * neither: a runner that has never beaten was never heard from, and reads offline.
  *
  * Every reader of liveness goes through here: a Prisma read selects RUNNER_BEATS beside the runner's
  * other fields and asks runnerIsOnline / runnerLastBeatAt; raw SQL splices runnerLastBeatSql or
@@ -410,8 +410,8 @@ export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
    * and a half leaves half a period of room on either side.
    *
    * Only runners that can LOSE contact are counted, in any number. Not one marked OFFLINE: that is
-   * written when a managed runner's row is created, before it has beaten, or reported by a runner about
-   * itself as it leaves — never by a runner cut off. And not a managed runner its manager is putting to
+   * what a runner's row is created with, before it has beaten, or what a runner reports about itself
+   * as it leaves — never a runner cut off. And not a managed runner its manager is putting to
    * sleep or has put to sleep (`managed_runner.management_state` DRAINING or SLEEPING): its silence is
    * the manager's own doing. A fleet of those going quiet together is no outage.
    */

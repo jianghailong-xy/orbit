@@ -307,7 +307,7 @@ def cmd_start(args):
         if len(rows) > 1:
             raise SystemExit(f'more than one runner named {args.name}: {[r["id"] for r in rows]}')
         beat = rows[0]['lastHeartbeatAt'] if rows else None
-        # Registration stamps lastHeartbeatAt too: only a beat after it shows `orbit run` reporting.
+        # Only a beat after this start shows `orbit run` reporting: a recreated runner has older ones.
         if beat and rows[0]['online'] and parse(beat) > max(since, parse(rows[0]['enrolledAt'])) + datetime.timedelta(seconds=1):
             row = rows[0]
             break

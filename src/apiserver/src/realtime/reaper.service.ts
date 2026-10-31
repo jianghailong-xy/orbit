@@ -195,9 +195,9 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  *
  * Save for one thing the runner says just as surely: `claimedAt`, the session's own claim of the
  * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
- * is presence. A process that has just started claims at once, while its first heartbeat waits for
- * the first tick of its 30-second ticker (runner-go runloop.go), so for that long the runner's last
- * beat is still its predecessor's. A managed runner woken from sleep is exactly that, every
+ * is presence. A process that has just started claims at once, and until its first heartbeat lands
+ * (runner-go runloop.go) the runner's last beat is still its predecessor's. A managed runner woken
+ * from sleep was exactly that, every
  * time: on the lab's real k3s (task T06, 2026-10-18) the run a woken runner claimed at 00:56:34.7
  * was finalized `runner offline` at 00:56:35.4, its heartbeat six minutes old from before the sleep.
  * The finalizing write asks the same of the row it writes (`claimedLongAgo`), under its lock.
@@ -219,8 +219,8 @@ function runnerLooksOffline(
 /**
  * Whether an offline verdict was read from silence: the runner is there and has not signed off. The
  * other two ways `runnerLooksOffline` says offline are facts on the record — a runner marked OFFLINE
- * (reported by a runner about itself as it leaves, or a managed runner's row before it ever beat), or
- * no runner at all — and `silenceHold`, which is about silence, does not hold them.
+ * (reported by a runner about itself as it leaves, or a runner's row before it ever beat), or no
+ * runner at all — and `silenceHold`, which is about silence, does not hold them.
  */
 function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
   return !!runner && runner.status !== 'OFFLINE';

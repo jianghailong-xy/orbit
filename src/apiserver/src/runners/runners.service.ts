@@ -356,6 +356,10 @@ export class RunnersService {
    * Approve a device session: mint one Runner for the machine, then stash its
    * credential. Workspaces are registered separately, not here. The session is
    * claimed first, so an approval and a denial racing each other settle on one.
+   *
+   * Nothing here says the machine is there: only its own heartbeat does. A new runner is OFFLINE and
+   * never heard from until then, and a re-registered one keeps what its last beat left, which reads
+   * as it did a moment ago and ages out if no process comes back with the new credential.
    */
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
@@ -383,8 +387,6 @@ export class RunnersService {
       maxConcurrent: s.maxConcurrent,
       version: s.version,
       tokenHash: sha256(runnerToken),
-      status: 'ONLINE' as const,
-      lastHeartbeatAt: new Date(),
       ...(registerDir ? { registerDir } : {}),
     };
     // Never a managed runner: its identity and credential belong to its mapping, not to a name.
@@ -1033,7 +1035,9 @@ export class RunnersService {
       where: { id },
       data: { dirProbeStatus: 'pending', dirProbePath: path, dirProbeAt: new Date() },
     });
-    this.realtime?.markRunnerChanged(id);
+    // Someone is watching the folder they typed, as with a sign-in (startLogin): the runner picks the
+    // question up on a heartbeat now rather than up to half a minute from now.
+    this.realtime?.notifyRunnerWake(id);
     return { path, status: 'pending' as const };
   }
 
