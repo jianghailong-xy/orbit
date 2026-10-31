@@ -30,10 +30,14 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	if got := *asked; len(got) != 1 || got[0] != "enable" {
 		t.Fatalf("broker was asked %v, want exactly [enable]", got)
 	}
+	user := "this account"
+	if u, err := registeringUser(); err == nil {
+		user = u.Username
+	}
 	for _, want := range []string{
-		unit,
-		"Status:  systemctl status " + unit,
-		"Logs:    journalctl -u " + unit + " -f",
+		"Background service started as " + user,
+		"(runs at boot)",
+		"Stop or remove it later with `orbit unregister`",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("register output missing %q; got:\n%s", want, out)

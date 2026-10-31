@@ -669,12 +669,11 @@ func signInEngine(spec engineSpec, binPath string) bool {
 	return true
 }
 
-// runDoctor checks every engine and prints status. When fix is true and stdin is
-// interactive, it offers to install anything missing and to sign in anything not
-// signed in, re-checking after each. proxyVars are threaded into installer commands
-// so installs work behind a proxy. Returns the final health slice. Best-effort —
-// never fatal — so `orbit register` can call it.
-func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
+// runDoctor checks every engine and prints status. When stdin is interactive,
+// it offers to install anything missing and to sign in anything not signed in,
+// re-checking after each. proxyVars are threaded into installer commands so
+// installs work behind a proxy. Best-effort — never fatal.
+func runDoctor(proxyVars []envVar) []engineHealth {
 	servicePath := serviceLoginPath()
 	healths := make([]engineHealth, len(engineSpecs))
 	for i, spec := range engineSpecs {
@@ -686,7 +685,7 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 		fmt.Printf("  %s\n", formatEngineLine(h))
 	}
 
-	if fix && interactive() {
+	if interactive() {
 		// Install pass: anything missing.
 		for i := range healths {
 			if healths[i].installed {
@@ -864,7 +863,7 @@ func cmdDoctor() {
 	} else {
 		fmt.Println("no runner registered on this machine — run `orbit register` first")
 	}
-	healths := runDoctor(true, doctorProxyVars(server))
+	healths := runDoctor(doctorProxyVars(server))
 	// Whether this machine can hold the runner link, and through what (link_doctor.go).
 	if cfg != nil {
 		checkRunnerLink(cfg, os.Stdout)

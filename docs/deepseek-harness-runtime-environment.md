@@ -25,7 +25,7 @@ Node 从哪来（`src/runner-go/dsh_node.go`）：
 
 `src/runner-go/dsh-install/` 的两个文件与 `scripts/deepseek-harness-p0/` 当前版本逐字节相同（测试断言），包括 `@deepseek-ai/libreoffice-kit` 的 `fflate` 0.8.3 安全覆盖；`@deepseek-ai/dsh` 0.2.0-rc.2 的 integrity 不变。P0 锁文件更新时同步复制这两个文件。已发布的 `0.2.0-rc.2` 目录不可变，不会因锁文件更新而重装。
 
-首次自动安装沿用 `AutoInstallEngines` 授权，默认拒绝；用户发起的浏览器 Install 使用既有单次授权。下载 Node 是安装的一部分，授权相同。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
+首次自动安装沿用 `AutoInstallEngines` 授权，默认允许（`orbit register --no-auto-install-engines` 可关闭）；用户发起的浏览器 Install 使用既有单次授权。下载 Node 是安装的一部分，授权相同。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
 
 ## 启动与恢复接口
 
