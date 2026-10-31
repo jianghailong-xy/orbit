@@ -149,6 +149,56 @@ func TestADeadSocketSaysWhyAndFallsBack(t *testing.T) {
 	}
 }
 
+// A broker that takes the connection and then goes quiet is the wedged-hostd case, and
+// the one registration must survive: the exchange times out, the user is told which
+// socket went silent, and the sudo path finishes the job. This runs the product chain —
+// setupServiceLinux → registerViaHostd → hostdDo → hostdCall — so that deleting
+// hostdCall's deadline, or falling through to an error instead of the legacy closure,
+// fails here rather than passing on a test's private copy of the behaviour.
+func TestASilentBrokerTimesOutAndStillFallsBack(t *testing.T) {
+	silent := make(chan struct{})
+	defer close(silent)
+	path := serveRawHostd(t, func(conn net.Conn) {
+		<-silent // accept, read nothing, answer nothing
+	})
+	shortenHostdTimeout(t)
+	commands := recordCommands(t)
+
+	installed := make(chan struct{}, 1)
+	out := captureServiceOutput(t, func() {
+		mustGiveUp(t, "register", func() {
+			if err := setupServiceLinux(path, nil, func() error { installed <- struct{}{}; return nil }); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	if len(installed) == 0 {
+		t.Error("a broker that never answers must still leave the runner installed the old way")
+	}
+	if !strings.Contains(out, path) || !strings.Contains(out, "falling back to the sudo path") {
+		t.Errorf("register output does not say which broker went silent; got:\n%s", out)
+	}
+
+	removed := make(chan struct{}, 1)
+	out = captureServiceOutput(t, func() {
+		mustGiveUp(t, "unregister", func() {
+			uninstallServiceLinux(path, func() { removed <- struct{}{} })
+		})
+	})
+	if len(removed) == 0 {
+		t.Error("a broker that never answers must still fall back to the sudo removal")
+	}
+	if !strings.Contains(out, "falling back to the sudo path") {
+		t.Errorf("unregister output does not say why it fell back; got:\n%s", out)
+	}
+
+	// Falling back is the legacy closure's job, not something the client does behind it:
+	// the client itself still ran nothing.
+	if len(*commands) != 0 {
+		t.Fatalf("the broker path shelled out to %v", *commands)
+	}
+}
+
 // The shared template carries no per-user environment, so a proxy the legacy path would
 // have baked into its own unit is not carried over. Say so rather than let the runner
 // come up unproxied and leave the user to work out why.

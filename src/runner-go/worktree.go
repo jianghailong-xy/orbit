@@ -899,7 +899,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		return files[:maxChangedFiles], nil, nil
 	}
 	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
-	return files, buildFilePatches(files, splitPatch(patchOut)), nil
+	// The committed pictures are what the checkout holds now: their placeholders come from it.
+	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
@@ -1090,7 +1091,7 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
 	// failure just leaves the file list without diffs, the status bar still works.
 	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
-	return files, buildFilePatches(files, splitPatch(patchOut))
+	return files, withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut)))
 }
 
 // seedIndexFromCheckout fills the temp index at idx with HEAD's tree, as `read-tree HEAD` into an
@@ -1266,7 +1267,8 @@ func gitDiffNewPath(ln string) string {
 // buildFilePatches pairs each (non-binary) changed file with its unified-diff segment under
 // the per-file and running-total size caps. A file whose diff is too large — or that pushes
 // the total over the cap — is marked Truncated with no text; binary files are omitted (the
-// web shows "binary" from the ChangedFile stat).
+// web shows "binary" from the ChangedFile stat), apart from a picture's placeholder, which
+// withImagePreviews adds after.
 func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch {
 	var out []FilePatch
 	total := 0

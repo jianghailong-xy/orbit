@@ -14,6 +14,12 @@ export function isWorktreeArtifactPath(value: unknown): value is string {
     && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..' && part.toLowerCase() !== '.git');
 }
 
+/** What a worktree file request waits on while its runner reads the file: the runner's answer to that request
+ *  (RunnerApiController.artifactResult) wakes it through RealtimeService.notifyWaiters. */
+export function worktreeFileAnswerKey(requestId: string): string {
+  return `worktree-file:${requestId}`;
+}
+
 export function readWorktreeArtifactRequest(content: string | null): WorktreeArtifactRequest | null {
   if (!content?.startsWith('{')) return null;
   try {
