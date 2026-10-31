@@ -9,6 +9,10 @@
  * on one database, a hub drops every event on purpose, a worker is killed between its claim and its
  * landing, a Nest application context is closed and booted again as a new process would be.
  *
+ * The job leaf (`SESSION_JOB_NO_OUTPUT_FOR`, predicateVersion 3) is driven the same way: its runner's job
+ * reports go through the runner door's own handler, and the silence it decides is the passage of the
+ * database's clock after the last of them.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-evaluator.pg.spec.ts
  *
  * Non-destructive: every row carries an id this run generated. Each case first retires the live
@@ -22,19 +26,21 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
 
-import { Module } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
 import {
   NormalizedRunEvent,
   RunEventType,
   SessionEndReason,
   SessionLifecycleState,
+  WATCH_LIMITS,
 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, Observable, tap } from 'rxjs';
 
+import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -43,6 +49,8 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
+import type { CreateWatchDto } from './dto';
 import {
   WATCH_EVALUATOR_OPTIONS,
   WatchEvaluation,
@@ -50,6 +58,8 @@ import {
   WatchEvaluatorService,
   watchHintFor,
 } from './watch-evaluator.service';
+import { redactReason, redactSnapshot } from './watch-redaction';
+import { WatchesService } from './watches.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -239,13 +249,14 @@ async function insertApproval(sessionId: string, status: string): Promise<void> 
 async function insertWatch(
   targets: Target[],
   predicate: unknown,
-  over: { ttlMs?: number; state?: string } = {},
+  over: { ttlMs?: number; state?: string; predicateVersion?: number } = {},
 ): Promise<string> {
   const id = randomUUID();
   await sql.query(
     `WITH "created" AS (
-       INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at")
-       VALUES ($1,$2,'USER',$3::jsonb,'ONE_SHOT','NOTIFY_USER',$4,now() + $5::int * interval '1 millisecond',now())
+       INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at",
+                           "predicate_version")
+       VALUES ($1,$2,'USER',$3::jsonb,'ONE_SHOT','NOTIFY_USER',$4,now() + $5::int * interval '1 millisecond',now(),$9)
        RETURNING "id"
      )
      INSERT INTO "watch_target"("id","watch_id","target_kind","target_resource_id")
@@ -260,6 +271,7 @@ async function insertWatch(
       targets.map(() => randomUUID()),
       targets.map((target) => target.kind),
       targets.map((target) => target.id),
+      over.predicateVersion ?? 1,
     ],
   );
   return id;
@@ -1082,4 +1094,305 @@ function spawnProbe(): { calls: string[]; restore(): void } {
       for (const [name, original] of synchronous) exported[name] = original;
     },
   };
+}
+
+// ── SESSION_JOB_NO_OUTPUT_FOR: a bg_run job's silence (predicateVersion 3) ──────────────────────────────
+
+/**
+ * The job leaf against the rows the runner's job reports keep. Every report below goes through the runner door's own
+ * handlers — `takeoverLeases`, then `events` carrying `background_task` payloads shaped as runner-go's bgJob sends them —
+ * so `running_bg_jobs` and `running_bg_job_activity` are written by the ingestion that writes them in production. No
+ * case here writes either column itself: the silence a case decides is what the reports left plus the database's clock.
+ */
+const JOB = 'bgj_0a1b2c3d4e5f';
+const quiet = (seconds: number, jobId?: string) => ({
+  kind: 'ANY',
+  over: 'ALL_TARGETS',
+  leaf: 'SESSION_JOB_NO_OUTPUT_FOR',
+  params: jobId === undefined ? { seconds } : { seconds, jobId },
+});
+
+/** A collaborator whose every method answers nothing: what the runner door would broadcast goes nowhere. */
+const silentCollaborator = (): never =>
+  new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) }) as never;
+
+/** The `running` report runner-go's bgJob.runningPayload sends at launch and again once a minute while the job runs. */
+const jobRunning = (id: string, idleMs?: number): Record<string, unknown> => ({
+  shellId: id,
+  toolUseId: id,
+  status: 'running',
+  kind: 'job',
+  command: 'npm run soak',
+  outputPath: `/root/.orbit/runs/job-leaf-spec/${id}.output`,
+  ...(idleMs === undefined ? {} : { idleMs }),
+});
+
+/** A session parked while the jobs its runner hosts run on, and what that runner reports through the runner door. */
+async function jobHost(prisma: PrismaClient) {
+  const runner = { id: randomUUID() };
+  await prisma.runner.create({
+    data: { id: runner.id, name: 'the machine running the soak test', ownerId, tokenHash: sha256(`job-leaf-${runner.id}`) },
+  });
+  const sessionId = randomUUID();
+  await prisma.session.create({
+    data: {
+      id: sessionId,
+      ownerId,
+      creatorId: ownerId,
+      title: 'a session waiting on its job',
+      prompt: 'run the soak test and tell me how it went',
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: false,
+      assignedRunnerId: runner.id,
+      numTurns: 1,
+    },
+  });
+  const door = new RunnerApiController(
+    prisma as never, silentCollaborator(), silentCollaborator(), silentCollaborator(), silentCollaborator(), silentCollaborator(),
+  );
+  const leaseOwner = randomUUID();
+  await door.takeoverLeases(runner, sessionId, { leaseOwner, expectedLeaseOwner: null } as never);
+  let seq = 0;
+  const report = (...payloads: Array<Record<string, unknown>>) =>
+    door.events(runner, sessionId, {
+      leaseOwner,
+      events: payloads.map((payload) => ({ type: RunEventType.BACKGROUND_TASK, payload, seq: ++seq, ts: new Date().toISOString() })),
+    } as never);
+  return {
+    sessionId,
+    /** The runner says the job is running and has written nothing for `seconds`. */
+    quietFor: (id: string, seconds: number) => report(jobRunning(id, seconds * 1000)),
+    /** A runner that predates idleMs says the job is running, and nothing about its output. */
+    runningUnreported: (id: string) => report(jobRunning(id)),
+    /** The job's terminal report (runner-go bgJob.endPayload). */
+    ended: (id: string) =>
+      report({ ...jobRunning(id), status: 'completed', summary: 'Background job completed (exit code 0)', output: 'soak passed', exitCode: 0 }),
+    /** The two columns as the ingestion left them. */
+    async columns(): Promise<{ jobs: string[]; activity: Record<string, number> }> {
+      const { rows: [row] } = await sql.query<{ jobs: string[]; activity: Record<string, number> }>(
+        `SELECT "running_bg_jobs" AS "jobs", "running_bg_job_activity" AS "activity" FROM "session" WHERE "id" = $1`,
+        [sessionId],
+      );
+      return row;
+    },
+  };
+}
+
+/** A version-3 watch through the service POST /api/watches and the runner door create with: validated, read and decided at create. */
+function createJobWatch(watches: WatchesService, sessionId: string, predicate: unknown, over: Record<string, unknown> = {}) {
+  return watches.create(ownerId, {
+    predicateVersion: 3,
+    predicate,
+    targets: [{ kind: 'SESSION', id: sessionId }],
+    action: 'NOTIFY_USER',
+    ...over,
+  } as unknown as CreateWatchDto);
+}
+
+/** The contract code a refused create answered with. */
+async function refusalOf(work: () => Promise<unknown>): Promise<string> {
+  try {
+    await work();
+  } catch (error) {
+    if (error instanceof BadRequestException || error instanceof ForbiddenException) {
+      const body = error.getResponse() as { code?: string };
+      if (body.code) return body.code;
+    }
+    throw error;
+  }
+  return assert.fail('the create was accepted');
+}
+
+/** A watch's schedule against the deadline the job's last reported output sets: that instant plus the window. */
+async function jobSchedule(watchId: string, sessionId: string, jobId: string, seconds: number) {
+  const { rows: [row] } = await sql.query<{ state: string; landed: boolean; due: boolean; atDeadline: boolean }>(
+    `SELECT w."state", w."last_evaluated_at" IS NOT NULL AS "landed", w."next_evaluate_at" <= now() AS "due",
+            abs(extract(epoch FROM w."next_evaluate_at"
+                - (to_timestamp((s."running_bg_job_activity" ->> $3)::float8 / 1000) + make_interval(secs => $4)))) < 0.002 AS "atDeadline"
+       FROM "watch" w, "session" s
+      WHERE w."id" = $1 AND s."id" = $2`,
+    [watchId, sessionId, jobId, seconds],
+  );
+  return row;
+}
+
+test('the job leaf decides its contract vectors from the rows the runner door writes, at create and in the evaluator alike', { skip, timeout: 120_000 }, async () => {
+  const { prisma, evaluator } = replica();
+  const watches = new WatchesService(prisma as unknown as PrismaService);
+  const exercised: string[] = [];
+  for (const vector of CONTRACT.vectors) {
+    if (!('SESSION_JOB_NO_OUTPUT_FOR' in vector.expect)) continue;
+    const expected = vector.expect.SESSION_JOB_NO_OUTPUT_FOR as boolean;
+    const host = await jobHost(prisma);
+    // A report places a job's last output at receivedAt - idleMs, so reporting `lastOutputSecondsAgo` of silence now
+    // leaves the rows a report that came earlier, saying less, would have left: one instant, measured from on one clock.
+    for (const job of vector.given.jobs as Array<{ id: string; lastOutputSecondsAgo: number | null }>) {
+      if (job.lastOutputSecondsAgo === null) await host.runningUnreported(job.id);
+      else await host.quietFor(job.id, job.lastOutputSecondsAgo);
+    }
+    for (const job of (vector.given.ended ?? []) as Array<{ id: string; lastOutputSecondsAgo: number }>) {
+      await host.quietFor(job.id, job.lastOutputSecondsAgo);
+      await host.ended(job.id);
+    }
+    const predicate = quiet(vector.given.params.seconds, vector.given.params.jobId);
+    const created = await createJobWatch(watches, host.sessionId, predicate);
+    assert.equal(created.state, expected ? 'MATCHED' : 'ACTIVE', `${vector.id}: decided at create`);
+    const waiting = await insertWatch([{ kind: 'SESSION', id: host.sessionId }], predicate, { predicateVersion: 3 });
+    assert.equal((await evaluator.evaluate(waiting)).outcome, expected ? 'MATCHED' : 'SCHEDULED', `${vector.id}: decided by the evaluator`);
+    exercised.push(vector.id);
+  }
+  assert.ok(exercised.length >= 6, `only ${exercised.length} job vectors were driven: ${exercised.join(', ')}`);
+
+  // The grammar it arrived in: a version-2 request naming it is refused, as the contract's vector says.
+  const refusal = CONTRACT.vectors.find((v) => v.id === 'version-2-refuses-the-job-leaf')!;
+  const host = await jobHost(prisma);
+  assert.equal(
+    await refusalOf(() => createJobWatch(watches, host.sessionId, refusal.given.predicate, { predicateVersion: refusal.given.predicateVersion })),
+    refusal.expect.refusal,
+  );
+});
+
+test('the job leaf holds once a job has been quiet past its window, and output that moves again ends it: a watch that waited through the silence does not match, and its deadline follows the new output', { skip, timeout: 120_000 }, async () => {
+  const { prisma, evaluator } = replica();
+  const watches = new WatchesService(prisma as unknown as PrismaService);
+  const host = await jobHost(prisma);
+  await host.quietFor(JOB, 400);
+  const quietSince = (await host.columns()).activity[JOB];
+  assert.equal(typeof quietSince, 'number', 'the fixture: the report recorded when the job last wrote');
+
+  // Quiet past the window: a watch made now holds at once, by any job and by this one named.
+  const anyJob = await createJobWatch(watches, host.sessionId, quiet(300));
+  const named = await createJobWatch(watches, host.sessionId, quiet(300, JOB));
+  assert.equal(anyJob.state, 'MATCHED', 'four hundred seconds of silence did not hold a three-hundred-second window');
+  assert.equal(named.state, 'MATCHED');
+  const [match] = await readMatches(anyJob.id);
+  assert.equal(match.reason, 'ANY SESSION_JOB_NO_OUTPUT_FOR(300s) 1/1');
+  const [target] = match.snapshot.targets as Array<Record<string, any>>;
+  assert.deepEqual(target.leaves, { 'SESSION_JOB_NO_OUTPUT_FOR(300s)': true });
+  assert.deepEqual(target.observed.jobs, [{ id: JOB, lastOutputAt: new Date(quietSince).toISOString() }]);
+  const [namedMatch] = await readMatches(named.id);
+  assert.equal(namedMatch.reason, `ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 1/1`);
+  // What a wake carries is rebuilt through the allowlist: the job's id, its last output and the labels all pass whole.
+  for (const recorded of [match, namedMatch]) {
+    assert.equal(redactReason(recorded.reason), recorded.reason, 'the allowlist withheld the job leaf\'s reason');
+    assert.deepEqual(redactSnapshot(recorded.snapshot), recorded.snapshot, 'the allowlist withheld part of the job leaf\'s snapshot');
+  }
+  // A predicate that does not ask about jobs records none of them.
+  const settled = await createJobWatch(watches, host.sessionId, any('SESSION_TURN_SETTLED'), { predicateVersion: 1 });
+  const [settledMatch] = await readMatches(settled.id);
+  assert.equal('jobs' in (settledMatch.snapshot.targets[0] as Record<string, any>).observed, false, 'a status watch recorded the jobs');
+
+  // A watch that was waiting through that silence, and has not been looked at again since.
+  const waiting = await insertWatch([{ kind: 'SESSION', id: host.sessionId }], quiet(300), { predicateVersion: 3 });
+  // The job writes, and the runner's next report says so.
+  await host.quietFor(JOB, 2);
+  const movedTo = (await host.columns()).activity[JOB];
+  assert.ok(movedTo - quietSince >= 397_000, `the fixture: the report moved the last output forward by ${movedTo - quietSince}ms`);
+
+  assert.equal((await evaluator.evaluate(waiting)).outcome, 'SCHEDULED');
+  assert.equal((await readMatches(waiting)).length, 0, 'output that moved again still ended in a Match');
+  assert.deepEqual(await readTargets(waiting), { [host.sessionId]: 'OBSERVED' });
+  assert.equal((await jobSchedule(waiting, host.sessionId, JOB, 300)).atDeadline, true,
+    'the watch was not scheduled at the deadline the new output set');
+  assert.equal((await createJobWatch(watches, host.sessionId, quiet(300))).state, 'ACTIVE', 'a watch made after the output moved held at create');
+});
+
+test('a runner that stops reporting is heard as silence: the deadline its last report set arrives on the database\'s clock, and the one loop matches it with no event', { skip, timeout: 120_000 }, async () => {
+  // Every hint this replica's hub publishes is dropped, and none would come anyway: the runner door here broadcasts
+  // nothing, and a job report is no hint. Only `next_evaluate_at` can bring the watch back.
+  const { prisma, evaluator } = replica({ pollIntervalMs: 200 }, (client) => new DroppingRealtime(client));
+  const host = await jobHost(prisma);
+  // The runner's last word: the job has written nothing for 297 seconds, three short of the window. Then it says
+  // nothing more — crashed, cut off, asleep — and the session stays parked, as the reaper leaves a parked one.
+  await host.quietFor(JOB, 297);
+  const lastReported = await host.columns();
+  const watchId = await insertWatch([{ kind: 'SESSION', id: host.sessionId }], quiet(300, JOB), { predicateVersion: 3 });
+
+  evaluator.start();
+  const first = await eventually('its first evaluation', () => jobSchedule(watchId, host.sessionId, JOB, 300), (row) => row.landed);
+  assert.equal(first.state, 'ACTIVE', 'the watch held before its window had passed');
+  assert.equal(first.atDeadline, true, 'the watch was not scheduled at the deadline the last report set: its next look is the sweep an hour out');
+  assert.equal(first.due, false);
+
+  await eventually('the silence to reach its window', () => readWatch(watchId), (w) => w.state === 'MATCHED', 30_000);
+  const [match] = await readMatches(watchId);
+  assert.equal(match.reason, `ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 1/1`);
+  const { rows: [timing] } = await sql.query<{ late: number }>(
+    `SELECT extract(epoch FROM m."matched_at"
+              - (to_timestamp((s."running_bg_job_activity" ->> $3)::float8 / 1000) + interval '300 seconds'))::float8 AS "late"
+       FROM "watch_match" m, "session" s WHERE m."watch_id" = $1 AND s."id" = $2`,
+    [watchId, host.sessionId, JOB],
+  );
+  assert.ok(timing.late >= 0, `matched ${-timing.late}s before the silence reached its window`);
+  assert.ok(timing.late < 5, `matched ${timing.late}s after its deadline, on a 200ms poll`);
+  assert.deepEqual(await host.columns(), lastReported, 'something wrote the job columns after the runner\'s last report');
+  assert.equal(await sessionStatus(host.sessionId), 'AWAITING_INPUT');
+});
+
+test('a job that ended is not quiet: the leaf does not hold, no deadline is scheduled for it, the watch waits for its TTL, and ANY_OF with SESSION_RUN_TERMINAL hears the run end', { skip, timeout: 60_000 }, async () => {
+  const { prisma, evaluator } = replica();
+  const host = await jobHost(prisma);
+  await host.quietFor(JOB, 400);
+  await host.ended(JOB);
+  assert.deepEqual(await host.columns(), { jobs: [], activity: {} }, 'the fixture: the terminal report took the job out of both columns');
+
+  const alone = await insertWatch([{ kind: 'SESSION', id: host.sessionId }], quiet(300, JOB), { predicateVersion: 3, ttlMs: 2_000 });
+  assert.equal((await evaluator.evaluate(alone)).outcome, 'SCHEDULED');
+  assert.equal((await readWatch(alone)).atExpiry, true, 'an ended job scheduled a deadline: the watch has nothing to wait for but its TTL');
+  await eventually('its TTL', async () => {
+    await evaluator.evaluate(alone);
+    return readWatch(alone);
+  }, (w) => w.state === 'EXPIRED', 10_000);
+  assert.equal((await readMatches(alone)).length, 0, 'an ended job matched a silence leaf');
+
+  const eitherWay = await insertWatch(
+    [{ kind: 'SESSION', id: host.sessionId }],
+    { kind: 'ANY_OF', operands: [quiet(300, JOB), any('SESSION_RUN_TERMINAL')] },
+    { predicateVersion: 3 },
+  );
+  assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'SCHEDULED');
+  await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [host.sessionId]);
+  assert.equal((await evaluator.evaluate(eitherWay)).outcome, 'MATCHED');
+  const [match] = await readMatches(eitherWay);
+  assert.equal(match.reason, `ANY_OF(ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${JOB}) 0/1, ANY SESSION_RUN_TERMINAL 1/1)`);
+  assert.equal(redactReason(match.reason), match.reason);
+});
+
+test('the job leaf is checked where a watch is created: its version, its window, its job id, its keys and its target kind, and a refused create writes nothing', { skip, timeout: 60_000 }, async () => {
+  const { prisma } = replica();
+  const watches = new WatchesService(prisma as unknown as PrismaService);
+  const host = await jobHost(prisma);
+  const task = await insertTask('OPEN');
+  const count = async () => {
+    const { rows: [{ n }] } = await sql.query<{ n: number }>(`SELECT count(*)::int AS "n" FROM "watch" WHERE "owner_id" = $1`, [ownerId]);
+    return n;
+  };
+  const before = await count();
+  const refused: Array<[string, Record<string, unknown>, string]> = [
+    ['under version 2', { predicateVersion: 2 }, 'UNKNOWN_PREDICATE_KIND'],
+    ['under a version this build does not serve', { predicateVersion: 4 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['a window under the minimum', { predicate: quiet(WATCH_LIMITS.minNoOutputSeconds - 1) }, 'PREDICATE_PARAMETER_INVALID'],
+    ['a window past the longest TTL', { predicate: quiet(WATCH_LIMITS.maxTtlSeconds + 1) }, 'PREDICATE_PARAMETER_INVALID'],
+    ['a fractional window', { predicate: quiet(300.5) }, 'PREDICATE_PARAMETER_INVALID'],
+    ['no params', { predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_JOB_NO_OUTPUT_FOR' } }, 'PREDICATE_PARAMETER_INVALID'],
+    ['a job id that is a command', { predicate: quiet(300, 'bgj_1; rm -rf /') }, 'PREDICATE_PARAMETER_INVALID'],
+    ['an id bg_run never hands out', { predicate: quiet(300, 'toolu_01EngineOwnedShell') }, 'PREDICATE_PARAMETER_INVALID'],
+    ['a command beside the window', { predicate: { ...quiet(300), params: { seconds: 300, command: 'tail -f build.log' } } }, 'PREDICATE_PARAMETER_INVALID'],
+    ['a task target', { targets: [{ kind: 'TASK', id: task }] }, 'TARGET_KIND_MISMATCH'],
+  ];
+  for (const [why, over, code] of refused) {
+    assert.equal(await refusalOf(() => createJobWatch(watches, host.sessionId, quiet(300), over)), code, why);
+  }
+  assert.equal(await count(), before, 'a refused create wrote a watch');
+  // The paired positive: the shortest window, one job named.
+  const accepted = await createJobWatch(watches, host.sessionId, quiet(WATCH_LIMITS.minNoOutputSeconds, JOB));
+  assert.equal(accepted.state, 'ACTIVE');
+  assert.equal(accepted.predicateVersion, 3);
+});
+
+async function sessionStatus(sessionId: string): Promise<string> {
+  const { rows: [row] } = await sql.query<{ status: string }>(`SELECT "status"::text AS "status" FROM "session" WHERE "id" = $1`, [sessionId]);
+  return row.status;
 }

@@ -24,7 +24,7 @@ func TestKimiTurnEventsReachTheControlPlaneInStreamOrder(t *testing.T) {
 	}
 	fake := newFakeKimiEngine(t,
 		chunk("agent_thought_chunk", "plan first"),
-		map[string]interface{}{"sleepMs": 80},
+		map[string]interface{}{"sleepMs": 500},
 		chunk("agent_message_chunk", "I'll read it."),
 		map[string]interface{}{
 			"sessionUpdate": "tool_call", "toolCallId": "1:t", "title": "Read",
@@ -101,10 +101,12 @@ func TestKimiTurnEventsReachTheControlPlaneInStreamOrder(t *testing.T) {
 		texts[5] != "now decide" || texts[6] != "Done." {
 		t.Fatalf("stretch texts out of order: %#v", texts)
 	}
-	// Each block carries its own stretch's time: the first held an 80ms beat of reasoning and
-	// says so; the second, streamed in a burst, claims none of it back.
+	// Each block carries its own stretch's time: the first held a 500ms beat of reasoning and
+	// says so; the second, streamed in a burst, claims none of it back. The clock runs from the
+	// runner reading the first chunk to it reading the next, so a first chunk read late comes out
+	// short by as much (a loaded host timed an 80ms beat at 54ms): the beat is long, the floor 60ms.
 	if len(thinkingMs) != 2 || thinkingMs[0] < 60 {
-		t.Fatalf("thinkingMs per block = %v, want the first to time its 80ms stretch", thinkingMs)
+		t.Fatalf("thinkingMs per block = %v, want the first to time its 500ms stretch", thinkingMs)
 	}
 	if thinkingMs[1] >= thinkingMs[0] {
 		t.Fatalf("thinkingMs per block = %v: the burst stretch inherited the timed one", thinkingMs)

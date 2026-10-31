@@ -171,6 +171,14 @@ export const LEAF_COPY: Record<WatchLeaf, LeafCopy> = {
     hint: 'Still open, and the progress it reports has not moved for a set time.',
     met: 'stalled',
   },
+  // Version 3: read on watches an agent made, never offered by the editor either.
+  SESSION_JOB_NO_OUTPUT_FOR: {
+    one: 'has a job that goes quiet',
+    many: 'have a job that goes quiet',
+    option: 'A job goes quiet',
+    hint: 'A job it started with bg_run has written no output for a set time.',
+    met: 'had a quiet job',
+  },
 };
 
 const NOUN: Record<WatchTargetKind, [one: string, many: string]> = {

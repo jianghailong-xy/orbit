@@ -62,14 +62,16 @@ Watch 往外说的每一样东西都只从白名单取：
 
 - **唤醒 turn 的快照**（Match 的 `latestSnapshot` 与 `changedTargets`、到期 turn 的 `latestSnapshot`）：每个目标只保留
   `kind`、`id`、`epoch`、`state`、`changed`；`leaves` 只保留契约声明过的 leaf（以 leaf 标签为键，带参数的形如
-  `TASK_NO_PROGRESS_FOR(600s)`），值必须是布尔；`observed` 只保留 `status`、`endReason`、`runState`、`lifecycleState`
-  （都必须是单个标识符）、`pendingApproval`（布尔），以及谓词读进度时的 `progress`：`phase`（单个标识符）、`current` / `total`
-  （计数）、`lastProgressAt` / `epochStartedAt`（时间）。报告的 `message` 从不进快照；`phase` 不是单个标识符时写成
+  `TASK_NO_PROGRESS_FOR(600s)`、`SESSION_JOB_NO_OUTPUT_FOR(1800s, bgj_0a1b2c3d4e5f)`），值必须是布尔；`observed` 只保留
+  `status`、`endReason`、`runState`、`lifecycleState`（都必须是单个标识符）、`pendingApproval`（布尔），谓词读进度时的
+  `progress`：`phase`（单个标识符）、`current` / `total`（计数）、`lastProgressAt` / `epochStartedAt`（时间），以及谓词读 job
+  输出时的 `jobs`：每项只有 `id`（bg_run 的 job id）与 `lastOutputAt`（时间或 null），job 打印的内容从不进快照（契约 §15）。
+  报告的 `message` 从不进快照；`phase` 不是单个标识符时写成
   `[redacted]`，完整的报告用 `GET /api/tasks/:id/progress` 读。continuous Watch 的 Match 带 `window` 与 `budget`，到期带
   `openWindow`，每个字段形状都对才保留，否则整个写成 `[redacted]`。**其他键直接丢弃；形状不对的值写成 `[redacted]`**，
   读 turn 的人能看出有东西被扣下了。
 - **reason**（turn 标题行、载荷、推送正文）：必须是谓词描述的词汇，例如 `ANY_OF(ALL TASK_TERMINAL 7/7, ANY TASK_FAILED 1/7)`、
-  `ANY TASK_NO_PROGRESS_FOR(600s) 1/1`；continuous Watch 的 Match 后面还跟着 `; 2 crossings since <时间>; wake 3 of 10`。
+  `ANY TASK_NO_PROGRESS_FOR(600s) 1/1`、`ANY SESSION_JOB_NO_OUTPUT_FOR(1800s, bgj_0a1b2c3d4e5f) 1/1`；continuous Watch 的 Match 后面还跟着 `; 2 crossings since <时间>; wake 3 of 10`。
   否则整条写成 `[redacted]`。推送要经过 Apple 的服务，只带这条 reason，不带任何目标。
 - **`REVOKED` / `UNRESOLVABLE` 的终态 turn**：只有 `watchId` 和 `state`，从来不含目标。
 - **`last_error`**：落库前，URL 里的用户名密码、`Bearer`/`Basic` 凭据、JWT、`sk-`/`gh*_`/`AKIA` 形式的 key、

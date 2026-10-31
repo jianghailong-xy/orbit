@@ -271,10 +271,10 @@ import {
 import { settleUnrunWakeTurns } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
-  cancelScheduledWakeup,
   ScheduledWakeupDto,
   type ScheduledWakeupReceipt,
   scheduleWakeup,
+  stopScheduledWakeups,
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -5843,11 +5843,12 @@ export class RunnerApiController {
   }
 
   /**
-   * The agent in this session asks to be woken later — or, with `stop`, no longer (runner-go
-   * `schedule_wakeup`). Claude Code's own ScheduleWakeup keeps that timer inside the engine process,
-   * which Orbit recycles and a runner restart kills; held here instead, the wakeup outlives both. When
-   * it is due, the scheduled-wakeup worker files it onto the session's wake turn
-   * (scheduled-wakeup.worker.ts), and no runner is involved until one claims that turn.
+   * The agent in this session asks to be woken later — once, or on a loop with `recurring` — or, with
+   * `stop`, no longer (runner-go `schedule_wakeup`, docs/long-running-loop-contract.md §1). Claude Code's
+   * own ScheduleWakeup keeps that timer inside the engine process, which Orbit recycles and a runner
+   * restart kills; held here instead, the wakeup outlives both. When it is due, the scheduled-wakeup
+   * worker files it onto the session's wake turn (scheduled-wakeup.worker.ts), and no runner is involved
+   * until one claims that turn. A stop cancels the waiting wakeup and ends the loop in one transaction.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/scheduled-wakeup')
@@ -5858,10 +5859,9 @@ export class RunnerApiController {
     @Body() dto: ScheduledWakeupDto,
   ): Promise<ScheduledWakeupReceipt> {
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    if (dto.stop === true) return cancelScheduledWakeup(this.prisma, sessionId);
     return withTransactionRetry(
       this.prisma,
-      (tx) => scheduleWakeup(tx, sessionId, dto),
+      (tx) => (dto.stop === true ? stopScheduledWakeups(tx, sessionId) : scheduleWakeup(tx, sessionId, dto)),
       loggedRetry(this.logger, 'runnerApi.scheduledWakeup'),
     );
   }

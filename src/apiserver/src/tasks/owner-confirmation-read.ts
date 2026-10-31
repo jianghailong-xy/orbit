@@ -211,8 +211,8 @@ export function runStoppedWorking(
 
 /**
  * Whether this session has a wake-up it asked for still waiting — the run coming back by itself,
- * which is why it counts as work in flight. One can be waiting at most, so this is a lookup by the
- * partial unique key, and PENDING is the only state a live wake-up is in.
+ * which is why it counts as work in flight. A one-shot wake-up and a loop's next tick can each be
+ * waiting (migration 0458), and PENDING is the only state a live one of either is in.
  */
 export async function waitingScheduledWakeup(
   tx: PrismaTypes.TransactionClient,
