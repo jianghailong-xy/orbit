@@ -1,0 +1,19 @@
+Printing with useUnmergedTree = 'true'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+ |-Node #54 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+   IsContainer = 'true'
+    |-Node #56 at (l=16.0, t=16.0, r=395.0, b=58.0)px, Tag: 'record:9:coordinatorDelivery'
+       |-Node #57 at (l=16.0, t=16.0, r=395.0, b=58.0)px
+         Focused = 'false'
+         Actions = [OnClick, RequestFocus]
+         MergeDescendants = 'true'
+          |-Node #58 at (l=28.0, t=28.0, r=41.0, b=46.0)px
+          | ClearAndSetSemantics = 'true'
+          |-Node #60 at (l=47.0, t=22.0, r=373.0, b=37.0)px, Tag: 'record:9:coordinatorDelivery:sentence'
+          | Text = '[Evidence revision 1 submitted: Wiki model queue: one claim can take more requests than the concurrency room]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #61 at (l=47.0, t=39.0, r=198.0, b=52.0)px, Tag: 'record:9:coordinatorDelivery:sent'
+          | Text = '[Sent to the coordinator · 22:32]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #62 at (l=379.0, t=30.0, r=383.0, b=45.0)px
+            ClearAndSetSemantics = 'true'

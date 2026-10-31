@@ -69,6 +69,25 @@ class StickySummaryTest {
         assertTrue("with no card it is the reader's message, as before", StickySummary.isAnchor(user(5, text("From Orbit · owner answer: …"))))
     }
 
+    /** A fact told to this session heads the reply under it: scrolled past, the bar reads "↑ From Orbit" and the line's sentence —
+     * never "Your question" over words the reader did not write (web `CoordinatorDeliveryLine`'s `data-sticky-label`). */
+    @Test fun aFactToldToThisSessionTakesTheBarAsFromOrbit() {
+        val told = "From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\nTask “Wiki queue” submitted revision 1."
+        val fact = user(3, buildJsonObject {
+            put("text", told)
+            putJsonObject("coordinatorDelivery") {
+                put("kind", "EVIDENCE_SUBMITTED"); putJsonObject("task") { put("id", "t1"); put("title", "Wiki queue") }
+                put("revision", 1); put("count", JsonNull); put("deliveredAt", "2026-10-31T11:30:00.000Z")
+            }
+        })
+        assertTrue(StickySummary.isAnchor(fact))
+        assertEquals("↑ From Orbit" to "Evidence revision 1 submitted: Wiki queue", StickySummary.of(fact))
+        assertEquals("the capsule keeps the card's label", "↑ From Orbit", StickySummary.compactLabel(StickySummary.of(fact).first))
+        val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), fact, RunEvent("assistant", 4, text("Read it."))))
+        assertEquals("the reply under the fact is named by it", "event:3", StickyQuestions(rows).above("event:4")?.key)
+        assertEquals("with no card it is the reader's message, as before", "↑ Your question", StickySummary.of(user(5, text(told))).first)
+    }
+
     @Test fun theIndexStepsBackThroughQuestionsAndSkipsWakes() {
         val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")),
             user(3, buildJsonObject { put("text", wake); put("controlPlaneNote", wake) }), RunEvent("assistant", 4, text("A1 cont.")),

@@ -75,6 +75,30 @@ class QueuedTailTest {
         assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
     }
 
+    /** A fact told to this session waits as the line its echo will be, can be withdrawn like any queued turn, and is nobody's words: the
+     * tray does not hold it, and a receipt that it failed hands nothing back to the composer. */
+    @Test fun aQueuedCoordinatorDeliveryIsItsLine() {
+        val delivery = """{"kind":"DEPENDENT_READY","task":{"id":"01a0d6a9-d763-70e1-b4cf-8793e971b511","title":"Wiki queue"},
+            "revision":null,"count":null,"deliveredAt":"2026-10-31T11:30:00.000Z"}"""
+        val told = "From Orbit · project “Runner link v1” has a downstream task that can start now"
+        val turn = queuedTail(rows("""[{"turnId":"t7","kind":"message","content":"$told","attachments":[],
+            "coordinatorDelivery":$delivery,"authoredByOrbit":true}]"""), emptyList()).single()
+        val card = turn.cards.single()
+        assertTrue(card.key.endsWith(":coordinatorDelivery"))
+        assertEquals("Can start now: Wiki queue", card.title)
+        assertEquals(told, turn.event.fields.text("text"))
+        assertTrue(turn.cancelable)
+        assertFalse("nobody typed it", turn.readersOwn)
+        assertFalse(turn.inTray)
+        val echo = RunEvent("user", 0, buildJsonObject {
+            put("text", told); putJsonArray("attachments") {}; put("coordinatorDelivery", Wire.json.parseToJsonElement(delivery))
+        }, "t7")
+        assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
+        assertTrue("a failed delivery is no words of the reader's to put back", undeliveredTail(rows("""[{"turnId":"t7","kind":"message",
+            "content":"$told","attachments":[],"coordinatorDelivery":$delivery,"authoredByOrbit":true,"delivery":"failed"}]"""),
+            emptyList()).isEmpty())
+    }
+
     /** The queued row carries exactly the cards its echo will: the same projection over the same keys. */
     @Test fun aQueuedRowCarriesTheCardsItsEchoWillCarry() {
         val turn = queuedTail(rows("""[{"turnId":"t3","kind":"message","content":"x","attachments":[],"sessionReplies":[$reply],
