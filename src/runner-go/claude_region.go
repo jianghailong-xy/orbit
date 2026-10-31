@@ -478,3 +478,40 @@ func claudeSignInRefusedMessage(machine, region string) string {
 // claudeRegionsSourceURL is Anthropic's Supported Regions Policy, the page the list is copied from (§2):
 // @orbit/shared's CLAUDE_REGIONS_SOURCE_URL. The address board 03 prints, /supported-countries, redirects here.
 const claudeRegionsSourceURL = "https://www.anthropic.com/legal/supported-regions"
+
+// claudeNonessentialTrafficVar turns Claude Code's nonessential traffic off: its telemetry, error reports, feature
+// flags and updater, the requests a claude makes to api.anthropic.com however it is configured.
+const claudeNonessentialTrafficVar = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+
+// claudeStartsQuiet reports whether a claude started with agentEnv layered over this process's environment runs with
+// its nonessential traffic off: it is not Anthropic-bound, so it runs whatever the verdict (owner decision ①), while
+// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③).
+// Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to api.anthropic.com as it starts
+// (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set sends Anthropic nothing.
+// Read with no request and no wait (lastDecided), so a turn on another provider's key never waits on the route: no
+// check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
+func claudeStartsQuiet(agentEnv map[string]string) bool {
+	const carryOver = 24 * time.Hour
+	check := claudeRegion.Load()
+	if check == nil {
+		return false
+	}
+	v, ok := check.lastDecided(claudeAnthropicProxy())
+	if !ok || v.Verdict != claudeRegionBlocked || check.now().Sub(v.At) >= carryOver {
+		return false
+	}
+	return !claudeTurnIsAnthropicBound(agentEnv)
+}
+
+// claudeQuietEnv is env, the whole environment a claude is started with (nil: this process's own, inherited), with
+// its nonessential traffic off when claudeStartsQuiet(agentEnv), and env as it was otherwise. Every claude the runner
+// starts that the region check lets run gets its environment through it.
+func claudeQuietEnv(env []string, agentEnv map[string]string) []string {
+	if !claudeStartsQuiet(agentEnv) {
+		return env
+	}
+	if env == nil {
+		env = os.Environ()
+	}
+	return envWithValue(env, claudeNonessentialTrafficVar, "1")
+}

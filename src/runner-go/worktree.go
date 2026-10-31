@@ -2607,6 +2607,7 @@ func generateCommitMessage(wtPath, fallback string) string {
 	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt+diff,
 		"--model", commitMsgModel, "--output-format", "text")
 	cmd.Dir = tmp
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return fallback

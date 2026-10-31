@@ -266,6 +266,10 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
 	}
+	// Claude Code's installer from one that does not talk to Anthropic, while blocked: quiet (claude_region.go).
+	if spec.bin == providerClaude {
+		cmd.Env = claudeQuietEnv(cmd.Env, nil)
+	}
 	// See configureEngineCommandTree: an installer that forks outlives the `sh` the context
 	// kills, and its open pipe would hold this timeout — and the lock above — open forever.
 	configureEngineCommandTree(cmd)
@@ -381,6 +385,10 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	cmd.Env = append(os.Environ(), "PATH="+serviceLoginPath())
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
+	}
+	// Claude Code's installer from one that does not talk to Anthropic, while blocked: quiet (claude_region.go).
+	if bin == providerClaude {
+		cmd.Env = claudeQuietEnv(cmd.Env, nil)
 	}
 	// This one is on a session's first turn: a forked installer that outlives its `sh` would
 	// hold the turn open past the timeout meant to bound it. See configureEngineCommandTree.

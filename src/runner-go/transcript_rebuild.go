@@ -494,6 +494,7 @@ func summarizeReplayHead(ctx context.Context, head []replayMessage) string {
 	cmd := exec.CommandContext(cctx, "claude", "-p", transcriptSummaryPrompt+digest,
 		"--model", transcriptSummaryModel, "--output-format", "text")
 	cmd.Dir = tmp
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err == nil {
 		if s := strings.TrimSpace(string(out)); s != "" {

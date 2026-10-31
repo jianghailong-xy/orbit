@@ -369,6 +369,18 @@ asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_r
   - Left as they are: `claude --version`, which connects nowhere; Anthropic-bound turns and deliveries, which have
     their own gates (§10); and what a person runs in their own terminal (`orbit resume`, doctor's interactive
     install).
+- **Quiet starts.** While blocked, every `claude` the runner starts that is not Anthropic-bound runs with
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (`claudeQuietEnv`). That covers a session on another provider's key
+  (`spawnClaude`, first spawn and respawn) and each start above that runs. "Blocked" here means the last decided
+  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`). It is read with no
+  request and no wait, so such a turn is never checked and never waits on the route (①).
+  - Measured on Claude Code 2.1.316, such a `claude` with a Claude login stored sends that login to
+    `api.anthropic.com` (`/api/claude_cli/bootstrap`, `/api/claude_code_penguin_mode`). With the variable it sends
+    Anthropic nothing, while the turn, its reply and its prompt suggestion still go to the other provider.
+  - The variable also turns off Claude Code's telemetry and product feedback, and its Design skills, commands and
+    tool.
+  - Nothing changes with no decided answer, an allowed one, or one a day old. A runner that has just started has no
+    decided answer until its first check answers, a few seconds in; a session it spawns before then is not quiet.
 
 ## Copy of record (board 04)
 

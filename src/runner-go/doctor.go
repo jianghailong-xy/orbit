@@ -412,7 +412,7 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		}
 		// Parse stdout regardless of exit code — the JSON carries the answer.
 		cmd := exec.CommandContext(ctx, binPath, "auth", "status")
-		cmd.Env = env
+		cmd.Env = claudeQuietEnv(env, envAsAgent(env))
 		out, _ := cmd.Output()
 		var s struct {
 			LoggedIn *bool `json:"loggedIn"`

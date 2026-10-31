@@ -138,6 +138,7 @@ func fetchClaudeModelCapabilities(ctx context.Context, dir, model, settings stri
 		"/fast",
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return claudeModelCapabilities{}
@@ -242,6 +243,7 @@ func fetchClaudeContextWindow(ctx context.Context, dir, model string) int {
 		"/context",
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0
@@ -292,6 +294,7 @@ func resolveClaudeModelName(ctx context.Context, dir, alias string) (string, err
 		"/model "+alias,
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err

@@ -294,7 +294,7 @@ func probeClaudeSlashAssets(ctx context.Context) (commands, skills []string, err
 		"--no-session-persistence",
 	)
 	cmd.Dir = dir
-	cmd.Env = envWithAgent(nil)
+	cmd.Env = claudeQuietEnv(envWithAgent(nil), nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, nil, err

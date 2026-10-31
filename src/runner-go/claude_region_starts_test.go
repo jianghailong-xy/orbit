@@ -20,14 +20,15 @@ import (
 
 const deepseekBaseURL = "https://api.deepseek.com/anthropic"
 
-// fakeOwnClaude puts first on PATH a claude that records each start and answers each of the four as the real CLI
-// does, keeps git reachable for the commit case, and names the same claude as the commit-message engine. It returns
-// how many times claude has been started.
-func fakeOwnClaude(t *testing.T) func() int {
+// fakeOwnClaude puts first on PATH a claude that records each start, with the value of the nonessential-traffic
+// variable it was started with, and answers each of the four as the real CLI does; it keeps git reachable for the
+// commit case and names the same claude as the commit-message engine. It returns the values, one per start ("unset"
+// for none).
+func fakeOwnClaude(t *testing.T) func() []string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "starts")
-	writeFakeBin(t, dir, providerClaude, `echo start >> '`+log+`'
+	writeFakeBin(t, dir, providerClaude, `echo "start ${`+claudeNonessentialTrafficVar+`-unset}" >> '`+log+`'
 for arg in "$@"; do
   case "$arg" in
     "/model opus") echo "Set model to Opus 5 for this session only"; exit 0 ;;
@@ -50,16 +51,30 @@ exit 2`)
 	previous := commitMsgEngine
 	commitMsgEngine = providerClaude
 	t.Cleanup(func() { commitMsgEngine = previous })
-	return func() int {
+	return func() []string {
 		b, err := os.ReadFile(log)
 		if os.IsNotExist(err) {
-			return 0
+			return nil
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		return strings.Count(string(b), "start\n")
+		var values []string
+		for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+			values = append(values, strings.TrimPrefix(line, "start "))
+		}
+		return values
 	}
+}
+
+// allEqual reports whether values holds at least one value and every one is want.
+func allEqual(values []string, want string) bool {
+	for _, v := range values {
+		if v != want {
+			return false
+		}
+	}
+	return len(values) > 0
 }
 
 // ownClaudeStart is one of the runner's own claude starts, driven through its caller: run reports whether what the
@@ -135,37 +150,44 @@ var ownClaudeStarts = []ownClaudeStart{
 	}},
 }
 
-// Blocked, none of the four starts claude and each caller takes its fallback; a process environment that points
-// Claude Code at DeepSeek still starts while blocked; and once allowed, each starts again.
+// Blocked, none of the four starts claude and each caller takes its fallback. A process environment that points
+// Claude Code at DeepSeek still starts while blocked, with its nonessential traffic off, and asks the route nothing for
+// it. Once allowed, each starts again, as it always did.
 func TestOwnClaudeStartsWaitOnTheRegion(t *testing.T) {
 	for _, c := range ownClaudeStarts {
 		t.Run(c.name, func(t *testing.T) {
 			isolateClaudeRegionEnv(t)
 			privateOrbitHome(t)
-			starts := fakeOwnClaude(t)
+			values := fakeOwnClaude(t)
 			stub := newRegionStub(t, regionAnswerBlocked)
 			clock := newFakePoolClock()
 			installRegionCheck(t, stub, clock)
 
 			var usedClaude bool
 			captureRunnerStdout(t, func() { usedClaude = c.run(t) })
-			if usedClaude || starts() != 0 {
-				t.Fatalf("blocked: claude started %d times (caller used it: %v), want none and the fallback", starts(), usedClaude)
+			if usedClaude || len(values()) != 0 {
+				t.Fatalf("blocked: claude started %d times (caller used it: %v), want none and the fallback", len(values()), usedClaude)
 			}
 
 			t.Setenv("ANTHROPIC_BASE_URL", deepseekBaseURL)
+			asked := len(stub.checksSoFar())
 			captureRunnerStdout(t, func() { usedClaude = c.run(t) })
-			if !usedClaude || starts() == 0 {
-				t.Fatalf("blocked, Claude Code on DeepSeek: claude started %d times (caller used it: %v), want it started", starts(), usedClaude)
+			if got := values(); !usedClaude || !allEqual(got, "1") {
+				t.Fatalf("blocked, Claude Code on DeepSeek: claude started with %s = %q (caller used it: %v), want it started with 1",
+					claudeNonessentialTrafficVar, got, usedClaude)
+			}
+			if n := len(stub.checksSoFar()); n != asked {
+				t.Fatalf("blocked, Claude Code on DeepSeek: the start asked the route %d times, want none", n-asked)
 			}
 			t.Setenv("ANTHROPIC_BASE_URL", "")
 
 			stub.setAnswer(regionAnswerAllowed)
 			clock.Advance(claudeRegionFreshFor)
-			before := starts()
+			before := len(values())
 			captureRunnerStdout(t, func() { usedClaude = c.run(t) })
-			if !usedClaude || starts() == before {
-				t.Fatalf("allowed: claude started %d more times (caller used it: %v), want it started", starts()-before, usedClaude)
+			if got := values()[before:]; !usedClaude || !allEqual(got, "unset") {
+				t.Fatalf("allowed: claude started with %s = %q (caller used it: %v), want it started as before, without it",
+					claudeNonessentialTrafficVar, got, usedClaude)
 			}
 		})
 	}
@@ -221,6 +243,37 @@ func writeClaudeTokenOnly(t *testing.T, dir string) {
 	}
 }
 
+// lastFileLine is the newest line file holds, "" while it does not exist.
+func lastFileLine(t *testing.T, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	return lines[len(lines)-1]
+}
+
+// linesFrom is the lines file holds from line n on (0-based): what was appended since it held n.
+func linesFrom(t *testing.T, file string, n int) []string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if n > len(lines) {
+		return nil
+	}
+	return lines[n:]
+}
+
 // countLines is how many lines file holds: none while it does not exist.
 func countLines(t *testing.T, file string) int {
 	t.Helper()
@@ -241,7 +294,7 @@ func TestClaudeAuthStatusWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 	dir := isolateClaudeRegionEnv(t)
 	bin := t.TempDir()
 	runs := filepath.Join(bin, "runs")
-	claude := writeFakeBin(t, bin, providerClaude, `echo "$*" >> '`+runs+`'
+	claude := writeFakeBin(t, bin, providerClaude, `echo "$* ${`+claudeNonessentialTrafficVar+`-unset}" >> '`+runs+`'
 echo '{"loggedIn":true}'`)
 	stub := newRegionStub(t, regionAnswerBlocked)
 	clock := newFakePoolClock()
@@ -268,10 +321,16 @@ echo '{"loggedIn":true}'`)
 	ask(authUnknown, 1, "blocked, a token in the environment")
 	t.Setenv("ANTHROPIC_BASE_URL", deepseekBaseURL)
 	ask(authYes, 2, "blocked, Claude Code on DeepSeek")
+	if got := lastFileLine(t, runs); got != "auth status 1" {
+		t.Fatalf("blocked, Claude Code on DeepSeek: ran %q, want auth status with its nonessential traffic off", got)
+	}
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	stub.setAnswer(regionAnswerAllowed)
 	clock.Advance(claudeRegionFreshFor)
 	ask(authYes, 3, "allowed, a token in the environment")
+	if got := lastFileLine(t, runs); got != "auth status unset" {
+		t.Fatalf("allowed: ran %q, want auth status as before", got)
+	}
 }
 
 // `claude update` sends the login stored here to Anthropic (measured), so while blocked it does not run where there
@@ -285,7 +344,8 @@ func TestClaudeUpdateWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("2.1.228")) }))
 	t.Cleanup(feed.Close)
 	runs := filepath.Join(t.TempDir(), "runs")
-	spec := engineSpec{name: "Claude Code", bin: providerClaude, updateCmd: "echo update >> '" + runs + "'", latestURL: feed.URL}
+	spec := engineSpec{name: "Claude Code", bin: providerClaude, latestURL: feed.URL,
+		updateCmd: "echo \"update ${" + claudeNonessentialTrafficVar + "-unset}\" >> '" + runs + "'"}
 	stub := newRegionStub(t, regionAnswerBlocked)
 	clock := newFakePoolClock()
 	installRegionCheck(t, stub, clock)
@@ -301,8 +361,8 @@ func TestClaudeUpdateWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 		t.Fatalf("blocked, a login stored: %+v after %d runs, want skipped with %q and no run", rec, countLines(t, runs), claudeUpdateSkippedDetail("Russia"))
 	}
 	t.Setenv("ANTHROPIC_BASE_URL", deepseekBaseURL)
-	if update(); countLines(t, runs) != 1 {
-		t.Fatalf("blocked, Claude Code on DeepSeek: the updater ran %d times, want once", countLines(t, runs))
+	if update(); countLines(t, runs) != 1 || lastFileLine(t, runs) != "update 1" {
+		t.Fatalf("blocked, Claude Code on DeepSeek: the updater ran %d times, last as %q; want once, quiet", countLines(t, runs), lastFileLine(t, runs))
 	}
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	if err := os.Remove(filepath.Join(dir, ".credentials.json")); err != nil {
@@ -314,8 +374,9 @@ func TestClaudeUpdateWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 	writeClaudeLogin(t, dir, "sk-ant-oat01-orbit-test", time.Now().Add(time.Hour))
 	stub.setAnswer(regionAnswerAllowed)
 	clock.Advance(claudeRegionFreshFor)
-	if update(); countLines(t, runs) != 3 {
-		t.Fatalf("allowed, a login stored: the updater ran %d times in all, want three", countLines(t, runs))
+	if update(); countLines(t, runs) != 3 || lastFileLine(t, runs) != "update unset" {
+		t.Fatalf("allowed, a login stored: the updater ran %d times in all, last as %q; want three, the last as before",
+			countLines(t, runs), lastFileLine(t, runs))
 	}
 }
 
@@ -328,7 +389,8 @@ func TestClaudeInstallWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	runs := filepath.Join(t.TempDir(), "runs")
 	previous := engineSpecs
-	engineSpecs = []engineSpec{{name: "Claude Code", bin: providerClaude, exe: "orbit-test-claude-not-installed", installCmd: "echo install >> '" + runs + "'"}}
+	engineSpecs = []engineSpec{{name: "Claude Code", bin: providerClaude, exe: "orbit-test-claude-not-installed",
+		installCmd: "echo \"install ${" + claudeNonessentialTrafficVar + "-unset}\" >> '" + runs + "'"}}
 	t.Cleanup(func() { engineSpecs = previous })
 	engineInstall.mu.Lock()
 	allowed, proxies := engineInstall.allowed, engineInstall.proxyVars
@@ -355,18 +417,26 @@ func TestClaudeInstallWaitsOnTheRegionWithALoginToSend(t *testing.T) {
 		t.Fatalf("blocked, a login stored: Install = %+v, on demand = %q, after %d installer runs; want both refused with %q and no run",
 			res, msg, countLines(t, runs), refusal)
 	}
+	// Each step runs the installer twice, from the Install button and on demand: both lines must say how.
+	step := func(what, want string) {
+		t.Helper()
+		before := countLines(t, runs)
+		install()
+		if got := linesFrom(t, runs, before); len(got) != 2 || got[0] != want || got[1] != want {
+			t.Fatalf("%s: the installer ran as %q, want twice as %q", what, got, want)
+		}
+	}
+	t.Setenv("ANTHROPIC_BASE_URL", deepseekBaseURL)
+	step("blocked, Claude Code on DeepSeek, a login stored", "install 1")
+	t.Setenv("ANTHROPIC_BASE_URL", "")
 	if err := os.Remove(filepath.Join(dir, ".credentials.json")); err != nil {
 		t.Fatal(err)
 	}
-	if install(); countLines(t, runs) != 2 {
-		t.Fatalf("blocked, no login stored: the installer ran %d times, want once for each", countLines(t, runs))
-	}
+	step("blocked, no login stored", "install unset")
 	writeClaudeLogin(t, dir, "sk-ant-oat01-orbit-test", time.Now().Add(time.Hour))
 	stub.setAnswer(regionAnswerAllowed)
 	clock.Advance(claudeRegionFreshFor)
-	if install(); countLines(t, runs) != 4 {
-		t.Fatalf("allowed, a login stored: the installer ran %d times in all, want four", countLines(t, runs))
-	}
+	step("allowed, a login stored", "install unset")
 }
 
 // orbit doctor goes by its own answer as the runner goes by its check: made the process's check (cmdDoctor), a blocked
@@ -390,5 +460,73 @@ echo '{"loggedIn":true}'`)
 	}
 	if n := len(stub.checksSoFar()); n != 1 {
 		t.Fatalf("doctor asked the route %d times, want once", n)
+	}
+}
+
+// A session's claude that does not talk to Anthropic (a DeepSeek key) runs while the region check answers blocked,
+// with its nonessential traffic off, so a Claude login stored on the machine does not go to Anthropic with it. Decided
+// from the answer the check already holds: the spawn asks the route nothing. Not quiet when allowed, with no decided
+// answer, with no check, or for an Anthropic-bound session (which the runner task's gate refuses, not this).
+func TestSpawnClaudeIsQuietOffAnthropicWhileBlocked(t *testing.T) {
+	isolateClaudeRegionEnv(t)
+	job := claudeSpawnJob(t)
+	dir := t.TempDir()
+	log := filepath.Join(dir, "spawns")
+	writeFakeBin(t, dir, providerClaude, `printf '%s\n' "${`+claudeNonessentialTrafficVar+`-unset}" >> '`+log+`'`)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	spawn := func(env map[string]string) string {
+		t.Helper()
+		job.Agent.Env = env
+		proc, err := spawnClaude(context.Background(), job, t.TempDir(), claudeCommandArgs(job, t.TempDir(), true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = proc.stdin.Close()
+		_ = proc.cmd.Wait()
+		b, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+		return lines[len(lines)-1]
+	}
+	deepseek := map[string]string{"ANTHROPIC_BASE_URL": deepseekBaseURL, "ANTHROPIC_AUTH_TOKEN": "sk-deepseek-orbit-test"}
+
+	previous := claudeRegion.Swap(nil)
+	t.Cleanup(func() { claudeRegion.Store(previous) })
+	if got := spawn(deepseek); got != "unset" {
+		t.Fatalf("no region check: %s = %q, want unset", claudeNonessentialTrafficVar, got)
+	}
+	stub := newRegionStub(t, regionAnswerBlocked)
+	clock := newFakePoolClock()
+	check := installRegionCheck(t, stub, clock)
+	if got := spawn(deepseek); got != "unset" {
+		t.Fatalf("no decided answer yet: %s = %q, want unset", claudeNonessentialTrafficVar, got)
+	}
+	check.check(context.Background())
+	asked := len(stub.checksSoFar())
+	if got := spawn(deepseek); got != "1" {
+		t.Fatalf("blocked, a DeepSeek key: %s = %q, want 1", claudeNonessentialTrafficVar, got)
+	}
+	// The answer is past forTurn's minute: still read as it stands, never asked again.
+	clock.Advance(10 * claudeRegionFreshFor)
+	if got := spawn(deepseek); got != "1" {
+		t.Fatalf("blocked, a DeepSeek key, a stale answer: %s = %q, want 1", claudeNonessentialTrafficVar, got)
+	}
+	if got := spawn(nil); got != "unset" {
+		t.Fatalf("blocked, Anthropic-bound: %s = %q, want unset", claudeNonessentialTrafficVar, got)
+	}
+	if n := len(stub.checksSoFar()); n != asked {
+		t.Fatalf("the spawns asked the route %d times, want none", n-asked)
+	}
+	// A blocked answer decided a day ago, with nothing decided since, counts as allowed (③).
+	clock.Advance(24 * time.Hour)
+	if got := spawn(deepseek); got != "unset" {
+		t.Fatalf("blocked a day ago, a DeepSeek key: %s = %q, want unset", claudeNonessentialTrafficVar, got)
+	}
+	stub.setAnswer(regionAnswerAllowed)
+	check.check(context.Background())
+	if got := spawn(deepseek); got != "unset" {
+		t.Fatalf("allowed, a DeepSeek key: %s = %q, want unset", claudeNonessentialTrafficVar, got)
 	}
 }

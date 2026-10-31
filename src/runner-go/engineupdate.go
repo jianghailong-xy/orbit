@@ -574,6 +574,10 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	for _, v := range proxyVars {
 		env = append(env, v.K+"="+v.V)
 	}
+	// `claude update` from a Claude Code that does not talk to Anthropic, while blocked: quiet (claude_region.go).
+	if spec.bin == providerClaude {
+		env = claudeQuietEnv(env, nil)
+	}
 	cmd.Env = env
 	// Without this the timeout above is decorative. CommandContext kills the `sh` it started
 	// and nothing else, so an updater that forked (every one of them does) is reparented to
