@@ -251,6 +251,11 @@ func ensureClaudeSlashRegistry(ctx context.Context) bool {
 	if !slashReg.emptyFor(providerClaude) || !claudeCLIAvailable() {
 		return false
 	}
+	// No start while Claude's connection is in a region Anthropic does not offer Claude in (claude_region.go): the
+	// registry keeps what it has, and the first pass on an allowed answer probes.
+	if claudeStartBlocked(ctx, nil) {
+		return false
+	}
 	commands, skills, err := probeClaudeSlashAssets(ctx)
 	if err != nil {
 		logln("slash registry probe failed:", err)

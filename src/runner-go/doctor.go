@@ -405,6 +405,11 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		if claudeStoredSignedIn(ctx, env) {
 			return authYes
 		}
+		// `auth status` sends a stored login to Anthropic as it answers (claudeLoginBlocked): not while Claude's
+		// connection is in a region Anthropic does not offer Claude in. Unknown is never read as signed out.
+		if _, _, blocked := claudeLoginBlocked(ctx, envAsAgent(env)); blocked {
+			return authUnknown
+		}
 		// Parse stdout regardless of exit code — the JSON carries the answer.
 		cmd := exec.CommandContext(ctx, binPath, "auth", "status")
 		cmd.Env = env
@@ -894,6 +899,8 @@ type doctorRegion struct {
 	proxy string
 	// err is why the check could not decide, when it failed rather than the server answering unknown.
 	err error
+	// check holds the answer as the check a turn would go on (forTurn), for cmdDoctor to make this process's own.
+	check *claudeRegionCheck
 }
 
 // checkDoctorRegion asks where Claude's connection to Anthropic comes out, for the runner cfg describes.
@@ -901,7 +908,14 @@ func checkDoctorRegion(cfg *RunnerConfig) doctorRegion {
 	proxy := claudeAnthropicProxy()
 	check := newClaudeRegionCheck(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), cfg.Name)
 	v, err := check.ask(context.Background(), proxy)
-	return doctorRegion{verdict: v, proxy: proxy, err: err}
+	v.At = check.now()
+	check.mu.Lock()
+	check.latest[proxy] = v
+	if v.Verdict != claudeRegionUnknown {
+		check.decided[proxy] = v
+	}
+	check.mu.Unlock()
+	return doctorRegion{verdict: v, proxy: proxy, err: err, check: check}
 }
 
 // formatDoctorRegion is the lines of doctor's Claude region section (board 03): where Claude's connection to
@@ -954,9 +968,12 @@ func cmdDoctor() {
 	if cfg != nil {
 		server = cfg.ServerURL
 		fmt.Printf("runner:  %s (%s)\nserver:  %s\n", cfg.Name, cfg.RunnerID, cfg.ServerURL)
-		// Checked now, before the engines: Claude Code's line and the sign-in pass go by it.
+		// Checked now, before the engines: Claude Code's line and the sign-in pass go by it, and so does every
+		// gate in this process, as the runner's go by its own check (claude_region.go): the engine checks ask no
+		// `claude auth status` that would send a stored login to Anthropic from a blocked connection.
 		r := checkDoctorRegion(cfg)
 		region = &r
+		claudeRegion.Store(r.check)
 	} else {
 		fmt.Println("no runner registered on this machine — run `orbit register` first")
 	}

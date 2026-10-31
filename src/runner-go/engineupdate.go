@@ -544,6 +544,15 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		logln("engine-update:", spec.name, "already current ("+before+" at "+binPath+")")
 		return recordEngineUpdate(spec.bin, updateChecked, "", facts), spec.name + " — already up to date (" + before + ")"
 	}
+	// `claude update` sends the login stored here to Anthropic (claudeLoginBlocked): not while Claude's connection
+	// is in a region Anthropic does not offer Claude in. The pass after that changes updates.
+	if spec.bin == providerClaude {
+		if _, region, blocked := claudeLoginBlocked(ctx, nil); blocked {
+			logln("engine-update:", spec.name, "skipped —", errClaudeStartRegionBlocked.Error())
+			rec := recordEngineUpdate(spec.bin, updateSkipped, claudeUpdateSkippedDetail(region), facts)
+			return rec, spec.name + " — not updated while anthropic is blocked"
+		}
+	}
 	// Named in every message from here down. A failure that says which version it was reaching for
 	// is a failure someone can act on; the same failure without it is a shrug.
 	//
