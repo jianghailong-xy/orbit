@@ -14,6 +14,11 @@
  *      replaces its earlier one. A wake after delivery is a turn of its own.
  *   3. A session that has ended is not woken: nothing is queued and nothing is revived. The same
  *      request to a session that is still open is.
+ *   4. A job that is still running and has written nothing for as long as it asked (`wakeOnStall`)
+ *      wakes its session in a block of its own, `<background-job-stall>`: which job, how long it has
+ *      run, when it last wrote — on this clock, from the silence the runner reports — the end of its
+ *      output, the file and how to read it. It is never written into a running turn, and a job's exit
+ *      comes first: a stall arriving after the exit is dropped, and an exit replaces a stall.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/background-job-wake.pg.spec.ts
  *
@@ -26,7 +31,7 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { SESSION_CURRENT_WORK_ROUTING_V1, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -91,6 +96,25 @@ function exitWake(jobId: string, fields: Record<string, unknown> = {}): Record<s
     outputOffset: 0,
     outputSize: 2048,
     outputExcerpt: 'X lint (ubuntu-latest) failed in 41s',
+    ...fields,
+  };
+}
+
+/** What the runner reports when a job that asked wakeOnStall has written nothing for as long. */
+function stallWake(jobId: string, n: number, fields: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    wakeId: `${jobId}:stall:${n}`,
+    jobId,
+    trigger: 'stall',
+    kind: 'job',
+    command: 'npm run migrate -- --wait-for-lock',
+    status: 'running',
+    outputPath: `/root/.orbit/runs/wake-spec/${jobId}.output`,
+    outputOffset: 0,
+    outputSize: 31,
+    outputExcerpt: 'step 1/2: waiting for the lock',
+    elapsedMs: 1_812_000,
+    idleMs: 1_800_000,
     ...fields,
   };
 }
@@ -316,5 +340,155 @@ test('a background job wakes its session through the runner door', {
     assert.equal(answer.status, 200, `background-wake answered ${answer.status}: ${answer.text}`);
     assert.equal(answer.json.outcome, 'ENQUEUED', answer.text);
     assert.equal((await turnsOf(open)).length, 1, 'the wake to an open session was not queued');
+  });
+
+  await t.test('a stall wake is queued in its own block, saying how long the job ran and when it last wrote', async () => {
+    const sessionId = await session();
+    const job = 'bgj_5a11ed000001';
+    const before = Date.now();
+    const answer = await wake(sessionId, stallWake(job, 1));
+    const after = Date.now();
+    assert.equal(answer.status, 200, `background-wake answered ${answer.status}: ${answer.text}`);
+    assert.equal(answer.json.outcome, 'ENQUEUED', answer.text);
+
+    const turns = await turnsOf(sessionId);
+    assert.equal(turns.length, 1, 'the stall wake was not filed as a turn');
+    assert.equal(turns[0].kind, 'message');
+    assert.ok(!turns[0].content, `the turn records words as the person's: ${JSON.stringify(turns[0].content)}`);
+    const stored = await prisma.backgroundJobWake.findFirstOrThrow({ where: { sessionId, jobId: job } });
+    assert.equal(stored.trigger, 'stall');
+    assert.equal(stored.elapsedMs, 1_812_000n);
+    assert.equal(stored.idleMs, 1_800_000n);
+    // The last output, placed on this clock: the instant the wake arrived, less the silence reported.
+    const lastOutputAt = stored.lastOutputAt?.getTime() ?? Number.NaN;
+    assert.ok(
+      lastOutputAt >= before - 1_800_000 && lastOutputAt <= after - 1_800_000,
+      `last_output_at ${stored.lastOutputAt?.toISOString()} is not the arrival less 30 minutes (${before}..${after})`,
+    );
+
+    const delivered = await claimAndPoll(sessionId);
+    assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
+    const content = String(delivered.json.content ?? '');
+    const lastOutput = new Date(lastOutputAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    for (const fact of [
+      '<background-job-stall>',
+      `${job}｜job｜npm run migrate -- --wait-for-lock`,
+      'still running',
+      'running for 30m 12s',
+      'no new output for 30m 0s',
+      `last output at ${lastOutput}`,
+      `output /root/.orbit/runs/wake-spec/${job}.output`,
+      'output tail:',
+      '        step 1/2: waiting for the lock',
+      'mcp__orbit__bg_output',
+      'mcp__orbit__bg_kill',
+      '</background-job-stall>',
+    ]) {
+      assert.ok(content.includes(fact), `the delivered stall turn does not say ${fact}:\n${content}`);
+    }
+    // Its own block, which today's clients leave a plain note: inside <background-job-wake>, each draws
+    // a card from the job's line and finds no line it knows to say what happened.
+    assert.ok(!content.includes('<background-job-wake>'), `a stall was delivered inside the wake block:\n${content}`);
+
+    // A job that has written nothing at all says so, rather than naming a last output it never had.
+    const silentSession = await session();
+    await wake(silentSession, stallWake('bgj_5a11ed000002', 1, {
+      outputSize: 0, outputExcerpt: '', elapsedMs: 120_000, idleMs: 120_000,
+    }));
+    const silent = String((await claimAndPoll(silentSession)).json.content ?? '');
+    for (const fact of ['no output at all', 'it has written nothing in the 2m 0s since it started', '(no output)']) {
+      assert.ok(silent.includes(fact), `the stall of a job that never wrote does not say ${fact}:\n${silent}`);
+    }
+    assert.ok(!silent.includes('last output at'), `a job that never wrote was given a last output:\n${silent}`);
+  });
+
+  await t.test("a job's exit comes first: a stall after it is dropped, and it replaces a stall", async () => {
+    // A stall arriving once the exit is on file — queued, or delivered already — is DROPPED.
+    const exited = await session();
+    const job = 'bgj_5a11ed000003';
+    const exit = await wake(exited, exitWake(job));
+    assert.equal(exit.json.outcome, 'ENQUEUED', exit.text);
+    const late = await wake(exited, stallWake(job, 1));
+    assert.equal(late.status, 200, `background-wake answered ${late.status}: ${late.text}`);
+    assert.equal(late.json.outcome, 'DROPPED', late.text);
+    assert.equal((await turnsOf(exited)).length, 1, 'a stall after the exit was filed');
+    const exitContent = String((await claimAndPoll(exited)).json.content ?? '');
+    assert.ok(exitContent.includes('<background-job-wake>') && exitContent.includes('exit code 1'), exitContent);
+    assert.ok(!exitContent.includes('<background-job-stall>'), `a job that ended was reported quiet:\n${exitContent}`);
+    const afterDelivery = await wake(exited, stallWake(job, 2));
+    assert.equal(afterDelivery.json.outcome, 'DROPPED', afterDelivery.text);
+    assert.equal((await turnsOf(exited)).length, 1, 'a stall after the delivered exit opened a turn');
+
+    // An exit arriving while the job's stall is still queued joins that turn and replaces the stall.
+    const stalled = await session();
+    const other = 'bgj_5a11ed000004';
+    const stall = await wake(stalled, stallWake(other, 1));
+    assert.equal(stall.json.outcome, 'ENQUEUED', stall.text);
+    const ended = await wake(stalled, exitWake(other, { outputOffset: 31, outputSize: 64, outputExcerpt: 'lock wait timeout exceeded' }));
+    assert.equal(ended.json.outcome, 'MERGED', ended.text);
+    assert.equal((await turnsOf(stalled)).length, 1);
+    const rows = await prisma.backgroundJobWake.findMany({ where: { sessionId: stalled } });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].trigger, 'exit');
+    assert.equal(rows[0].idleMs, null, 'the exit kept the stall\'s silence');
+    const content = String((await claimAndPoll(stalled)).json.content ?? '');
+    assert.ok(content.includes('lock wait timeout exceeded') && content.includes('exit code 1'), content);
+    assert.ok(!content.includes('<background-job-stall>'), `the exit did not replace the stall:\n${content}`);
+    // From where the stall's output began: nothing the session was not told about is skipped.
+    assert.ok(content.includes('this covers bytes 0–64'), content);
+  });
+
+  await t.test('a stall never goes into the running turn; the exit of the same job does', async () => {
+    await prisma.runner.update({
+      where: { id: runnerId },
+      data: { capabilities: [SESSION_CURRENT_WORK_ROUTING_V1], capabilitiesReportedAt: new Date() },
+    });
+    try {
+      const sessionId = await session({ status: RunStatus.RUNNING, engine: 'claude' });
+      const running = await prisma.conversationTurn.create({
+        data: {
+          sessionId, seq: 2, clientTurnId: 'typed-while-the-job-ran', kind: 'message', content: 'refactor the parser',
+          status: 'IN_FLIGHT', deliveredAt: new Date(), leaseDeadlineAt: new Date(Date.now() + 120_000),
+        },
+      });
+      const job = 'bgj_5a11ed000005';
+      const stall = await wake(sessionId, stallWake(job, 1));
+      assert.equal(stall.json.outcome, 'ENQUEUED', stall.text);
+      const queued = (await turnsOf(sessionId)).filter((turn) => turn.clientTurnId?.startsWith('bg-wake:'));
+      assert.equal(queued.length, 1);
+      assert.equal(queued[0].kind, 'message', 'a stall was written into the running turn');
+      assert.notEqual(queued[0].sendIntent, 'CURRENT_WORK');
+      assert.equal(queued[0].targetTurnId, null);
+
+      // The paired positive: the job's exit, beside the same running turn, is a steer aimed at it.
+      const exit = await wake(sessionId, exitWake(job));
+      assert.equal(exit.status, 200, `background-wake answered ${exit.status}: ${exit.text}`);
+      const steers = (await turnsOf(sessionId)).filter((turn) => turn.kind === 'steer');
+      assert.equal(steers.length, 1, 'the exit beside a live turn was not steered into it');
+      assert.equal(steers[0].targetTurnId, running.id);
+      // ...and takes the job's queued stall with it: the next turn has nothing left to report.
+      const stillQueued = (await turnsOf(sessionId)).filter(
+        (turn) => turn.kind === 'message' && turn.status === 'PENDING' && turn.clientTurnId?.startsWith('bg-wake:'),
+      );
+      assert.equal(stillQueued.length, 0, 'the stall stayed queued after the exit was steered');
+    } finally {
+      await prisma.runner.update({ where: { id: runnerId }, data: { capabilities: [], capabilitiesReportedAt: null } });
+    }
+  });
+
+  await t.test('a stall wake must say how long the job ran and was quiet', async () => {
+    const sessionId = await session();
+    for (const missing of ['elapsedMs', 'idleMs']) {
+      const body = stallWake('bgj_5a11ed000006', 1);
+      delete body[missing];
+      const answer = await wake(sessionId, body);
+      assert.equal(answer.status, 400, `a stall wake without ${missing} answered ${answer.status}: ${answer.text}`);
+    }
+    const negative = await wake(sessionId, stallWake('bgj_5a11ed000006', 1, { idleMs: -1 }));
+    assert.equal(negative.status, 400, `a stall wake with a negative silence answered ${negative.status}: ${negative.text}`);
+    assert.equal((await turnsOf(sessionId)).length, 0, 'a malformed stall wake was filed');
+    // The paired positive: the same wake, whole, is a turn.
+    const whole = await wake(sessionId, stallWake('bgj_5a11ed000006', 1));
+    assert.equal(whole.json.outcome, 'ENQUEUED', whole.text);
   });
 });

@@ -48,19 +48,24 @@ func (b *bgTailer) recordJob(job *bgJob) bool {
 // recordLocked is the job's record as it stands. Caller holds b.mu, or is the only one to know the job.
 func (j *bgJob) recordLocked(sessionID string) bgJobRecord {
 	return bgJobRecord{
-		Version:      bgJobRecordVersion,
-		SessionID:    sessionID,
-		JobID:        j.id,
-		PID:          j.pid,
-		Kind:         j.kind,
-		Command:      j.command,
-		Description:  j.description,
-		OutputPath:   j.outputPath,
-		StartedAt:    j.startedAt,
-		WakeOnExit:   j.wakeOnExit,
-		WakeOnOutput: j.wakeOnOutput,
-		WokenThrough: j.wokenThrough,
-		OutputWakes:  j.outputWakes,
+		Version:            bgJobRecordVersion,
+		SessionID:          sessionID,
+		JobID:              j.id,
+		PID:                j.pid,
+		Kind:               j.kind,
+		Command:            j.command,
+		Description:        j.description,
+		OutputPath:         j.outputPath,
+		StartedAt:          j.startedAt,
+		WakeOnExit:         j.wakeOnExit,
+		WakeOnOutput:       j.wakeOnOutput,
+		WokenThrough:       j.wokenThrough,
+		OutputWakes:        j.outputWakes,
+		LastOutputAt:       j.lastOutputAt,
+		OutputSeen:         j.outputSeen,
+		WakeOnStallSeconds: int(j.wakeOnStall / time.Second),
+		StallWakes:         j.stallWakes,
+		StallWokenFor:      j.stallWokenFor,
 	}
 }
 
@@ -107,11 +112,19 @@ func (b *bgTailer) handOffJobs() bool {
 	}
 	for _, job := range handing {
 		b.stop(job.id)
+		// A last look at the output before the job is handed on: what it wrote since the tail last
+		// read the file was written before the re-exec, and the next image must not date it to its own
+		// start (noteOutput).
+		size := outputSizeOf(job.outputPath)
 		b.mu.Lock()
+		if size != job.outputSeen {
+			job.outputSeen, job.lastOutputAt = size, time.Now()
+		}
 		rec := job.recordLocked(b.sessionID)
 		b.mu.Unlock()
 		if err := writeBgJobRecord(rec); err != nil {
-			// The record written at spawn still names the job; only its output wakes may repeat.
+			// The record written at spawn still names the job; only its output and stall wakes may
+			// repeat, and its silence is counted from its start.
 			logln("could not bring the record of background job", job.id, "up to date:", err)
 		}
 		b.pool.keepHostlessJob(b.sessionID, job)
@@ -182,6 +195,9 @@ func (b *bgTailer) adoptJobs(jobs []*bgJob) {
 		if job.wakeOnOutput {
 			b.startOutputWakes(job)
 		}
+		if job.wakeOnStall > 0 {
+			b.startStallWakes(job)
+		}
 		b.mu.Lock()
 		b.wg.Add(1)
 		b.mu.Unlock()
@@ -222,7 +238,7 @@ func (b *bgTailer) endHandedOffJob(job *bgJob, reason string) {
 		}
 		b.alertIfNobodyIsWatching(job, status, exit)
 		if wake, ok := b.wakeFor(job, reason); ok {
-			b.deliverWake(wake)
+			b.deliverWake(wake, false)
 		}
 	}
 	removeBgJobRecord(b.sessionID, job.id)

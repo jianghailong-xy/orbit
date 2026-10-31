@@ -401,6 +401,10 @@ interface ListedActiveTurn extends ListedQueuedTurn {
 
 const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
 
+/** The card the runner files before a single task create (runner-go `taskCreateApprovalToolName`):
+ *  the one card whose yes may also start what it creates (`ApprovalDecisionRequest.startAfterCreate`). */
+const TASK_CREATE_APPROVAL_TOOL = 'orbit_task_create';
+
 function currentWorkUnavailable(
   reason:
     | 'NO_CURRENT_WORK'
@@ -7910,12 +7914,46 @@ export class SessionsService {
     if (dto.behavior !== 'allow' && dto.behavior !== 'deny') {
       throw new BadRequestException('behavior must be "allow" or "deny"');
     }
+    // "Create and start" is a second yes of the single-task create card and of no other card: the
+    // runner reads it off the poll as "start the task this create writes", so on a card that writes
+    // no task there is nothing it could start, and a refusal starts nothing. Nor on a card whose
+    // runner predates it (`input.acceptsStartAfterCreate`, recorded when the card was filed): that
+    // runner would only create the task. All are refused here rather than stored as a choice the
+    // runner would ignore.
+    if (dto.startAfterCreate != null && typeof dto.startAfterCreate !== 'boolean') {
+      throw new BadRequestException('startAfterCreate must be a boolean');
+    }
+    const startAfterCreate = dto.startAfterCreate === true;
+    if (startAfterCreate) {
+      if (dto.behavior !== 'allow') {
+        throw new BadRequestException(
+          'startAfterCreate goes only with "allow": a refused task is not created, so there is nothing to start',
+        );
+      }
+      const asked = await this.prisma.approval.findFirst({
+        where: { id: approvalId, sessionId: id },
+        select: { toolName: true, input: true },
+      });
+      if (!asked) throw new NotFoundException('approval not found');
+      if (asked.toolName !== TASK_CREATE_APPROVAL_TOOL) {
+        throw new BadRequestException(
+          `startAfterCreate applies only to a single task create card (${TASK_CREATE_APPROVAL_TOOL}), and this card is ${asked.toolName}`,
+        );
+      }
+      if ((asked.input as { acceptsStartAfterCreate?: unknown } | null)?.acceptsStartAfterCreate !== true) {
+        throw new BadRequestException(
+          'startAfterCreate needs a card filed by a runner that starts what it creates, and this one predates it: ' +
+            'create the task with the plain yes, then start it',
+        );
+      }
+    }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
     // Only the first decision on a still-PENDING approval applies (idempotent).
     const res = await this.prisma.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
       data: {
         status,
+        startAfterCreate,
         message: dto.message ?? null,
         answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
         // Only an allow can carry "remember same kind" rules; the runner reads them off

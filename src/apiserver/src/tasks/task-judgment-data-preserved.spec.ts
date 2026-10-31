@@ -2575,6 +2575,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // named, and no function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored enrollment reads NULL.
       '0455_device_enrollment_requester_ip',
+      // The single-task create card's "Create and start" (0456, sessions/sessions.service.ts decideApproval,
+      // runner-api/runner-api.controller.ts pollApproval): one BOOLEAN NOT NULL column with a constant default on
+      // `approval`, `start_after_create`, added with IF NOT EXISTS — catalog-only. Only that table is altered, and it
+      // is not a preserved relation: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored
+      // approval reads false.
+      '0456_approval_start_after_create',
       // A machine's first workspace made from the conversation (0457, docs/first-workspace-contract.md): `runner` gains
       // `register_dir` and the four `dir_probe_*` columns of a one-slot relay (TEXT, TEXT, TEXT, TIMESTAMP(3), JSONB, all
       // nullable, no default), `workspace` gains `auto_create_work_dir` and `session` `created_workspace` (BOOLEAN NOT
@@ -2593,7 +2601,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
       // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored wakeup reads
       // `loop_id` NULL, which is exactly what the narrowed key held before.
-      '0458_session_wakeup_loop'],
+      '0458_session_wakeup_loop',
+      // A background job's stall wake (0459, runner-api/background-job-wake.ts): `background_job_wake`, the table 0262
+      // created, has its own `background_job_wake_trigger_check` dropped and added back under the same name, widened by
+      // 'stall' — every stored row reads 'exit' or 'output' — and gains `elapsed_ms` and `idle_ms` (BIGINT) and
+      // `last_output_at` (TIMESTAMPTZ(3)), nullable with no default, each added with IF NOT EXISTS. Only that table is
+      // altered, and it is not a preserved relation: no `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, and no function, trigger, type or index is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: adding the
+      // CHECK back reads the stored wakes to validate them, and every one reads NULL in each new column.
+      '0459_background_job_wake_stall'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

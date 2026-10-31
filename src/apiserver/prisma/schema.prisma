@@ -2444,6 +2444,10 @@ model Approval {
   // ({ toolName, ruleContent? }) the runner adds to the session so future matching
   // calls are auto-allowed by claude without re-prompting.
   rememberRule Json?     @map("remember_rule")
+  /// The owner's "Create and start" on an `orbit_task_create` card (0456): the runner creates the task
+  /// and starts it at once. Only an ALLOWED card of that tool whose runner acts on it
+  /// (`input.acceptsStartAfterCreate`) can carry it (SessionsService.decideApproval).
+  startAfterCreate Boolean @default(false) @map("start_after_create")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById  String?   @map("decided_by_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -2592,27 +2596,32 @@ model ConversationTurn {
 /// empty, so none of this is recorded as the person's words. One row per (turn, job): a job's later
 /// wake replaces its earlier one while the turn is still queued.
 model BackgroundJobWake {
-  id            String   @id @default(uuid(7)) @db.Uuid
-  sessionId     String   @map("session_id") @db.Uuid
-  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  clientTurnId  String   @map("client_turn_id")
-  jobId         String   @map("job_id")
-  /// exit | output
+  id            String    @id @default(uuid(7)) @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  clientTurnId  String    @map("client_turn_id")
+  jobId         String    @map("job_id")
+  /// exit | output | stall
   trigger       String
   kind          String
   command       String
   description   String?
   /// running | completed | failed | killed
   status        String
-  exitCode      Int?     @map("exit_code")
+  exitCode      Int?      @map("exit_code")
   reason        String?
-  outputPath    String   @map("output_path")
+  outputPath    String    @map("output_path")
   /// Where the output this wake is about begins, and how long the file was when it was sent.
-  outputOffset  BigInt   @map("output_offset")
-  outputSize    BigInt   @map("output_size")
-  outputExcerpt String   @map("output_excerpt")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  outputOffset  BigInt    @map("output_offset")
+  outputSize    BigInt    @map("output_size")
+  outputExcerpt String    @map("output_excerpt")
+  /// A stall wake's: how long the job had run and had written nothing when it was sent, and when it last
+  /// wrote anything on the control plane's clock (received at, less idleMs). Null on an exit or output wake.
+  elapsedMs     BigInt?   @map("elapsed_ms")
+  idleMs        BigInt?   @map("idle_ms")
+  lastOutputAt  DateTime? @map("last_output_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([sessionId, clientTurnId, jobId])
   @@map("background_job_wake")
