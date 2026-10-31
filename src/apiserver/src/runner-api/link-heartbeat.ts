@@ -193,6 +193,11 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'IN_PROCESS',
     reads: 'cursorKeyCheckRelay.takeAnywhere, asked on every beat, here and of the process holding one (providers.service.ts#checkCursorKey also marks)',
   },
+  regionCheckRequest: {
+    how: 'MARKED',
+    writers: ['runners/runners.service.ts#requestRegionCheck'],
+    pending: 'a Check again no check has answered yet: every full answer carries it until the check route clears it',
+  },
   linkHints: { how: 'EVERY_BEAT', reads: 'readRunnerLinkHints in the beat statement; watchers and the release in this process' },
 } as const satisfies Record<keyof Required<RunnerHeartbeatResponse> | 'linkHints', HeartbeatDelivery>;
 
@@ -826,6 +831,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.claudeHistoryRequest !== undefined
     || answer.dirProbeRequest !== undefined
     || answer.codexRateLimitResetRequest !== undefined
+    || answer.regionCheckRequest !== undefined
     || answer.managedSleep !== undefined
     || answer.refreshModelCatalog === true
     || answer.checkSelfUpdate === true

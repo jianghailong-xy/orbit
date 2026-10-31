@@ -783,6 +783,15 @@ model Runner {
   /// @orbit/shared RunnerDirProbeResult: the asked path and what the runner found there. Advisory and disposable.
   dirProbeResult Json?     @map("dir_probe_result")
 
+  /// Which country this machine's Claude connection to Anthropic comes out in (migration 0461,
+  /// docs/claude-region-check-contract.md §4): @orbit/shared RunnerRegion, written only by GET /runner/region-check
+  /// (runners/runner-region.ts recordRegionCheck). A decided check replaces it, one that could not decide moves its
+  /// checkedAt alone. Never an address. NULL until a check decides, which gates nothing.
+  region                 Json?
+  /// The owner's Check again (§7): handed to every heartbeat of a process that declares claude-region/v1 until a
+  /// check at or after it reaches the route, which clears it. NULL: nobody asked.
+  regionCheckRequestedAt DateTime? @map("region_check_requested_at")
+
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
