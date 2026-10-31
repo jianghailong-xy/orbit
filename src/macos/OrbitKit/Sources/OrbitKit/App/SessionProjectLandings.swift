@@ -166,9 +166,15 @@ public enum SessionProjectLandings {
     public static func window(_ rows: [Session], merges: [ProjectPromotionView], now: Date = Date(),
                               calendar: Calendar = .current) -> LandingsWindow {
         let records = merges.filter { $0.merged != nil }
+        // A record's `landingSessionId` is not a field the server's id codec rewrites, so it arrives as
+        // a UUID while every session's `id` is the base62 public id: both are keyed by
+        // `PublicID.storageKey` before they meet, or no round would find its session and each merge
+        // drew twice.
         var bySession: [String: ProjectPromotionView] = [:]
         for record in records {
-            if let id = record.landingSessionId, !id.isEmpty, bySession[id] == nil { bySession[id] = record }
+            guard let id = record.landingSessionId, !id.isEmpty else { continue }
+            let key = PublicID.storageKey(id)
+            if bySession[key] == nil { bySession[key] = record }
         }
         var joined = Set<String>()
         var settled: [(row: LandingsWindowRow, at: String?)] = []
@@ -183,7 +189,7 @@ public enum SessionProjectLandings {
                 continue
             }
             if landing.subject == "PROMOTION" && landing.settledAs == "MERGED" {
-                let record = bySession[session.id]
+                let record = bySession[PublicID.storageKey(session.id)]
                 if let record { joined.insert(record.promotionId) }
                 let at = record?.merged?.at ?? landing.settledAt
                 settled.append((LandingsWindowRow(
@@ -203,7 +209,7 @@ public enum SessionProjectLandings {
         // the read did not list. It is still a merge into main, at its own instant.
         for record in records where !joined.contains(record.promotionId) {
             let at = record.merged?.at
-            let session = record.landingSessionId.flatMap { $0.isEmpty ? nil : $0 }
+            let session = record.landingSessionId.flatMap { $0.isEmpty ? nil : PublicID.toPublic($0) }
             settled.append((LandingsWindowRow(
                 key: session ?? "merge:\(record.promotionId)", sessionId: session, subject: "PROMOTION",
                 title: PromotionCards.timelineTitle(record), detail: PromotionCards.timelineDetail(record),

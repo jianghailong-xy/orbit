@@ -384,6 +384,28 @@ describe('the Landings window and its row', () => {
     expect(window.days[0].rows[0].promotion?.promotionId).toBe('P-12');
   });
 
+  it('joins a round with its session across the two spellings the server sends: the record’s UUID, the row’s base62', () => {
+    // `promotions/merged` sends `landingSessionId` as a UUID (the id codec does not rewrite it) while
+    // the session list sends base62 ids. Compared as they came, every merge into main drew twice.
+    const window = landingsWindow([
+      landing('2zwQZ2hd93IvLb59t6phi', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: local(27, 9, 52) },
+        { title: 'Merge project/p1 → main · #42' }),
+    ], [
+      merged('P-42', local(27, 9, 51), '0196e000-0000-7000-8000-000000000a42'),
+      merged('P-43', local(27, 10, 5), '0196e000-0000-7000-8000-000000000a43'),
+    ], { now: NOON });
+    const rows = window.days.flatMap((day) => day.rows);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      key: '2zwQZ2hd93IvLb59t6phi', sessionId: '2zwQZ2hd93IvLb59t6phi', title: 'Merged into main',
+      detail: '3f1c2a9 · 2 tasks · automatically', time: '09:51',
+    });
+    expect(rows[0].promotion?.promotionId).toBe('P-42');
+    // A round whose session the read did not list keeps its own row, its session named the app's way.
+    expect(rows[1]).toMatchObject({ key: '2zwQZ2hd93IvLb59t6phj', sessionId: '2zwQZ2hd93IvLb59t6phj' });
+    expect(rows[1].promotion?.promotionId).toBe('P-43');
+  });
+
   it('keeps a merge older than landing sessions as a row of its own, and a round past the 20 records as its session', () => {
     const window = landingsWindow([
       landing('S-3', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: local(25, 15) },

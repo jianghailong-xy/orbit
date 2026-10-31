@@ -91,6 +91,29 @@ final class SessionProjectLandingsTests: XCTestCase {
         XCTAssertEqual(row.promotion?.promotionId, "P-12")
     }
 
+    func testJoinsARoundWithItsSessionAcrossTheTwoSpellingsTheServerSends() {
+        // `promotions/merged` sends `landingSessionId` as a UUID (the id codec does not rewrite it) while
+        // the session list sends base62 ids. Compared as they came, every merge into main drew twice.
+        let window = SessionProjectLandings.window([
+            row("2zwQZ2hd93IvLb59t6phi", title: "Merge project/p1 → main · #42", subject: "PROMOTION",
+                state: "SETTLED", settledAs: "MERGED", settledAt: local(27, 9, 52)),
+        ], merges: [
+            merged("P-42", at: local(27, 9, 51), session: "0196e000-0000-7000-8000-000000000a42"),
+            merged("P-43", at: local(27, 10, 5), session: "0196e000-0000-7000-8000-000000000a43"),
+        ], now: now, calendar: calendar)
+        let rows = window.days.flatMap(\.rows)
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[0].key, "2zwQZ2hd93IvLb59t6phi")
+        XCTAssertEqual(rows[0].sessionId, "2zwQZ2hd93IvLb59t6phi")
+        XCTAssertEqual(rows[0].detail, "3f1c2a9 · 2 tasks · automatically")
+        XCTAssertEqual(rows[0].time, clock(local(27, 9, 51)))
+        XCTAssertEqual(rows[0].promotion?.promotionId, "P-42")
+        // A round whose session the read did not list keeps its own row, its session named the app's way.
+        XCTAssertEqual(rows[1].key, "2zwQZ2hd93IvLb59t6phj")
+        XCTAssertEqual(rows[1].sessionId, "2zwQZ2hd93IvLb59t6phj")
+        XCTAssertEqual(rows[1].promotion?.promotionId, "P-43")
+    }
+
     func testKeepsAMergeOlderThanLandingSessionsAndARoundPastTheTwentyRecords() {
         let window = SessionProjectLandings.window([
             row("S-3", title: "Merge project/p1 → main · #3", subject: "PROMOTION", state: "SETTLED",

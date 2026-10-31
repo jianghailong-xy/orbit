@@ -191,10 +191,12 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 0, landed: 0, merged: 0),
                        "Nothing landed today")
         // The window's days are the session list's own sections, and a merge is joined with its
-        // round's landing session by `landingSessionId`.
+        // round's landing session by `landingSessionId`, both ids read in one spelling first (the
+        // record's comes as a UUID, the row's as base62): here `PublicID.storageKey`.
         assertSays(web, "const days = sessionTimeSections(settled, { pinnedFirst: false, now: opts.now })",
                    in: Self.sessionProjects)
-        assertSays(web, "const record = bySession.get(row.id) ?? null;", in: Self.sessionProjects)
+        assertSays(web, "const sessionKey = (id: string): string => routeId(id) ?? id;", in: Self.sessionProjects)
+        assertSays(web, "const record = bySession.get(sessionKey(row.id)) ?? null;", in: Self.sessionProjects)
         XCTAssertEqual(SessionTimeGrouping.bucketTitles, ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"])
         // A task segment is named by its task: the server's `Land · ` comes off.
         assertSays(web, "const prefix = `${LANDING_PAGE_COPY.LAND} · `;", in: Self.sessionProjects)

@@ -11,6 +11,7 @@ import {
 } from '@orbit/shared';
 import type { SessionFolder } from '../api';
 import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords, landingClockTime } from '../components/ProjectPanoramaHeader';
+import { routeId } from './idCodec';
 import { LANDING_PAGE_COPY } from './landingSession';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
 import { promotionTimelineDetail, promotionTimelineTitle } from './projectMerge';
@@ -380,11 +381,14 @@ export function landingsWindow(
   opts: { now?: Date } = {},
 ): LandingsWindow {
   const records = merges.filter((promotion) => promotion.merged != null);
+  // A record's `landingSessionId` is not a field the server's id codec rewrites, so it arrives as a
+  // UUID while every session row's `id` is the base62 public id: both are read in the app's own
+  // spelling before they meet, or no round would ever find its session and each merge drew twice.
+  const sessionKey = (id: string): string => routeId(id) ?? id;
   const bySession = new Map<string, ProjectPromotionView>();
   for (const record of records) {
-    if (record.landingSessionId && !bySession.has(record.landingSessionId)) {
-      bySession.set(record.landingSessionId, record);
-    }
+    const sessionId = record.landingSessionId ? sessionKey(record.landingSessionId) : null;
+    if (sessionId && !bySession.has(sessionId)) bySession.set(sessionId, record);
   }
   const joined = new Set<string>();
   const settled: Array<LandingsWindowRow & GroupableSession> = [];
@@ -400,7 +404,7 @@ export function landingsWindow(
       continue;
     }
     if (landing.subject === 'PROMOTION' && landing.settledAs === 'MERGED') {
-      const record = bySession.get(row.id) ?? null;
+      const record = bySession.get(sessionKey(row.id)) ?? null;
       if (record) joined.add(record.promotionId);
       const at = record?.merged?.at ?? landing.settledAt;
       add({
@@ -434,9 +438,10 @@ export function landingsWindow(
   for (const record of records) {
     if (joined.has(record.promotionId)) continue;
     const at = record.merged?.at ?? null;
+    const sessionId = record.landingSessionId ? sessionKey(record.landingSessionId) : null;
     add({
-      key: record.landingSessionId ?? `merge:${record.promotionId}`,
-      sessionId: record.landingSessionId ?? null,
+      key: sessionId ?? `merge:${record.promotionId}`,
+      sessionId,
       subject: 'PROMOTION',
       title: promotionTimelineTitle(record),
       detail: promotionTimelineDetail(record),
