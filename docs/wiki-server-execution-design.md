@@ -223,8 +223,8 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - 结果：`progress`、`report`、`error`；`failure_kind`，取值为 infra / content
   - 带到重放：作业没结束时 `report` 只暂存 `{ carry }`——之前的尝试做完、重放不会再做的部分（2026-10-10）；结束时的报告并进它，交还、重放过的作业报告的也是整个作业（契约 §24.10）
   - 时间：`created_at`、`started_at`、`ended_at`
-- 领取：照 `watch_delivery` 的做法。
-  - 用 `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` 领取，每次领取给这一行一个新代数；
+- 领取：照 `watch_delivery` 的做法，但候选只读一次。
+  - 用 `WITH due AS MATERIALIZED (SELECT … FOR UPDATE SKIP LOCKED) UPDATE … FROM due` 领取，每次领取给这一行一个新代数；
   - 所有回写都按代数做比较并交换；
   - 租约 60 秒，执行中定期续租；
   - 过期回收：租约已过期的作业放回 queued。
@@ -251,7 +251,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 - **全局并发**：调度器在一个事务里：
   1. 先拿一把 advisory 锁；
   2. 数出"running 且租约未过期"的行；
-  3. 只领取 N 减去这个数的请求，按 `priority` 降序、`enqueued_at` 升序，`FOR UPDATE SKIP LOCKED`，每行一个新代数。
+  3. 只领取 N 减去这个数的请求，按 `priority` 降序、`enqueued_at` 升序，`FOR UPDATE SKIP LOCKED`，候选只读一次（`WITH due AS MATERIALIZED`），每行一个新代数。
 
   这样无论起几个 worker 进程，同时在途的请求都不超过 `ORBIT_WIKI_MODEL_CONCURRENCY`。
 - **公平**：

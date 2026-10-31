@@ -88,6 +88,20 @@ function withoutComments(source: string): string {
     .join('\n');
 }
 
+/** The template a `$queryRaw` tag opens on this line, to its closing backtick; null when the line opens none. */
+function templateFrom(lines: readonly string[], index: number): string | null {
+  const tag = /\$queryRaw(?:<[^`]*>)?`/.exec(lines[index]);
+  if (!tag) return null;
+  const code = lines.slice(index).join('\n');
+  let depth = 0;
+  for (let at = tag.index + tag[0].length; at < code.length; at += 1) {
+    if (code[at] === '{' && (depth > 0 || code[at - 1] === '$')) depth += 1;
+    else if (code[at] === '}' && depth > 0) depth -= 1;
+    else if (code[at] === '`' && depth === 0) return code.slice(0, at + 1);
+  }
+  return null;
+}
+
 /** Every method in the tree that writes, with how it reaches the database. */
 function scan(): Scanned[] {
   const units = new Map<string, { kinds: Set<string>; sites: number; inherits: boolean }>();
@@ -137,10 +151,11 @@ function scan(): Scanned[] {
       else if (/\$transaction\(/.test(line)) add('TX_BARE');
       if (/\$executeRaw/.test(line)) add('RAW_WRITE');
       if (/\$queryRaw/.test(line)) {
-        // A tagged template spans lines; take the window up to its terminator.
+        // A tagged template spans lines; take the window up to its terminator. A template this line opens is read to
+        // its end however long it is: a claim's write comes after its WITHs, and a claim is no less a write for that.
         const window = lines.slice(index, index + 16).join('\n');
         const end = window.indexOf('`;');
-        const statement = end >= 0 ? window.slice(0, end + 2) : window;
+        const statement = templateFrom(lines, index) ?? (end >= 0 ? window.slice(0, end + 2) : window);
         if (TAKES_LOCK.test(statement)) add('LOCK');
         else if (WRITES_ROWS.test(statement) || CALLS_WRITE_FUNCTION.test(statement)) add('RAW_WRITE');
       }
