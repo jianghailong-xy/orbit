@@ -24,6 +24,7 @@ export interface AcceptedUserTurn extends TurnCards {
 export const TURN_CARD_FIELDS = {
   openItemDelivery: true,
   ownerAnswer: true,
+  coordinatorDelivery: true,
   taskStart: true,
   projectStarted: true,
   confirmationReviewRequest: true,

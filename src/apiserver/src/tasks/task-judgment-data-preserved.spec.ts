@@ -2600,7 +2600,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions is named, and no function, trigger, type or index is created,
       // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: adding the
       // CHECK back reads the stored wakes to validate them, and every one reads NULL in each new column.
-      '0459_background_job_wake_stall'],
+      '0459_background_job_wake_stall',
+      // The wakes delivered to a conversation, found by that conversation (0460, projects/coordinator-delivery-card.ts):
+      // one partial index on `project_coordinator_wake` (`session_id` WHERE status = 'DELIVERED'), created IF NOT EXISTS.
+      // That table is not a preserved relation; no `task`, `session`, `project` or `project_acceptance_*` object nor any
+      // of the six preserved triggers/functions is named, and no column, function, trigger, type or constraint is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0460_coordinator_wake_delivered_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -24,6 +24,12 @@ final class QueuedTurnCardsTests: XCTestCase {
             {"itemId": "item-2", "kind": "COORDINATOR_QUESTION", "sessionId": "s-coordinator",
              "deliveredAt": "2026-10-06T05:39:58.000Z"}
             """),
+        ("coordinatorDelivery", "coordinatorDelivery", """
+            {"kind": "EVIDENCE_SUBMITTED",
+             "task": {"id": "01a0d6a9-d763-70e1-b4cf-8793e971b513",
+                      "title": "Wiki model queue: one claim can take more requests than the concurrency room"},
+             "revision": 1, "count": null, "deliveredAt": "2026-10-31T11:30:00.000Z"}
+            """),
         ("taskStart", "taskStart", """
             {"taskId": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "title": "runner + web：配额按账户归属",
              "completionCriterion": "EVIDENCE_JUDGMENT", "auto": true,
@@ -153,6 +159,9 @@ final class QueuedTurnCardsTests: XCTestCase {
             XCTAssertEqual(b.itemCard?.files, ["src/web/src/components/WorkspaceView.tsx"])
             XCTAssertEqual(b.ownerAnswer?.kind, .coordinatorQuestion)
             XCTAssertEqual(b.ownerAnswer?.deliveredAt, "2026-10-06T05:39:58.000Z")
+            XCTAssertEqual(b.coordinatorDelivery?.kind, .evidenceSubmitted)
+            XCTAssertEqual(b.coordinatorDelivery?.revision, 1)
+            XCTAssertEqual(b.coordinatorDelivery?.task?.id, "01a0d6a9-d763-70e1-b4cf-8793e971b513")
             XCTAssertEqual(b.taskStart?.taskId, "01a0cca7-8609-70ed-a0e2-d4b55b832b60")
             XCTAssertEqual(b.taskStart?.title, "runner + web：配额按账户归属")
             XCTAssertEqual(b.taskStart?.completionCriterion, .evidenceJudgment)
