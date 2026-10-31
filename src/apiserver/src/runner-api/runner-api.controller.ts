@@ -28,7 +28,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
-import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
+import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -4649,6 +4649,9 @@ export class RunnerApiController {
         if (linked.count !== 1) throw new BadRequestException('attachment does not belong to this file request');
       }
     }, loggedRetry(this.logger, 'runnerApi.artifactResult'));
+    // Whoever opened the file is waiting on this answer (SessionsService.getWorktreeFileForOwner): wake them now
+    // rather than at their next check. A legacy request has nobody waiting, and a wake costs nothing.
+    this.realtime.notifyWaiters(worktreeFileAnswerKey(dto.requestId));
     return { ok: true };
   }
 
@@ -9375,7 +9378,8 @@ export class RunnerApiController {
   }
 
   /** A freshly recomputed live worktree diff, pushed in response to a 'diff' inbox control
-   *  turn (the web opened a file whose stored patch lagged). Overwrites the session's
+   *  turn (the web opened a file whose stored patch lagged), or at the end of a turn the engine
+   *  ran on its own, which never reaches turnComplete. Overwrites the session's
    *  changedFiles and the SessionDiff side-table patches together, so the file list and the
    *  per-file diffs are consistent again. Guarded to OPEN + this runner (mirrors the heartbeat
    *  guard) so a straggler can't clobber a just-finalized session's committed diff. */

@@ -7,6 +7,16 @@ export function isDrawableImage(path: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(path);
 }
 
+/** A changed file the diff drawer draws: a picture by its extension, binary to git, and still in the
+ *  worktree (a deleted one has nothing to read). */
+export function isDrawnPicture(file: { path: string; additions: number; deletions: number; status?: string | null }): boolean {
+  return (
+    (file.additions < 0 || file.deletions < 0) &&
+    !(file.status || '').toUpperCase().startsWith('D') &&
+    isDrawableImage(file.path)
+  );
+}
+
 /** Why a worktree file can't be shown, and whether reading it again can help. */
 export interface WorktreeFileFailure {
   title: string;

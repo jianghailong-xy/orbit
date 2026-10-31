@@ -2521,6 +2521,12 @@ export interface FilePatch {
   path: string;
   patch?: string;
   truncated?: boolean;
+  /** A changed picture's blur-up placeholder (runner-go worktree_image_preview.go): a data URL of a tiny copy, which
+   *  the diff drawer draws blurred at `width` × `height`, the picture's own pixel size, while its bytes load. Absent
+   *  for anything else, and from runners that predate it. */
+  preview?: string;
+  width?: number;
+  height?: number;
 }
 
 /**

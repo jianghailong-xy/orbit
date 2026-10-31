@@ -24,6 +24,15 @@
 
 实现时补了一条：窄的右侧区域里（手机，或侧栏拖到最窄），头部换行，不再被截掉。
 
+## 02 · 由模糊到清晰（blur-up）
+
+`02-blur-up.png`（源文件 `02-blur-up.html`）。部署后实测：点开一张板子要等 runner 读文件约 1 秒，再加上下载整张图（每张 1.2–2.2 MB），
+这段时间右侧是空的。方案 A：runner 报告 diff 时给每张改动的图做一张约 2.6 KB 的小图（96 px 宽 JPEG），跟 diff 一起到。
+点开文件的瞬间就按原图尺寸铺上模糊版，原图画好后换成清晰的。附带：翻页预取前后两张图；runner 交回文件服务端立刻回复。
+原型在 `capture/prototype-blur-up.patch`（只有 Web 部分，打在 main 0f2ff2489 上）。
+
+已定（2026-10-31，按建议都加上）：模糊版 96 px 宽；翻页预取和服务端即时回复一起做；runner 发版（版本号 +1）。
+
 ## 重拍
 
 截图来自真实的 Web 页面：vite 加上仓库自带的 `ui-migration` fixtures，原型在 `capture/prototype.patch`，

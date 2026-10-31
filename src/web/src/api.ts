@@ -1977,6 +1977,13 @@ export interface SessionFilePatch {
   path: string;
   patch?: string;
   truncated?: boolean;
+  /** A picture's blur-up placeholder: a tiny JPEG data URL the runner made when it reported the diff,
+   *  drawn blurred at the picture's size while its own bytes load. Absent for anything else, and from
+   *  runners that predate it. */
+  preview?: string;
+  /** The picture's pixel size, sent with `preview`. */
+  width?: number;
+  height?: number;
 }
 
 /** The session's per-file diffs, kept off the session payload and fetched on demand when a

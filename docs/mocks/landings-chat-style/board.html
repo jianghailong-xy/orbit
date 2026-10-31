@@ -1,0 +1,274 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-31). The owner's question: "评估下这个页面的设计，是否可以和 Session 聊天保持一致的交互风格"
+     (screenshot: the web Landings window of project "Runner 链路 v1"), then "B 先出效果图": option B, the window drawn like the
+     chat itself, with no day groups. Drawn on main d6f363a6c.
+     Web frames are shots of the real web console (vite + src/web/ui-migration fixtures; data from the owner's screenshot).
+     "Today" is ProjectLandingsWindow as it is. "After" is the real session page with its transcript and composer redrawn
+     using the transcript's own classes (chat-turn-head, chat-tool-group, chat-tool-card, chat-result, chat-turn-foot,
+     chat-status-card), so every part is one the chat already draws. iPhone frames are drawn after the iOS chat (tool
+     group row, composer) and the 10-27 board's built design (docs/mocks/landings-one-window, pD).
+     Kit: /var/tmp/landings-chat-mock (capture.mjs, proposal.mjs, gen.mjs, render-board.mjs). -->
+<html lang="zh-CN"><meta charset="utf-8"><title>Landings 窗口改成聊天的样子（方案 B）</title>
+<style>* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1720px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin-bottom: 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section:first-of-type { border-top: 0; padding-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-bottom: 26px; align-items: start; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: start; }
+.tile { margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; }
+.tag { display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; margin: 0 0 8px; }
+.tag.now { background: #ffe0dc; color: #8f1d13; }
+.tag.after { background: #d9e6ff; color: #14428f; }
+.fr { position: relative; border-radius: 10px; overflow: visible; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); margin: 4px 0 12px; }
+.fr img { display: block; border-radius: 10px; }
+.fr + .fr { margin-top: 14px; }
+.fr-label { position: absolute; left: 8px; top: -10px; font-size: 11px; background: #16161a; color: #fff; border-radius: 4px; padding: 0 6px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.num.m { position: absolute; box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); z-index: 3; }
+.notes { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; line-height: 1.62; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 7px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.notes i { color: #1f2a44; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 150px; font-weight: 600; color: #16161a; }
+.cmp td:nth-child(2) { background: #fff6f5; }
+.cmp td:nth-child(3) { background: #f3f7ff; }
+.sumtile { align-self: stretch; }
+.pair { margin-bottom: 22px; }
+.pair-title { font-size: 16px; font-weight: 650; margin: 0 0 10px 4px; }
+.pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.state .tile-title { font-size: 15px; }
+.notes li .t { flex: 1; min-width: 0; }
+.tile.wide { margin-bottom: 26px; }
+.tile.wide .frs { display: flex; gap: 28px; align-items: flex-start; }
+.tile.wide .notes { columns: 2; column-gap: 36px; }
+.tile.wide .notes li { break-inside: avoid; }
+
+  .board { width: 1720px; }
+  .fr { position: relative; flex: none; }
+  .fr img { display: block; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); }
+  .num.m { position: absolute; }
+  .duo { display: grid; grid-template-columns: 800px 800px; gap: 24px; align-items: start; }
+  .duo .cap, .trio .cap { margin-top: 12px; }
+  .cap-title { font-size: 15.5px; font-weight: 700; margin: 0 0 6px; }
+  .pair-head { display: grid; grid-template-columns: 800px 800px; gap: 24px; margin-bottom: 10px; }
+  .ref { display: grid; grid-template-columns: 520px 1fr; gap: 28px; align-items: start; margin-bottom: 30px; }
+  .vocab { font-size: 14.5px; line-height: 1.7; color: #34343c; }
+  .vocab table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  .vocab td { padding: 7px 10px; border-top: 1px solid #e6e6ec; vertical-align: top; }
+  .vocab td:first-child { width: 170px; font-weight: 600; color: #16161a; }
+  .trio { display: grid; grid-template-columns: 393px 393px 393px 1fr; gap: 26px; align-items: start; }
+  .rules { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+  .rules th, .rules td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid #ececf1; line-height: 1.55; }
+  .rules th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; background: #fafafc; }
+  .rules td:first-child { width: 120px; font-weight: 600; }
+  .rules td:nth-child(2) { background: #fff6f5; width: 560px; }
+  .rules td:nth-child(3) { background: #f3f7ff; }
+  .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 26px; align-items: start; }
+  .box { background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); font-size: 14px; line-height: 1.65; color: #34343c; }
+  .box h3 { margin: 0 0 8px; font-size: 16px; color: #16161a; }
+  .box ol, .box ul { margin: 0; padding-left: 20px; } .box li { margin: 5px 0; }
+  .box.open { background: #fffaf0; box-shadow: 0 0 0 1.5px #f3c96b; }
+  .box.bug { background: #fff6f5; box-shadow: 0 0 0 1px #f5c2bd; }
+  .rec { color: #1d6b32; font-weight: 600; }
+  .muted { color: #6a6a74; }
+
+  /* iPhone (prefixed: no collision with the console's own classes) */
+  .ip-phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: #000;
+    box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08); font-family: Inter, "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .ip-top { position: absolute; top: 0; left: 0; right: 0; height: 113px; background: #FAFAFA; z-index: 2; }
+  .ip-sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0 44px; }
+  .ip-time { font-size: 17px; font-weight: 700; }
+  .ip-sys { display: flex; gap: 8px; align-items: center; }
+  .ip-bars { display: flex; gap: 2px; align-items: flex-end; } .ip-bars i { width: 3px; background: #000; border-radius: 1px; display: block; }
+  .ip-bat { background: #000; color: #fff; border-radius: 6px; font: 700 12.5px/1 Inter, sans-serif; padding: 3px 5px; }
+  .ip-nav { position: absolute; top: 54px; left: 0; right: 0; height: 59px; }
+  .ip-circ { position: absolute; top: 4px; width: 45px; height: 45px; border-radius: 50%; background: #F6F6F6; border: 1px solid rgba(0,0,0,.09); box-shadow: 0 1px 6px rgba(0,0,0,.06); display: grid; place-items: center; }
+  .ip-back { left: 16px; } .ip-more { right: 16px; }
+  .ip-ttl { position: absolute; left: 70px; right: 70px; top: 9px; text-align: center; }
+  .ip-t1 { font-size: 17px; font-weight: 600; line-height: 22px; }
+  .ip-t2 { font-size: 12.5px; line-height: 16px; color: rgba(60,60,67,.6); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ip-tx { position: absolute; left: 0; right: 0; bottom: 162px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 8px; }
+  .ip-tx > * { flex-shrink: 0; }
+  .ip-msg { padding: 0 16px; font-size: 16px; line-height: 24px; margin: 4px 0 6px; }
+  .ip-msg b { font-weight: 650; } .ip-msg ul { margin: 2px 0 0; padding-left: 22px; } .ip-msg code { font: 13.5px "JetBrains Mono", monospace; background: #EFEFF0; border-radius: 4px; padding: 0 4px; }
+  .ip-tools { margin: 2px 16px 4px; height: 30px; display: flex; align-items: center; gap: 7px; border-left: 3px solid #8A8A8D; padding-left: 9px; white-space: nowrap; overflow: hidden; }
+  .ip-tools.is-open { margin-bottom: 0; }
+  .ip-ib { width: 20px; height: 20px; border-radius: 5px; background: #EEEEEF; display: grid; place-items: center; flex: none; }
+  .ip-nm { font: 600 14px/1 "JetBrains Mono", monospace; flex: none; }
+  .ip-sc { font-size: 14px; color: rgba(60,60,67,.6); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ip-sc.is-failed { color: #D93025; }
+  .ip-st { margin-left: auto; margin-right: 2px; display: flex; flex: none; padding-left: 6px; }
+  .ip-foot { display: flex; align-items: center; gap: 8px; padding: 0 16px 0 18px; margin: 4px 0 14px; font-size: 13px; color: rgba(60,60,67,.5); }
+  .ip-steps { margin: 2px 16px 6px 28px; }
+  .ip-step { display: flex; align-items: center; gap: 8px; height: 28px; border-left: 3px solid #ccc; padding-left: 9px; font-size: 13.5px; white-space: nowrap; }
+  .ip-snm { font: 600 13px/1 "JetBrains Mono", monospace; } .ip-ssc { color: rgba(60,60,67,.6); overflow: hidden; text-overflow: ellipsis; }
+  .ip-live { border-left: 3px solid #14A38B; padding: 6px 0 4px 12px; }
+  .ip-bud { display: flex; justify-content: space-between; font-size: 13px; color: rgba(60,60,67,.6); } .ip-bud b { color: #000; } .ip-u { color: rgba(60,60,67,.4); }
+  .ip-meter { position: relative; height: 4px; border-radius: 2px; background: #E6EBFA; margin: 7px 0; } .ip-meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: #3E69F6; }
+  .ip-meter u { position: absolute; top: -3px; width: 1.5px; height: 10px; background: #55555e; }
+  .ip-lv { display: flex; align-items: center; gap: 6px; font-size: 13px; color: rgba(60,60,67,.55); } .ip-lv i { width: 7px; height: 7px; border-radius: 50%; background: #34C759; display: block; }
+  .ip-card { margin: 6px 16px 2px; border: 1px solid #E3E3E6; border-left: 3px solid #E5484D; border-radius: 10px; padding: 9px 12px 11px; background: #fff; }
+  .ip-ch { display: flex; align-items: center; gap: 7px; font-size: 14px; } .ip-ch b { font-weight: 650; } .ip-age { margin-left: auto; color: rgba(60,60,67,.5); font-size: 13px; }
+  .ip-cx { width: 18px; height: 18px; border-radius: 50%; background: #E5484D; display: grid; place-items: center; flex: none; }
+  .ip-cr { margin: 6px 0 9px 25px; font-size: 13.5px; color: rgba(60,60,67,.7); }
+  .ip-ca { display: flex; gap: 8px; margin-left: 25px; } .ip-pri, .ip-sec { font-size: 14px; font-weight: 600; padding: 6px 13px; border-radius: 16px; }
+  .ip-pri { background: #3E69F6; color: #fff; } .ip-sec { background: #EDEDF0; color: #000; }
+  .ip-down { position: absolute; left: 176px; bottom: 178px; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.14); display: grid; place-items: center; z-index: 2; }
+  .ip-band { position: absolute; left: 0; right: 0; bottom: 0; height: 162px; background: #fff; z-index: 2; }
+  .ip-band::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); background: rgba(60,60,67,.29); }
+  .ip-cmp { position: absolute; left: 16px; right: 16px; top: 14px; height: 112px; border: 1px solid #E3E3E6; background: #F2F2F4; border-radius: 26px; padding: 13px 16px; }
+  .ip-ph { font-size: 15px; line-height: 21px; color: rgba(60,60,67,.6); } .ip-ph b { color: #000; font-weight: 600; }
+  .ip-tb { position: absolute; left: 16px; right: 10px; bottom: 9px; display: flex; align-items: center; }
+  .ip-dec { font-size: 13.5px; color: rgba(60,60,67,.5); }
+  .ip-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #3E69F6; background: #fff; border: 1px solid #DADAE0; border-radius: 15px; padding: 5px 11px; }
+  .ip-home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; }
+  .ip-cut { opacity: 1; }
+  .fig { position: relative; }
+  .notes.plain li .dot { width: 12px; color: #8a8a94; flex: none; }
+  .fig .tag { margin-bottom: 10px; }
+</style>
+<body>
+<div class="board" id="part-1" data-png="01-history">
+  <h1>Landings 窗口改成和会话聊天一样（方案 B：完全像聊天，不分日期组）</h1>
+  <div class="lede">一次落地 = Orbit 的一个回合：回合头 <i>Worked for</i>、一句话、收起来的 <i>Steps</i> 工具组、每条下面的时间。底部是输入框位置上的只读框。
+  web 的「现在」和「改后」都是真实控制台截图：改后那张就是会话页本身，换上落地的内容，用的全是聊天已有的部件。数据照你截图里的项目（Runner 链路 v1）。英文是上线文案，中文是说明。</div>
+
+  <div class="section"><span class="sec after">⓪ 聊天长这样</span><span class="sec-sub">同一个 web 控制台里的一个会话：落地窗口要对齐的就是这几样</span></div>
+  <div class="ref"><div class="fr" style="width:520px"><img src="frames/chat-ref-open.png" width="520" alt=""></div>
+    <div class="vocab">一个会话回合由这几样组成，改后的落地窗口一样不多、一样不少：
+      <table>
+        <tr><td>回合头</td><td><i>Worked for 4m 41s</i>，跑着时是 <i>Working for 19m</i></td></tr>
+        <tr><td>工具组</td><td>左边一道竖线，<i>▸ Tools × 3 · 1 failed · 2 succeeded · Failed: …</i>，整行点开；里面每个调用一行，点开是输出和命令</td></tr>
+        <tr><td>回复</td><td>正文，markdown</td></tr>
+        <tr><td>回合脚</td><td><i>⧉ 7:45 PM</i>：今天只写钟点，别的日子带日期（<code>formatClock</code>：a bare time on another day misleads）</td></tr>
+        <tr><td>状态卡</td><td>左边一道色条的卡（<code>chat-status-card</code>）</td></tr>
+        <tr><td>底部</td><td>输入框；往上翻时中间一个 ↓ 回到底部</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section"><span class="sec now">① 往上翻历史</span><span class="sec-sub">同一个晚上（Thu Sep 24）的落地，左边现在，右边改后</span></div>
+  <div class="pair-head"><span class="tag now">现在 · ProjectLandingsWindow</span><span class="tag after">改后 · 会话页画落地</span></div>
+  <div class="duo">
+    <div><div class="fr" style="width:800px"><img src="frames/today-history.png" width="800" alt=""><span class="num m" style="left:-11px;top:86px">1</span><span class="num m" style="left:741px;top:141px">2</span><span class="num m" style="left:-11px;top:141px">3</span><span class="num m" style="left:-11px;top:893px">4</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t">吸顶的日期条：<i>2–7 days ago</i> 一组跨了好几天，往上翻时它的上面还漏出半行（你截图里同样）。</span></li><li><span class="num">2</span><span class="t">时间在最右边，<i>19:16</i> 这种 24 小时制、不带日期。一组跨好几天，<i>08:54</i> 是哪天看不出来。宽窗口里标题和时间隔得很远。</span></li><li><span class="num">3</span><span class="t">合入 main 一轮一行，只写 <i>2 tasks</i> 不说是哪两个；自动合入的项目里差不多一半的行都是 <i>Merged into main</i>。整页是列表行（<code>.session-row</code>）加发丝线。</span></li><li><span class="num">4</span><span class="t">底部两行灰字加链接，不在输入框的位置、也不是输入框的样子。</span></li></ul></div>
+    <div><div class="fr" style="width:800px"><img src="frames/b-history.png" width="800" alt=""><span class="num m" style="left:-11px;top:75px">1</span><span class="num m" style="left:-11px;top:102px">2</span><span class="num m" style="left:-11px;top:136px">3</span><span class="num m" style="left:-11px;top:168px">4</span><span class="num m" style="left:-11px;top:269px">5</span><span class="num m" style="left:424px;top:802px">6</span><span class="num m" style="left:-11px;top:873px">7</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t">回合头，和聊天的 <i>Worked for</i> 一样：这次落地从排队到结束用了多久。</span></li><li><span class="num">2</span><span class="t">一句话写结果，任务名加粗：<i>Landed … on the project line.</i> 和聊天唯一的不同：句子放在步骤前面，因为没有用户那一句说明「在落什么」。</span></li><li><span class="num">3</span><span class="t">步骤收成聊天的工具组：<i>▸ Steps × 4 · Merge check passed · 17m 42s</i>，runner 名放在灰色小标里，最右一个状态点。整行点开（见 ②）。</span></li><li><span class="num">4</span><span class="t">回合脚：时间在每条下面，用聊天的 <code>formatClock</code>（今天 <i>7:45 PM</i>，别的日子 <i>Thu, Sep 24, 7:36 PM</i>），所以不再需要日期分组。聊天的 ⧉ 换成 ⋯：这一次落地的菜单（内容和今天每行的 ⋯ 一样），右键照旧。</span></li><li><span class="num">5</span><span class="t">合入 main 把带上的任务列出来：<i>Merged 2 tasks into main · 6ba7181 · automatically</i> + 两个任务名。</span></li><li><span class="num">6</span><span class="t">往上翻时出现聊天的 ↓ 回到底部。打开窗口仍然停在最底。</span></li><li><span class="num">7</span><span class="t">底栏占输入框的位置和外形，灰底、不能输入；右边 <i>Open coordinator</i>。文案照旧：<i>Orbit runs these landings — nothing to type here.</i> / <i>Decisions: the coordinator</i>。</span></li></ul></div>
+  </div>
+</div>
+
+<div class="board" id="part-2" data-png="02-open">
+  <div class="section" style="border-top:0;padding-top:0;margin-top:0"><span class="sec after">② 点开一次落地</span><span class="sec-sub">合入 main 的 #42 那一轮（Thu 7:49 PM）</span></div>
+  <div class="pair-head"><span class="tag now">现在 · 点行在原地展开</span><span class="tag after">改后 · 点 Steps 展开，像点开工具组</span></div>
+  <div class="duo">
+    <div><div class="fr" style="width:800px"><img src="frames/today-open.png" width="800" alt=""><span class="num m" style="left:741px;top:194px">1</span><span class="num m" style="left:-11px;top:258px">2</span><span class="num m" style="left:-11px;top:380px">3</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t">收起时看不出能点开；点开后时间旁边才出现 ^。</span></li><li><span class="num">2</span><span class="t">绿色回执卡：现在在 main 上的任务、测过的树。</span></li><li><span class="num">3</span><span class="t">时间线是第三套画法：时刻列 + 符号 + 句子，<i>Log ›</i> 打开检查输出。</span></li></ul></div>
+    <div><div class="fr" style="width:800px"><img src="frames/b-open.png" width="800" alt=""><span class="num m" style="left:-11px;top:329px">1</span><span class="num m" style="left:-11px;top:371px">2</span><span class="num m" style="left:-11px;top:425px">3</span><span class="num m" style="left:-11px;top:561px">4</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t"><i>Steps × 2</i> 点开：一步一行，和聊天里一个工具调用一行一样（左边色条、图标、等宽名字、摘要、状态点）。</span></li><li><span class="num">2</span><span class="t"><i>Merge check</i> 这一步再点开，就是聊天里 Bash 工具点开的样子。</span></li><li><span class="num">3</span><span class="t">上面是输出（失败时是红底的 <i>error</i>，和聊天一样），下面是跑的命令。取代 <i>Log ›</i>。</span></li><li><span class="num">4</span><span class="t"><i>Merge</i> 这一步：合入的 sha、测过的树、自动还是你点的。今天回执卡里的任务列表进了上面那句话，树进了这一步。</span></li></ul>
+      <div class="cap muted" style="margin-top:8px">每一步的时刻（今天时间线左边那列）不再单列：聊天的工具行没有时刻。见待定 4。</div></div>
+  </div>
+</div>
+
+<div class="board" id="part-3" data-png="03-now">
+  <div class="section" style="border-top:0;padding-top:0;margin-top:0"><span class="sec after">③ 窗口最底：等决定的、正在跑的、底栏</span><span class="sec-sub">打开窗口时停在这里</span></div>
+  <div class="pair-head"><span class="tag now">现在 · Now 组里两张状态卡</span><span class="tag after">改后 · 最后两个回合，正在跑的在最下面</span></div>
+  <div class="duo">
+    <div><div class="fr" style="width:800px"><img src="frames/today-bottom.png" width="800" alt=""><span class="num m" style="left:-11px;top:519px">1</span><span class="num m" style="left:-11px;top:555px">2</span><span class="num m" style="left:-11px;top:717px">3</span><span class="num m" style="left:-11px;top:893px">4</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t">没结的单独一组 <i>Now</i>。</span></li><li><span class="num">2</span><span class="t">等决定：红卡，<i>Not landed</i>，两个门 <i>Open Coordinator</i> / <i>Open Task</i>。</span></li><li><span class="num">3</span><span class="t">在跑：计时、预算条、活性。</span></li><li><span class="num">4</span><span class="t">底栏。</span></li></ul></div>
+    <div><div class="fr" style="width:800px"><img src="frames/b-bottom.png" width="800" alt=""><span class="num m" style="left:-11px;top:149px">1</span><span class="num m" style="left:-11px;top:194px">2</span><span class="num m" style="left:-11px;top:385px">3</span><span class="num m" style="left:-11px;top:597px">4</span><span class="num m" style="left:-11px;top:873px">5</span></div>
+      <ul class="notes"><li><span class="num">1</span><span class="t">没落成的那一次，步骤组像聊天里失败的工具组：默认收起，摘要红字 <i>Failed: Merge check · exit 1 after 3m 52s</i>。</span></li><li><span class="num">2</span><span class="t">等决定用聊天的状态卡（左边红条）：<i>Not landed · waiting for a decision</i>，谁在定、推没推，两个门照旧。结案后卡消失，这一回合留在原处。</span></li><li><span class="num">3</span><span class="t">正在跑的回合头 <i>Working for 8m</i>，和聊天一样；它永远在最下面，没有回合脚（结束才有时间）。</span></li><li><span class="num">4</span><span class="t">跑着的 <i>Merge check</i> 自动展开：今天卡上的预算条、<i>usually ~9m</i>、活性原样放进这一步，下面滚动输出的最后几行，和聊天里跑着的 Bash 一样。</span></li><li><span class="num">5</span><span class="t">底栏同 ①-7。</span></li></ul></div>
+  </div>
+</div>
+
+<div class="board" id="part-4" data-png="04-iphone">
+  <div class="section" style="border-top:0;padding-top:0;margin-top:0"><span class="sec after">④ iPhone</span><span class="sec-sub">同一套规则，按 iOS 会话的样子画（数据照 10-27 那张图）</span></div>
+  <div class="trio">
+    <div class="fig"><span class="tag now">现在 · 10-27 的图，已照此实现</span><img src="frames/ip-today.png" width="393" alt="" style="display:block"></div>
+    <div class="fig"><span class="tag after">改后 · 往上翻</span><div class="ip-phone"><div class="ip-top"><div class="ip-sb"><span class="ip-time">10:20</span><span class="ip-sys"><span class="ip-bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="ip-bat">97</span></span></div>
+  <div class="ip-nav"><div class="ip-circ ip-back"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></div><div class="ip-ttl"><div class="ip-t1">Landings</div><div class="ip-t2">Run by Orbit · Android 客户端</div></div><div class="ip-circ ip-more"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.7"><circle cx="12" cy="12" r="9.5"/><circle cx="7.6" cy="12" r=".9" fill="#000"/><circle cx="12" cy="12" r=".9" fill="#000"/><circle cx="16.4" cy="12" r=".9" fill="#000"/></svg></div></div></div><div class="ip-tx" style="top:113px">
+  <div class="ip-cut"><div class="ip-msg">Nothing to land for <b>A01 · 对齐矩阵补记 iOS 27 的差异</b>: its branch has no commits beyond the project line.</div><div class="ip-tools"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 3</span><span class="ip-sc">Nothing to land</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AEAEB2" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12h8" stroke-linecap="round"/></svg></span></div><div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>8:30 AM</span></div></div>
+  <div class="ip-msg">Landed <b>A08l · Android 15 重建窗口时折叠输入框</b> on the project line.</div>
+  <div class="ip-tools" data-mk="2"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 4</span><span class="ip-sc">Merge check passed · 17m 41s</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>9:05 AM</span></div>
+  <div class="ip-msg">Merged 2 tasks into main · <code>3f1c2a9</code> · automatically<ul><li>A05i · 会话目录搜索漏掉折叠文件夹</li><li>A08l · Android 15 重建窗口时折叠输入框 (#2)</li></ul></div>
+  <div class="ip-tools"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 2</span><span class="ip-sc">Merge check passed on the combined tree</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>9:51 AM</span></div>
+  <div class="ip-msg">Landed <b>A13f · Runner 设置页的模型账户排序</b> on the project line.</div>
+  <div class="ip-tools"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 4</span><span class="ip-sc">Merge check passed · 16m 12s</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>10:02 AM</span></div>
+  </div><div class="ip-down"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M6 13l6 6 6-6"/></svg></div><div class="ip-band"><div class="ip-cmp"><div class="ip-ph">Orbit runs these landings — <b>nothing to type here.</b></div>
+  <div class="ip-tb"><span class="ip-dec">Decisions: the coordinator</span><span class="ip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3E69F6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Open coordinator</span></div></div><div class="ip-home"></div></div></div></div>
+    <div class="fig"><span class="tag after">改后 · 最底</span><div class="ip-phone"><div class="ip-top"><div class="ip-sb"><span class="ip-time">10:20</span><span class="ip-sys"><span class="ip-bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="ip-bat">97</span></span></div>
+  <div class="ip-nav"><div class="ip-circ ip-back"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></div><div class="ip-ttl"><div class="ip-t1">Landings</div><div class="ip-t2">Run by Orbit · Android 客户端</div></div><div class="ip-circ ip-more"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.7"><circle cx="12" cy="12" r="9.5"/><circle cx="7.6" cy="12" r=".9" fill="#000"/><circle cx="12" cy="12" r=".9" fill="#000"/><circle cx="16.4" cy="12" r=".9" fill="#000"/></svg></div></div></div><div class="ip-tx" style="top:113px">
+  <div class="ip-msg">Landed <b>A13f · Runner 设置页的模型账户排序</b> on the project line.</div>
+  <div class="ip-tools"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 4</span><span class="ip-sc">Merge check passed · 16m 12s</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>10:02 AM</span></div>
+  <div class="ip-msg"><b>A10c · 通知冷启动后跳转丢失会话</b> did not land: the merge check exited 1 (expected 0) on the combined tree, and nothing was pushed.</div>
+  <div class="ip-tools"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 4</span><span class="ip-sc is-failed">Failed: Merge check · exit 1 …</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#E5484D"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></span></div>
+  <div class="ip-card"><div class="ip-ch"><span class="ip-cx"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><b>Not landed · waiting for a decision</b><span class="ip-age">18m</span></div>
+    <div class="ip-cr">Coordinator has it · nothing was pushed</div>
+    <div class="ip-ca"><span class="ip-pri">Open Coordinator</span><span class="ip-sec">Open Task</span></div></div>
+  <div class="ip-foot"><svg width="15" height="15" viewBox="0 0 24 24" fill="#8E8E93"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>10:03 AM</span></div>
+  <div class="ip-msg">Landing <b>A11k · 任务页写入后先回读再放开按钮</b> on the project line…</div>
+  <div class="ip-tools is-open"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#C4C4C8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg><span class="ip-ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b6b70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/></svg></span><span class="ip-nm">Steps × 3</span><span class="ip-sc">Merge check · 6m 12s of 30m</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3E69F6" stroke-width="2.6" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-9 9"/></svg></span></div>
+  <div class="ip-steps"><div class="ip-step" style="border-left-color:#B9B9BE"><span class="ip-snm">Queue</span><span class="ip-ssc">Task marked done</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ip-step" style="border-left-color:#3E69F6"><span class="ip-snm">Claim</span><span class="ip-ssc">workstation-gpu · claim 1</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34A853"/><path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ip-step" style="border-left-color:#14A38B"><span class="ip-snm">Merge check</span><span class="ip-ssc">running · usually ~9m</span><span class="ip-st"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3E69F6" stroke-width="2.6" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-9 9"/></svg></span></div>
+    <div class="ip-live"><div class="ip-bud"><span>Merge check <b>6m 12s</b> of 30m</span><span class="ip-u">usually ~9m</span></div><div class="ip-meter"><i style="width:21%"></i><u style="left:30%"></u></div><div class="ip-lv"><i></i>Output 2s ago · Updated just now</div></div></div>
+  </div><div class="ip-band"><div class="ip-cmp"><div class="ip-ph">Orbit runs these landings — <b>nothing to type here.</b></div>
+  <div class="ip-tb"><span class="ip-dec">Decisions: the coordinator</span><span class="ip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3E69F6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Open coordinator</span></div></div><div class="ip-home"></div></div></div></div>
+    <div><ul class="notes plain"><li><span class="dot">•</span><span class="t">iOS 会话本身没有 <i>Worked for</i> 回合头，所以 iPhone 不加。</span></li><li><span class="dot">•</span><span class="t">步骤组用 iOS 会话的工具组行（<code>ToolGroupSummary</code>：左边竖线、等宽 <i>Steps × 4</i>、摘要、状态点），点开一步一行。</span></li><li><span class="dot">•</span><span class="t">iOS 会话也没有每条的时间；去掉日期组以后时间总得有地方放，iPhone 在每条下面加一行 <i>⋯ 9:05 AM</i>（和 web 的回合脚同规则）。见待定 3。</span></li><li><span class="dot">•</span><span class="t">等决定：iOS 的状态卡，两个门；正在跑：自动展开的 <i>Merge check</i>，预算条和活性在里面。</span></li><li><span class="dot">•</span><span class="t">底栏：输入框的位置和圆角外形，灰底不能输入，右边 <i>Open coordinator</i>。往上翻时有 ↓。</span></li><li><span class="dot">•</span><span class="t">Android 照 iPhone 的规则画，等 web 和 iPhone 定了再出图。</span></li></ul></div>
+  </div>
+</div>
+
+<div class="board" id="part-5" data-png="05-rules">
+  <div class="section" style="border-top:0;padding-top:0;margin-top:0"><span class="sec after">⑤ 规则、代价、改哪些、待定</span></div>
+  <table class="rules">
+    <tr><th></th><th>现在</th><th>改后（方案 B）</th></tr>
+    <tr><td>一次落地</td><td>一行列表行：圆圈图标 · 粗标题 · 灰状态 · 最右时间 · 发丝线</td><td>一个回合：<i>Worked for</i>（web）· 一句话 · <i>Steps</i> 工具组 · 回合脚（⋯ + 时间）</td></tr>
+    <tr><td>合入 main</td><td><i>Merged into main</i> / <i>fec46d2 · 2 tasks · automatically</i></td><td><i>Merged 2 tasks into main · fec46d2 · automatically</i>，下面列出任务名；任务自己的 <i>Landed</i> 回合照旧</td></tr>
+    <tr><td>时间</td><td>最右边 <i>19:36</i>，不带日期</td><td>每条下面，<code>formatClock</code>：今天 <i>7:45 PM</i>，别的日子 <i>Thu, Sep 24, 7:36 PM</i></td></tr>
+    <tr><td>日期分组</td><td>吸顶的 <i>Today / Yesterday / 2–7 days ago / Now</i></td><td>没有；日期在每条的时间里，和聊天一样</td></tr>
+    <tr><td>展开</td><td>点行原地展开，展开后才有 ^；回执卡 + 时间线（时刻列）+ <i>Log ›</i></td><td>点 <i>Steps</i> 工具组（▸/▾，整行可点）；一步一行；<i>Merge check</i> 点开是输出 + 命令；失败的输出红底</td></tr>
+    <tr><td>正在跑</td><td><i>Now</i> 组里的状态卡（计时、预算条、活性）</td><td>最下面的回合：<i>Working for</i>、自动展开的 <i>Steps</i>、跑着的 <i>Merge check</i>（预算条、活性、输出尾巴）</td></tr>
+    <tr><td>等决定</td><td><i>Now</i> 组里的红卡 + <i>Open Coordinator</i> / <i>Open Task</i></td><td>这一回合：红字 <i>Failed</i> 的工具组 + 状态卡 <i>Not landed · waiting for a decision</i> + 同样两个门；超时的 <i>Retry / Re-run the check / Abandon</i> 也在这张卡上</td></tr>
+    <tr><td>菜单</td><td>每行右边悬停的 ⋯，右键</td><td>回合脚的 ⋯（时间前面），右键；菜单内容不变</td></tr>
+    <tr><td>底部</td><td>两行灰字 + <i>Open coordinator ›</i></td><td>输入框位置上的只读框 + <i>Open coordinator</i> 按钮</td></tr>
+    <tr><td>不变</td><td colspan="2">标题栏和 ⋮；打开停在最底；别处的 <i>Open landing ›</i> 进来定位、展开、描边；每张卡的轮询节奏；服务端、契约、数据都不动（只改三端客户端）</td></tr>
+  </table>
+  <div class="cols3">
+    <div class="box"><h3>代价</h3><ul>
+      <li>一屏能看到的变少：web 一屏从约 13 条变成约 5 条（每条 4 行）。找某一次落地要多翻。</li>
+      <li>每一步的时刻不再常驻（聊天的工具行没有时刻）。</li>
+      <li>三端都要改，文案 parity 测试跟着改；新句子要进 <code>LANDING_PAGE_COPY</code> 再给 Swift/Kotlin。</li>
+      <li>不能直接复用 <code>Transcript</code> 组件（它从会话事件流建节点），复用的是它的样式和小部件。</li>
+    </ul></div>
+    <div class="box"><h3>改哪些</h3><ul>
+      <li><b>web</b>：<code>ProjectLandingsWindow.tsx</code>（回合、工具组、状态卡、只读底栏）、<code>lib/sessionProjects.ts</code>（<code>landingsWindow</code> 不再分天）、<code>lib/landingSession.ts</code>（新句子）、<code>index.css</code>（去掉 <code>landings-window-day-head</code> 等）、对应测试。</li>
+      <li><b>iOS/macOS</b>：<code>ProjectLandingsWindowView.swift</code>、<code>SessionProjectLandings.swift</code>、<code>LandingSessionPage.swift</code>（文案）。</li>
+      <li><b>Android</b>：<code>ProjectLandingsWindow.kt</code>、<code>SessionProjectLandings.kt</code>、<code>LandingSessionModel.kt</code>。</li>
+      <li>服务端：不改。</li>
+    </ul></div>
+    <div class="box open"><h3>待你定</h3><ol>
+      <li>web 每条上面的 <i>Worked for</i> 回合头：<span class="rec">要（推荐，和聊天一致）</span>，还是省掉换密度。iPhone 不加（iOS 会话本来没有）。</li>
+      <li>那一句话放在步骤<span class="rec">前面（推荐，没有用户那句来说明在落什么）</span>，还是照聊天放在步骤后面。</li>
+      <li>iPhone 的时间：<span class="rec">每条下面一行（推荐）</span>，还是放进 <i>Steps</i> 那一行的右边。</li>
+      <li>每一步的时刻：<span class="rec">点开那一步才看（推荐）</span>，还是常驻在工具行右边。</li>
+      <li>先改哪端：<span class="rec">web + iPhone 一起（推荐）</span>，Android 随后。</li>
+    </ol></div>
+  </div>
+  <div class="box bug" style="margin-top:22px"><b>和这张图无关、单独修的 bug：</b>你截图里每轮合入 main 都出现两行（同一分钟，一行 <i>fec46d2 · 2 tasks · automatically</i>，一行 <i>Merge project/34bc0CsOzPh9KshG7H3DW → main · #42</i>）。合入记录的 <code>landingSessionId</code> 是 UUID，会话列表的 <code>id</code> 是 base62，web 和 iOS 用字符串直接比，永远对不上（Android 先规范化，所以没事）。本图「现在」那几帧按修好以后画，每轮只有一行。</div>
+</div>
+</body></html>

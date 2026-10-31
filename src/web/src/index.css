@@ -4038,13 +4038,42 @@ button.toast--pill:focus-visible {
   text-align: center;
 }
 .wt-preview-img {
+  position: relative;
   display: inline-block;
   max-width: 100%;
   padding: 0;
   border: 0;
+  border-radius: 6px;
+  overflow: hidden;
   background: transparent;
   cursor: zoom-in;
   vertical-align: top;
+}
+.wt-preview-img:disabled {
+  cursor: progress;
+}
+/* Blur-up: the runner's tiny placeholder, scaled to the picture's own box and blurred. Alone it is the
+   box; under a picture still loading it covers it, until the picture has been painted. */
+.wt-preview-img img.wt-preview-blur {
+  filter: blur(8px);
+  transform: scale(1.04);
+}
+.wt-preview-img img + img.wt-preview-blur {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wt-preview-loading {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
 }
 .wt-preview-img img {
   display: block;
