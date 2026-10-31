@@ -158,6 +158,9 @@ import {
   type AccountEngine,
   type NormalizedRunEvent,
   toUuid,
+  CLAUDE_REGION_V1,
+  type ClaudeRegionCheckRequest,
+  type ClaudeRegionCheckResponse,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -381,7 +384,9 @@ import {
 import { AdmitsLinkCallItself, readAdmittedLinkRunner, RunnerAuthGuard, runnerLinkTokenRevoked } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
-import { visitorAddress } from '../shared/public-surface.guard';
+import { cameThroughTrustedProxy, visitorAddress } from '../shared/public-surface.guard';
+import { isRunnerLinkCall } from '../common/runner-link-call';
+import { recordRegionCheck, regionCheckAnswer, regionCheckRequestOf } from '../runners/runner-region';
 import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
 import {
   heartbeatAnswerHandsOut,
@@ -1357,7 +1362,7 @@ export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] 
 export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
 // The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
-// answered 426 UPGRADE_REQUIRED, but for the five marked StaysOnHttps (runner-link-required.ts).
+// answered 426 UPGRADE_REQUIRED, but for the six marked StaysOnHttps (runner-link-required.ts).
 @MachineProtocol()
 @UseInterceptors(RunnerLinkRequiredInterceptor)
 @Controller('runner')
@@ -1689,6 +1694,36 @@ export class RunnerApiController {
     await refuseManagedRunnerDeletion(this.prisma, runner.id);
     await this.prisma.runner.delete({ where: { id: runner.id } });
     return { ok: true };
+  }
+
+  /**
+   * The Claude region check (docs/claude-region-check-contract.md §3, §4): which country this runner's Claude connection
+   * to Anthropic comes out in, as Cloudflare saw this request. The runner sends it through the proxy Claude uses for
+   * api.anthropic.com, so it is not part of the daemon protocol and stays on HTTPS (D14), answering while
+   * RUNNER_LINK_REQUIRED is on.
+   *
+   * The country, and Ukraine's region, come only from CF-IPCountry and cf-region-code, and only when the hop nginx saw
+   * is a proxy TRUSTED_PROXIES names (cameThroughTrustedProxy). Any other request is unknown, and so is a link call,
+   * whose connection is the link's rather than Claude's. The answer is kept in runner.region, which nothing else writes
+   * (recordRegionCheck), and never with an address.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
+  @Get('region-check')
+  async regionCheck(
+    @CurrentRunner() runner: { id: string },
+    @Req() req: Request,
+    /** `1` when the check went through the proxy Claude uses; anything else is direct. */
+    @Query('viaProxy') viaProxy?: string,
+  ): Promise<ClaudeRegionCheckResponse> {
+    const answer = regionCheckAnswer({
+      trusted: !isRunnerLinkCall(req) && cameThroughTrustedProxy(req),
+      country: req.headers['cf-ipcountry'],
+      regionCode: req.headers['cf-region-code'],
+      viaProxy: viaProxy === '1',
+    });
+    await recordRegionCheck(this.prisma, runner.id, answer, new Date());
+    return answer;
   }
 
   // A beat the link gateway forwarded is admitted in the statement that answers it (linkHeartbeat).
@@ -2282,6 +2317,7 @@ export class RunnerApiController {
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
+    let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -2337,6 +2373,8 @@ export class RunnerApiController {
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
       // The same kind of request, kept on the row the same way, so it goes last beside it.
       checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
+      // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
+      regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -2401,6 +2439,8 @@ export class RunnerApiController {
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
       // Present only when this beat hands a key over, for the same reason.
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
+      // Only while the owner's Check again waits, and only to a process that declared claude-region/v1.
+      ...(regionCheckRequest ? { regionCheckRequest } : {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };
@@ -2745,6 +2785,23 @@ export class RunnerApiController {
       data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * The owner's Check again while it waits (docs/claude-region-check-contract.md §7): `{ requestedAt }` on every beat of
+   * a process that declares claude-region/v1, until a check at or after it reaches GET /runner/region-check, which
+   * clears it (recordRegionCheck), or until REGION_CHECK_REQUEST_TTL_MS has passed. Redelivered rather than claimed, so
+   * an answer lost on the way loses nothing: the runner checks once per requestedAt. A process without the capability
+   * is handed nothing, since it would not check. Reads only.
+   */
+  private async drainRegionCheckRequest(
+    runnerId: string,
+    /** The capabilities header as it arrived, read through runnerSupportsCapability. */
+    capabilities: string | string[] | undefined,
+  ): Promise<ClaudeRegionCheckRequest | undefined> {
+    if (!runnerSupportsCapability(capabilities, CLAUDE_REGION_V1)) return undefined;
+    const r = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { regionCheckRequestedAt: true } });
+    return regionCheckRequestOf(r?.regionCheckRequestedAt, new Date());
   }
 
   /**

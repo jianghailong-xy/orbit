@@ -72,4 +72,86 @@ final class AgentListLogicTests: XCTestCase {
         let groups = AgentListLogic.grouped(agents, runnerOrder: ["first", "second"])
         XCTAssertEqual(groups.map(\.runnerId), ["first", "second", "stale-a", "stale-b"])
     }
+
+    // MARK: a machine with no workspace (board rules 9 and 11)
+
+    private func runner(_ id: String, online: Bool?, displayName: String? = nil, status: String? = nil) -> Runner {
+        var fields = [#""id":"\#(id)""#, #""name":"\#(id)@host""#]
+        if let online { fields.append(#""online":\#(online)"#) }
+        if let displayName { fields.append(#""displayName":"\#(displayName)""#) }
+        if let status { fields.append(#""status":"\#(status)""#) }
+        return try! JSONDecoder().decode(Runner.self, from: Data("{\(fields.joined(separator: ","))}".utf8))
+    }
+
+    func testAnOnlineMachineWithNoWorkspaceGetsARow() {
+        let machines = AgentListLogic.machinesToSetUp(
+            runners: [runner("austin", online: true), runner("hpc", online: true)],
+            agents: [agent(#"{"id":"w","name":"a","runnerId":"hpc"}"#)])
+        XCTAssertEqual(machines, [MachineToSetUp(id: "austin", name: "austin@host")])
+    }
+
+    func testNotOneThatIsOfflineWhateverItHolds() {
+        XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner("gone", online: false)], agents: []), [])
+    }
+
+    func testAMachineNobodyHasSaidIsOnlineIsNotOne() {
+        XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner("older", online: nil)], agents: []), [])
+        // An older server's row with no `online` is read by its status, as the rail reads it.
+        XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner("older", online: nil, status: "ONLINE")], agents: []).map(\.id),
+                       ["older"])
+    }
+
+    func testAConfigOnlyWorkspaceIsOnNoMachine() {
+        let machines = AgentListLogic.machinesToSetUp(runners: [runner("austin", online: true)],
+                                                      agents: [agent(#"{"id":"w","name":"a"}"#)])
+        XCTAssertEqual(machines.map(\.id), ["austin"])
+    }
+
+    func testRowsKeepTheRunnerListsOrder() {
+        let machines = AgentListLogic.machinesToSetUp(
+            runners: [runner("hpc", online: true), runner("gone", online: false), runner("austin", online: true)],
+            agents: [])
+        XCTAssertEqual(machines.map(\.id), ["hpc", "austin"])
+    }
+
+    func testAMachineIsNamedTheWayTheAppNamesIt() {
+        XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner("r", online: true, displayName: "HPC")], agents: [])
+            .map(\.name), ["HPC"])
+    }
+
+    /// The Mac's sidebar: a group per machine, with the empty ones after every workspace, Shared included.
+    func testTheMacsGroupsPutEmptyMachinesAfterEveryWorkspace() {
+        let groups = AgentListLogic.sidebarGroups(
+            [agent(#"{"id":"1","name":"a","runnerId":"r1"}"#), agent(#"{"id":"2","name":"b"}"#)],
+            machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
+        XCTAssertEqual(groups.map(\.runnerId), ["r1", nil, "austin"])
+        XCTAssertEqual(groups.last?.setUp, MachineToSetUp(id: "austin", name: "orbit@austin"))
+        XCTAssertEqual(groups.last?.agents, [])
+        XCTAssertNil(groups.first?.setUp)
+    }
+
+    func testAnEmptyAccountsGroupsAreItsMachines() {
+        let groups = AgentListLogic.sidebarGroups([], machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
+        XCTAssertEqual(groups.map(\.id), ["austin"])
+    }
+
+    func testNewSessionStaysInTheWorkspaceInView() {
+        XCTAssertEqual(AgentListLogic.newSessionTarget(currentAgentID: "w", list: .content(showsError: false),
+                                                       firstOnlineMachine: "austin"), .workspace("w"))
+    }
+
+    func testWithNoWorkspaceNewSessionOpensTheFirstOnlineMachine() {
+        XCTAssertEqual(AgentListLogic.newSessionTarget(currentAgentID: nil, list: .empty, firstOnlineMachine: "austin"),
+                       .machine("austin"))
+    }
+
+    func testWithNoMachineToOpenNewSessionGoesToMachinesAndModels() {
+        XCTAssertEqual(AgentListLogic.newSessionTarget(currentAgentID: nil, list: .empty, firstOnlineMachine: nil), .machines)
+    }
+
+    func testAListThatHasntAnsweredIsNoReasonToGoAnywhere() {
+        for list: ListLoadPresentation? in [.loading, .failed, nil] {
+            XCTAssertNil(AgentListLogic.newSessionTarget(currentAgentID: nil, list: list, firstOnlineMachine: "austin"))
+        }
+    }
 }

@@ -3,6 +3,7 @@ package io.orbitd.android.composer
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +25,29 @@ internal suspend fun <T> threeTries(read: suspend () -> T): T {
 }
 
 class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle, val sessionId: String, private val target: DraftTarget? = null) {
-    suspend fun read(path: List<String>): JsonElement = Wire.json.parseToJsonElement(auth.request(handle, ApiRequest(path)).body.decodeToString())
-    suspend fun detail() = read(if (target == null) listOf("sessions", sessionId) else listOf("workspaces", target.workspaceId)).jsonObject
+    suspend fun read(path: List<String>, query: List<Pair<String, String>> = emptyList()): JsonElement =
+        Wire.json.parseToJsonElement(auth.request(handle, ApiRequest(path, query = query)).body.decodeToString())
+    suspend fun detail(): JsonObject = when {
+        target == null -> read(listOf("sessions", sessionId)).jsonObject
+        target.isMachineDraft -> {
+            val runner = runner(target.runnerId) ?: error("Runner is unavailable.")
+            MachineSetup.machineDraft(runner.text("id") ?: target.runnerId!!, RunnerPage.displayName(runner), MachineSetup.firstEngineOn(runner))
+        }
+        else -> read(listOf("workspaces", target.workspaceId)).jsonObject
+    }
+    suspend fun workspaces(): List<JsonObject> = read(listOf("workspaces")).jsonArray.filterIsInstance<JsonObject>()
+    suspend fun askDirProbe(runnerId: String, path: String) {
+        auth.request(handle, ApiRequest(listOf("runners", runnerId, "dir-probe"), HttpMethod.POST,
+            body = buildJsonObject { put("path", path) }.toString().encodeToByteArray()))
+    }
+    suspend fun readDirProbe(runnerId: String, path: String): DirProbeAnswer =
+        DirProbeAnswer.fromJson(read(listOf("runners", runnerId, "dir-probe"), query = listOf("path" to path)).jsonObject)
+    suspend fun probeDir(runnerId: String, path: String, ask: Boolean): DirProbeRelay.Outcome =
+        DirProbeRelay.probe(
+            ask = if (ask) ({ askDirProbe(runnerId, path) }) else null,
+            read = { readDirProbe(runnerId, path) },
+            sleep = { ms -> delay(ms) },
+        )
     suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST): JsonObject {
         val response = auth.request(handle, ApiRequest(if (endpoint == "create") listOf("sessions") else listOf("sessions", sessionId) + endpoint.split('/'), method,
             body = body?.toString()?.encodeToByteArray()))

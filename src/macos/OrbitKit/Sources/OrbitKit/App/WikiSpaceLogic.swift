@@ -73,7 +73,7 @@ public enum WikiSpaceLogic {
             switch nav.drawerDestination(agentID: agentID) {
             case .workspace(let id):      return id
             case .project(let projectID): return coordinatorWorkspace(projectID)
-            case .section:                return nil
+            case .section, .machine:      return nil
             }
         case .projects:
             return nav.selectedProjectID.flatMap(coordinatorWorkspace)

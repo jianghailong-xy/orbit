@@ -230,6 +230,8 @@ type runner struct {
 	// liveRng is what the live stream draws on (live.go), apart from rng, so that the rest of a run draws as it does
 	// without it.
 	liveRng *rand.Rand
+	// dialClient opens this runner's connections, from its -source address.
+	dialClient *http.Client
 
 	token    string
 	tokenExp time.Time
@@ -570,7 +572,7 @@ func (r *runner) open(ctx context.Context, first, renewal, drain bool, token str
 	started := time.Now()
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	ws, resp, err := websocket.Dial(dctx, d.linkURL, &websocket.DialOptions{
-		HTTPClient: g.dialClient,
+		HTTPClient: r.dialClient,
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + d.token}},
 	})
 	cancel()

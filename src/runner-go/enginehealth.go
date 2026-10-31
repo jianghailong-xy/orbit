@@ -324,6 +324,10 @@ type engineHealthProbe struct {
 	kimiRegions map[string]string
 	// Closed once a probe has completed (`probed`), made on first use; kept under mu.
 	done chan struct{}
+	// What run also starts at its start and on every tick: the Claude region check (claude_region.go),
+	// on a goroutine of its own, so that a proxy slow to answer never holds the probe up. Nil where
+	// nothing checks, as in tests.
+	checkRegion func()
 }
 
 // probed is closed once a probe has completed: what a managed instance's first heartbeat waits for
@@ -487,6 +491,7 @@ func (p *engineHealthProbe) snapshotNow() []EngineHealthReport {
 }
 
 func (p *engineHealthProbe) run(ctx context.Context) {
+	p.startRegionCheck()
 	p.refresh()
 	ticker := time.NewTicker(engineHealthRefreshInterval)
 	defer ticker.Stop()
@@ -495,7 +500,14 @@ func (p *engineHealthProbe) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			p.startRegionCheck()
 			p.refresh()
 		}
+	}
+}
+
+func (p *engineHealthProbe) startRegionCheck() {
+	if p.checkRegion != nil {
+		go p.checkRegion()
 	}
 }

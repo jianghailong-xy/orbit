@@ -1081,6 +1081,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
 
+	// Where Claude's connection to Anthropic comes out (claude_region.go): checked at the start and
+	// on the engine probe's clock, on the owner's Check again, and by any Anthropic-bound Claude turn
+	// whose last answer is a minute old.
+	regionCheck := newClaudeRegionCheck(t, cfg.Name)
+	claudeRegion.Store(regionCheck)
+	defer claudeRegion.Store(nil)
+	engineHealth.checkRegion = func() { regionCheck.check(loopCtx) }
+
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
 	// Each probe refreshes quickly while active and slowly while an agent for that
@@ -1666,6 +1674,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					delete(artifactNow, req.RequestID)
 					mergeMu.Unlock()
 				}(a)
+			}
+			// The owner's Check again (claude_region.go): checked at once, once per request. Off the
+			// heartbeat goroutine, which must not wait on a proxy that does not answer.
+			if rr := resp.RegionCheckRequest; rr != nil && regionCheck.takeCheckAgain(rr.RequestedAt) {
+				go regionCheck.check(loopCtx)
 			}
 			// Drive the browser-less sign-in the user started from the web. Both actions are
 			// idempotent: the server redelivers each one until a status report moves it on,

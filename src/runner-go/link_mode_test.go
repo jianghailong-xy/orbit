@@ -595,10 +595,11 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 		t.Errorf("the controller's routes without the runner guard are %v, want %v", open, want)
 	}
 	// 49 counted on 2026-10-25, the daemon's three calls that went beside the agent tool API until 2026-10-28 (a
-	// Cursor key check's answer, a session's own key check and a background job's alert), and since 2026-10-31 the
-	// directory probe's answer (docs/first-workspace-contract.md §2.4).
-	if n := len(guarded) + len(open); n != 53 {
-		t.Errorf("the controller has %d routes; 53 since 2026-10-31", n)
+	// Cursor key check's answer, a session's own key check and a background job's alert), since 2026-10-31 the
+	// directory probe's answer (docs/first-workspace-contract.md §2.4), and since 2026-11-01 the Claude region check
+	// (docs/claude-region-check-contract.md §3).
+	if n := len(guarded) + len(open); n != 54 {
+		t.Errorf("the controller has %d routes; 54 since 2026-11-01", n)
 	}
 }
 

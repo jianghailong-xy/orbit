@@ -1,0 +1,219 @@
+diff --git a/src/web/src/components/RunNeverStartedCard.tsx b/src/web/src/components/RunNeverStartedCard.tsx
+index 5849d21..540e13d 100644
+--- a/src/web/src/components/RunNeverStartedCard.tsx
++++ b/src/web/src/components/RunNeverStartedCard.tsx
+@@ -47,7 +47,8 @@ export type NeverStartedCause =
+   | 'ENGINE_UNSUPPORTED'
+   | 'ENGINE_SIGNED_OUT'
+   | 'RUNNER_OFFLINE'
+-  | 'ENGINE_DIED';
++  | 'ENGINE_DIED'
++  | 'REGION_UNSUPPORTED';
+ 
+ /** The presses a card can offer. The host supplies the handler; an id it cannot perform is not drawn. */
+ export type NeverStartedActionId =
+@@ -56,7 +57,10 @@ export type NeverStartedActionId =
+   | 'install'
+   | 'open-providers'
+   | 'open-runner'
+-  | 'chat-about';
++  | 'chat-about'
++  | 'other-provider'
++  | 'move-session'
++  | 'check-again';
+ 
+ /** The label each press wears — the repo's existing words, never a second spelling. */
+ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, string>> = {
+@@ -69,6 +73,9 @@ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, s
+   'open-providers': 'Open Machines & models',
+   'open-runner': 'Open the runner',
+   'chat-about': 'Chat about this',
++  'other-provider': 'Use another provider',
++  'move-session': 'Move to another machine',
++  'check-again': 'Check again',
+ };
+ 
+ export const NEVER_STARTED_TITLE = 'This run never started';
+@@ -138,6 +145,8 @@ export interface NeverStartedInput {
+   keyName?: string | null;
+   /** The machine, as the user named it — the repair cards' `runnerName`. */
+   runnerName?: string | null;
++  /** PROTOTYPE: the runner's last region check, as its heartbeat reports it. */
++  region?: { checkedAt: string; claudePath: string | null; viaProxy: boolean } | null;
+ }
+ 
+ /** The engine's product name, from the one table that keeps them (lib/runnerEngines). */
+@@ -200,6 +209,8 @@ const UPGRADE_SENTENCE = /requires (?:a newer |an? )?Orbit runner|update this ru
+ const NOT_INSTALLED_SENTENCE = /isn’t installed|isn't installed|not installed/i;
+ const SIGNED_OUT_SENTENCE = /needs authentication|failed to authenticate|signed out|not signed in/i;
+ const OFFLINE_SENTENCE = /offline/i;
++/** PROTOTYPE: the runner's region refusal, `CLAUDE_REGION_UNSUPPORTED: <sentence> [CC]`. */
++const REGION_SENTENCE = /^CLAUDE_REGION_UNSUPPORTED: ([\s\S]*?)(?: \[([A-Z]{2})\])?$/;
+ 
+ /** §6.1's three resolved states — the ones a SOURCE refusal can be about (SR45's Legacy split). */
+ const RESOLVED_SOURCE_STATES = new Set(['SELECTED', 'PINNED', 'REFUSED']);
+@@ -257,6 +268,21 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
+   const task = !!session.taskId;
+   const dsh = runtime === 'dsh' ? dshRepair(error) : null;
+   const antigravity = runtime === 'antigravity' ? antigravityRepair(error) : null;
++  const region = REGION_SENTENCE.exec(error);
++  if (region) {
++    const r = input.region;
++    const at = r ? new Date(r.checkedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
++    return {
++      cause: 'REGION_UNSUPPORTED',
++      subject: 'CLAUDE_REGION_UNSUPPORTED · ' + (region[2] ?? ''),
++      detail: r ? `Checked ${at} · Claude’s connection: ${r.claudePath}${r.viaProxy ? ' (through a proxy)' : ' (no proxy)'}` : null,
++      why: `${engineName(runtime)} can’t use Anthropic on ${machine}`,
++      body: region[1]!.trim(),
++      next: null,
++      actions: ['other-provider', 'move-session', 'check-again'],
++      foot: MACHINE_COPY.waitingFoot,
++    };
++  }
+ 
+   if (dsh === 'updateRunner' || antigravity === 'updateRunner' || UPGRADE_SENTENCE.test(error)) {
+     return {
+@@ -387,6 +413,9 @@ export interface NeverStartedActions {
+   openProviders?: () => void;
+   openRunner?: () => void;
+   chatAbout?: () => void;
++  otherProvider?: () => void;
++  moveSession?: () => void;
++  checkAgain?: () => void;
+   /** A press is already in flight, so none of them is offered twice. */
+   busy?: boolean;
+ }
+@@ -434,6 +463,9 @@ export function RunNeverStartedCard({
+     'open-providers': actions.openProviders,
+     'open-runner': actions.openRunner,
+     'chat-about': actions.chatAbout,
++    'other-provider': actions.otherProvider,
++    'move-session': actions.moveSession,
++    'check-again': actions.checkAgain,
+   };
+   const drawable = never.actions.filter((id) => handlers[id]);
+   const primary = drawable[0];
+@@ -445,7 +477,19 @@ export function RunNeverStartedCard({
+         <span className="criteria-provenance prov-neutral">{FROM_ORBIT}</span>
+       </div>
+       <div className="chat-authfix-desc run-never-started-why">{never.why}</div>
+-      {never.body ? <div className="chat-authfix-desc">{never.body}</div> : null}
++      {never.body ? (
++        <div className="chat-authfix-desc">
++          {never.body}
++          {never.cause === 'REGION_UNSUPPORTED' ? (
++            <>
++              {' '}
++              <a href="https://www.anthropic.com/supported-countries" target="_blank" rel="noreferrer">
++                Supported regions
++              </a>
++            </>
++          ) : null}
++        </div>
++      ) : null}
+       {never.subject ? (
+         <div className="chat-authfix-msg run-never-started-subject">{never.subject}</div>
+       ) : null}
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index bf172a9..aaec658 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -322,6 +322,7 @@ import {
+   runNeverStarted,
+   type NeverStartedActions,
+   type NeverStartedSession,
++  type NeverStartedInput,
+ } from './RunNeverStartedCard';
+ import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
+ import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, type CursorQuotaHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+@@ -4171,6 +4172,7 @@ export function WorkspaceView({
+             runtime: selectedRuntime,
+             keyName: selectedKeyName,
+             runnerName: runner.displayName || runner.name,
++            region: (runner as { region?: NeverStartedInput['region'] }).region ?? null,
+           })
+         : null,
+     [
+@@ -9260,6 +9262,9 @@ export function WorkspaceView({
+     // The conversation is the other way to answer a refusal, so this only arms it:
+     // the reader's own words are the point, and nothing is sent for them.
+     chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
++    otherProvider: () => {},
++    moveSession: () => {},
++    checkAgain: () => {},
+     busy: retryInFlight || startRunAgain.isPending || installCursor.isPending,
+   };
+   const pickModel = (v: string): void => {
+@@ -9472,7 +9477,7 @@ export function WorkspaceView({
+                 <span className="scope-menu-row">
+                   <span className="composer-provider-name">
+                     {(choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+-                    {blocked ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}, fix it →` : choice.label}
++                    {blocked ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}${choice.unavailable === 'Region not supported' ? '' : ', fix it →'}` : choice.label}
+                     {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                   </span>
+                   {checkSlot(choice.slug === shownProvider)}
+diff --git a/src/web/src/lib/sessionProviderChoices.ts b/src/web/src/lib/sessionProviderChoices.ts
+index 53f2251..6752032 100644
+--- a/src/web/src/lib/sessionProviderChoices.ts
++++ b/src/web/src/lib/sessionProviderChoices.ts
+@@ -346,6 +346,12 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+   const pools = sources.pools ?? [];
+   const antigravityKeyAvailable = sources.antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false;
+   const health = engineHealth?.find((e) => e.engine === engine);
++  /** PROTOTYPE: this runner's Claude connection is in a region Anthropic doesn't serve, so its
++   *  Anthropic-bound credentials (its own sign-in, Anthropic keys, Claude pools) can't run here. */
++  const regionBlocked = engine === AgentProvider.CLAUDE && !!(health as { regionBlocked?: boolean } | undefined)?.regionBlocked;
++  const REGION = 'Region not supported';
++  const anthropicKey = (p: { presetSlug?: string | null; baseUrl?: string | null }) =>
++    p.presetSlug === 'anthropic' || /(^|\/\/)([a-z0-9-]+\.)*anthropic\.com(\/|$)/i.test(p.baseUrl ?? '');
+   const modelLabel = (provider: string) =>
+     defaultModelLabel(engine, provider, modelCatalog, configured, runtimeDefaultModels);
+   // What a credential that brings its own key needs from this runner: the engine's CLI, and for
+@@ -372,7 +378,7 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+         ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount)
+         : engine === AgentProvider.CURSOR
+           ? cursorBlocker(dshRunner, health, true)
+-          : engineBlocker(health);
++          : regionBlocked ? REGION : engineBlocker(health);
+     const accounts = blocker ? undefined : accountChoices(engine, health, withEnginePlanUsage(sources.planUsage, engineHealth));
+     own.push({
+       slug: engine,
+@@ -404,6 +410,8 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+       ...(pool.shared && !pool.members.some((member) => member.login) ? { poolUnit: 'key' as const } : {}),
+       ...(carried
+         ? { unavailable: carried, fixEngine: engine }
++        : regionBlocked
++          ? { unavailable: REGION, fixEngine: engine }
+         : pool.unavailable
+           ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+           : {}),
+@@ -427,7 +435,11 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+       kind: 'key' as const,
+       ...brandForProvider(p.slug, p.label, p.presetSlug),
+       modelLabel: modelLabel(p.slug),
+-      ...(carried ? { unavailable: carried, fixEngine: engine } : {}),
++      ...(carried
++        ? { unavailable: carried, fixEngine: engine }
++        : regionBlocked && anthropicKey(p as { presetSlug?: string | null; baseUrl?: string | null })
++          ? { unavailable: REGION, fixEngine: engine }
++          : {}),
+       ...(pooled.has(p.slug) ? { inPool: true } : {}),
+     }));
+ 
+diff --git a/src/web/src/components/NewSessionProviderHero.tsx b/src/web/src/components/NewSessionProviderHero.tsx
+index c54807d..f331ef1 100644
+--- a/src/web/src/components/NewSessionProviderHero.tsx
++++ b/src/web/src/components/NewSessionProviderHero.tsx
+@@ -169,7 +169,9 @@ export function NewSessionProviderHero({
+       {blocked.unavailable}
+       {onRunner(blocked)}
+       <span className="np-dot">·</span>
+-      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>Fix it</Link>
++      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>
++        {blocked.unavailable === 'Region not supported' ? 'Details' : 'Fix it'}
++      </Link>
+     </div>
+   );
+ 

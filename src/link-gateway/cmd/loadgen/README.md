@@ -71,6 +71,9 @@ loadgen -fleet fleet.jsonl -api http://127.0.0.1:61086 -link-url wss://link-gate
 | `-drain-timeout` | 30s | After the window, how long runners wait for their last acknowledgements. They send no new beat meanwhile, and close each connection with the close handshake, so the gateway sees them leave. |
 | `-interval` | 10s | How often `series.jsonl` gets a line. |
 | `-seed` | 1 | The random seed. |
+| `-shard` | — | `i/n`: play shard `i` of `n`, the runners whose place `k` in the fleet (among the first `-runners`) has `k mod n = i`. Several processes play one fleet between them, each runner in exactly one, and a runner draws on the seed with its place in the fleet, so it is the same runner in any shard. `-ramp-rate` and `-live-rate` stay the fleet's: each shard takes its `1/n` share. `-event-rate` is shared by the fleet's active sessions, so a shard's sessions stream at the rate they would in one process. `summary.json` says which shard it was and what the fleet held. |
+| `-source` | the system's | The local addresses the link's connections leave from, comma-separated: each runner opens its connections from one of them, in turn by its place in the process. One address has about 28,000 ephemeral ports for the gateway's one address (`net.ipv4.ip_local_port_range`); several, on loopback any of `127.0.0.0/8`, let one host open more. Each must be an address of the host: the loadgen binds to it first and refuses one it cannot. |
+| `-histograms` | off | Also write `histograms.json`: every latency histogram of the steady window and the whole run, bucket by bucket, so that the shards' runs can be added up exactly (`scripts/runner-link/gateway-limit-report.mjs`). |
 
 It writes to `-out`:
 
@@ -80,7 +83,14 @@ It writes to `-out`:
   the notes (Drain, Credit changes, renewals whose old connection ended first) and the first details of each error.
   `heartbeatsReconciled` counts the beats whose answer was a full reconcile: it names the directories to scan, which
   an answer from `runner_presence` alone never does;
-- `errors.log`: every error, one line each.
+- `errors.log`: every error, one line each;
+- with `-histograms`, `histograms.json`.
+
+Without `-shard`, `-source` and `-histograms` a run behaves and writes exactly as before them: no shard or source in
+`summary.json` and no `histograms.json` (`TestTodaysFlagsWriteNoShardSourcesOrHistograms`). `shard_test.go` plays a fleet
+in two shards from two loopback addresses against a gateway that records where each connection came from and for whom.
+`scripts/runner-link/gateway-limit.sh` runs shards against one gateway and the stub backend
+([cmd/linkstub](../linkstub/README.md)), with no database.
 
 It exits 0 only if the steady window was reached, nothing was counted as an error and every event produced was
 acknowledged.

@@ -48,6 +48,8 @@ import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.watch.WatchStore
+import io.orbitd.android.composer.MachineSetup
+import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -201,6 +203,28 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
+        val workspaces = orderedWorkspaces(data.workspaces)
+        val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows)
+        val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows)
+        fun openNewSession(origin: Origin = Origin.LIST) {
+            val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
+            when {
+                workspace != null -> open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = origin))
+                firstOnline != null -> select(machineDraftDestination(firstOnline), OrbitRoute(Destination.DRAFT, id = firstOnline, origin = origin))
+                else -> open(OrbitRoute(Destination.RUNNER, origin = origin))
+            }
+        }
+        // Rule 10 & 11: with no workspaces, an online machine lands on its new session page; if all machines are offline, lands on Machines & models.
+        LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, navigation.canGoBack, navigation.pending) {
+            if (data.ready && data.workspaces.isEmpty() &&
+                route.destination == Destination.WORKSPACES && !navigation.canGoBack && navigation.pending == null) {
+                if (firstOnline != null) {
+                    land(machineDraftDestination(firstOnline), OrbitRoute(Destination.DRAFT, id = firstOnline))
+                } else if (data.effectiveRunnerRows.isNotEmpty()) {
+                    land("settings", OrbitRoute(Destination.RUNNER))
+                }
+            }
+        }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
         val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
@@ -250,8 +274,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }
-                        if (data.ready && data.workspaces.isEmpty()) Text("Add a workspace to start a session.", Modifier.padding(16.dp))
-                        val workspaces = orderedWorkspaces(data.workspaces)
+                        if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
@@ -263,14 +286,23 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
+                        machinesToSetUp.forEach { machine ->
+                            val dest = machineDraftDestination(machine.id)
+                            val selected = navigation.section == dest ||
+                                (route.destination == Destination.DRAFT && route.workspaceId == null && ObjectId.same(route.id, machine.id))
+                            NavigationDrawerItem(selected = selected,
+                                label = { Text(MachineSetupCopy.setupTitle(machine.name), color = MaterialTheme.colorScheme.primary) },
+                                icon = { Icon(painterResource(R.drawable.ic_folder_plus), null, tint = MaterialTheme.colorScheme.primary) },
+                                onClick = { select(dest, OrbitRoute(Destination.DRAFT, id = machine.id, origin = Origin.DRAWER)) },
+                                modifier = Modifier.testTag("setup-machine:${machine.id}"))
+                        }
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
                             navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
-                        val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
-                        Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
-                            enabled = workspace != null && data.fresh) { Text("New session") }
+                        Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) },
+                            enabled = data.fresh) { Text("New session") }
                         TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
                             Icon(painterResource(R.drawable.ic_settings), null); Spacer(Modifier.width(8.dp)); Text("Settings")
                         }
@@ -280,8 +312,23 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             Scaffold(topBar = {
                 // iOS `ConsoleView.foldsChrome`: a phone's page folds the bar away while its own composer holds the
                 // keyboard — back, title and the page's buttons come back when the keyboard goes.
+                val machineName = if (route.destination == Destination.DRAFT && route.workspaceId == null && route.id != null) {
+                    data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), route.id) }?.let(RunnerPage::displayName)
+                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name
+                } else null
                 if (!PageBar.folds(route)) TopAppBar(modifier = Modifier.testTag("app-bar"),
-                    title = { PageBar.Title(route) { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) } },
+                    title = {
+                        PageBar.Title(route) {
+                            if (machineName != null) {
+                                Column {
+                                    Text(MachineSetupCopy.SETUP_PAGE_TITLE, maxLines = 1, style = MaterialTheme.typography.titleMedium)
+                                    Text(machineName, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            } else {
+                                Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
@@ -300,7 +347,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) },
+                                    startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
                                     revision, watches.summaries)
                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
@@ -311,7 +359,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
-                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
+                                Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open) { key, root -> land(key, root) }
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
@@ -387,13 +435,19 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
 }
 
 @Composable
-private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, refresh: () -> Unit) {
+private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, startSession: () -> Unit, refresh: () -> Unit) {
     // A launcher's cold start lands here. Its rows are the workspaces, after the status item; "No workspaces" is not one.
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     ReportDirectoryDrawn(data, list) { it.index in 1..data.workspaces.size }
     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list) {
         item { DirectoryStatus(data, refresh) }
-        if (data.ready && data.workspaces.isEmpty()) item { StatusMessage("No workspaces", "Add a workspace to start a session.") }
+        if (data.ready && data.workspaces.isEmpty()) item {
+            Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(MachineSetupCopy.NO_WORKSPACES_YET, style = MaterialTheme.typography.titleMedium)
+                Text(MachineSetupCopy.NO_WORKSPACES_DETAIL, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = startSession) { Text(MachineSetupCopy.START_A_SESSION) }
+            }
+        }
         val workspaces = orderedWorkspaces(data.workspaces)
         items(workspaces.size) { index ->
             val w = workspaces[index]

@@ -1240,6 +1240,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
+	// What a FAILED finalize names its failure as, when it is one the control plane treats apart: a
+	// run refused for the region (sessionProcessRegionRefused).
+	finalizeSubtype := ""
 	// A normal ack retries for as long as the session lives. During runner
 	// shutdown it gets the same finite drain budget as the provider process, so a
 	// dead control plane cannot keep shutdown blocked forever.
@@ -1633,7 +1636,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
 				}
-				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) {
+				// A turn refused for the region is put back in the queue by a control plane that
+				// knows the subtype, which then answers with the session's waiting status rather
+				// than a terminal one (docs/claude-region-check-contract.md §10). This run is over
+				// either way: its engine has stopped, and the next claim starts another.
+				regionHold := ack.request.Subtype == claudeRegionRefusedSubtype
+				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
 					terminalAckErr = fmt.Errorf("failed-turn turn-complete returned non-terminal status %q", terminalAckStatus)
 				}
 				if terminalAckErr == nil {
@@ -1641,8 +1649,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 					status = terminalAckStatus
 					pendingTerminalAck.clear(ack.request.TurnID)
 					// Every terminal lifecycle transaction retires the generation; do not
-					// issue a redundant release against an already-terminal Session.
-					leaseResetGeneration = ""
+					// issue a redundant release against an already-terminal Session. A
+					// session held in the queue is not one: its generation is released
+					// below, as after any engine that stopped.
+					if terminalTurnCompleteStatus(terminalAckStatus) {
+						leaseResetGeneration = ""
+					}
 				}
 			}
 		}
@@ -1696,6 +1708,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			status = stCancelled
+			break
+		}
+		if st == sessionProcessRegionRefused {
+			status, finalizeSubtype = stFailed, claudeRegionRefusedSubtype
 			break
 		}
 		if ended {
@@ -1758,6 +1774,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// or lost to another process first.
 	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !ownershipLost.Load() {
 		status = stFailed
+		finalizeSubtype = ""
 		lastErrMu.Lock()
 		lastErrorMessage = (*givenUp).Error()
 		lastErrMu.Unlock()
@@ -1850,6 +1867,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		lastErrMu.Lock()
 		finalizeRequest.Error = lastErrorMessage
 		lastErrMu.Unlock()
+		finalizeRequest.Subtype = finalizeSubtype
 	}
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
@@ -1979,6 +1997,13 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 			waitTurnPermit: waitTurnPermit, onLeaseLost: onLeaseLost,
 		})
 	}
+	// A Claude turn that would talk to Anthropic while this runner's connection to it is in a region
+	// Anthropic does not offer Claude in is not started (claude_region.go): nothing is installed or
+	// spawned for it, and the run ends with the refusal as its error, under its own subtype.
+	if refusal := claudeRegionRefusal(ctx, job); refusal != "" {
+		emit(evError, map[string]interface{}{"message": refusal})
+		return sessionProcessRegionRefused, true, false
+	}
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
 	// failed, installed but signed out) fails with something actionable instead of a
@@ -2082,6 +2107,11 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 // Internal provider-generation outcome. It never crosses the runner API; the supervisor uses it
 // to replace a deliberately fenced Claude process without charging the crash-respawn budget.
 const sessionProcessCurrentWorkFenced = "CURRENT_WORK_TARGET_FENCED"
+
+// Internal provider-generation outcome, like the one above: the run's Claude turn was refused for
+// the region before any engine was spawned (claude_region.go). The supervisor finalizes it FAILED
+// with the refusal's subtype.
+const sessionProcessRegionRefused = "CLAUDE_REGION_REFUSED"
 
 // pushLiveDiff reports the worktree as it stands now, with no turn to carry it. It only reads the
 // checkout (liveDiff stages into a throwaway index), so it is safe whatever the engine is doing.
@@ -2285,6 +2315,20 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// Dedup by turnId so we never double-feed claude or desync `pending`.
 				if !inbox.markInflight(resp.TurnID) {
 					continue
+				}
+				// A message is not delivered to an engine whose connection to Anthropic is in a
+				// region Anthropic does not offer Claude in (claude_region.go): nothing is written
+				// for it, its turn is refused, and that report stops this engine. A steer is not
+				// asked: it joins a turn that is already running, which only a confirmed flip stops.
+				if !steer {
+					if refusal := claudeRegionRefusal(procCtx, job); refusal != "" {
+						logln("not delivering a message to", job.SessionID+":", refusal)
+						emit(evError, map[string]interface{}{"message": refusal})
+						refuseRegionTurn(resp.TurnID, refusal, job, completeTurn)
+						setTurn("")
+						inbox.clearInflight(resp.TurnID)
+						continue
+					}
 				}
 				// A steer only means anything while a turn is actually in progress. The
 				// server decides that from the lease, and this is the same question asked of
