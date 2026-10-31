@@ -210,7 +210,7 @@ struct RunnerWindowRow: View {
 private func runnerAttentionGlyph(_ kind: RunnerAttentionKind) -> String {
     switch kind {
     case .offline: return "power"
-    case .engineSignedOut: return "person.crop.circle.badge.exclamationmark"
+    case .noCliSignedIn, .engineSignedOut: return "person.crop.circle.badge.exclamationmark"
     case .checkoutStuck: return "arrow.triangle.branch"
     case .quotaNearLimit: return "gauge.with.dots.needle.67percent"
     case .diskLow: return "internaldrive"

@@ -135,6 +135,9 @@ export function runnerEngineUpdateFailed(version: string, when: string): string 
 export const RUNNER_WORKSPACE_WORKTREES = 'Worktrees';
 export const RUNNER_WORKSPACES_FOOTER =
   'Tap a workspace to open its sessions. Add or change workspaces on the web.';
+/** The words of RUNNER_WORKSPACES_FOOTER the native pages make a link to this runner's page here,
+ *  <origin>/runners/<id> (project 34pLjYBjU6ILsehatEjJs, contract 6). */
+export const RUNNER_WORKSPACES_FOOTER_LINK = 'on the web';
 
 export function runnerWorkspaceRunning(count: number): string {
   return `${count} running`;

@@ -186,7 +186,7 @@ struct RunnersListView: View {
     /// A line of Needs you, opened: the machine's record, the pool's page.
     private func openAttention(_ item: Infrastructure.Attention) {
         switch item.kind {
-        case .offline(let runnerID):
+        case .offline(let runnerID), .noCliSignedIn(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
             } else {
@@ -660,7 +660,7 @@ struct RunnerDetailContent: View {
     }
 
     /// Where it runs: each workspace and how many of its sessions are running. A row opens the
-    /// workspace's sessions; workspaces are added and changed on the web.
+    /// workspace's sessions; workspaces are added and changed on the web, which the footer links to.
     @ViewBuilder private func workspacesSection(_ workspaces: [Agent]) -> some View {
         Section {
             if workspaces.isEmpty {
@@ -681,8 +681,17 @@ struct RunnerDetailContent: View {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
                                 trailing: workspaces.isEmpty ? nil : "\(workspaces.count)")
         } footer: {
-            Text(RunnerPageCopy.RUNNER_WORKSPACES_FOOTER)
+            Text(workspacesFooter)
         }
+    }
+
+    /// The Workspaces footer with "on the web" a link to this runner's page there, which the system opens
+    /// in the browser — on iPhone, iPad and Mac alike.
+    private var workspacesFooter: AttributedString {
+        let footer = RunnerPageFormat.workspacesFooter(runnerID: runner.id, baseURL: model.baseURL)
+        var link = AttributedString(footer.link)
+        link.link = footer.url
+        return AttributedString(footer.before) + link + AttributedString(footer.after)
     }
 
     /// What it is. The name is a page of its own; the rest is read-only.

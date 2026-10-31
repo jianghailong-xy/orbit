@@ -82,7 +82,7 @@ class CursorEngineTest {
         assertEquals(listOf("claude", "antigravity"), rows(without))
         // An engine this build doesn't know yet is still drawn, after the rest.
         assertEquals(listOf("claude", "antigravity", "next-cli"), rows(older(claude, """{"engine":"next-cli","installed":true}""")))
-        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(without), emptyList(), emptyList(), now))
+        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(without), emptyList(), emptyList(), emptyList(), now))
         assertEquals("1 of 3 signed in", Infrastructure.summary(without, now))
     }
 
@@ -102,7 +102,7 @@ class CursorEngineTest {
         // machine card draws it nothing.
         val items = RunnerPage.attention(withCursor, listOf(onCursor), now, latestVersion = null)
         assertEquals(listOf("Cursor CLI signed out"), items.filter { it.kind == "engineSignedOut" }.map { it.short })
-        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(withCursor), emptyList(), emptyList(), now))
+        assertEquals(emptyList<Infrastructure.Attention>(), Infrastructure.attention(listOf(withCursor), emptyList(), emptyList(), emptyList(), now))
         // Cursor CLI's update note is the pinned build's: a fortnight behind the release it doesn't follow is still worth a person.
         assertTrue(items.any { it.kind == "engineNotUpdating" && it.short == "Cursor CLI update failed" })
     }

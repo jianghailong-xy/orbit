@@ -126,8 +126,36 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: 0, runners: []), "None")
 
         // The count is the page's own list: the machine offline is one line of it.
-        let lines = Infrastructure.attention(runners: fleet, memberPools: [], ownPools: [])
+        let lines = Infrastructure.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
         XCTAssertEqual(SettingsHome.infrastructureValue(needsYou: lines.count, runners: fleet), "1 needs you")
+    }
+
+    /// A machine online where no coding CLI is signed in, and no workspace runs on a key, is one line of
+    /// it too, as the web's Settings row counts it (docs/mocks/first-workspace-in-conversation 02, rule 10
+    /// of 04): orbit@austin on 2026-10-31, Claude Code and Codex installed and neither signed in.
+    func testAMachineWithNoCodingCLISignedInNeedsYou() throws {
+        let austin = try JSONDecoder().decode(Runner.self, from: Data(#"""
+        {"id":"austin","name":"orbit@austin","online":true,"engines":[
+          {"engine":"claude","installed":true,"auth":"no"},{"engine":"codex","installed":true,"auth":"no"}]}
+        """#.utf8))
+        func workspace(_ provider: String?, on runner: String = "austin") throws -> Agent {
+            let last = provider.map { #","lastProvider":"\#($0)""# } ?? ""
+            return try JSONDecoder().decode(Agent.self, from: Data(
+                #"{"id":"w-\#(runner)","name":"app","runnerId":"\#(runner)"\#(last)}"#.utf8))
+        }
+        func value(_ runners: [Runner], _ workspaces: [Agent]) -> String {
+            let lines = Infrastructure.attention(runners: runners, workspaces: workspaces, memberPools: [], ownPools: [])
+            return SettingsHome.infrastructureValue(needsYou: lines.count, runners: runners)
+        }
+        XCTAssertEqual(value([austin], []), "1 needs you")
+        XCTAssertEqual(value([austin], [try workspace("claude")]), "1 needs you")
+        XCTAssertEqual(value([austin], [try workspace(nil)]), "1 needs you")
+        // A workspace there on a DeepSeek key runs with nothing signed in.
+        XCTAssertEqual(value([austin], [try workspace("deepseek")]), "1 of 1 online")
+        // Another machine's key does nothing for this one; offline, it is counted once, as offline.
+        XCTAssertEqual(value([austin], [try workspace("deepseek", on: "hpc")]), "1 needs you")
+        let away = try runner("b", online: false)
+        XCTAssertEqual(value([austin, away], []), "2 need you")
     }
 
     func testSharedLinksCountWhatIsOpenForAnyone() {

@@ -651,6 +651,8 @@ describe('runnerCopy', () => {
     expect(copy.RUNNER_WORKSPACES_FOOTER).toBe(
       'Tap a workspace to open its sessions. Add or change workspaces on the web.',
     );
+    // The native pages link these words of it, so they are in it, once.
+    expect(copy.RUNNER_WORKSPACES_FOOTER.split(copy.RUNNER_WORKSPACES_FOOTER_LINK)).toHaveLength(2);
   });
 
   // OrbitKit's parity test reads runnerCopy.ts as text, so the file's shape is part of the contract.

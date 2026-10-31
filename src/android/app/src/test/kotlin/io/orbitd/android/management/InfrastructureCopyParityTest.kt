@@ -31,7 +31,7 @@ class InfrastructureCopyParityTest {
         assertTrue("Infrastructure holds no words", words.size >= 15)
         assertEquals("Infrastructure strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
         // The sentences built around a name keep iOS's words around it.
-        listOf("\"\\(machine) is offline\"",
+        listOf("\"\\(machine) is offline\"", "\"\\(machine) has no coding CLI signed in\"",
             "\"Last seen \\(", "\"Never checked in\"", "\" · its subscriptions are unavailable until it’s back\"", "\"\\(pool) is unavailable\"",
             "\"\\(reason) · no session can start on it\"", " · \\(busy) / \\(all) slots busy\"", "\"\\(active) / \\(max) running\"",
             "\"Install failed\"", "\"Update failed\"", "\"Updating…\"",

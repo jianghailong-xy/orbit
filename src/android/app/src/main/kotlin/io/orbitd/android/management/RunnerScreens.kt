@@ -43,13 +43,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -400,7 +403,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
                 }
             }
-            FormSection(RunnerCopy.WORKSPACES, workspaces.size.takeIf { it > 0 }?.toString(), RunnerCopy.WORKSPACES_FOOTER) {
+            FormSection(RunnerCopy.WORKSPACES, workspaces.size.takeIf { it > 0 }?.toString(),
+                footerContent = { WorkspacesFooter(RunnerPage.runnerWebUrl(api.handle.account.server, id)) }) {
                 if (workspaces.isEmpty()) Text("No workspaces on this runner yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
@@ -472,6 +476,19 @@ private fun RunnerHead(runner: JsonObject, now: Long) {
             RunnerPage.hostLine(runner).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
+}
+
+/** The Workspaces footer with "on the web" a link to this runner's page there, which the browser opens (project 34pLjYBjU6ILsehatEjJs,
+ * contract 6; OrbitKit RunnerPageFormat.workspacesFooter). Without an address the words stay plain. */
+@Composable
+private fun WorkspacesFooter(url: String?) {
+    val (before, words, after) = RunnerPage.workspacesFooter()
+    val link = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary))
+    Text(buildAnnotatedString {
+        append(before)
+        if (url != null) withLink(LinkAnnotation.Url(url, link)) { append(words) } else append(words)
+        append(after)
+    }, Modifier.testTag("workspaces-footer"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
