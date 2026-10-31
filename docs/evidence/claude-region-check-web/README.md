@@ -140,3 +140,40 @@ markup, and `NewSessionProviderHero`, `sessionProviderChoices`, `runnerAttention
   | OrbitKit `swift test` | 4274 tests, 5 skipped, 0 failures | 4277 tests, 5 skipped, 0 failures |
   | Android `:app:testDebugUnitTest` | 1972 tests, 0 failed | 1973 tests, 0 failed |
   | Android `:core:test` | 310 tests, 0 failed | 310 tests, 0 failed |
+
+## Revision 2: the macOS and iOS apps build
+
+Revision 1 added two enum cases to OrbitKit (ba56233df) and did not change OrbitApp:
+`RunnerAttentionKind.claudeRegionUnsupported` and `RunnerAttentionActionKind.checkRegion`. OrbitApp switches over
+both exhaustively:
+
+- `runnerAttentionGlyph` in `Views/RunnerPageParts.swift`;
+- `attentionButton` in `Views/SkillsRunnersView.swift`.
+
+OrbitKit has no library evolution, so the macOS and iOS apps stopped compiling. Nothing that runs on Linux compiles
+OrbitApp. **fed5eae30 adds both cases:**
+
+- the glyph is `exclamationmark.triangle`, the warning the web draws;
+- `.checkRegion` draws nothing (`EmptyView()`) until the iOS and macOS region task wires Check again.
+
+**No other switch is left:**
+
+- No other switch in OrbitApp or `src/ios` names a member of either enum. `SkillsRunnersView.swift:189` and
+  `InfrastructureSections.swift:111` switch over `Infrastructure.Attention.Kind`, and `RunnerPageParts.swift:39` over
+  `RunnerPageFormat.Presence`, neither of which changed.
+- The other Swift API this branch changed (`Runner.region`, `RunnerAttentionRunner.region`, `noCliSignedIn`'s
+  defaulted `region:`) is not constructed or referenced from OrbitApp or `src/ios`.
+- In OrbitKit, the two files that use the enums have no platform gates, so the Linux suite compiled them.
+
+**A real build of fed5eae30:** client.yml dispatched on `probe/region-check-web`, run **41247260446**, all jobs
+**success**. The probe branch was deleted afterwards.
+
+| Job | Conclusion | What its log says |
+| --- | --- | --- |
+| macOS (build + test), 124673338064 | success | OrbitKit `swift test` on macOS: "Executed 4180 tests, with 5 tests skipped and 0 failures", `ClaudeRegionCopyParityTests` among them. OrbitApp `swift build`: "[406/460] Compiling OrbitApp SkillsRunnersView.swift", "[456/482] Compiling OrbitApp RunnerPageParts.swift", "Build complete! (167.80s)". |
+| iOS (generate + build), 124673337911 | success | "SwiftCompile normal arm64 …/OrbitApp/Views/SkillsRunnersView.swift (in target 'Orbit' from project 'Orbit')", the same for `RunnerPageParts.swift`, then "** BUILD SUCCEEDED **". |
+| Navigation and Font tokens | success | |
+
+- **Android:** reads `SkillsRunnersView.swift` only for an unrelated sentence (`InfrastructureCopyParityTest`), so
+  revision 1's runs stand.
+- **web vitest on fed5eae30:** 461 files, 6082 tests, all passed. The web did not change, so the screenshots stand.
