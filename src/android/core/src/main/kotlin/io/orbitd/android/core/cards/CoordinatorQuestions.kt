@@ -19,6 +19,8 @@ object CoordinatorQuestions {
     const val recommended = "Recommended"
     const val deliveredToCoordinator = "Delivered to the current coordinator"
     const val waitingForCoordinator = "Waiting for this project’s next coordinator"
+    /** An answer on the queue behind the turn its coordinator is running: told, but not read yet (web `QUEUED_FOR_COORDINATOR`). */
+    const val queuedForCoordinator = "Queued — the coordinator reads it when its current turn ends"
     const val freeAnswerPrompt = "Your answer"
     const val otherOption = "Other — say it in my own words"
     const val answeredByYou = "Answered by you"

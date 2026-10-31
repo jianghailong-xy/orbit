@@ -1,0 +1,23 @@
+# Android gate on 7bc3184df: gradlew test lintDebug assembleDebug (the command scripts/verify.sh runs), TZ=UTC, HPC, 2026-10-27
+== 2026-10-27T16:35:05Z HEAD 7bc3184dfed130728f00784a9ceb68d3f90eb276 attempt 1; avail=3468M swapfree=16753M load=17.99
+== worktree changes against HEAD:
+ M src/android/app/src/androidTest/kotlin/io/orbitd/android/increments/OwnerAnswerCardDeviceTest.kt
+> Task :app:assembleDebug
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 14m 8s
+== gradle exit 0 at 2026-10-27T16:49:14Z
+app-testDebugUnitTest: 1855 tests, 0 failed
+app-testReleaseUnitTest: 1855 tests, 0 failed
+core-test: 283 tests, 0 failed
+total: 3993 tests, 0 failed
+# the classes this change touches
+app-testDebugUnitTest io.orbitd.android.cards.OwnerAnswerLineViewTest: tests=8 failures=0 errors=0
+app-testDebugUnitTest io.orbitd.android.cards.QuestionRecordViewsTest: tests=4 failures=0 errors=0
+app-testDebugUnitTest io.orbitd.android.reader.OwnerAnswerCopyParityTest: tests=4 failures=0 errors=0
+app-testDebugUnitTest io.orbitd.android.reader.QueuedTailTest: tests=15 failures=0 errors=0
+app-testReleaseUnitTest io.orbitd.android.cards.OwnerAnswerLineViewTest: tests=8 failures=0 errors=0
+app-testReleaseUnitTest io.orbitd.android.cards.QuestionRecordViewsTest: tests=4 failures=0 errors=0
+app-testReleaseUnitTest io.orbitd.android.reader.OwnerAnswerCopyParityTest: tests=4 failures=0 errors=0
+app-testReleaseUnitTest io.orbitd.android.reader.QueuedTailTest: tests=15 failures=0 errors=0
+core-test io.orbitd.android.core.cards.CoordinatorQuestionsTest: tests=11 failures=0 errors=0
+core-test io.orbitd.android.core.cards.OwnerAnswerLineTest: tests=4 failures=0 errors=0

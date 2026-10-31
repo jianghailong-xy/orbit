@@ -7,6 +7,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.BackgroundWakeLine
+import io.orbitd.android.cards.LocalAnsweredQuestions
+import io.orbitd.android.cards.OwnerAnswerLineView
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.WatchWakeLine
@@ -124,11 +126,15 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
 
 /** One queued turn at the transcript's end: its card (dashed while it can still be withdrawn), its reply cards, its wake's line, or its
  * words — then the queue's own line: "Queued" and "Cancel", or, for a steer on its way into the running turn, how far it got. A steer
- * known only from its receipt says how it came out and why, with [putBack], its words' way back to the composer (web `QueuedTurnMeta`). */
+ * known only from its receipt says how it came out and why, with [putBack], its words' way back to the composer (web `QueuedTurnMeta`).
+ * The owner's answer to a question the conversation holds is that question's card, which says it is queued itself, and has no Cancel:
+ * the answer is given, and taking it off the queue would leave the coordinator never told (web `OwnerAnswerLine`). */
 @Composable
 internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabled: Boolean, putBack: (() -> Unit)? = null,
     cancel: (String) -> Unit) {
-    val withdraw: (() -> Unit)? = if (turn.cancelable && cancelEnabled) ({ cancel(turn.turnId!!) }) else null
+    val answered = LocalAnsweredQuestions.current
+    val handover = turn.cards.firstOrNull { it.key.endsWith(":ownerAnswer") && answered?.record(it.source) != null }
+    val withdraw: (() -> Unit)? = if (turn.cancelable && cancelEnabled && handover == null) ({ cancel(turn.turnId!!) }) else null
     val foot = @Composable {
         if (turn.delivery != null) SteerStateLine(SteerOutcome(turn.delivery, turn.deliveryReason),
             why = SteerDelivery.failureExplanation(turn.deliveryCode, turn.deliveryReason), putBack = putBack)
@@ -140,6 +146,12 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
                 onCancelQueued = withdraw)
             // A watch's wake waiting for a runner (A08-14): its line, dashed, and the queue's own line, which asks before it withdraws.
             turn.watch != null -> WatchWakeLine(turn.watch, null, open, queued = turn.cancelable, onWithdraw = withdraw)
+            handover != null -> {
+                turn.cards.forEach { card ->
+                    if (card === handover) OwnerAnswerLineView(card, turn.event, queued = turn.delivery == null) else TranscriptCardView(card, open, turn.event)
+                }
+                foot()
+            }
             turn.cards.any { it.key.contains(":reply:") } -> {
                 // A session's reply: its reply cards, solid, and one queue line under them all.
                 turn.cards.forEach { TranscriptCardView(it, open, turn.event) }
