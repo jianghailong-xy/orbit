@@ -949,7 +949,7 @@ function EngineRow({
               {CLAUDE_REGION_SUPPORTED_REGIONS}
             </a>
           </div>
-          <div className="rsi-hint re-upd">
+          <div className="rsi-hint re-region-checked">
             {claudeRegionChecked(ago(runner.region.checkedAt, now), runner.region.name, runner.region.viaProxy)}
           </div>
         </div>
