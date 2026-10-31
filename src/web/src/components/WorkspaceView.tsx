@@ -9669,6 +9669,8 @@ export function WorkspaceView({
                 <span className="scope-menu-row">
                   <span className="composer-provider-name">
                     {(choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                    {/* The runner's Claude region has no fix on any page (board 02 C ③): the row names the
+                        reason alone, and its press opens the machine's row, which explains it. */}
                     {blocked
                       ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}${choice.regionBlocked ? '' : ', fix it →'}`
                       : choice.label}
