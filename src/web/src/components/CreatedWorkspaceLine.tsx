@@ -1,6 +1,6 @@
 import { HomeOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type SessionDetail } from '../api';
 import { encodeId } from '../lib/idCodec';
@@ -47,10 +47,13 @@ export function CreatedWorkspaceLine({
     },
     onError: (e: Error) => message.error(CREATED_RENAME_FAILED, e.message),
   });
+  // Escape leaves through the same blur as Enter, and has to leave nothing behind.
+  const dropped = useRef(false);
   const save = () => {
     const name = renaming?.trim();
     setRenaming(null);
-    if (name && name !== workspace.name) rename.mutate(name);
+    if (dropped.current) dropped.current = false;
+    else if (name && name !== workspace.name) rename.mutate(name);
   };
   // A workspace deleted since is still what this conversation made; it just has nothing to change.
   const live = !workspace.deletedAt;
@@ -69,8 +72,10 @@ export function CreatedWorkspaceLine({
           onBlur={save}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
-            if (e.key === 'Enter') e.currentTarget.blur();
-            if (e.key === 'Escape') setRenaming(null);
+            if (e.key === 'Enter' || e.key === 'Escape') {
+              dropped.current = e.key === 'Escape';
+              e.currentTarget.blur();
+            }
           }}
         />
       ) : (

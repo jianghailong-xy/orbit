@@ -6444,7 +6444,7 @@ export function WorkspaceView({
       // Sent by itself, so it stays where it waited and says so there: it is in no composer to keep,
       // and the toast below would be gone by the time anyone looks.
       if (vars.held) {
-        setup.failHeld(e.message);
+        if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));

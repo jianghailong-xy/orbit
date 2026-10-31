@@ -1570,7 +1570,7 @@ export function RunnerDetailPage() {
                   header doesn't reflow out from under the pointer. */}
               <Button
                 // With none yet, the way in is a session (below): the form stays, for the advanced use.
-                variant={workspaces.length === 0 ? 'default' : 'primary'}
+                variant={workspacesQ.isSuccess && workspaces.length === 0 ? 'default' : 'primary'}
                 icon={<PlusOutlined />}
                 disabled={formOpen && !editing}
                 onClick={() => switchTo(openCreate)}

@@ -1445,7 +1445,7 @@ export function WorkspacesHead({
       {/* None yet: the head stands over machines to set up, which count nothing and arrange nothing. */}
       {count > 0 && <span className="tp-count">{count}</span>}
       {!editing && <CaretDownOutlined className={`tp-caret ${open ? '' : 'collapsed'}`} />}
-      {count > 0 && (
+      {(count > 0 || editing) && (
         <button
           type="button"
           className={`tp-group-action${editing ? ' editing' : ''}`}

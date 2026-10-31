@@ -29,6 +29,7 @@ vi.mock('../api', async (importOriginal) => {
     getSessionRetryMessage: vi.fn(),
     listQueuedTurns: vi.fn(),
     readDirProbe: vi.fn(),
+    uploadAttachment: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -46,6 +47,7 @@ const {
   getSessionRetryMessage,
   listQueuedTurns,
   readDirProbe,
+  uploadAttachment,
 } = await import('../api');
 const apiMock = vi.mocked(api);
 const createMock = vi.mocked(createInteractiveSession);
@@ -151,6 +153,8 @@ beforeEach(() => {
   vi.mocked(getSessionEventPage).mockImplementation((async () => ({ events, hasMore: eventsHaveMore })) as never);
   vi.mocked(getSessionRetryMessage).mockResolvedValue({ text: '' } as never);
   vi.mocked(listQueuedTurns).mockImplementation(async () => []);
+  vi.mocked(uploadAttachment).mockReset();
+  vi.mocked(uploadAttachment).mockImplementation(async () => ({ id: 'att-1' }) as never);
   apiMock.mockReset();
   apiMock.mockImplementation(((path: string, options?: { method?: string; body?: unknown }) => {
     if (options?.method === 'PATCH') {
@@ -464,6 +468,55 @@ describe('rule 6: what is sent before both steps are done', () => {
     await act(async () => button('Withdraw')!.click());
     await settle();
     expect(composer().value).toBe('!ls -la');
+  });
+
+  /** A file pasted into the composer, uploaded as a staged chip. */
+  async function paste(file: File): Promise<void> {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      value: { items: [{ kind: 'file', getAsFile: () => file }] },
+    });
+    await act(async () => {
+      composer().dispatchEvent(event);
+    });
+    await settle();
+  }
+
+  it('its files wait with it, as the ids they already are, and go with the first message', async () => {
+    await openMachine();
+    await paste(new File(['log'], 'build.log', { type: 'text/plain' }));
+    expect(uploadAttachment).toHaveBeenCalledTimes(1);
+    await send('Look at this log');
+    expect(held()).toBeTruthy();
+    expect(mounted().querySelector('.workspace-composer')?.textContent).not.toContain('build.log');
+
+    await useFolder();
+    await machineReports(signedIn());
+    await waitForUi(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][0]).toMatchObject({ prompt: 'Look at this log', attachmentIds: ['att-1'] });
+  });
+
+  it('withdrawn, its files come back to the composer with its words', async () => {
+    await openMachine();
+    await paste(new File(['log'], 'build.log', { type: 'text/plain' }));
+    await send('Look at this log');
+    await act(async () => button('Withdraw')!.click());
+    await settle();
+    expect(composer().value).toBe('Look at this log');
+    expect(mounted().querySelector('.workspace-composer')?.textContent).toContain('build.log');
+  });
+
+  it('a file sent with no words waits too, and comes back the same way', async () => {
+    await openMachine();
+    await paste(new File(['log'], 'build.log', { type: 'text/plain' }));
+    await waitForUi(() => expect(sendButton().disabled).toBe(false));
+    await act(async () => sendButton().click());
+    await settle();
+    expect(held()).toBeTruthy();
+    await act(async () => button('Withdraw')!.click());
+    await settle();
+    expect(composer().value).toBe('');
+    expect(mounted().querySelector('.workspace-composer')?.textContent).toContain('build.log');
   });
 
   it('one message waits at a time: a second is told so, and stays in the composer', async () => {

@@ -11,6 +11,12 @@
   padding: 24px 24px 4px;
 }
 
+@media (max-width: 640px) {
+  .msc-draft {
+    padding-inline: 0;
+  }
+}
+
 .msc {
   box-sizing: border-box;
   padding: 18px 20px 14px;
