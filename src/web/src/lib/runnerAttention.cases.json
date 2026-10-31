@@ -1603,6 +1603,50 @@
     }
   },
   {
+    "name": "no CLI signed in, a workspace on a DeepSeek key and one on the Claude login: that login, as before",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-orbit", "name": "orbit", "lastProvider": "deepseek", "workDir": "~/orbit" },
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Claude signed out",
+          "title": "Claude is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Claude signed out",
+      "subtitle": "lab-host · v0.1.240",
+      "disk": null
+    }
+  },
+  {
     "name": "one CLI signed in and no workspace: nothing for the signed-out one",
     "input": {
       "runner": {
