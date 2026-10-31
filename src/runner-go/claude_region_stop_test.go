@@ -270,6 +270,48 @@ func TestConfirmedFlipStopsATurnTheEngineRunsOnItsOwn(t *testing.T) {
 	}
 }
 
+// A flip confirmed while the engine is idle stops nothing; a turn the engine then starts on its own is stopped by
+// the next blocked answer, the periodic check's, and its run ends as above.
+func TestBlockedAnswerAfterTheFlipStopsATurnStartedSince(t *testing.T) {
+	isolateClaudeRegionEnv(t)
+	engineOutwaitsTheTest(t)
+	rig := newRegionRig(t, regionAnswerAllowed, anthropicKey(), nil,
+		fakeStep{Await: "user"}, fakeStep{Emit: "replay_user"}, fakeStep{Emit: "system_init"},
+		fakeStep{Emit: "assistant", Text: "renamed it"}, fakeStep{Emit: "result", Text: "renamed it"},
+		fakeStep{Await: "release", Text: "wake"},
+		fakeStep{Emit: "assistant", Text: "the build finished; checking it"},
+		fakeStep{Await: "release", Text: "finish"},
+		fakeStep{Emit: "result", Text: "checked it"},
+	)
+	rig.awaitSettled("turn-1")
+	waitUntil(t, func() bool { return !rig.pool.isActive(rig.live) }, "turn-1 never parked")
+	pid := rig.fake.Spawns()[0].PID
+
+	rig.flipToBlocked()
+	rig.clock.Advance(claudeRegionRecheckAfter) // confirmed, with the engine idle
+	if !processAlive(pid) || len(rig.finalizes()) != 0 {
+		t.Fatal("a confirmed flip stopped an idle engine")
+	}
+	rig.fake.Release("wake")
+	waitUntil(t, func() bool { return rig.hasEvent(evAssistant, "the build finished; checking it") },
+		"the engine never started a turn of its own")
+	rig.clock.Advance(5 * time.Minute)
+	rig.check.check(context.Background()) // the periodic check: blocked still
+	rig.awaitEnd()
+
+	if !processGoneWithin(pid, fakeClaudeTimeout) {
+		t.Fatalf("the engine (pid %d) is still running its own turn", pid)
+	}
+	finals := rig.finalizes()
+	if len(finals) != 1 || finals[0].Status != stFailed || finals[0].Subtype != claudeRegionStoppedSubtype ||
+		finals[0].Error != atlasRussiaStopped {
+		t.Fatalf("finalizes = %+v, want one: FAILED / region_stopped with %q", finals, atlasRussiaStopped)
+	}
+	if errs := rig.errors(); !slices.Equal(errs, []string{atlasRussiaStopped}) {
+		t.Fatalf("the transcript's errors are %q, want the stopped sentence once", errs)
+	}
+}
+
 // The stop is the engine's turn's alone: an acceptance command the runner is running for an Anthropic-bound
 // session when the flip is confirmed talks to nobody, and runs to its own exit; the engine beside it stays up.
 func TestConfirmedFlipLeavesAnAcceptanceCommandRunning(t *testing.T) {

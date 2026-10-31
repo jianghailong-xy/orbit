@@ -214,13 +214,13 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	v.At = c.clock.Now()
 	c.mu.Lock()
 	previous, seen := c.latest[proxy]
-	confirmed := c.noteFlipLocked(proxy, v)
+	stopping, confirmed := c.noteFlipLocked(proxy, v)
 	c.latest[proxy] = v
 	if v.Verdict != claudeRegionUnknown {
 		c.decided[proxy] = v
 	}
 	var stops []func(string)
-	if confirmed {
+	if stopping {
 		for e := range c.engines {
 			stops = append(stops, e.stop)
 		}
@@ -244,6 +244,8 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	if confirmed {
 		logln(fmt.Sprintf("Claude region (%s): still blocked a minute on — stopping the running Anthropic-bound Claude turns of %d engine(s)",
 			how, len(stops)))
+	}
+	if stopping {
 		sentence := claudeRegionStoppedError(c.machine, v.Name)
 		for _, stop := range stops {
 			stop(sentence)
@@ -252,13 +254,15 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	return v
 }
 
-// noteFlipLocked keeps the flip through proxy up to date with answer v, and reports whether v confirms it (owner
-// decision ④, contract §10). A blocked answer while turns through proxy run — the last decided verdict allowed,
-// none decided yet, or a blocked one past its carry-over — starts a flip, and the check is made again
-// claudeRegionRecheckAfter later. A blocked answer at least that long after the flip's first confirms it, once. An
-// allowed answer ends it. An unknown one leaves it standing, as it leaves the verdict: the next decided answer, the
-// recheck's or a later one, settles it.
-func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) bool {
+// noteFlipLocked keeps the flip through proxy up to date with answer v, and reports whether v stops the running
+// turns, and whether v is the answer that confirms the flip (owner decision ④, contract §10). A blocked answer while
+// turns through proxy run — the last decided verdict allowed, none decided yet, or a blocked one past its
+// carry-over — starts a flip, and the check is made again claudeRegionRecheckAfter later. A blocked answer at least
+// that long after the flip's first confirms it, and it and every blocked answer after it stop what is running then:
+// a turn an engine starts on its own after the confirmation is stopped by the next one. An allowed answer ends the
+// flip. An unknown one leaves it standing, as it leaves the verdict: the next decided answer, the recheck's or a
+// later one, settles it.
+func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
 	flip := c.flips[proxy]
 	switch v.Verdict {
 	case claudeRegionAllowed:
@@ -278,14 +282,15 @@ func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) 
 				flip.recheck = c.clock.AfterFunc(claudeRegionRecheckAfter, func() { c.check(c.lifetime) })
 			}
 			c.flips[proxy] = flip
-			return false
+			return false, false
 		}
-		if !flip.confirmed && v.At.Sub(flip.at) >= claudeRegionRecheckAfter {
+		if v.At.Sub(flip.at) >= claudeRegionRecheckAfter {
+			confirmed = !flip.confirmed
 			flip.confirmed = true
-			return true
+			return true, confirmed
 		}
 	}
-	return false
+	return false, false
 }
 
 // register adds a running Claude engine whose turns talk to Anthropic to what a confirmed flip stops, until the

@@ -247,10 +247,11 @@ Where runner-go stops (④, `claude_region.go`):
   decided, or a blocked one past its carry-over. One blocked answer stops nothing; it refuses new turns, as above.
   The runner checks again 60 seconds later (`claudeRegionRecheckAfter`), if the check runs in its loop (`orbit
   doctor`'s does not).
-- **A blocked answer at least 60 seconds after the flip's first** confirms it, once: the recheck's, or, after an
-  unknown recheck, the next decided answer (the five-minute check, a turn's check, Check again). An allowed answer
-  ends the flip and stops nothing. A blocked one sooner than that, such as an early Check again, neither confirms
-  nor ends it.
+- **A blocked answer at least 60 seconds after the flip's first** confirms it: the recheck's, or, after an unknown
+  recheck, the next decided answer (the five-minute check, a turn's check, Check again). That answer, and every
+  blocked answer after it, stops what is running then, so a turn an engine starts on its own after the
+  confirmation is stopped by the next check. An allowed answer ends the flip and stops nothing. A blocked one sooner
+  than that, such as an early Check again, neither confirms nor ends it.
 - **A confirmed flip** stops every running Claude engine whose turns talk to Anthropic (§8); each one registered
   with the check when it was spawned. The engine is killed. The turn Orbit gave it is reported on turn-complete:
   `FAILED`, `region_stopped`, the stopped sentence in `error` and `result`, with what the turn left in the worktree.

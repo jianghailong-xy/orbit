@@ -136,7 +136,8 @@ func TestClaudeRegionUnknownWithoutABlockedVerdictIsAllowed(t *testing.T) {
 }
 
 // Allowed to blocked: the check is made again a minute on, and its second blocked answer stops the running
-// Anthropic-bound turns, once, with the stopped sentence.
+// Anthropic-bound turns with the stopped sentence; so does every blocked answer after it, for what has started
+// since. An unknown answer stops nothing.
 func TestClaudeRegionFlipIsCheckedAgainAMinuteOnAndConfirmed(t *testing.T) {
 	stub, clock, check, engine := regionFlipRig(t, regionAnswerAllowed)
 	ctx := context.Background()
@@ -161,13 +162,18 @@ func TestClaudeRegionFlipIsCheckedAgainAMinuteOnAndConfirmed(t *testing.T) {
 		t.Fatalf("stops = %q, want one, with %q", got, atlasRussiaStopped)
 	}
 
-	// The blocked answers after it are the same flip: nothing is stopped again.
+	// Each blocked answer after it stops what has started since (a turn an engine runs on its own); an unknown
+	// one, which only keeps the verdict, stops nothing.
 	clock.Advance(5 * time.Minute)
 	check.check(ctx)
+	stub.setAnswer(regionAnswerUnknown)
+	clock.Advance(5 * time.Minute)
+	check.check(ctx)
+	stub.setAnswer(regionAnswerBlocked)
 	clock.Advance(time.Hour)
 	check.check(ctx)
-	if got := engine.stops(); len(got) != 1 {
-		t.Fatalf("stops = %q: the same flip stopped turns again", got)
+	if got := engine.stops(); len(got) != 3 {
+		t.Fatalf("stops = %q, want one for each of the three blocked answers since the minute was up", got)
 	}
 
 	// Allowed ends the flip; the next blocked answer is a new one, with its own minute.
@@ -177,11 +183,11 @@ func TestClaudeRegionFlipIsCheckedAgainAMinuteOnAndConfirmed(t *testing.T) {
 	stub.setAnswer(regionAnswerBlocked)
 	clock.Advance(5 * time.Minute)
 	check.check(ctx)
-	if got := engine.stops(); len(got) != 1 {
+	if got := engine.stops(); len(got) != 3 {
 		t.Fatalf("stops = %q: a new flip stopped turns on its first blocked answer", got)
 	}
 	clock.Advance(claudeRegionRecheckAfter)
-	if got := engine.stops(); len(got) != 2 || got[1] != atlasRussiaStopped {
+	if got := engine.stops(); len(got) != 4 || got[3] != atlasRussiaStopped {
 		t.Fatalf("stops = %q, want the new flip confirmed a minute on", got)
 	}
 }
