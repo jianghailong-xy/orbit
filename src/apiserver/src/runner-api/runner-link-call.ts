@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { toUuid } from '@orbit/shared';
 
+import { holdIdleConnections } from '../common/idle-connections';
 import { markRunnerLinkCall } from '../common/runner-link-call';
 import type { RunnerLinkErrorFields } from '../common/runner-link-error.filter';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -235,7 +236,8 @@ export async function listenForRunnerLinkCalls(
     return null;
   }
   const host = settings.host?.trim() || RUNNER_LINK_INTERNAL_DEFAULT_HOST;
-  const server = createServer(runnerLinkCallListener(link.config, app.getHttpAdapter().getInstance()));
+  // Idle connections are held longer than the gateway holds them (common/idle-connections.ts).
+  const server = holdIdleConnections(createServer(runnerLinkCallListener(link.config, app.getHttpAdapter().getInstance())));
   try {
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);

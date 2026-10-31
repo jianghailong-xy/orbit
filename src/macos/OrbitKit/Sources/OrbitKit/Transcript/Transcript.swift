@@ -143,6 +143,13 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// `text` — the words written for the agent. Nil for every other turn, and for every answer stored
     /// before the payload existed, which keeps the reading it has always had.
     public var ownerAnswer: OwnerAnswer?
+    /// A fact told to this session — a coordinator told of a committed fact, or a session the answer to
+    /// its criteria proposal — when the control plane recorded what the line says and when it was sent
+    /// beside the echo (`coordinatorDelivery`, see `CoordinatorDelivery.parse`). Nobody typed it either:
+    /// the console draws one line, "Evidence revision 1 submitted: <task> · Sent to the coordinator ·
+    /// 07:30 PM", that opens to `text` — the words written for the agent. Nil for every other turn, and
+    /// for every delivery stored before the payload existed, which keeps the reading it has always had.
+    public var coordinatorDelivery: CoordinatorDelivery?
     /// The turn that starts a task's run, when the control plane recorded the task its brief was built
     /// from beside the echo (`taskStart`, see `TaskStart.parse`). Nobody typed this turn either: the
     /// console draws the task as a card instead of the bubble, with `text` — the brief written for the
@@ -208,7 +215,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil, withdrawable: Bool = false,
                 itemCard: OpenItemDelivery? = nil,
-                ownerAnswer: OwnerAnswer? = nil, taskStart: TaskStart? = nil,
+                ownerAnswer: OwnerAnswer? = nil, coordinatorDelivery: CoordinatorDelivery? = nil,
+                taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
@@ -231,6 +239,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.withdrawable = withdrawable
         self.itemCard = itemCard
         self.ownerAnswer = ownerAnswer
+        self.coordinatorDelivery = coordinatorDelivery
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
@@ -248,7 +257,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, ownerAnswer, taskStart, startedCard, sessionMessage, sessionReplies
+        case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
+        case sessionMessage, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
         case receipt, deliveryCode, deliveryReason
     }
@@ -273,6 +283,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for the owner's answer handed to the coordinator: a snapshot from before it existed keeps
         // the bubble.
         ownerAnswer = try? c.decodeIfPresent(OwnerAnswer.self, forKey: .ownerAnswer)
+        // And for a fact told to this session: a snapshot from before it existed keeps the bubble.
+        coordinatorDelivery = try? c.decodeIfPresent(CoordinatorDelivery.self, forKey: .coordinatorDelivery)
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)

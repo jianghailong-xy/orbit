@@ -1,5 +1,4 @@
 import {
-  Suspense,
   lazy,
   useEffect,
   useId,
@@ -105,6 +104,7 @@ import { AppLink } from './AppLink';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
+import { LazyBoundary } from './ErrorBoundary';
 import { MainBranchSelect } from './MainBranchSelect';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
@@ -677,9 +677,9 @@ export function StartProjectCard({
         </div>
         <div className="start-card-plan">
           {graph ? (
-            <Suspense fallback={levels}>
+            <LazyBoundary fallback={levels}>
               <LazyStartPlanGraph projectId={projectId} data={graph} fallback={levels} onDrawn={setGraphDrawn} />
-            </Suspense>
+            </LazyBoundary>
           ) : (
             levels
           )}
@@ -696,9 +696,9 @@ export function StartProjectCard({
             </button>
           ) : null}
           {graph && graphOpen ? (
-            <Suspense fallback={null}>
+            <LazyBoundary fallback={null}>
               <LazyStartTaskGraph projectId={projectId} data={graph} onClose={() => setGraphOpen(false)} />
-            </Suspense>
+            </LazyBoundary>
           ) : null}
         </div>
         {error ? (

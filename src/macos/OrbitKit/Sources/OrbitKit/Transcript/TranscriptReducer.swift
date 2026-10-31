@@ -1347,6 +1347,9 @@ public struct TranscriptReducer: Sendable, Codable {
         let itemCard = OpenItemDelivery.parse(ev.payload)
         // And for the owner's answer handed to the coordinator (`ownerAnswer`, `OwnerAnswer.parse`).
         let ownerAnswer = OwnerAnswer.parse(ev.payload)
+        // And for a fact told to this session, or the answer to its criteria proposal
+        // (`coordinatorDelivery`, `CoordinatorDelivery.parse`).
+        let coordinatorDelivery = CoordinatorDelivery.parse(ev.payload)
         // The same for a task run's opening turn (`taskStart`, `TaskStart.parse`): the payload, never
         // the brief's text.
         let taskStart = TaskStart.parse(ev.payload)
@@ -1424,6 +1427,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 // The card is the event's own: it rides whichever row ends up drawing this turn.
                 b.itemCard = itemCard
                 b.ownerAnswer = ownerAnswer
+                b.coordinatorDelivery = coordinatorDelivery
                 b.taskStart = taskStart
                 b.startedCard = startedCard
                 b.sessionMessage = sessionMessage
@@ -1464,7 +1468,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                 note: recorded?.note,
                                 steer: steer, delivery: delivery,
                                 withdrawable: withdrawable,
-                                itemCard: itemCard, ownerAnswer: ownerAnswer, taskStart: taskStart,
+                                itemCard: itemCard, ownerAnswer: ownerAnswer,
+                                coordinatorDelivery: coordinatorDelivery, taskStart: taskStart,
                                 startedCard: startedCard,
                                 sessionMessage: sessionMessage,
                                 sessionReplies: sessionReplies,

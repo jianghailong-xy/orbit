@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DownloadOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SessionChangedFile } from '../api';
+import type { SessionChangedFile, SessionFilePatch } from '../api';
 import { worktreeFileQuery } from '../lib/queries';
 import {
   FILE_DELETED,
@@ -21,15 +21,22 @@ import { ImagePreview } from './ui/ImagePreview';
  * viewer when pressed; anything else is offered as a download. What is read is the file as it is now,
  * not a before/after pair: a modified picture shows its current version.
  *
+ * Blur-up: when the stored diff carries the runner's tiny copy of the picture (`patch.preview`), it is
+ * drawn blurred at the picture's own size the moment the file opens, and the picture replaces it once
+ * painted (docs/mocks/worktree-file-preview-web, 02-blur-up).
+ *
  * `head` is the pane head's start (file nav and path); the kind, size and Download follow it.
  */
 export function WorktreeFilePreview({
   sessionId,
   file,
+  patch,
   head,
 }: {
   sessionId: string;
   file: SessionChangedFile;
+  /** The file's entry in the stored diff: for a picture, the runner's blur-up placeholder and size. */
+  patch?: SessionFilePatch;
   head: ReactNode;
 }) {
   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
@@ -43,7 +50,16 @@ export function WorktreeFilePreview({
   // read when Download is pressed.
   const q = useQuery({ ...query, enabled: image && !deleted });
   const url = useObjectUrl(q.data);
+  // Blur-up: the runner's tiny placeholder, drawn blurred at the picture's own size from the moment
+  // the file opens, until the picture itself has been painted over it. Once painted it stays gone: a
+  // later read of the same file (a turn's end refreshes it) swaps one sharp picture for another.
+  const placeholder =
+    image && !deleted && patch?.preview && patch.width && patch.height
+      ? { src: patch.preview, width: patch.width, height: patch.height }
+      : null;
+  const [painted, setPainted] = useState(false);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const dims = size ?? placeholder;
   const [broken, setBroken] = useState(false);
   // Decode the bytes once more off-screen: it gives the pixel size for the head, and says when bytes
   // that came back are not a picture after all.
@@ -82,12 +98,12 @@ export function WorktreeFilePreview({
         {head}
         <span className="wt-preview-meta">
           <span className="wt-preview-kind">{kind}</span>
-          {size && (
+          {dims && (
             <span>
-              {size.width} × {size.height}
+              {dims.width} × {dims.height}
             </span>
           )}
-          {size && bytes != null && <span aria-hidden="true">·</span>}
+          {dims && bytes != null && <span aria-hidden="true">·</span>}
           {bytes != null && <span>{formatFileSize(bytes)}</span>}
         </span>
         {image && !deleted && !(q.error && !q.data) && (
@@ -113,11 +129,12 @@ export function WorktreeFilePreview({
             </div>
           )}
         </div>
-      ) : url && !broken ? (
+      ) : (url && !broken) || (placeholder && !url && !q.error) ? (
         <div className="wt-preview-body">
           <button
             type="button"
             className="wt-preview-img"
+            disabled={!url}
             aria-label={`Open ${name}`}
             title="Open in viewer"
             onClick={(e) => {
@@ -127,14 +144,25 @@ export function WorktreeFilePreview({
               setViewer(e.detail > 0 ? { x: e.clientX, y: e.clientY } : { x: r.x + r.width / 2, y: r.y + r.height / 2 });
             }}
           >
-            <img src={url} alt={name} />
+            {url && (
+              <img src={url} alt={name} width={dims?.width} height={dims?.height} onLoad={() => setPainted(true)} />
+            )}
+            {placeholder && !painted && (
+              <>
+                <img className="wt-preview-blur" src={placeholder.src} alt="" aria-hidden="true"
+                  width={placeholder.width} height={placeholder.height} />
+                <span className="wt-preview-loading">Loading full image…</span>
+              </>
+            )}
           </button>
-          <ImagePreview
-            open={viewer != null}
-            onClose={() => setViewer(null)}
-            items={[{ src: url, alt: name }]}
-            origin={viewer}
-          />
+          {url && (
+            <ImagePreview
+              open={viewer != null}
+              onClose={() => setViewer(null)}
+              items={[{ src: url, alt: name }]}
+              origin={viewer}
+            />
+          )}
         </div>
       ) : broken ? (
         <FileState failure={IMAGE_UNREADABLE} onRetry={() => void q.refetch()} />

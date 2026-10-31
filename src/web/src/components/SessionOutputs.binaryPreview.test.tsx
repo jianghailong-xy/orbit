@@ -4,14 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getWorktreeFile, type SessionDetail } from '../api';
+import { ApiError, getSessionDiff, getWorktreeFile, type SessionDetail } from '../api';
 import { SessionOutputs } from './SessionOutputs';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
-  getSessionDiff: vi.fn(async () => ({
-    patches: [{ path: 'docs/mocks/board/README.md', patch: '@@ -0,0 +1 @@\n+# Board' }],
-  })),
+  getSessionDiff: vi.fn(),
   getWorktreeFile: vi.fn(),
   refreshSessionDiff: vi.fn(async () => undefined),
 }));
@@ -55,6 +53,12 @@ class FakeImage {
   }
 }
 const png = () => new Blob([new Uint8Array(2_256_476)], { type: 'image/png' });
+const README_PATCH = { path: 'docs/mocks/board/README.md', patch: '@@ -0,0 +1 @@\n+# Board' };
+/** The runner's blur-up placeholder for the board, as a diff report carries it. */
+const BOARD_PREVIEW = { path: BOARD, preview: 'data:image/jpeg;base64,/9j/4AAQ', width: 3440, height: 9130 };
+/** The paths read so far, in order: the shown picture's and the ones read ahead. */
+const reads = () => vi.mocked(getWorktreeFile).mock.calls.map((call) => call[1]);
+const readsOf = (path: string) => reads().filter((p) => p === path).length;
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -77,6 +81,8 @@ beforeEach(() => {
     downloads.push(this.download);
   });
   vi.mocked(getWorktreeFile).mockReset();
+  vi.mocked(getSessionDiff).mockReset();
+  vi.mocked(getSessionDiff).mockResolvedValue({ patches: [README_PATCH] });
 });
 
 afterEach(async () => {
@@ -139,8 +145,8 @@ describe('a binary file in the diff drawer', () => {
 
     await press(row(BOARD));
 
-    expect(getWorktreeFile).toHaveBeenCalledTimes(1);
     expect(vi.mocked(getWorktreeFile).mock.calls[0].slice(0, 2)).toEqual([SESSION, BOARD]);
+    expect(readsOf(BOARD)).toBe(1);
     const img = pane()?.querySelector<HTMLImageElement>('.wt-preview-img img');
     expect(img?.getAttribute('src')).toMatch(/^blob:test\//);
     expect(img?.alt).toBe('01-flow.png');
@@ -151,7 +157,7 @@ describe('a binary file in the diff drawer', () => {
     // Download hands over the bytes already read, under the file's own name.
     await press(buttonIn(head(), 'Download'));
     expect(downloads).toEqual(['01-flow.png']);
-    expect(getWorktreeFile).toHaveBeenCalledTimes(1);
+    expect(readsOf(BOARD)).toBe(1);
 
     // Pressing the picture opens it in the full-screen viewer.
     await press(pane()?.querySelector('.wt-preview-img'));
@@ -196,7 +202,7 @@ describe('a binary file in the diff drawer', () => {
     expect(buttonIn(head(), 'Download')).toBeUndefined();
     vi.mocked(getWorktreeFile).mockResolvedValueOnce(png());
     await press(buttonIn(pane(), 'Retry'));
-    expect(getWorktreeFile).toHaveBeenCalledTimes(2);
+    expect(readsOf(BOARD)).toBe(2);
     expect(pane()?.querySelector('.wt-preview-img img')).toBeTruthy();
   });
 
@@ -237,5 +243,69 @@ describe('paging the drawer with ‹ ›', () => {
     expect(head()?.querySelector('.wt-diff-pane-path')?.textContent).toBe(FRAME);
     expect(row(FRAME)?.classList.contains('active')).toBe(true);
     expect(vi.mocked(getWorktreeFile).mock.calls.map((call) => call[1])).toEqual([BOARD, FRAME]);
+  });
+});
+
+describe('blur-up', () => {
+  it("draws the runner's placeholder at the picture's size the moment the file opens, until the picture is painted", async () => {
+    vi.mocked(getSessionDiff).mockResolvedValue({ patches: [README_PATCH, BOARD_PREVIEW] });
+    let deliver: (blob: Blob) => void = () => {};
+    vi.mocked(getWorktreeFile).mockImplementation(() => new Promise<Blob>((resolve) => (deliver = resolve)));
+    await openDrawer();
+
+    await press(row(BOARD));
+
+    const blur = pane()?.querySelector<HTMLImageElement>('img.wt-preview-blur');
+    expect(blur?.getAttribute('src')).toBe(BOARD_PREVIEW.preview);
+    expect([blur?.getAttribute('width'), blur?.getAttribute('height')]).toEqual(['3440', '9130']);
+    expect(pane()?.textContent).toContain('Loading full image…');
+    expect(pane()?.textContent).not.toContain('Loading file…');
+    expect(head()?.querySelector('.wt-preview-meta')?.textContent).toBe('PNG3440 × 9130');
+    expect(buttonIn(head(), 'Download')?.disabled).toBe(true);
+
+    // The bytes arrive: the picture is laid over the placeholder, which goes once it is painted.
+    await act(async () => deliver(png()));
+    await settle();
+    const full = pane()?.querySelector<HTMLImageElement>('img[alt="01-flow.png"]');
+    expect(full?.getAttribute('src')).toMatch(/^blob:test\//);
+    expect(pane()?.querySelector('img.wt-preview-blur')).toBeTruthy();
+    await act(async () => full!.dispatchEvent(new Event('load')));
+    expect(pane()?.querySelector('img.wt-preview-blur')).toBeNull();
+    expect(pane()?.textContent).not.toContain('Loading full image…');
+    expect(head()?.querySelector('.wt-preview-meta')?.textContent).toBe('PNG3440 × 9130·2.2 MB');
+  });
+
+  it('says "Loading file…" for a picture whose diff carries no placeholder, as from an older runner', async () => {
+    vi.mocked(getWorktreeFile).mockImplementation(() => new Promise<Blob>(() => {}));
+    await openDrawer();
+
+    await press(row(BOARD));
+
+    expect(pane()?.querySelector('img.wt-preview-blur')).toBeNull();
+    expect(pane()?.textContent).toContain('Loading file…');
+  });
+});
+
+describe('reading ahead', () => {
+  it("reads the pictures either side of a shown picture once its own bytes are in, and pages to them without reading again", async () => {
+    let deliver: (blob: Blob) => void = () => {};
+    vi.mocked(getWorktreeFile).mockImplementation((_session, path) =>
+      path === BOARD ? new Promise<Blob>((resolve) => (deliver = resolve)) : Promise.resolve(png()));
+    await openDrawer();
+    // A text file is shown: nothing is read.
+    expect(reads()).toEqual([]);
+
+    await press(row(BOARD));
+    // Its neighbours wait for its own bytes: frames/a.png before it, README.md (text) after it.
+    expect(reads()).toEqual([BOARD]);
+    await act(async () => deliver(png()));
+    await settle();
+    expect(reads()).toEqual([BOARD, FRAME]);
+
+    await press(document.querySelector('button[aria-label="Previous file"]'));
+    expect(head()?.querySelector('.wt-diff-pane-path')?.textContent).toBe(FRAME);
+    expect(pane()?.querySelector('.wt-preview-img img')).toBeTruthy();
+    // frames/a.png's own neighbours: fonts/Inter.woff2 (not a picture) and the board (read already).
+    expect(reads()).toEqual([BOARD, FRAME]);
   });
 });

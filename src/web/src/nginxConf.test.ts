@@ -57,6 +57,22 @@ describe('nginx: a public share page', () => {
   });
 });
 
+describe('nginx: hashed assets', () => {
+  const assets = locationDirectives('/assets/');
+
+  it('calls a file it has immutable, and says nothing of one it does not', () => {
+    // `always` stamps the 404 too, and Chromium then keeps "no such chunk" for a year: past the
+    // rollback or revert that brings that very file name back, and through every reload.
+    expect(assets.filter((d) => d.startsWith('add_header '))).toEqual([
+      'add_header Cache-Control "public, max-age=31536000, immutable"',
+    ]);
+  });
+
+  it('answers a missing file with 404, never the SPA shell where the browser expects JavaScript', () => {
+    expect(assets.filter((d) => d.startsWith('try_files '))).toEqual(['try_files $uri =404']);
+  });
+});
+
 describe('nginx: runner downloads', () => {
   const dl = locationDirectives('/dl/');
 

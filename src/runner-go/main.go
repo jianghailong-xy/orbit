@@ -291,6 +291,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
 		os.Exit(runSessionScope(os.Args[2:]))
 	}
+	// The credential helper every network git command is given (network_git.go). git runs it, and it
+	// answers git and does nothing else.
+	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {
+		os.Exit(runGitCredentialReadOnly(os.Args[2:]))
+	}
 	// Services installed by an older Orbit release have a baked PATH that predates one or more
 	// official per-user engine directories. Refresh the current process too: doctor/install may
 	// correctly find ~/.opencode/bin/opencode, and every later exec must see that same binary

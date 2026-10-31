@@ -622,6 +622,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     this.hints?.inbox(runId);
   }
 
+  /** Wake whatever is parked in waitForInbox(key) on any replica, without hinting a runner: for a key that names no
+   *  run, such as a worktree file request waiting for its runner's answer (worktreeFileAnswerKey). */
+  notifyWaiters(key: string): void {
+    this.inbox.emit(key); // same replica
+    this.notifyRaw(INBOX_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
+  }
+
   /** Park until a turn is enqueued for this run, or the timeout elapses. */
   waitForInbox(runId: string, timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
