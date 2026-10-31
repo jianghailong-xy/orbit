@@ -2575,6 +2575,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // named, and no function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored enrollment reads NULL.
       '0455_device_enrollment_requester_ip',
+      // The single-task create card's "Create and start" (0456, sessions/sessions.service.ts decideApproval,
+      // runner-api/runner-api.controller.ts pollApproval): one BOOLEAN NOT NULL column with a constant default on
+      // `approval`, `start_after_create`, added with IF NOT EXISTS — catalog-only. Only that table is altered, and it
+      // is not a preserved relation: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored
+      // approval reads false.
+      '0456_approval_start_after_create',
       // A machine's first workspace made from the conversation (0457, docs/first-workspace-contract.md): `runner` gains
       // `register_dir` and the four `dir_probe_*` columns of a one-slot relay (TEXT, TEXT, TEXT, TIMESTAMP(3), JSONB, all
       // nullable, no default), `workspace` gains `auto_create_work_dir` and `session` `created_workspace` (BOOLEAN NOT
