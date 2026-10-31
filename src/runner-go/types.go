@@ -1549,10 +1549,16 @@ type ChangedFile struct {
 // FilePatch carries one changed file's full unified-diff text (git diff vs base), reported
 // alongside the ChangedFile stats so the web can show a file's diff on demand. Patch is
 // empty for binary/omitted files; Truncated marks a diff dropped for exceeding the size cap.
+// A changed picture's entry carries its blur-up placeholder instead (worktree_image_preview.go):
+// Preview is a data URL of a tiny copy, which the web draws blurred at Width × Height, the
+// picture's own pixel size, while the picture's bytes load.
 type FilePatch struct {
 	Path      string `json:"path"`
 	Patch     string `json:"patch,omitempty"`
 	Truncated bool   `json:"truncated,omitempty"`
+	Preview   string `json:"preview,omitempty"`
+	Width     int    `json:"width,omitempty"`
+	Height    int    `json:"height,omitempty"`
 }
 
 // RunFinalizeRequest reports the terminal outcome of the runner process. It is not the
