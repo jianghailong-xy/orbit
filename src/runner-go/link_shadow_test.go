@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -728,10 +729,17 @@ func TestLinkShadowReconnectsNoSoonerThanItIsTold(t *testing.T) {
 		t.Errorf("no RTT in %+v", summary)
 	}
 	log := strings.Join(rig.logs.all(), "\n")
-	for _, want := range []string{"closed by the gateway: CLOSE_CODE_INTERNAL_ERROR", "cannot connect (upgrade answered 503 DRAINING)", "after 3."} {
+	for _, want := range []string{"closed by the gateway: CLOSE_CODE_INTERNAL_ERROR", "cannot connect (upgrade answered 503 DRAINING)"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("the log does not say %q:\n%s", want, log)
 		}
+	}
+	// The reconnect's line names the time without a connection: 3 seconds at least, as in the summary. A loaded host
+	// can make it more than 4.
+	if m := regexp.MustCompile(` after (\S+) without one`).FindStringSubmatch(log); m == nil {
+		t.Errorf("the log does not say how long the shadow was without a connection:\n%s", log)
+	} else if gap, err := time.ParseDuration(m[1]); err != nil || gap < 3*time.Second {
+		t.Errorf("the log says the shadow was without a connection for %s, sooner than it was told:\n%s", m[1], log)
 	}
 }
 
