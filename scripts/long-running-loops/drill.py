@@ -163,7 +163,7 @@ def sql(query):
 
 def sql_json(query):
     rows = sql(f'select coalesce(json_agg(row_to_json(t)), \'[]\'::json) from ({query}) t')
-    return json.loads(rows[0]) if rows else []
+    return json.loads('\n'.join(rows)) if rows else []
 
 
 def quote(value):
@@ -681,12 +681,12 @@ def snapshot(state):
       'loops', coalesce((select json_agg(json_build_object('id', l.id, 'sessionId', l.session_id, 'state', l.state,
           'ticksFired', l.ticks_fired, 'ticksMissed', l.ticks_missed, 'reviveStreak', l.revive_streak, 'alertedAt', l.alerted_at,
           'endedReason', l.ended_reason) order by l.created_at) from session_wakeup_loop l), '[]'::json),
-      'turns', coalesce((select json_agg(x) from (select t.session_id as "sessionId", count(*) as n, max(t.seq) as "lastSeq",
+      'turns', coalesce((select json_agg(row_to_json(x)) from (select t.session_id as "sessionId", count(*) as n, max(t.seq) as "lastSeq",
           count(*) filter (where t.status = 'PENDING') as pending, count(*) filter (where t.status = 'IN_FLIGHT') as "inFlight"
           from conversation_turn t where t.session_id in ({in_list}) group by t.session_id) x), '[]'::json),
       'runners', coalesce((select json_agg(json_build_object('name', r.name, 'status', r.status,
           'lastBeat', {runner_beat_sql()}) order by r.name) from runner r), '[]'::json))"""
-    return json.loads(sql(query)[0])
+    return json.loads('\n'.join(sql(query)))
 
 
 def cmd_sample(_args):

@@ -1,0 +1,108 @@
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-a", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.281"}
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-b", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.349"}
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-c", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.281"}
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-f1", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.314"}
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-f2", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.315"}
+{"at": "2026-10-31T21:07:29.461171+00:00", "what": "runner lrl-f3", "heartbeat": "beating", "lastBeat": "2026-10-31T21:07:15.35"}
+{"at": "2026-10-31T21:07:39.510983+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:07:39.510983+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 0, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:23:46.071098+00:00", "what": "session LRL drill B", "status": "FAILED", "retryArmed": true, "retryAttempts": 0, "finishedAt": "2026-10-31T21:19:07.67", "error": "runner offline", "runningBgJobs": []}
+{"at": "2026-10-31T21:23:46.071098+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:23:46.071098+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 3, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:23:46.071098+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 5, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:23:46.071098+00:00", "what": "runner lrl-b", "heartbeat": "silent for more than 90 s", "lastBeat": "2026-10-31T21:17:10.279"}
+{"at": "2026-10-31T21:24:38.520325+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 6, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:25:08.66591+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 4, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:25:38.8142+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 7, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:26:39.096814+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 8, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:27:39.388579+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 9, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:28:34.749237+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 10, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:29:37.178043+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 11, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:30:07.342864+00:00", "what": "session LRL drill A", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:30:07.342864+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 5, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:30:17.398858+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:30:37.496296+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 12, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:31:37.980663+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 13, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:32:38.379877+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 14, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:33:38.676509+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 15, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:34:38.981566+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 16, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:35:09.122706+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 6, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:35:39.303223+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 17, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:36:39.657962+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 18, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:37:39.940798+00:00", "what": "session LRL drill C", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:37:39.940798+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 19, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:37:49.993659+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:38:00.044567+00:00", "what": "session LRL drill C", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:38:10.136467+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:38:40.320684+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 20, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:39:30.577707+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 21, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:40:00.731855+00:00", "what": "session LRL drill A", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:40:00.731855+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 7, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:40:10.784993+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:40:30.897645+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 22, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:41:31.230304+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 23, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:42:31.62407+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 24, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:43:31.966506+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 25, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:44:32.262572+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 26, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:45:02.411259+00:00", "what": "session LRL drill A", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:45:02.411259+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 8, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:45:12.912919+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T21:45:33.696975+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 27, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:46:34.138999+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 28, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:47:34.577686+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 29, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:48:35.136476+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 30, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:49:15.347589+00:00", "what": "session LRL drill B", "status": "FAILED", "retryArmed": false, "retryAttempts": 0, "finishedAt": "2026-10-31T21:19:07.67", "error": "runner offline", "runningBgJobs": []}
+{"at": "2026-10-31T21:49:35.447601+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 31, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:50:05.592302+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:50:35.746054+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 32, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:51:36.044646+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 33, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:52:36.539579+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 9, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:52:36.539579+00:00", "what": "runner lrl-b", "heartbeat": "beating", "lastBeat": "2026-10-31T21:52:36.122"}
+{"at": "2026-10-31T21:53:36.866336+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:53:36.866336+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 10, "ticksMissed": 34, "reviveStreak": 1, "alertedAt": "2026-10-31T21:33:29.985+00:00", "endedReason": null}
+{"at": "2026-10-31T21:54:10.770603+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:54:40.924952+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:54:40.924952+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 11, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:55:12.520234+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:55:12.520234+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 10, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:55:32.668589+00:00", "what": "session LRL drill C", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:55:42.72093+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:55:42.72093+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T21:55:42.72093+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 12, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:56:12.886447+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:56:43.024595+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:56:43.024595+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 13, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:57:13.186305+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:57:43.328171+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:57:43.328171+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:58:13.620994+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:58:33.806352+00:00", "what": "session LRL drill B", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:58:33.806352+00:00", "what": "loop of LRL drill B", "state": "ACTIVE", "ticksFired": 15, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T21:59:14.0246+00:00", "what": "session LRL drill B", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T21:59:14.0246+00:00", "what": "loop of LRL drill B", "state": "ENDED", "ticksFired": 15, "ticksMissed": 34, "reviveStreak": 0, "alertedAt": null, "endedReason": "REQUESTED"}
+{"at": "2026-10-31T22:00:04.271488+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 11, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:05:07.028667+00:00", "what": "session LRL drill A", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T22:05:07.028667+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 12, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:05:17.079459+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T22:10:08.542757+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 13, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:13:49.783192+00:00", "what": "runner lrl-a", "heartbeat": "silent for more than 90 s", "lastBeat": "2026-10-31T22:12:10.27"}
+{"at": "2026-10-31T22:15:12.290088+00:00", "what": "session LRL drill A", "status": "PENDING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_9ad4f310ca2d"]}
+{"at": "2026-10-31T22:15:12.290088+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 0, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:20:03.898755+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 1, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:25:05.432209+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 2, "reviveStreak": 0, "alertedAt": "2026-10-31T22:25:02.337+00:00", "endedReason": null}
+{"at": "2026-10-31T22:30:12.260057+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 3, "reviveStreak": 0, "alertedAt": "2026-10-31T22:25:02.337+00:00", "endedReason": null}
+{"at": "2026-10-31T22:33:33.527351+00:00", "what": "session LRL drill C", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T22:33:43.5744+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": ["bgj_4c86a2f98e3b"]}
+{"at": "2026-10-31T22:35:03.997757+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 14, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": "2026-10-31T22:25:02.337+00:00", "endedReason": null}
+{"at": "2026-10-31T22:37:34.722029+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T22:37:34.722029+00:00", "what": "runner lrl-a", "heartbeat": "beating", "lastBeat": "2026-10-31T22:37:33.577"}
+{"at": "2026-10-31T22:40:05.499999+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 15, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:45:07.06954+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 16, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:50:09.561367+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 17, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T22:55:11.180874+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 18, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T23:00:12.933627+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 19, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T23:05:07.003871+00:00", "what": "session LRL drill A", "status": "RUNNING", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T23:05:07.003871+00:00", "what": "loop of LRL drill A", "state": "ACTIVE", "ticksFired": 20, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": null}
+{"at": "2026-10-31T23:05:17.05859+00:00", "what": "session LRL drill A", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}
+{"at": "2026-10-31T23:07:37.747897+00:00", "what": "loop of LRL drill A", "state": "ENDED", "ticksFired": 20, "ticksMissed": 4, "reviveStreak": 0, "alertedAt": null, "endedReason": "REQUESTED"}
+{"at": "2026-10-31T23:08:07.893849+00:00", "what": "session LRL drill C", "status": "AWAITING_INPUT", "retryArmed": false, "retryAttempts": 0, "finishedAt": null, "error": null, "runningBgJobs": []}

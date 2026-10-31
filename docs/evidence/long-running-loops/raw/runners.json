@@ -1,0 +1,44 @@
+[
+  {
+    "id": "01a193c9-ab26-7308-b410-0b2aa85eb1e3",
+    "name": "lrl-a",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:31.084"
+  },
+  {
+    "id": "01a193c9-ab38-768e-ba03-a9fef70f3be6",
+    "name": "lrl-b",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:32.91"
+  },
+  {
+    "id": "01a193c9-ab4a-70b4-9c27-566c6cd87cf5",
+    "name": "lrl-c",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:40.273"
+  },
+  {
+    "id": "01a193c9-ab5b-73ec-82ee-8733bd494e89",
+    "name": "lrl-f1",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:40.273"
+  },
+  {
+    "id": "01a193c9-ab6b-7202-80c5-ba16e68a4696",
+    "name": "lrl-f2",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:40.271"
+  },
+  {
+    "id": "01a193c9-ab7a-75ab-a16d-5945461ce209",
+    "name": "lrl-f3",
+    "status": "ONLINE",
+    "version": "lrl-drill-1031a2052b63",
+    "last_beat": "2026-10-31T23:23:40.271"
+  }
+]
