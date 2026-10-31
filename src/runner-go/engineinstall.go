@@ -251,6 +251,13 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		return InstallResultRequest{Status: installDone, Command: engineRenewCmd}
 	}
 
+	// Claude Code's installer sends the login stored here to Anthropic (claudeLoginBlocked).
+	if spec.bin == providerClaude {
+		if machine, region, blocked := claudeLoginBlocked(context.Background(), nil); blocked {
+			logln("engine-install (requested):", spec.name, "refused —", errClaudeStartRegionBlocked.Error())
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: claudeInstallRefusedMessage(machine, region)}
+		}
+	}
 	logln("engine-install (requested):", spec.name, "->", spec.installCmd)
 	ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
 	defer cancel()
@@ -350,6 +357,13 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if installed && rematerializeEngine(bin) {
 		logln("engine-install:", spec.name, "refreshed the installed file in place")
 		return ""
+	}
+	// Claude Code's installer sends the login stored here to Anthropic (claudeLoginBlocked).
+	if bin == providerClaude {
+		if machine, region, blocked := claudeLoginBlocked(ctx, nil); blocked {
+			logln("engine-install:", spec.name, "refused —", errClaudeStartRegionBlocked.Error())
+			return claudeInstallRefusedMessage(machine, region)
+		}
 	}
 
 	if installed {

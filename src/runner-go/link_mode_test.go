@@ -512,6 +512,7 @@ func TestOnlyTheDaemonBuildsAnUnmarkedTransport(t *testing.T) {
 	callers := map[string]string{
 		"mcp.go": "runnerCallerMCP", "antigravity_approval.go": "runnerCallerAntigravityHook",
 		"main.go": "runnerCallerCLI", "task_cli.go": "runnerCallerCLI", "session_cli.go": "runnerCallerCLI",
+		"doctor.go": "runnerCallerCLI",
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
