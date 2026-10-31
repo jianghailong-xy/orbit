@@ -301,10 +301,8 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
 
     // Long silent: an approval is not a beat, whatever the row says about the machine. Its last beat is the real one.
     const heardLast = new Date(Date.now() - 3_600_000);
-    await sql.query(
-      `WITH cleared AS (DELETE FROM runner_presence WHERE runner_id = $1) UPDATE runner SET last_heartbeat_at = $2 WHERE id = $1`,
-      [runnerId, heardLast],
-    );
+    await sql.query('DELETE FROM runner_presence WHERE runner_id = $1', [runnerId]);
+    await db.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: heardLast } });
     assert.equal((await listed(runnerId)).online, false, 'silent for an hour');
     const again = await start(machine('first-beat'));
     assert.equal(approval(expect(await decide(owner.login, again.userCode, 'approve'), 201, 're-approving')).replaced, true);
@@ -314,7 +312,7 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
 
     // Heard a moment ago: it reads as its beats say, as with a rotated credential, and ages out if nothing comes back.
     const heardNow = new Date(Date.now() - 10_000);
-    await sql.query('UPDATE runner SET last_heartbeat_at = $2 WHERE id = $1', [runnerId, heardNow]);
+    await db.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: heardNow } });
     const third = await start(machine('first-beat'));
     expect(await decide(owner.login, third.userCode, 'approve'), 201, 're-approving');
     const still = await listed(runnerId);

@@ -197,8 +197,8 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
  * is presence. A process that has just started claims at once, and until its first heartbeat lands
  * (runner-go runloop.go) the runner's last beat is still its predecessor's. A managed runner woken
- * from sleep was exactly that, every
- * time: on the lab's real k3s (task T06, 2026-10-18) the run a woken runner claimed at 00:56:34.7
+ * from sleep is exactly that, every time: on the lab's real k3s (task T06, 2026-10-18) the run a
+ * woken runner claimed at 00:56:34.7
  * was finalized `runner offline` at 00:56:35.4, its heartbeat six minutes old from before the sleep.
  * The finalizing write asks the same of the row it writes (`claimedLongAgo`), under its lock.
  *
