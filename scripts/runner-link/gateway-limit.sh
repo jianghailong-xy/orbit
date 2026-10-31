@@ -49,6 +49,9 @@
 #                           they came from (ss)
 #   logs/                   the gateway's log (with GODEBUG=gctrace=1's line for each GC), the stubs' and NATS's
 #
+# It exits 0 when every level ran to its end with every shard exiting 0 (nothing counted as an error, every event
+# acknowledged), and 1 otherwise, the report written either way.
+#
 # The run holds the host's load-test lock (/var/tmp/orbit-loadgen.lock) from start to end, one load-test stack at a time.
 # It starts only with GATEWAY_LIMIT_MIN_AVAILABLE_MB (4096) of memory available, and stops when the host stays below it
 # for 15 s. It tears everything down as soon as it ends, however it ends. Ports from GATEWAY_LIMIT_PORT_BASE (62400): the
@@ -496,6 +499,7 @@ jq --argjson from "$idle_from" --argjson to "$(date +%s%3N)" '. + {idleFromMs: $
   mv "$out/run.json.new" "$out/run.json"
 
 # --- The levels. ------------------------------------------------------------------------------------------------------
+failed=0
 for i in "${!level_list[@]}"; do
   level="${level_list[$i]}"
   if [ -e "$out/gateway-ended.json" ] || [ -e "$out/stopped-for-memory" ]; then break; fi
@@ -526,6 +530,7 @@ for i in "${!level_list[@]}"; do
     c=0
     wait "$p" || c=$?
     codes+=("$c")
+    [ "$c" = 0 ] || failed=1
   done
   ended="$(date +%s%3N)"
   jq -n --argjson level "$level" --argjson startedMs "$started" --argjson endedMs "$ended" --argjson rampRate "$rate" \
@@ -538,5 +543,13 @@ for i in "${!level_list[@]}"; do
 done
 # One more of each scrape after the last level's drain.
 sleep 16
-[ ! -e "$out/stopped-for-memory" ] || log "stopped at $(cat "$out/stopped-for-memory"): the host's available memory stayed under the floor"
-[ ! -e "$out/gateway-ended.json" ] || log "the gateway ended under load: $(cat "$out/gateway-ended.json")"
+if [ -e "$out/stopped-for-memory" ]; then
+  log "stopped at $(cat "$out/stopped-for-memory"): the host's available memory stayed under the floor"
+  failed=1
+fi
+if [ -e "$out/gateway-ended.json" ]; then
+  log "the gateway ended under load: $(cat "$out/gateway-ended.json")"
+  failed=1
+fi
+[ "$(find "$out/levels" -name level.json | wc -l)" -eq "${#level_list[@]}" ] || failed=1
+exit "$failed"
