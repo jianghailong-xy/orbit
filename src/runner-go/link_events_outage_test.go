@@ -51,11 +51,32 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	ticks := int(outage / (250 * time.Millisecond))
 	payload := max(4<<10, (12<<20)/max(ticks*(perTick-1), 1))
 	var mu sync.Mutex
-	var slowestEmit, slowestFlush time.Duration
+	var slowestEmit, slowestFlush, worstStall time.Duration
 	emitted, onDisk := 0, 0
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
+	// The control, for the same window: a goroutine that only sleeps a short fixed time, again and again. How late it
+	// wakes is how long the whole process stalled (a loaded host, swapping, a GC pause). Such a stall delays an emit as
+	// much, and says nothing about the engine waiting on the link or the disk.
+	const controlNap = time.Millisecond
+	go func() {
+		defer wg.Done()
+		var worst time.Duration
+		for {
+			select {
+			case <-stop:
+				mu.Lock()
+				worstStall = worst
+				mu.Unlock()
+				return
+			default:
+			}
+			began := time.Now()
+			time.Sleep(controlNap)
+			worst = max(worst, time.Since(began)-controlNap)
+		}
+	}()
 	go func() { // the engine's stdout reader
 		defer wg.Done()
 		tick := time.NewTicker(250 * time.Millisecond)
@@ -157,7 +178,8 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 		}
 		n++
 	}
-	if slowestEmit > 50*time.Millisecond {
+	// An emit may take what the whole process stalled for, and 50ms past that.
+	if slowestEmit > 50*time.Millisecond+worstStall {
 		t.Errorf("an event took %s to emit: the engine waited on the link or the disk", slowestEmit)
 	}
 	if outage >= 20*time.Second && onDisk == 0 {
@@ -166,6 +188,7 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	if line := strings.Join(r.logs.all(), "\n"); strings.Contains(line, "dropping") || strings.Contains(line, "not sent") {
 		t.Errorf("the log says events were dropped:\n%s", line)
 	}
-	t.Logf("%d events, at most %d on disk at once; the slowest emit %s, the slowest hand-over %s", emitted, onDisk,
-		slowestEmit, slowestFlush)
+	t.Logf("%d events, at most %d on disk at once; the slowest emit %s, the slowest hand-over %s; the control's worst "+
+		"overshoot of a %s sleep, how long the whole process stalled, %s", emitted, onDisk, slowestEmit, slowestFlush,
+		controlNap, worstStall)
 }

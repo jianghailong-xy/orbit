@@ -1355,14 +1355,33 @@ func (t *Transport) backgroundWake(sessionID string, wake bgWake) (backgroundWak
 }
 
 // scheduledWakeupReceipt is what the control plane did with a schedule_wakeup call: holds a wakeup for
-// the session until dueAt (SCHEDULED), or cancelled the one waiting (CANCELLED).
+// the session until dueAt, or a loop whose first tick is due then (SCHEDULED), or cancelled what was
+// waiting (CANCELLED). The shapes are docs/long-running-loop-contract.md §1.1's.
 type scheduledWakeupReceipt struct {
 	Outcome      string `json:"outcome"`
 	DueAt        string `json:"dueAt,omitempty"`
 	DelaySeconds int    `json:"delaySeconds,omitempty"`
 	Clamped      bool   `json:"clamped,omitempty"`
-	Replaced     bool   `json:"replaced,omitempty"`
-	Cancelled    int    `json:"cancelled,omitempty"`
+	// A wakeup's: it replaced the one-shot wakeup waiting. A loop's: it replaced the loop running.
+	Replaced  bool `json:"replaced,omitempty"`
+	Cancelled int  `json:"cancelled,omitempty"`
+	// A loop's. Only a control plane that holds loops sets recurring: one that predates them strips the
+	// fields it does not know and answers a loop request as one wakeup, without it.
+	Recurring    bool                       `json:"recurring,omitempty"`
+	LoopID       string                     `json:"loopId,omitempty"`
+	EverySeconds int                        `json:"everySeconds,omitempty"`
+	Until        string                     `json:"until,omitempty"`
+	ClampedFrom  scheduledWakeupClampedFrom `json:"clampedFrom"`
+	// A stop's: the loops it ended, 0 or 1. Absent from a control plane that predates loops.
+	LoopsStopped int `json:"loopsStopped,omitempty"`
+}
+
+// scheduledWakeupClampedFrom is what a loop request asked for, of each field the control plane clamped.
+// The numbers are the agent's own, rounded, so they need not fit an int.
+type scheduledWakeupClampedFrom struct {
+	EverySeconds *float64 `json:"everySeconds,omitempty"`
+	DelaySeconds *float64 `json:"delaySeconds,omitempty"`
+	Until        string   `json:"until,omitempty"`
 }
 
 // scheduleWakeup asks the control plane to wake the session later — or, with body["stop"], not to.
