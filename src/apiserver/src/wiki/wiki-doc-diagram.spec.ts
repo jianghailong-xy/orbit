@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { WIKI_DOC_DIAGRAM_RULES } from '@orbit/shared';
 
 import { parseDiagram } from './wiki-doc-diagram';
-import { diagramWord, keepSourcedDiagrams, parseSectionBody } from './wiki-docs';
+import { diagramNameWords, diagramWord, keepSourcedDiagrams, parseSectionBody } from './wiki-docs';
 
 /**
  * A section's diagram (contract `docs.diagram`): the flowchart the server reads out of a mermaid block and writes out
@@ -74,9 +74,9 @@ test('a label is shown as text: Mermaid\'s characters as entity codes, line brea
 
 test('what is not that flowchart, or is past the rules\' sizes, is no diagram', () => {
   const chain = (n: number) => `flowchart LR\n  ${Array.from({ length: n }, (_, i) => `x${i}`).join(' --> ')}`;
+  const list = (name: string, n: number) => Array.from({ length: n }, (_, i) => `${name}${i}`).join(' & ');
   const cases: Array<[string, string]> = [
     ['sequenceDiagram\n  A->>B: hello', 'another kind of diagram'],
-    ['flowchart LR\n  A & B --> C', 'a list joined with &'],
     ['flowchart LR\n  subgraph x\n  A --> B', 'a subgraph never closed'],
     ['flowchart LR\n  A --> B\nend', 'an end with no subgraph'],
     ['flowchart LR\n  A -- B', 'a link that is only its opening'],
@@ -85,10 +85,58 @@ test('what is not that flowchart, or is past the rules\' sizes, is no diagram', 
     ['flowchart LR\n  click A "https://example.com"', 'no node at all'],
     ['flowchart LR\n  A["open --> B', 'a quote never closed'],
     [chain(WIKI_DOC_DIAGRAM_RULES.nodesMax + 1), 'more nodes than nodesMax'],
+    [`flowchart LR\n  ${list('a', 8)} --> ${list('b', 8)}`, 'lists that make more links than edgesMax'],
     [`flowchart LR\n  A["${'x'.repeat(WIKI_DOC_DIAGRAM_RULES.labelMaxChars + 1)}"]`, 'a label past labelMaxChars'],
   ];
   for (const [text, what] of cases) assert.equal(parseDiagram(text), null, what);
   assert.ok(parseDiagram(chain(WIKI_DOC_DIAGRAM_RULES.nodesMax)), 'nodesMax nodes are a diagram');
+});
+
+test('a list joined with & links each node of one end to each of the other, along a chain and with a label', () => {
+  const diagram = parseDiagram([
+    'flowchart LR',
+    '  A[Alpha] & B[Beta] -->|sends| C[Gamma] & D[Delta] --> E[Epsilon]',
+    '  F & E --- A',
+  ].join('\n'));
+  assert.ok(diagram);
+  assert.equal(diagram.source, [
+    'flowchart LR',
+    '  n1["Alpha"]',
+    '  n2["Beta"]',
+    '  n3["Gamma"]',
+    '  n4["Delta"]',
+    '  n5["Epsilon"]',
+    '  n6["F"]',
+    '  n1 -->|"sends"| n3',
+    '  n1 -->|"sends"| n4',
+    '  n2 -->|"sends"| n3',
+    '  n2 -->|"sends"| n4',
+    '  n3 --> n5',
+    '  n4 --> n5',
+    '  n6 --- n1',
+    '  n5 --- n1',
+  ].join('\n'));
+});
+
+test('a node the diagram labels under a subgraph\'s id is a node of its own, and a link to the id ends at it', () => {
+  const diagram = parseDiagram([
+    'flowchart TB',
+    '  subgraph G["Gateway"]',
+    '    x[nginx]',
+    '  end',
+    '  G["Gate"] --> x',
+  ].join('\n'));
+  assert.ok(diagram);
+  assert.equal(diagram.source, [
+    'flowchart TB',
+    '  subgraph s1["Gateway"]',
+    '    n1["nginx"]',
+    '  end',
+    '  n2["Gate"]',
+    '  n2 --> n1',
+  ].join('\n'));
+  // With no label of its own the same id is the subgraph.
+  assert.match(parseDiagram('flowchart TB\n  subgraph G["Gateway"]\n    x[nginx]\n  end\n  y --> G')?.source ?? '', /n\d --> s1$/u);
 });
 
 test('a mermaid block of a section is a diagram block, or nothing; any other fence stays code', () => {
@@ -188,4 +236,27 @@ test('a word is the same word with another ending; a code name, a path or a numb
     '```',
   ].join('\n'), 1);
   assert.equal(keepSourcedDiagrams(more, [true]).diagramsDropped, 1);
+});
+
+test('the words inside a sourced sentence\'s code names count; a label\'s own code name and a number are only themselves', () => {
+  assert.deepEqual(diagramNameWords('`sessionId` runs on the wiki-worker, per `HTTPServer` at src/runner_go/mcp.go, limit-500.').sort(), [
+    'http', 'limit', 'mcp', 'per', 'runner', 'runs', 'server', 'session', 'src', 'the', 'wiki', 'worker',
+  ]);
+  const section = (label: string): ReturnType<typeof parseSectionBody> => parseSectionBody([
+    'The `sessionId` is read by the `wiki-worker`, up to `limit-500`[1]. The `fileName` is kept[1].',
+    '',
+    'A `queueDepth` is logged[2].',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    `  a["${label}"]`,
+    '```',
+  ].join('\n'), 2);
+  const kept = (label: string): number => keepSourcedDiagrams(section(label), [true, false]).diagrams.length;
+  assert.equal(kept('Session read by worker'), 1, 'session and worker are inside sourced code names');
+  assert.equal(kept('Sessions'), 1, 'and another ending of them is the same word');
+  assert.equal(kept('sessionId'), 1, 'a code name a sentence says whole');
+  assert.equal(kept('sessionName'), 0, 'a code name is compared whole: it is not made up of two sentences\' parts');
+  assert.equal(kept('500'), 0, 'a number inside a code name is no number a sentence says');
+  assert.equal(kept('queue'), 0, 'the words inside a sentence with no verified footnote do not count');
 });

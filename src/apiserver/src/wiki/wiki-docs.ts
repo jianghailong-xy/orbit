@@ -587,16 +587,33 @@ export function diagramWord(token: string): string {
 }
 
 /**
+ * The words inside a text's fact tokens (contract `docs.diagram.check`), lowercased: a code name, a path or a compound
+ * read word by word, so `sessionId` gives session, and `wiki-worker` gives wiki and worker. Words of letters alone: a
+ * number stays what its whole token says.
+ */
+export function diagramNameWords(text: string): string[] {
+  const out = new Set<string>();
+  for (const [token] of text.matchAll(FACT_TOKEN)) {
+    const spaced = token.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').replace(/([A-Z])([A-Z][a-z])/gu, '$1 $2');
+    for (const word of spaced.split(/[^A-Za-z]+/u)) if (word.length >= 3) out.add(word.toLowerCase());
+  }
+  return [...out];
+}
+
+/**
  * A section's diagrams kept as far as its sourced sentences go (contract `docs.diagram.check`): one whose every label's
  * fact tokens are, ending aside (`diagramWord`), among those of the sentences that carry a verified footnote —
- * `verified[i]` for the section's footnote i — or are a flowchart's own words; the first that is, as `perSection`
- * allows. Every other one is taken out with its block, the sentences after it moving up a block.
+ * `verified[i]` for the section's footnote i — or the words inside them (`diagramNameWords`), or are a flowchart's own
+ * words; the first that is, as `perSection` allows. A label's own code name is compared whole, so one made of a
+ * sentence's parts is not found. Every other diagram is taken out with its block, the sentences after it moving up a
+ * block.
  */
 export function keepSourcedDiagrams(body: SectionBody, verified: readonly boolean[]): SectionBody {
   if (body.diagrams.length === 0) return body;
   const known = new Set<string>(WIKI_DOC_DIAGRAM_RULES.structureWords.map(diagramWord));
   for (const sentence of body.sentences) {
-    if (sentence.notes.some((n) => verified[n])) for (const token of factTokens(sentence.text)) known.add(diagramWord(token));
+    if (!sentence.notes.some((n) => verified[n])) continue;
+    for (const token of [...factTokens(sentence.text), ...diagramNameWords(sentence.text)]) known.add(diagramWord(token));
   }
   const dropped = new Set<number>();
   let kept = 0;
