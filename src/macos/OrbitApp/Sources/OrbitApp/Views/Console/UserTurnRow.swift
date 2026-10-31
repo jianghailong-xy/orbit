@@ -97,6 +97,16 @@ struct UserTurnRow: View {
             // old reading.
             OwnerAnswerLineView(card: card, text: b.text, undelivered: undelivered,
                                 attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.coordinatorDelivery, b.sessionReplies?.isEmpty ?? true {
+            // A fact told to this session — what its coordinator is told about a committed fact, or the
+            // answer to its criteria proposal — is the platform's message too: a headline and paragraphs
+            // of protocol written for the AGENT, which as the reader's bubble filled a screen with words
+            // they never wrote and, undelivered, offered to put them back in the composer. One line
+            // (`coordinatorDelivery`, `CoordinatorDelivery.parse`) that opens to those words, queued or
+            // delivered alike — and the sticky bar's anchor (`StickySummary.isAnchor`). Outcomes riding
+            // on it are the replies branch's below. No payload, the old reading.
+            CoordinatorDeliveryLineView(card: card, text: b.text, undelivered: undelivered,
+                                        attached: b.attached, onCancelQueued: cancel)
         } else if let card = b.taskStart {
             // A task run's opening turn is the brief written for the agent — the task, then four
             // steps of protocol — and nobody typed it either. With the task recorded beside it
@@ -139,9 +149,12 @@ struct UserTurnRow: View {
             // blocks the cards draw, so it has no bubble.
             VStack(alignment: .leading, spacing: 6) {
                 if queued == nil, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // The owner's answer handed to the coordinator is still nobody's message: its line.
+                    // The owner's answer handed to the coordinator, or a fact told to this session, is
+                    // still nobody's message: its line.
                     if let answer = b.ownerAnswer {
                         OwnerAnswerLineView(card: answer, text: b.text, undelivered: undelivered)
+                    } else if let delivery = b.coordinatorDelivery {
+                        CoordinatorDeliveryLineView(card: delivery, text: b.text, undelivered: undelivered)
                     } else {
                         UserBubbleView(bubble: withoutNote(b))
                     }

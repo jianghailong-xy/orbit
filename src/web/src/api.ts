@@ -3,6 +3,7 @@ import type {
   BgShell,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  CoordinatorDeliveryCard,
   ConversationTurnKind,
   DirProbeAnswer,
   NewWorkspaceRequest,
@@ -745,6 +746,10 @@ export interface TurnCards {
   /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
    *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
   ownerAnswer?: OwnerAnswerCard;
+  /** A fact told to this session — a coordinator told of a committed fact, or a session the answer to
+   *  its criteria proposal (`CoordinatorDeliveryCard`): what the line says and when it was sent. Its
+   *  words are written for the agent. Absent on every turn a person typed. */
+  coordinatorDelivery?: CoordinatorDeliveryCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;

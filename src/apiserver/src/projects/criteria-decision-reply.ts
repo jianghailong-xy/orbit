@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreatorType } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -87,6 +87,23 @@ export type CriteriaDecisionReply =
 /** The `clientTurnId` of the one turn that answers a proposal. */
 export function criteriaDecisionReplyTurnId(intentId: string): string {
   return derivedUuid(`criteria-decision-reply:v1:turn:${intentId}`);
+}
+
+/**
+ * The proposal a reply turn answers, read back off the words `criteriaDecisionReplyMessage` wrote to
+ * the session that filed it — `Your criteria proposal <id> on project …` — or null for any other
+ * words. Not trusted on its own: the reader holds it to the turn's key, which is derived from that
+ * id (`criteriaDecisionReplyTurnId`), and to the decision row (`coordinator-delivery-card.ts`).
+ */
+export function criteriaDecisionReplyIntentOf(content: string | null): string | null {
+  const match = /^From Orbit · criteria decision\n\nYour criteria proposal ([0-9A-Za-z]{1,22}) on project /
+    .exec(content ?? '');
+  if (!match) return null;
+  try {
+    return base62ToUuid(match[1]!);
+  } catch {
+    return null;
+  }
 }
 
 /** The id of the one comment that answers a proposal whose session had ended. */

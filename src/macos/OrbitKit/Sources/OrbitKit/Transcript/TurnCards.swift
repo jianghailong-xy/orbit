@@ -14,6 +14,7 @@ import Foundation
 public struct TurnCards: Equatable, Sendable {
     public var itemCard: OpenItemDelivery?
     public var ownerAnswer: OwnerAnswer?
+    public var coordinatorDelivery: CoordinatorDelivery?
     public var taskStart: TaskStart?
     public var startedCard: ProjectStarted?
     public var sessionMessage: SessionMessage?
@@ -21,13 +22,15 @@ public struct TurnCards: Equatable, Sendable {
     public var reviewRequest: ConfirmationReviewRequestCard?
     public var reviewReturn: ConfirmationReturnCard?
 
-    public init(itemCard: OpenItemDelivery? = nil, ownerAnswer: OwnerAnswer? = nil, taskStart: TaskStart? = nil,
+    public init(itemCard: OpenItemDelivery? = nil, ownerAnswer: OwnerAnswer? = nil,
+                coordinatorDelivery: CoordinatorDelivery? = nil, taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
                 reviewReturn: ConfirmationReturnCard? = nil) {
         self.itemCard = itemCard
         self.ownerAnswer = ownerAnswer
+        self.coordinatorDelivery = coordinatorDelivery
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
@@ -42,13 +45,15 @@ extension UserBubble {
     /// does not hold is cleared rather than left over from an earlier reading.
     public var cards: TurnCards {
         get {
-            TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswer, taskStart: taskStart, startedCard: startedCard,
+            TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswer, coordinatorDelivery: coordinatorDelivery,
+                      taskStart: taskStart, startedCard: startedCard,
                       sessionMessage: sessionMessage, sessionReplies: sessionReplies,
                       reviewRequest: reviewRequest, reviewReturn: reviewReturn)
         }
         set {
             itemCard = newValue.itemCard
             ownerAnswer = newValue.ownerAnswer
+            coordinatorDelivery = newValue.coordinatorDelivery
             taskStart = newValue.taskStart
             startedCard = newValue.startedCard
             sessionMessage = newValue.sessionMessage

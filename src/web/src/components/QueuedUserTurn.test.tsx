@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  CoordinatorDeliveryCard,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -80,6 +81,16 @@ const ANSWER: OwnerAnswerCard = {
 };
 const ANSWER_TOLD = 'From Orbit · owner answer: you asked "Merge now, or wait for the review?". '
   + 'The owner answered: Wait for the review (2026-10-06T05:39:57.512Z).';
+
+const DELIVERY: CoordinatorDeliveryCard = {
+  kind: 'DEPENDENT_READY',
+  task: { id: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a72', title: 'Draw the queued delivery as its line' },
+  revision: null,
+  count: null,
+  deliveredAt: '2026-10-06T05:40:02.000Z',
+};
+const DELIVERY_TOLD = 'From Orbit · project “Queue parity” has a downstream task that can start now\n\n'
+  + 'Task “Draw the queued delivery as its line” (0198f0e2) can start now: its prerequisites are all done.';
 
 const TASK: TaskStartCard = {
   taskId: '01a0cca7-8609-70ed-a0e2-d4b55b832b60',
@@ -221,6 +232,17 @@ const CASES: Case[] = [
     echo: { text: ANSWER_TOLD, ownerAnswer: ANSWER },
     root: '.owner-answer',
     queuedMark: '.owner-answer.is-queued',
+    slot: '.owner-answer-queued',
+    actions: ['Cancel'],
+    acceptable: true,
+  },
+  {
+    name: 'a fact told to the coordinator',
+    field: 'coordinatorDelivery',
+    row: { turnId: 'turn-delivery', content: DELIVERY_TOLD, createdAt: TS, coordinatorDelivery: DELIVERY, authoredByOrbit: true },
+    echo: { text: DELIVERY_TOLD, coordinatorDelivery: DELIVERY },
+    root: '.coordinator-delivery',
+    queuedMark: '.coordinator-delivery.is-queued',
     slot: '.owner-answer-queued',
     actions: ['Cancel'],
     acceptable: true,
@@ -526,6 +548,7 @@ describe('a turn on the queue is drawn as the card its echo is', () => {
     const cards: Required<TurnCards> = {
       openItemDelivery: ITEM,
       ownerAnswer: ANSWER,
+      coordinatorDelivery: DELIVERY,
       taskStart: TASK,
       projectStarted: STARTED,
       confirmationReviewRequest: REVIEW_REQUEST,

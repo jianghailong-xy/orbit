@@ -94,6 +94,9 @@ import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { parseOwnerAnswer } from '../lib/ownerAnswer';
 import type { OwnerAnswerCard as OwnerAnswer } from '@orbit/shared';
 import { OwnerAnswerLine } from './OwnerAnswerLine';
+import { parseCoordinatorDelivery } from '../lib/coordinatorDelivery';
+import type { CoordinatorDeliveryCard as CoordinatorDelivery } from '@orbit/shared';
+import { CoordinatorDeliveryLine } from './CoordinatorDeliveryLine';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
@@ -534,6 +537,12 @@ type TextNode = {
   // either: drawn as one line, `Sent to the coordinator · 08:29`, that opens to the words the agent
   // read.
   ownerAnswer?: OwnerAnswer;
+  // A turn telling this session about a committed fact — a fact the coordinator is told, or the answer
+  // to its criteria proposal — when the control plane recorded what it says and when it was sent beside
+  // the echo (`coordinatorDelivery`, lib/coordinatorDelivery). Nobody typed it either: drawn as one
+  // line, `Evidence revision 1 submitted: <task> · Sent to the coordinator · 07:30 PM`, that opens to
+  // the words the agent read.
+  coordinatorDelivery?: CoordinatorDelivery;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
   // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
   // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
@@ -842,6 +851,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !node.sessionReplies
   && !node.itemCard
   && !node.ownerAnswer
+  && !node.coordinatorDelivery
   && !node.taskStart
   && !node.startedCard
   && !node.reviewRequest
@@ -1148,6 +1158,8 @@ function buildTranscript(
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
         // And for the owner's answer handed to the coordinator (lib/ownerAnswer).
         const ownerAnswer = parseOwnerAnswer(p) ?? undefined;
+        // And for a fact told to this session, or the answer to its criteria proposal (lib/coordinatorDelivery).
+        const coordinatorDelivery = parseCoordinatorDelivery(p) ?? undefined;
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
@@ -1189,6 +1201,7 @@ function buildTranscript(
             note: recorded?.note,
             itemCard,
             ownerAnswer,
+            coordinatorDelivery,
             taskStart,
             startedCard,
             sessionMessage,
@@ -1825,11 +1838,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         const words = node.text.trim() !== '';
         return (
           <>
-            {/* Outcomes can ride on the owner's answer handed to the coordinator, whose words are
-                still nobody's message: its line, not a bubble. */}
+            {/* Outcomes can ride on the owner's answer handed to the coordinator, or on a fact told to
+                this session, whose words are still nobody's message: its line, not a bubble. */}
             {words && (node.ownerAnswer ? (
               <OwnerAnswerLine
                 card={node.ownerAnswer}
+                text={node.text}
+                seq={seq}
+                undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+                queued={queued}
+              />
+            ) : node.coordinatorDelivery ? (
+              <CoordinatorDeliveryLine
+                card={node.coordinatorDelivery}
                 text={node.text}
                 seq={seq}
                 undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
@@ -1891,6 +1912,24 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         return (
           <OwnerAnswerLine
             card={node.ownerAnswer}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
+          />
+        );
+      }
+      // A fact told to this session — what the coordinator is told about a committed fact, or the
+      // answer to its criteria proposal — is the platform's message too: a headline and paragraphs of
+      // protocol written for the AGENT, which drawn as the reader's bubble filled a screen with words
+      // they never wrote and offered to put them back in the composer. One line (lib/coordinatorDelivery)
+      // that opens to those words, and the sticky bar's anchor: the reply under it answers it. With no
+      // payload the turn keeps its old reading.
+      if (node.coordinatorDelivery) {
+        return (
+          <CoordinatorDeliveryLine
+            card={node.coordinatorDelivery}
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}

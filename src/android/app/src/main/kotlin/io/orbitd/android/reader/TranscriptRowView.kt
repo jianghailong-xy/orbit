@@ -59,8 +59,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
-    // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading.
-    val answerLine = cards.singleOrNull()?.takeIf { event.type == "user" && it.key.endsWith(":ownerAnswer") }
+    // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
+    // a fact told to this session (`CoordinatorDeliveryLineView`), also when the outcomes of this session's requests ride on the same
+    // turn: the line first, then their reply cards (web `Transcript.tsx`'s session-replies branch).
+    val answerLine = cards.firstOrNull()?.takeIf { line ->
+        event.type == "user" && (line.key.endsWith(":ownerAnswer") && cards.size == 1 ||
+            line.key.endsWith(":coordinatorDelivery") && cards.drop(1).all { it.key.contains(":reply:") })
+    }
     /** [reveal]: a failed read opens the card to say so — except for a question card reading itself whole while folded. */
     fun loadFull(copy: Boolean = false, reveal: Boolean = true) { scope.launch {
         loading = true; error = false
@@ -117,7 +122,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     // A07-5: so is a DeepSeek Harness failure on a session Harness runs (iOS e789ce3dc).
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (answerLine != null) { TranscriptCardView(answerLine, open, shown); return@Column }
+        if (answerLine != null) { cards.forEach { TranscriptCardView(it, open, shown) }; return@Column }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
         if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
         if (event.type == "auto_retry" && console != null) {

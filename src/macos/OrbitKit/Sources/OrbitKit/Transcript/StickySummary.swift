@@ -38,15 +38,21 @@ public enum StickySummary {
     /// under the line, and the bar names them the way it names any question; a watch's wake is the
     /// whole of its turn's words, so nobody's are there.
     ///
+    /// A fact told to this session (`coordinatorDelivery`) is a line too, but it IS the head of a round:
+    /// the reply under it answers it, so the bar points back at it, as the browser's line carries its
+    /// `data-sticky-label`.
+    ///
     /// Read in `of`'s order, so a turn a card earlier in it claims is never taken for a wake here.
     public static func isAnchor(text: String, note: String? = nil,
                                 itemCard: OpenItemDelivery? = nil,
                                 taskStart: TaskStart? = nil,
                                 startedCard: ProjectStarted? = nil,
                                 sessionMessage: SessionMessage? = nil,
-                                ownerAnswer: OwnerAnswer? = nil) -> Bool {
+                                ownerAnswer: OwnerAnswer? = nil,
+                                coordinatorDelivery: CoordinatorDelivery? = nil) -> Bool {
         if sessionMessage != nil || itemCard != nil || taskStart != nil || startedCard != nil { return true }
         if ownerAnswer != nil { return false }
+        if coordinatorDelivery != nil { return true }
         if WatchWakeText.parse(text) != nil { return false }
         guard BackgroundWakeText.carriesWake(note) else { return true }
         return BackgroundWakeCard.drawsBubble(text: text)
@@ -68,7 +74,8 @@ public enum StickySummary {
                           itemCard: OpenItemDelivery? = nil,
                           taskStart: TaskStart? = nil,
                           startedCard: ProjectStarted? = nil,
-                          sessionMessage: SessionMessage? = nil) -> (label: String, text: String) {
+                          sessionMessage: SessionMessage? = nil,
+                          coordinatorDelivery: CoordinatorDelivery? = nil) -> (label: String, text: String) {
         // Another Orbit session's message: somebody's question, but not the reader's, and the card
         // under the bar names who asked it (`SessionMessageCard`).
         if let card = sessionMessage {
@@ -77,6 +84,12 @@ public enum StickySummary {
         }
         if let card = itemCard {
             let summary = OpenItemDeliveryCard.sticky(card)
+            return (arrow + summary.label, summary.text)
+        }
+        // A fact told to this session: nobody's question, and the line under the bar says what it was
+        // (`CoordinatorDeliveryCard`) — `↑ From Orbit`, never `Your question` over words nobody typed.
+        if let card = coordinatorDelivery {
+            let summary = CoordinatorDeliveryCard.sticky(card)
             return (arrow + summary.label, summary.text)
         }
         // A task run's opening turn: the brief is nobody's question, and the card under the bar
