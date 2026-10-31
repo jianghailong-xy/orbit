@@ -171,7 +171,7 @@ func (s *regionStub) checksSoFar() []string {
 func installRegionCheck(t *testing.T, stub *regionStub, clock *fakePoolClock) *claudeRegionCheck {
 	t.Helper()
 	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
-	check.now = clock.Now
+	check.clock = clock
 	previous := claudeRegion.Swap(check)
 	t.Cleanup(func() { claudeRegion.Store(previous) })
 	return check
@@ -378,7 +378,7 @@ func TestClaudeRegionTurnGoesOnAFreshAnswerOrAsksNow(t *testing.T) {
 	stub := newRegionStub(t, regionAnswerAllowed)
 	clock := newFakePoolClock()
 	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
-	check.now = clock.Now
+	check.clock = clock
 
 	if v := check.forTurn(context.Background()); v.Verdict != claudeRegionAllowed {
 		t.Fatalf("first turn: %+v, want allowed", v)
@@ -409,7 +409,7 @@ func TestClaudeRegionKeepsTheLastDecidedVerdictByProxy(t *testing.T) {
 	proxy := newForwardProxy(t)
 	clock := newFakePoolClock()
 	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
-	check.now = clock.Now
+	check.clock = clock
 
 	decidedAt := clock.Now()
 	check.check(context.Background())

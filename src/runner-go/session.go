@@ -1241,7 +1241,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
 	// What a FAILED finalize names its failure as, when it is one the control plane treats apart: a
-	// run refused for the region (sessionProcessRegionRefused).
+	// run refused or stopped for the region (sessionProcessRegionRefused, sessionProcessRegionStopped).
 	finalizeSubtype := ""
 	// A normal ack retries for as long as the session lives. During runner
 	// shutdown it gets the same finite drain budget as the provider process, so a
@@ -1636,11 +1636,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
 				}
-				// A turn refused for the region is put back in the queue by a control plane that
-				// knows the subtype, which then answers with the session's waiting status rather
-				// than a terminal one (docs/claude-region-check-contract.md §10). This run is over
-				// either way: its engine has stopped, and the next claim starts another.
-				regionHold := ack.request.Subtype == claudeRegionRefusedSubtype
+				// A turn refused or stopped for the region is put back in the queue, or rested, by a
+				// control plane that knows the subtype, which then answers with the session's waiting
+				// status rather than a terminal one (docs/claude-region-check-contract.md §10). This
+				// run is over either way: its engine has stopped, and the next claim starts another.
+				// Only a waiting status is that answer. A session whose cancel won the lock before the
+				// report is answered RUNNING, which is the non-terminal answer below, and the run is
+				// finalized as it always was, with the cancel's reason standing.
+				regionReport := ack.request.Subtype == claudeRegionRefusedSubtype || ack.request.Subtype == claudeRegionStoppedSubtype
+				regionHold := regionReport && (terminalAckStatus == stPending || terminalAckStatus == stAwaitingInput)
 				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
 					terminalAckErr = fmt.Errorf("failed-turn turn-complete returned non-terminal status %q", terminalAckStatus)
 				}
@@ -1712,6 +1716,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		if st == sessionProcessRegionRefused {
 			status, finalizeSubtype = stFailed, claudeRegionRefusedSubtype
+			break
+		}
+		if st == sessionProcessRegionStopped {
+			status, finalizeSubtype = stFailed, claudeRegionStoppedSubtype
 			break
 		}
 		if ended {
@@ -2113,6 +2121,12 @@ const sessionProcessCurrentWorkFenced = "CURRENT_WORK_TARGET_FENCED"
 // with the refusal's subtype.
 const sessionProcessRegionRefused = "CLAUDE_REGION_REFUSED"
 
+// Internal provider-generation outcome, like the two above: a confirmed flip stopped the turn the
+// engine was running (claude_region.go). The stopped turn's own report normally ends the run; when
+// it could not be handed over, the supervisor finalizes the run FAILED with the stop's subtype,
+// which a control plane that knows it rests rather than fails.
+const sessionProcessRegionStopped = "CLAUDE_REGION_STOPPED"
+
 // pushLiveDiff reports the worktree as it stands now, with no turn to carry it. It only reads the
 // checkout (liveDiff stages into a throwaway index), so it is safe whatever the engine is doing.
 func pushLiveDiff(t *Transport, job *ClaimedSession) {
@@ -2271,6 +2285,67 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			rt.close()
 		})
 	}
+
+	// A confirmed flip of Claude's connection to Anthropic into a region Anthropic does not offer Claude in stops
+	// the turn this engine is running, when its turns talk to Anthropic (claude_region.go, owner decision ④); a
+	// turn on another provider's key goes on. The stop takes the turn whose result the stdout reader is waiting
+	// for, under the lock its frame was committed under, so neither the reader nor the poller touches it again,
+	// and kills the process. The account of what the process owed, after it, answers that turn with the stopped
+	// sentence (stopRegionTurn). A turn the engine is running on its own (engineOwnTurn) has no turn of Orbit's to
+	// answer: the process is killed all the same, and the run ends under the stop's subtype. With neither — the
+	// engine idle, or a `!` shell or an acceptance command running in its place — a stop changes nothing.
+	regionStops := make(chan string, 1)
+	// engineOwnTurn: the engine is producing a turn no message of Orbit's is waiting for — a Monitor's wake, a
+	// background task reporting in — as the stdout reader sees it: output with nothing in `pending`, until a
+	// `result` ends it.
+	var engineOwnTurn atomic.Bool
+	if check := claudeRegion.Load(); check != nil && claudeTurnIsAnthropicBound(job.Agent.Env) {
+		unregister := check.register(func(sentence string) {
+			select {
+			case regionStops <- sentence:
+			default: // one is on its way already
+			}
+		})
+		defer unregister()
+	}
+	var regionStopMu sync.Mutex
+	regionStoppedTurn, regionStoppedWith := "", ""
+	regionStopCtx, endRegionStops := context.WithCancel(procCtx)
+	defer endRegionStops()
+	regionStopDone := make(chan struct{})
+	go func() {
+		defer close(regionStopDone)
+		for {
+			select {
+			case <-regionStopCtx.Done():
+				return
+			case sentence := <-regionStops:
+				activeOrbitMu.Lock()
+				turnID := ""
+				select {
+				case turnID = <-pending:
+				default:
+				}
+				if turnID != "" && activeOrbitTurnID == turnID {
+					activeOrbitTurnID = "" // a steer has no turn to join now
+				}
+				activeOrbitMu.Unlock()
+				if turnID == "" && !engineOwnTurn.Load() {
+					continue
+				}
+				regionStopMu.Lock()
+				regionStoppedTurn, regionStoppedWith = turnID, sentence
+				regionStopMu.Unlock()
+				if turnID != "" {
+					logln("stopping turn", turnID, "of", job.SessionID+":", sentence)
+				} else {
+					logln("stopping the turn", job.SessionID, "is running on its own:", sentence)
+				}
+				procCancel()
+				return
+			}
+		}
+	}()
 
 	// Inbox poller: pulls turns and acts immediately so interrupt/end land mid-turn.
 	pollDone := make(chan struct{})
@@ -2939,6 +3014,9 @@ scanLoop:
 			}
 		}
 		if msg["type"] == "assistant" {
+			if len(pending) == 0 {
+				engineOwnTurn.Store(true)
+			}
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
 			}
@@ -2948,6 +3026,7 @@ scanLoop:
 			}
 		}
 		if msg["type"] == "result" {
+			engineOwnTurn.Store(false)
 			r := resultFrom(msg, procCtx)
 			// Recorded before the carrier check below: the id claude runs the conversation
 			// under is session-level, and a resume can report it on a result that belongs to
@@ -3096,14 +3175,40 @@ scanLoop:
 	// running) once the writer has finished with stdin.
 	rt.markTerminal()
 	_ = rt.wait()
-	// Account for the messages this process still owed before anything re-delivers them.
-	settleUndeliveredMessages(deliveries, job, completeTurn, reportDelivery)
+	// A region stop still on its way lands before the account below, or not at all.
+	endRegionStops()
+	<-regionStopDone
+	regionStopMu.Lock()
+	stoppedTurn, stoppedWith := regionStoppedTurn, regionStoppedWith
+	regionStopMu.Unlock()
+	// Account for the messages this process still owed before anything re-delivers them. The turn a region stop
+	// took is answered by the stop, once, after its message is accounted for like any other.
+	owed := completeTurn
+	if stoppedTurn != "" {
+		owed = func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+			if req.TurnID == stoppedTurn {
+				return nil
+			}
+			return completeTurn(req, providerContexts...)
+		}
+	}
+	settleUndeliveredMessages(deliveries, job, owed, reportDelivery)
+	if stoppedWith != "" {
+		// The sentence goes into the transcript as the refusals' does: a stopped turn has no card of its own.
+		emit(evError, map[string]interface{}{"message": stoppedWith})
+		if stoppedTurn != "" {
+			stopRegionTurn(stoppedTurn, stoppedWith, job, completeTurn)
+		}
+	}
 	// stderr is an event source too. Join it before the provider generation
 	// returns, otherwise it can append after the supervisor's final flush.
 	stderrWg.Wait()
 	procCancel()
 	<-pollDone
 
+	if stoppedWith != "" {
+		return sessionProcessRegionStopped, true, false
+	}
 	if ctx.Err() != nil {
 		return stCancelled, true, false
 	}

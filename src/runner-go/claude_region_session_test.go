@@ -25,6 +25,7 @@ type regionRig struct {
 	live  *liveSession
 	job   *ClaimedSession
 	clock *fakePoolClock
+	check *claudeRegionCheck
 	done  chan struct{}
 }
 
@@ -33,38 +34,71 @@ type regionRig struct {
 // (isolateClaudeRegionEnv).
 func newRegionRig(t *testing.T, answer string, env map[string]string, status func(TurnCompleteRequest) string, script ...fakeStep) *regionRig {
 	t.Helper()
+	rig := prepareRegionRig(t, answer, status)
+	job := claudeSpawnJob(t)
+	job.Agent.Env = env
+	rig.start(job, script...)
+	return rig
+}
+
+// prepareRegionRig is a rig's runner before its session starts: the stub, and the region check that asks it,
+// which checks again a minute after a flip, as runLoop's does. A test can put the check where it wants it
+// before start.
+func prepareRegionRig(t *testing.T, answer string, status func(TurnCompleteRequest) string) *regionRig {
+	t.Helper()
 	stub := newRegionStub(t, answer)
 	stub.status = status
 	clock := newFakePoolClock()
-	installRegionCheck(t, stub, clock)
-	fake := newFakeClaude(t, script...)
-	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	job := claudeSpawnJob(t)
-	job.Agent.Env = env
-	stub.inbox = append(stub.inbox, RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "rename the widget"})
+	check := installRegionCheck(t, stub, clock)
+	check.lifetime = context.Background()
+	return &regionRig{regionStub: stub, clock: clock, check: check, done: make(chan struct{})}
+}
 
-	pool := newSessionPool(2)
+// start runs job, on a fake CLI that plays script.
+func (r *regionRig) start(job *ClaimedSession, script ...fakeStep) {
+	r.t.Helper()
+	r.fake = newFakeClaude(r.t, script...)
+	r.t.Setenv("PATH", r.fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r.run(job)
+}
+
+// beside runs job as a second session on the rig's runner — the same region check and the same fake CLI —
+// with a stub of its own for its control-plane traffic, answering its turn-completes with status.
+func (r *regionRig) beside(job *ClaimedSession, status func(TurnCompleteRequest) string) *regionRig {
+	r.t.Helper()
+	stub := newRegionStub(r.t, regionAnswerNotFound) // its route is never asked: the rig's check asks the rig's
+	stub.status = status
+	other := &regionRig{regionStub: stub, fake: r.fake, clock: r.clock, check: r.check, done: make(chan struct{})}
+	other.run(job)
+	return other
+}
+
+func (r *regionRig) run(job *ClaimedSession) {
+	t := r.t
+	t.Helper()
+	r.job = job
+	r.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "rename the widget"})
+	r.pool = newSessionPool(2)
 	ctx, cancel := context.WithCancel(context.Background())
-	live, added := pool.register(job, cancel, true)
+	live, added := r.pool.register(job, cancel, true)
 	if !added {
 		t.Fatal("the session was not registered")
 	}
-	rig := &regionRig{regionStub: stub, fake: fake, pool: pool, live: live, job: job, clock: clock, done: make(chan struct{})}
+	r.live = live
 	execDir := t.TempDir()
 	go func() {
-		defer close(rig.done)
-		runInteractiveSession(NewTransport(stub.server.URL, "runner-token"), job, ctx, context.Background(), execDir, nil, pool, live)
-		pool.finish(live)
+		defer close(r.done)
+		runInteractiveSession(NewTransport(r.server.URL, "runner-token"), job, ctx, context.Background(), execDir, nil, r.pool, live)
+		r.pool.finish(live)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-rig.done:
+		case <-r.done:
 		case <-time.After(30 * time.Second):
 			t.Error("the supervisor did not return after its session was cancelled")
 		}
 	})
-	return rig
 }
 
 func (r *regionRig) queue(turn RunInboxResponse) {
