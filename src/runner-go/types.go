@@ -1126,7 +1126,8 @@ type CommitErrorExpiry struct {
 
 // DiffResultRequest mirrors @orbit/shared SessionDiffResultRequest: a freshly recomputed live
 // worktree diff, POSTed back in response to a 'diff' inbox control turn so the web's diff
-// drawer reflects the current worktree even when the stored snapshot lagged.
+// drawer reflects the current worktree even when the stored snapshot lagged, and at the end of
+// a turn the engine ran on its own, which no /turn-complete reports.
 type DiffResultRequest struct {
 	ChangedFiles  []ChangedFile `json:"changedFiles,omitempty"`
 	ChangedDiff   []FilePatch   `json:"changedDiff,omitempty"`

@@ -997,8 +997,9 @@ func (t *Transport) artifactResult(sessionID string, b ArtifactResultRequest) er
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/artifacts/result", b, nil, 15*time.Second)
 }
 
-// diffResult pushes a freshly recomputed live worktree diff back to the server in response to
-// an inbox 'diff' refresh request (the web opened a file whose stored patch lagged).
+// diffResult pushes a freshly recomputed live worktree diff to the server: in response to an inbox
+// 'diff' refresh request (the web opened a file whose stored patch lagged), and when a turn the
+// engine ran on its own ends, which has no /turn-complete to carry it.
 func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
 	return t.diffResultContext(nil, sessionID, b)
 }

@@ -9375,7 +9375,8 @@ export class RunnerApiController {
   }
 
   /** A freshly recomputed live worktree diff, pushed in response to a 'diff' inbox control
-   *  turn (the web opened a file whose stored patch lagged). Overwrites the session's
+   *  turn (the web opened a file whose stored patch lagged), or at the end of a turn the engine
+   *  ran on its own, which never reaches turnComplete. Overwrites the session's
    *  changedFiles and the SessionDiff side-table patches together, so the file list and the
    *  per-file diffs are consistent again. Guarded to OPEN + this runner (mirrors the heartbeat
    *  guard) so a straggler can't clobber a just-finalized session's committed diff. */
