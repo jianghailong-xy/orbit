@@ -13,9 +13,10 @@ import { cutRunes } from './wiki-import-extract';
  * A claim moves due queued jobs to running under a fresh lease generation, in one statement that skips what
  * another claim holds (`FOR UPDATE SKIP LOCKED`), at most one job per space
  * (`wiki_job_space_running_key` is the same rule in the database, for two schedulers that read the table at
- * once) and only kinds this build runs. Every write that settles the job afterwards is a compare-and-set on
- * that generation, so a worker whose lease ran out and was taken over settles nothing: the takeover's
- * generation is not its own.
+ * once) and only kinds this build runs. The statement reads its candidates once, whatever the plan, so the
+ * room the worker gives it is a bound (wiki-claim-reads-once.pg.spec.ts). Every write that settles the job
+ * afterwards is a compare-and-set on that generation, so a worker whose lease ran out and was taken over
+ * settles nothing: the takeover's generation is not its own.
  *
  * THE ORDER
  * A space runs its jobs in its own order: the highest priority first, then the longest-waiting — with one exception,
@@ -144,15 +145,10 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
                first_value(q."id") OVER "head" AS "placeId"
         FROM "queue" q
         WINDOW "head" AS (PARTITION BY q."space_id" ORDER BY q."priority" DESC, q."created_at", q."id")
-      )
-      UPDATE "wiki_job" AS j
-      SET "state" = 'running',
-          "lease_owner" = ${input.workerId}::uuid,
-          "lease_generation" = gen_random_uuid(),
-          "lease_deadline_at" = now() + ${lease}::int * interval '1 millisecond',
-          "started_at" = COALESCE(j."started_at", now()),
-          "updated_at" = now()
-      FROM (
+      ),
+      -- A WITH and not a subquery of the UPDATE's FROM: a plan with j outside would run a subquery once for each row
+      -- of j, each run locking past the rows this statement has already written, and LIMIT would bound nothing.
+      "due" AS MATERIALIZED (
         SELECT c."id" FROM "wiki_job" c
         JOIN "line" l ON l."id" = c."id"
         -- The space's next job, and only it: two schedulers therefore pick the same row and one of them skips it,
@@ -171,8 +167,16 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
         ORDER BY l."placePriority" DESC, l."placeAt" ASC, l."placeId" ASC
         LIMIT ${input.limit}
         FOR UPDATE OF c SKIP LOCKED
-      ) AS due
-      WHERE j."id" = due."id"
+      )
+      UPDATE "wiki_job" AS j
+      SET "state" = 'running',
+          "lease_owner" = ${input.workerId}::uuid,
+          "lease_generation" = gen_random_uuid(),
+          "lease_deadline_at" = now() + ${lease}::int * interval '1 millisecond',
+          "started_at" = COALESCE(j."started_at", now()),
+          "updated_at" = now()
+      FROM "due"
+      WHERE j."id" = "due"."id"
       RETURNING j."id", j."owner_id" AS "ownerId", j."space_id" AS "spaceId", j."kind", j."input",
                 j."priority", j."attempts", j."lease_generation" AS "leaseGeneration"`;
   } catch (error) {

@@ -21,7 +21,9 @@ import { wikiStoredModelText, wikiTextBase64, wikiTextFromStored, wikiTextIsStor
  * deployment serializes here), counts the running rows whose lease has not expired, and takes at most
  * ORBIT_WIKI_MODEL_CONCURRENCY minus that count — by priority descending, then enqueued_at, SKIP LOCKED,
  * each row under a new lease generation. However many workers run, that many requests are in flight at
- * once and no more, and a job never has more than WIKI_MODEL_QUEUE.maxInFlightPerJob of them.
+ * once and no more, and a job never has more than WIKI_MODEL_QUEUE.maxInFlightPerJob of them. The take
+ * reads its candidates once, whatever the plan (the statement says why): wiki-claim-reads-once.pg.spec.ts
+ * forces the plan that would read them again.
  *
  * THE LEASE
  * A running row holds lease_owner, lease_generation and lease_deadline_at together (the CHECK holds that
@@ -146,14 +148,9 @@ export async function claimWikiModelRequests(
     const room = Math.min(input.limit ?? input.concurrency, input.concurrency) - counted.running;
     if (room <= 0) return [];
     const claimed = await tx.$queryRaw<Array<Omit<ClaimedWikiModelRequest, 'request'> & { request: unknown; partialEncoding: string }>>`
-      UPDATE "wiki_model_request" AS r
-      SET "state" = 'running',
-          "lease_owner" = ${input.workerId}::uuid,
-          "lease_generation" = gen_random_uuid(),
-          "lease_deadline_at" = now() + ${lease}::int * interval '1 millisecond',
-          "started_at" = COALESCE(r."started_at", now()),
-          "updated_at" = now()
-      FROM (
+      -- A WITH and not a subquery of the UPDATE's FROM: a plan with r outside would run a subquery once for each row
+      -- of r, each run locking past the rows this statement has already written, and LIMIT would bound nothing.
+      WITH due AS MATERIALIZED (
         SELECT c."id" FROM "wiki_model_request" c
         WHERE c."state" = 'queued'
           AND COALESCE(c."not_before", c."enqueued_at") <= now()
@@ -172,7 +169,15 @@ export async function claimWikiModelRequests(
         ORDER BY c."priority" DESC, c."enqueued_at" ASC, c."id" ASC
         LIMIT ${room}
         FOR UPDATE SKIP LOCKED
-      ) AS due
+      )
+      UPDATE "wiki_model_request" AS r
+      SET "state" = 'running',
+          "lease_owner" = ${input.workerId}::uuid,
+          "lease_generation" = gen_random_uuid(),
+          "lease_deadline_at" = now() + ${lease}::int * interval '1 millisecond',
+          "started_at" = COALESCE(r."started_at", now()),
+          "updated_at" = now()
+      FROM due
       WHERE r."id" = due."id"
       RETURNING r."id", r."job_id" AS "jobId", r."owner_id" AS "ownerId", r."space_id" AS "spaceId",
                 r."step", r."unit", r."attempt", r."attempts", r."priority", r."request",

@@ -2207,13 +2207,15 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 
 ### 24.2 领取、租约、回收
 
-- 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
+- 领取是一条语句：`WITH due AS MATERIALIZED (SELECT … FOR UPDATE SKIP LOCKED) UPDATE "wiki_job" … FROM due`，候选是
   `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、`attempts` 没到重试上限（§24.4）、本 build 认识的种类、领取的账号
   范围之内（worker 是每个账号，§24.5）、
   且**同一空间没有在跑的作业**；每个空间只出它自己顺序里的下一个作业（优先级高的先，同一优先级先来先得，等维护的文章作业排到
   最后、不领，见下一条）；空间之间按各自的位置排——空间里按 `priority DESC, created_at, id` 排第一的那个作业的位置，不管轮到的是它
   自己还是替它走的维护；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。整条领取仍是一条语句：先用 WITH 读出到期的
-  排队作业和它们等不等维护，再 `UPDATE … FROM (SELECT … FOR UPDATE OF c SKIP LOCKED)`。
+  排队作业和它们等不等维护，再用 `WITH due AS MATERIALIZED (SELECT … FOR UPDATE OF c SKIP LOCKED)` 读出候选，最后 `UPDATE … FROM due`。
+  候选只读一次，所以 `LIMIT` 无论走哪个计划都是上限：写成 `UPDATE … FROM (SELECT …)` 的话，计划可能每扫表里一行就重跑一次子查询，每次都越过
+  本语句已经改过的行，`LIMIT` 就拦不住了（`wiki-claim-reads-once.pg.spec.ts`）。
 - **维护优先，文章最多让一轮**（owner 2026-10-10 定，`jobs.priority`）：一个还没被领取过的 `articles` 作业，要等它所在空间的「这一轮」
   维护——这个空间里在它之后建的第一个 `maintain` 作业（优先级不低于它）——结束：这一轮排着、跑着、因 infra 失败退避着，它都不领，
   所以这一轮先被领走，哪怕它建得晚。这一轮结束以后，再建的维护作业就按先来先得排在它后面：每个文章作业只让这一轮，不会饿死。
@@ -2480,7 +2482,7 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 - `ORBIT_WIKI_MODEL_CONCURRENCY`（默认 4）是整个部署在途请求的上限，与有几个 worker 无关。
 - 调度器在一个事务里领取（`claimWikiModelRequests`）：先 `pg_advisory_xact_lock` 拿全队列一把锁；数出 `state = 'running' AND
   lease_deadline_at > now()` 的行数 r；只领 `N − r` 条（哪次领取都不会越过上限）；候选按 `priority DESC, enqueued_at, id`，
-  `FOR UPDATE SKIP LOCKED`，每条给一个新的 `lease_generation`。
+  `FOR UPDATE SKIP LOCKED`，放在 `WITH due AS MATERIALIZED` 里只读一次（§24.2），每条给一个新的 `lease_generation`。
 - 同一优先级先来先得；每个作业最多 `maxInFlightPerJob` = 4 条在途，避免一个作业占满队列。
 
 ### 25.3 请求即断点
@@ -2565,9 +2567,9 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - 第二个能力 `wiki-repo-op-read/v1`（`WIKI_REPO_OP_READ_CAPABILITY`，owner 2026-10-08）：声明了它的 runner，`read` 回答的是指定 sha 上的
   整个文件。只声明 `wiki-repo-op/v1` 的 runner 照旧能领到操作，只是 `read` 只给每个文件的前 `boundedChars`（22,000）字——服务端照旧处理，
   健康行给出同一个「升级 runner」的原因（§26.6）。
-- 领取照集成作业：一条 `UPDATE "wiki_repo_op" … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id
+- 领取照集成作业：一条 `WITH candidate AS (SELECT … JOIN workspace w ON w.id = o.workspace_id
   WHERE w.runner_id = <本机> AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - 60s AND lease_owner <> <本进程>))
-  ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED)`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
+  ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE "wiki_repo_op" … FROM candidate`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
   在 `SKIP LOCKED` 上错开，而不是互相等待。
 - 按 `workspace.runner_id` 路由，`work_dir` 与空间记录的 `repo_url_norm`、`root_commit_sha` 一起下发：runner 读的是自己的
   checkout，检查也是在自己的 checkout 上做的。
