@@ -37,8 +37,8 @@ struct SessionRunStartCardView: View {
                 }
             }
             // The presses wrap where a row can't hold them all — a phone holds two of the region
-            // card's three (board 03) — and keep their order wherever it can.
-            CardActionRows(spacing: 8) {
+            // card's three (board 03) — in the card's order, the order they are read in.
+            FlowLayout(spacing: 8) {
                 ForEach(card.actions.filter(drawable), id: \.kind) { action in
                     if action.primary {
                         Button(action.label) { press(action) }
@@ -122,49 +122,5 @@ struct SessionRunStartCardView: View {
         case .chatAboutThis, .otherProvider, .moveSession: return false
         case .checkAgain: return console.regionChecking || console.runnerOnline == false
         }
-    }
-}
-
-/// The card's presses in rows: each takes the first row with room left for it, and a new row when
-/// none has — so a row holds as many as fit and they read in order wherever all of them do (a Mac,
-/// a wide pane). On a phone the region card's three come out as board 03 draws them: Use another
-/// provider and Check again, then Move to another machine.
-private struct CardActionRows: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: rows.map(\.width).max() ?? 0, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
-            var x = bounds.minX
-            for index in row.items {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row { var items: [Int]; var width: CGFloat; var height: CGFloat }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
-        var rows: [Row] = []
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            if let fit = rows.indices.first(where: { rows[$0].width + spacing + size.width <= width }) {
-                rows[fit].items.append(index)
-                rows[fit].width += spacing + size.width
-                rows[fit].height = max(rows[fit].height, size.height)
-            } else {
-                rows.append(Row(items: [index], width: size.width, height: size.height))
-            }
-        }
-        return rows
     }
 }
