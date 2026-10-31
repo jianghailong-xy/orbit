@@ -72,12 +72,6 @@ public enum RunnerPageCopy {
     }
 
     public static let RUNNER_WORKSPACE_WORKTREES = "Worktrees"
-    // These two are no longer drawn here (`MachineSetupCopy.RUNNER_WORKSPACES_TAP`). They stay while the
-    // Android page still says them: its RunnerPageTest and this file's parity test read them, and
-    // Android's P1b takes them out of runnerCopy.ts, here and there together.
-    public static let RUNNER_WORKSPACES_FOOTER =
-        "Tap a workspace to open its sessions. Add or change workspaces on the web."
-    public static let RUNNER_WORKSPACES_FOOTER_LINK = "on the web"
     public static func runnerWorkspaceRunning(count: Int) -> String { "\(count) running" }
 
     public static let RUNNER_ABOUT_NAME = "Name"
