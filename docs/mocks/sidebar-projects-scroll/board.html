@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web 侧栏：滚动先给 Projects</title>
+<link rel="stylesheet" href="../session-list-projects/web.css">
+<style>
+  .b-part { margin-bottom: 46px; padding: 0 4px; }
+  .b-w { width: 1300px; }
+  .b-part h2.b-h { font-size: 21px; letter-spacing: -.015em; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .b-sub { color: #4a4a52; margin: 0 0 20px; }
+  .b-row { display: flex; gap: 36px; align-items: flex-start; }
+  .b-group { display: flex; gap: 28px; align-items: flex-start; }
+  .b-group-label { font-size: 14px; font-weight: 700; color: #3a3a40; margin: 0 0 10px; display: flex; gap: 8px; align-items: center; }
+  .b-split { width: 1px; align-self: stretch; background: #c9c9d1; margin: 0 6px; }
+  .b-frame { margin: 0; width: 280px; flex: none; }
+  .b-frame.b-wide { width: 320px; }
+  .b-frame figcaption { font-size: 13.5px; color: #3a3a40; font-weight: 650; margin: 0 0 9px; line-height: 1.4; min-height: 38px; }
+  .b-frame figcaption .b-dim { display: block; font-weight: 500; color: #6a6a72; }
+  .b-shot { position: relative; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 9px; pointer-events: none; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+             font: 600 12px/22px Inter, -apple-system, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .b-gnotes { width: 588px; }
+  .b-num { display: inline-block; min-width: 54px; font-weight: 700; color: #16161a; }
+  .b-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; margin-top: 22px; align-items: start; }
+  .b-opts h3.b-q { font-size: 16px; margin: 0 0 10px; }
+  .b-opt { background: #fff; border-radius: 16px; padding: 14px 18px 8px; margin: 0 0 14px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+  .b-opt.b-rec { box-shadow: 0 0 0 2px #52c41a inset; }
+  .b-opt h4 { font-size: 15px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-opt p { margin: 4px 0 8px; font-size: 14px; color: #2a2a30; }
+  .b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+  .b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+  .tag.rec { background: #d7f2dd; color: #1d6b31; }
+  .tag.no { background: #fde2e2; color: #9b1c1c; }
+  .tag.min { background: #fff1d6; color: #8a5300; }
+  .b-red { color: #f5222d; font-weight: 650; }
+  ol.b-land { margin: 0; padding-left: 22px; font-size: 14.5px; line-height: 1.65; }
+  ol.b-land li { margin: 0 0 10px; }
+  pre.b-patch { margin: 14px 0 0; padding: 14px 18px; border-radius: 12px; background: #1f1f24; color: #dedee4;
+                font: 12.5px/1.55 "DejaVu Sans Mono", ui-monospace, monospace; white-space: pre; overflow: hidden; }
+  pre.b-patch .a { color: #95de64; } pre.b-patch .d { color: #ff9c9c; } pre.b-patch .h { color: #8fb8ff; }
+  .b-rules { margin-left: 8px; flex: 1; }
+</style>
+<script src="marks.js"></script>
+</head>
+<body>
+
+<section id="part-1" class="b-part">
+  <h1>Web 侧栏：滚动先给 Projects</h1>
+  <p class="lede b-w">今天侧栏中间（导航、Workspaces、Projects）是一个滚动框。13 个 Workspace 时，在 13 寸笔记本上 Projects 只露出组头；往下滚看项目，导航和 Workspaces 一起滚走。建议：导航固定；Workspaces 和 Projects 各占一个框、各自滚，分剩下的高度——放得下就全放，放不下时各一半，一组用不满就让给另一组。每张图都是真实 Web 控制台的截图（静态构建加假数据：今天 = main 91fde3cab，建议 = 同一棵树打上 <code>prototype.patch</code>）；数量照你的截图（13 个 Workspace、24 个项目），名字是示例；红色虚线和数字是标注。</p>
+
+  <h2 class="b-h">13 寸笔记本，浏览器窗口 1440×800</h2>
+  <div class="b-row">
+    <div>
+      <div class="b-group-label"><span class="tag n">① 今天</span></div>
+      <div class="b-group">
+        <figure class="b-frame" data-shot="today-top" data-marks="1:pjHead">
+          <figcaption>刚打开<span class="b-dim">Projects 露出 0.4 行</span></figcaption>
+          <div class="b-shot"><img src="shots/today-top.png" alt=""></div>
+        </figure>
+        <figure class="b-frame" data-shot="today-scrolled" data-marks="2:scroll">
+          <figcaption>往下滚到 Projects<span class="b-dim">上面全滚走了</span></figcaption>
+          <div class="b-shot"><img src="shots/today-scrolled.png" alt=""></div>
+        </figure>
+      </div>
+      <ul class="notes b-gnotes">
+        <li class="n" data-n="1">13 个 Workspace 把这一屏占满了，Projects 只剩组头和一条边，24 个项目一个都看不到。整列要 1663 px 高的窗口才放得下。</li>
+        <li class="n" data-n="2">整列是一个滚动框：往下滚，导航（Projects / Tasks / Wiki）和 13 个 Workspace 一起滚出视野，要换 Workspace 得滚回去（⌘1–⌘9 照样能用）。</li>
+      </ul>
+    </div>
+    <div class="b-split"></div>
+    <div>
+      <div class="b-group-label"><span class="tag new">② 建议</span></div>
+      <div class="b-group">
+        <figure class="b-frame" data-shot="b-rest" data-marks="3:nav,4:ws,5:pj">
+          <figcaption>刚打开<span class="b-dim">Workspaces 6.5 行 · Projects 6.5 行</span></figcaption>
+          <div class="b-shot"><img src="shots/b-rest.png" alt=""></div>
+        </figure>
+        <figure class="b-frame" data-shot="b-projects-scrolled" data-marks="6:pj">
+          <figcaption>滚 Projects<span class="b-dim">只有这个框动</span></figcaption>
+          <div class="b-shot"><img src="shots/b-projects-scrolled.png" alt=""></div>
+        </figure>
+      </div>
+      <ul class="notes b-gnotes">
+    <li class="n" data-n="3">导航固定，不再跟着滚。</li>
+    <li class="n" data-n="4">Workspaces 一个框：放不下时占剩下高度的一半，这里是 6.5 行（⌘1–⌘6 加半行 ⌘7），其余的在框里滚。露半行就是「下面还有」。</li>
+    <li class="n" data-n="5">Projects 一个框：另一半，6.5 行；等你的排最前（橙色的 1），和今天的排序一样。</li>
+    <li class="n" data-n="6">滚 Projects：只有这个框在动，Projects 组头停在框顶（点它照样折叠）；导航和 Workspaces 不动。滚动条只在正在滚的那个框里出现。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="part-2" class="b-part">
+  <h2 class="b-h"><span class="tag new">③ 建议的其它状态</span>同一套规则</h2>
+  <p class="b-sub b-w">Workspaces 框自己也能滚；折叠一组，另一组就拿到全部高度；窗口够高时 Workspaces 全放下，只有 Projects 滚；窄屏抽屉（≤960 px 宽）也是这一套。</p>
+  <div class="b-row">
+    <figure class="b-frame" data-shot="b-ws-scrolled" data-marks="1:ws">
+      <figcaption>滚 Workspaces<span class="b-dim">1440×800</span></figcaption>
+      <div class="b-shot"><img src="shots/b-ws-scrolled.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="b-ws-folded" data-marks="2:wsHead,3:pj">
+      <figcaption>折叠 Workspaces<span class="b-dim">1440×800</span></figcaption>
+      <div class="b-shot"><img src="shots/b-ws-folded.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-wide" data-shot="today-drawer" data-marks="4:ws">
+      <figcaption>手机抽屉 · 今天<span class="b-dim">390×760</span></figcaption>
+      <div class="b-shot"><img src="shots/today-drawer.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-wide" data-shot="b-drawer" data-marks="5:ws,6:pj">
+      <figcaption>手机抽屉 · 建议<span class="b-dim">390×760</span></figcaption>
+      <div class="b-shot"><img src="shots/b-drawer.png" alt=""></div>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:30px">
+    <figure class="b-frame" data-shot="b-tall" data-marks="7:ws,8:pj">
+      <figcaption>外接显示器<span class="b-dim">1440×1300</span></figcaption>
+      <div class="b-shot"><img src="shots/b-tall.png" alt=""></div>
+    </figure>
+    <div class="b-rules">
+      <ul class="notes" style="margin-top:47px">
+        <li class="n" data-n="1">Workspaces 框也能自己滚，组头留在框顶；Projects 不动。</li>
+        <li class="n" data-n="2">点组头折叠 Workspaces（今天就有）……</li>
+        <li class="n" data-n="3">……Projects 拿到整块高度：13 行。再点一下展开，回到各一半。</li>
+        <li class="n" data-n="4">今天的手机抽屉：13 个 Workspace 就占满了，Projects 在下面，一行也看不到。</li>
+        <li class="n" data-n="5">建议：抽屉里同一规则，Workspaces 6 行……</li>
+        <li class="n" data-n="6">……Projects 6 行。</li>
+        <li class="n" data-n="7">窗口 1300 高：Workspaces 用不满一半，13 行全放下，不滚。13 个 Workspace 时，窗口到 1270 高就是这样。</li>
+        <li class="n" data-n="8">只有 Projects 滚：13.9 行。</li>
+      </ul>
+      <div class="box" style="margin-top:18px">
+        <h2>规则</h2>
+        <table>
+          <tr><th style="width:190px">情况</th><th>Workspaces 框</th><th>Projects 框</th></tr>
+          <tr><td>两组都放得下</td><td>全放</td><td>全放（和今天一样，都不滚）</td></tr>
+          <tr><td>Workspaces 不到一半</td><td>全放，不滚</td><td>拿剩下的全部，自己滚</td></tr>
+          <tr><td>Projects 不到一半</td><td>拿剩下的全部，自己滚</td><td>全放，不滚</td></tr>
+          <tr><td>两组都超过一半</td><td>一半，自己滚</td><td>一半，自己滚</td></tr>
+          <tr><td>折叠其中一组</td><td colspan="2">另一组拿全部高度</td></tr>
+          <tr><td>不变的</td><td colspan="2">导航和账户行固定；组头可折叠；排序、⌘1–⌘9、Edit 拖动排序照旧；收起成 56 px 图标栏时照旧</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-3" class="b-part">
+  <h2 class="b-h"><span class="tag web">待定 · 要你拍板</span>都在 1440×800</h2>
+  <div class="b-row">
+    <figure class="b-frame" data-shot="a-rest" data-marks="1:pj">
+      <figcaption>A · 只滚 Projects<span class="b-dim">Workspaces 永远全显示</span></figcaption>
+      <div class="b-shot"><img src="shots/a-rest.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="b-rest" data-marks="">
+      <figcaption>B · 各一半（推荐）<span class="b-dim">即 ② 的图</span></figcaption>
+      <div class="b-shot"><img src="shots/b-rest.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="b2-rest" data-marks="2:ws,3:pj">
+      <figcaption>B′ · Workspaces 占 ⅔<span class="b-dim">放不下时 2 : 1</span></figcaption>
+      <div class="b-shot"><img src="shots/b2-rest.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="c-scrolled" data-marks="4:pjHead">
+      <figcaption>C · 整列照旧一起滚，组头吸顶<span class="b-dim">已滚到 Projects</span></figcaption>
+      <div class="b-shot"><img src="shots/c-scrolled.png" alt=""></div>
+    </figure>
+  </div>
+  <div class="b-opts b-w">
+    <div>
+      <h3 class="b-q">拍板 1 · 侧栏怎么滚</h3>
+      <div class="b-opt">
+        <h4><span class="tag no">不推荐</span>A · 只滚 Projects，Workspaces 永远全显示</h4>
+        <p class="b-pro">最贴字面：Workspaces 和导航永远不动。</p>
+        <p class="b-con"><span class="b-red">①</span> 13 个 Workspace 时，800 高的窗口里 Projects 框只剩组头，一个项目都露不出来；要 980 高才露出 5 个。Workspace 越多越糟。</p>
+      </div>
+      <div class="b-opt b-rec">
+        <h4><span class="tag rec">推荐</span>B · 两组分剩下的高度，用不满就让</h4>
+        <p class="b-pro">放得下就全放，和今天一样；放不下时各一半、各自滚；折叠一组，另一组拿全部。</p>
+        <p class="b-pro">纯 CSS（grid 的行按内容分高度），没有写死的行数；手机抽屉同一套。</p>
+        <p class="b-con">13 个 Workspace 时，笔记本上 Workspaces 也要滚（6.5 行）。</p>
+      </div>
+      <div class="b-opt">
+        <h4><span class="tag min">改动最小</span>C · 整列照旧一起滚，只让组头吸顶</h4>
+        <p class="b-pro">一条 CSS 规则。<span class="b-red">④</span> 滚到 Projects 时它的组头停在顶上，随时能点它折叠。</p>
+        <p class="b-con">导航和 Workspaces 照样滚走，你截图里的问题还在。</p>
+      </div>
+    </div>
+    <div>
+      <h3 class="b-q">拍板 2 · 选 B 的话，两组都放不下时怎么分</h3>
+      <div class="b-opt b-rec">
+        <h4><span class="tag rec">推荐</span>B · 各一半</h4>
+        <p class="b-pro">13 寸：Workspaces 6.5 行，Projects 6.5 行；窗口 1270 高起 Workspaces 不滚。</p>
+        <p class="b-pro">两个方向都会把用不满的让出去，纯 CSS。</p>
+      </div>
+      <div class="b-opt">
+        <h4>B′ · Workspaces 占 ⅔</h4>
+        <p class="b-pro"><span class="b-red">②</span> 13 寸上 ⌘1–⌘9 九行全露；窗口 1020 高起 Workspaces 不滚。</p>
+        <p class="b-con"><span class="b-red">③</span> Projects 只剩 4 行。</p>
+        <p class="b-con">CSS 的 2 : 1 不会把用不满的让出去（项目少时 Workspaces 还卡在 ⅔、Projects 框下面空着），要照内容让高度得加几行 JS。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="part-4" class="b-part">
+  <h2 class="b-h"><span class="tag n">落地</span>按代价排（按推荐的 B）</h2>
+  <ol class="b-land b-w">
+    <li><b>Web，约半天。</b><code>index.css</code>：<code>.tp-scroll</code> 从一个滚动框改成 grid（导航和分隔线是固定高度的两行，两组在后面分高度），加 <code>.tp-group-scroll</code>（各自滚，滚动条槽位常驻，⌘P 和 ⌘1 对齐、折叠时行不跳）和吸顶的组头。<code>TasksSidePanel.tsx</code>：三个 className。就是下面的 <code>prototype.patch</code>，② ③ 的图都是它；原型树上侧栏的 9 个测试文件加 <code>indexCss</code>、<code>firstPageStylesheet</code> 都过（122 条）。要补：一条 Playwright 检查（800 高两框各 266.5 px、1300 高 Workspaces 不滚），Safari 和 Firefox 各看一眼。</li>
+    <li><b>顺手两处。</b>⌘↑ / ⌘↓ 换到框外的 Workspace 时，把那一行滚进框里（今天整列滚的时候也没做，框变矮后更容易碰到）；Edit 拖动排序在矮框里拖到边上要能自动滚（dnd-kit 默认会滚可滚动的祖先，要实测）。</li>
+    <li><b>原生端不在这张图里。</b>Mac 和 iPad 侧栏、iPhone 和 Android 抽屉各有自己的实现；web 定下来后，再决定要不要跟。</li>
+  </ol>
+  <pre class="b-patch b-w" id="patch"></pre>
+  <p class="foot b-w">截图：真实 Web 控制台（vite 静态构建加假数据），侧栏用默认宽 280 px（你截图里拉到了 480，规则一样），Chromium 打开真实滚动条（8 px 槽位）。1440×800 ≈ 13 寸笔记本的浏览器窗口，1440×1300 ≈ 外接显示器，390×760 ≈ 手机。今天 = main 91fde3cab；建议 = 同一棵树打上 <code>prototype.patch</code>；A、B′、C 是在这两份构建上叠的一两行 CSS，只为截图。重截：<code>capture/</code>（数据、截图、标注框）。</p>
+</section>
+
+<script>
+  // The prototype diff, coloured: read from prototype.patch beside this board.
+  fetch('prototype.patch').then((r) => r.text()).then((text) => {
+    const pre = document.getElementById('patch');
+    for (const line of text.split('\n').filter((l) => !/^(diff --git|index )/.test(l))) {
+      const span = document.createElement('span');
+      span.className = line.startsWith('+') && !line.startsWith('+++') ? 'a' : line.startsWith('-') && !line.startsWith('---') ? 'd' : line.startsWith('@@') ? 'h' : '';
+      span.textContent = line + '\n';
+      pre.append(span);
+    }
+  }).catch(() => {});
+  // Numbered marks over each shot, from the boxes the capture measured (marks.js). A box is clipped
+  // to the part of the shot above the account row, so a group longer than the screen rings what shows.
+  window.drawMarks = () => {
+    for (const fig of document.querySelectorAll('[data-shot]')) {
+      const m = window.SHOT_MARKS[fig.dataset.shot];
+      const holder = fig.querySelector('.b-shot');
+      holder.querySelectorAll('.b-ring, .b-badge').forEach((e) => e.remove());
+      const scale = holder.clientWidth / m.w;
+      const floor = m.boxes.user ? m.boxes.user[1] : m.h;
+      for (const spec of (fig.dataset.marks || '').split(',').filter(Boolean)) {
+        const [n, key] = spec.split(':');
+        const b = m.boxes[key];
+        if (!b) { console.error('missing box', fig.dataset.shot, key); continue; }
+        const top = Math.max(0, b[1]), bottom = Math.min(floor, b[1] + b[3]);
+        const pad = 3;
+        const x = Math.max(2, b[0] * scale - pad), y = top * scale - pad;
+        const w = Math.min(holder.clientWidth - 4 - x, b[2] * scale + 2 * pad), h = (bottom - top) * scale + 2 * pad;
+        const ring = document.createElement('div');
+        ring.className = 'b-ring';
+        Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+        const badge = document.createElement('div');
+        badge.className = 'b-badge';
+        badge.textContent = n;
+        Object.assign(badge.style, { left: `${Math.max(-8, x - 12)}px`, top: `${Math.max(-8, y - 12)}px` });
+        holder.append(ring, badge);
+      }
+    }
+  };
+  window.addEventListener('load', () => window.drawMarks());
+</script>
+</body></html>
