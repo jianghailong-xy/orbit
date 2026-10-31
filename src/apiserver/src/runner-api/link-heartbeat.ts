@@ -160,7 +160,10 @@ export const HEARTBEAT_DELIVERIES = {
   },
   agentDirs: {
     how: 'MARKED',
-    writers: ['workspaces/workspaces.service.ts#create', 'workspaces/workspaces.service.ts#update', 'workspaces/workspaces.service.ts#remove'],
+    writers: [
+      'workspaces/workspaces.service.ts#create', 'workspaces/workspaces.service.ts#update', 'workspaces/workspaces.service.ts#remove',
+      'sessions/sessions.service.ts#createInNewWorkspace',
+    ],
   },
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
   refreshModelCatalog: { how: 'MARKED', writers: ['runners/runners.service.ts#requestModelCatalogRefresh'], pending: 'until a beat claims it' },
@@ -171,6 +174,7 @@ export const HEARTBEAT_DELIVERIES = {
     pending: 'an operation of the runner still active: every beat renews, settles or takes over its claim',
   },
   claudeHistoryRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#requestClaudeHistory'], pending: 'a scan pending or running' },
+  dirProbeRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#requestDirProbe'], pending: 'a probe pending or under way' },
   integrationJobs: {
     how: 'MARKED',
     writers: [
@@ -794,6 +798,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
              OR r."codex_account_remove_status" = 'pending'
              OR r."repo_cleanup_status" = 'pending'
              OR r."claude_history_status" IN ('pending', 'scanning')
+             OR r."dir_probe_status" IN ('pending', 'probing')
              OR r."model_catalog_refresh_at" IS NOT NULL
              OR r."self_update_requested_at" IS NOT NULL)
       )
@@ -819,6 +824,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.installRequest !== undefined
     || answer.repoCleanupRequest !== undefined
     || answer.claudeHistoryRequest !== undefined
+    || answer.dirProbeRequest !== undefined
     || answer.codexRateLimitResetRequest !== undefined
     || answer.managedSleep !== undefined
     || answer.refreshModelCatalog === true

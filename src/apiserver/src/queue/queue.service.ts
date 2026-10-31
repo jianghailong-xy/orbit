@@ -1074,6 +1074,10 @@ export class QueueService {
       branch: session.branch ?? undefined,
       // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: workspace?.autoInitGit ?? undefined,
+      // A workspace made in a new folder under the runner's reposRoot (POST /sessions `newFolder`): the runner makes
+      // workDir before the engine starts when it is missing (docs/first-workspace-contract.md §4). Only when true, so
+      // every other claim keeps the shape it had.
+      ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
       // The branch this session merges into — its own recorded target, a code task's project
       // integration line, else the workspace's remembered default. Lets the runner judge
       // "already merged" against that branch instead of main.

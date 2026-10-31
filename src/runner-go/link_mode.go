@@ -739,6 +739,7 @@ var linkDaemonRoutes = []string{
 	"POST /runner/codex-rate-limit-reset-result",
 	"POST /runner/repo-cleanup-result",
 	"POST /runner/claude-history-result",
+	"POST /runner/dir-probe-result",
 	"POST /runner/install-result",
 	"POST /runner/codex-account-remove-result",
 	"POST /runner/account-remove-result",

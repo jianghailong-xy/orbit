@@ -2574,7 +2574,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
       // named, and no function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored enrollment reads NULL.
-      '0455_device_enrollment_requester_ip'],
+      '0455_device_enrollment_requester_ip',
+      // A machine's first workspace made from the conversation (0457, docs/first-workspace-contract.md): `runner` gains
+      // `register_dir` and the four `dir_probe_*` columns of a one-slot relay (TEXT, TEXT, TEXT, TIMESTAMP(3), JSONB, all
+      // nullable, no default), `workspace` gains `auto_create_work_dir` and `session` `created_workspace` (BOOLEAN NOT
+      // NULL DEFAULT false: a constant default, so no table is rewritten), each added with IF NOT EXISTS. `session` is
+      // altered, which is not a preserved relation; no `task`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored
+      // runner reads NULL in each new column, and every workspace and session false.
+      '0457_first_workspace_in_conversation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
