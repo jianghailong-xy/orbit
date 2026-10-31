@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -1379,30 +1381,27 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if s.sessionID == "" {
 			return toolResult("schedule_wakeup wakes the session it is called from, and this MCP server is not running inside one", true)
 		}
-		body := map[string]interface{}{"stop": true}
-		if !getBool(args, "stop") {
-			delay, ok := args["delaySeconds"].(float64)
-			if !ok {
-				return toolResult("delaySeconds (a number of seconds) is required unless stop is true", true)
-			}
-			reason := getString(args, "reason")
-			if reason == "" {
-				return toolResult("reason is required unless stop is true", true)
-			}
-			body = map[string]interface{}{"delaySeconds": delay, "reason": reason}
-			if prompt := getString(args, "prompt"); prompt != "" {
-				body["prompt"] = prompt
-			}
+		body, refused := scheduleWakeupBody(args)
+		if refused != "" {
+			return toolResult(refused, true)
 		}
+		loop := body["recurring"] == true
 		receipt, err := s.t.scheduleWakeup(s.sessionID, body)
 		if err != nil {
+			if loop && scheduleWakeupLoopReadAsOneShot(err) {
+				return toolResult("schedule_wakeup failed: "+scheduleWakeupNoLoops+". It read the call as one wakeup, which needs "+
+					"delaySeconds and reason, and refused it: nothing was scheduled. "+scheduleWakeupNoLoopsAdvice+"\n"+err.Error(), true)
+			}
 			return toolResult("schedule_wakeup failed: "+err.Error(), true)
 		}
-		if receipt.Outcome == "CANCELLED" {
-			if receipt.Cancelled == 0 {
-				return toolResult("There was no pending wakeup to cancel.", false)
-			}
-			return toolResult("Pending wakeup cancelled: nothing will wake this session.", false)
+		switch {
+		case receipt.Outcome == "CANCELLED":
+			return toolResult(scheduledWakeupStopNote(receipt), false)
+		case loop && !receipt.Recurring:
+			// Never reported as a loop: no loop is running, and the agent has to know it.
+			return toolResult(scheduledWakeupLoopRefusedNote(receipt), true)
+		case loop:
+			return toolResult(scheduledWakeupLoopNote(receipt), false)
 		}
 		var note strings.Builder
 		fmt.Fprintf(&note, "Wakeup scheduled for %s (in %ds)", receipt.DueAt, receipt.DelaySeconds)
@@ -4622,29 +4621,47 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "schedule_wakeup",
-			"description": "Wake this session later. Orbit's server holds the timer: when it is due, a turn starts in " +
-				"this session carrying your reason and prompt — even if this engine was recycled or the runner restarted " +
-				"in the meantime, and even while a Monitor or background job is still running. Use it instead of Claude's " +
-				"ScheduleWakeup, which is refused here because its timer lives inside the engine process. One wakeup waits " +
-				"per session: a new call replaces the pending one, and stop: true cancels it. To wait for something that " +
-				"ends by itself outside Orbit (CI, a build, a deploy), prefer bg_run with wakeOnExit; for Orbit tasks and " +
-				"sessions, call task_await or session_await. Both wake you when it happens.",
+			"description": "Wake this session later, once or on a loop. Orbit's server holds the timer: when it is due, " +
+				"a turn starts in this session carrying your reason and prompt — even if this engine was recycled or the " +
+				"runner restarted in the meantime, and even while a Monitor or background job is still running. Use it " +
+				"instead of Claude's ScheduleWakeup and CronCreate, which are refused here because their timers live inside " +
+				"the engine process. Once: delaySeconds and reason. One such wakeup waits per session: a new call replaces " +
+				"the pending one. On a loop: recurring: true with everySeconds and prompt. The server schedules every tick " +
+				"itself until `until`, so do not call schedule_wakeup again each turn to keep the loop going: a tick that " +
+				"cannot run (the runner offline, the session failed) is counted as missed, and the next one is scheduled all " +
+				"the same. One loop runs per session, and a new recurring call replaces it; a one-shot wakeup and a loop " +
+				"never replace each other. stop: true cancels the pending wakeup and ends the loop. To wait for something " +
+				"that ends by itself outside Orbit (CI, a build, a deploy), prefer bg_run with wakeOnExit; for Orbit tasks " +
+				"and sessions, call task_await or session_await. Both wake you when it happens.",
 			"inputSchema": obj(map[string]interface{}{
 				"delaySeconds": map[string]interface{}{
-					"type":        "number",
-					"description": "Seconds from now to wake up, clamped to [60, 3600]. Required unless stop is true.",
+					"type": "number",
+					"description": "Once: seconds from now to wake up, clamped to [60, 3600]; required unless stop or recurring is true. " +
+						"On a loop: when the first tick is due, clamped to [60, 86400]; everySeconds when omitted.",
 				},
 				"reason": map[string]interface{}{
 					"type":        "string",
-					"description": "One sentence on what you are waiting for; it is said back to you when you are woken. Required unless stop is true.",
+					"description": "One sentence on what you are waiting for; it is said back to you when you are woken. Required for one wakeup; a loop may leave it out.",
 				},
 				"prompt": map[string]interface{}{
 					"type":        "string",
-					"description": "What the woken turn should do: the next step, or the /loop input to continue with.",
+					"description": "What the woken turn should do: the next step, or the /loop input to continue with. Required with recurring: it is what every tick's turn does.",
+				},
+				"recurring": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Hold a loop instead of one wakeup: a tick every everySeconds until `until`, each starting a turn with prompt.",
+				},
+				"everySeconds": map[string]interface{}{
+					"type":        "number",
+					"description": "A loop's interval in seconds, clamped to [60, 86400]. Required with recurring.",
+				},
+				"until": map[string]interface{}{
+					"type":        "string",
+					"description": "When a loop ends by itself, as an ISO 8601 date-time: 7 days out when omitted, 30 days out at most.",
 				},
 				"stop": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Cancel the pending wakeup instead of scheduling one.",
+					"description": "Cancel the pending wakeup and end the running loop instead of scheduling anything. Calling it again changes nothing.",
 				},
 			}),
 		},
@@ -4966,6 +4983,140 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		})
 	}
 	return tools
+}
+
+// ── schedule_wakeup ───────────────────────────────────────────────────────
+
+// scheduleWakeupBody is the request a schedule_wakeup call sends, or why it sends none
+// (docs/long-running-loop-contract.md §1.1). What a loop needs is refused here as the control plane
+// refuses it, and a loop's fields without recurring: true are refused here alone: a control plane that
+// predates loops strips the fields it does not know, so it would hold one wakeup and drop them unsaid.
+func scheduleWakeupBody(args map[string]interface{}) (map[string]interface{}, string) {
+	if getBool(args, "stop") {
+		return map[string]interface{}{"stop": true}, ""
+	}
+	if !getBool(args, "recurring") {
+		if args["everySeconds"] != nil || args["until"] != nil {
+			return nil, "everySeconds and until belong to a loop: send them with recurring: true"
+		}
+		delay, ok := args["delaySeconds"].(float64)
+		if !ok {
+			return nil, "delaySeconds (a number of seconds) is required unless stop or recurring is true"
+		}
+		reason := getString(args, "reason")
+		if reason == "" {
+			return nil, "reason is required unless stop or recurring is true"
+		}
+		body := map[string]interface{}{"delaySeconds": delay, "reason": reason}
+		if prompt := getString(args, "prompt"); prompt != "" {
+			body["prompt"] = prompt
+		}
+		return body, ""
+	}
+	every, ok := args["everySeconds"].(float64)
+	if !ok {
+		return nil, "everySeconds (the seconds between ticks) is required with recurring: true"
+	}
+	prompt := getString(args, "prompt")
+	if strings.TrimSpace(prompt) == "" {
+		return nil, "prompt is required with recurring: true: it is what every tick's turn is to do"
+	}
+	body := map[string]interface{}{"recurring": true, "everySeconds": every, "prompt": prompt}
+	if v := args["delaySeconds"]; v != nil {
+		delay, ok := v.(float64)
+		if !ok {
+			return nil, "delaySeconds, when the first tick is due, is a number of seconds"
+		}
+		body["delaySeconds"] = delay
+	}
+	if v := args["until"]; v != nil {
+		until, ok := v.(string)
+		if !ok || strings.TrimSpace(until) == "" {
+			return nil, "until is an ISO 8601 date-time, such as 2026-11-08T09:00:00Z"
+		}
+		body["until"] = until
+	}
+	if reason := getString(args, "reason"); reason != "" {
+		body["reason"] = reason
+	}
+	return body, ""
+}
+
+// What a loop request meets on a control plane that predates loops (contract §1.1, version skew), and
+// what to do there instead.
+const (
+	scheduleWakeupNoLoops       = "this Orbit server predates recurring wakeups, so no loop is running"
+	scheduleWakeupNoLoopsAdvice = "On this server, schedule one wakeup at a time (delaySeconds, reason and prompt) and " +
+		"call schedule_wakeup again from each woken turn; stop: true cancels the pending one."
+)
+
+// scheduleWakeupLoopReadAsOneShot reports a loop request refused by a control plane that predates loops:
+// it strips the loop's fields and refuses what is left as a one-shot wakeup missing its delaySeconds or
+// its reason, in class-validator's words for them. A control plane that holds loops says neither to a
+// loop request, because scheduleWakeupBody sends delaySeconds only as a number and reason only as a
+// string, and it asks for neither of a loop.
+func scheduleWakeupLoopReadAsOneShot(err error) bool {
+	var refused *transportHTTPError
+	if !errors.As(err, &refused) || refused.statusCode != http.StatusBadRequest {
+		return false
+	}
+	return strings.Contains(refused.body, "delaySeconds must be a number") || strings.Contains(refused.body, "reason must be a string")
+}
+
+// scheduledWakeupLoopRefusedNote answers a loop request that a control plane which predates loops held
+// as one wakeup: what it holds instead, which the agent can keep or cancel.
+func scheduledWakeupLoopRefusedNote(r scheduledWakeupReceipt) string {
+	var note strings.Builder
+	fmt.Fprintf(&note, "schedule_wakeup failed: %s. It held the call as one wakeup instead, due %s (in %ds)", scheduleWakeupNoLoops, r.DueAt, r.DelaySeconds)
+	if r.Replaced {
+		note.WriteString(", replacing the one that was pending")
+	}
+	note.WriteString(". " + scheduleWakeupNoLoopsAdvice)
+	return note.String()
+}
+
+// scheduledWakeupLoopNote is the receipt of a loop the control plane holds: when its first tick is due,
+// how long it runs, what was clamped, and whether it replaced a loop.
+func scheduledWakeupLoopNote(r scheduledWakeupReceipt) string {
+	var note strings.Builder
+	fmt.Fprintf(&note, "Loop scheduled: a tick every %ds until %s. The first tick is due %s (in %ds).", r.EverySeconds, r.Until, r.DueAt, r.DelaySeconds)
+	var clamped []string
+	if from := r.ClampedFrom.EverySeconds; from != nil {
+		clamped = append(clamped, fmt.Sprintf("everySeconds %s became %d", strconv.FormatFloat(*from, 'f', -1, 64), r.EverySeconds))
+	}
+	if from := r.ClampedFrom.DelaySeconds; from != nil {
+		clamped = append(clamped, fmt.Sprintf("delaySeconds %s became %d", strconv.FormatFloat(*from, 'f', -1, 64), r.DelaySeconds))
+	}
+	if len(clamped) > 0 {
+		note.WriteString(" Clamped to [60, 86400] seconds: " + strings.Join(clamped, ", ") + ".")
+	}
+	if from := r.ClampedFrom.Until; from != "" {
+		fmt.Fprintf(&note, " The until asked for, %s, is more than 30 days out: the loop ends at %s instead.", from, r.Until)
+	}
+	if r.Replaced {
+		note.WriteString(" It replaces the loop that was running, which has ended.")
+	}
+	note.WriteString(" Orbit's server holds the loop and schedules every tick itself: each starts a turn in this session with your " +
+		"prompt, even if this engine was recycled or the runner restarted, and a tick that cannot run is counted as missed while the next " +
+		"one is still scheduled. Do not call schedule_wakeup again to keep it going; stop: true ends it.")
+	return note.String()
+}
+
+// scheduledWakeupStopNote says what a stop cancelled, the one-shot wakeup and the loop each on its own:
+// a stop takes both, and finding neither is an answer, not an error.
+func scheduledWakeupStopNote(r scheduledWakeupReceipt) string {
+	if r.Cancelled == 0 && r.LoopsStopped == 0 {
+		return "Nothing to stop: no wakeup was pending and no loop was running."
+	}
+	wakeup := "no one-shot wakeup was pending"
+	if r.Cancelled > 0 {
+		wakeup = "the pending one-shot wakeup is cancelled"
+	}
+	loop := "no loop was running"
+	if r.LoopsStopped > 0 {
+		loop = "the loop has ended, and no further tick of it is scheduled"
+	}
+	return "Stopped: " + wakeup + "; " + loop + "."
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────

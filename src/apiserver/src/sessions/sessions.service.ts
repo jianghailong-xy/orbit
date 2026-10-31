@@ -24,7 +24,7 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
+import { appendScheduledWakeupContext, endWakeupLoop } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -6200,6 +6200,11 @@ export class SessionsService {
       // here — every one of them, because an interrupt drops the whole queue and not one named turn
       // (runner-api/wake-turn-withdraw.ts). A refusal below rolls this back too.
       await settleUnrunWakeTurns(tx, id, { interrupted: true });
+      // The composer's Stop ends the session's background work, and a wakeup loop is background work: it
+      // ends here, OWNER_STOP, with the tick it has waiting (docs/long-running-loop-contract.md §1). A plain
+      // interrupt leaves the loop running — it only took the loop's tick already queued, just above — and
+      // the next tick comes due as it would have.
+      if (stopBackgroundWork) await endWakeupLoop(tx, id, 'OWNER_STOP');
       // An exception item queued behind the interrupted turn is taken back unrun. The conversation
       // lives on, so the item stays the coordinator's and is delivered again when its next turn ends.
       await returnQueuedTurns(tx, id, { code: 'TURN_INTERRUPTED' });

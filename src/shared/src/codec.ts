@@ -349,6 +349,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // capabilities; the corresponding equality capabilities are classified below.
   'ingestedByRunnerId',
   'wakeupId',
+  // `session_scheduled_wakeup.loop_id` (migration 0458): the wakeup loop a tick belongs to. An address —
+  // `schedule_wakeup({recurring: true})` answers with it — and never a fence: nothing compares it but a key.
+  'loopId',
   'evaluationId',
   'firstEvaluationId',
   'actionIntentId',

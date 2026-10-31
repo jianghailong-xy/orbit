@@ -16,6 +16,9 @@
  *      a wakeup not yet due is not delivered.
  *   4. A session that ended before its wakeup came due is not woken.
  *   5. A wakeup that comes due while a background job's wake turn is still queued joins that turn.
+ *   6. The door takes a loop (`recurring`, docs/long-running-loop-contract.md §1) through the production
+ *      request pipe, answers its public id, refuses one without its interval, and a stop ends it beside
+ *      the one-shot wakeup. What a loop's ticks do is scheduled-wakeup-loop.pg.spec.ts's.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/scheduled-wakeup.pg.spec.ts
  *
@@ -268,6 +271,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
     ended: await session(),
     notYetDue: await session(),
     joined: await session(),
+    looping: await session(),
   };
 
   await t.test('the runner door holds a wakeup for its own session, and only for its own', async () => {
@@ -305,6 +309,48 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
     const refused = await schedule(elsewhere, { delaySeconds: 60, reason: 'not mine to schedule' });
     assert.equal(refused.status, 403, `a wakeup for another runner's session answered ${refused.status}: ${refused.text}`);
     assert.equal((await wakeupsOf(elsewhere)).length, 0);
+  });
+
+  await t.test('the door holds a loop through the request pipe, and a stop ends it beside the one-shot wakeup', async () => {
+    const until = new Date(Date.now() + 86_400_000).toISOString();
+    const started = await schedule(on.looping, {
+      recurring: true,
+      everySeconds: 600,
+      prompt: 'advance the migration by one batch',
+      until,
+    });
+    assert.equal(started.status, 200, `a loop request answered ${started.status}: ${started.text}`);
+    assert.deepEqual(
+      [started.json.outcome, started.json.recurring, started.json.everySeconds, started.json.delaySeconds, started.json.until],
+      ['SCHEDULED', true, 600, 600, until],
+      started.text,
+    );
+    const { rows: loops } = await sql.query(
+      `SELECT "id", "state", "every_seconds" AS "everySeconds" FROM "session_wakeup_loop" WHERE "session_id" = $1::uuid`,
+      [on.looping],
+    );
+    assert.deepEqual(loops.map((loop) => [loop.state, loop.everySeconds]), [['ACTIVE', 600]]);
+    assert.ok(
+      [loops[0].id, uuidToBase62(loops[0].id)].includes(String(started.json.loopId)),
+      `the receipt names another loop: ${started.text}`,
+    );
+    // The pipe strips what no field declares, so a loop's fields have to be declared to reach the door.
+    const incomplete = await schedule(on.looping, { recurring: true, prompt: 'no interval' });
+    assert.equal(incomplete.status, 400, `a loop with no everySeconds answered ${incomplete.status}: ${incomplete.text}`);
+
+    assert.equal((await schedule(on.looping, { delaySeconds: 60, reason: 'beside the loop' })).status, 200);
+    const stopped = await schedule(on.looping, { stop: true });
+    assert.equal(stopped.status, 200, stopped.text);
+    assert.deepEqual(
+      [stopped.json.outcome, stopped.json.cancelled, stopped.json.loopsStopped],
+      ['CANCELLED', 1, 1],
+      stopped.text,
+    );
+    const { rows: ended } = await sql.query(
+      `SELECT "state", "ended_reason" AS "endedReason" FROM "session_wakeup_loop" WHERE "session_id" = $1::uuid`,
+      [on.looping],
+    );
+    assert.deepEqual(ended.map((loop) => [loop.state, loop.endedReason]), [['ENDED', 'REQUESTED']]);
   });
 
   await t.test('a later request replaces a waiting wakeup, and stop cancels one', async () => {

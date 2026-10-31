@@ -794,7 +794,8 @@ func (r *linkTestRig) start(t *testing.T) {
 	t.Cleanup(r.stop)
 }
 
-// connected waits until the gateway has welcomed n connections.
+// connected waits until the gateway has welcomed n connections. That is the gateway's side only: it marks a
+// connection welcomed as it sends the Welcome, before the shadow has read it (taken).
 func (r *linkTestRig) connected(t *testing.T, n int) {
 	t.Helper()
 	linkWaitFor(t, 10*time.Second, fmt.Sprintf("%d welcomed connections", n), func() bool {
@@ -808,5 +809,27 @@ func (r *linkTestRig) connected(t *testing.T, n int) {
 			r.g.mu.Unlock()
 		}
 		return welcomed >= n
+	})
+}
+
+// taken waits until the shadow has read the Welcome of the gateway's nth welcomed connection and taken it as its
+// own: after a time without one ("connected ...") or in place of the one before ("... replaced by ..."). What the
+// shadow counts and logs of a connection is written then, so a test that reads either after connected waits for this.
+func (r *linkTestRig) taken(t *testing.T, n int) {
+	t.Helper()
+	r.connected(t, n)
+	conns, _, _, _ := r.g.snapshot()
+	id := ""
+	r.g.mu.Lock()
+	for i, welcomed := 0, 0; i < len(conns) && id == ""; i++ {
+		if !conns[i].welcomed.IsZero() {
+			if welcomed++; welcomed == n {
+				id = conns[i].id
+			}
+		}
+	}
+	r.g.mu.Unlock()
+	linkWaitFor(t, 10*time.Second, "the shadow to take connection "+id, func() bool {
+		return logged(r.logs, "link shadow: connected "+id+" ") || logged(r.logs, " replaced by "+id+" (")
 	})
 }
