@@ -20,6 +20,16 @@ final class AgentsModel {
     private(set) var runnerModelCatalog: [String: RunnerModelCatalog] = [:]
     /// runnerId → runtime → the effective default reported by the latest heartbeat.
     private(set) var runnerRuntimeDefaultModels: [String: [String: String]] = [:]
+    /// The rows `GET /runners` last answered, whole: what a machine's new session page reads about it
+    /// (what it can be asked, where a new folder goes, which engines are signed in).
+    private(set) var runnerRows: [Runner] = []
+    /// The online machines no workspace is on yet, each a Set up row after the workspaces (board rule
+    /// 9). Empty until the workspace list has answered: every machine would read as bare until it lands.
+    private(set) var machinesToSetUp: [MachineToSetUp] = []
+    /// The first runner online: where an account with no workspace lands, and where New session goes.
+    private(set) var firstOnlineMachine: String?
+    /// A workspace list from the server is in hand, not one a launch snapshot left.
+    private var workspacesAnswered = false
     /// `load()` and the iOS availability cadence may meet at an await boundary. Keep their identical
     /// Runner reads single-flight so an older response cannot overwrite a newer one.
     private var runnerSnapshotRefreshInFlight = false
@@ -92,7 +102,9 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
-    var groups: [AgentGroup] { AgentListLogic.grouped(items, runnerOrder: runnerOrder) }
+    var groups: [AgentGroup] {
+        AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)
+    }
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
     /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
     var listPresentation: ListLoadPresentation {
@@ -139,6 +151,11 @@ final class AgentsModel {
     }
 
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
+
+    func runnerRow(_ id: String) -> Runner? { runnerRows.first { $0.id == id } }
+    /// The first workspace on a machine, in the rail's order: where a page for the machine goes once it
+    /// has one.
+    func firstWorkspace(onRunner id: String) -> Agent? { orderedItems.first { $0.runnerId == id } }
 
     // MARK: a DeepSeek key's account balance
 
@@ -265,7 +282,10 @@ final class AgentsModel {
         loadState.begin()
         do {
             items = try await api.agents()
+            workspacesAnswered = true
             await refreshRunnerSnapshot()
+            // Also when a refresh already on the wire took that call: the workspaces just changed.
+            updateMachinesToSetUp()
             // Best-effort too: a transient failure keeps the last good list rather than blanking
             // the pickers (mirrors the runners fetch above).
             if let providers = try? await api.providers() {
@@ -325,6 +345,16 @@ final class AgentsModel {
         if runtimeDefaults != runnerRuntimeDefaultModels {
             runnerRuntimeDefaultModels = runtimeDefaults
         }
+        if runners != runnerRows { runnerRows = runners }
+        updateMachinesToSetUp()
+    }
+
+    private func updateMachinesToSetUp() {
+        guard workspacesAnswered else { return }
+        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items)
+        if machines != machinesToSetUp { machinesToSetUp = machines }
+        let first = runnerRows.first(where: AgentListLogic.isOnline)?.id
+        if first != firstOnlineMachine { firstOnlineMachine = first }
     }
 
     func save(_ id: String, _ req: UpdateAgentRequest) async {
