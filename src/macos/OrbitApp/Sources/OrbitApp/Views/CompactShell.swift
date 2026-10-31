@@ -302,6 +302,14 @@ private struct CompactSections: View {
                             switch node {
                             case .compose(let agentID, let folderID):
                                 AgentComposePage(agentID: agentID, folderID: folderID)
+                            // A machine's own new session page: the page of its Set up row, so it
+                            // leads like the session list it stands in for — the drawer's hamburger,
+                            // not a back button (board 03).
+                            case .machineDraft(let runnerID):
+                                MachineDraftPage(runnerID: runnerID)
+                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                    .navigationBarBackButtonHidden()
+                                    .drawerToggle(open: openDrawer)
                             // One folder's page: the sessions filed in it, opened by its row at the top of
                             // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
                             // the session that draft creates lands in the folder.
@@ -855,9 +863,10 @@ struct NavigationDrawer: View {
     /// row is redundant. Settings opens as a sheet over the page the drawer closes onto, the way
     /// ChatGPT's does. "New session" starts a draft with the current agent (`currentAgentID`, the
     /// same target as macOS ⌘N), which is the compact shell's only entry point that doesn't first
-    /// require navigating to that agent's session list.
+    /// require navigating to that agent's session list. With no workspace it opens the first online
+    /// machine's new session page (`AppModel.newSessionTarget`).
     private var actionBar: some View {
-        let canCompose = model.currentAgentID != nil
+        let canCompose = model.newSessionTarget != nil
         return HStack(spacing: 12) {
             Button {
                 model.newSessionInCurrentAgent()
@@ -898,22 +907,14 @@ struct NavigationDrawer: View {
     }
 
     /// Why New session is greyed out, over the bar — a disabled button with no reason reads as broken.
-    /// It only is when there's no workspace to start in; silent while the first fetch is still out.
+    /// It only is while the workspace list can't be read; silent while the first fetch is still out.
     @ViewBuilder
     private var newSessionBlockedNote: some View {
-        if model.currentAgentID == nil, let reason = newSessionBlockedReason {
-            Text(reason)
+        if model.newSessionTarget == nil, model.agents?.listPresentation == .failed {
+            Text("New sessions need a connection to Orbit.")
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, DrawerMetrics.hInset + 6)
-        }
-    }
-
-    private var newSessionBlockedReason: String? {
-        switch model.agents?.listPresentation {
-        case .failed?: return "New sessions need a connection to Orbit."
-        case .empty?: return "Add a workspace to start a session."
-        default: return nil
         }
     }
 
@@ -1117,7 +1118,33 @@ struct NavigationDrawer: View {
             ForEach(agents.orderedItems) { agent in
                 agentRow(agent, agents: agents)
             }
+            ForEach(agents.machinesToSetUp) { machine in
+                setUpRow(machine)
+            }
         }
+    }
+
+    /// An online machine with no workspace, after every workspace: its new session page, where its first
+    /// one is made (board 03 ①, rule 9). In the tint, since it asks for something the rest of the rail
+    /// doesn't.
+    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+        let selected = model.drawerDestination == .machine(runnerID: machine.id)
+        return Button {
+            open(.machine(runnerID: machine.id))
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: "folder.badge.plus")
+                        .frame(width: 24)
+                    Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
     }
 
     /// Heads the Workspace rows when the list couldn't be fetched (offline, server down), so an empty

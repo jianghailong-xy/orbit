@@ -660,12 +660,13 @@ struct RunnerDetailContent: View {
     }
 
     /// Where it runs: each workspace and how many of its sessions are running. A row opens the
-    /// workspace's sessions; workspaces are added and changed on the web, which the footer links to.
+    /// workspace's sessions; with none yet, the way in is a session (board rule 12).
     @ViewBuilder private func workspacesSection(_ workspaces: [Agent]) -> some View {
         Section {
             if workspaces.isEmpty {
-                Text("No workspaces on this runner yet.")
+                Text(MachineSetupCopy.machineEmptyHere(machine: RunnerPageFormat.displayName(runner)))
                     .foregroundStyle(Color.secondary)
+                Button(MachineSetupCopy.START_A_SESSION) { startSession() }
             }
             ForEach(workspaces) { workspace in
                 Button { openWorkspace(workspace.id) } label: {
@@ -681,17 +682,10 @@ struct RunnerDetailContent: View {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_WORKSPACES,
                                 trailing: workspaces.isEmpty ? nil : "\(workspaces.count)")
         } footer: {
-            Text(workspacesFooter)
+            if !workspaces.isEmpty {
+                Text(MachineSetupCopy.RUNNER_WORKSPACES_TAP)
+            }
         }
-    }
-
-    /// The Workspaces footer with "on the web" a link to this runner's page there, which the system opens
-    /// in the browser — on iPhone, iPad and Mac alike.
-    private var workspacesFooter: AttributedString {
-        let footer = RunnerPageFormat.workspacesFooter(runnerID: runner.id, baseURL: model.baseURL)
-        var link = AttributedString(footer.link)
-        link.link = footer.url
-        return AttributedString(footer.before) + link + AttributedString(footer.after)
     }
 
     /// What it is. The name is a page of its own; the rest is read-only.
@@ -953,6 +947,12 @@ struct RunnerDetailContent: View {
     private func openWorkspace(_ id: String) {
         model.settingsPresented = false
         model.openAgent(id)
+    }
+
+    /// Start a session: this machine's new session page, after the Settings sheet comes down.
+    private func startSession() {
+        model.settingsPresented = false
+        model.startSession(onMachine: runner.id)
     }
 
     private func copy(_ text: String?) {
