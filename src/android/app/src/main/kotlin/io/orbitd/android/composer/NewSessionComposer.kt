@@ -223,7 +223,7 @@ private fun MachineDraftComposer(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(scrollState)
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
                 if (runner != null) {
                     MachineSetupCard(

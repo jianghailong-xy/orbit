@@ -83,7 +83,7 @@ internal fun MachineSetupCard(
         shadowElevation = 2.dp,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     Modifier
@@ -290,7 +290,7 @@ internal fun MachineSetupCard(
 @Composable
 private fun SetupStepRow(number: Int, done: Boolean, content: @Composable ColumnScope.() -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 11.dp),
+        Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -584,7 +584,7 @@ private fun FolderOptionRow(
             .fillMaxWidth()
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .semantics { this.selected = selected }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

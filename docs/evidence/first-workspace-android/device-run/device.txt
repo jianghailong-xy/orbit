@@ -1,0 +1,3 @@
+google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys
+36
+Physical size: 1080x2400
