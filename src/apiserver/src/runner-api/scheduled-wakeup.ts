@@ -40,6 +40,9 @@ export const WAKEUP_LOOP_MAX_EVERY_SECONDS = 86_400;
 export const WAKEUP_LOOP_DEFAULT_SPAN_MS = 7 * 24 * 60 * 60 * 1_000;
 export const WAKEUP_LOOP_MAX_SPAN_MS = 30 * 24 * 60 * 60 * 1_000;
 
+/** The dead-man signal's floor: a loop is silent after two intervals with no run, and never sooner than this. */
+export const WAKEUP_LOOP_SILENCE_FLOOR_MS = 15 * 60_000;
+
 /** Why a loop ended. Every end writes one of these, with when (`session_wakeup_loop.ended_at`). */
 export type WakeupLoopEndReason = 'REQUESTED' | 'REPLACED' | 'OWNER_STOP' | 'SESSION_ENDED' | 'UNTIL_REACHED';
 
@@ -417,6 +420,61 @@ export async function settleLoopTick(
     select: { id: true, dueAt: true },
   });
   return { next: written, ended: null };
+}
+
+/**
+ * How long a loop may go without a run before its owner is told (docs/long-running-loop-contract.md §4):
+ * two intervals, and never less than WAKEUP_LOOP_SILENCE_FLOOR_MS.
+ */
+export function loopSilenceLimitMs(everySeconds: number): number {
+  return Math.max(2 * everySeconds * 1_000, WAKEUP_LOOP_SILENCE_FLOOR_MS);
+}
+
+/**
+ * The loop's last run: the latest of its ticks whose turn was handed to the engine, and when it was
+ * (`conversation_turn.delivered_at`). A tick filed onto a turn still queued has not run, however long ago
+ * it was filed; nor has one whose turn was put back in the queue, which clears that time. Null when no
+ * tick of the loop has run yet.
+ */
+export async function lastLoopRun(
+  prisma: PrismaService,
+  loopId: string,
+): Promise<{ dueAt: Date; deliveredAt: Date } | null> {
+  const [run] = await prisma.$queryRaw<Array<{ dueAt: Date; deliveredAt: Date }>>`
+    SELECT w."due_at" AS "dueAt", t."delivered_at" AS "deliveredAt"
+      FROM "session_scheduled_wakeup" w
+      JOIN "conversation_turn" t ON t."session_id" = w."session_id" AND t."client_turn_id" = w."client_turn_id"
+     WHERE w."loop_id" = ${loopId}::uuid AND w."state" = 'DELIVERED' AND t."delivered_at" IS NOT NULL
+     ORDER BY w."due_at" DESC
+     LIMIT 1`;
+  return run ?? null;
+}
+
+/**
+ * Claim the owner's alert for the loop's silence since `silentSince` — its last run, or its start when it
+ * has none: true for exactly one caller, however many passes or replicas reach a due tick of it. An alert
+ * written before `silentSince` was for an earlier silence, which a run has ended since, so it does not hold
+ * this one back.
+ */
+export async function claimLoopAlert(
+  prisma: PrismaService,
+  loopId: string,
+  silentSince: Date,
+  now: Date,
+): Promise<boolean> {
+  const { count } = await prisma.sessionWakeupLoop.updateMany({
+    where: { id: loopId, state: 'ACTIVE', OR: [{ alertedAt: null }, { alertedAt: { lt: silentSince } }] },
+    data: { alertedAt: now },
+  });
+  return count === 1;
+}
+
+/** The loop has run since its owner was told it had stopped (`lastRunAt`): that silence is over. */
+export async function clearLoopAlert(prisma: PrismaService, loopId: string, lastRunAt: Date): Promise<void> {
+  await prisma.sessionWakeupLoop.updateMany({
+    where: { id: loopId, alertedAt: { lt: lastRunAt } },
+    data: { alertedAt: null },
+  });
 }
 
 /** Whether this wake turn already carries a tick of this loop: a tick joining it is then missed. */

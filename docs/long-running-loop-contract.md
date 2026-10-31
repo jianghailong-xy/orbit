@@ -12,6 +12,7 @@ places downstream tasks read it. A change to the semantics below changes this fi
 | Runner door | `POST /api/runner/sessions/:id/scheduled-wakeup` (`runner-api/runner-api.controller.ts` `scheduledWakeup`) |
 | Loops, ticks, the wake block | `src/apiserver/src/runner-api/scheduled-wakeup.ts` |
 | Tick delivery | `src/apiserver/src/runner-api/scheduled-wakeup.worker.ts` |
+| The dead-man signal (C2) | `scheduled-wakeup.worker.ts` `signalIfSilent`, `signalDropped`; `src/apiserver/src/push/push.service.ts` `notifyLoopMissed` |
 | The owner's Stop | `src/apiserver/src/sessions/sessions.service.ts` `interrupt` |
 | Specs | `src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts`, `scheduled-wakeup.pg.spec.ts` |
 
@@ -242,6 +243,26 @@ there is none). When `now - L >= max(2 × every, 15 minutes)`, the session has n
 failure has not been alerted yet, a compare-and-set on `alerted_at` sends one `PushService.notifyLoopMissed` (the
 missed count and the reason: runner offline, session FAILED, or turn queued). `alerted_at` is cleared once delivery
 recovers. A one-shot wakeup DROPPED because its session was FAILED is pushed too. A busy turn is not a miss.
+
+As built (task C2):
+
+- L is the `delivered_at` of the turn carrying the loop's latest DELIVERED tick that has one. A tick filed onto a turn
+  still queued has not run, and neither has one whose turn was put back in the queue (that clears `delivered_at`).
+  The check runs at every due tick before the tick is filed, and not at a tick that ends the loop with its session.
+- "Live IN_FLIGHT" is read off the session and its runner: the session is RUNNING, it has an IN_FLIGHT `message` or
+  `shell` turn, and its assigned runner is online. `lease_deadline_at` is not used: it is set once when the turn is
+  handed out and never renewed, so a long turn outlives it. A turn on a runner that has gone is not running.
+- The compare-and-set (`claimLoopAlert`) writes `alerted_at` only while the loop is ACTIVE and `alerted_at` is null or
+  older than L, so one caller per silence pushes. The next due tick after a run clears an older `alerted_at`
+  (`clearLoopAlert`).
+- The missed count is the due times since the last run, this one included: this tick's number minus the last run's
+  (minus 0 when the loop never ran). The reason is RUNNER_OFFLINE when the session's runner is not online, else
+  SESSION_FAILED when the session is FAILED, else TURN_QUEUED.
+- The push is titled with the session's title, routes a tap to the session (`sessionID`), carries no badge, and has
+  kind `loop-missed` ("Wakeup loop missed 3 ticks: the runner is offline.") or, for a one-shot wakeup, kind
+  `wakeup-dropped` ("Scheduled wakeup dropped: the session failed."). A one-shot dropped because its session ended
+  or is gone, or held for an armed retry (§1.6), is not pushed.
+- The next turn the loop runs says how many due times were missed, on its `loop:` line (§1.5).
 
 ## 5. Watch (task D)
 

@@ -17,11 +17,18 @@ import {
 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService, type WakeupMissedReason } from '../push/push.service';
+import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { BACKGROUND_WAKE_TURN_PREFIX, sessionHasEnded, undeliveredWakeTurn } from './background-job-wake';
 import {
+  claimLoopAlert,
+  clearLoopAlert,
   dropScheduledWakeup,
+  lastLoopRun,
+  loopSilenceLimitMs,
+  loopTickNumber,
   markScheduledWakeupDelivered,
   ScheduledWakeupSettled,
   settleLoopTick,
@@ -61,6 +68,11 @@ import {
  *
  * Anything else leaves the tick waiting for the next pass, until it is an interval late: then it is
  * counted missed and the next tick written, so no one tick can hold its loop up.
+ *
+ * A due tick is also when the loop is checked for silence (contract §4, signalIfSilent): none of its ticks
+ * has reached the engine for max(2 × every, 15 minutes), and its session is not busy with a turn that is
+ * still running. Its owner is then told once (PushService.notifyLoopMissed), and again only for a silence
+ * after the loop's next run. So is the owner of a one-shot wakeup dropped because its session had FAILED.
  */
 
 /** How often a pass looks for due wakeups. A wakeup is at least a minute away when it is asked for. */
@@ -124,6 +136,13 @@ const TICK_SESSION = {
 
 type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION }>;
 
+/** What a silent loop's alert reads of its session: its title, and whether its runner is there. */
+const SILENT_SESSION = {
+  title: true,
+  status: true,
+  assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
+} as const satisfies Prisma.SessionSelect;
+
 /** A due tick, as the worker reads it. */
 interface DueTick {
   id: string;
@@ -162,6 +181,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
     @Optional() @Inject(SCHEDULED_WAKEUP_WORKER_OPTIONS) options: ScheduledWakeupWorkerOptions = {},
+    @Optional() private readonly push?: PushService,
   ) {
     this.pollIntervalMs = options.pollIntervalMs ?? SCHEDULED_WAKEUP_POLL_INTERVAL_MS;
     this.batch = options.batch ?? SCHEDULED_WAKEUP_BATCH;
@@ -252,9 +272,38 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       // its auto-retry armed: that session is coming back, and the wakeup waits for it.
       if (error instanceof SessionNotSendable || error instanceof NotFoundException) {
         if (error instanceof SessionNotSendable && (await this.recoveringByRetry(sessionId))) return 'HELD';
-        return (await dropScheduledWakeup(this.prisma, wakeupId)) ? 'DROPPED' : 'SETTLED_ELSEWHERE';
+        if (!(await dropScheduledWakeup(this.prisma, wakeupId))) return 'SETTLED_ELSEWHERE';
+        await this.signalDropped(wakeupId, sessionId, ownerId);
+        return 'DROPPED';
       }
       throw error;
+    }
+  }
+
+  /**
+   * A one-shot wakeup dropped because its session had FAILED is a wait nobody will be woken from, so its
+   * owner is told (contract §4) — once, because only the drop's compare-and-set gets here. One dropped
+   * because its session ended or is gone is not: that end was somebody's doing. Never throws: the wakeup is
+   * dropped either way.
+   */
+  private async signalDropped(wakeupId: string, sessionId: string, ownerId: string): Promise<void> {
+    try {
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { ...TICK_SESSION, title: true },
+      });
+      if (!session) return;
+      const standing = tickStanding(session, new Date());
+      if (standing !== 'FAILED' && standing !== 'FAILED_RECOVERING') return;
+      void this.push?.notifyLoopMissed({
+        ownerId,
+        sessionId,
+        title: session.title,
+        missed: { wakeupId },
+        reason: 'SESSION_FAILED',
+      });
+    } catch (error) {
+      this.log.error(`the owner of session ${sessionId} was not told its wakeup ${wakeupId} was dropped: ${messageOf(error)}`);
     }
   }
 
@@ -298,6 +347,9 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       reviveStreak: row.loop.reviveStreak,
       session: row.session,
     };
+    // Read before the tick is filed, so the alert says what the tick found. A loop ending with its session
+    // here is not silent: it is over.
+    if (tickStanding(tick.session, now) !== 'ENDED') await this.signalIfSilent(tick, now);
     const late = now.getTime() - tick.dueAt.getTime() > tick.everySeconds * 1_000;
     let outcome: ScheduledWakeupOutcome;
     try {
@@ -310,6 +362,66 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       return this.missTick(tick, 'keep');
     }
     return outcome === 'RETRY' && late ? this.missTick(tick, 'keep') : outcome;
+  }
+
+  /**
+   * The dead-man signal (docs/long-running-loop-contract.md §4), read at every due tick. The loop is silent
+   * when none of its ticks has reached the engine — its turn handed out, `conversation_turn.delivered_at` —
+   * for loopSilenceLimitMs, counted from its last run, or from its start when it has none.
+   *
+   * A silent loop whose session is busy is waiting, not failing: a turn of it is IN_FLIGHT on a runner that
+   * is still there. Live is read off the session and its runner, not the turn's `lease_deadline_at`, which
+   * is set once when the turn is handed out and never renewed, so a long turn outlives it (pool-pause.ts).
+   *
+   * Any other silent loop tells its owner, once: the compare-and-set on `alerted_at` (claimLoopAlert) lets
+   * one caller through per silence, and a run after the alert both clears it and lets the next silence be
+   * told. The alert says how many due times have not run since the last run, this one included, and why:
+   * the runner is offline, the session FAILED, or the turn is queued. Never throws: the signal is about the
+   * loop, and must not be what holds a tick of it up.
+   */
+  private async signalIfSilent(tick: DueTick, now: Date): Promise<void> {
+    try {
+      const loop = await this.prisma.sessionWakeupLoop.findUnique({
+        where: { id: tick.loopId },
+        select: { everySeconds: true, firstDueAt: true, createdAt: true, alertedAt: true },
+      });
+      if (!loop) return;
+      const lastRun = await lastLoopRun(this.prisma, tick.loopId);
+      if (lastRun && loop.alertedAt && loop.alertedAt.getTime() < lastRun.deliveredAt.getTime()) {
+        await clearLoopAlert(this.prisma, tick.loopId, lastRun.deliveredAt);
+      }
+      const silentSince = lastRun?.deliveredAt ?? loop.createdAt;
+      if (now.getTime() - silentSince.getTime() < loopSilenceLimitMs(loop.everySeconds)) return;
+      const session = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: SILENT_SESSION });
+      if (!session) return;
+      const runnerOnline = runnerIsOnline(session.assignedRunner, now.getTime());
+      if (runnerOnline && session.status === RunStatus.RUNNING && (await this.turnRunning(tick.sessionId))) return;
+      if (!(await claimLoopAlert(this.prisma, tick.loopId, silentSince, now))) return;
+      const standing = tickStanding(tick.session, now);
+      const reason: WakeupMissedReason = !runnerOnline
+        ? 'RUNNER_OFFLINE'
+        : standing === 'FAILED' || standing === 'FAILED_RECOVERING' ? 'SESSION_FAILED' : 'TURN_QUEUED';
+      const ticks = loopTickNumber(loop, tick.dueAt) - (lastRun ? loopTickNumber(loop, lastRun.dueAt) : 0);
+      this.log.warn(`wakeup loop ${tick.loopId} of session ${tick.sessionId} has not run for ${ticks} ticks (${reason}); its owner is told`);
+      void this.push?.notifyLoopMissed({
+        ownerId: tick.session.ownerId,
+        sessionId: tick.sessionId,
+        title: session.title,
+        missed: { loopId: tick.loopId, ticks, alertedAt: now },
+        reason,
+      });
+    } catch (error) {
+      this.log.error(`wakeup loop ${tick.loopId} could not be checked for silence at tick ${tick.id}: ${messageOf(error)}`);
+    }
+  }
+
+  /** Whether the session has a turn handed to its engine and not yet answered. */
+  private async turnRunning(sessionId: string): Promise<boolean> {
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+      select: { id: true },
+    });
+    return turn != null;
   }
 
   private async fileTick(tick: DueTick, now: Date): Promise<ScheduledWakeupOutcome> {

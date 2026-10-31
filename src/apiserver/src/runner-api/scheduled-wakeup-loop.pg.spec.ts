@@ -1,7 +1,9 @@
 /**
  * A wakeup loop is held by the control plane and is not broken by a failed turn, a FAILED session or a
  * one-shot wakeup: only `stop`, `until`, the session ending and the owner's Stop end it, and each end
- * leaves its reason (docs/long-running-loop-contract.md §1, project 34pUaJboWdDFzjftkEso8, task A1).
+ * leaves its reason (docs/long-running-loop-contract.md §1, project 34pUaJboWdDFzjftkEso8, task A1). A
+ * loop that stops running, and a one-shot wakeup dropped with its FAILED session, are told to the owner
+ * (§4, task C2).
  *
  * Against real PostgreSQL, with the production code throughout — the runner door
  * (RunnerApiController.scheduledWakeup), SessionsService (createTurn, resume, interrupt), the
@@ -27,6 +29,16 @@
  *      one), SESSION_ENDED (for every way a session ends) and UNTIL_REACHED (with the last tick's block).
  *   8. A tick that cannot be filed waits for the next pass, and an interval late it is counted missed.
  *   9. The door's bounds: clamped and said so, refused when the loop cannot be what was asked.
+ *  10. The dead-man signal, through a PushService double: a loop none of whose ticks has reached the engine
+ *      for max(2 × every, 15 minutes) tells its owner once per silence — the runner offline, then the
+ *      session FAILED — and again only after it has run, which clears the alert; the turn that runs after
+ *      the silence tells the agent how many due times did not run.
+ *  11. A busy session is not a silent loop: nothing is said while its turn runs on a runner that is there,
+ *      and the alert comes once that runner is gone.
+ *  12. A loop that never ran is silent from its start, a turn nobody hands out is said to be queued, and a
+ *      loop whose session ended is over, not silent.
+ *  13. A one-shot wakeup dropped with its FAILED session tells the owner, once; one held for an armed
+ *      retry, or dropped with a session that ended, says nothing.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts
  *
@@ -55,12 +67,13 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
+import type { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerApiController } from './runner-api.controller';
-import { ScheduledWakeupDto } from './scheduled-wakeup';
+import { loopSilenceLimitMs, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
@@ -100,6 +113,9 @@ interface TickRow {
   prompt: string | null;
 }
 
+/** What the worker asked PushService to send. */
+type WakeupMissedPush = Parameters<PushService['notifyLoopMissed']>[0];
+
 test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for a reason it records', {
   skip, concurrency: 1, timeout: 600_000,
 }, async (t) => {
@@ -129,6 +145,21 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   const worker = new ScheduledWakeupWorker(prisma, sessions);
   const claims = new QueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
   const autoRetry = new AutoRetryService(prisma, sessions, quiet);
+  /** A worker whose PushService is a double keeping every notifyLoopMissed it was asked for. */
+  const signallingWorker = (): { worker: ScheduledWakeupWorker; rang: WakeupMissedPush[] } => {
+    const rang: WakeupMissedPush[] = [];
+    const push = {
+      notifyLoopMissed: async (input: WakeupMissedPush) => {
+        rang.push(input);
+      },
+    } as unknown as PushService;
+    return { worker: new ScheduledWakeupWorker(prisma, sessions, {}, push), rang };
+  };
+  /** The loop alert a push was for; it fails the case when the push was for a one-shot wakeup. */
+  const loopAlertOf = (push: WakeupMissedPush) => {
+    assert.ok('loopId' in push.missed, `not a loop's alert: ${JSON.stringify(push)}`);
+    return push.missed;
+  };
 
   assert.ok(existsSync(WEB_PARSER), `${WEB_PARSER} was not found: the block is read against the web client's own parser`);
   const stripped = path.join(mkdtempSync(path.join(os.tmpdir(), 'orbit-wakeup-loop-')), 'backgroundWake.mjs');
@@ -266,6 +297,30 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
               "until_at" = "until_at" - $2::bigint * interval '1 millisecond'
         WHERE "id" = $1::uuid`,
       [loopId, shiftMs],
+    );
+    return (await ticksOf(loopId)).find((tick) => tick.id === waiting.id)!;
+  }
+
+  /** Let the loop's clock run until the tick it has waiting came due `lateSeconds` ago: makeDue, with the rest
+   *  of its history moved back by the same amount — when it started, when it last alerted, and when its
+   *  session's turns were handed to the engine — so the time since its last run grows as it would have.
+   *  Shifted in SQL: `delivered_at` has no zone, and this host's `pg` client would read it eight hours off. */
+  async function elapse(loopId: string, sessionId: string, lateSeconds = 1): Promise<TickRow> {
+    const waiting = await pendingOf(loopId);
+    assert.ok(waiting, 'the loop has no tick waiting');
+    const shiftMs = waiting.dueAt.getTime() - (Date.now() - lateSeconds * 1_000);
+    const back = `- $2::bigint * interval '1 millisecond'`;
+    await sql.query(`UPDATE "session_scheduled_wakeup" SET "due_at" = "due_at" ${back} WHERE "loop_id" = $1::uuid`, [loopId, shiftMs]);
+    await sql.query(
+      `UPDATE "session_wakeup_loop"
+          SET "first_due_at" = "first_due_at" ${back}, "until_at" = "until_at" ${back},
+              "created_at" = "created_at" ${back}, "alerted_at" = "alerted_at" ${back}
+        WHERE "id" = $1::uuid`,
+      [loopId, shiftMs],
+    );
+    await sql.query(
+      `UPDATE "conversation_turn" SET "delivered_at" = "delivered_at" ${back} WHERE "session_id" = $1::uuid AND "delivered_at" IS NOT NULL`,
+      [sessionId, shiftMs],
     );
     return (await ticksOf(loopId)).find((tick) => tick.id === waiting.id)!;
   }
@@ -797,5 +852,183 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     }
     assert.equal((await loopsOf(id)).length, loopsBefore, 'a refused request wrote a loop');
     assert.equal((await loopOf(id)).state, 'ACTIVE', 'a refused request ended the running loop');
+  });
+
+  // Every loop below ticks every 400 seconds, so its silence limit — max(2 × 400 s, 15 minutes) = 900 s — falls
+  // between two of its ticks, 100 seconds after one and 300 before the next, wherever the run being counted
+  // from was handed out within the second each tick is late.
+
+  await t.test('a silent loop tells its owner once per silence: not before max(2 × every, 15 minutes) without a run, never twice for one, and again after it has run', async () => {
+    // The limit: two intervals, and never under 15 minutes.
+    assert.deepEqual(
+      [60, 400, 450, 600, 3_600].map(loopSilenceLimitMs),
+      [900_000, 900_000, 900_000, 1_200_000, 7_200_000],
+    );
+    const { worker: signalling, rang } = signallingWorker();
+    const m = await machine('silent');
+    const id = await session(m);
+    await schedule(m, id, { recurring: true, everySeconds: 400, prompt: 'advance the archive migration by one batch', reason: 'the archive migration' });
+    const loop = await loopOf(id);
+
+    // Tick 1 runs: filed, handed to the engine, answered.
+    let tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    await claim(m, id);
+    await finishTurn(id);
+
+    // The runner goes away. Ticks 2 and 3 go onto one queued turn nobody takes: 400 and 800 seconds without a
+    // run are under the limit.
+    await goOffline(m);
+    for (const n of [2, 3]) {
+      tick = await elapse(loop.id, id);
+      assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
+      assert.equal(rang.length, 0, `tick ${n}, ${(n - 1) * 400} seconds after the last run, alerted`);
+    }
+    // Tick 4, 1200 seconds after it: silent. One push, with how many due times have not run and why.
+    tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    assert.equal(rang.length, 1, 'a silent loop did not alert');
+    const first = loopAlertOf(rang[0]);
+    assert.equal((await loopOf(id)).alertedAt?.getTime(), first.alertedAt.getTime(), 'the push is not for the alert the loop recorded');
+    assert.deepEqual(
+      [rang[0].ownerId, rang[0].sessionId, rang[0].title, first.loopId, first.ticks, rang[0].reason],
+      [m.ownerId, id, 'an archive migration that runs for days', loop.id, 3, 'RUNNER_OFFLINE'],
+    );
+    // The same silence goes on: nothing more is said, and the alert stays where it was.
+    for (const n of [5, 6]) {
+      tick = await elapse(loop.id, id);
+      assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
+    }
+    assert.equal(rang.length, 1, 'one silence alerted twice');
+    assert.ok((await loopOf(id)).alertedAt, 'the alert went while the silence lasted');
+
+    // The runner is back and the queued turn runs: it tells the agent how many due times did not run.
+    await goOnline(m);
+    const { content } = await claim(m, id);
+    assert.ok(content.includes('loop: tick 6, every 400 seconds'), content);
+    assert.ok(content.includes('4 ticks missed since the last run'), content);
+    await finishTurn(id);
+    // The next tick finds the loop running again: the alert is cleared, and nothing is said.
+    tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    assert.equal((await loopOf(id)).alertedAt, null, 'a run after the alert left it standing');
+    assert.equal(rang.length, 1);
+    await claim(m, id);
+    await finishTurn(id);
+
+    // A second silence: the session FAILED with its retry armed an hour out, so its ticks are skipped. The third
+    // after the last run tells the owner again, this time that the session failed.
+    await failSession(id, new Date(Date.now() + 3_600_000));
+    for (const n of [8, 9]) {
+      tick = await elapse(loop.id, id);
+      assert.equal(await signalling.deliverTick(tick.id), 'MISSED', `tick ${n}`);
+    }
+    assert.equal(rang.length, 1, 'a second silence alerted before the limit');
+    tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'MISSED');
+    assert.equal(rang.length, 2, 'a silence after the loop ran again did not alert');
+    const second = loopAlertOf(rang[1]);
+    assert.equal((await loopOf(id)).alertedAt?.getTime(), second.alertedAt.getTime());
+    assert.deepEqual([rang[1].sessionId, second.loopId, second.ticks, rang[1].reason], [id, loop.id, 3, 'SESSION_FAILED']);
+  });
+
+  await t.test('a busy session is not a silent loop: nothing is said while its turn runs on a runner that is there, and the alert comes once that runner is gone', async () => {
+    const { worker: signalling, rang } = signallingWorker();
+    const m = await machine('busy');
+    const id = await session(m);
+    await schedule(m, id, { recurring: true, everySeconds: 400, prompt: 'advance the archive migration by one batch' });
+    const loop = await loopOf(id);
+
+    // Tick 1's turn is handed to the engine and runs long: the ticks after it queue behind it, the last of
+    // them 1600 seconds after it was handed out, well past the limit.
+    let tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    await claim(m, id);
+    for (const n of [2, 3, 4, 5]) {
+      tick = await elapse(loop.id, id);
+      assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
+    }
+    assert.equal((await sessionRow(id)).status, RunStatus.RUNNING);
+    assert.equal(rang.length, 0, 'a loop queued behind a turn that is still running alerted');
+    assert.equal((await loopOf(id)).alertedAt, null);
+
+    // The runner running that turn goes away: the turn is not running anywhere any more, and the loop is silent.
+    await goOffline(m);
+    tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    assert.equal(rang.length, 1, 'a turn on a runner that is gone held the alert back');
+    assert.deepEqual([loopAlertOf(rang[0]).ticks, rang[0].reason], [5, 'RUNNER_OFFLINE']);
+  });
+
+  await t.test('a loop that never ran is silent from its start, a turn nobody hands out is said to be queued, and a loop whose session ended is over, not silent', async () => {
+    const { worker: signalling, rang } = signallingWorker();
+    const m = await machine('queued');
+    const id = await session(m);
+    await schedule(m, id, { recurring: true, everySeconds: 400, prompt: 'advance the archive migration by one batch' });
+    const loop = await loopOf(id);
+
+    // The runner is there, but the turn tick 1 opened is never handed out; tick 2 joins it, 800 seconds in.
+    for (const n of [1, 2]) {
+      const tick = await elapse(loop.id, id);
+      assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
+    }
+    assert.equal(rang.length, 0, 'a loop 800 seconds old alerted');
+    const tick = await elapse(loop.id, id);
+    assert.equal(await signalling.deliverTick(tick.id), 'DELIVERED');
+    assert.equal(rang.length, 1, 'a loop that never ran in 1200 seconds did not alert');
+    assert.deepEqual([loopAlertOf(rang[0]).ticks, rang[0].reason], [3, 'TURN_QUEUED']);
+
+    // Just as silent, but its owner ended the session: the tick ends the loop and says nothing.
+    const over = await session(m);
+    await schedule(m, over, { recurring: true, everySeconds: 400, prompt: 'advance the archive migration by one batch' });
+    const overLoop = await loopOf(over);
+    for (const n of [1, 2]) {
+      const filed = await elapse(overLoop.id, over);
+      assert.equal(await signalling.deliverTick(filed.id), 'DELIVERED', `tick ${n} of the loop whose session ends`);
+    }
+    await db.session.update({ where: { id: over }, data: { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() } });
+    const last = await elapse(overLoop.id, over);
+    assert.equal(await signalling.deliverTick(last.id), 'LOOP_ENDED');
+    assert.equal(rang.length, 1, 'a loop that ended with its session was told as silent');
+  });
+
+  await t.test('a one-shot wakeup dropped with its FAILED session tells the owner, once; held for an armed retry, or dropped with a session that ended, it says nothing', async () => {
+    const { worker: signalling, rang } = signallingWorker();
+    const m = await machine('dropped');
+
+    const failed = await session(m);
+    await schedule(m, failed, { delaySeconds: 60, reason: 'look at the deploy' });
+    await failSession(failed);
+    const [dropped] = await oneShotsOf(failed);
+    assert.equal(await signalling.deliver(dropped.id, failed, m.ownerId), 'DROPPED');
+    assert.deepEqual(rang, [{
+      ownerId: m.ownerId,
+      sessionId: failed,
+      title: 'an archive migration that runs for days',
+      missed: { wakeupId: dropped.id },
+      reason: 'SESSION_FAILED',
+    }]);
+    // Another pass reaching the same wakeup finds it settled, and says nothing more.
+    assert.equal(await signalling.deliver(dropped.id, failed, m.ownerId), 'SETTLED_ELSEWHERE');
+    assert.equal(rang.length, 1, 'one dropped wakeup alerted twice');
+
+    const armed = await session(m);
+    await schedule(m, armed, { delaySeconds: 60, reason: 'look at the deploy' });
+    await failSession(armed, new Date(Date.now() + 10 * 60_000));
+    const [held] = await oneShotsOf(armed);
+    assert.equal(await signalling.deliver(held.id, armed, m.ownerId), 'HELD');
+
+    const ways: Array<[string, Partial<Prisma.SessionUncheckedUpdateInput>]> = [
+      ['ended by its owner (CANCELLED)', { status: RunStatus.CANCELLED, endReason: 'ended', finishedAt: new Date() }],
+      ['FAILED and moved to Completed', { status: RunStatus.FAILED, finishedAt: new Date(), completedAt: new Date() }],
+    ];
+    for (const [how, end] of ways) {
+      const id = await session(m);
+      await schedule(m, id, { delaySeconds: 60, reason: 'look at the deploy' });
+      await db.session.update({ where: { id }, data: end });
+      const [wakeup] = await oneShotsOf(id);
+      assert.equal(await signalling.deliver(wakeup.id, id, m.ownerId), 'DROPPED', `a session ${how}`);
+    }
+    assert.equal(rang.length, 1, 'a held wakeup, or one dropped with a session that ended, alerted');
   });
 });
