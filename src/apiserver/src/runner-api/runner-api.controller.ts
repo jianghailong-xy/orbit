@@ -159,6 +159,8 @@ import {
   type NormalizedRunEvent,
   toUuid,
   CLAUDE_REGION_V1,
+  CLAUDE_REGION_REFUSED_SUBTYPE,
+  CLAUDE_REGION_STOPPED_SUBTYPE,
   type ClaudeRegionCheckRequest,
   type ClaudeRegionCheckResponse,
 } from '@orbit/shared';
@@ -386,7 +388,15 @@ import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
 import { cameThroughTrustedProxy, visitorAddress } from '../shared/public-surface.guard';
 import { isRunnerLinkCall } from '../common/runner-link-call';
-import { recordRegionCheck, regionCheckAnswer, regionCheckRequestOf } from '../runners/runner-region';
+import {
+  blockedRunnerRegion,
+  claudeRegionSignInRefusal,
+  recordRegionCheck,
+  regionCheckAnswer,
+  regionCheckRequestOf,
+  regionFlipConfirmed,
+  regionMachineName,
+} from '../runners/runner-region';
 import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
 import {
   heartbeatAnswerHandsOut,
@@ -1722,7 +1732,11 @@ export class RunnerApiController {
       regionCode: req.headers['cf-region-code'],
       viaProxy: viaProxy === '1',
     });
-    await recordRegionCheck(this.prisma, runner.id, answer, new Date());
+    const region = await recordRegionCheck(this.prisma, runner.id, answer, new Date());
+    // A confirmed flip is news the owner hears once (§10, board 04 "push (flip)"): the blocked check that takes
+    // blockedChecks to 2. One blocked check alone is not one, and the checks after it, unknown ones included, are the
+    // same flip.
+    if (region && regionFlipConfirmed(answer.verdict, region)) void this.push.notifyClaudeRegionBlocked(runner.id, region.name);
     return answer;
   }
 
@@ -3120,6 +3134,10 @@ export class RunnerApiController {
         loginRegion: true,
         loginCode: true,
         loginAt: true,
+        // Whether a Claude sign-in may go out at all (the region check, below), and the machine its refusal names.
+        name: true,
+        displayName: true,
+        region: true,
       },
     });
     if (!r?.loginStatus) return undefined;
@@ -3166,8 +3184,15 @@ export class RunnerApiController {
       // does not declare it signs Claude Code in for an engine it does not know.
       // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
       // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
-      const refusal =
-        !signsInAccounts && (accountName || (account && account !== 'default'))
+      // Claude's sign-in talks to Anthropic, so a process whose Claude connection is in a region Anthropic does not
+      // offer Claude in is sent none (docs/claude-region-check-contract.md §12): the sign-in fails with board 04's
+      // sentence. Judged on what this process declares, as the rest is; one without claude-region/v1 is never gated.
+      const regionBlocked = engine === 'claude'
+        ? blockedRunnerRegion({ region: r.region, capabilities: parseRunnerCapabilities(capabilities) }, new Date())
+        : null;
+      const refusal = regionBlocked
+        ? claudeRegionSignInRefusal(regionMachineName(r), regionBlocked.name)
+        : !signsInAccounts && (accountName || (account && account !== 'default'))
           ? accountLoginTooOld(accountEngine)
           : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
             ? 'This runner is too old to choose a Kimi site — update it, then try again.'
@@ -6390,6 +6415,47 @@ export class RunnerApiController {
           requestsClosed,
         };
       }
+      // A message the runner did not deliver because its Claude connection to Anthropic is in a region Anthropic does
+      // not offer Claude in (docs/claude-region-check-contract.md §10). Not a failure: the run goes back in the queue
+      // as a hold, QUEUED with the sentence, and the message stays queued — the same row, put back undelivered, for the
+      // claim that follows the hold's release (§11) to deliver. The runner stops its engine after this report and
+      // releases the run's inbox generation on the waiting status this answers, so nothing here retires it, fails a
+      // task, drains a queue or bills a turn: no turn ran.
+      if (dto.subtype === CLAUDE_REGION_REFUSED_SUBTYPE && completedTurn) {
+        // The completion's own compare-and-set (the ACK below), so a retried report matches nothing.
+        const requeued = await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' }, deliveredAt: { not: null } },
+          data: { status: 'PENDING', deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null },
+        });
+        const held = requeued.count > 0
+          ? await tx.session.updateMany({
+              where: { id: sessionId, cancelRequestedAt: null, status: RunStatus.RUNNING },
+              data: {
+                status: RunStatus.PENDING,
+                engineTurnActive: false,
+                error: dto.error || dto.result || null,
+                ...(dto.runtimeSessionId ? { runtimeSessionId: dto.runtimeSessionId } : {}),
+                ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+              },
+            })
+          : { count: 0 };
+        const status = held.count > 0
+          ? RunStatus.PENDING
+          : (await tx.session.findUnique({ where: { id: sessionId }, select: { status: true } }))?.status ?? current.status;
+        return {
+          applied: requeued.count > 0,
+          steer: false,
+          requeued: false,
+          regionHeld: held.count > 0,
+          status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
+      // A turn the runner stopped because a confirmed flip put its connection to Anthropic in such a region (owner
+      // decision ④, §10). It ran, so it is answered and billed like any turn, and it is not replayed; but the session
+      // does not fail: it rests resumable with the stopped sentence, or waits under the hold when messages are queued.
+      const regionStopped = dto.subtype === CLAUDE_REGION_STOPPED_SUBTYPE;
       // A turn that failed mid-run (e.g. an API/content-filter error the workspace couldn't
       // recover from — the runner reports such turns as FAILED) would otherwise park at
       // AWAITING_INPUT, which is indistinguishable from an ordinary idle session: the list
@@ -6398,7 +6464,7 @@ export class RunnerApiController {
       // it's what the list must show. The session stays resumable, so retrying is still one
       // message away. A task-bound session additionally reclaims its task as FAILED (it
       // would otherwise sit IN_PROGRESS with nothing watching).
-      let failSession = dto.status === RunStatus.FAILED;
+      let failSession = dto.status === RunStatus.FAILED && !regionStopped;
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
@@ -6450,8 +6516,11 @@ export class RunnerApiController {
       // a turn WITHOUT answering it (which is why it is not in the set above), so it is named
       // here rather than added there. Only `message` turns are asked for a reply at all: a shell
       // turn is answered by its exit code, and a control turn is acked on delivery.
+      //
+      // A turn the region check stopped is answered by the stop, as an interrupted one is: never requeued (§10).
       const unanswered =
-        completedTurn?.kind === 'message'
+        !regionStopped
+        && completedTurn?.kind === 'message'
         && (await tx.runEvent.findFirst({
           where: {
             sessionId,
@@ -6511,6 +6580,8 @@ export class RunnerApiController {
       // another can take it, which the next claim moves the session to, else at the first account's reset.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
+        // A region stop is no credential's failure: the session waits under the hold (§10, §11).
+        && !regionStopped
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
@@ -6858,9 +6929,12 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
+      // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
       const nextStatus = failSession
         ? RunStatus.FAILED
-        : statusAfterTurnCompleted(pendingExecutable > 0);
+        : regionStopped
+          ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
+          : statusAfterTurnCompleted(pendingExecutable > 0);
       // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
       // owner. This is the only place that knows the turn succeeded — the runner's turn_end event
       // carries no outcome — so the question is recorded here, in the same transaction as the
@@ -6948,6 +7022,8 @@ export class RunnerApiController {
                 ...CLEARED_RUNNING_WORK,
               }
             : {}),
+          // The stopped sentence a region stop ends the turn with (§10), which the claim clears once the hold releases.
+          ...(regionStopped && !failSession ? { error: dto.error || dto.result || null } : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
           // runner reports the worktree's uncommitted diff and the exact healed base used to
           // compute it on every turn-complete). Keep both in this one write so a rebase cannot
@@ -7187,6 +7263,16 @@ export class RunnerApiController {
         maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
       },
     }));
+    // A message refused for the region went back in the queue with its session (§10): no turn ended, so nothing a
+    // turn's end hands over is owed. The row and its queue changed, and the runner's slot is free for another session.
+    if ('regionHeld' in finalized) {
+      if (finalized.applied) {
+        this.realtime.publishSessionUpdated(sessionId);
+        this.realtime.publishQueuedTurnsChanged(sessionId);
+      }
+      if (finalized.regionHeld) this.queue.notifySessionQueued(runner.id);
+      return { ok: true, status: finalized.status };
+    }
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
     if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
@@ -7348,7 +7434,8 @@ export class RunnerApiController {
     // still wakes control turns (reload/diff/end), while executable messages remain gated
     // until a future claim changes the Session back to RUNNING.
     this.realtime.notifyInbox(sessionId);
-    if (finalized.applied && finalized.status === RunStatus.AWAITING_INPUT) {
+    // PENDING here is a turn the region check stopped with a message queued behind it (§10): its slot is free too.
+    if (finalized.applied && (finalized.status === RunStatus.AWAITING_INPUT || finalized.status === RunStatus.PENDING)) {
       // A runner slot just became available; wake claim long-polls immediately instead
       // of leaving unrelated PENDING sessions to the periodic retry fallback. Over the link only
       // this runner is hinted: a session elsewhere in a batch or tree this slot also counted
@@ -8606,6 +8693,17 @@ export class RunnerApiController {
         current.endReason !== SessionEndReason.COMPLETED &&
         current.endReason !== SessionEndReason.DELETED &&
         !producedNothingBeforeFailing(current.numTurns, effectiveStatus, dto);
+      // A run the runner refused or stopped because its Claude connection to Anthropic is in a region Anthropic does
+      // not offer Claude in (docs/claude-region-check-contract.md §10) ends here, and the session does not: it is
+      // neither FAILED nor drained, its task is told nothing, and its checkout is kept. Not for a session somebody is
+      // ending, whose own reason stands.
+      if (
+        dto.status === RunStatus.FAILED
+        && !current.cancelRequestedAt
+        && (dto.subtype === CLAUDE_REGION_REFUSED_SUBTYPE || dto.subtype === CLAUDE_REGION_STOPPED_SUBTYPE)
+      ) {
+        return this.restRegionGatedRun(tx, sessionId, dto, dto.subtype === CLAUDE_REGION_STOPPED_SUBTYPE);
+      }
       // A run the provider's quota killed before it could speak: claude/codex refuse at startup and
       // that refusal is the process's last words, not an assistant reply, so it never passes the
       // event path that arms the retry (retryPlanFor) — the only record of when work can resume was
@@ -8873,6 +8971,16 @@ export class RunnerApiController {
         repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
+    // A run the region check refused or stopped (§10): the session goes on, so no settlement is announced. Its row
+    // and its queue changed, and the runner's slot is free for another session.
+    if ('regionRested' in outcome) {
+      if (outcome.regionRested) {
+        this.realtime.publishSessionUpdated(sessionId);
+        this.realtime.publishQueuedTurnsChanged(sessionId);
+        this.queue.notifySessionQueued(runner.id);
+      }
+      return { ok: true, keepCheckout: outcome.keepCheckout };
+    }
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
 
     if (
@@ -8916,6 +9024,77 @@ export class RunnerApiController {
       },
     });
     return { ok: true, keepCheckout: outcome.keepCheckout };
+  }
+
+  /**
+   * The end of a run the region check refused or stopped (docs/claude-region-check-contract.md §10), inside finalize's
+   * transaction and under its session lock: the run is over, the session is not.
+   *
+   *   - Refused (`region_refused`): the runner never started the engine. The session goes back in the queue as a hold,
+   *     PENDING with the sentence, and every message it was sent stays queued for the claim that follows the hold's
+   *     release (§11).
+   *   - Stopped (`region_stopped`): a confirmed flip stopped the turn the engine was running (④). That turn is answered
+   *     and not replayed, and what was sent to it as current work is written off as finalize writes it off. The session
+   *     rests AWAITING_INPUT with the stopped sentence, resumable — or PENDING under the hold when messages wait.
+   *
+   * Either way its checkout is kept and what the runner reports of it is written as every finalize writes it, what the
+   * run had running went with its process, no task is reclaimed and no queue is drained. Answered as finalize answers
+   * a session it did not finalize, with `regionRested` saying whether this report moved it.
+   */
+  private async restRegionGatedRun(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    dto: RunFinalizeRequest,
+    stopped: boolean,
+  ) {
+    if (stopped) {
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+        data: { status: 'ANSWERED', answeredAt: new Date() },
+      });
+      await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+        includeInFlight: true,
+        inFlightOutcome: 'UNCONFIRMED',
+        code: CURRENT_WORK_SESSION_FINALIZED,
+        reason: 'Delivery could not be confirmed before the runner stopped the turn for its region.',
+      });
+    }
+    const waiting = await tx.conversationTurn.count({
+      where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
+    });
+    const status = stopped && waiting === 0 ? RunStatus.AWAITING_INPUT : RunStatus.PENDING;
+    const rested = await tx.session.updateMany({
+      where: { id: sessionId, status: { in: LIVE } },
+      data: {
+        status,
+        error: dto.error || dto.result || null,
+        engineTurnActive: false,
+        ...CLEARED_RUNNING_WORK,
+        branch: dto.branch ?? undefined,
+        baseSha: dto.baseSha ?? undefined,
+        ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+        ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+        isolationStatus: dto.isolationStatus ?? undefined,
+        ...(dto.changedFiles !== undefined ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue } : {}),
+        ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
+        ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
+      },
+    });
+    if (rested.count > 0) {
+      if (dto.changedDiff !== undefined) {
+        const patches = dto.changedDiff as unknown as Prisma.InputJsonValue;
+        await tx.sessionDiff.upsert({ where: { sessionId }, create: { sessionId, patches }, update: { patches } });
+      }
+      // A tool call still waiting on the stopped turn can no longer be answered.
+      await reapApprovalsOfEndedTurns(tx, sessionId);
+    }
+    return {
+      finalized: false as const,
+      effectiveStatus: status,
+      keepCheckout: true,
+      retryAt: null,
+      regionRested: rested.count > 0,
+    };
   }
 
   /** @deprecated Runner protocol alias retained for binaries predating `/finalize`. */

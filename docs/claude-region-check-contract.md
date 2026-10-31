@@ -247,6 +247,20 @@ A control plane that knows the subtypes does **not** fail the session:
   `FAILED`. Messages still queued, and the session's next turn, wait under the same hold until it releases. The
   stopped turn is not replayed.
 
+What the server writes for each (`runner-api.controller.ts`; `restRegionGatedRun` for finalize), under the session lock
+the report already takes, and only for a session nobody is ending: a report for one whose cancel won the lock is the
+ordinary end it always was.
+
+| Report | The turn | The session | The answer |
+| --- | --- | --- | --- |
+| turn-complete, `region_refused` | Back in the queue: `PENDING`, undelivered, lease cleared — the same row. | `PENDING` with the sentence; no turn counted or billed, no task told, no queue drained. | `{ ok, status: 'PENDING' }`: the runner ends the run and releases its inbox generation. |
+| turn-complete, `region_stopped` | `ANSWERED`, counted and billed as any turn. | `AWAITING_INPUT` with the stopped sentence, or `PENDING` when a message is queued behind it: a stopped engine passes no slot on. | `{ ok, status }` with that status. |
+| finalize, `region_refused` | Every queued message stays queued. | `PENDING` with the sentence. | `{ ok, keepCheckout: true }`. |
+| finalize, `region_stopped` | The turn in flight `ANSWERED`; current work aimed at it written off as a finalize writes it off. | `AWAITING_INPUT` with the stopped sentence, or `PENDING` with messages queued. | `{ ok, keepCheckout: true }`. |
+
+Either way no settlement is announced (no final `STATUS`, so no "session failed" push) and the runner's slot is free for
+the next claim. A retried report changes nothing.
+
 The stopped `session.error`, from board 04:
 
 ```
@@ -255,6 +269,12 @@ CLAUDE_REGION_UNSUPPORTED: Claude Code stopped on {machine}: its connection to A
 
 **The push** (board 04, "push (flip)") goes out once per confirmed flip: when a blocked result takes
 `blockedChecks` to 2.
+
+The check route sends it (`PushService.notifyClaudeRegionBlocked`) when the check it just recorded answered blocked and
+left `blockedChecks` at 2 (`regionFlipConfirmed`): an unknown check right after a flip leaves the count at 2 and is not
+the flip again. It is about the machine, as the sign-out push is: title the runner's name, body board 04's push
+sentence, `kind: 'claude-region-blocked'`, `runnerID`, `engine: 'claude'`, no `sessionID` and no badge. Android opens
+the runner on a tap and keeps the notification while `GET /runners` reads the runner's `region.verdict` blocked.
 
 ## 11. Holds and their release
 
@@ -269,6 +289,27 @@ The claim that follows takes the session as usual, and clears `session.error` as
 Anthropic-bound Claude sessions are held. Every other session on the same runner is claimed as usual, and so is
 every session on a runner without the capability.
 
+On the server (`QueueService.pausedPendingSessions`, `runners/runner-region.ts` `claudeRegionHold`):
+
+- The claim writes the refusal sentence (§9) on each session it holds, naming the runner as Orbit names it (its display
+  name, else its name), and the claim that takes a session clears any `session.error` that begins with
+  `CLAUDE_REGION_UNSUPPORTED: `, the stopped sentence included.
+- **A refusal while the row reads allowed waits for the next check.** The runner refuses only on an answer the route
+  gave it under a minute ago, so `runner.region` reads blocked whenever it refuses, unless another check came in
+  between, through another account's proxy, which the runner keeps a verdict of its own for. A session whose last
+  claim the runner refused (`region_refused`) is then held with the runner's own sentence until a check newer than
+  that claim reaches the route, and for no longer than the carry-over (24 h); the verdict of that check decides. So
+  the two can disagree for one check at most, and a refused session is tried again once per check rather than as fast
+  as a claim and a refusal can follow each other.
+- **A switch to another provider:** a PATCH of `provider` on a `PENDING` session only rewrites the row; the next claim
+  reads it and takes the session once its credential is not Anthropic-bound.
+- **A move:** the Move panel and `POST /sessions/:id/move` refuse a queued session with `Stop the session first.`, but
+  not one the region check holds — `PENDING` with a region sentence, nothing in flight and no approval waiting. It
+  moves as it is, without being ended: its queued message moves with it and is the turn the new machine's runner is
+  handed, the sentence naming the machine it left is cleared, and that runner's claim is woken. Its new machine holds
+  it again only if it is in such a region too. The other rules of a move still stand: a task's run stays in its task's
+  workspace, and the checkout the old machine holds is not committed by the move.
+
 ## 12. New sessions and Claude sign-in
 
 - **New sessions:** `POST /sessions` for an Anthropic-bound Claude session bound for a runner whose effective
@@ -280,6 +321,19 @@ every session on a runner without the capability.
   sign-in fails with board 04's sentence:
   `Claude sign-in isn’t available on {machine}: its connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude.`
   The runner refuses `claude auth login` with the same sentence while its own verdict is blocked.
+
+On the server:
+
+- The create refusal (`ClaudeRegionConflict`, `sessions.service.ts` `create`) comes before the signed-out one: signing
+  in would not clear it, since that sign-in is refused too. It needs no runner online: the verdict carries over (§5).
+  A task's run is started through the same create and is refused as a signed-out engine refuses it; an @-mention's
+  delivery takes it as the availability condition it takes a signed-out engine for (`PROVIDER_UNAVAILABLE`, retried
+  once the runner can take it).
+- Claude's sign-in is refused at `POST /runners/:id/login` (`RunnersService.startLogin`) with **409**
+  `{ code: 'CLAUDE_REGION_UNSUPPORTED', message, runnerId }`, `message` the sentence above, and nothing is recorded for
+  a heartbeat to carry. A Claude sign-in already pending when the verdict turns is not handed out either: the heartbeat
+  that would carry it fails it with the same sentence (`loginStatus: 'failed'`, `loginMessage`), judged on what the
+  polling process declares.
 
 ## Copy of record (board 04)
 
@@ -348,3 +402,10 @@ The project's twelve items leave these open. They are settled here so the parall
 9. A runner link call to the check route answers unknown, whatever its headers say: its connection is the link's,
    not Claude's (§3). runner-go lists the route among the controller's guarded routes (`linkDaemonRoutes`) as it lists
    the attachments, whose calls never go over the link either.
+10. Reading 7's open question, on the server: a refusal reported while `runner.region` reads allowed holds the session
+    until a check newer than the claim it refused reaches the route, for 24 hours at most (§11).
+11. turn-complete is answered `PENDING` for `region_refused` and `AWAITING_INPUT` or `PENDING` for `region_stopped`, and
+    the runner ends the run on either answer, as on a terminal one (§10). finalize keeps the checkout for both.
+12. A session the region check holds moves to another workspace without being ended, its queued message with it (§11).
+13. The push is `kind: 'claude-region-blocked'`, about the runner (§10); Android parses it, opens the runner and checks
+    it against `region.verdict`.

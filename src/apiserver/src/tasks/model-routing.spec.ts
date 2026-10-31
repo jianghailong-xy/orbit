@@ -504,6 +504,18 @@ test('an agent\'s own engine signed out on the runner moves the run to an allowe
   ]);
 });
 
+test('Claude\'s sign-in on a runner the region check blocks is ruled out as a signed-out one is', () => {
+  // docs/claude-region-check-contract.md §12: sessions.create would refuse the run there with CLAUDE_REGION_UNSUPPORTED.
+  const value = crossInput();
+  value.task = { modelHint: 'XL' };
+  setState(value, 'claude', { regionBlocked: true });
+  const result = routeTaskRun(value);
+  assertDecision(result, { level: 'XL', engine: 'codex', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
+  assert.deepEqual(result.reasons, [
+    'Tier XL: suggested by the coordinator', 'Engine codex: claude can’t use Anthropic on this runner',
+  ]);
+});
+
 test('a run moves from Codex to Claude on the same tier, mapped onto Claude\'s table', () => {
   const value = codexInput();
   value.task = { modelHint: 'L' };

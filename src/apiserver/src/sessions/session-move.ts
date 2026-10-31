@@ -75,6 +75,10 @@ export interface SessionMoveFacts {
   /** The engine that runs it (sessionEngine: Session.engine, or the old rules for a row without
    *  one), which a move never changes; null when nobody can tell. */
   runtime: AgentProvider | null;
+  /** It waits in the queue because its runner's Claude connection to Anthropic is in a region Anthropic does not offer
+   *  Claude in (docs/claude-region-check-contract.md §11): PENDING with a region sentence, and nothing of it out on a
+   *  delivery. Moving it to another machine is one of the ways out of that wait. */
+  regionHeld?: boolean;
 }
 
 export type SessionMoveVerdict =
@@ -87,6 +91,11 @@ export type SessionMoveVerdict =
  * May this session leave its workspace? Only an ended session moves: ending is when its runner
  * commits what it left uncommitted, and a session moved before that would leave the work on the old
  * machine with nobody to commit it. An idle one is movable once ended — the client's End and Move.
+ *
+ * Except a session the region check holds (§11 of docs/claude-region-check-contract.md): queued, with
+ * nothing running and nothing out on a delivery, and waiting on its machine rather than on anybody. It
+ * moves as it is, at once, and the message it waits with runs on the machine it moves to; ending it
+ * first would take that message with it.
  */
 export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   const refuse = (reason: string): SessionMoveVerdict => ({ reason, needsEnd: false });
@@ -110,13 +119,16 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
   const ended = ENDED.includes(s.status);
+  // Held for its runner's region: its queue is what moves with it.
+  const regionHeld = !!s.regionHeld && s.status === RunStatus.PENDING && s.liveApprovals === 0;
   if (!ended) {
     if (s.cancelRequestedAt) return refuse(MOVE_REFUSAL.ENDING);
     if (
-      s.status === RunStatus.PENDING ||
-      isSessionGenerating(s) ||
-      s.liveApprovals > 0 ||
-      s.queuedTurns > 0
+      !regionHeld &&
+      (s.status === RunStatus.PENDING ||
+        isSessionGenerating(s) ||
+        s.liveApprovals > 0 ||
+        s.queuedTurns > 0)
     ) {
       return refuse(MOVE_REFUSAL.STOP);
     }
@@ -132,7 +144,7 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
     s.completedAt == null &&
     ((s.status === RunStatus.AWAITING_INPUT && s.cancelRequestedAt == null) || s.status === RunStatus.FAILED);
   if (retryArmed) return refuse(MOVE_REFUSAL.RETRY);
-  return { reason: null, needsEnd: !ended };
+  return { reason: null, needsEnd: !ended && !regionHeld };
 }
 
 /** What a workspace offers as a place to move to (§5.2, "目标 Workspace"). */

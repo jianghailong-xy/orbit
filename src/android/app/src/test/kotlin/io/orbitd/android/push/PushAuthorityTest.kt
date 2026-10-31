@@ -252,6 +252,39 @@ class PushAuthorityTest {
         }
     }
 
+    /** The server's push on a confirmed Claude region flip (docs/claude-region-check-contract.md §10): it parses exactly as the server
+     * sends it (the shared fixture's sample), opens the runner, and stands while the runner's effective verdict reads blocked. Without its
+     * runner it is no notification. */
+    @Test fun aClaudeRegionFlipOpensItsRunnerAndStandsWhileTheRunnerReadsBlocked() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "claude-region-blocked" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's claude-region-blocked push is dropped")
+        val machine = sample["source"]!!.jsonObject["runnerID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("claude-region-blocked", push.payload.kind)
+        assertTrue(ObjectId.same(push.payload.runnerId, machine))
+        assertFalse(push.payload.isReminder)
+        assertEquals(Destination.RUNNER, push.link?.let { OrbitLinks.parse(it) }?.destination)
+        assertNull("it names its runner", PushMessage.parse(data + ("payload" to
+            """{"title":"HPC","body":"Claude Code can’t use Anthropic on HPC.","engine":"claude","kind":"claude-region-blocked"}""")))
+        authorityFixture { authority, server, _ ->
+            var region = """{"verdict":"blocked","country":"CN","regionCode":null,"name":"mainland China","viaProxy":false,"checkedAt":"2026-11-01T10:20:00.000Z"}"""
+            var listed = true
+            server.respond = { request ->
+                assertEquals("/api/runners", request.path)
+                response(if (listed) """[{"id":"$machine","engines":[{"engine":"claude","auth":"yes"}],"region":$region}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            region = region.replace("\"blocked\"", "\"allowed\"")
+            assertEquals(PushCheck.STALE, authority.check(push))
+            region = "null"
+            assertEquals(PushCheck.UNKNOWN, authority.check(push))
+            listed = false
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     @Test fun headlessMessageHasNoInventedRouteAndChecksCurrentAccountPreference() = runBlocking {
         authorityFixture { authority, server, _ ->
             val push = message("agent-message")

@@ -831,6 +831,52 @@ test('an Antigravity sign-out is announced under the name the Providers page giv
   assert.deepEqual([sent[0].engine, sent[0].kind, sent[0].runnerID], ['antigravity', 'engine-signed-out', 'runner-1']);
 });
 
+/** The Claude region push (docs/claude-region-check-contract.md §10, board 04 "push (flip)"), sent for runner `runnerId`. */
+async function claudeRegionPush(runnerId: string, runner: { name: string; displayName: string | null } | null) {
+  const prisma = {
+    runner: { findUnique: async () => (runner ? { ...runner, ownerId: 'owner-1' } : null) },
+    deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  const sent: { body: string; type: unknown; collapseId?: string }[] = [];
+  (service as any).deliver = async (_tokens: unknown, body: string, type: unknown, _priority: unknown, collapseId?: string) => {
+    sent.push({ body, type, collapseId });
+  };
+  await service.notifyClaudeRegionBlocked(runnerId, 'mainland China');
+  return sent;
+}
+
+test('a confirmed Claude region flip is announced about the machine, in board 04’s words', async () => {
+  const sent = await claudeRegionPush('runner-1', { name: 'workstation-gpu', displayName: 'HPC' });
+  assert.equal(sent.length, 1);
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.aps.alert.title, 'HPC');
+  assert.equal(
+    payload.aps.alert.body,
+    'Claude Code can’t use Anthropic on HPC — its connection is now in mainland China. Sessions on Anthropic accounts or keys there wait until you switch provider or move them.',
+  );
+  // About the machine: no badge, no session; a tap opens the runner.
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(payload.sessionID, undefined);
+  assert.deepEqual([payload.kind, payload.runnerID, payload.engine], ['claude-region-blocked', 'runner-1', 'claude']);
+  // A runner known by its registered name alone is named so; one gone sends nothing.
+  const plain = await claudeRegionPush('runner-2', { name: 'workstation-gpu', displayName: null });
+  assert.match(JSON.parse(plain[0].body).aps.alert.body, /^Claude Code can’t use Anthropic on workstation-gpu — /);
+  assert.equal((await claudeRegionPush('runner-3', null)).length, 0);
+});
+
+// The shared Android fixture's sample is this send: fcm-transport.spec converts it to the FCM data it holds, and
+// Android's PushAuthorityTest parses that data, so the wire shape is pinned on both sides.
+test('the shared Android fixture carries what notifyClaudeRegionBlocked sends, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'claude-region-blocked');
+  assert.ok(sample, 'the shared Android fixture has no claude-region-blocked sample');
+  const sent = await claudeRegionPush(sample.source.runnerID, { name: 'workstation-gpu', displayName: 'HPC' });
+  assert.equal(sent[0].body, JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
+});
+
 function wakeupMissedHarness(deliver?: () => Promise<void>) {
   const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
   const service = new PushService(prisma as any, enabledConfig());
