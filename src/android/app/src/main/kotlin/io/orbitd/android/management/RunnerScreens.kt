@@ -370,7 +370,11 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     AttentionRow(item, now) {
                         val action = item.action
                         when (action?.kind) {
-                            "signIn" -> AttentionButton(RunnerCopy.SIGN_IN) { open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${action.engine}")) }
+                            // Only where that engine can sign in here, as its Engines row offers it: an Antigravity that needs the runner
+                            // updated says why on its row instead (RunnerPage.signInHint).
+                            "signIn" -> if (RunnerPage.canSignIn(runner, action.engine.orEmpty())) {
+                                AttentionButton(RunnerCopy.SIGN_IN) { open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${action.engine}")) }
+                            }
                             "repair" -> AttentionButton(RunnerCopy.REPAIR) { scope.launch { show(model.press { api.post("workspaces/${action.workspaceId}/repo-cleanup") }) } }
                             "setReserve" -> AttentionButton(RunnerCopy.SET_A_RESERVE) { choosingReserve = true }
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }

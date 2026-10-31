@@ -173,10 +173,15 @@ class RemoveDefaultTest {
         val two = removed(work(), personal("no"))
         assertEquals(RunnerCopy.SIGNED_OUT to "warn", RunnerPage.engineStatus(health(two), two))
         assertTrue("Personal's sign-in", RunnerPage.needsSignIn(health(two), two))
-        // Every one that remains signed out: Codex is signed out there for Orbit, whatever Default's sign-in on the machine.
+        // Every one that remains signed out: Codex is signed out there for Orbit, whatever Default's sign-in on the machine — said beside
+        // a CLI that is signed in. With no other CLI there signed in the machine can run nothing, and one item says so
+        // (RunnerPage.noCliSignedIn, docs/mocks/first-workspace-in-conversation rule 10).
         val out = removed(work("no"), personal("no"))
         val workspace = json("""{"id":"w","name":"Alpha","lastProvider":"codex"}""")
-        assertEquals(listOf("Codex is signed out"), RunnerPage.attention(out, listOf(workspace), now, null).map { it.title })
+        assertEquals(listOf("No coding CLI is signed in"), RunnerPage.attention(out, listOf(workspace), now, null).map { it.title })
+        val claude = buildJsonObject { put("engine", "claude"); put("installed", true); put("auth", "yes") }
+        val beside = JsonObject(out + ("engines" to JsonArray(out.list("engines") + claude)))
+        assertEquals(listOf("Codex is signed out"), RunnerPage.attention(beside, listOf(workspace), now, null).map { it.title })
         assertEquals(emptyList<String>(), RunnerPage.attention(two, listOf(workspace), now, null).map { it.title })
     }
 
