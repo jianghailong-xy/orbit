@@ -12,6 +12,11 @@
  * The progress leaves read `task_progress`: the numbers and the phase a reporter stated, and when the
  * position last changed. A report's message is not among the rows a leaf is handed, so no wording in it
  * can make a threshold hold or a stall end.
+ *
+ * The job leaf reads the two session columns the runner's job reports keep: which runner-hosted jobs
+ * are in flight (`running_bg_jobs`) and when each one's output last moved, in this server's timebase
+ * (`running_bg_job_activity`, see sessions/background-job-activity.ts). Nothing a job printed is among
+ * them, so no output can make a job read as quiet or as busy; only whether it moved.
  */
 import {
   deriveSessionLifecycleState,
@@ -25,11 +30,12 @@ import {
 } from '@orbit/shared';
 
 import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
+import { readBgJobActivity } from '../sessions/background-job-activity';
 
 /** The newest grammar this build evaluates. */
-export const WATCH_PREDICATE_VERSION = 2;
+export const WATCH_PREDICATE_VERSION = 3;
 /** Every grammar this build evaluates. A watch stored under another version is left to a build that serves it. */
-export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2];
+export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3];
 
 export type WatchTargetKind = 'SESSION' | 'TASK';
 
@@ -44,6 +50,7 @@ export const WATCH_LEAF_TARGET_KIND = {
   TASK_DONE: 'TASK',
   TASK_PROGRESS_AT_LEAST: 'TASK',
   TASK_NO_PROGRESS_FOR: 'TASK',
+  SESSION_JOB_NO_OUTPUT_FOR: 'SESSION',
 } as const satisfies Record<string, WatchTargetKind>;
 
 export type WatchLeaf = keyof typeof WATCH_LEAF_TARGET_KIND;
@@ -59,11 +66,20 @@ export const WATCH_LEAF_SINCE_VERSION: Readonly<Record<WatchLeaf, number>> = {
   TASK_DONE: 1,
   TASK_PROGRESS_AT_LEAST: 2,
   TASK_NO_PROGRESS_FOR: 2,
+  SESSION_JOB_NO_OUTPUT_FOR: 3,
 };
 
 const PROGRESS_LEAVES: ReadonlySet<WatchLeaf> = new Set(['TASK_PROGRESS_AT_LEAST', 'TASK_NO_PROGRESS_FOR']);
+const JOB_LEAVES: ReadonlySet<WatchLeaf> = new Set(['SESSION_JOB_NO_OUTPUT_FOR']);
 
-export type WatchLeafParams = { current: number } | { percent: number } | { seconds: number };
+/**
+ * A job id as bg_run hands it out (runner-go newBgJobID: `bgj_` and twelve hex digits), with room for a
+ * longer one. It is the only free-form value a predicate may carry, so it is held to this shape: no space,
+ * no punctuation, nothing a reader could take for an expression.
+ */
+export const WATCH_JOB_ID = /^bgj_[0-9a-z]{1,64}$/;
+
+export type WatchLeafParams = { current: number } | { percent: number } | { seconds: number; jobId?: string };
 
 /** One leaf as a term asks it: the leaf, and its parameters when it takes any. */
 export interface WatchLeafTest {
@@ -75,6 +91,15 @@ export type WatchPredicate =
   | { kind: 'ALL' | 'ANY'; over: 'ALL_TARGETS'; leaf: WatchLeaf; params?: WatchLeafParams }
   | { kind: 'AT_LEAST'; count: number; over: 'ALL_TARGETS'; leaf: WatchLeaf; params?: WatchLeafParams }
   | { kind: 'ALL_OF' | 'ANY_OF'; operands: WatchPredicate[] };
+
+/**
+ * One runner-hosted job a session has in flight: its bg_run id, and when its output last moved in this
+ * server's timebase (ms), or null when no runner has said (one that predates `idleMs`).
+ */
+export interface WatchSessionJob {
+  id: string;
+  lastOutputAt: number | null;
+}
 
 /** A Task's reported position in its current lifecycle epoch. Nothing reported yet: every field null. */
 export interface WatchTaskProgress {
@@ -106,7 +131,25 @@ export type WatchTargetFact =
       deletedAt: Date | null;
       /** An `approval` row for the session is PENDING. */
       pendingApproval: boolean;
+      /** `running_bg_jobs`, each with its instant from `running_bg_job_activity` (`sessionJobsOf`). */
+      jobs: readonly WatchSessionJob[];
     };
+
+/** The latest instant a `Date` can hold, either side of the epoch: a stored number past it names no time. */
+const MAX_INSTANT_MS = 8.64e15;
+
+/**
+ * A session's jobs in flight as the job leaf reads them, from the two columns as stored: the running set
+ * in its own order, each id with the instant the activity map holds for it. The map is jsonb and trusted
+ * for nothing (`readBgJobActivity`); an id it has no instant for is unknown, never silent.
+ */
+export function sessionJobsOf(runningBgJobs: readonly string[], activity: unknown): WatchSessionJob[] {
+  const known = readBgJobActivity(activity);
+  return [...new Set(runningBgJobs)].map((id) => {
+    const at = Object.hasOwn(known, id) ? known[id] : undefined;
+    return { id, lastOutputAt: at !== undefined && Math.abs(at) <= MAX_INSTANT_MS ? at : null };
+  });
+}
 
 const TERMINAL_TASK_STATUSES: readonly string[] = [TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.FAILED];
 const TERMINAL_RUN_STATES: readonly SessionRunState[] = [
@@ -171,15 +214,33 @@ export function leafParamsProblem(leaf: WatchLeaf, raw: unknown): string | null 
       }
       return `TASK_NO_PROGRESS_FOR takes \`params\` with exactly \`seconds\`, an integer from ${
         WATCH_LIMITS.minNoProgressSeconds} to ${WATCH_LIMITS.maxTtlSeconds}`;
+    case 'SESSION_JOB_NO_OUTPUT_FOR': {
+      const params = isPlainRecord(raw) ? raw : null;
+      if (
+        params !== null
+        && Object.keys(params).every((key) => key === 'seconds' || key === 'jobId')
+        && isCount(params.seconds, WATCH_LIMITS.minNoOutputSeconds, WATCH_LIMITS.maxTtlSeconds)
+        && (!Object.hasOwn(params, 'jobId') || (typeof params.jobId === 'string' && WATCH_JOB_ID.test(params.jobId)))
+      ) {
+        return null;
+      }
+      return `SESSION_JOB_NO_OUTPUT_FOR takes \`params\` with \`seconds\`, an integer from ${
+        WATCH_LIMITS.minNoOutputSeconds} to ${WATCH_LIMITS.maxTtlSeconds}, and optionally \`jobId\`, the id bg_run `
+        + 'returned (bgj_ followed by lowercase letters and digits)';
+    }
     default:
       return raw === undefined ? null : `${leaf} takes no \`params\``;
   }
 }
 
 function soleEntry(raw: unknown): [string, unknown] | null {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  if (!isPlainRecord(raw)) return null;
   const entries = Object.entries(raw);
   return entries.length === 1 ? entries[0] : null;
+}
+
+function isPlainRecord(raw: unknown): raw is Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
 }
 
 function isCount(value: unknown, min: number, max: number): boolean {
@@ -197,7 +258,8 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
       return fact.kind === 'TASK' && fact.status === TaskStatus.DONE;
     case 'TASK_PROGRESS_AT_LEAST':
       return fact.kind === 'TASK' && progressReached(fact.progress, test.params);
-    case 'TASK_NO_PROGRESS_FOR': {
+    case 'TASK_NO_PROGRESS_FOR':
+    case 'SESSION_JOB_NO_OUTPUT_FOR': {
       const deadline = stallDeadline(test, fact);
       return deadline !== null && deadline <= now;
     }
@@ -226,15 +288,40 @@ function progressReached(progress: WatchTaskProgress, params: WatchLeafParams | 
 }
 
 /**
- * When a `TASK_NO_PROGRESS_FOR` leaf starts to hold for this target if nothing changes before then: its
- * window after the Task's reported position last changed in the current epoch, or after the epoch began
- * when nothing has been reported in it. Null when waiting can never make it hold — the test is another
- * leaf, the target is not a Task, or the Task is terminal, which is finished rather than stalled.
+ * When a silence leaf starts to hold for this target if nothing changes before then. Null when waiting can
+ * never make it hold: the test is another leaf, or the target is of the other kind.
+ *
+ * `TASK_NO_PROGRESS_FOR`: its window after the Task's reported position last changed in the current epoch,
+ * or after the epoch began when nothing has been reported in it. A terminal Task has none: it is finished
+ * rather than stalled.
+ *
+ * `SESSION_JOB_NO_OUTPUT_FOR`: its window after the job's output last moved — the job `jobId` names, or the
+ * earliest of the session's jobs in flight, since any one of them going quiet is enough. None for a job
+ * that is not in flight (it ended, or never ran here) or whose last output nobody reported: an ended job
+ * has stopped rather than stalled, and an unknown instant is not silence. The instant only moves when a
+ * runner reports, so a runner that stopped reporting leaves it where it was and the deadline arrives.
  */
 export function stallDeadline(test: WatchLeafTest, fact: WatchTargetFact): number | null {
-  if (test.leaf !== 'TASK_NO_PROGRESS_FOR' || test.params === undefined || !('seconds' in test.params)) return null;
-  if (fact.kind !== 'TASK' || TERMINAL_TASK_STATUSES.includes(fact.status)) return null;
-  return (fact.progress.lastProgressAt ?? fact.epochStartedAt).getTime() + test.params.seconds * 1000;
+  const { params } = test;
+  if (params === undefined || !('seconds' in params)) return null;
+  const windowMs = params.seconds * 1000;
+  switch (test.leaf) {
+    case 'TASK_NO_PROGRESS_FOR':
+      if (fact.kind !== 'TASK' || TERMINAL_TASK_STATUSES.includes(fact.status)) return null;
+      return (fact.progress.lastProgressAt ?? fact.epochStartedAt).getTime() + windowMs;
+    case 'SESSION_JOB_NO_OUTPUT_FOR': {
+      if (fact.kind !== 'SESSION') return null;
+      let earliest: number | null = null;
+      for (const job of fact.jobs) {
+        if ((params.jobId !== undefined && job.id !== params.jobId) || job.lastOutputAt === null) continue;
+        const deadline = job.lastOutputAt + windowMs;
+        if (earliest === null || deadline < earliest) earliest = deadline;
+      }
+      return earliest;
+    }
+    default:
+      return null;
+  }
 }
 
 /** Whether the predicate holds at `now` over the facts of the targets still in the set (none of them GONE). */
@@ -290,11 +377,14 @@ export function predicateLeafTests(predicate: WatchPredicate): WatchLeafTest[] {
   return [...tests.values()];
 }
 
-/** A leaf's name, followed by its parameters when it takes any: `TASK_NO_PROGRESS_FOR(600s)`, `TASK_PROGRESS_AT_LEAST(50%)`. */
+/**
+ * A leaf's name, followed by its parameters when it takes any: `TASK_NO_PROGRESS_FOR(600s)`,
+ * `TASK_PROGRESS_AT_LEAST(50%)`, `SESSION_JOB_NO_OUTPUT_FOR(1800s, bgj_0a1b2c3d4e5f)`.
+ */
 export function leafLabel(test: WatchLeafTest): string {
   const { params } = test;
   if (params === undefined) return test.leaf;
-  if ('seconds' in params) return `${test.leaf}(${params.seconds}s)`;
+  if ('seconds' in params) return `${test.leaf}(${params.seconds}s${params.jobId === undefined ? '' : `, ${params.jobId}`})`;
   if ('percent' in params) return `${test.leaf}(${params.percent}%)`;
   return `${test.leaf}(${params.current})`;
 }
@@ -322,7 +412,8 @@ export function leafVerdicts(tests: readonly WatchLeafTest[], fact: WatchTargetF
 
 /**
  * The source columns the asked leaves read, as a snapshot records them. A Task's progress is recorded only
- * when a progress leaf read it, so a predicate over statuses records statuses and nothing else.
+ * when a progress leaf read it, and a session's jobs only when the job leaf read them, so a predicate over
+ * statuses records statuses and nothing else.
  */
 export function observationOf(fact: WatchTargetFact, tests: readonly WatchLeafTest[]): NonNullable<WatchTargetObservation['observed']> {
   if (fact.kind === 'SESSION') {
@@ -332,6 +423,12 @@ export function observationOf(fact: WatchTargetFact, tests: readonly WatchLeafTe
       runState: deriveSessionRunState(fact),
       lifecycleState: deriveSessionLifecycleState(fact),
       pendingApproval: fact.pendingApproval,
+      ...(tests.some((test) => JOB_LEAVES.has(test.leaf)) && {
+        jobs: fact.jobs.map((job) => ({
+          id: job.id,
+          lastOutputAt: job.lastOutputAt === null ? null : new Date(job.lastOutputAt).toISOString(),
+        })),
+      }),
     };
   }
   if (!tests.some((test) => PROGRESS_LEAVES.has(test.leaf))) return { status: fact.status };

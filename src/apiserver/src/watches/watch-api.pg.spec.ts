@@ -341,7 +341,8 @@ test('a predicate outside the v1 grammar is refused with the contract code, and 
     ],
     ['five operands', { predicate: { kind: 'ANY_OF', operands: Array(5).fill(ALL_TERMINAL) } }, 'PREDICATE_TOO_DEEP'],
     ['no predicateVersion', { predicateVersion: undefined }, 'PREDICATE_VERSION_UNSUPPORTED'],
-    ['predicateVersion 3', { predicateVersion: 3 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    // The newest grammar plus one: a version this build does not serve, whichever grammar is newest.
+    [`predicateVersion ${WATCH_PREDICATE_VERSION + 1}`, { predicateVersion: WATCH_PREDICATE_VERSION + 1 }, 'PREDICATE_VERSION_UNSUPPORTED'],
     ['predicateVersion as text', { predicateVersion: '1' }, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [why, over, code] of refused) {
@@ -636,6 +637,49 @@ test('a condition not yet true stays ACTIVE, unmatched and due, and is decided f
   // The same request made now is decided from the rows as they are, and matches.
   const again = await create(h, owner, watchBody(tasks([open, done])), 'the same request after the change');
   assert.equal(again.state, 'MATCHED');
+});
+
+test('a job leaf crosses the HTTP door as written: its bg_run job id is stored, matched on and read back as sent', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'job');
+  const host = await session(h, owner.id, { status: 'AWAITING_INPUT' });
+  const job = 'bgj_0a1b2c3d4e5f';
+  // The two columns as the runner's job reports leave them (watch-evaluator.pg.spec.ts drives those reports through the
+  // runner door): the job in flight, its output last moved 400 seconds ago in this server's timebase.
+  await h.sql.query(
+    `UPDATE "session" SET "running_bg_jobs" = ARRAY[$2::text],
+            "running_bg_job_activity" = jsonb_build_object($2::text, floor(extract(epoch FROM now()) * 1000) - 400000)
+      WHERE "id" = $1`,
+    [host, job],
+  );
+  // `jobId` is also the name of a public id elsewhere (a wiki plan job), and the id codecs on both ends of this door act on
+  // fields by name. A bg_run id is no uuid, so neither may rewrite it, and nothing may be added beside it.
+  const quietJob = { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_JOB_NO_OUTPUT_FOR', params: { seconds: 300, jobId: job } };
+  const watch = await create(h, owner, watchBody(sessions([host]), { predicateVersion: 3, predicate: quietJob }), 'a quiet job');
+  assert.equal(watch.state, 'MATCHED', 'four hundred seconds of silence did not hold a three-hundred-second window');
+  assert.equal(watch.predicateVersion, 3);
+  assert.deepEqual(watch.predicate, quietJob, 'the predicate came back other than it was sent');
+  assert.equal(watch.matches[0].reason, `ANY SESSION_JOB_NO_OUTPUT_FOR(300s, ${job}) 1/1`);
+  assert.deepEqual(
+    watch.matches[0].perTargetSnapshot.targets[0].observed.jobs.map(({ id }: { id: string }) => id),
+    [job],
+  );
+  const read = await call(h, owner.bearer, 'GET', `/watches/${watch.id}`);
+  expectStatus(read, 200, 'read the job watch back');
+  assert.deepEqual(read.body.predicate, quietJob);
+
+  // The same door refuses an id bg_run never hands out, by the contract's code, and under version 2 the leaf itself.
+  const notAJob = { ...quietJob, params: { seconds: 300, jobId: 'toolu_01EngineOwnedShell' } };
+  expectRefusal(
+    await call(h, owner.bearer, 'POST', '/watches', watchBody(sessions([host]), { predicateVersion: 3, predicate: notAJob })),
+    'PREDICATE_PARAMETER_INVALID',
+    'a job id bg_run never hands out',
+  );
+  expectRefusal(
+    await call(h, owner.bearer, 'POST', '/watches', watchBody(sessions([host]), { predicateVersion: 2, predicate: quietJob })),
+    'UNKNOWN_PREDICATE_KIND',
+    'the job leaf under version 2',
+  );
 });
 
 // ── permission ──────────────────────────────────────────────────────────────────────────────────

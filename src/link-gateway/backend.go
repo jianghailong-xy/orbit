@@ -55,8 +55,11 @@ func newBackendPool(cfg config, m *gatewayMetrics, log *slog.Logger) *backendPoo
 		DialContext:         (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		MaxIdleConns:        1024,
 		MaxIdleConnsPerHost: 256,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  true,
+		// Shorter than the apiserver holds an idle connection (src/apiserver/src/common/idle-connections.ts, whose
+		// test reads this value), so the gateway always lets go first. If the apiserver closed first, a call sent on a
+		// connection it was closing would be reset: sent again and counted `lost` if idempotent, cut off if not.
+		IdleConnTimeout:    90 * time.Second,
+		DisableCompression: true,
 	}
 	return &backendPool{
 		urls:    cfg.InternalAPIURLs,

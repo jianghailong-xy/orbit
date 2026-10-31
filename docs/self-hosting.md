@@ -712,6 +712,17 @@ docker compose ps apiserver apiserver-2 link-gateway gateway
 docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls are served'
 ```
 
+**Idle connections: the caller closes first.** Every apiserver keeps an idle HTTP connection open for 120 seconds,
+on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. Whatever calls it must close an idle connection sooner. If the
+apiserver closed it first, a request sent on it at that moment would be reset: through the web gateway the caller gets
+a 502, and the link gateway sends the call again or tells the runner to.
+
+- The web gateway closes an idle connection after 60 seconds. That is nginx's upstream `keepalive_timeout`, which
+  applies with no `keepalive` directive since nginx 1.29.7.
+- The link gateway closes one after 90 seconds (`IdleConnTimeout` in `src/link-gateway/backend.go`).
+- If you set `keepalive_timeout` in the web gateway's upstreams, or put another proxy or load balancer in front of the
+  apiservers, keep its idle timeout under 120 seconds.
+
 **How the session streams are spread:**
 
 - **By session.** The web gateway hashes the session's id in the stream's address, so all of one session's streams,
