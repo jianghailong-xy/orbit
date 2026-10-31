@@ -33,8 +33,10 @@ has one, so an entry can say Start a session for any machine.
 
 ## Differences from the frames
 
-Element boxes match the board to the pixel in every frame except where a row below says otherwise. In the percentages
-beside each sheet, most of what remains is the difference between the two builds' text antialiasing.
+Of the 26 element boxes both runs measured, 21 match the board to the pixel; the other five are the p-progress, e-missing
+and e-nogit rows below. The boards keep their frames at 1.1 to 2 pixels per CSS pixel and the comparison resizes them up
+to the real crop, so the faint outlines around text in the frames the boards drew smaller are that resize, not a change.
+The frame kept at full size (p-landing's card) differs by 0.15%, which is the path.
 
 | Frame | Board | Real page | Why |
 | --- | --- | --- | --- |
