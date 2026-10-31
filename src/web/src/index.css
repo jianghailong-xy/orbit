@@ -8788,8 +8788,15 @@ button.chat-jump-start:hover {
 .chat-sticky-loading:hover {
   background: var(--bg-sunken);
 }
+/* Over a turn another session sent, the label is `From <its title>`, and a task session's title runs
+   to 80 characters: capped and cut with an ellipsis, so the text beside it stays visible. Capped
+   rather than left to shrink, which let the long text squeeze it to `From Tas…`. */
 .chat-sticky-label {
   flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-3);
 }
