@@ -260,10 +260,16 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 // default refspec is: a target rewritten on origin is read as rewritten — a check then starts over,
 // and an apply refuses on the changed tip — instead of failing the fetch on every check after it.
 func recoveryRemoteTip(root, target string) (string, error) {
-	if _, err := git(root, "fetch", "origin", "+refs/heads/"+target+":refs/remotes/origin/"+target); err != nil {
+	if _, err := networkGit(root, networkGitTimeout, "fetch", "origin", "+refs/heads/"+target+":refs/remotes/origin/"+target); err != nil {
 		return "", err
 	}
 	return git(root, "rev-parse", "--verify", "refs/remotes/origin/"+target)
+}
+
+// pushRecoveryCandidate is applyMergeRecovery's push: the reviewed candidate onto origin's target.
+func pushRecoveryCandidate(root, candidate, target string) error {
+	_, err := networkGit(root, networkGitTimeout, "push", "origin", candidate+":refs/heads/"+target)
+	return err
 }
 
 func recoveryCommits(root, base, tip string) ([]MergeRecoveryCommit, error) {
@@ -583,7 +589,7 @@ func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
 		if err := recoveryLocalReady(root, r.TargetBranch, r.CandidateSha); err != nil {
 			return recoveryError(r, "LOCAL_CHECKOUT_BLOCKED", err.Error())
 		}
-		if _, err := git(root, "push", "origin", r.CandidateSha+":refs/heads/"+r.TargetBranch); err != nil {
+		if err := pushRecoveryCandidate(root, r.CandidateSha, r.TargetBranch); err != nil {
 			// A transport error may mean the push succeeded. Decide by reading the remote.
 			remote, readErr := recoveryRemoteTip(root, r.TargetBranch)
 			if readErr != nil || !targetContainsSource(root, r.CandidateSha, remote) {
