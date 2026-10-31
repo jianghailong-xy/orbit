@@ -764,9 +764,17 @@ lists every option.
   the loadgen shards, the stubs and NATS, each from its own cgroup; and what the stubs say of themselves
   (`GET /stub/stats`: their CPU, each route's calls and how long each took, with the delay and without).
 
-`report.md` compares each level with C2b's single gateway: 0.053 cores per 1,000 connections and about 243 KiB a
-connection (0.801 cores and 3,556 MiB at 15,000, task 34m88i6i8CQeU4dSuw7HM). It gives each figure as measured (the
-same way as C2b's) and above the idle gateway, measured for `--gap` before the first level.
+`report.md` compares each level with C2b's single gateway at 15,000 connections (task 34m88i6i8CQeU4dSuw7HM):
+
+- **CPU: 0.053 cores per 1,000 connections**, the 0.801 cores of C2b's first run (c2b-full-1h, evidence 15). Its rerun
+  took 0.791 (c2b-full-1h-r2, evidence 25).
+- **Memory: 157 KiB a connection**, the 2,298 MiB of that rerun over a full hour (evidence 25). The rerun's live run,
+  on the same gateway process about 2.3 hours old, peaked at 2,305 MiB (c2b-live-1h-r2, evidence 28). The first run's
+  3,556 MiB (243 KiB a connection) is the outlier, and nothing measured why. One candidate, unverified: it ran before
+  the keep-alive fix (f6a150f07), when the gateway reopened the backend connections Node closed every 5 s.
+
+It gives each figure as measured (the same way as C2b's) and above the idle gateway, measured for `--gap` before the
+first level.
 
 **Telling a limit of the rig from one of the gateway.** Every level's report ends with a check:
 
@@ -814,17 +822,18 @@ Everything runs on one host, over the loopback interface: every connection takes
   pressure and trims buffers). The report gives the most used against that value.
 - **Softirqs.** Loopback traffic is received through each CPU's backlog (`net.core.netdev_max_backlog`, 1000). Raise
   it if `softnet dropped` grows.
-- **Memory.** About 243 KiB a connection for the gateway (C2b), and about 94 KiB a runner for the loadgen (C2b's
-  1,371 MiB at 15,000).
+- **Memory.** About 157 KiB a connection for the gateway (C2b's rerun), and about 94 KiB a runner for the loadgen
+  (C2b's 1,371 MiB at 15,000). C2b's first run reached 243 KiB a connection for reasons nothing measured: leave the
+  gateway's allowance room for that until a level held for an hour here says otherwise.
 
 | Level | Source addresses (default ports / 1024–65535) | `nf_conntrack_max` at least | Shards (about 20,000 runners each) | Gateway memory | Loadgen memory |
 | --- | --- | --- | --- | --- | --- |
-| 3,000 | 1 / 1 (2 for the check: each is exercised) | the default 262,144 | 2 | 0.7 GB | 0.3 GB |
-| 15,000 | 1 / 1 | 262,144 | 2 | 3.6 GB | 1.4 GB |
-| 30,000 | 2 / 1 | 262,144 | 2 | 7.2 GB | 2.8 GB |
-| 65,000 | 3 / 2 | 262,144 | 4 | 16 GB | 6 GB |
-| 100,000 | 4 / 2 | 262,144 | 5 | 24 GB | 9.4 GB |
-| 150,000 | 6 / 3 | 262,144 | 8 | 36 GB | 14 GB |
+| 3,000 | 1 / 1 (2 for the check: each is exercised) | the default 262,144 | 2 | 0.5 GB | 0.3 GB |
+| 15,000 | 1 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
+| 30,000 | 2 / 1 | 262,144 | 2 | 4.7 GB | 2.8 GB |
+| 65,000 | 3 / 2 | 262,144 | 4 | 10 GB | 6 GB |
+| 100,000 | 4 / 2 | 262,144 | 5 | 16 GB | 9.4 GB |
+| 150,000 | 6 / 3 | 262,144 | 8 | 24 GB | 14 GB |
 
 ```bash
 # For 65,000 connections and more, on a machine of its own, with room to spare beyond the table's:
@@ -878,7 +887,7 @@ scripts/runner-link/gateway-limit.sh --name hpc-3k-probe --levels 3000 --ramp 60
   - Pinned to the P-cores, which other work also used, the GC's sweep termination waited up to 6.9 ms for a CPU. On
     any core its pauses stayed under 1 ms.
 
-**Against C2b's single gateway** (0.053 cores per 1,000 connections and 243 KiB a connection):
+**Against C2b's single gateway** (0.053 cores per 1,000 connections, and 157 KiB a connection from its rerun):
 
 - **CPU, −71% in A and −76% in B, is where the gateway runs and how many Ps its runtime has.** HPC has 8 P-cores and 16
   slower E-cores. C2b's gateway container had no CPU limit on 56 vCPUs, so its runtime ran with GOMAXPROCS 56.
@@ -891,10 +900,15 @@ scripts/runner-link/gateway-limit.sh --name hpc-3k-probe --levels 3000 --ramp 60
 
   So the stub does not change what the gateway spends per connection; its cores and GOMAXPROCS do, by up to 3.7 times.
   The limit task states its cpuset and GOMAXPROCS, and keeps the gateway's cores apart from the rig's.
-- **Memory, −36%, is how long the gateway had run.** C2b's 243 KiB a connection is the peak of one process that ran the
-  whole hour. C2b's own shorter-lived processes, on the same machine and commit at the same 15,000 connections, peaked
-  at 156 KiB a connection: 2,288 MiB in its heartbeat-only run (10 minutes) and 2,292 MiB in its reconnect run at
-  2,000 events a second (gateway restarted every 10 minutes). That is within 1% of the 155–158 KiB here. C2b's cell
-  spec took 162,000 B (158 KiB) a connection from its first run's heartbeat-only run. The gateway's memory grows while it
-  runs: here by 6.5–7 MiB over each 5-minute window at 3,000 connections, about 24 KB for each of the 290 renewals in
-  it. The limit task holds the levels whose memory it reports for an hour.
+- **Memory matches C2b's rerun, within 1%.** The gateway took 155–158 KiB a connection here, against 157 KiB in C2b's rerun.
+  That rerun held 15,000 connections for a full hour (c2b-full-1h-r2: 2,298 MiB). Its live run, on the same process
+  about 2.3 hours old, peaked at 2,305 MiB (c2b-live-1h-r2).
+  - C2b's first run peaked at 3,556 MiB, 243 KiB a connection, and nothing measured why. One candidate, unverified: it
+    ran before the keep-alive fix (f6a150f07), when the gateway reopened the backend connections Node closed every 5 s.
+  - Both runs of that commit that ran an hour were as high: c2b-full-1h at 3,556 MiB and c2b-live-1h at 3,523 MiB.
+    Its reconnect run, with the gateway restarted every 10 minutes, peaked at 2,292 MiB.
+- **Open: whether the growth seen here levels off.** Over each 5-minute window the gateway here grew 6.5–7 MiB at
+  3,000 connections. Taken as a steady rate and scaled to 15,000 connections, that would add about 0.9 GiB over 2.3
+  hours. C2b's rerun process peaked at 2,298 MiB in its first hour and at 2,305 MiB about 2.3 hours in, so it is not a
+  steady rate at that scale. Whether it levels off at 3,000 connections only a longer run can say; the limit task holds
+  a level for an hour.

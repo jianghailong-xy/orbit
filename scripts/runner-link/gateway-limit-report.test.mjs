@@ -152,11 +152,13 @@ test('every figure of a level comes out as the run recorded it', () => {
   assert.equal(l.kernel.conntrackCountMax, 2500);
   assert.equal(l.kernel.netRxSoftirqsPerSecond, 1000);
   assert.equal(l.kernel.tcpMemPressureMiB, 950);
-  assert.deepEqual(l.vsC2b, { coresPer1000: 0.0534, coresGapPct: 181, kibPerConnection: 242.8, memoryGapPct: 10 });
+  // C2b's CPU from its first run (0.801 cores), its memory from its rerun (2,298 MiB), both at 15,000 connections.
+  assert.deepEqual(l.vsC2b, { coresPer1000: 0.0534, coresGapPct: 181, kibPerConnection: 156.9, memoryGapPct: 70 });
   assert.equal(report.idle.meanCores, 0.01);
   const md = readFileSync(join(dir, 'report.json'), 'utf8') && res.stdout;
   assert.match(md, /plus `scripts\/runner-link\/gateway-limit-probe\.go` \(sha256 `(ab){32}`\)/);
-  assert.match(md, /\| 1000 \| 0\.15 \| \+181% \(over 30%\) \| 0\.14 \| 266\.2 \| \+10% \| 245\.8 \|/);
+  assert.match(md, /\| 1000 \| 0\.15 \| \+181% \(over 30%\) \| 0\.14 \| 266\.2 \| \+70% \(over 30%\) \| 245\.8 \|/);
+  assert.match(md, /0\.053 cores per 1,000 connections \(its first run, c2b-full-1h, evidence 15\) and 157 KiB a connection \(its rerun over a full hour, c2b-full-1h-r2, evidence 25\)/);
   assert.match(md, /6000, 6000: every one answered/);
   assert.match(md, /127\.0\.0\.2 499-500, 127\.0\.0\.3 500-501/);
   assert.doesNotMatch(md, /\b(null|undefined|NaN)\b/);

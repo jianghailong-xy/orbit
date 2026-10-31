@@ -8,13 +8,15 @@
 //
 //   node scripts/runner-link/gateway-limit-report.mjs <run dir> > <run dir>/report.md     # also writes report.json
 //
-// gateway-limit.sh writes it as it tears down. C2b's single-gateway figures, which each level is compared with, are
-// 0.801 cores and 3,556 MiB at 15,000 connections (task 34m88i6i8CQeU4dSuw7HM, evidence 15): 0.053 cores per 1,000
-// connections and about 243 KiB a connection.
+// gateway-limit.sh writes it as it tears down. Each level is compared with C2b's single gateway at 15,000 connections
+// (task 34m88i6i8CQeU4dSuw7HM): its CPU with the first run's 0.801 cores, 0.053 per 1,000 connections (c2b-full-1h,
+// evidence 15; the rerun took 0.791), its memory with the rerun's 2,298 MiB over a full hour, 157 KiB a connection
+// (c2b-full-1h-r2, evidence 25). The first run's 3,556 MiB is an outlier nothing measured the cause of (README.md, "The
+// gateway alone").
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const C2B = { connections: 15000, cores: 0.801, memMiB: 3556 };
+const C2B = { connections: 15000, cores: 0.801, coresRun: 'c2b-full-1h, evidence 15', memMiB: 2298, memRun: 'c2b-full-1h-r2, evidence 25' };
 C2B.coresPer1000 = (C2B.cores / C2B.connections) * 1000;
 C2B.kibPerConnection = (C2B.memMiB * 1024) / C2B.connections;
 const USER_HZ = 100; // /proc/stat's unit
@@ -464,7 +466,8 @@ for (const l of levels) {
     r.everyHeartbeatAnswered && r.everyEventAnswered ? 'yes' : '**no**');
 }
 md.push('', `C2b, one gateway at ${C2B.connections.toLocaleString('en')} connections behind four apiservers: ${round(C2B.coresPer1000, 3)} cores per 1,000 connections ` +
-  `and ${round(C2B.kibPerConnection, 0)} KiB a connection.`, '');
+  `(its first run, ${C2B.coresRun}) and ${round(C2B.kibPerConnection, 0)} KiB a connection (its rerun over a full hour, ${C2B.memRun}). ` +
+  'The first run peaked at 243 KiB a connection, an outlier nothing measured the cause of.', '');
 if (report.idle) {
   md.push(`The idle gateway (NATS and the stubs up, no runner): ${report.idle.meanCores} cores, ${report.idle.memMiB} MiB in its cgroup, ` +
     `${report.idle.rssMiB} MiB RSS, ${report.idle.goroutines ?? '—'} goroutines. "Above idle" is what each connection adds to it.`, '');
