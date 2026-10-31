@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
-import { encodeId } from '../lib/idCodec';
+import { machineDraftPath } from '../lib/machineSetup';
+import { REGISTER_NEXT, START_A_SESSION } from '../lib/machineSetupCopy';
 import { Segmented } from './ui/Segmented';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
@@ -116,20 +117,17 @@ export function RunnerRegisterGuide() {
             <CheckCircleFilled className="runner-status-icon" />
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
-              <div className="runner-status-sub">
-                It's now on the Machines & models page, under Machines. Next, sign in a coding CLI on it and add a
-                workspace — the folder it runs tasks in.
-              </div>
+              <div className="runner-status-sub">{REGISTER_NEXT}</div>
             </div>
-            {/* The machine alone can't do anything yet: sessions and tasks both hang off an
-                workspace, and run on a CLI signed in there, so the real next step is this runner's page,
-                where both are done. */}
+            {/* The machine alone can't do anything yet: sessions and tasks both hang off a workspace,
+                and run on a CLI signed in there, so the real next step is its new session page, whose
+                card asks for both. */}
             <button
               className="runner-done-btn"
-              onClick={() => navigate(`/runners/${encodeId(connected.id)}`)}
+              onClick={() => navigate(machineDraftPath(connected.id))}
               type="button"
             >
-              Open machine
+              {START_A_SESSION}
             </button>
           </div>
         ) : (
