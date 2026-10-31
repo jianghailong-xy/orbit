@@ -219,7 +219,36 @@ final class ConsoleModel {
         SessionRunStart.card(error: sessionError, sourceState: sessionSourceState,
                              sourceRefusalCode: sessionSourceRefusalCode,
                              sourceRefusalDetail: sessionSourceRefusalDetail,
-                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion)
+                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion,
+                             region: runnerRegion)
+    }
+
+    /// Held for the Claude region (docs/claude-region-check-contract.md §10–§11): queued with a region
+    /// refusal as its error. Its message waits and nothing is working on it.
+    var regionHeld: Bool { ClaudeRegion.held(status: sessionStatus, error: sessionError) }
+
+    /// Check again, from the region card (§7): the runner checks at once, and its answer lands in
+    /// `Runner.region` like any other check's — so the row is read again every two seconds until its
+    /// `checkedAt` reaches the request, for up to 30 seconds. A held session the check lets go is
+    /// claimed by the server, which this console hears as any other claim.
+    func checkRegionAgain() async {
+        guard let runnerID, !regionChecking else { return }
+        regionChecking = true
+        defer { regionChecking = false }
+        let asked: ClaudeRegionCheckRequest
+        do {
+            asked = try await api.requestRunnerRegionCheck(runnerID)
+        } catch {
+            statusMessage = "\(ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED) — \(APIClient.failureReason(error))."
+            return
+        }
+        let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
+        let started = Date()
+        while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
+            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await refreshRunner()
+            if ClaudeRegion.checkAnswered(checkedAt: runnerRegion?.checkedAt, askedAt: askedAt) { return }
+        }
     }
 
     /// "Start it again" for a refused run: SR34's recovery, which is a NEW run on the task — a
@@ -493,6 +522,12 @@ final class ConsoleModel {
     /// credentials expired). Loaded with the footer context.
     private(set) var runnerID: String?
     private(set) var runnerName: String?
+    /// Where that machine's Claude connection last came out (`Runner.region`, with the effective
+    /// verdict): the place the region card names, and what gates Anthropic credentials in the Provider
+    /// menu. Nil for a runner that does not check, which is never gated.
+    private(set) var runnerRegion: RunnerRegionView?
+    /// Check again is on its way (`checkRegionAgain`).
+    private(set) var regionChecking = false
     /// The workspace this session made, as its detail read it (`createdWorkspaceLine`).
     private var madeWorkspace: SessionAgentRef?
     /// The line this conversation opens with, when it made its workspace (board rule 8).
@@ -1980,6 +2015,8 @@ final class ConsoleModel {
     /// card is pending, since each of those already signals the state.
     var showWorkingIndicator: Bool {
         guard !isDraft else { return false }
+        // Held for the Claude region, nothing is working on its message (web parity).
+        guard !regionHeld else { return false }
         guard sending || awaitingReply || state.status == .running else { return false }
         guard state.pendingApprovals.isEmpty else { return false }
         guard let last = state.items.last else { return true }   // empty transcript → a reply is owed
@@ -2012,6 +2049,7 @@ final class ConsoleModel {
 
     private func adoptRunnerSnapshot(_ runner: Runner) {
         runnerName = runner.displayName?.isEmpty == false ? runner.displayName : runner.name
+        runnerRegion = runner.region
         runnerOnline = runner.online
         runnerHeartbeatLeaseOwner = runner.heartbeatLeaseOwner
         runnerHeartbeatDraining = runner.heartbeatDraining
@@ -2027,6 +2065,7 @@ final class ConsoleModel {
     }
 
     private func clearRunnerSnapshot() {
+        runnerRegion = nil
         runnerOnline = nil
         runnerHeartbeatLeaseOwner = nil
         runnerHeartbeatDraining = nil
@@ -2346,7 +2385,7 @@ final class ConsoleModel {
                       engines: runnerEngines, pools: allPools, planUsage: runnerPlanUsage,
                       antigravity: runnerAntigravity, antigravityKeyAvailable: antigravityKeyAvailable,
                       dshState: dshRunnerState, cursorState: cursorRunnerState,
-                      showsCursor: fleetKnowsCursor || engine == CursorRuntime.engine)
+                      showsCursor: fleetKnowsCursor || engine == CursorRuntime.engine, region: runnerRegion)
     }
 
     /// The credentials this session's engine runs on here (`SessionProviderChoices.providers`): its own

@@ -19,8 +19,11 @@ public enum SessionHeader {
     /// session remains "Succeeded" in Open, Completed and Trash alike. The DTO resolves old servers.
     /// `watching` is the session as an observer: parked with a live watch that will resume it, it
     /// reads "Watching 7 targets" — not "Waiting for your reply", and not a background process.
+    /// `machine`, where the caller knows it, is the runner the session runs on, by name: a session held
+    /// for the Claude region reads `Anthropic unavailable on {machine}` in place of its queue word (web
+    /// `statusLabel`, `claudeRegionHeldWords`).
     public static func statusWord(for s: Session, watching: WatchSessionSummary? = nil,
-                                  now: Date = Date()) -> String {
+                                  now: Date = Date(), machine: String? = nil) -> String {
         // Somebody waiting on YOU outranks everything else the word could say, and — as in the web
         // `statusLabel` this mirrors — the check sits OUTSIDE the generating gate: an owner
         // confirmation is held open by no turn, so it is still waiting once the conversation parks.
@@ -33,7 +36,7 @@ public enum SessionHeader {
         if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
         switch s.effectiveRunState {
         case .queued:
-            return "Queued"
+            return ClaudeRegion.heldWords(s, machine: machine) ?? "Queued"
         case .running:
             return "Running"
         case .awaitingInput:
@@ -96,9 +99,9 @@ public enum SessionHeader {
     /// Returns nil when there's no session to describe (a fresh deep link) so the caller can fall
     /// back to the live stream's status.
     public static func subtitle(for session: Session?, watching: WatchSessionSummary? = nil,
-                                now: Date = Date()) -> String? {
+                                now: Date = Date(), machine: String? = nil) -> String? {
         guard let s = session else { return nil }
-        let word = statusWord(for: s, watching: watching, now: now)
+        let word = statusWord(for: s, watching: watching, now: now, machine: machine)
         let lifecycle = lifecycleWord(for: s)
         // The two axes no longer share any vocabulary — a filed session reads "Ended · Completed",
         // which is exactly the split this subtitle exists to show — so there is nothing to collapse.
