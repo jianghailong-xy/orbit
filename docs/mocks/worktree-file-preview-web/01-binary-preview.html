@@ -1,0 +1,63 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>Diff 抽屉：二进制文件直接预览 · Web</title>
+<style>* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1720px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin-bottom: 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section:first-of-type { border-top: 0; padding-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-bottom: 26px; align-items: start; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: start; }
+.tile { margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; }
+.tag { display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; margin: 0 0 8px; }
+.tag.now { background: #ffe0dc; color: #8f1d13; }
+.tag.after { background: #d9e6ff; color: #14428f; }
+.fr { position: relative; border-radius: 10px; overflow: visible; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); margin: 4px 0 12px; }
+.fr img { display: block; border-radius: 10px; }
+.fr + .fr { margin-top: 14px; }
+.fr-label { position: absolute; left: 8px; top: -10px; font-size: 11px; background: #16161a; color: #fff; border-radius: 4px; padding: 0 6px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.num.m { position: absolute; box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); z-index: 3; }
+.notes { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; line-height: 1.62; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 7px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.notes i { color: #1f2a44; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 150px; font-weight: 600; color: #16161a; }
+.cmp td:nth-child(2) { background: #fff6f5; }
+.cmp td:nth-child(3) { background: #f3f7ff; }
+.sumtile { align-self: stretch; }
+.pair { margin-bottom: 22px; }
+.pair-title { font-size: 16px; font-weight: 650; margin: 0 0 10px 4px; }
+.pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.state .tile-title { font-size: 15px; }
+.notes li .t { flex: 1; min-width: 0; }
+.tile.wide { margin-bottom: 26px; }
+.tile.wide .frs { display: flex; gap: 28px; align-items: flex-start; }
+.tile.wide .notes { columns: 2; column-gap: 36px; }
+.tile.wide .notes li { break-inside: avoid; }
+
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; }
+.state .tile-title { font-size: 15px; margin-bottom: 8px; }
+.state-note { font-size: 13.5px; line-height: 1.6; color: #34343c; margin-top: 2px; }
+.state-note i, .notes i, .cmp i { font-style: normal; font-family: Inter, sans-serif; background: #eef0f4; border-radius: 4px; padding: 0 4px; }
+.cmp td:nth-child(2) { background: #f3f7ff; }
+.cmp td:first-child { width: 150px; }
+.files { list-style: none; margin: 0 0 18px; padding: 0; font-size: 14px; }
+.files li { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid #ececf1; }
+.files li:first-child { border-top: 0; }
+.files li span { color: #4a4a54; }
+.todo-title { margin-top: 6px; padding-top: 14px; border-top: 1px solid #dcdce3; }
+.todo { margin: 0; padding-left: 22px; font-size: 14.5px; line-height: 1.65; }
+.todo li { margin: 6px 0; }
+</style><body><div class="board"><h1>Diff 抽屉：二进制文件直接预览 · Web</h1><div class="lede">今天 Web 的 diff 抽屉碰到二进制文件只写 <i>Binary file — no preview</i>。iOS / macOS / Android 早就在同一个位置显示图片：它们调 <code>GET /sessions/:id/worktree-file</code>，服务端让会话的 runner 从 worktree 现读这个文件。方案：<b>Web 走同一条路</b>，图片直接画在右侧，其他二进制给 <i>Download</i>。只改 Web；服务端要不要顺手加一行让它更快，见待你定 ③。</div><div class="section"><span class="sec now">① 今天 → ② 方案</span><span class="sec-sub">左：你截的那一屏（真页面）。右：同一个文件，方案里的样子（真页面 + 原型，不是手画）。</span></div><div class="grid2"><figure class="tile "><span class="tag now">今天</span><div class="tile-title">Binary file — no preview：PNG 只有一句话</div><div class="fr" style="width:759px;height:316px"><img src="frames/t-png.png" width="759" height="316"><span class="num m" style="left:368px;top:189px">1</span><span class="num m" style="left:150px;top:26px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t">二进制文件（numstat 记成 <code>-1</code>）没有 patch，右侧只写 <i>Binary file — no preview</i>。你看 mock 板子时只能去别处打开 PNG。</span></li><li><span class="num">2</span><span class="t">‹ › 翻页跳过二进制文件，停在图片上时位置空着、两个箭头都灰。</span></li></ol></figure><figure class="tile "><span class="tag after">方案</span><div class="tile-title">方案：直接画出来（和 iOS / macOS / Android 一样）</div><div class="fr" style="width:759px;height:316px"><img src="frames/p-png.png" width="759" height="316"><span class="num m" style="left:150px;top:46px">1</span><span class="num m" style="left:632px;top:46px">2</span><span class="num m" style="left:713px;top:47px">3</span><span class="num m" style="left:141px;top:88px">4</span></div><ol class="notes"><li><span class="num">1</span><span class="t">‹ › 把二进制文件也算进去：这里是 <i>37/48</i>，可以一张张翻 mock。</span></li><li><span class="num">2</span><span class="t">头部写类型 · 像素尺寸 · 大小：<i>PNG 3440 × 9130 · 2.2 MB</i>（尺寸读完图才有）。</span></li><li><span class="num">3</span><span class="t"><i>Download</i>：存下刚读到的这份字节，不再读第二次。</span></li><li><span class="num">4</span><span class="t">图按右侧宽度缩放，<b>不放大</b>小图；长图在右侧里竖着滚。点图进全屏查看器。</span></li></ol></figure></div><div class="section"><span class="sec after">② 方案 · 翻页和放大</span><span class="sec-sub"></span></div><div class="grid2"><figure class="tile "><span class="tag after">方案</span><div class="tile-title">‹ › 翻进收起的文件夹：自动展开</div><div class="fr" style="width:759px;height:474px"><img src="frames/p-next.png" width="759" height="474"><span class="num m" style="left:150px;top:46px">1</span><span class="num m" style="left:-6px;top:160px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t">从 <code>capture/vite.mjs</code> 按 ›，到下一个文件 <code>frames/e-home-…png</code>（11/48）。</span></li><li><span class="num">2</span><span class="t"><code>frames/</code> 全是二进制，今天默认收起；翻到它里面的文件时自动展开，列表上能看到你在哪。手动收起照旧有效。</span></li></ol></figure><figure class="tile "><span class="tag after">方案</span><div class="tile-title">点图：现有的全屏查看器</div><div class="fr" style="width:759px;height:474px"><img src="frames/p-viewer.png" width="759" height="474"><span class="num m" style="left:265px;top:435px">1</span><span class="num m" style="left:711px;top:6px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t">就是对话里图片用的那个查看器（<code>ui/ImagePreview</code>）：滚轮 / 按钮缩放、拖动、旋转、翻转。</span></li><li><span class="num">2</span><span class="t">Esc、✕ 或点暗处关掉，回到抽屉。</span></li></ol></figure></div><div class="section"><span class="sec after">② 方案 · 各种状态</span><span class="sec-sub">同一个右侧区域，在一个小窗口里截的。文案照抄原生客户端，四端说法一致。</span></div><div class="grid3"><figure class="tile state"><div class="tile-title">读取中</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-loading.png" width="489" height="326"></div><div class="state-note">打开就让 runner 现读。走 runner link 的 runner 几秒就回来；只走 HTTPS 的要等它下一次心跳，最多约 30 秒（见待你定 ③）。没读到前 <i>Download</i> 是灰的。</div></figure><figure class="tile state"><div class="tile-title">小图、改动过的图（M）</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-small.png" width="489" height="326"></div><div class="state-note">按原尺寸居中，不放大。<b>只显示现在的版本</b>，没有改前 / 改后对比（见待你定 ①）。</div></figure><figure class="tile state"><div class="tile-title">不是图片（woff2、zip、pdf…）</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-other.png" width="489" height="326"></div><div class="state-note">不自动读；按 <i>Download</i> 才让 runner 读，读完直接下载。</div></figure><figure class="tile state"><div class="tile-title">已删除（D）</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-deleted.png" width="489" height="326"></div><div class="state-note">现在的 worktree 里没有这个文件，不发请求，只说明一句。</div></figure><figure class="tile state"><div class="tile-title">Runner 离线（503）</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-offline.png" width="489" height="326"></div><div class="state-note">和原生同一句文案，带 <i>Retry</i>。超时（504，服务端最多等 40 秒）、找不到（404）同样可以重试。</div></figure><figure class="tile state"><div class="tile-title">超过 25 MB（413）</div><div class="fr" style="width:489px;height:326px"><img src="frames/s-large.png" width="489" height="326"></div><div class="state-note">上传上限是 runner 那边定的 25 MB；不给重试，读了也一样。</div></figure></div><div class="section"><span class="sec after">规则 · 改动 · 待你定</span><span class="sec-sub"></span></div><div class="grid2"><figure class="tile"><div class="tile-title">规则</div><table class="cmp"><tr><th></th><th>规则</th></tr><tr><td>哪些文件</td><td>右侧文件列表里标 <i>binary</i> 的文件（git numstat 是 <code>-</code>）。文本文件、SVG（git 当文本）不变。</td></tr><tr><td>怎么拿字节</td><td>复用现成的 <code>GET /sessions/:id/worktree-file?path=…</code>：服务端让这个会话的 runner 从 worktree 读文件上传，iOS / macOS / Android 早就在用。<b>只改 Web</b>；服务端要不要加一行，见待你定 ③。</td></tr><tr><td>画哪些格式</td><td>png、jpg/jpeg、gif、webp、avif、bmp、ico（所有浏览器都能画的）。其他二进制给 <i>Download</i>。</td></tr><tr><td>读的是哪一版</td><td>worktree 里<b>现在</b>的文件。会话还在跑时，turn 结束会重读正在看的图（和 diff 一起刷新）。</td></tr><tr><td>翻回看过的图</td><td>先显示上次读到的那份，同时后台重读；离开一分钟后释放内存，翻几十张大图不会一直占着。</td></tr><tr><td>已结束的会话</td><td>同一条路：checkout 还在就能看；checkout 被回收后显示 <i>File not found</i>。</td></tr><tr><td>点工作区条打开抽屉</td><td>照旧先打开第一个文本文件（秒开）；想看图点图，或用 ‹ › 翻过去。</td></tr></table></figure><figure class="tile"><div class="tile-title">改哪些文件</div><ul class="files"><li><code>src/web/src/components/WorktreeFilePreview.tsx</code><span>新：预览组件（头部类型 · 尺寸 · 大小、Download，图 / 各种状态）</span></li><li><code>src/web/src/lib/worktreeFile.ts</code><span>新：可画的格式、失败文案（照抄原生 WorktreeFileFailure）、大小格式</span></li><li><code>src/web/src/components/SessionOutputs.tsx</code><span>DiffPane 把二进制交给预览；‹ › 包括二进制；文件树展开当前文件所在的文件夹</span></li><li><code>src/web/src/api.ts · lib/queries.ts</code><span><code>getWorktreeFile</code> / <code>worktreeFileQuery</code></span></li><li><code>src/web/src/index.css</code><span><code>.wt-preview-*</code>（类名先 grep 过，没有撞）</span></li><li><code>测试</code><span>vitest：图 / 非图 / 删除 / 各状态码 / ‹ › 顺序 / 自动展开</span></li></ul><div class="tile-title todo-title">待你定</div><ol class="todo"><li>改动过的图（M）只看现在的版本，和四端今天一样。要不要做改前 / 改后对比？那得让 runner 再读 base 版本（服务端 + runner 都要加），建议另开任务。</li><li>‹ › 包括二进制文件，翻到收起的文件夹里会自动展开。如果你更想要 ‹ › 只翻文本、图片只能点开，告诉我。</li><li>只走 HTTPS 的 runner 要等下一次心跳（最多约 30 秒）才去读文件：这个请求只提醒走 runner link 的 runner，不像 Merge / Commit 那样直接叫醒 runner。服务端在 <code>getWorktreeFileForOwner</code> 里加一行 <code>notifyRunnerWake</code> 就能马上读，四个客户端的文件预览都会快。<b>我建议一起做。</b></li></ol></figure></div></div></body></html>
