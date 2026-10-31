@@ -251,5 +251,6 @@ and session reads false.
 - `task-judgment-data-preserved.spec.ts`: the migration ledger.
 - `link-heartbeat.ts` `HEARTBEAT_DELIVERIES`: `dirProbeRequest` (MARKED by `requestDirProbe`), and
   `createInNewWorkspace` among the writers of `agentDirs`.
-- Route lists: `REFUSED_OVER_HTTPS` (`runner-link-required.spec.ts`) and `linkDaemonRoutes`
-  (`src/runner-go/link_mode.go`, with its count in `link_mode_test.go`).
+- Route lists: `REFUSED_OVER_HTTPS` (`runner-link-required.spec.ts`, and the route counts its pg twin
+  `runner-link-required.pg.spec.ts` drives) and `linkDaemonRoutes` (`src/runner-go/link_mode.go`, with its count in
+  `link_mode_test.go`): 53 routes, 48 of them the daemon's.
