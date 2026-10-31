@@ -151,7 +151,89 @@ public struct BlockerResolvePreview: Equatable, Sendable {
     }
 }
 
+/// What a delete would take away, read off the card the server filed for it. The asker sends only
+/// an id: the name, where it stands and what goes with it are the server's own reading
+/// (`runner-api/runner-delete-approval.ts`), so a card cannot name one machine and delete another.
+public struct DeleteApprovalPreview: Equatable, Sendable {
+    /// One workspace deleted with a runner: what the owner may not have had in mind.
+    public struct Workspace: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let workDir: String?
+    }
+
+    public let isRunner: Bool
+    public let name: String
+    /// Where it stands: a runner online or last seen, the runner a workspace is on.
+    public let status: String
+    /// A workspace's folder.
+    public let workDir: String?
+    /// The workspaces that go with a runner.
+    public let workspaces: [Workspace]
+
+    public var noun: String { isRunner ? "runner" : "workspace" }
+
+    /// The card's header. The name is the next row rather than part of this line: the header stays
+    /// on one line, and a delete is the last place a name may be cut short.
+    public var heading: String { "Delete this \(noun)?" }
+
+    /// What a refusal names, ahead of the reason to be typed. Web computes the same name
+    /// (`declineSubject`).
+    public var declineName: String { name.isEmpty ? "this \(noun)" : name }
+
+    /// What deleting means, under the facts.
+    public var note: String { isRunner ? Approvals.deleteRunnerNote : Approvals.deleteWorkspaceNote }
+}
+
 public extension Approvals {
+
+    /// The yes on a delete card, and the words around what goes. Web's card says the same
+    /// (`DeleteCardCopyParityTests`); the two notes are the words the runner page's own Delete uses.
+    static let deleteAction = "Delete it"
+    static let deleteGoesWith = "Deleted with it"
+    static let deleteNoWorkspaces = "No workspaces are bound to it."
+    static let deleteRunnerNote = "This removes the runner and its workspaces from your account. "
+        + "Re-register the machine to add it back."
+    static let deleteWorkspaceNote = "The workspace leaves your list but is not erased — its sessions "
+        + "and tasks are kept and stay linked to it."
+
+    /// The facts the server filed on an `orbit_runner_delete` / `orbit_agent_delete` card, or nil for
+    /// any other approval. A runner's status is the runner list's own line, so a machine reads the
+    /// same on its card as on its row.
+    static func deletePreview(toolName: String, from input: JSONValue,
+                              nowMs: Int64) -> DeleteApprovalPreview? {
+        let isRunner = isRunnerDelete(toolName: toolName)
+        guard isRunner || isWorkspaceDelete(toolName: toolName) else { return nil }
+        func text(_ value: JSONValue?) -> String? {
+            guard let string = value?.stringValue, !string.isEmpty else { return nil }
+            return string
+        }
+        guard isRunner else {
+            let runner = input["runner"]
+            let host = text(runner?["displayName"]) ?? text(runner?["name"])
+            return DeleteApprovalPreview(isRunner: false, name: text(input["name"]) ?? "",
+                                         status: host.map { "On \($0)" } ?? "On no runner",
+                                         workDir: text(input["workDir"]), workspaces: [])
+        }
+        var workspaces: [DeleteApprovalPreview.Workspace] = []
+        if case .array(let raw)? = input["workspaces"] {
+            workspaces = raw.map {
+                .init(id: $0["id"]?.stringValue ?? "", name: $0["name"]?.stringValue ?? "",
+                      workDir: text($0["workDir"]))
+            }
+        }
+        let status: String
+        if input["online"]?.boolValue == true {
+            status = RunnerPageCopy.RUNNER_ONLINE
+        } else if let seen = text(input["lastHeartbeatAt"]) {
+            status = RunnerPageCopy.runnerOfflineLastSeen(when: RunnerAttention.ago(seen, nowMs: nowMs))
+        } else {
+            status = RunnerPageCopy.RUNNER_OFFLINE
+        }
+        return DeleteApprovalPreview(isRunner: true,
+                                     name: text(input["displayName"]) ?? text(input["name"]) ?? "",
+                                     status: status, workDir: nil, workspaces: workspaces)
+    }
 
     /// The body carried on an `orbit_task_create` / `orbit_project_create` approval, or nil for any
     /// other approval.
@@ -191,6 +273,28 @@ public extension Approvals {
     /// own `Confirm: …` line and the native card draws an icon chip beside it, so it is the words
     /// that are shared and `CreateCardCopyParityTests` is what keeps them shared.
     static let createHeading = "Create 1 task?"
+
+    /// The single-task card's second yes: create the task and start its run in the same press, so
+    /// the owner is not asked again to start it. Web's `CREATE_AND_START`; Android's
+    /// `CardVerb.CREATE_AND_START`.
+    static let createAndStartAction = "Create and start"
+
+    /// Whether the single-task card offers Create and start: only when the server's forecast says
+    /// nothing would start the task by itself (`needsManualStart` is 1). A task that starts on its
+    /// own (now or at its runAt), waits on a prerequisite, cannot run, or waits for its project to
+    /// start has nothing for the press to add, and a card whose forecast could not be read says
+    /// nothing either way. Nor a card the server did not mark `acceptsStartAfterCreate`: its runner,
+    /// or the server itself, predates the choice and would only create the task. Web's
+    /// `offersCreateAndStart`.
+    static func offersCreateAndStart(toolName: String, input: JSONValue?) -> Bool {
+        guard isTaskCreate(toolName: toolName), let input,
+              input["acceptsStartAfterCreate"]?.boolValue == true else { return false }
+        return batchPreview(from: input)?.needsManualStart == 1
+    }
+
+    /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
+    /// remember rules, none of which a create card carries.
+    static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
 
     /// The fold's own line, carrying its length the way the evidence card's claim fold does: this is
     /// the longest field on the card and the least decisive, and how much of it there is is exactly

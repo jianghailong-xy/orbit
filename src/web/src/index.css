@@ -8788,8 +8788,15 @@ button.chat-jump-start:hover {
 .chat-sticky-loading:hover {
   background: var(--bg-sunken);
 }
+/* Over a turn another session sent, the label is `From <its title>`, and a task session's title runs
+   to 80 characters: capped and cut with an ellipsis, so the text beside it stays visible. Capped
+   rather than left to shrink, which let the long text squeeze it to `From Tas…`. */
 .chat-sticky-label {
   flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -10877,7 +10884,8 @@ button.chat-jump-start:hover {
 }
 /* The owner's answer handed to the coordinator (components/OwnerAnswerLine.tsx): the same pill, saying
    the same thing, opening to the words the agent read. Dashed while it still waits on the queue. */
-.owner-answer {
+.owner-answer,
+.coordinator-delivery {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -10910,7 +10918,8 @@ button.chat-jump-start:hover {
   outline: 2px solid var(--orbit-focus-color);
   outline-offset: 2px;
 }
-.owner-answer.is-queued .owner-answer-line {
+.owner-answer.is-queued .owner-answer-line,
+.coordinator-delivery.is-queued .owner-answer-line {
   border: 1px dashed var(--border);
 }
 .owner-answer-text {
@@ -10954,6 +10963,44 @@ button.chat-jump-start:hover {
   flex-wrap: wrap;
   justify-content: center;
   row-gap: 2px;
+}
+/* A fact told to this session (components/CoordinatorDeliveryLine.tsx): the owner's answer's pill,
+   saying what happened, then when it was sent. The sentence gives way with an ellipsis and the time
+   does not; at phone width the two take a row each, the sentence first, and the dot between them goes. */
+.coordinator-delivery-words {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.coordinator-delivery-sep,
+.coordinator-delivery-sent {
+  flex: none;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.coordinator-delivery-task {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .coordinator-delivery .owner-answer-line {
+    width: 100%;
+    border-radius: 12px;
+  }
+  .coordinator-delivery-words {
+    flex: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .coordinator-delivery-sep {
+    display: none;
+  }
+  .coordinator-delivery .owner-answer-chev {
+    align-self: center;
+  }
 }
 /* The same turn when the conversation can draw the question it answers: that question's card. */
 .owner-answer-card {

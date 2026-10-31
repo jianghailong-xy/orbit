@@ -88,8 +88,8 @@ const (
 var wikiFetchLockWait = time.Minute
 
 // fetchWikiOriginMain fetches origin's main into refs/remotes/origin/main — the one fetch the wiki makes
-// of a checkout: the runner's repository operations (wikiRepoOpCheckout). An error is git's own words; the
-// caller says what it means.
+// of a checkout: the runner's repository operations (wikiRepoOpCheckout). An error is git's own words, or
+// errGitAuthFailed with them; the caller says what it means.
 //
 // THE FAILURE THIS EXISTS FOR (2026-10-09, the canary's docs build 79620f23). A fetch updates
 // refs/remotes/origin/main only from the value it read when it began. Two fetches of one checkout that
@@ -112,7 +112,7 @@ var wikiFetchLockWait = time.Minute
 //
 // --no-auto-maintenance: the fetch starts no maintenance in a checkout it only reads. Git's own after a
 // fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
-// a moment as long as a loaded machine makes it (wikiAnchorGit).
+// a moment as long as a loaded machine makes it (wikiAnchorGit, whose WaitDelay networkGit keeps).
 func fetchWikiOriginMain(repo string) error {
 	if common := gitCommonDir(repo); common != "" {
 		if release, held := acquireWikiFetchLock(filepath.Join(common, wikiFetchLockName), wikiFetchLockWait); held {
@@ -120,12 +120,15 @@ func fetchWikiOriginMain(repo string) error {
 		}
 	}
 	for attempt := 1; ; attempt++ {
-		_, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec)
-		if err == nil && code == 0 {
+		_, err := networkGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec)
+		if err == nil {
 			return nil
 		}
-		if err != nil || !strings.Contains(stderr, "cannot lock ref") || attempt == integrationFetchLockAttempts {
-			return errors.New(firstNonEmpty(strings.TrimSpace(stderr), errString(err), fmt.Sprintf("git fetch exited %d", code)))
+		if !isRefLockConflict(err) || attempt == integrationFetchLockAttempts {
+			if errors.Is(err, errGitAuthFailed) {
+				return err
+			}
+			return errors.New(firstNonEmpty(gitStderr(err), err.Error()))
 		}
 		integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 	}

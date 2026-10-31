@@ -92,11 +92,12 @@ vi.mock('../api', async (importOriginal) => {
 /** The graph is React Flow, which jsdom cannot lay out: whether the plan fits is the arithmetic's
  *  (`startPlanGraphFits`, ProjectDependencyGraph.test.tsx), and what the card does with the answer
  *  is under test here — so the answer is the test's to give. */
-const planGraph = vi.hoisted(() => ({ fits: false }));
+const planGraph = vi.hoisted(() => ({ fits: false, loads: true }));
 vi.mock('./StartPlanGraph', async () => {
   const { createElement, Fragment, useEffect } = await import('react');
   return {
     default: function StubPlanGraph({ fallback, onDrawn }: { fallback: ReactNode; onDrawn: (drawn: boolean) => void }) {
+      if (!planGraph.loads) throw new TypeError('Failed to fetch dynamically imported module');
       useEffect(() => {
         onDrawn(planGraph.fits);
       }, [onDrawn]);
@@ -278,6 +279,7 @@ beforeEach(() => {
   narrow = false;
   startedCalls = 0;
   planGraph.fits = false;
+  planGraph.loads = true;
   navigateTo = null;
   server.standing = standingOf();
   server.document = documentOf();
@@ -887,6 +889,18 @@ describe('what the card says', () => {
     // The graph's rows are its layout's, not levels: the head says how many tasks and no more.
     expect(sections(card()).at(-1)).toBe('Plan · 5 tasks');
     expect(card().querySelector('.start-card-graph-link')).toBeNull();
+  });
+
+  it('keeps the plan by level when the graph’s chunk never arrives: a tab older than the last deploy', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    planGraph.fits = true;
+    planGraph.loads = false;
+    const { card } = await delivered();
+    await until(() => levelsOf(card()).length > 0, 'the levels');
+    expect(levelsOf(card())).toHaveLength(4);
+    expect(sections(card()).at(-1)).toBe('Plan · 5 tasks in 4 levels');
+    expect(card().querySelector('[data-testid="start-plan-graph"]')).toBeNull();
+    vi.restoreAllMocks();
   });
 
   it('lists the plan by level when the graph does not fit, with the graph full screen a press away', async () => {

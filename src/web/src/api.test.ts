@@ -8,6 +8,7 @@ import {
 import {
   ApiError,
   api,
+  decideApproval,
   getSessionEventPage,
   getShareLink,
   getWorktreeFile,
@@ -412,5 +413,25 @@ describe('getWorktreeFile', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(503);
     expect((error as ApiError).message).toBe('The runner is offline. Try again when it is online.');
+  });
+});
+
+describe('decideApproval', () => {
+  it('sends Create and start only when it was chosen, so every other answer reads as before', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 'a1', status: 'ALLOWED' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await decideApproval('s1', 'a1', 'allow', undefined, undefined, undefined, true);
+    await decideApproval('s1', 'a1', 'allow');
+    await decideApproval('s1', 'a1', 'allow', undefined, undefined, undefined, false);
+
+    const sent = fetchMock.mock.calls.map((call) => {
+      const [url, init] = call as unknown as [string, RequestInit];
+      return { url, body: JSON.parse(String(init.body)) as Record<string, unknown> };
+    });
+    expect(sent[0].url).toContain('/api/sessions/s1/approvals/a1/decision');
+    expect(sent[0].body).toEqual({ behavior: 'allow', startAfterCreate: true });
+    expect(sent[1].body).toEqual({ behavior: 'allow' });
+    expect(sent[2].body).toEqual({ behavior: 'allow' });
   });
 });

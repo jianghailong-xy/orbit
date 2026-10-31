@@ -1,6 +1,7 @@
 import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  CoordinatorDeliveryCard,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -99,6 +100,24 @@ export function withOwnerAnswer(
   const stored = { ...payload };
   delete stored.ownerAnswer;
   if (card !== null) stored.ownerAnswer = card;
+  return stored;
+}
+
+/**
+ * The same rule for a turn telling a session about a committed fact (`coordinatorDelivery`,
+ * projects/coordinator-delivery-card.ts): a fact the coordinator is told, or the answer to a
+ * session's criteria proposal — what the line says and when this conversation was handed it, so a
+ * client draws one line rather than the owner's bubble. Absent for every other turn, and a card
+ * arriving from the runner is dropped for the reason the rules above give.
+ */
+export function withCoordinatorDelivery(
+  payload: Record<string, unknown>,
+  card: CoordinatorDeliveryCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.coordinatorDelivery;
+  if (card !== null) stored.coordinatorDelivery = card;
   return stored;
 }
 

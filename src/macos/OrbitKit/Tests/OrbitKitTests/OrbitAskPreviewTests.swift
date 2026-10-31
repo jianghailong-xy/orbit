@@ -24,10 +24,12 @@ final class OrbitAskPreviewTests: XCTestCase {
         // A merge check joins them with teeth on both sides: the server writes a session's merge
         // check only against a card a PERSON answered, so a standing rule here would be a switch
         // that turns every later proposal into a refusal the agent cannot read — the owner
-        // believing they had allowed it.
+        // believing they had allowed it. A delete has the same teeth: the server deletes only on a
+        // card a person answered, so a standing yes would answer nothing.
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
-                     "orbit_provider_delete", "orbit_project_update_integration"] {
+                     "orbit_provider_delete", "orbit_project_update_integration",
+                     "orbit_runner_delete", "orbit_agent_delete"] {
             XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
                            "\(tool) must not offer Allow & remember")
         }
@@ -35,6 +37,89 @@ final class OrbitAskPreviewTests: XCTestCase {
         // for this being about those asks and not about the `orbit_` prefix.
         XCTAssertFalse(Approvals.rememberRules(toolName: "Read", input: json("{}")).isEmpty)
         XCTAssertFalse(Approvals.rememberRules(toolName: "orbit_task_get", input: json("{}")).isEmpty)
+    }
+
+    // MARK: deleting a runner or a workspace
+
+    /// Six hours and a minute after the last heartbeat these cards report.
+    private let deleteNow: Int64 = (1_790_000_000 + 6 * 3_600 + 60) * 1_000
+    private var lastBeat: String {
+        ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_790_000_000))
+    }
+
+    /// The card as the server files it: its own reading of the runner, never the asker's words.
+    private func runnerDelete(name: String = "instance-20261027-071926", displayName: String? = nil,
+                              online: Bool = false, heardFrom: Bool = true,
+                              workspaces: String = #"[{"id":"w1","name":"c2b-loadtest","workDir":null},{"id":"w2","name":"site","workDir":"~/site"}]"#
+    ) -> DeleteApprovalPreview? {
+        let shown = displayName.map { "\"\($0)\"" } ?? "null"
+        let beat = heardFrom ? "\"\(lastBeat)\"" : "null"
+        return Approvals.deletePreview(toolName: "orbit_runner_delete", from: json("""
+            {"runnerId":"r1","name":"\(name)","displayName":\(shown),"online":\(online),
+             "lastHeartbeatAt":\(beat),"workspaces":\(workspaces)}
+            """), nowMs: deleteNow)
+    }
+
+    func testARunnerCardNamesTheRunnerWhereItStandsAndWhatGoesWithIt() throws {
+        let card = try XCTUnwrap(runnerDelete())
+        XCTAssertTrue(card.isRunner)
+        XCTAssertEqual(card.heading, "Delete this runner?")
+        XCTAssertEqual(card.noun, "runner")
+        XCTAssertEqual(card.name, "instance-20261027-071926")
+        XCTAssertEqual(card.status, "Offline · last seen 6h ago")
+        XCTAssertNil(card.workDir)
+        XCTAssertEqual(card.workspaces, [.init(id: "w1", name: "c2b-loadtest", workDir: nil),
+                                         .init(id: "w2", name: "site", workDir: "~/site")])
+        XCTAssertEqual(card.note, Approvals.deleteRunnerNote)
+        XCTAssertEqual(card.declineName, "instance-20261027-071926")
+    }
+
+    func testARunnerIsCalledWhatTheAppCallsItAndSaysWhenItWasNeverHeardFrom() {
+        XCTAssertEqual(runnerDelete(displayName: "Build box")?.name, "Build box")
+        XCTAssertEqual(runnerDelete(online: true)?.status, "Online")
+        XCTAssertEqual(runnerDelete(heardFrom: false)?.status, "Offline")
+        XCTAssertEqual(runnerDelete(workspaces: "[]")?.workspaces, [])
+    }
+
+    func testAWorkspaceCardNamesItsRunnerAndFolderAndThatItIsNotErased() throws {
+        let card = try XCTUnwrap(Approvals.deletePreview(
+            toolName: "orbit_agent_delete",
+            from: json("""
+                {"agentId":"w1","name":"c2b-loadtest","workDir":"/srv/loadtest",
+                 "runner":{"id":"r1","name":"workstation-gpu","displayName":"HPC"}}
+                """),
+            nowMs: deleteNow))
+        XCTAssertFalse(card.isRunner)
+        XCTAssertEqual(card.heading, "Delete this workspace?")
+        XCTAssertEqual(card.name, "c2b-loadtest")
+        XCTAssertEqual(card.status, "On HPC")
+        XCTAssertEqual(card.workDir, "/srv/loadtest")
+        XCTAssertEqual(card.workspaces, [])
+        XCTAssertEqual(card.note, Approvals.deleteWorkspaceNote)
+    }
+
+    func testAWorkspaceWithNoRunnerSaysSoAndAnUnnamedCardStillHasADeclineName() {
+        let card = Approvals.deletePreview(toolName: "orbit_agent_delete",
+                                           from: json(#"{"agentId":"w1","runner":null}"#),
+                                           nowMs: deleteNow)
+        XCTAssertEqual(card?.status, "On no runner")
+        XCTAssertNil(card?.workDir)
+        XCTAssertEqual(card?.declineName, "this workspace")
+        XCTAssertEqual(runnerDelete(name: "")?.declineName, "this runner")
+    }
+
+    func testOnlyTheDeleteCardsAreDeleteCards() {
+        XCTAssertNil(Approvals.deletePreview(toolName: "orbit_provider_delete", from: json("{}"),
+                                             nowMs: deleteNow))
+        XCTAssertNil(Approvals.deletePreview(toolName: "Bash", from: json("{}"), nowMs: deleteNow))
+    }
+
+    func testSayingNoToADeleteIsAConversationAboutKeepingIt() {
+        for tool in ["orbit_runner_delete", "orbit_agent_delete"] {
+            XCTAssertTrue(Approvals.isOrbitAsk(toolName: tool), tool)
+            XCTAssertEqual(Approvals.decliningPrefix(toolName: tool), "Keeping it: ")
+            XCTAssertEqual(Approvals.kind(toolName: tool), .tool, "drawn by the tool card")
+        }
     }
 
     // MARK: ending a blocker
@@ -222,6 +307,114 @@ final class OrbitAskPreviewTests: XCTestCase {
         XCTAssertEqual(project.titleLine, "")
         XCTAssertEqual(project.foldNoun, "goal")
         XCTAssertEqual(project.criteriaText, "- p95 < 1s")
+    }
+
+    // MARK: Create and start
+
+    /// A single create's body as the server files it: the forecast for its one task (`field` is 1, the
+    /// rest absent, which is how a one-task forecast reads) and, beside it, `acceptsStartAfterCreate`
+    /// when the runner that filed the card acts on the choice.
+    private func forecast(_ field: String, _ count: Int = 1, accepts: Bool? = true) -> JSONValue {
+        let flag = accepts.map { ",\"acceptsStartAfterCreate\":\($0)" } ?? ""
+        return json("""
+            {"title":"Write the 2.5 release notes","completionCriterion":"EXECUTABLE"\(flag),
+             "preview":{"taskCount":1,"\(field)":\(count),"lists":[]}}
+            """)
+    }
+
+    func testCreateAndStartIsOfferedOnlyWhenNothingWouldStartTheTaskOtherwise() {
+        XCTAssertTrue(Approvals.offersCreateAndStart(toolName: "orbit_task_create",
+                                                     input: forecast("needsManualStart")))
+
+        // Every other forecast already says what becomes of the task — it starts now or at its time,
+        // waits on a prerequisite, cannot run, or waits for its project — so the press adds nothing.
+        for field in ["startingNow", "scheduled", "blocked", "notDispatchable", "awaitingProjectStart"] {
+            XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create", input: forecast(field)),
+                           "\(field) 1 must not offer Create and start")
+        }
+        XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create",
+                                                      input: forecast("needsManualStart", 2)),
+                       "exactly one task waiting on a manual start, as web's `=== 1`")
+        // A card the server did not mark: its runner, or the server, predates the choice, and the press
+        // would only create the task.
+        XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create",
+                                                      input: forecast("needsManualStart", accepts: nil)),
+                       "no acceptsStartAfterCreate, no Create and start")
+        XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create",
+                                                      input: forecast("needsManualStart", accepts: false)))
+        // No forecast — an older runner, or a read that failed — says nothing either way.
+        XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create", input: json("""
+            {"title":"Write the 2.5 release notes","completionCriterion":"EXECUTABLE","acceptsStartAfterCreate":true}
+            """)))
+        XCTAssertFalse(Approvals.offersCreateAndStart(toolName: "orbit_task_create", input: nil))
+        // Only the single-task card: a project create and a batch keep their one yes.
+        for tool in ["orbit_project_create", "orbit_task_batch"] {
+            XCTAssertFalse(Approvals.offersCreateAndStart(toolName: tool, input: forecast("needsManualStart")),
+                           "\(tool) must not offer Create and start")
+        }
+    }
+
+    func testCreateAndStartSendsTheStartAndCreateItSendsNoStartKeyAtAll() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        func wire(_ request: ApprovalDecisionRequest) throws -> String {
+            String(decoding: try encoder.encode(request), as: UTF8.self)
+        }
+
+        XCTAssertEqual(try wire(Approvals.createAndStartRequest), #"{"behavior":"allow","startAfterCreate":true}"#)
+        // Create it, as `ConsoleModel.decide` builds it for a card with no remember rules: the body it
+        // sent before Create and start existed, with no startAfterCreate in it — not even a false.
+        XCTAssertEqual(try wire(ApprovalDecisionRequest(behavior: .allow, message: nil, answers: nil,
+                                                        rememberRules: nil)),
+                       #"{"behavior":"allow"}"#)
+    }
+
+    /// From `start` up to the next `end` after it.
+    private func section(_ text: String, from start: String, to end: String) throws -> String {
+        let lower = try XCTUnwrap(text.range(of: start), "no `\(start)`")
+        let upper = try XCTUnwrap(text.range(of: end, range: lower.upperBound..<text.endIndex),
+                                  "no `\(end)` after `\(start)`")
+        return String(text[lower.lowerBound..<upper.lowerBound])
+    }
+
+    /// The card draws Create and start right after Create it, only when the shared rule offers it,
+    /// and the press reaches the console as the choice that sends Create and start's own body. A
+    /// source scan, for the reason the blocker card's is one: SwiftUI does not exist here.
+    func testTheCardOffersCreateAndStartAfterCreateItAndThePressSendsIt() throws {
+        let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
+
+        let actions = try section(card, from: "private var actions: some View {",
+                                  to: "@ViewBuilder private var details: some View")
+        let order = ["allowButton",
+                     "if Approvals.offersCreateAndStart(toolName: approval.toolName ?? \"\", input: approval.input) {",
+                     "createAndStartButton",
+                     "denyButton"].map { actions.range(of: $0)?.lowerBound }
+        XCTAssertFalse(order.contains(nil), "the card's actions lost a part: \(actions)")
+        XCTAssertEqual(order.compactMap { $0 }, order.compactMap { $0 }.sorted(),
+                       "Create and start sits right after Create it, offered by the shared rule")
+
+        let button = try section(card, from: "private var createAndStartButton: some View {",
+                                 to: "private func rememberButton(")
+        XCTAssertTrue(button.contains("decide(console, approval, .allow, startAfterCreate: true)"), button)
+        XCTAssertTrue(button.contains("Text(Approvals.createAndStartAction)"), button)
+        XCTAssertTrue(button.contains(".buttonStyle(.bordered)") && !button.contains(".borderedProminent"),
+                      "a secondary yes, beside the filled one")
+        // Create it keeps its press, its words and its fill.
+        let allow = try section(card, from: "private var allowButton: some View {", to: "private var allowLabel")
+        XCTAssertTrue(allow.contains("decide(console, approval, .allow) }") && allow.contains(".borderedProminent"),
+                      allow)
+        XCTAssertTrue(card.contains("if create != nil { return \"Create it\" }"))
+        let press = try section(card, from: "private func decide(_ console: ConsoleModel,",
+                                to: "private func nonEmpty(")
+        XCTAssertTrue(press.contains("startAfterCreate: startAfterCreate)"), "the choice reaches the console")
+
+        let console = try source("src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift")
+        let decide = try section(console, from: "func decide(_ approval: PendingApproval,",
+                                 to: "private(set) var projectID: String?")
+        XCTAssertTrue(decide.contains("? Approvals.createAndStartRequest"), decide)
+        XCTAssertTrue(decide.contains(
+            ": ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)"),
+                      "every other press keeps the body it always sent")
     }
 
     // MARK: dag preview

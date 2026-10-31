@@ -29,7 +29,7 @@ import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
-import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -88,6 +88,7 @@ import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
 import { ACCEPTANCE_EMPTY, TaskAcceptance } from '../pages/TaskDetailPage';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { TaskFollowedBy } from './WatchRelations';
+import { LazyBoundary } from './ErrorBoundary';
 import {
   OWNER_CONFIRM_ACTION,
   WAITING_FOR_CONFIRMATION,
@@ -1845,7 +1846,7 @@ export function TaskDetailPanel({
               dependencyGraphQ.isLoading ? (
                 <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
               ) : (
-                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>}>
+                <LazyBoundary fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>} failed={null}>
                   <LazyTaskDependencyGraph
                     graph={dependencyGraph}
                     title={task?.title ?? 'Current task'}
@@ -1865,7 +1866,7 @@ export function TaskDetailPanel({
                     }
                     removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
                   />
-                </Suspense>
+                </LazyBoundary>
               )
             ) : (
               <TaskDependencyList

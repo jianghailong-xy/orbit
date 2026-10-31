@@ -410,9 +410,12 @@ public enum ComposerLogic {
     /// (`sessionMessage`): somebody typed that, but not the reader. Handed back, those put text written
     /// for the agent — or by another one — in the composer as though the reader had typed it, one tap
     /// from being sent again under their name. Web: `returnsToComposer`
-    /// (src/web/src/lib/queuedTurnRestore.ts).
+    /// (src/web/src/lib/queuedTurnRestore.ts). Nil, too, for a fact told to this session
+    /// (`coordinatorDelivery`), whose echo carries no `authoredByOrbit`: undelivered, it offers nothing
+    /// to put back (`SteerDelivery.offersPutBack`), as the browser's line offers nothing.
     public static func restorableText(of bubble: UserBubble) -> String? {
-        guard !bubble.authoredByOrbit, bubble.itemCard == nil, bubble.startedCard == nil,
+        guard !bubble.authoredByOrbit, bubble.itemCard == nil, bubble.coordinatorDelivery == nil,
+              bubble.startedCard == nil,
               bubble.sessionMessage == nil,
               WatchWakeText.parse(bubble.text) == nil,
               BackgroundWakeText.parse(bubble.text) == nil else { return nil }

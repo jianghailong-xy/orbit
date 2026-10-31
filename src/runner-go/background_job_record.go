@@ -37,6 +37,19 @@ type bgJobRecord struct {
 	// neither repeats a wake nor skips output.
 	WokenThrough int64 `json:"wokenThrough,omitempty"`
 	OutputWakes  int   `json:"outputWakes,omitempty"`
+	// When the job's output last moved and how much of the file had been read by then, so the next
+	// image counts the job's silence from when it really began, and takes what the file holds past
+	// OutputSeen for output written while no image was watching. A record from an image that kept
+	// neither has a zero LastOutputAt (adoptedJob).
+	LastOutputAt time.Time `json:"lastOutputAt"`
+	OutputSeen   int64     `json:"outputSeen,omitempty"`
+	// The job's wakeOnStall, the stall wakes it has finished sending, and the silence the last of them
+	// was about (by the lastOutputAt it began at), so the next image neither reports that silence again
+	// nor fails to report the next one. A stall wake still being sent when the job was handed on is
+	// counted in neither, so the next image sends it again, under the same id.
+	WakeOnStallSeconds int       `json:"wakeOnStallSeconds,omitempty"`
+	StallWakes         int       `json:"stallWakes,omitempty"`
+	StallWokenFor      time.Time `json:"stallWokenFor"`
 }
 
 func bgJobRecordPath(sessionID, jobID string) string {

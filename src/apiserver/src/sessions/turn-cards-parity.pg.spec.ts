@@ -46,6 +46,9 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
+import { dependentReadyFact, wakeIdempotencyKey } from '../projects/coordinator-wake';
+import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { OPEN_ITEM_TURN_PREFIX, OWNER_ANSWER_TURN_PREFIX } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PROJECT_STARTED_TURN_PREFIX, tellCoordinatorProjectStarted } from '../projects/project-started';
@@ -77,6 +80,7 @@ const SHA = 'c3'.repeat(20);
 const CARD_FIELDS: Record<keyof TurnCards, true> = {
   openItemDelivery: true,
   ownerAnswer: true,
+  coordinatorDelivery: true,
   taskStart: true,
   projectStarted: true,
   confirmationReviewRequest: true,
@@ -181,6 +185,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
   const confirmations = new TaskOwnerConfirmationService(db, sessions, tasks, realtime as never, reviews);
   const confirmationDoor = new RunnerTaskOwnerConfirmationController(confirmations, reviews);
   const openItems = new ProjectOpenItemService(db, sessions);
+  const deliveries = new CoordinatorDeliveryService(db, new CoordinatorWakeService(db), sessions);
   const orchestration = new RunnerOrchestrationAuthorizer(db, new JwtService({ secret: 'turn-cards-parity-pg' }));
   const attempts = { chargeSteer: async () => undefined };
   const sendDoor = new RunnerSessionsController(sessions, orchestration, {} as never, attempts as never, undefined, requests);
@@ -346,6 +351,21 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     await openItems.answerOpenItem(ownerId, projectId, asked.itemId, { option: 1 });
     const told = await turnKeyed(coordinator, OWNER_ANSWER_TURN_PREFIX);
     await assertSameCards('ownerAnswer', coordinator, told.id, { ahead, listedWhileHanded: true });
+  });
+
+  // ── coordinatorDelivery ───────────────────────────────────────────────────────────────────────
+
+  await t.test('a fact told to the coordinator, queued behind the owner (coordinatorDelivery)', async () => {
+    const { projectId, coordinator } = await coordinatedProject('the project with a task that can start');
+    const ready = await task('the task that can start now', { projectId });
+    const fact = dependentReadyFact({ projectId, taskId: ready, title: 'the task that can start now', dispatchEpoch: 1 });
+    const ahead = await ownerSays(coordinator, 'the owner goes first');
+    const outcome = await deliveries.queue(fact, async () => ({ allowed: true }));
+    assert.equal(outcome.outcome, 'DELIVERED');
+    const told = await prisma.conversationTurn.findUniqueOrThrow({
+      where: { sessionId_clientTurnId: { sessionId: coordinator, clientTurnId: coordinatorDeliveryTurnId(wakeIdempotencyKey(fact)) } },
+    });
+    await assertSameCards('coordinatorDelivery', coordinator, told.id, { ahead, listedWhileHanded: true });
   });
 
   // ── taskStart ─────────────────────────────────────────────────────────────────────────────────

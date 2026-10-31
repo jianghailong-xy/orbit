@@ -1,12 +1,13 @@
-import { Suspense, lazy, type JSX, type ReactNode } from 'react';
+import { lazy, type JSX, type ReactNode } from 'react';
 import type { BatchTaskInput } from '../lib/batchGraph';
+import { LazyBoundary } from './ErrorBoundary';
 
 /**
  * A proposed batch's shape, as the card draws it — the project page's own canvas, behind this
  * boundary.
  *
  * React Flow and dagre are heavy and most approval cards are not a batch at all. This module is
- * the cheap half: it imports nothing but a type, and the picture (with its own layout engine) is
+ * the cheap half: it imports neither, and the picture (with its own layout engine) is
  * fetched the moment a card actually has one to draw — the same arrangement `ProjectTasksGraph`
  * and the start card's plan already use.
  *
@@ -23,8 +24,8 @@ export function BatchGraph({
   fallback: ReactNode;
 }): JSX.Element {
   return (
-    <Suspense fallback={fallback}>
+    <LazyBoundary fallback={fallback}>
       <LazyBatchPlanGraph tasks={tasks} fallback={fallback} />
-    </Suspense>
+    </LazyBoundary>
   );
 }

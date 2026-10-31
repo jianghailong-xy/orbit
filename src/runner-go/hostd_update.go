@@ -161,17 +161,19 @@ func (u hostdUpdate) verb(peer hostdPeer, _ hostdRequest) hostdResponse {
 		return hostdFail("cannot read the release %s publishes: %v", server, err)
 	}
 
-	// Stamped here: after everything that can fail with a reason (a machine with no config or no
-	// binary must tell every caller why, not answer "skipped" for five minutes), and before the
-	// download rather than after it (the second runner of a stampede has to be waved off while
-	// the first is still downloading, not once it has finished).
-	u.stamp()
-
 	// A public manifest is never a rollback — that is a per-runner assignment — so only a newer
 	// release is installed.
 	if !isNewer(m.Version, current) {
 		return hostdOK(map[string]any{"version": current, "updated": false})
 	}
+
+	// Stamped here: after everything that can fail with a reason (a machine with no config or no
+	// binary must tell every caller why, not answer "skipped" for five minutes), only once there
+	// is a release to install (a machine already on it ran no update, and must not wave off the
+	// next caller's real one for five minutes), and before the download rather than after it (the
+	// second runner of a stampede has to be waved off while the first is still downloading, not
+	// once it has finished).
+	u.stamp()
 	u.background(func() { u.install(server, key, m, target, cred) })
 	return hostdOK(map[string]any{"version": m.Version, "from": current, "accepted": true})
 }

@@ -49,6 +49,11 @@ public enum Approvals {
     public static func isMergeCheckChange(toolName: String) -> Bool {
         toolName == "orbit_project_update_integration"
     }
+    /// Deleting one of the account's runners, or one of its workspaces. The server deletes only on a
+    /// card a person answered, so a standing rule could answer nothing. Web keys them off
+    /// `isRunnerDelete` and `isWorkspaceDelete`; the card reads `DeleteApprovalPreview`.
+    public static func isRunnerDelete(toolName: String) -> Bool { toolName == "orbit_runner_delete" }
+    public static func isWorkspaceDelete(toolName: String) -> Bool { toolName == "orbit_agent_delete" }
     /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
     /// conversation rather than a press (the composer is armed with the reason), and none of them
     /// can be waived with a standing rule — what is being asked for differs each time.
@@ -56,6 +61,7 @@ public enum Approvals {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
+            || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
     }
     /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
     /// refused as a plain tool card (its input is the provider as it would be written, the key
@@ -172,6 +178,7 @@ public enum Approvals {
     public static func decliningPrefix(toolName: String) -> String {
         if isDagChange(toolName: toolName) { return "Leaving the graph alone: " }
         if isBlockerResolve(toolName: toolName) { return "Leaving this open: " }
+        if isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName) { return "Keeping it: " }
         return "Not creating: "
     }
 

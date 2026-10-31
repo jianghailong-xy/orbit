@@ -105,7 +105,8 @@ public enum SteerDelivery {
     /// its `note` what delivery appended; a queued wake has its block as its text. Web parity:
     /// `Transcript.tsx`'s `readersOwnWords` and the queue's `returnsToComposer`.
     public static func isReadersOwn(_ b: UserBubble) -> Bool {
-        !b.authoredByOrbit && b.itemCard == nil && b.taskStart == nil && b.startedCard == nil
+        !b.authoredByOrbit && b.itemCard == nil && b.coordinatorDelivery == nil
+            && b.taskStart == nil && b.startedCard == nil
             && b.sessionMessage == nil && b.sessionReplies == nil
             && b.reviewRequest == nil && b.reviewReturn == nil
             && WatchWakeText.parse(b.text) == nil
