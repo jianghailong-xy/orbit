@@ -223,6 +223,22 @@ The runner reports either on finalize (`RunFinalizeRequest`) or on turn-complete
 ends what it refused or stopped. `status` is `FAILED`, as for `delivery_failed` (`claude_delivery.go`), so that a
 control plane which predates the subtype records an ordinary failure with the sentence in view.
 
+Where runner-go refuses (`claude_region.go`), each time on an answer from the route under 60 seconds old:
+
+- **A cold start** refuses before anything is installed or spawned, and reports on finalize with the sentence in
+  `error`.
+- **A claim for a warm engine** recycles the engine instead of reusing it (`activatePrepared`), and the cold start
+  that takes its place refuses as above.
+- **A message handed to a running engine** is not written to it. Its turn is reported on turn-complete, with the
+  sentence in `error` and `result`, and that report stops the engine. A steer is not refused: it joins a turn that
+  is already running, which only ④ stops.
+- **The turn-complete answer** ends the run whatever status it carries: a terminal one from a control plane that
+  predates the subtype, or the session's waiting status from one that holds it. Nothing is finalized after it, and
+  the run's inbox generation is released unless that status is terminal.
+
+Because the runner refuses only on a fresh answer the route just gave it, `runner.region` reads blocked whenever
+the runner refuses, as long as nothing else checked for that runner since.
+
 A control plane that knows the subtypes does **not** fail the session:
 
 - **`region_refused`:** the server puts the run back in the queue as a hold: `QUEUED`, with the sentence in
