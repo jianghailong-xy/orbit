@@ -109,7 +109,12 @@ func TestLinkShadowMirrorsWhatTheControlPlaneAccepted(t *testing.T) {
 	if got := strings.Join(hb.GetSupportedProviders(), ","); got != supportedProvidersHeader() {
 		t.Errorf("supported_providers %q", got)
 	}
-	if n := rig.shadow.counts[linkMirrorHeartbeat].sent.Load() + rig.shadow.counts[linkMirrorEvents].sent.Load(); n != 2 {
+	// The shadow counts a mirror sent once its raw half is written, which the gateway may have compared already.
+	counted := func() int64 {
+		return rig.shadow.counts[linkMirrorHeartbeat].sent.Load() + rig.shadow.counts[linkMirrorEvents].sent.Load()
+	}
+	linkWaitFor(t, 5*time.Second, "the shadow to count both mirrors sent", func() bool { return counted() >= 2 })
+	if n := counted(); n != 2 {
 		t.Errorf("the shadow counts %d mirrors sent", n)
 	}
 	linkWaitFor(t, 5*time.Second, "both raw halves answered", func() bool { return rig.shadow.answered.Load() == 2 })
@@ -642,7 +647,8 @@ func TestLinkShadowFollowsADrain(t *testing.T) {
 	conns, _, _, _ := rig.g.snapshot()
 	sent := time.Now()
 	conns[0].send(&linkpb.Frame{Body: &linkpb.Frame_Drain{Drain: &linkpb.Drain{ReconnectAfterMs: 400}}})
-	rig.connected(t, 2)
+	// The shadow's side too: it logs the replacement after it has closed the drained connection.
+	rig.taken(t, 2)
 	conns, _, _, upgrades := rig.g.snapshot()
 	if at := upgrades[len(upgrades)-1]; at.Sub(sent) < 400*time.Millisecond {
 		t.Errorf("the next connection was opened %s after the Drain, sooner than its 400ms", at.Sub(sent))
@@ -684,7 +690,14 @@ func TestLinkShadowReconnectsNoSoonerThanItIsTold(t *testing.T) {
 	conns[0].send(&linkpb.Frame{Body: &linkpb.Frame_Close{Close: &linkpb.Close{
 		Code: linkpb.CloseCode_CLOSE_CODE_INTERNAL_ERROR, Message: "the test closes it", RetryAfterMs: 1200}}})
 	_ = conns[0].ws.Close(websocket.StatusInternalError, "closing")
-	rig.connected(t, 2)
+	// The summary is the shadow's: stopped before it has read the second Welcome, it counts one connection and logs
+	// no reconnect. So wait for its side — the connection taken, and a ping timed, which the summary reports too.
+	rig.taken(t, 2)
+	linkWaitFor(t, 5*time.Second, "the shadow to time a ping", func() bool {
+		rig.shadow.mu.Lock()
+		defer rig.shadow.mu.Unlock()
+		return rig.shadow.rtt.n > 0
+	})
 	_, _, _, upgrades := rig.g.snapshot()
 	if len(upgrades) != 3 {
 		t.Fatalf("%d upgrades: want the first, one refused, one welcomed", len(upgrades))
@@ -809,7 +822,8 @@ func TestLinkMirrorBuildersFollowTheReadme(t *testing.T) {
 func TestLinkShadowStopFlushesAndNeverHangs(t *testing.T) {
 	rig := newLinkTestRig(t)
 	rig.start(t)
-	rig.connected(t, 1)
+	// Stopped before it has read the Welcome, the shadow has no connection to send the mirror on.
+	rig.taken(t, 1)
 	if _, err := rig.t.heartbeat(linkTestHeartbeat(rig.t.leaseOwner)); err != nil {
 		t.Fatal(err)
 	}
