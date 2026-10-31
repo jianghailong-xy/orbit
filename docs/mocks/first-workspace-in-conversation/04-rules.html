@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>没有 workspace 的机器 · 规则、改动、分期、待你定</title>
+<link rel="stylesheet" href="board.css">
+<style>
+  .rules { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 14px; overflow: hidden;
+           box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+  .rules th, .rules td { text-align: left; vertical-align: top; padding: 11px 14px; border-top: 1px solid #ececf1; line-height: 1.6; }
+  .rules th { border-top: 0; background: #fafafc; color: #6a6a74; font-size: 13px; font-weight: 600; }
+  .rules td:first-child { width: 40px; color: #8a8a92; font-weight: 600; }
+  .rules td:nth-child(2) { width: 180px; font-weight: 650; }
+  .rules td:last-child { width: 420px; color: #4a4a54; }
+  .rules tr.later td { background: #fbfbfd; color: #6a6a74; }
+  .decided { background: #eef7f0; border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; box-shadow: 0 0 0 1px rgba(26,127,55,.12); font-size: 14.5px; }
+  .decided b { color: #1a7f37; }
+  .decided ul { margin: 6px 0 0; padding-left: 20px; }
+  .layers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .layer { background: #fff; border-radius: 14px; padding: 14px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); font-size: 13.5px; line-height: 1.6; }
+  .layer h3 { font-size: 15px; margin: 0 0 6px; }
+  .layer ul { margin: 0; padding-left: 18px; }
+  .layer li { margin: 4px 0; }
+  .phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .phase { background: #fff; border-radius: 14px; padding: 14px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); font-size: 13.5px; line-height: 1.6; }
+  .phase h3 { font-size: 15px; margin: 0 0 2px; }
+  .phase .cost { color: #6a6a74; font-size: 12.5px; margin-bottom: 6px; }
+  .phase ul { margin: 0; padding-left: 18px; }
+  .q { background: #fff; border-radius: 14px; padding: 14px 18px; margin-bottom: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+  .q h3 { font-size: 15.5px; margin: 0 0 8px; }
+  .opt2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 14px; line-height: 1.6; }
+  .opt2 > div { border-radius: 10px; padding: 10px 14px; background: #f6f6f9; }
+  .opt2 > div.rec { background: #eef3ff; box-shadow: inset 0 0 0 1.5px #b8cdfc; }
+  .opt2 b { display: block; margin-bottom: 2px; }
+  .rectag { display: inline-block; font-size: 11.5px; font-weight: 700; color: #14428f; background: #d9e6ff; border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: 1px; }
+</style>
+<body>
+<div class="board">
+<h1>没有 workspace 的机器 · 规则、改动清单、分期、待你定</h1>
+<div class="lede">01–03 是样子，这一张是规则。原则只有两条：<b>只问人才能答的事</b>（文件夹是 agent 能读写的范围，登录是凭据），其余都推导；
+<b>不在沉默中卡住</b>（什么都跑不了的机器要被说出来，路径错了当场就说）。</div>
+
+<div class="decided"><b>已按推荐定下</b>（你回的「按推荐」）
+<ul>
+  <li>在<b>对话里</b>建：设置卡放在这台机器的新会话页里，不做弹窗或向导。</li>
+  <li><code>orbit register</code> 的目录<b>只当建议</b>，不当默认。</li>
+  <li>「最近用 Claude Code / Codex 工作过的目录」<b>先不扫</b>：runner 今天刻意不普查目录（<code>claude_history.go</code>），放到 P2 再定。</li>
+  <li><code>agent_create</code> 以后要先出<b>确认卡</b>（P2）。</li>
+</ul></div>
+
+<div class="section"><span class="sec after">规则</span><span class="sec-sub">web、iOS/macOS、Android 同一套。</span></div>
+<table class="rules">
+<tr><th>#</th><th>场景</th><th>规则</th><th>为什么</th></tr>
+<tr><td>1</td><td>什么时候出卡</td><td>机器在线，这个账号在它上面 0 个 workspace，打开它的新会话页时。离线：卡上写离线，两步都不能做。</td><td>没有文件夹就开不了会话；与其让人去设置页，不如在开始的地方把它问掉。</td></tr>
+<tr><td>2</td><td>文件夹建议</td><td><code>orbit register</code> 的目录：存在、而且不是 <code>~</code> 或 <code>/</code> 才列出来；是 git 仓库时默认选中，否则默认选「新文件夹」。</td><td>安装脚本在用户当前目录里跑 register，那通常就是 <code>~</code>。把整个家目录当默认，等于替人做了授权决定。</td></tr>
+<tr><td>3</td><td>新文件夹</td><td>建在机器的 Repos Folder 下（orbit@austin 上是 <code>~/orbit-repos/</code>），名字必填。第一次会话前由 runner <code>mkdir -p</code>，只对 Orbit 自己要建的目录这样做。</td><td>今天目录不存在时会话直接起不来（<code>working directory … does not exist</code>）。代码不在这台机器上的人，第一条消息里让 agent 去 clone。</td></tr>
+<tr><td>4</td><td>别的文件夹</td><td>输入就在机器上检查：不存在的不能选；不是 git 仓库的能选，但写明会共享目录、不隔离；是 git 仓库的显示分支。</td><td>今天写错路径要到会话失败才会暴露。</td></tr>
+<tr><td>5</td><td>登录</td><td>跟随输入框选的引擎，嵌入现有的 <code>RunnerSignIn</code>。机器上装了的其他引擎给 <i>Use X instead</i>；账号有能用的 key 时给 <i>Use an API key</i>。</td><td>凭据只能由人给。用同一个组件，机器页、会话里、设置卡三处一模一样。</td></tr>
+<tr><td>6</td><td>先发的消息</td><td>留在卡下面，状态写 <i>Waiting for &lt;machine&gt; — sends once both steps are done</i>，可以撤回。两步做完自动发出，不用再按一次。</td><td>先说要做什么，不被配置打断。和今天「排队的消息」是同一种说法。</td></tr>
+<tr><td>7</td><td>发送时建什么</td><td>一次请求建三样：workspace、会话、第一条消息。workspace 名取文件夹名，重名加序号；隔离沿用今天的默认；合并目标自动检测；repoUrl 由探测回填。任何一步失败都不留半成品。</td><td>用户只按了「发送」，不该留下一个空的 workspace。</td></tr>
+<tr><td>8</td><td>建完告诉人</td><td>对话第一行写 <i>Created workspace &lt;name&gt; on &lt;machine&gt; · &lt;path&gt;</i>，带 Rename 和 Settings。</td><td>说清楚建了什么，才可以不额外再问一遍。</td></tr>
+<tr><td>9</td><td>侧边栏和抽屉</td><td>在线、0 个 workspace 的机器显示 <i>Set up &lt;machine&gt;</i>，排在所有 workspace 后面；离线的不列。</td><td>离线的机器在 Machines &amp; models 里已经算 needs you。</td></tr>
+<tr><td>10</td><td>提醒</td><td>机器上装了的登录型 CLI 一个都没登录 → 一条 <i>No coding CLI is signed in</i>，不管有没有 workspace；Settings 里也算 needs you。只要有一个登录了，其他没用到的引擎照旧不报。</td><td>什么都跑不了的机器要被说出来；但不要为没人用的引擎吵。</td></tr>
+<tr><td>11</td><td>打开 Orbit 落在哪</td><td>一个 workspace 都没有的账号 → 第一台在线机器的新会话页；所有机器都离线 → Machines &amp; models。</td><td>落在能直接开始的地方，而不是一页引擎列表。</td></tr>
+<tr><td>12</td><td>入口</td><td>批准页（/enroll）、Add a runner 页、机器页的空状态，都用同一句下一步和同一个按钮：<i>Start a session</i>。</td><td>今天三处说法不一样：一处说先登录，一处说先建 workspace，原生端说去 web。</td></tr>
+<tr class="later"><td>13</td><td>以后的 workspace（P2）</td><td>在已有的会话里说「也在 ~/code/api 开一个」，agent 调 <code>agent_create</code>，和 <code>task_create</code> 一样先出确认卡。</td><td>它决定 agent 能碰哪些目录，今天却不经确认。</td></tr>
+</table>
+
+<div class="section"><span class="sec after">改动清单</span><span class="sec-sub">web 部分的原型就是 <code>capture/prototype.patch</code>（截图用的）；服务端和 runner 只是设计，还没写。</span></div>
+<div class="layers">
+  <div class="layer"><h3>服务端 · apiserver</h3><ul>
+    <li><code>POST /sessions</code> 接受「机器 + 文件夹」：一个事务里建 workspace、会话和第一条消息（<code>sessions.service.ts</code> 的 create，<code>workspaces.service.ts</code> 的 create）。</li>
+    <li>按路径检查目录：新的 runner 中继，照 <code>requestClaudeHistory</code> 的单槽中继做（<code>runners.service.ts:952</code>）。</li>
+    <li>注册目录：批准时把 <code>deviceEnrollment.workDir</code> 记到 runner 上（新列），runner 列表带上它和探测结果。要过迁移和写入的各项 census。</li>
+  </ul></div>
+  <div class="layer"><h3>Runner · runner-go</h3><ul>
+    <li>目录检查中继：复用 <code>agent_dir_probe.go</code> 的探测（存在、git、分支、剩余空间）。</li>
+    <li>新文件夹：claim 时对 Orbit 要建的 workDir 做 <code>mkdir -p</code>，在 <code>spawn_workdir.go</code> 启动引擎之前。</li>
+    <li>heartbeat 或中继报告注册目录的探测结果。</li>
+  </ul></div>
+  <div class="layer"><h3>Web</h3><ul>
+    <li>新 <code>MachineSetupCard.tsx</code>。<code>WorkspaceView.tsx</code>：没有 workspace 的草稿、拦住发送、显示等着的消息。</li>
+    <li><code>TasksSidePanel.tsx</code>（Set up 行）、<code>App.tsx</code>（落地）、<code>EnrollPage.tsx</code>、<code>RunnerRegisterGuide.tsx</code>、<code>RunnerDetailPage.tsx</code>（空状态，表单路径必填、创建前检查）。</li>
+    <li><code>lib/runnerAttention.ts</code>、<code>lib/runnerCopy.ts</code>、<code>SettingsPage.tsx</code>、<code>index.css</code>，以及对应的测试。</li>
+  </ul></div>
+  <div class="layer"><h3>iOS / macOS</h3><ul>
+    <li>抽屉和 Mac 侧边栏加 Set up 行（<code>AgentListLogic</code>、<code>CompactShell</code>、<code>MainView</code>）。没有 workspace 时 New session 和 ⌘N 不再置灰。</li>
+    <li>新的设置卡视图 + <code>AgentsView</code> 草稿；落地改 <code>LoadFailureLogic</code>。</li>
+    <li><code>RunnerAttention.swift</code>、<code>SettingsHome</code>、<code>RunnerPageCopy</code>（去掉 “on the web”），以及 copy parity 测试。</li>
+  </ul></div>
+  <div class="layer"><h3>Android</h3><ul>
+    <li><code>MainActivity.kt</code>：抽屉行，以及 New session。<code>NewSessionComposer.kt</code>：没有 workspace 时也能出草稿（今天直接 return）。</li>
+    <li>新的设置卡 composable，复用现有的 sign-in card。</li>
+    <li><code>management/RunnerPage.kt</code>（提醒规则、页脚）、<code>SettingsScreen.kt</code>，以及 parity 测试。</li>
+  </ul></div>
+  <div class="layer"><h3>不动的</h3><ul>
+    <li>workspace 的概念和数据模型不变：每个会话仍然属于一个 workspace，只是建它的时机挪到了第一条消息。</li>
+    <li>机器页的 Add workspace 表单保留，给高级用法。</li>
+    <li>托管 runner 自带的 Default workspace 不受影响。</li>
+  </ul></div>
+</div>
+
+<div class="section"><span class="sec after">分期</span></div>
+<div class="phases">
+  <div class="phase"><h3>P0 · 不再沉默</h3><div class="cost">只改规则和文案 · 小</div><ul>
+    <li>提醒规则和 Settings 计数（三端）。</li>
+    <li>两个注册完成页说同一句下一步（先指向机器页）。</li>
+    <li>web 表单路径必填。</li>
+    <li>原生端那句 “on the web” 给可点的链接。</li></ul></div>
+  <div class="phase"><h3>P1 · web 在对话里建</h3><div class="cost">服务端 + runner + web · 中</div><ul>
+    <li>workspace 和会话一起建；目录检查中继；注册目录。</li>
+    <li>runner 建新文件夹。</li>
+    <li>设置卡、落地、侧边栏；入口改指新会话页。</li></ul></div>
+  <div class="phase"><h3>P1b · 原生端</h3><div class="cost">iOS/macOS、Android · 中</div><ul>
+    <li>同一张卡、同一条抽屉行。</li>
+    <li>它们今天连创建入口都没有，这是第一次能在手机上开始。</li></ul></div>
+  <div class="phase"><h3>P2 · 以后</h3><div class="cost">按需</div><ul>
+    <li><code>agent_create</code> 加确认卡。</li>
+    <li>「最近工作过的目录」建议（隐私另定）。</li>
+    <li>浏览目录；从 git URL 克隆（也可以就交给 agent）。</li></ul></div>
+</div>
+
+<div class="section"><span class="sec now">待你定</span><span class="sec-sub">蓝框是推荐。</span></div>
+<div class="q"><h3>1. P0 先单独上吗？</h3><div class="opt2">
+  <div class="rec"><b>A 先上 P0<span class="rectag">推荐</span></b>改动小、三端都是规则和文案，马上不再沉默。代价是入口先指向机器页，等 P1 上了再改指新会话页。</div>
+  <div><b>B 等 P1 一起上</b>少改一次入口；但 P1 落地之前，没 workspace 的机器继续不出声。</div></div></div>
+<div class="q"><h3>2. 新文件夹建在哪？</h3><div class="opt2">
+  <div class="rec"><b>A 机器的 Repos Folder：<code>~/orbit-repos/&lt;name&gt;</code><span class="rectag">推荐</span></b>和托管 runner 的 Default（<code>…/orbit-repos/default</code>）同一个约定，Orbit 建的东西都在一处。</div>
+  <div><b>B 家目录下：<code>~/&lt;name&gt;</code></b>更像人自己建的，但会和用户自己的目录混在一起。</div></div></div>
+<div class="q"><h3>3. 这样建出来的 workspace，隔离默认开不开？</h3><div class="opt2">
+  <div class="rec"><b>A 沿用今天的默认：关<span class="rectag">推荐</span></b>第一次使用不需要先懂 worktree；需要时在会话里一键打开（今天已有）。</div>
+  <div><b>B git 仓库默认开</b>并行会话更安全，但第一次就多一个分支和合并的概念。</div></div></div>
+<div class="q"><h3>4. 原生端什么节奏？</h3><div class="opt2">
+  <div class="rec"><b>A web 先上，iOS/macOS 和 Android 随后（P1b）<span class="rectag">推荐</span></b>服务端和 runner 的改动先在 web 上验证，再接原生端。</div>
+  <div><b>B 四端同时上</b>手机上的死路关得最快，但一次要改的面最大，copy parity 测试一起动。</div></div></div>
+</div>
+</body>
+</html>
