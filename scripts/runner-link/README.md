@@ -837,3 +837,64 @@ sysctl -w net.core.somaxconn=65535 net.ipv4.tcp_max_syn_backlog=65535 net.core.n
 A widened port range covers the harness's own ports (`GATEWAY_LIMIT_PORT_BASE`, 62400 and on). Each is listened on
 before any load starts, so no outgoing connection can take one; a host's other services may lose theirs. `run.json`
 keeps every setting above as the run found it.
+
+### On HPC, 2026-10-31
+
+Every run at commit 27a9028b2 (`gateway-limit-probe.go` sha256 `8ef4b3f3…f7a67`) held the load-test lock. Each had
+3,000 connections from 2 shards, 1,500 from each of 127.0.0.2 and 127.0.0.3 (the gateway's own count, `ss`), and played
+`-volatile` at 100 heartbeats and 400 events a second. Each held a 5-minute steady window after a 60 s ramp and a 60 s
+settle, with 4 stubs at 5 ms and a 4G memory allowance:
+
+```bash
+scripts/runner-link/gateway-limit.sh --name hpc-3k-probe --levels 3000 --ramp 60s --settle 60s --steady 5m \
+  --gateway-cpus 4 --gateway-memory 4G --gateway-cpuset 0-7 --shards 2 --sources 127.0.0.2,127.0.0.3 --stubs 4 -- -volatile
+```
+
+| Run | Gateway CPUs | GOMAXPROCS | Cores mean / peak 10 s | Per 1,000 connections | Memory (cgroup) | A connection | Goroutines a connection | GC pause p50 / p99 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A, with the probe | 4 cores, the P-cores (0–7) | 4 | 0.047 / 0.101 | 0.0157 | 455 MiB | 155.5 KiB | 4.03 | 1.2 / 6.9 ms |
+| B, without it | the same | 4 | 0.038 / 0.053 | 0.0126 | 455 MiB | 155.3 KiB | — | 0.085 / 5.9 ms |
+| C, unconstrained | no limit, any CPU | 24 | 0.139 / 0.213 | 0.0462 | 463 MiB | 157.9 KiB | 4.03 | 0.087 / 0.76 ms |
+| D, any core | 4 cores, any CPU | 4 | 0.096 / 0.175 | 0.0319 | 455 MiB | 155.2 KiB | 4.03 | 0.052 / 0.11 ms |
+
+- **Every run was clean.** 0 errors and 0 refusals. Every heartbeat and every event was answered: in A, 42,185 and
+  156,453, none left unacknowledged. HeartbeatAck p99 was 6.7–8.8 ms and EventAck p99 107–108 ms, the 100 ms merge
+  window and the stub's 5 ms. Dial to Welcome p99 was 11–14 ms; the gateway's handshake averaged 5.6–5.9 ms, the welcome
+  route's 5 ms included. The kernel had no listen overflows or conntrack drops, at most 4,963 tracked entries, and at
+  most 9.1 MiB of TCP socket memory.
+- **The rig was not the limit.** The loadgen shards took 0.07–0.13 cores and 282–284 MiB, and waited for a CPU at most 0.3%
+  of the time. The stubs took 0.027–0.053 cores and 36–41 MiB, and answered p99 at 6.0–6.1 ms against their 5 ms delay;
+  their own work p99 was at most 2.1 ms, the merged calls'. NATS took at most 0.001 cores. Neither is pinned, so their
+  CPU time varies with the cores they land on, up to twice from run to run. Per runner, the loadgen costs about what it
+  cost in C2b: 0.022–0.044 cores per 1,000 runners and 97 KiB each, against 0.029 and 94 KiB.
+- **The probe costs nothing measurable.** A and B's memory was the same to 0.1%. The probe's own CPU, measured on the
+  probe-built gateway idle and then read 3,000 times, is 19.2 µs a read. At one read every 15 s that is 1.3 millionths
+  of a core, 0.003% of the gateway's. A's 0.009 more cores came with a busier host: its stop-the-world pauses had p50
+  1.2 ms against B's 0.085 ms, and its cgroup's CPU pressure was 1.9% against 1.5%.
+- **The host was shared.** Other work took 9–12 of its 24 cores and swapped 450–1,760 pages a second.
+  - The memory guard stopped six attempts. Each started again from scratch once the host had held 5.6 GB for 90 s. The
+    last stop came after D's steady window and drain had ended (both shards exited 0), so D's figures stand.
+  - D ran with this README uncommitted; its binaries were the commit's.
+  - Pinned to the P-cores, which other work also used, the GC's sweep termination waited up to 6.9 ms for a CPU. On
+    any core its pauses stayed under 1 ms.
+
+**Against C2b's single gateway** (0.053 cores per 1,000 connections and 243 KiB a connection):
+
+- **CPU, −71% in A and −76% in B, is where the gateway runs and how many Ps its runtime has.** HPC has 8 P-cores and 16
+  slower E-cores. C2b's gateway container had no CPU limit on 56 vCPUs, so its runtime ran with GOMAXPROCS 56.
+  - On the P-cores alone with GOMAXPROCS 4 (A, B): 0.0126–0.0157 cores per 1,000 connections.
+  - The same 4-core quota on any core (D): 0.0319, 2 to 2.5 times that.
+  - No limit on any core, GOMAXPROCS 24 (C, as C2b ran): 0.0462, 1.45 times D, and within 14% of C2b.
+  - A and B are within 6% and 24% of the per-operation costs task O3 measured on HPC's P-cores behind the real stack. At
+    this traffic per connection those come to 0.0166 cores per 1,000 (0.31 ms a beat, 0.045 ms an event, 1.05 ms a
+    connect).
+
+  So the stub does not change what the gateway spends per connection; its cores and GOMAXPROCS do, by up to 3.7 times.
+  The limit task states its cpuset and GOMAXPROCS, and keeps the gateway's cores apart from the rig's.
+- **Memory, −36%, is how long the gateway had run.** C2b's 243 KiB a connection is the peak of one process that ran the
+  whole hour. C2b's own shorter-lived processes, on the same machine and commit at the same 15,000 connections, peaked
+  at 156 KiB a connection: 2,288 MiB in its heartbeat-only run (10 minutes) and 2,292 MiB in its reconnect run at
+  2,000 events a second (gateway restarted every 10 minutes). That is within 1% of the 155–158 KiB here. C2b's cell
+  spec took 162,000 B (158 KiB) a connection from its first run's heartbeat-only run. The gateway's memory grows while it
+  runs: here by 6.5–7 MiB over each 5-minute window at 3,000 connections, about 24 KB for each of the 290 renewals in
+  it. The limit task holds the levels whose memory it reports for an hour.
