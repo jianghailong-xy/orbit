@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import { HttpException } from '@nestjs/common';
 import type { ArtifactResultRequest } from '@orbit/shared';
@@ -87,18 +88,31 @@ function fixture() {
       throw error;
     }
   };
-  const api = new RunnerApiController(db as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  // RealtimeService's two halves of a file request's wait: the runner's answer (notifyWaiters) wakes the request
+  // parked on it (waitForInbox), as across replicas.
+  const waiters = new EventEmitter();
+  const notified: string[] = [];
+  const api = new RunnerApiController(db as never, {} as never, {
+    notifyWaiters: (key: string) => { notified.push(key); waiters.emit(key); },
+  } as never, {} as never, {} as never, {} as never);
   // The runners a request woke (RealtimeService.notifyRunnerWake): the runner's heartbeat hands the request over,
   // and the wake has it beat now instead of at its next tick.
   const woken: string[] = [];
   const service = new SessionsService(
     db as never,
     {} as never,
-    { notifyRunnerWake: (runnerId: string) => void woken.push(runnerId) } as never,
+    {
+      notifyRunnerWake: (runnerId: string) => void woken.push(runnerId),
+      waitForInbox: (key: string, timeoutMs: number) => new Promise<void>((resolve) => {
+        const timer = setTimeout(done, timeoutMs);
+        function done() { clearTimeout(timer); waiters.off(key, done); resolve(); }
+        waiters.once(key, done);
+      }),
+    } as never,
   );
   const realtime = new RealtimeService(db as never, {} as never);
   return {
-    service, realtime, session, woken,
+    service, realtime, session, woken, notified,
     turns: () => turns, attachments: () => attachments,
     onRead: (callback: typeof onRead) => { onRead = callback; },
     addTurn: (content: string, overrides: Row = {}) => {
@@ -158,6 +172,25 @@ test('same-basename files and repeated previews fetch fresh request-scoped bytes
   assert.equal(f.turns().every((turn) => turn.status === 'ANSWERED'), true);
   assert.deepEqual(f.attachments().map((row) => row.id), [transcriptImage.id]);
   assert.deepEqual(f.woken, [RUNNER, RUNNER, RUNNER], 'each request wakes the session\'s runner');
+});
+
+test('a file request returns as soon as its runner answers, not at the next one-second check', async () => {
+  const f = fixture();
+  let answered = false;
+  f.onRead(async (turn) => {
+    if (answered) return;
+    answered = true;
+    // The runner answers a moment after the request starts waiting.
+    setTimeout(() => {
+      const upload = f.addAttachment({ data: Buffer.from('fresh bytes') });
+      void f.result(turn.id, { status: 'uploaded', attachmentId: upload.id });
+    }, 30);
+  });
+  const started = Date.now();
+  const result = await f.service.getWorktreeFileForOwner(OWNER, SESSION, 'one/card.png');
+  assert.equal(result.data.toString(), 'fresh bytes');
+  assert.ok(Date.now() - started < 600, `answered after ${Date.now() - started} ms`);
+  assert.deepEqual(f.notified, [`worktree-file:${f.turns()[0].id}`]);
 });
 
 test('runner callbacks refuse cross-owner, cross-session, already-linked and older uploads atomically', async () => {

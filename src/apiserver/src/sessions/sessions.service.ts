@@ -30,7 +30,7 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
-import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
+import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import {
   readSteerWithdrawRequest,
@@ -4741,7 +4741,9 @@ export class SessionsService {
         if (expired.count === 0) continue;
         throw new HttpException('The file request timed out. Please try again.', HttpStatus.GATEWAY_TIMEOUT);
       }
-      await sleep(1_000);
+      // The runner's answer wakes this at once; the second is the fallback for a wake that is lost, or
+      // that came between the read above and the wait.
+      await this.realtime.waitForInbox(worktreeFileAnswerKey(turn.id), 1_000);
     }
   }
 
