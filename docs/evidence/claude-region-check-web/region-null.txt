@@ -1,0 +1,10 @@
+base tree scene	this branch scene	differing pixels	largest channel difference
+mm-today	mm-today	0	0
+mm-today	mm-null	0	0
+mm-today	mm-allowed	0	0
+s-queued-today	s-queued-today	0	0
+s-queued-today	s-queued-null	0	0
+hero-today	hero-today	0	0
+hero-today	hero-null	0	0
+prov-today	prov-today	0	0
+prov-today	prov-null	0	0

@@ -1,13 +1,23 @@
 import {
   AgentProvider,
   ALL_ENGINES,
+  credentialIsAnthropicBound,
   ENGINE_CLI_NAMES,
   isAccountEngine,
   PROVIDER_PRESETS,
   withEnginePlanUsage,
+  type AnthropicBoundCredential,
   type ProviderBrand,
 } from '@orbit/shared';
-import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type {
+  PlanUsage,
+  RunnerAntigravityState,
+  RunnerEngineHealth,
+  RunnerModelCatalog,
+  RunnerRegionView,
+  RuntimeDefaultModels,
+} from '@orbit/shared';
+import { CLAUDE_REGION_NOT_SUPPORTED } from './claudeRegionCopy';
 import type { CodexLogin } from './codexLogin';
 import { CURSOR_KEY_PRESET, CURSOR_STATE_LABEL, cursorRunnerState, type CursorRunnerFacts } from './cursorRuntime';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
@@ -94,6 +104,10 @@ export interface ProviderChoice {
   /** Where `unavailable` is fixed when it is not about this runner at all: an account pool none of
    *  whose accounts can run is fixed on the pool's own page. */
   fixHref?: string;
+  /** `unavailable` is this runner's region: its Claude connection to Anthropic comes out where
+   *  Anthropic doesn't offer Claude (docs/claude-region-check-contract.md §8). Nothing on the page
+   *  fixes that, so the row offers no fix — the machine's Claude Code row (`fixEngine`) explains. */
+  regionBlocked?: true;
   /** An account pool: how many accounts it holds, counted on its tile. */
   poolSize?: number;
   /** What `poolSize` counts when it is not accounts: a shared pool's keys. */
@@ -268,6 +282,24 @@ export interface ChoiceSources {
   /** Every runner of the account, where the page has them: whether Cursor CLI is drawn at all
    *  (webShowsEngine). Without them, the runner above decides. */
   fleet?: readonly CursorRunnerFacts[] | null;
+  /** Where the runner's Claude connection last came out (`runner.region`), with the effective
+   *  verdict. Blocked, its Anthropic-bound credentials can't run Claude Code there; absent or null
+   *  (a runner that doesn't check), nothing is gated. */
+  region?: Pick<RunnerRegionView, 'verdict'> | null;
+}
+
+/** Why an Anthropic-bound credential can't run Claude Code on this runner, or nothing: the runner's
+ *  verdict is blocked and the credential talks to Anthropic (the shared credentialIsAnthropicBound —
+ *  Claude Code's own sign-in, a Claude pool, an Anthropic key). Claude only (decision ⑥), and it
+ *  outranks every other reason: no install or sign-in here changes it. */
+function regionBlocker(
+  engine: AgentProvider,
+  sources: ChoiceSources,
+  credential: AnthropicBoundCredential,
+): Pick<ProviderChoice, 'unavailable' | 'fixEngine' | 'regionBlocked'> | null {
+  if (engine !== AgentProvider.CLAUDE || sources.region?.verdict !== 'blocked') return null;
+  if (!credentialIsAnthropicBound(credential)) return null;
+  return { unavailable: CLAUDE_REGION_NOT_SUPPORTED, fixEngine: engine, regionBlocked: true };
 }
 
 /** An engine and a provider of it — a draft's pick, or what a workspace last ran on. */
@@ -373,7 +405,8 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
         : engine === AgentProvider.CURSOR
           ? cursorBlocker(dshRunner, health, true)
           : engineBlocker(health);
-    const accounts = blocker ? undefined : accountChoices(engine, health, withEnginePlanUsage(sources.planUsage, engineHealth));
+    const region = regionBlocker(engine, sources, { kind: 'login', engine });
+    const accounts = blocker || region ? undefined : accountChoices(engine, health, withEnginePlanUsage(sources.planUsage, engineHealth));
     own.push({
       slug: engine,
       label: signInLabel(health),
@@ -381,7 +414,7 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
       ...(engine === AgentProvider.ANTIGRAVITY ? { labelDetail: usesGoogleAccount ? 'Google account' : 'env key' } : {}),
       ...brandForProvider(engine, ENGINE_CLI_NAMES[engine]),
       modelLabel: modelLabel(engine),
-      ...(blocker ? { unavailable: blocker, fixEngine: engine } : {}),
+      ...(region ?? (blocker ? { unavailable: blocker, fixEngine: engine } : {})),
       ...(accounts ? { accounts } : {}),
     });
   }
@@ -402,11 +435,12 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
       // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts counts
       // accounts (the viewer's own words — AccountPools' memberNoun).
       ...(pool.shared && !pool.members.some((member) => member.login) ? { poolUnit: 'key' as const } : {}),
-      ...(carried
-        ? { unavailable: carried, fixEngine: engine }
-        : pool.unavailable
-          ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
-          : {}),
+      ...(regionBlocker(engine, sources, { kind: 'pool', engine: poolEngine(pool) }) ??
+        (carried
+          ? { unavailable: carried, fixEngine: engine }
+          : pool.unavailable
+            ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+            : {})),
     }));
 
   const poolSlugs = new Set(pools.map((pool) => pool.slug));
@@ -427,7 +461,9 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources): 
       kind: 'key' as const,
       ...brandForProvider(p.slug, p.label, p.presetSlug),
       modelLabel: modelLabel(p.slug),
-      ...(carried ? { unavailable: carried, fixEngine: engine } : {}),
+      // A picker row knows a key's preset, not its endpoint (GET /providers leaves the URL out).
+      ...(regionBlocker(engine, sources, { kind: 'key', presetSlug: p.presetSlug ?? null }) ??
+        (carried ? { unavailable: carried, fixEngine: engine } : {})),
       ...(pooled.has(p.slug) ? { inPool: true } : {}),
     }));
 
@@ -570,6 +606,8 @@ export interface EngineChoice {
   unavailable?: string;
   fixEngine?: string;
   fixHref?: string;
+  /** `unavailable` is the runner's region (ProviderChoice.regionBlocked): explained, not fixed. */
+  regionBlocked?: true;
 }
 
 /** The engine's name and mark, over no credential yet. */
@@ -590,6 +628,7 @@ function engineLanding(engine: AgentProvider, providers: ProviderChoice[], provi
           unavailable: provider.unavailable,
           ...(provider.fixEngine ? { fixEngine: provider.fixEngine } : {}),
           ...(provider.fixHref ? { fixHref: provider.fixHref } : {}),
+          ...(provider.regionBlocked ? { regionBlocked: true as const } : {}),
         }
       : {}),
   };

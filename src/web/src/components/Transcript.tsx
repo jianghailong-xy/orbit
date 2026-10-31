@@ -131,6 +131,7 @@ import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
+import { claudeRegionErrorLine } from '../lib/claudeRegion';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -1389,7 +1390,13 @@ function buildTranscript(
         // and the ESC byte is invisible in HTML — what would show is literal "[31m" garbage.
         const msg = stripAnsi(String(p.message ?? 'error'));
         turnAccountedFor = true;
-        if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
+        // The Claude region check (docs/claude-region-check-contract.md §9, §10): a refusal is the held
+        // session's card's to say, with its ways out, so it draws no line here; a turn stopped by a
+        // confirmed flip has no card, and says its sentence without the code.
+        const region = claudeRegionErrorLine(msg);
+        if (region === null) break;
+        if (region !== undefined) into(parent).push({ kind: 'error', seq: ev.seq, message: region });
+        else if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
         // Codex reports quota failures as `error` events. Give them the same card as quota
         // assistant text so they carry the session's pending retry.
         else if (isUsageLimitErrorText(msg)) autoRetry(parent, ev.seq, msg, 'quota');

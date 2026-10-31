@@ -19,7 +19,7 @@ import type {
   RunnerLoginState,
   SlashCommandInfo,
 } from '@orbit/shared';
-import { CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
@@ -54,7 +54,7 @@ import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../man
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
-import { runnerRegionView } from './runner-region';
+import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -539,6 +539,19 @@ export class RunnersService {
         ? (namesAccount ? accountLoginTooOld('cursor') : CURSOR_LOGIN_TOO_OLD)
         : null;
     if (refusal) throw new BadRequestException(refusal);
+    // Claude's sign-in talks to Anthropic, so it is not started on a runner whose Claude connection to Anthropic is in
+    // a region Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12): no login request is
+    // recorded for its heartbeat to carry, and the refusal is board 04's sentence under the code. The runner refuses
+    // `claude auth login` in the same words while its own verdict is blocked. One that does not declare
+    // claude-region/v1 is never refused (⑤).
+    const regionBlocked = engine === 'claude' ? blockedRunnerRegion(runner, new Date()) : null;
+    if (regionBlocked) {
+      throw new ConflictException({
+        code: CLAUDE_REGION_UNSUPPORTED,
+        message: claudeRegionSignInRefusal(regionMachineName(runner), regionBlocked.name),
+        runnerId: id,
+      });
+    }
     const r = await this.prisma.runner.update({
       where: { id },
       data: {
