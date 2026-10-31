@@ -39,6 +39,8 @@ import {
   type ClaudeHistoryResult,
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { machineDraftPath } from '../lib/machineSetup';
+import { machineEmpty, START_A_SESSION } from '../lib/machineSetupCopy';
 import {
   meQuery,
   providersQuery,
@@ -1567,7 +1569,8 @@ export function RunnerDetailPage() {
               {/* Kept in place while the create form is open — disabled rather than removed, so the
                   header doesn't reflow out from under the pointer. */}
               <Button
-                variant="primary"
+                // With none yet, the way in is a session (below): the form stays, for the advanced use.
+                variant={workspaces.length === 0 ? 'default' : 'primary'}
                 icon={<PlusOutlined />}
                 disabled={formOpen && !editing}
                 onClick={() => switchTo(openCreate)}
@@ -1581,7 +1584,12 @@ export function RunnerDetailPage() {
               </div>
             ) : workspaces.length === 0 && !(formOpen && !editing) ? (
               <div className="rd-empty">
-                No workspaces under this runner yet — add one to start a conversation.
+                {machineEmpty(runner.displayName || runner.name)}
+                <div className="rd-empty-action">
+                  <Button variant="primary" onClick={() => navigate(machineDraftPath(runner.id))}>
+                    {START_A_SESSION}
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="rd-workspace-list">

@@ -8,9 +8,8 @@ import { encodeId } from '../lib/idCodec';
 
 /**
  * Add a runner (/runners/register) once the machine it waits for comes online: what it says the next
- * step is, and where its button goes. Until the first session can be started from the machine's own new
- * session page, that next step is the one the approval page (/enroll) names too — sign in a coding CLI
- * and add a workspace, both on the machine's page (project 34pLjYBjU6ILsehatEjJs, contract 6).
+ * step is, and where its button goes. It is the one the approval page (/enroll) and an empty machine's
+ * page name too: Start a session, on the machine's new session page (board rule 12).
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -66,7 +65,7 @@ afterEach(async () => {
 });
 
 describe('Add a runner, once the machine comes online', () => {
-  it('names the next step the approval page names, and Open machine opens its page', async () => {
+  it('names the next step the approval page names, and Start a session opens its new session page', async () => {
     // The page opens with no machine online; the next read finds the new one.
     let reads = 0;
     vi.mocked(api).mockImplementation(async (path: string) => {
@@ -85,17 +84,18 @@ describe('Add a runner, once the machine comes online', () => {
     const said = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
     expect(said(page.querySelector('.runner-status-title'))).toBe('Runner online — “orbit@austin” is ready');
     expect(said(page.querySelector('.runner-status-sub'))).toBe(
-      "It's now on the Machines & models page, under Machines. Next, sign in a coding CLI on it and add a " +
-        'workspace — the folder it runs tasks in.',
+      "It's now on the Machines & models page, under Machines. Next, start a session on it — you pick the " +
+        'folder it works in and sign in a coding CLI there.',
     );
     const button = page.querySelector<HTMLButtonElement>('.runner-done-btn');
-    expect(said(button)).toBe('Open machine');
+    expect(said(button)).toBe('Start a session');
     expect(page.textContent).not.toContain('Create a workspace');
+    expect(page.textContent).not.toContain('Open machine');
 
     await act(async () => {
       button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await settle();
-    expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/runners/${encodeId(RUNNER_ID)}`);
+    expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);
   });
 });

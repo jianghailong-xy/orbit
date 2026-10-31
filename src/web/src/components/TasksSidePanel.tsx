@@ -5,6 +5,7 @@ import {
   CodeOutlined,
   DeleteOutlined,
   DisconnectOutlined,
+  FolderAddOutlined,
   FolderOutlined,
   HolderOutlined,
   LoadingOutlined,
@@ -61,6 +62,8 @@ import {
 } from '../lib/queries';
 import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
+import { machineDraftPath, machineName, machinesToSetUp } from '../lib/machineSetup';
+import { setupTitle } from '../lib/machineSetupCopy';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import {
@@ -248,6 +251,9 @@ export interface Runner {
   minFreeDiskMb?: number | null;
   // Where this machine clones repositories, as it reported. null = a runner too old to say.
   reposRoot?: string | null;
+  // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
+  // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
+  registerDir?: string | null;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
@@ -342,6 +348,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const workspacesMatch = useMatch('/workspaces/:id/*');
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
+  const settingUpRunnerId = routeId(useMatch('/runners/:id/new')?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
   const narrow = useIsMobile();
   const sessionQ = useQuery({
@@ -516,6 +523,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
+  // The online machines no workspace is on yet, each a row after the workspaces that opens its new
+  // session page, where its setup card is (board rule 9). Not before the list is known: every machine
+  // would read as bare until it lands.
+  const bareMachines = useMemo(
+    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data) : []),
+    [runners.data, workspaces.data, workspaces.isSuccess],
+  );
 
   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
@@ -862,7 +876,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         <div className="tp-divider" />
 
         <div className="tp-group">
-          {orderedWorkspaces.length > 0 && (
+          {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
             <WorkspacesHead
               count={orderedWorkspaces.length}
               open={workspacesOpen}
@@ -929,10 +943,30 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 })}
             </SortableContext>
           </DndContext>
+          {(workspacesOpen || editingWorkspaces) &&
+            bareMachines.map((runner) => (
+              <div
+                key={runner.id}
+                className={`tp-item tp-setup${runner.id === settingUpRunnerId ? ' active' : ''}`}
+                onClick={() => {
+                  onNavigate?.();
+                  navigate(machineDraftPath(runner.id));
+                }}
+              >
+                <span className="tp-ico tp-workspace-icon">
+                  <FolderAddOutlined aria-hidden="true" />
+                </span>
+                <span className="tp-label tp-workspace-label">
+                  <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                </span>
+              </div>
+            ))}
           {confirmation}
         </div>
 
-        {orderedWorkspaces.length > 0 && openProjects.length > 0 && <div className="tp-divider" />}
+        {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && openProjects.length > 0 && (
+          <div className="tp-divider" />
+        )}
 
         {/* The open projects close the rail, as they close the iPhone drawer: the ones waiting on
             you first, then by the newest activity (lib/projectAttention `sidebarProjects`). The
@@ -1408,19 +1442,22 @@ export function WorkspacesHead({
   return (
     <div className="tp-group-head" onClick={editing ? undefined : onToggle}>
       <span className="tp-group-name">Workspaces</span>
-      <span className="tp-count">{count}</span>
+      {/* None yet: the head stands over machines to set up, which count nothing and arrange nothing. */}
+      {count > 0 && <span className="tp-count">{count}</span>}
       {!editing && <CaretDownOutlined className={`tp-caret ${open ? '' : 'collapsed'}`} />}
-      <button
-        type="button"
-        className={`tp-group-action${editing ? ' editing' : ''}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (editing) onDone();
-          else onEdit();
-        }}
-      >
-        {editing ? 'Done' : 'Edit'}
-      </button>
+      {count > 0 && (
+        <button
+          type="button"
+          className={`tp-group-action${editing ? ' editing' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (editing) onDone();
+            else onEdit();
+          }}
+        >
+          {editing ? 'Done' : 'Edit'}
+        </button>
+      )}
     </div>
   );
 }

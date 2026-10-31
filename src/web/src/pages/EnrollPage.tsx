@@ -16,6 +16,8 @@ import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
+import { machineDraftPath } from '../lib/machineSetup';
+import { ENROLL_NEXT_BODY, ENROLL_NEXT_TITLE, ENROLL_OPEN_MACHINE, START_A_SESSION } from '../lib/machineSetupCopy';
 import { meQuery } from '../lib/queries';
 import { ago } from '../lib/runnerEngines';
 import { useToast } from '../lib/toast';
@@ -249,16 +251,17 @@ export function EnrollPage() {
           up by itself.
         </p>
         <div className="enroll-next">
-          <div className="enroll-next-title">Next: sign in a coding CLI and add a workspace</div>
-          <div className="enroll-next-body">
-            Sessions run in a folder on this machine, on a coding CLI signed in here. Do both from its page.
-          </div>
+          <div className="enroll-next-title">{ENROLL_NEXT_TITLE}</div>
+          <div className="enroll-next-body">{ENROLL_NEXT_BODY}</div>
         </div>
         <div className="enroll-actions">
-          <a className="login-submit enroll-submit-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
-            Open machine
+          <a className="login-submit enroll-submit-link" href={runnerId ? machineDraftPath(runnerId) : '/'}>
+            {START_A_SESSION}
           </a>
         </div>
+        <a className="enroll-quiet-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
+          {ENROLL_OPEN_MACHINE}
+        </a>
       </EnrollShell>
     );
   }

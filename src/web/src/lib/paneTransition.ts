@@ -54,7 +54,7 @@ export function navigateWithPaneSlide(
  *  project's Landings window. WorkspaceView draws the session list for every other route —
  *  `show-conversation` is exactly these. */
 export const showsConversation = (path: string): boolean =>
-  /^\/sessions\/[^/]+$/.test(path) || /^\/(?:workspaces|agents)\/[^/]+\/new$/.test(path)
+  /^\/sessions\/[^/]+$/.test(path) || /^\/(?:workspaces|agents|runners)\/[^/]+\/new$/.test(path)
   || /^\/projects\/[^/]+\/landings$/.test(path);
 
 /**

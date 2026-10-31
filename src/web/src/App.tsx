@@ -4,6 +4,7 @@ import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
 import { useManagedRunner } from './lib/managedRunner';
 import { workspacesQuery, runnersQuery } from './lib/queries';
+import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
@@ -71,9 +72,9 @@ function LoginRedirect() {
 // The default landing (bare root, and where login/setup bounce to): the first workspace's session
 // list — the same destination as clicking that workspace in the sidebar. Resolving "the first workspace"
 // needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
-// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; a
-// single runner → that runner's page, where its first workspace is created; several runners →
-// Infrastructure, which lists them, since there's a machine to pick first. BootGate pre-warms both
+// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; the first
+// machine online → its new session page, where its first workspace is made in the conversation
+// (board rule 11); every machine offline → Infrastructure, which says so. BootGate pre-warms both
 // queries, so on a fresh load these read straight from cache and redirect in one shot.
 //
 // An account with no runner at all, while the server offers managed runners
@@ -108,9 +109,8 @@ function DefaultLanding() {
       <Navigate to="/runners/register" replace />
     );
   }
-  if (runnerList.length === 1) {
-    return <Navigate to={`/runners/${encodeId(runnerList[0].id)}`} replace />;
-  }
+  const online = runnerList.find((runner) => runner.online);
+  if (online) return <Navigate to={machineDraftPath(online.id)} replace />;
   return <Navigate to="/infrastructure" replace />;
 }
 
@@ -465,6 +465,8 @@ export function App() {
                 survives navigation between them without remounting. */}
             <Route element={<WorkspaceConsole />}>
               <Route path="workspaces/:id/*" />
+              {/* A machine's own new session page, which needs no workspace to exist (the setup card). */}
+              <Route path="runners/:id/new" />
               {/* Pre-rename URL, still in people's bookmarks and history. */}
               <Route path="agents/:id/*" />
               <Route path="sessions/:id" />

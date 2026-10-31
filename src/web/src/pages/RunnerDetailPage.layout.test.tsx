@@ -521,6 +521,42 @@ describe('a machine where no coding CLI is signed in', () => {
   });
 });
 
+// A machine with no workspace (board rule 12): the way in is a session, which asks for the folder as it
+// starts. The form stays, a step back, for whoever wants to set one up by hand.
+describe('the Workspaces section of a machine with none', () => {
+  const addWorkspace = () => button('Add workspace');
+
+  it('says Start a session, the same next step as the approval page and Add a runner', async () => {
+    await mount(machine('no CLI signed in and no workspace'));
+    expect(text($('.rd-empty'))).toBe(
+      'No workspaces on orbit@austin yet. Start a session and pick the folder it works in as you go — or add one here.Start a session',
+    );
+    await click(button('Start a session', $('.rd-empty')));
+    expect(text($('[data-testid="arrived"]'))).toBe(`/runners/${RUNNER_ID}/new`);
+  });
+
+  it('names the machine as the app does', async () => {
+    await mount(machine('no CLI signed in and no workspace', { displayName: 'Austin box' }));
+    expect(text($('.rd-empty'))).toContain('No workspaces on Austin box yet.');
+  });
+
+  it('Add workspace steps back to a secondary button, and still opens the form', async () => {
+    await mount(machine('no CLI signed in and no workspace'));
+    expect(addWorkspace().className).toContain('orbit-button-default');
+    expect(addWorkspace().className).not.toContain('orbit-button-primary');
+    expect(button('Start a session').className).toContain('orbit-button-primary');
+    await click(addWorkspace());
+    expect($('.rd-workspace-form')).toBeTruthy();
+    expect(document.querySelector('.rd-empty')).toBeNull();
+  });
+
+  it('with workspaces, Add workspace is the section’s primary action again, and nothing says Start a session', async () => {
+    await mount(machine('real wikova'));
+    expect(addWorkspace().className).toContain('orbit-button-primary');
+    expect($$('button').some((b) => text(b) === 'Start a session')).toBe(false);
+  });
+});
+
 // The Add workspace form: a workspace made here says which folder it runs in (P0 of
 // docs/mocks/first-workspace-in-conversation, 04). A saved one is edited as it was.
 describe('the Add workspace form', () => {

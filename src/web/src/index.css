@@ -761,6 +761,16 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A machine with no workspace yet, under the workspaces: a way in, not one of them. */
+.tp-item.tp-setup .tp-workspace-icon {
+  color: var(--brand);
+}
+.tp-item.tp-setup .tp-workspace-name {
+  color: var(--text-2);
+}
+.tp-item.tp-setup.active .tp-workspace-name {
+  color: var(--text-1);
+}
 .tp-workspace-separator {
   flex: none;
   color: var(--text-3);
@@ -2324,6 +2334,10 @@ button.toast--pill:focus-visible {
   border: 1px dashed var(--border);
   border-radius: 10px;
   text-align: center;
+}
+/* An empty machine's way in: a session, which asks for the folder as it starts. */
+.rd-empty-action {
+  margin-top: 10px;
 }
 /* The run's report sits above the rows it summarizes, not inside any one of them. */
 .rd-engine-relay {
