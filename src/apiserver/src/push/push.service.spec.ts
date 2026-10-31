@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
@@ -890,6 +892,31 @@ test('a one-shot wakeup dropped with its FAILED session is announced once, under
     ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1'],
   );
   assert.equal(collapseId, 'wakeup-wakeup-1');
+});
+
+// The shared Android fixture's two samples are these sends: fcm-transport.spec converts each to the FCM data it
+// holds, and Android's PushAuthorityTest parses that data, so the wire shape is pinned on both sides.
+test('the shared Android fixture carries what notifyLoopMissed sends, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const session = '019a0000-0000-7000-8000-000000000002';
+  const sends = [
+    ['loop-missed', {
+      ownerId: 'owner-1', sessionId: session, title: 'Migrate the archive', reason: 'RUNNER_OFFLINE',
+      missed: { loopId: '019a0000-0000-7000-8000-000000000009', ticks: 3, alertedAt: new Date('2026-11-01T10:20:00.000Z') },
+    }],
+    ['wakeup-dropped', {
+      ownerId: 'owner-1', sessionId: session, title: 'Watch the deploy', reason: 'SESSION_FAILED',
+      missed: { wakeupId: '019a0000-0000-7000-8000-00000000000a' },
+    }],
+  ] as const;
+  for (const [name, input] of sends) {
+    const { service, sent } = wakeupMissedHarness();
+    await service.notifyLoopMissed(input);
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
+    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
 });
 
 test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {

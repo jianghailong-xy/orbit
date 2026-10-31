@@ -84,7 +84,7 @@ owns display/removal. Every value in `data` is a string:
 | `type` | `alert` or silent `sync`. |
 | `registrationKey` | Must exactly match the active server/account binding. |
 | `eventId` | UUID stable across one send's retries; deduplicate within the binding. |
-| `notificationKey` | Tag for replacement, scoped to the binding. Stable for an approval session, settled session, owner item, confirmation record, or watch generation. |
+| `notificationKey` | Tag for replacement, scoped to the binding. Stable for an approval session, settled session, owner item, confirmation record, watch generation, a wakeup loop's silence (`loop-missed`), or a dropped wakeup (`wakeup-dropped`). |
 | `sentAt` | Server ISO timestamp for ordering/diagnostics, not proof of arrival time. |
 | `payload` | JSON object of `AndroidPushPayload`; examples are in the shared fixture. |
 

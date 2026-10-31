@@ -68,7 +68,7 @@ data class PushMessage(
         private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
         private val kinds = PushPayload.ownerItemKinds + setOf("approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
-            "wiki-review-mode-tiered", "wiki-maintenance-failing")
+            "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped")
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -105,7 +105,8 @@ data class PushMessage(
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
-                    "approval", "finished", "failed" -> require(payload.sessionId != null)
+                    // A wakeup loop that stopped running, and a wakeup dropped with its FAILED session, are about that session.
+                    "approval", "finished", "failed", "loop-missed", "wakeup-dropped" -> require(payload.sessionId != null)
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     "engine-signed-out" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
