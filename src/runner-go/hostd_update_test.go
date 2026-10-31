@@ -411,7 +411,9 @@ func TestHostdUpdateInstallsNothingThatFailsTheReleaseChecks(t *testing.T) {
 }
 
 // A machine that is already current must not download anything and must not touch a single
-// runner: a restart is a live session torn down, and there is nothing here to gain by it.
+// runner: a restart is a live session torn down, and there is nothing here to gain by it. Nor may
+// it spend the rate-limit window, which is for updates that actually ran — or a release published
+// a minute later would be answered "skipped" for five minutes.
 func TestHostdUpdateLeavesAnUpToDateMachineAlone(t *testing.T) {
 	for _, installed := range []string{rolloutTestLatest, "0.1.400"} {
 		t.Run(installed, func(t *testing.T) {
@@ -440,6 +442,36 @@ func TestHostdUpdateLeavesAnUpToDateMachineAlone(t *testing.T) {
 			if !bytes.Equal(fileBytes(t, h.installed), before.installed) {
 				t.Error("the installed binary was replaced although no newer release exists")
 			}
+			if _, err := os.Stat(h.stampPath); err == nil {
+				t.Error("an ask that installed nothing created the rate-limit stamp")
+			}
+
+			// Nor does it renew the window an earlier update opened: the stamp that update left,
+			// from before the window, keeps its time.
+			earlier := time.Now().Add(-hostdUpdateInterval - time.Minute)
+			if err := os.MkdirAll(filepath.Dir(h.stampPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			h.write(h.stampPath, []byte(earlier.UTC().Format(time.RFC3339)+"\n"), 0o644)
+			if err := os.Chtimes(h.stampPath, earlier, earlier); err != nil {
+				t.Fatal(err)
+			}
+			stamped := h.sideEffects().stamp
+			if resp := h.ask(1000); !resp.OK || resp.Data["updated"] != false {
+				t.Fatalf("second ask = %+v, want it to install nothing again", resp)
+			}
+			if got := h.sideEffects().stamp; !got.Equal(stamped) {
+				t.Errorf("an ask that installed nothing moved the rate-limit stamp: %v → %v", stamped, got)
+			}
+
+			// So a release published right after a no-op is installed by the very next ask.
+			newer := newRolloutRelease(t, "0.1.500")
+			next := serveRollout(t, newer, nil, releaseAssignment{Version: "0.1.500"})
+			h.writeConfig(next.srv.URL)
+			if resp := h.ask(1001); !resp.OK || resp.Data["accepted"] != true {
+				t.Fatalf("the ask after a no-op = %+v, want 0.1.500 accepted rather than skipped", resp)
+			}
+			assertInstalled(t, h.installed, newer.binary)
 		})
 	}
 }

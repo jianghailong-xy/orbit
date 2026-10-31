@@ -7,11 +7,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.management.RunnerCopy
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.reader.EngineErrors
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
@@ -70,6 +73,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             input.obj("blocker")?.let { CardFields(it, listOf("kind", "subjectTitle", "requiredAction"), open) }
             Field("The agent says it no longer blocks", input["reason"], open)
         }
+        CardFamily.DELETE -> DeleteCardBody(DeleteCards.read(row.text("toolName").orEmpty(), row.obj("input") ?: JsonObject(emptyMap())))
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
             // Opened by Decide it myself: still saying what it waits for, and that deciding here is the owner's choice.
@@ -144,6 +148,36 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             CoordinatorNote(card, CoordinatorQueue.explanation)
         }
     }
+}
+
+/** Where it stands: a runner in the runner list's own words, so it reads the same on its card as on its row; the runner a workspace is on. */
+internal fun deleteStatus(delete: DeleteCard, nowMs: Long): String = when {
+    !delete.isRunner -> DeleteCards.onRunner(delete.host)
+    delete.online -> RunnerCopy.ONLINE
+    delete.lastHeartbeatAt != null -> RunnerCopy.offlineLastSeen(RunnerPage.ago(delete.lastHeartbeatAt, nowMs))
+    else -> RunnerCopy.OFFLINE
+}
+
+/**
+ * What a delete takes away (iOS `ToolApprovalCard`'s delete branch, web `DeleteBody`): the name on its own row, where it stands, and
+ * for a runner every workspace that goes with it, by name. With none the card says so: an empty place reads as a list that failed to load.
+ */
+@Composable
+private fun DeleteCardBody(delete: DeleteCard) {
+    val small = MaterialTheme.typography.bodySmall
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(delete.name, style = MaterialTheme.typography.titleSmall)
+    Text(deleteStatus(delete, System.currentTimeMillis()), style = small, color = muted)
+    delete.workDir?.let { Text(it, style = small, color = muted, fontFamily = FontFamily.Monospace) }
+    if (delete.isRunner && delete.workspaces.isEmpty()) Text(DeleteCards.noWorkspaces, style = small, color = muted)
+    if (delete.workspaces.isNotEmpty()) {
+        Text(DeleteCards.goesWith, style = MaterialTheme.typography.labelMedium)
+        delete.workspaces.forEach { workspace ->
+            Text("− ${workspace.name}", style = MaterialTheme.typography.bodyMedium)
+            workspace.workDir?.let { Text(it, style = small, color = muted, fontFamily = FontFamily.Monospace) }
+        }
+    }
+    Text(if (delete.isRunner) DeleteCards.runnerNote else DeleteCards.workspaceNote, style = small, color = muted)
 }
 
 /**

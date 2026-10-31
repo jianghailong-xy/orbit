@@ -1,0 +1,1 @@
+pressed “Create and start” -> POST sessions/34A07cComposerSession1/approvals/ct1/decision {"behavior":"allow","startAfterCreate":true}

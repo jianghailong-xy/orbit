@@ -61,6 +61,11 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
 		os.Exit(runSessionScope(os.Args[2:]))
 	}
+	// This binary as the read-only credential helper every network git command names by the runner's own
+	// executable (network_git.go), which under test is this one.
+	if len(os.Args) > 1 && os.Args[1] == gitCredentialReadOnlyCommand {
+		os.Exit(runGitCredentialReadOnly(os.Args[2:]))
+	}
 	// What the scripted Cursor CLI's commands leave running (fake_cursor_acp_test.go).
 	if mode := os.Getenv(fakeCursorScopeProcessEnv); mode != "" {
 		os.Exit(runFakeCursorScopeProcess(mode))

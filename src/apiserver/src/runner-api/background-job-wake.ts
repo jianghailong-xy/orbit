@@ -5,7 +5,7 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
-import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, ValidateIf } from 'class-validator';
 import { stripNul } from './strip-nul';
 
 /**
@@ -42,6 +42,14 @@ import { stripNul } from './strip-nul';
  * off the next-turn queue (`takeJobOffNextTurnQueue`), and an output wake arriving after the exit was
  * filed is dropped (`StaleBackgroundWake`). Either one left alone would open a turn after the exit
  * was read, to report output the exit had already reported.
+ *
+ * A stall wake is the third trigger: a job started with `wakeOnStall` that is still running and has
+ * written nothing for as long as it asked (runner-go background_job.go `watchForStall`). It goes the
+ * way an output wake goes — never steered, filed for the next turn, replaced by the job's later wake
+ * on a turn still queued, dropped once the job's exit is on file — and it is delivered in a block of
+ * its own, `<background-job-stall>` (`buildBackgroundStallBlock`). Not inside `<background-job-wake>`:
+ * the clients installed today draw a card from every `bgj_` line of that block and know no stall
+ * line, so one would come out as half a card; a tag they do not know stays the plain note it is.
  */
 
 /** The `client_turn_id` prefix of a turn filed to deliver background job wakes. */
@@ -53,7 +61,7 @@ export function isBackgroundWakeTurn(clientTurnId: string | null | undefined): b
 
 /** One wake, as the runner reports it (runner-go `bgWake`). */
 export class BackgroundWakeDto {
-  /** `<jobId>:exit`, or `<jobId>:output:<n>`: what a retry of this wake is recognised by. */
+  /** `<jobId>:exit`, `<jobId>:output:<n>` or `<jobId>:stall:<n>`: what a retry of this wake is recognised by. */
   @IsString()
   @MaxLength(200)
   @Matches(/^[\w:.-]+$/)
@@ -63,7 +71,7 @@ export class BackgroundWakeDto {
   @MaxLength(100)
   jobId!: string;
 
-  @IsIn(['exit', 'output'])
+  @IsIn(['exit', 'output', 'stall'])
   trigger!: string;
 
   @IsString()
@@ -110,6 +118,22 @@ export class BackgroundWakeDto {
   @IsString()
   @MaxLength(8_000)
   outputExcerpt!: string;
+
+  /**
+   * A stall wake's, and required on one: how long the job had run, and how long it had written
+   * nothing, when the runner sent it. Durations rather than instants, for the reason a `running`
+   * report's idleMs is one (sessions/background-job-activity.ts): the last output is restated as
+   * received-at less idleMs, on this clock. Not read on an exit or output wake.
+   */
+  @ValidateIf((wake: BackgroundWakeDto) => wake.trigger === 'stall')
+  @IsInt()
+  @Min(0)
+  elapsedMs?: number;
+
+  @ValidateIf((wake: BackgroundWakeDto) => wake.trigger === 'stall')
+  @IsInt()
+  @Min(0)
+  idleMs?: number;
 }
 
 /**
@@ -123,16 +147,17 @@ export interface BackgroundWakeReceipt {
 }
 
 /**
- * An output wake that arrived after its job's exit was filed. The runner sends the two from separate
- * requests, and the output found as the process exited can arrive second; by then the exit has said
- * how the job ended and where its output is, whether it is still queued, written into a running turn
- * or long since read. Filed anyway, it would open a turn of its own to say less than the exit did.
- * Thrown from the coalesce hook, so nothing of it is written; answered DROPPED, which the runner does
- * not retry.
+ * An output or stall wake that arrived after its job's exit was filed. The runner sends each from a
+ * request of its own, and the one found as the process exited — or still being retried against a
+ * control plane that was away — can arrive second; by then the exit has said how the job ended and
+ * where its output is, whether it is still queued, written into a running turn or long since read.
+ * Filed anyway, it would open a turn of its own to say less than the exit did, or that a job which
+ * has ended is still running. Thrown from the coalesce hook, so nothing of it is written; answered
+ * DROPPED, which the runner does not retry.
  */
 export class StaleBackgroundWake extends Error {
-  constructor(jobId: string) {
-    super(`background job ${jobId} already reported its exit; its later output wake has nothing to add`);
+  constructor(jobId: string, trigger: string) {
+    super(`background job ${jobId} already reported its exit; its later ${trigger} wake has nothing to add`);
     this.name = 'StaleBackgroundWake';
   }
 }
@@ -339,6 +364,9 @@ async function moveJobWake(
       outputPath: says.outputPath,
       outputSize: says.outputSize,
       outputExcerpt: says.outputExcerpt,
+      elapsedMs: says.elapsedMs,
+      idleMs: says.idleMs,
+      lastOutputAt: says.lastOutputAt,
       outputOffset: there.outputOffset < wake.outputOffset ? there.outputOffset : wake.outputOffset,
     },
   });
@@ -371,15 +399,20 @@ export async function foldRequeuedWakeTurns(
  * File one wake onto the wake turn that will deliver it. A job's later wake replaces its earlier one:
  * it says how the job stands now, while what the session has not been told about still begins where
  * the earlier wake's output did. Except that nothing replaces how a job ended: the runner sends an
- * output wake and the exit wake from separate requests, and the one found as the process exited can
- * arrive second, saying `running` about a job that is gone.
+ * output or stall wake and the exit wake from separate requests, and the one found as the process
+ * exited can arrive second, saying `running` about a job that is gone.
+ *
+ * A stall wake's last output is placed on this clock as `receivedAt` less the silence the runner
+ * reported, so it is right however far the runner's clock is from this one.
  */
 export async function fileBackgroundJobWake(
   tx: Prisma.TransactionClient,
   sessionId: string,
   clientTurnId: string,
   wake: BackgroundWakeDto,
+  receivedAt: Date = new Date(),
 ): Promise<void> {
+  const stall = wake.trigger === 'stall';
   const facts = {
     trigger: wake.trigger,
     kind: stripNul(wake.kind),
@@ -391,13 +424,16 @@ export async function fileBackgroundJobWake(
     outputPath: stripNul(wake.outputPath),
     outputSize: BigInt(wake.outputSize),
     outputExcerpt: stripNul(wake.outputExcerpt),
+    elapsedMs: stall ? BigInt(wake.elapsedMs ?? 0) : null,
+    idleMs: stall ? BigInt(wake.idleMs ?? 0) : null,
+    lastOutputAt: stall ? new Date(receivedAt.getTime() - (wake.idleMs ?? 0)) : null,
   };
   const offset = BigInt(wake.outputOffset);
   const earlier = await tx.backgroundJobWake.findUnique({
     where: { sessionId_clientTurnId_jobId: { sessionId, clientTurnId, jobId: wake.jobId } },
     select: { id: true, trigger: true, outputOffset: true },
   });
-  if (earlier?.trigger === 'exit' && wake.trigger === 'output') return;
+  if (earlier?.trigger === 'exit' && wake.trigger !== 'exit') return;
   if (earlier) {
     await tx.backgroundJobWake.update({
       where: { id: earlier.id },
@@ -423,6 +459,9 @@ type StoredWake = {
   outputOffset: bigint;
   outputSize: bigint;
   outputExcerpt: string;
+  elapsedMs: bigint | null;
+  idleMs: bigint | null;
+  lastOutputAt: Date | null;
   createdAt: Date;
 };
 
@@ -450,28 +489,78 @@ const WAKE_HEADS: Record<'message' | 'steer', string> = {
   steer: '  A background job you started with bg_run has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
 };
 
+/** A job's head line, then its output: where the file is, what this covers, and its end. */
+function jobLines(wake: StoredWake, describe: (wake: StoredWake) => string[]): string[] {
+  const head = [wake.jobId, wake.kind, wake.command];
+  if (wake.description) head.push(wake.description);
+  const lines = [`    ${head.join('｜')}`, ...describe(wake).map((line) => `      ${line}`)];
+  lines.push(`      output ${wake.outputPath}｜this covers bytes ${wake.outputOffset}–${wake.outputSize}`);
+  const excerpt = wake.outputExcerpt.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+  if (!excerpt) {
+    lines.push('      (no output)');
+    return lines;
+  }
+  lines.push('      output tail:');
+  for (const line of excerpt.split('\n')) lines.push(`        ${line}`);
+  return lines;
+}
+
 /** The block a wake turn delivers. */
 export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
   const lines = ['<background-job-wake>', WAKE_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
-  for (const wake of wakes) {
-    const head = [wake.jobId, wake.kind, wake.command];
-    if (wake.description) head.push(wake.description);
-    lines.push(`    ${head.join('｜')}`);
-    lines.push(`      ${describeTrigger(wake)}`);
-    lines.push(`      output ${wake.outputPath}｜this covers bytes ${wake.outputOffset}–${wake.outputSize}`);
-    const excerpt = wake.outputExcerpt.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
-    if (!excerpt) {
-      lines.push('      (no output)');
-      continue;
-    }
-    lines.push('      output tail:');
-    for (const line of excerpt.split('\n')) lines.push(`        ${line}`);
-  }
+  for (const wake of wakes) lines.push(...jobLines(wake, (job) => [describeTrigger(job)]));
   lines.push('  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.');
   if (wakes.some((wake) => wake.status === 'killed')) {
     lines.push('  A killed job does not come back on its own: to keep waiting, start it again with bg_run.');
   }
   lines.push('</background-job-wake>');
+  return lines.join('\n');
+}
+
+/** A duration as a person reads it: `2h 5m 0s`, `30m 12s`, `45s`. */
+function readableDuration(ms: bigint | number | null): string {
+  let seconds = Math.max(0, Math.floor(Number(ms ?? 0) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  seconds -= hours * 3600;
+  const minutes = Math.floor(seconds / 60);
+  seconds -= minutes * 60;
+  const parts = hours > 0 ? [`${hours}h`, `${minutes}m`] : minutes > 0 ? [`${minutes}m`] : [];
+  return [...parts, `${seconds}s`].join(' ');
+}
+
+/** An instant on this clock, to the second. */
+function readableInstant(at: Date): string {
+  return at.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** How a stalled job stood when its stall wake was sent: how long it had run, and since when it was quiet. */
+function describeStall(wake: StoredWake): string[] {
+  const lines = [`gone quiet｜still running｜running for ${readableDuration(wake.elapsedMs)} when this was sent`];
+  if (wake.outputSize === 0n) {
+    lines.push(`no output at all｜it has written nothing in the ${readableDuration(wake.elapsedMs)} since it started`);
+  } else {
+    const last = wake.lastOutputAt ? `｜last output at ${readableInstant(wake.lastOutputAt)}` : '';
+    lines.push(`no new output for ${readableDuration(wake.idleMs)}${last}`);
+  }
+  return lines;
+}
+
+/** What the stall block says brought it, by the kind of turn delivering it, as `WAKE_HEADS` does. */
+const STALL_HEADS: Record<'message' | 'steer', string> = {
+  message: '  A background job you started with bg_run is still running and has written nothing for as long as you asked to be told about; the control plane opened this turn for it:',
+  steer: '  A background job you started with bg_run is still running and has written nothing for as long as you asked to be told about; this message was added to the turn you are in:',
+};
+
+/**
+ * The block a stall wake is delivered in: `<background-job-stall>`, never inside
+ * `<background-job-wake>`, whose `bgj_` lines today's clients draw as cards — see the head of this file.
+ */
+export function buildBackgroundStallBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
+  const lines = ['<background-job-stall>', STALL_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
+  for (const wake of wakes) lines.push(...jobLines(wake, describeStall));
+  lines.push('  The control plane recorded this for you; the user did not say it. The job has not ended: read its output with mcp__orbit__bg_output by id (pass sinceOffset to read only what is new), stop it with mcp__orbit__bg_kill, or leave it running.');
+  lines.push('  One silence wakes you once: you are woken again only if the job writes something and then goes quiet as long again.');
+  lines.push('</background-job-stall>');
   return lines.join('\n');
 }
 
@@ -496,6 +585,12 @@ export async function appendBackgroundWakeContext(
   if (wakes.length === 0) return content;
   // In the order the wakes first arrived, ordered here rather than trusted from the read.
   wakes.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.jobId.localeCompare(b.jobId));
-  const block = buildBackgroundWakeBlock(wakes, turnKind);
-  return content ? `${content}\n\n${block}` : block;
+  // A stall goes in a block of its own, after the exits and output beside it.
+  const news = wakes.filter((wake) => wake.trigger !== 'stall');
+  const stalls = wakes.filter((wake) => wake.trigger === 'stall');
+  const blocks = [
+    ...(news.length > 0 ? [buildBackgroundWakeBlock(news, turnKind)] : []),
+    ...(stalls.length > 0 ? [buildBackgroundStallBlock(stalls, turnKind)] : []),
+  ];
+  return [content, ...blocks].filter(Boolean).join('\n\n');
 }
