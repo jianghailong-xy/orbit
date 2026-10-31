@@ -182,15 +182,27 @@ func hostdServe(l net.Listener, cfg hostdConfig, verbs map[string]hostdVerb) err
 	var (
 		wg    sync.WaitGroup
 		idled atomic.Bool
-		timer *time.Timer
+		timer atomic.Pointer[time.Timer]
 	)
 	if cfg.idleTimeout > 0 {
 		// Closing the listener is how the timer interrupts a blocked Accept.
-		timer = time.AfterFunc(cfg.idleTimeout, func() {
+		var quit func()
+		quit = func() {
+			// A verb that answered immediately and kept working — the central update
+			// downloads, swaps the binary and rolls every runner — is still this machine's
+			// business. The socket being quiet then means the work moved off it, not that
+			// there is nothing to wait for, so wait rather than exit into a half-done
+			// update. The timer is held atomically because this re-arm runs on the timer's
+			// own goroutine while the accept loop resets it from ours.
+			if hostdBackground.Load() > 0 {
+				timer.Store(time.AfterFunc(cfg.idleTimeout, quit))
+				return
+			}
 			idled.Store(true)
 			l.Close()
-		})
-		defer timer.Stop()
+		}
+		timer.Store(time.AfterFunc(cfg.idleTimeout, quit))
+		defer func() { timer.Load().Stop() }()
 	}
 
 	for {
@@ -204,8 +216,8 @@ func hostdServe(l net.Listener, cfg hostdConfig, verbs map[string]hostdVerb) err
 			}
 			return err
 		}
-		if timer != nil {
-			timer.Reset(cfg.idleTimeout)
+		if t := timer.Load(); t != nil {
+			t.Reset(cfg.idleTimeout)
 		}
 		wg.Add(1)
 		// One goroutine per connection: verbs shell out to systemctl, and a peer that
@@ -215,6 +227,21 @@ func hostdServe(l net.Listener, cfg hostdConfig, verbs map[string]hostdVerb) err
 			hostdServeConn(conn, verbs)
 		}()
 	}
+}
+
+// hostdBackground counts the work verbs have accepted but not finished — today, the
+// central update, which keeps downloading, swapping and restarting long after the
+// connection that asked for it closed. Idle exit consults it.
+var hostdBackground atomic.Int64
+
+// hostdRunBackground runs f detached from the request that asked for it, holding hostd
+// open until f returns.
+func hostdRunBackground(f func()) {
+	hostdBackground.Add(1)
+	go func() {
+		defer hostdBackground.Add(-1)
+		f()
+	}()
 }
 
 // hostdServeConn runs one exchange: authenticate the peer from the kernel, read one
