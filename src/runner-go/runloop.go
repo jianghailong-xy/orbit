@@ -1083,8 +1083,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// Where Claude's connection to Anthropic comes out (claude_region.go): checked at the start and
 	// on the engine probe's clock, on the owner's Check again, and by any Anthropic-bound Claude turn
-	// whose last answer is a minute old.
+	// whose last answer is a minute old. A flip to blocked is checked again a minute on, for as long
+	// as this loop runs, and a second blocked answer stops the running Anthropic-bound Claude turns.
 	regionCheck := newClaudeRegionCheck(t, cfg.Name)
+	regionCheck.lifetime = loopCtx
 	claudeRegion.Store(regionCheck)
 	defer claudeRegion.Store(nil)
 	engineHealth.checkRegion = func() { regionCheck.check(loopCtx) }
