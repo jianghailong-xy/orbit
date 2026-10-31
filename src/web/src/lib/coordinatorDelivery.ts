@@ -59,6 +59,14 @@ export const COORDINATOR_DELIVERY_STICKY_LABEL = 'From Orbit';
 /** The link at the foot of the opened line, to the task the fact names. */
 export const COORDINATOR_DELIVERY_ITS_TASK = 'Its task ↗';
 
+/**
+ * Where the line says it was sent, and the heading the words open under, when this conversation is not
+ * the project's coordinator (`toCoordinator: false`): the owner's answer to a criteria proposal a task's
+ * run filed. Every other card says `Sent to the coordinator` and opens to `What the coordinator was told`.
+ */
+export const COORDINATOR_DELIVERY_SENT_TO_SESSION = 'Sent to this session';
+export const COORDINATOR_DELIVERY_SESSION_TOLD = 'What this session was told';
+
 /** The sentence the line says, before `Sent to the coordinator · 07:30 PM`. */
 export function coordinatorDeliverySentence(card: CoordinatorDeliveryCard): string {
   const counts = COORDINATOR_DELIVERY_COUNTS[card.kind];
@@ -80,6 +88,9 @@ const positive = (value: unknown): value is number =>
  * Read the way `parseOwnerAnswer` reads its card: the shape is checked, and a payload that is not a
  * card parses as NOTHING rather than as half a card, which leaves the turn drawn exactly as it was
  * before this existed. Nothing is derived from the words.
+ *
+ * Only the server's own `false` says this conversation is not the coordinator: a card stored before
+ * `toCoordinator` existed was drawn as the coordinator's, and reads as it was.
  */
 export function parseCoordinatorDelivery(payload: unknown): CoordinatorDeliveryCard | null {
   const raw = (payload as { coordinatorDelivery?: unknown } | null)?.coordinatorDelivery;
@@ -105,5 +116,6 @@ export function parseCoordinatorDelivery(payload: unknown): CoordinatorDeliveryC
     revision: sentence.includes('{revision}') ? card.revision as number : null,
     count: sentence.includes('{count}') ? card.count as number : null,
     deliveredAt: card.deliveredAt,
+    toCoordinator: card.toCoordinator !== false,
   };
 }

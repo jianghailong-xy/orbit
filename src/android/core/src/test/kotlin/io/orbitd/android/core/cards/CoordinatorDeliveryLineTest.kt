@@ -118,6 +118,37 @@ class CoordinatorDeliveryLineTest {
             CoordinatorDeliveryLine.sentence(card(payload("EVIDENCE_SUBMITTED", revision = 2, taskJson = """{"id":"t1","title":"$odd"}"""))))
     }
 
+    /**
+     * The owner's answer to a criteria proposal goes to whichever session filed it. Told to a task's run — the server's `toCoordinator`
+     * false — the line says it was sent to this session and opens to what this session was told; told to the coordinator, it says what it
+     * always said.
+     */
+    @Test fun aReplyToATasksRunSaysThisSession() {
+        val zone = ZoneId.of("Asia/Shanghai")
+        val now = Instant.parse("2026-10-31T12:00:00Z")
+        val reply = payload("CRITERIA_REJECTED", revision = null, count = null, taskJson = null)
+        val run = CoordinatorDeliveryLine.parse(card(reply.dropLast(1) + ""","toCoordinator":false}"""))!!
+        assertEquals(CoordinatorDelivery("CRITERIA_REJECTED", null, null, null, "2026-10-31T11:30:00.000Z", toCoordinator = false), run)
+        assertEquals("Sent to this session · 19:30", CoordinatorDeliveryLine.sent(run, now, zone))
+        assertEquals("What this session was told", CoordinatorDeliveryLine.told(run))
+        assertEquals("Criteria proposal rejected", CoordinatorDeliveryLine.sentence(run))
+
+        val coordinator = CoordinatorDeliveryLine.parse(card(reply.dropLast(1) + ""","toCoordinator":true}"""))!!
+        assertTrue(coordinator.toCoordinator)
+        assertEquals("Sent to the coordinator · 19:30", CoordinatorDeliveryLine.sent(coordinator, now, zone))
+        assertEquals(OwnerAnswerLine.told, CoordinatorDeliveryLine.told(coordinator))
+        assertEquals("What the coordinator was told", CoordinatorDeliveryLine.told(coordinator))
+    }
+
+    /** Only the server's own `false` says this conversation is not the coordinator: a card stored before the field reads as it was drawn. */
+    @Test fun onlyTheServersFalseSaysNotTheCoordinator() {
+        assertTrue("a card with no field", CoordinatorDeliveryLine.parse(card(payload("LOOKS_FINISHED")))!!.toCoordinator)
+        listOf("\"false\"", "0", "null", "\"no\"").forEach { odd ->
+            val json = payload("LOOKS_FINISHED").dropLast(1) + ""","toCoordinator":""" + odd + "}"
+            assertTrue(odd, CoordinatorDeliveryLine.parse(card(json))!!.toCoordinator)
+        }
+    }
+
     /** Then when it was sent, on the receipts' clock: the time that day, the date as well after it (`OwnerAnswerLine.line`). */
     @Test fun theLineSaysSentToTheCoordinatorAndWhen() {
         val parsed = CoordinatorDeliveryLine.parse(card(payload("LOOKS_FINISHED")))!!

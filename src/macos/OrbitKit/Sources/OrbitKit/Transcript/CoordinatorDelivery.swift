@@ -59,13 +59,35 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
     public let count: Int?
     /// When this conversation was handed it (ISO-8601): the delivery's bind, or the reply turn's own.
     public let deliveredAt: String
+    /// Whether this conversation is the project's coordinator, by the project's own pointer: true for every
+    /// fact a coordinator is told, false for the owner's answer to a criteria proposal a task's run — any
+    /// conversation but the coordinator — filed. The line then says it was sent to this session.
+    public let toCoordinator: Bool
 
-    public init(kind: Kind, task: TaskRef? = nil, revision: Int? = nil, count: Int? = nil, deliveredAt: String) {
+    public init(kind: Kind, task: TaskRef? = nil, revision: Int? = nil, count: Int? = nil, deliveredAt: String,
+                toCoordinator: Bool = true) {
         self.kind = kind
         self.task = task
         self.revision = revision
         self.count = count
         self.deliveredAt = deliveredAt
+        self.toCoordinator = toCoordinator
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, task, revision, count, deliveredAt, toCoordinator
+    }
+
+    /// A transcript cached before `toCoordinator` existed holds no such key: its card was drawn as the
+    /// coordinator's, and reads back as it was rather than as no card at all.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        task = try c.decodeIfPresent(TaskRef.self, forKey: .task)
+        revision = try c.decodeIfPresent(Int.self, forKey: .revision)
+        count = try c.decodeIfPresent(Int.self, forKey: .count)
+        deliveredAt = try c.decode(String.self, forKey: .deliveredAt)
+        toCoordinator = try c.decodeIfPresent(Bool.self, forKey: .toCoordinator) ?? true
     }
 
     /// The card a `user` event's payload carries, or nil for the ordinary case: a turn that is no such
@@ -82,7 +104,9 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
     /// The web's rule, step for step: a kind it knows, a moment that reads as one, and each field the
     /// kind's sentence names (`CoordinatorDeliveryCard.sentence(for:)`) present and valid — a task with
     /// an id and a title that is not blank, a revision or count that is a positive whole number. A field
-    /// the sentence does not name is left out, whatever the payload held.
+    /// the sentence does not name is left out, whatever the payload held. Only the server's own `false`
+    /// says this conversation is not the coordinator: a card stored before `toCoordinator` existed was
+    /// drawn as the coordinator's, and reads as it was.
     public static func parseCard(_ value: JSONValue?) -> CoordinatorDelivery? {
         guard case .object(let card)? = value,
               let kind = card["kind"]?.stringValue.flatMap(Kind.init(rawValue:)),
@@ -107,7 +131,8 @@ public struct CoordinatorDelivery: Sendable, Equatable, Codable {
             task: sentence.contains("{task}") ? task : nil,
             revision: sentence.contains("{revision}") ? revision : nil,
             count: sentence.contains("{count}") ? count : nil,
-            deliveredAt: deliveredAt)
+            deliveredAt: deliveredAt,
+            toCoordinator: card["toCoordinator"] != .bool(false))
     }
 
     /// A positive whole number no larger than the browser can hold exactly (`Number.isSafeInteger`):
@@ -135,6 +160,11 @@ public enum CoordinatorDeliveryCard {
     public static let itsTask = "Its task ↗"
     /// The heading over the words the session was handed, once the line is opened: the owner's answer's.
     public static let told = OwnerAnswerCard.told
+    /// Where the line says it was sent when this conversation is not the project's coordinator — the
+    /// owner's answer to a criteria proposal a task's run filed (web `COORDINATOR_DELIVERY_SENT_TO_SESSION`).
+    public static let sentToThisSession = "Sent to this session"
+    /// And the heading its words open under (web `COORDINATOR_DELIVERY_SESSION_TOLD`).
+    public static let toldThisSession = "What this session was told"
     /// What the line says when the session has not confirmed it received the turn.
     public static let undelivered = OwnerAnswerCard.undelivered
 
@@ -195,9 +225,24 @@ public enum CoordinatorDeliveryCard {
     }
 
     /// "Sent to the coordinator · 07:30 PM": what a version handed to its coordinator says, in the same
-    /// words and on the same clock (`EvidenceDecisions.sentLine`). Never truncated on the line.
+    /// words and on the same clock (`EvidenceDecisions.sentLine`) — or "Sent to this session · 07:30 PM"
+    /// where this conversation is not the project's coordinator. Never truncated on the line.
     public static func sent(_ card: CoordinatorDelivery, now: Date = Date()) -> String {
-        EvidenceDecisions.sentLine(card.deliveredAt, now: now)
+        card.toCoordinator
+            ? EvidenceDecisions.sentLine(card.deliveredAt, now: now)
+            : "\(sentToThisSession) · \(EvidenceDecisions.receiptTime(card.deliveredAt, now: now))"
+    }
+
+    /// The heading over the words, once the line is opened: what the coordinator was told, or — where this
+    /// conversation is not the project's coordinator — what this session was told.
+    public static func heading(_ card: CoordinatorDelivery) -> String {
+        card.toCoordinator ? told : toldThisSession
+    }
+
+    /// What pressing the line does, as the accessibility hint says it: "Opens what the coordinator was told",
+    /// or "Opens what this session was told" — the heading it opens to, in a sentence.
+    public static func openHint(_ card: CoordinatorDelivery) -> String {
+        card.toCoordinator ? "Opens what the coordinator was told" : "Opens what this session was told"
     }
 
     /// The whole line as one sentence, where it is read rather than laid out: the sheet's head, the
