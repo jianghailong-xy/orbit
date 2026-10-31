@@ -143,6 +143,9 @@ private struct MachineDraftContent: View {
                     Color.clear.frame(height: .composerBandFade)
                 }
                 .fadesIntoComposerBand()
+                #if os(iOS)
+                .scrollDismissesKeyboard(.interactively)   // swipe the card to lower the keyboard
+                #endif
                 // What lands under the card can land below the fold.
                 .onChange(of: setup.state.held != nil) { _, waiting in
                     if waiting { withAnimation { proxy.scrollTo(HeldFirstMessageView.anchor, anchor: .bottom) } }
