@@ -1,0 +1,59 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>没有 workspace 的机器：在对话里建第一个 workspace · Web</title>
+<style>* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1720px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin-bottom: 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section:first-of-type { border-top: 0; padding-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-bottom: 26px; align-items: start; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: start; }
+.tile { margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; }
+.tag { display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; margin: 0 0 8px; }
+.tag.now { background: #ffe0dc; color: #8f1d13; }
+.tag.after { background: #d9e6ff; color: #14428f; }
+.fr { position: relative; border-radius: 10px; overflow: visible; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); margin: 4px 0 12px; }
+.fr img { display: block; border-radius: 10px; }
+.fr + .fr { margin-top: 14px; }
+.fr-label { position: absolute; left: 8px; top: -10px; font-size: 11px; background: #16161a; color: #fff; border-radius: 4px; padding: 0 6px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.num.m { position: absolute; box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); z-index: 3; }
+.notes { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; line-height: 1.62; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 7px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.notes i { color: #1f2a44; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 150px; font-weight: 600; color: #16161a; }
+.cmp td:nth-child(2) { background: #fff6f5; }
+.cmp td:nth-child(3) { background: #f3f7ff; }
+.sumtile { align-self: stretch; }
+.pair { margin-bottom: 22px; }
+.pair-title { font-size: 16px; font-weight: 650; margin: 0 0 10px 4px; }
+.pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.state .tile-title { font-size: 15px; }
+.notes li .t { flex: 1; min-width: 0; }
+.tile.wide { margin-bottom: 26px; }
+.tile.wide .frs { display: flex; gap: 28px; align-items: flex-start; }
+.tile.wide .notes { columns: 2; column-gap: 36px; }
+.tile.wide .notes li { break-inside: avoid; }
+</style><body><div class="board"><h1>没有 workspace 的机器：在对话里建第一个 workspace · Web</h1><div class="lede">用户接上一台机器之后想的是「让 agent 在这台机器上干活」，不是「去配一个 workspace」。今天的路要绕到设置页填表，而且 iPhone、Mac、Android 根本建不了。方案：<b>新会话页就是入口</b>。在这台机器上直接开新会话，卡片只问两件只有你能定的事（<b>文件夹</b>和<b>登录</b>），你发出的第一条消息会把 workspace 一起建出来。</div>
+<div class="section"><span class="sec now">① 今天</span><span class="sec-sub">新账号只有 orbit@austin 一台机器：在线、两个引擎都没登录、0 个 workspace（runner_list 2026-10-31 的真实状态）。都是真页面截图。</span></div>
+<div class="grid2"><figure class="tile "><span class="tag now">今天</span><div class="tile-title">新用户落地：直接进了机器页</div><div class="fr" style="width:768px;height:540px"><img src="frames/t-landing-0-0-1280x900.png" width="768" height="540"><span class="num m" style="left:61px;top:109px">1</span><span class="num m" style="left:518px;top:104px">2</span><span class="num m" style="left:373px;top:517px">3</span></div><ol class="notes"><li><span class="num">1</span><span class="t">侧边栏里看不到这台机器：Workspaces 组只在至少有一个 workspace 时出现。</span></li><li><span class="num">2</span><span class="t">首屏全是引擎：Claude Code 和 Codex 都 <b>Signed out</b>，但页面没有 Needs attention，Settings 还写着 <code>1 of 1 online</code>。</span></li><li><span class="num">3</span><span class="t">唯一的创建入口 <b>Add workspace</b> 在折叠线下面（y≈930），要往下滚才看得到。</span></li></ol></figure><figure class="tile "><span class="tag now">今天</span><div class="tile-title">其实已经有一个「机器草稿页」，只是没人能走到</div><div class="fr" style="width:768px;height:540px"><img src="frames/t-draft-hidden-0-0-1280x900.png" width="768" height="540"><span class="num m" style="left:451px;top:288px">1</span><span class="num m" style="left:380px;top:470px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t"><code>/workspaces/&lt;机器 id&gt;</code> 能画出这台机器的新会话页（为老链接留的兼容），还会提示 <i>Not signed in on this runner · Fix it</i>。没有任何入口链到这里。</span></li><li><span class="num">2</span><span class="t">输入框能打字能发送，但服务端会拒绝：这个 id 不是 workspace（<code>workspace not found</code>）。<b>方案就把这一页变成正式入口。</b></span></li></ol></figure></div>
+<div class="grid2"><figure class="tile "><span class="tag now">今天</span><div class="tile-title">创建表单：名字必填，路径反而可选</div><div class="fr" style="width:581px;height:526px"><img src="frames/t-form-307-922-632x572.png" width="581" height="526"><span class="num m" style="left:53px;top:86px">1</span><span class="num m" style="left:397px;top:86px">2</span><span class="num m" style="left:552px;top:475px">3</span></div><ol class="notes"><li><span class="num">1</span><span class="t"><b>Name</b> 是唯一的必填项。</span></li><li><span class="num">2</span><span class="t"><b>Working directory</b> 选填、纯文本，创建时不检查（检查只在编辑时跑）。不填的话，会话会悄悄落到 <code>orbit register</code> 时的目录，安装脚本让它通常就是 <code>~</code>。</span></li><li><span class="num">3</span><span class="t">点 Create 后停在原页，不进会话；也没说 Claude Code 在这台机器上没登录。</span></li></ol></figure><div class="tile sumtile"><div class="tile-title">走完要几步</div><table class="cmp"><tr><th></th><th>今天（web）</th><th>方案</th></tr>
+<tr><td>从批准机器到第一条消息</td><td>批准页 → 机器页 → 登录 → 往下滚 → Add workspace → 填表 → Create → 点开 workspace → 写消息：<b>2 个页面、9 步</b></td><td>批准页 → 新会话页（设置卡）→ 选文件夹 → 登录 → 写消息：<b>1 个页面、4 步</b>，顺序随意</td></tr>
+<tr><td>路径</td><td>可选，创建时不检查</td><td>必选，选的时候就在机器上检查</td></tr>
+<tr><td>iPhone / iPad / Mac / Android</td><td>都建不了，只说 “on the web”</td><td>同一张卡（见 03）</td></tr></table></div></div>
+<div class="section"><span class="sec after">② 方案</span><span class="sec-sub">在这台机器的新会话页里，用一张设置卡问两件事，然后直接开始。截图来自真页面 + 原型补丁（<code>capture/prototype.patch</code>）。</span></div>
+<figure class="tile wide"><span class="tag after">方案</span><div class="tile-title">① 落地：这台机器的新会话页，主角是设置卡</div><div class="frs"><div class="fr" style="width:704px;height:495px"><img src="frames/p-landing-0-0-1280x900.png" width="704" height="495"><span class="num m" style="left:-9px;top:114px">1</span><span class="num m" style="left:335px;top:438px">6</span></div><div class="fr" style="width:619px;height:677px"><img src="frames/p-landing-631-104-619x677.png" width="619" height="677"><span class="num m" style="left:9px;top:11px">2</span><span class="num m" style="left:12px;top:108px">3</span><span class="num m" style="left:12px;top:437px">4</span><span class="num m" style="left:567px;top:615px">5</span></div></div><ol class="notes"><li><span class="num">1</span><span class="t">侧边栏：在线、还没有 workspace 的机器多一行 <b>Set up orbit@austin</b>。新用户进 Orbit 就落在这一页（今天落在机器页）。</span></li><li><span class="num">2</span><span class="t">设置卡占住引擎 hero 的位置，只问两件只有你能定的事：<i>Pick where it works and sign in a coding CLI.</i></span></li><li><span class="num">3</span><span class="t"><b>文件夹</b>是 agent 能读写的范围，所以要你点头。可选：<code>orbit register</code> 的目录（只在它是项目、不是 <code>~</code> 时给）、新文件夹、别的文件夹。路径当场在机器上检查。</span></li><li><span class="num">4</span><span class="t"><b>登录</b>：直接嵌入现有的 <code>RunnerSignIn</code>，和机器页、会话里的登录卡是同一个组件。另给 <i>Use Codex instead</i> 和 API key 两个选择。</span></li><li><span class="num">5</span><span class="t">发送前什么都不建。名字、隔离、合并目标都有默认值，以后能改。</span></li><li><span class="num">6</span><span class="t">输入框照常可用：<i>Send orbit@austin a task…</i>，也可以先写要做的事。</span></li></ol></figure><figure class="tile wide"><span class="tag after">方案</span><div class="tile-title">② 先发了消息：消息等着，两步在卡里完成</div><div class="frs"><div class="fr" style="width:704px;height:495px"><img src="frames/p-progress-0-0-1280x900.png" width="704" height="495"></div><div class="fr" style="width:619px;height:668px"><img src="frames/p-progress-631-70-619x668.png" width="619" height="668"><span class="num m" style="left:12px;top:182px">1</span><span class="num m" style="left:32px;top:317px">2</span><span class="num m" style="left:73px;top:545px">3</span></div></div><ol class="notes"><li><span class="num">1</span><span class="t">文件夹选好就收成一行 ✓，带 <i>Change</i>。</span></li><li><span class="num">2</span><span class="t">登录做到一半（贴码这一步），和今天机器页上一模一样。</span></li><li><span class="num">3</span><span class="t">先发出的消息留在卡下面：<i>Waiting for orbit@austin — sends once both steps are done</i>，可以撤回。两步都打勾后自动发出，不用再点一次。</span></li></ol></figure>
+<div class="grid2"><figure class="tile "><span class="tag after">方案</span><div class="tile-title">③ 两步都好了（还没写消息时）</div><div class="fr" style="width:573px;height:251px"><img src="frames/p-ready-629-305-623x273.png" width="573" height="251"><span class="num m" style="left:14px;top:193px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">底部变绿：<i>Ready. Send a task — Orbit adds the workspace “app” for ~/code/app as it starts.</i> 发送这一下同时建 workspace 和会话。</span></li></ol></figure><figure class="tile "><span class="tag after">方案</span><div class="tile-title">④ 开始了：workspace 已建好，会话在跑</div><div class="fr" style="width:768px;height:540px"><img src="frames/p-started-0-0-1280x900.png" width="768" height="540"><span class="num m" style="left:451px;top:48px">1</span><span class="num m" style="left:-9px;top:125px">2</span><span class="num m" style="left:438px;top:81px">3</span></div><ol class="notes"><li><span class="num">1</span><span class="t">对话第一行写明建了什么：<i>Created workspace <b>app</b> on orbit@austin · ~/code/app · Rename · Settings</i>。</span></li><li><span class="num">2</span><span class="t">侧边栏里 <i>Set up orbit@austin</i> 换成真正的 workspace 行 <b>app · orbit@austin</b>。</span></li><li><span class="num">3</span><span class="t">等着的那条消息正常送达，会话照常开始。之后这台机器上的其他 workspace 也可以在对话里建（见 04）。</span></li></ol></figure></div>
+</div></body></html>

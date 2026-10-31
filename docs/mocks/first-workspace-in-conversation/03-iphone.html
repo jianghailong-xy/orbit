@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>没有 workspace 的机器 · iPhone</title>
+<link rel="stylesheet" href="board.css">
+<style>
+  :root { --tint: #3E69F6; --label: #000; --label-2: rgba(60,60,67,.6); --label-3: rgba(60,60,67,.3);
+          --sep: rgba(60,60,67,.18); --group: #F2F2F7; --cell: #fff; --amber: #C2710C; --amber-bg: rgba(255,149,0,.14);
+          --green: #34C759; --drawer: #F9F9F9; }
+  .phones { display: flex; gap: 40px; align-items: flex-start; }
+  .ph-wrap { width: 393px; flex: none; }
+  .phone { width: 393px; height: 852px; position: relative; overflow: hidden; border-radius: 48px; background: #fff;
+           box-shadow: 0 18px 44px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.08); color: var(--label);
+           font: 17px/22px Inter, "Noto Sans SC", sans-serif; letter-spacing: -.01em; }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 30px 6px 46px; font-size: 16px; font-weight: 600; }
+  .status .r { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+  .bat { width: 25px; height: 12px; border: 1.5px solid #000; border-radius: 4px; position: relative; }
+  .bat::after { content: ''; position: absolute; left: 1.5px; top: 1.5px; width: 16px; height: 6px; background: #000; border-radius: 1.5px; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; }
+  .m { position: absolute; z-index: 9; }
+  /* drawer */
+  .drawer { position: absolute; inset: 0 auto 0 0; width: 298.67px; background: var(--drawer); }
+  .peek { position: absolute; left: 298.67px; top: 0; width: 393px; height: 852px; background: #fff; border-radius: 48px 0 0 48px;
+          box-shadow: -4px 0 22px rgba(0,0,0,.13); }
+  .peek .ham { position: absolute; left: 16px; top: 62px; width: 44px; height: 44px; border-radius: 22px; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.12); }
+  .peek .ham::before { content: ''; position: absolute; left: 13px; top: 15px; width: 18px; height: 2px; background: #000; box-shadow: 0 6px 0 #000, 0 12px 0 #000; border-radius: 1px; }
+  .dtitle { display: flex; align-items: center; justify-content: space-between; padding: 22px 16px 10px 22px; }
+  .dtitle b { font-size: 24px; font-weight: 700; }
+  .circ { width: 44px; height: 44px; border-radius: 22px; background: rgba(120,120,128,.12); display: grid; place-items: center; }
+  .drow { margin: 0 10px; height: 42.33px; border-radius: 10px; display: flex; align-items: center; gap: 12px; padding: 0 12px; white-space: nowrap; }
+  .drow .ic { width: 24px; display: flex; justify-content: center; color: #000; }
+  .drow .meta { color: rgba(0,0,0,.5); }
+  .drow.tint { color: var(--tint); }
+  .drow.tint .ic { color: var(--tint); }
+  .dsep { height: .5px; background: rgba(60,60,67,.29); margin: 8px 22px; }
+  .glabel { padding: 10px 22px 4px; font-size: 15px; font-weight: 600; color: rgba(0,0,0,.5); }
+  .dfoot { position: absolute; left: 0; right: 0; bottom: 30px; padding: 0 16px 0 10px; }
+  .dnote { font-size: 13px; line-height: 17px; color: rgba(0,0,0,.5); padding: 0 12px 10px; }
+  .dbtns { display: flex; align-items: center; justify-content: space-between; }
+  .newbtn { height: 50px; padding: 0 22px 0 18px; border-radius: 25px; background: var(--tint); color: #fff; font-weight: 600; display: flex; gap: 9px; align-items: center; }
+  .newbtn.off { opacity: .35; }
+  /* grouped pages */
+  .nav { display: flex; align-items: center; gap: 10px; padding: 8px 16px; height: 52px; }
+  .back { color: var(--tint); display: flex; align-items: center; gap: 4px; font-size: 17px; }
+  .navtitle { font-size: 17px; font-weight: 600; text-align: center; flex: 1; margin-right: 80px; }
+  .grouped { background: var(--group); position: absolute; inset: 106px 0 0 0; overflow: hidden; padding: 6px 0 0; }
+  .big { font-size: 30px; font-weight: 700; padding: 4px 20px 2px; }
+  .sub { color: var(--label-2); font-size: 15px; padding: 0 20px 12px; }
+  .sh { font-size: 13px; color: var(--label-2); text-transform: uppercase; padding: 14px 36px 6px; letter-spacing: 0; }
+  .sec { margin: 0 16px; background: var(--cell); border-radius: 12px; overflow: hidden; }
+  .cell { display: flex; align-items: center; gap: 12px; padding: 11px 16px; min-height: 44px; position: relative; }
+  .cell + .cell::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--sep); }
+  .cell .grow { flex: 1; min-width: 0; }
+  .cell .t2 { font-size: 13px; color: var(--label-2); line-height: 17px; }
+  .cell .amber { color: var(--amber); }
+  .pill { font-size: 15px; font-weight: 600; color: var(--tint); background: rgba(62,105,246,.12); border-radius: 999px; padding: 5px 13px; white-space: nowrap; }
+  .sf { font-size: 13px; line-height: 17px; color: var(--label-2); padding: 7px 36px 0; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-size: 16px; flex: none; }
+  .attn { margin: 0 16px; background: #FDECEB; border-radius: 12px; padding: 12px 16px; }
+  /* chat */
+  .chatnav { display: flex; align-items: center; gap: 12px; padding: 6px 16px 8px; height: 56px; }
+  .chatnav .ham { position: static; width: 40px; height: 40px; border-radius: 20px; background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.12); position: relative; flex: none; }
+  .chatnav .ham::before { content: ''; position: absolute; left: 12px; top: 13px; width: 16px; height: 2px; background: #000; box-shadow: 0 6px 0 #000, 0 12px 0 #000; border-radius: 1px; }
+  .ct { flex: 1; min-width: 0; }
+  .ct b { display: block; font-size: 17px; font-weight: 600; line-height: 21px; }
+  .ct span { font-size: 13px; color: var(--label-2); }
+  .body { position: absolute; top: 110px; left: 0; right: 0; bottom: 120px; overflow: hidden; padding: 0 14px; }
+  .composer { position: absolute; left: 12px; right: 12px; bottom: 26px; background: #fff; border-radius: 24px;
+              box-shadow: 0 0 0 .5px rgba(0,0,0,.16), 0 4px 16px rgba(0,0,0,.07); }
+  .field { padding: 14px 16px 6px; color: rgba(60,60,67,.3); font-size: 17px; }
+  .toolbar { display: flex; align-items: center; height: 44px; padding: 4px 8px 8px; font-size: 15px; }
+  .toolbar .mode { margin-left: 6px; color: var(--label-2); font-weight: 500; }
+  .toolbar .chip { margin-left: auto; font-weight: 600; }
+  .toolbar .chip i { font-style: normal; color: var(--label-2); font-weight: 400; margin-left: 4px; }
+  .send { width: 32px; height: 32px; border-radius: 16px; background: #d1d1d6; margin-left: 10px; display: grid; place-items: center; }
+  /* the setup card, iOS */
+  .scard { background: #fff; border-radius: 18px; box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 2px 10px rgba(0,0,0,.05); padding: 14px 14px 10px; font-size: 15px; line-height: 20px; }
+  .scard .hd { display: flex; gap: 10px; align-items: flex-start; }
+  .scard .hd .logo { background: rgba(62,105,246,.12); color: var(--tint); }
+  .scard .hd b { font-size: 17px; display: block; line-height: 22px; }
+  .scard .hd span { color: var(--label-2); font-size: 14px; line-height: 18px; display: block; }
+  .step { display: flex; gap: 10px; border-top: .5px solid var(--sep); margin-top: 12px; padding-top: 11px; }
+  .sn { width: 22px; height: 22px; border-radius: 11px; border: 1px solid rgba(60,60,67,.3); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--label-2); flex: none; }
+  .sn.ok { border: 0; background: var(--green); color: #fff; }
+  .step .grow { flex: 1; min-width: 0; }
+  .st { font-weight: 600; }
+  .sh2 { color: var(--label-2); font-size: 13px; line-height: 17px; margin-top: 1px; }
+  .opts { margin-top: 8px; border-radius: 10px; background: var(--group); overflow: hidden; }
+  .opt { display: flex; gap: 10px; padding: 8px 10px; align-items: flex-start; position: relative; }
+  .opt + .opt::before { content: ''; position: absolute; top: 0; left: 36px; right: 0; height: .5px; background: var(--sep); }
+  .opt .ck { width: 18px; color: var(--tint); font-weight: 700; flex: none; text-align: center; }
+  .opt .p { font: 14px/18px "JetBrains Mono", monospace; letter-spacing: 0; }
+  .opt .v { font-size: 12.5px; line-height: 16px; color: #1a7f37; }
+  .opt .w { font-size: 12.5px; line-height: 16px; color: var(--label-2); }
+  .btnrow { display: flex; gap: 8px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
+  .btn { background: var(--tint); color: #fff; font-weight: 600; font-size: 15px; border-radius: 999px; padding: 6px 14px; }
+  .btn.alt { background: rgba(62,105,246,.12); color: var(--tint); }
+  .lnk { color: var(--tint); font-size: 14px; }
+  .sfoot { border-top: .5px solid var(--sep); margin-top: 12px; padding-top: 8px; font-size: 12.5px; color: var(--label-2); line-height: 16px; }
+  .held { margin: 12px 0 0 auto; width: fit-content; max-width: 82%; }
+  .bubble { background: rgba(62,105,246,.12); border-radius: 18px; padding: 9px 13px; font-size: 16px; line-height: 21px; }
+  .heldst { font-size: 12px; color: var(--label-2); text-align: right; margin-top: 4px; }
+  .created { text-align: center; font-size: 12.5px; color: var(--label-2); margin: 10px 0 12px; line-height: 17px; }
+  .created b { color: rgba(0,0,0,.7); }
+  .created a { color: var(--tint); }
+  .reply { font-size: 16px; line-height: 22px; margin-top: 14px; }
+  .work { font-size: 12.5px; color: var(--label-2); margin-top: 14px; }
+</style>
+<body>
+<div class="board">
+<h1>没有 workspace 的机器 · iPhone（iPad 抽屉同款，Mac 侧边栏同理）</h1>
+<div class="lede">今天的 iOS / macOS / Android <b>根本建不了 workspace</b>（创建接口在 OrbitKit 里有，只有测试在调），所有空状态都把人打发去 web。
+方案和 web 用同一套规则：抽屉里给这台机器一行 <b>Set up orbit@austin</b>，点开就是它的新会话页，主角是同一张设置卡。手绘稿：字号、颜色和间距按现有 SwiftUI 实测取值，文案照代码。</div>
+
+<div class="section"><span class="sec now">① 今天</span><span class="sec-sub">新账号只有 orbit@austin：在线、两个引擎都没登录、0 个 workspace。</span></div>
+<div class="phones">
+  <div class="ph-wrap"><div class="phone">
+    <div class="drawer">
+      <div class="status"><span>9:41</span><span class="r">●●● ◠ <span class="bat"></span></span></div>
+      <div class="dtitle"><b>Orbit</b><span class="circ">⌕</span></div>
+      <div class="drow"><span class="ic">▦</span>Projects</div>
+      <div class="drow"><span class="ic">☰</span>Tasks</div>
+      <div class="drow"><span class="ic">▤</span>Wiki</div>
+      <div class="dsep"></div>
+      <div class="glabel">Workspaces</div>
+      <div class="dfoot">
+        <div class="dnote">Add a workspace to start a session.</div>
+        <div class="dbtns"><span class="newbtn off">✎ New session</span><span class="circ">⚙</span></div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <div class="peek"><div class="ham"></div></div>
+    <span class="num m" style="left:150px;top:286px">1</span>
+    <span class="num m" style="left:232px;top:735px">2</span>
+  </div>
+  <ol class="notes">
+    <li><span class="num">1</span><span class="t">「Workspaces」标题下空着；有 workspace 的机器只作为行尾标签出现，所以 orbit@austin 在抽屉里根本不存在。</span></li>
+    <li><span class="num">2</span><span class="t">New session 置灰，上面一句 <i>Add a workspace to start a session.</i>，可这句话没有按钮，App 里也没有任何地方能加。</span></li>
+  </ol></div>
+
+  <div class="ph-wrap"><div class="phone">
+    <div class="status"><span>9:41</span><span class="r">●●● ◠ <span class="bat"></span></span></div>
+    <div class="nav"><span class="back">‹ Machines &amp; models</span></div>
+    <div class="grouped">
+      <div class="big">orbit@austin</div>
+      <div class="sub"><span style="color:#1a7f37">●</span> Online · 0 / 16 running · v0.1.240</div>
+      <div class="sh">Engines</div>
+      <div class="sec">
+        <div class="cell"><span class="logo" style="background:#D97757">✳</span><div class="grow">Claude Code<div class="t2"><span class="amber">2.1.302 · Signed out</span></div></div><span class="pill">Sign In</span></div>
+        <div class="cell"><span class="logo" style="background:#111">◎</span><div class="grow">Codex<div class="t2"><span class="amber">0.164.0 · Signed out</span></div></div><span class="pill">Sign In</span></div>
+      </div>
+      <div class="sf">Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</div>
+      <div class="sh">Workspaces</div>
+      <div class="sec"><div class="cell"><span style="color:var(--label-2)">No workspaces on this runner yet.</span></div></div>
+      <div class="sf">Tap a workspace to open its sessions. Add or change workspaces on the web.</div>
+      <div class="sh">About This Runner</div>
+      <div class="sec"><div class="cell"><div class="grow">Repos Folder</div><span style="color:var(--label-2);font-size:15px">/home/orbit/orbit-repos</span></div></div>
+    </div>
+    <div class="home"></div>
+    <span class="num m" style="left:350px;top:208px">1</span>
+    <span class="num m" style="left:4px;top:493px">2</span>
+  </div>
+  <ol class="notes">
+    <li><span class="num">1</span><span class="t">两个引擎都 Signed out，但没有 Needs Attention；Settings 那一行写 <i>1 of 1 online</i>。从抽屉到这里要走 ⚙ → Settings → Machines &amp; models → 机器。</span></li>
+    <li><span class="num">2</span><span class="t"><i>No workspaces on this runner yet.</i> 下面一句 <i>Add or change workspaces on the web.</i>，没有链接。手机上是死路。</span></li>
+  </ol></div>
+</div>
+
+<div class="section"><span class="sec after">② 方案</span><span class="sec-sub">同一套规则：抽屉一行 → 机器的新会话页 → 设置卡 → 第一条消息把 workspace 建出来。</span></div>
+<div class="phones">
+  <div class="ph-wrap"><div class="phone">
+    <div class="drawer">
+      <div class="status"><span>9:41</span><span class="r">●●● ◠ <span class="bat"></span></span></div>
+      <div class="dtitle"><b>Orbit</b><span class="circ">⌕</span></div>
+      <div class="drow"><span class="ic">▦</span>Projects</div>
+      <div class="drow"><span class="ic">☰</span>Tasks</div>
+      <div class="drow"><span class="ic">▤</span>Wiki</div>
+      <div class="dsep"></div>
+      <div class="glabel">Workspaces</div>
+      <div class="drow tint" style="background:rgba(62,105,246,.14)"><span class="ic">⊕</span>Set up orbit@austin</div>
+      <div class="dfoot">
+        <div class="dbtns"><span class="newbtn">✎ New session</span><span class="circ">⚙</span></div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <div class="peek"><div class="ham"></div></div>
+    <span class="num m" style="left:250px;top:298px">1</span>
+    <span class="num m" style="left:160px;top:770px">2</span>
+  </div>
+  <ol class="notes">
+    <li><span class="num">1</span><span class="t">在线、没有 workspace 的机器在 Workspaces 下面多一行 <b>Set up orbit@austin</b>（文件夹加号图标，主色）。有 workspace 的账号里它排在最后。</span></li>
+    <li><span class="num">2</span><span class="t">New session 不再置灰：没有 workspace 时，它打开第一台在线机器的新会话页。</span></li>
+  </ol></div>
+
+  <div class="ph-wrap"><div class="phone" style="background:#F7F7F9">
+    <div class="status"><span>9:41</span><span class="r">●●● ◠ <span class="bat"></span></span></div>
+    <div class="chatnav"><span class="ham"></span><div class="ct"><b>New session</b><span>orbit@austin</span></div></div>
+    <div class="body">
+      <div class="scard">
+        <div class="hd"><span class="logo">▭</span><div><b>Set up orbit@austin</b><span>Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</span></div></div>
+        <div class="step"><span class="sn">1</span><div class="grow">
+          <div class="st">Folder</div>
+          <div class="sh2">Where on orbit@austin should sessions work? They can read and change everything in it.</div>
+          <div class="opts">
+            <div class="opt"><span class="ck">✓</span><div><div class="p">~/code/app</div><div class="v">Found · git repository · main</div><div class="w">Where you ran orbit register</div></div></div>
+            <div class="opt"><span class="ck"></span><div>A new folder<div class="w">Starts empty. Ask for a clone in your first message.</div></div></div>
+            <div class="opt"><span class="ck"></span><div>Another folder…</div></div>
+          </div>
+          <div class="btnrow"><span class="btn">Use This Folder</span></div>
+        </div></div>
+        <div class="step"><span class="sn">2</span><div class="grow">
+          <div class="st">Sign in Claude Code on orbit@austin</div>
+          <div class="sh2">Sessions run on the coding CLIs signed in on that machine.</div>
+          <div class="btnrow"><span class="btn">Sign In</span><span class="btn alt">Use an API Key</span><span class="lnk">Use Codex instead</span></div>
+        </div></div>
+        <div class="sfoot">Nothing is created until you send.</div>
+      </div>
+    </div>
+    <div class="composer"><div class="field">Send orbit@austin a task…</div>
+      <div class="toolbar"><span style="font-size:22px;padding:0 6px">+</span><span class="mode">Auto</span><span class="chip">Opus 5.5<i>Default</i></span><span class="send">↑</span></div></div>
+    <div class="home"></div>
+    <span class="num m" style="left:350px;top:116px">1</span>
+    <span class="num m" style="left:6px;top:298px">2</span>
+    <span class="num m" style="left:6px;top:556px">3</span>
+    <span class="num m" style="left:350px;top:726px">4</span>
+  </div>
+  <ol class="notes">
+    <li><span class="num">1</span><span class="t">标题栏是机器名（还没有 workspace 名可写）。</span></li>
+    <li><span class="num">2</span><span class="t">同一张设置卡，iOS 化：选项用分组底色和 ✓，按钮用胶囊。路径当场在机器上检查。</span></li>
+    <li><span class="num">3</span><span class="t">登录直接用现有的 <code>RunnerSignIn</code> 卡（机器的引擎页、会话里的登录过期卡已经在用）。</span></li>
+    <li><span class="num">4</span><span class="t">输入框照常可用：<i>Send orbit@austin a task…</i>。先发的消息和 web 一样留在卡下面等着（<i>Waiting for orbit@austin…</i>），两步做完自动发出。</span></li>
+  </ol></div>
+
+  <div class="ph-wrap"><div class="phone">
+    <div class="status"><span>9:41</span><span class="r">●●● ◠ <span class="bat"></span></span></div>
+    <div class="chatnav"><span class="ham"></span><div class="ct"><b>Fix the flaky login test</b><span>app · orbit@austin</span></div></div>
+    <div class="body">
+      <div class="created">Created workspace <b>app</b> on orbit@austin · ~/code/app<br><a>Rename</a> · <a>Settings</a></div>
+      <div class="held"><div class="bubble">Fix the flaky login test in tests/auth — it fails about one run in five on CI.</div></div>
+      <div class="work">Working for 1m</div>
+      <div class="reply">I’ll reproduce it first: running the auth tests 20 times in a row to catch the failing case, then I’ll read the test and the session-expiry code it touches.</div>
+    </div>
+    <div class="composer"><div class="field">Reply…</div>
+      <div class="toolbar"><span style="font-size:22px;padding:0 6px">+</span><span class="mode">Default</span><span class="chip">Opus 5.5<i>Default</i></span><span class="send" style="background:var(--tint);color:#fff">■</span></div></div>
+    <div class="home"></div>
+    <span class="num m" style="left:4px;top:124px">1</span>
+    <span class="num m" style="left:350px;top:58px">2</span>
+  </div>
+  <ol class="notes">
+    <li><span class="num">1</span><span class="t">对话第一行写明建了什么：<i>Created workspace app on orbit@austin · ~/code/app</i>，带 Rename / Settings。</span></li>
+    <li><span class="num">2</span><span class="t">标题栏换成会话名，副标题 <i>app · orbit@austin</i>；抽屉里那行 Set up 换成真正的 workspace 行。</span></li>
+  </ol></div>
+</div>
+
+<div class="section"><span class="sec after">Mac / Android</span><span class="sec-sub">不单独出图，规则相同。</span></div>
+<div class="tile"><ol class="notes">
+  <li><span class="num">1</span><span class="t"><b>Mac</b>：侧边栏 Workspaces 组按机器分组，给 orbit@austin 一个分组头加一行 <i>Set up orbit@austin</i>；⌘N 和 File ▸ New Session 在没有 workspace 时不再置灰，打开这台机器的新会话页。今天侧边栏写 <i>No agents</i>。</span></li>
+  <li><span class="num">2</span><span class="t"><b>Android</b>：抽屉同 iPhone（今天也是 <i>Add a workspace to start a session.</i> + 置灰的 New session）；设置卡用 Compose 现有的卡片和单选样式；登录用现有的 sign-in card。</span></li>
+  <li><span class="num">3</span><span class="t">三端都改那条提醒规则：一个 CLI 都没登录的机器算 needs you（今天 <code>RunnerAttention.swift</code>、<code>RunnerPage.kt</code> 和 web 的 <code>runnerAttention.ts</code> 同一条规则，都要「有 workspace 用这个引擎」才报）。</span></li>
+</ol></div>
+</div>
+</body>
+</html>

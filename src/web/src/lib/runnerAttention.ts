@@ -9,6 +9,8 @@ import {
   ATTENTION_CHECKOUT_DETAIL,
   ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
   ATTENTION_NEVER_CHECKED_IN,
+  ATTENTION_NO_CLI_SIGNED_IN,
+  ATTENTION_NO_CLI_SIGNED_IN_SHORT,
   ATTENTION_OFFLINE_ONE_SESSION_WAITS,
   ATTENTION_OFFLINE_WAKE,
   ATTENTION_RUNNER_UPDATE_FAILED,
@@ -30,6 +32,7 @@ import {
   RUNNER_LOGIN_CLAUDE,
   RUNNER_LOGIN_CODEX,
   RUNNER_LOGIN_KIMI,
+  RUNNER_NAMES_COMMA,
   RUNNER_OFFLINE,
   RUNNER_QUOTA_ANNUAL,
   RUNNER_QUOTA_DAILY,
@@ -54,6 +57,8 @@ import {
   attentionEngineUpdateDetail,
   attentionEngineUpdateFailed,
   attentionInstallFolderNotWritableDetail,
+  attentionNoCliSignedInDetail,
+  attentionNoCliSignedInDetailMany,
   attentionOfflineFor,
   attentionOfflineSessionsWait,
   attentionQuotaDetail,
@@ -86,7 +91,10 @@ import {
  * An item is raised only when something depends on it. An engine's signed-out login or its
  * nearly spent quota is news only if a workspace on this machine last ran on that built-in engine:
  * a machine whose sessions all run on configured providers (deepseek, anthropic-2, …) never spends
- * that login, and flagging it would be a false alarm. An offline runner keeps only what is still
+ * that login, and flagging it would be a false alarm. The exception is a machine where no login CLI
+ * is signed in and no workspace runs on a key or a pool instead: nothing can run there, with a
+ * workspace or without one, and that is said once in place of each signed-out login (rule 10 of
+ * docs/mocks/first-workspace-in-conversation/04-rules). An offline runner keeps only what is still
  * true and still actionable — that it is offline, and that it cannot replace its own binary; its
  * engine, quota, disk and checkout readings are as old as its last heartbeat.
  *
@@ -138,6 +146,7 @@ export interface RunnerAttentionInput {
 /** Most severe first — the order items come out in. */
 export type AttentionKind =
   | 'offline'
+  | 'noCliSignedIn'
   | 'engineSignedOut'
   | 'checkoutStuck'
   | 'quotaNearLimit'
@@ -186,6 +195,15 @@ const LOGIN_NAME: Record<LoginEngine, string> = {
   codex: RUNNER_LOGIN_CODEX,
   kimi: RUNNER_LOGIN_KIMI,
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAME.cursor,
+};
+/** A login CLI as the item for a machine with none signed in lists it: by its own name, but
+ *  Antigravity's as the sign-in sentences say it. */
+const LOGIN_CLI_NAME: Record<LoginEngine, string> = {
+  claude: ENGINE_CLI_NAME.claude,
+  codex: ENGINE_CLI_NAME.codex,
+  kimi: ENGINE_CLI_NAME.kimi,
+  antigravity: LOGIN_NAME.antigravity,
   cursor: ENGINE_CLI_NAME.cursor,
 };
 /** Every engine a runner reports on, in the order its page lists them — Cursor CLI on a runner that
@@ -387,6 +405,50 @@ function workspacesOn(workspaces: ReadonlyArray<AttentionWorkspace>, engine: Log
   return workspaces
     .filter((w) => w.lastProvider === engine && (w.lastEngine ?? engine) === engine)
     .map((w) => w.name);
+}
+
+/** A workspace whose sessions run on a key or a pool of the account's: a credential that needs no
+ *  sign-in on this machine. A lastProvider that is a login engine is that engine's sign-in here, and
+ *  none (null, blank) says nothing either way. */
+function runsOnKeyOrPool(workspace: AttentionWorkspace): boolean {
+  const provider = workspace.lastProvider?.trim();
+  return !!provider && !(LOGIN_ENGINES as string[]).includes(provider);
+}
+
+/**
+ * The login CLIs installed on this machine, in LOGIN_ENGINES order, when not one of them is signed in
+ * and no workspace here runs on a key or a pool instead — then nothing can run on it, whether or not
+ * it has a workspace yet. Null when one is signed in or its sign-in is unknown, when none is installed,
+ * and when a workspace runs on a key: that machine runs without any sign-in, so a signed-out login is
+ * news only to the workspaces on it (signedOutItems). Settings counts the machine by the same answer.
+ */
+export function noCliSignedIn(
+  runner: Pick<AttentionRunner, 'engines'>,
+  workspaces: ReadonlyArray<AttentionWorkspace>,
+): LoginEngine[] | null {
+  const installed = LOGIN_ENGINES.filter((engine) => runner.engines?.find((e) => e.engine === engine)?.installed);
+  if (installed.length === 0) return null;
+  if (installed.some((engine) => runner.engines?.find((e) => e.engine === engine)?.auth !== 'no')) return null;
+  if (workspaces.some(runsOnKeyOrPool)) return null;
+  return installed;
+}
+
+/** One item for the machine noCliSignedIn names, listing every CLI it has and signing in the first. */
+function noCliSignedInItem(engines: LoginEngine[]): AttentionItem {
+  const names = engines.map((engine) => LOGIN_CLI_NAME[engine]);
+  const last = names[names.length - 1];
+  return {
+    kind: 'noCliSignedIn',
+    tone: 'bad',
+    short: ATTENTION_NO_CLI_SIGNED_IN_SHORT,
+    title: ATTENTION_NO_CLI_SIGNED_IN,
+    detail:
+      names.length === 1
+        ? attentionNoCliSignedInDetail(last)
+        : attentionNoCliSignedInDetailMany(runnerNamesTwo(names.slice(0, -1).join(RUNNER_NAMES_COMMA), last)),
+    action: { kind: 'signIn', engine: engines[0] },
+    params: { engines },
+  };
 }
 
 function signedOutItems(
@@ -673,7 +735,9 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
   if (offline) {
     items.push(offlineItem(runner, nowMs));
   } else {
-    items.push(...signedOutItems(runner, workspaces), ...checkoutItems(workspaces));
+    const noCli = noCliSignedIn(runner, workspaces);
+    items.push(...(noCli ? [noCliSignedInItem(noCli)] : signedOutItems(runner, workspaces)));
+    items.push(...checkoutItems(workspaces));
     items.push(...quotaItems(runner, workspaces, nowMs));
     const disk = diskItem(runner, workspaces);
     if (disk) items.push(disk);

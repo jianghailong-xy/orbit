@@ -741,6 +741,35 @@ public enum RunnerPageFormat {
         return counts.first { PublicID.storageKey($0.workspaceId) == key }?.running ?? 0
     }
 
+    /// This runner's page on the web, where its workspaces are added and changed: `<server>/runners/<id>`,
+    /// the id in its public spelling, as the app's other web addresses are (`AppModel.projectWebURL`).
+    /// Nil without a server.
+    public static func runnerWebURL(runnerID: String, baseURL: URL?) -> URL? {
+        baseURL?.appendingPathComponent("runners").appendingPathComponent(PublicID.toPublic(runnerID))
+    }
+
+    /// A line with some of its words a link: the words before it, the link's own, the words after, and
+    /// where it goes — nil when there is nowhere to go, and the words stay plain.
+    public struct LinkedLine: Equatable, Sendable {
+        public let before: String
+        public let link: String
+        public let after: String
+        public let url: URL?
+    }
+
+    /// The Workspaces footer with its "on the web" a link to this runner's page there (project
+    /// 34pLjYBjU6ILsehatEjJs, contract 6), which the system opens in the browser.
+    public static func workspacesFooter(runnerID: String, baseURL: URL?) -> LinkedLine {
+        let footer = RunnerPageCopy.RUNNER_WORKSPACES_FOOTER
+        let words = RunnerPageCopy.RUNNER_WORKSPACES_FOOTER_LINK
+        guard let range = footer.range(of: words) else {
+            return LinkedLine(before: footer, link: "", after: "", url: nil)
+        }
+        return LinkedLine(before: String(footer[..<range.lowerBound]), link: words,
+                          after: String(footer[range.upperBound...]),
+                          url: runnerWebURL(runnerID: runnerID, baseURL: baseURL))
+    }
+
     // MARK: About This Runner
 
     /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so

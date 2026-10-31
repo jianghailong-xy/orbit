@@ -154,6 +154,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     // The Infrastructure row's value is what its page's Needs you holds: the machines, and the pools — a Codex one of the account's
     // own with its people and keys, which say whether it can run. Shown once the machines are read, as on iOS.
     var runners by remember(api) { mutableStateOf<List<JsonObject>?>(null) }
+    // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
+    var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
     val infrastructure = remember(api) { InfrastructureModel(api) }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
@@ -170,7 +172,11 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         alerts = deviceAlerts()
         // Each row's value is its own read; only an answer the server gave is shown.
         launch {
-            try { runners = providerObjects(api.get("runners")) }
+            try {
+                val machines = providerObjects(api.get("runners"))
+                workspaces = try { providerObjects(api.get("workspaces")) } catch (e: CancellationException) { throw e } catch (_: Exception) { workspaces }
+                runners = machines
+            }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
         launch { infrastructure.loadPools() }
@@ -214,7 +220,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
         // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
         SettingsGroup(null, footer = Infrastructure.SUBTITLE) {
-            val needsYou = runners?.let { infrastructure.attention(it, System.currentTimeMillis()).size } ?: 0
+            val needsYou = runners?.let { infrastructure.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
             SettingsLink(Infrastructure.TITLE, R.drawable.ic_runner, runners?.let { Infrastructure.settingsValue(needsYou, it) },
                 valueColor = if (needsYou > 0) Ink.amber else null) { page("infrastructure") }

@@ -4,6 +4,7 @@ import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -60,6 +61,8 @@ internal object RunnerCopy {
     fun updateFailed(version: String, whenText: String) = "Update to $version failed $whenText"
     const val WORKTREES = "Worktrees"
     const val WORKSPACES_FOOTER = "Tap a workspace to open its sessions. Add or change workspaces on the web."
+    /** The words of WORKSPACES_FOOTER that link to this runner's page on the web (RunnerPage.workspacesFooter). */
+    const val WORKSPACES_FOOTER_LINK = "on the web"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
     const val ABOUT_HOSTNAME = "Hostname"
@@ -109,6 +112,15 @@ internal object RunnerCopy {
     const val UPGRADE_COMMAND = "sudo orbit upgrade"
     const val UPDATES_TURN_ON = "To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — " +
         "on a Mac, opening the latest Orbit app does this."
+    /** A machine where no coding CLI is signed in (RunnerPage.noCliSignedIn): the list's short line, the card's title, and what it is
+     * told — [cli] the one CLI installed there, [clis] every one of them, listed. */
+    const val NO_CLI_SIGNED_IN_SHORT = "No coding CLI signed in"
+    const val NO_CLI_SIGNED_IN = "No coding CLI is signed in"
+    fun noCliSignedInDetail(cli: String) = "Nothing can run on this machine until one is. $cli is installed here."
+    fun noCliSignedInDetailMany(clis: String) = "Nothing can run on this machine until one is. $clis are installed here."
+    /** Names listed in one sentence: the last after "and", the rest between commas — `Claude Code, Codex and Kimi Code`. */
+    fun namesTwo(first: String, second: String) = "$first and $second"
+    const val NAMES_COMMA = ", "
 }
 
 /** An engine's accounts and Antigravity's Google sign-in in iOS's words (RunnerPageCopy, EngineAuth, RunnerEnginePage,
@@ -391,6 +403,9 @@ internal object RunnerPage {
     val loginEngines = listOf("claude", "codex", "kimi", "antigravity", ProviderEngines.CURSOR)
     private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi", "antigravity" to "Antigravity",
         ProviderEngines.CURSOR to ProviderEngines.cliName(ProviderEngines.CURSOR))
+    /** A login CLI as the item for a machine with none signed in lists it (OrbitKit LoginEngine.displayName): by its own name, but
+     * Antigravity's as the sign-in sentences say it. */
+    private val loginCliNames = loginEngines.associateWith { if (it == "antigravity") loginNames.getValue(it) else ProviderEngines.cliName(it) }
     /** Antigravity's buckets by the label usageRows gives the window agy names for each. */
     private val antigravityWindows = mapOf("5-hour" to "5-hour limit", "Weekly" to "weekly limit")
     private val stuckIn = mapOf("unmerged" to "a conflict", "merge" to "a merge", "rebase" to "a rebase",
@@ -552,6 +567,36 @@ internal object RunnerPage {
     private fun engineHealth(runner: JsonObject, engine: String) =
         (runner["engines"] as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { it.str("engine") == engine }
 
+    /** A workspace whose sessions run on a key or a pool of the account's, which needs no sign-in on this machine: a lastProvider that
+     * is a login engine is that engine's sign-in here, and none (null, blank) says nothing either way (web runsOnKeyOrPool). */
+    private fun runsOnKeyOrPool(workspace: JsonObject) =
+        workspace.str("lastProvider")?.trim()?.takeIf { it.isNotEmpty() }?.let { it !in loginEngines } == true
+
+    /**
+     * The login CLIs installed on this machine, in [loginEngines]' order, when not one of them is signed in and no workspace here runs
+     * on a key or a pool instead — then nothing can run on it, with a workspace or without one (OrbitKit RunnerAttention.noCliSignedIn,
+     * the web's noCliSignedIn). Null when one is signed in or its sign-in is unknown, when none is installed, and when a workspace runs
+     * on a key: that machine runs without any sign-in, so a signed-out login is news only to the workspaces on it. Settings counts the
+     * machine by the same answer (Infrastructure.attention).
+     */
+    fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
+        val installed = loginEngines.filter { engineHealth(runner, it)?.bool("installed") == true }
+        if (installed.isEmpty() || installed.any { engineHealth(runner, it)?.str("auth") != "no" }) return null
+        if (workspaces.any(::runsOnKeyOrPool)) return null
+        return installed
+    }
+
+    /** What a machine [noCliSignedIn] names is told: nothing runs until one is, and every CLI it has, by its own name. */
+    fun noCliSignedInDetail(engines: List<String>): String {
+        val names = engines.map { loginCliNames[it] ?: engineName(it) }
+        return if (names.size == 1) RunnerCopy.noCliSignedInDetail(names.single())
+        else RunnerCopy.noCliSignedInDetailMany(RunnerCopy.namesTwo(names.dropLast(1).joinToString(RunnerCopy.NAMES_COMMA), names.last()))
+    }
+
+    /** One item for the machine [noCliSignedIn] names, listing every CLI it has and signing in the first. */
+    private fun noCliSignedInItem(engines: List<String>) = AttentionItem("noCliSignedIn", "bad", RunnerCopy.NO_CLI_SIGNED_IN_SHORT,
+        RunnerCopy.NO_CLI_SIGNED_IN, noCliSignedInDetail(engines), AttentionAction("signIn", engine = engines.first()))
+
     private fun signedOutItems(runner: JsonObject, workspaces: List<JsonObject>) = loginEngines.mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true && it.str("auth") == "no" } ?: return@mapNotNull null
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
@@ -695,7 +740,7 @@ internal object RunnerPage {
         val items = mutableListOf<AttentionItem>()
         if (offline) items += offlineItem(runner, nowMs)
         else {
-            items += signedOutItems(runner, workspaces)
+            items += noCliSignedIn(runner, workspaces)?.let { listOf(noCliSignedInItem(it)) } ?: signedOutItems(runner, workspaces)
             items += checkoutItems(workspaces)
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
@@ -703,6 +748,20 @@ internal object RunnerPage {
         cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
+    }
+
+    /** This runner's page on the web, where its workspaces are added and changed: <server>/runners/<id>, the id in its public spelling
+     * (OrbitKit RunnerPageFormat.runnerWebURL). Null for a server address that is no URL. */
+    fun runnerWebUrl(server: String, runnerId: String): String? = server.toHttpUrlOrNull()?.newBuilder()
+        ?.addPathSegment("runners")?.addPathSegment(ObjectId.toPublic(runnerId))?.build()?.toString()
+
+    /** The Workspaces footer split around its "on the web", the words that link to this runner's page there (OrbitKit
+     * RunnerPageFormat.workspacesFooter): the words before, the link's own, the words after. */
+    fun workspacesFooter(): Triple<String, String, String> {
+        val footer = RunnerCopy.WORKSPACES_FOOTER
+        val at = footer.indexOf(RunnerCopy.WORKSPACES_FOOTER_LINK).takeIf { it >= 0 } ?: return Triple(footer, "", "")
+        val end = at + RunnerCopy.WORKSPACES_FOOTER_LINK.length
+        return Triple(footer.substring(0, at), RunnerCopy.WORKSPACES_FOOTER_LINK, footer.substring(end))
     }
 
     /** The list's third line: the first two items' short lines; none for an offline runner. */

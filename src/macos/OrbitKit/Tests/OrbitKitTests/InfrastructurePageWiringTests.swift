@@ -136,7 +136,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let read = try slice(sections, from: "struct InfrastructureLists {", to: "struct InfrastructureNeedsYouSection: View {")
         for piece in ["keys = model.agents?.ownKeys ?? []", "SharedPools.ownPoolWithAccess(pool, access)",
                       "settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }",
-                      "Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),"] {
+                      "workspaces = model.runners?.agents ?? []",
+                      "Infrastructure.attention(runners: runners, workspaces: workspaces,",
+                      "memberPools: memberPools.map(SharedPools.asProviderPool), ownPools: ownPools)"] {
             XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
         }
         let agents = code(try appSource("AgentsModel.swift"))
@@ -669,7 +671,12 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let page = try detail()
         let section = try slice(page, from: "private func workspacesSection(", to: "private func aboutSection(")
         XCTAssertTrue(section.contains("RunnerPageFormat.runningCount(workspace,"))
-        XCTAssertTrue(section.contains("Text(RunnerPageCopy.RUNNER_WORKSPACES_FOOTER)"))
+        // The footer's "on the web" links to this runner's page there (project 34pLjYBjU6ILsehatEjJs, contract 6).
+        try assertInOrder(section, ["Text(workspacesFooter)", "private var workspacesFooter: AttributedString {",
+                                    "RunnerPageFormat.workspacesFooter(runnerID: runner.id, baseURL: model.baseURL)",
+                                    "link.link = footer.url",
+                                    "AttributedString(footer.before) + link + AttributedString(footer.after)"],
+                          "the Workspaces footer links on the web to this runner's page")
         let open = try slice(code(try runners()), from: "private func openWorkspace(_ id: String) {", to: "private func copy(")
         try assertInOrder(open, ["model.settingsPresented = false", "model.openAgent(id)"],
                           "the sheet comes down before the workspace opens")

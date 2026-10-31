@@ -244,6 +244,54 @@ final class RunnerAttentionCasesTests: XCTestCase {
                        "Never updated. Orbit retries every 30 min — Update Engines Now tries again right away.")
     }
 
+    /// A machine where no coding CLI is signed in (rule 10 of docs/mocks/first-workspace-in-conversation/04):
+    /// one item, naming every CLI installed there by its own name, in the engines' order, and signing in the
+    /// first — the web spec's "a machine where no coding CLI is signed in". When it is raised is the case file's.
+    func testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst() throws {
+        let item = try XCTUnwrap(try items(
+            "no CLI signed in and no workspace: one item, signing in the first CLI (orbit@austin)").first)
+        XCTAssertEqual(item.detail,
+                       "Nothing can run on this machine until one is. Claude Code and Codex are installed here.")
+        XCTAssertEqual(item.action, RunnerAttentionAction(kind: .signIn, engine: "claude", workspaceId: nil, command: nil))
+        XCTAssertEqual(item.params, ["engines": .array([.string("claude"), .string("codex")])])
+
+        XCTAssertEqual(RunnerAttention.noCliSignedInDetail([.codex]),
+                       "Nothing can run on this machine until one is. Codex is installed here.")
+        XCTAssertEqual(RunnerAttention.noCliSignedInDetail([.claude, .kimi, .antigravity]),
+                       "Nothing can run on this machine until one is. Claude Code, Kimi Code and Antigravity are installed here.")
+        XCTAssertEqual(RunnerAttention.noCliSignedInDetail(LoginEngine.allCases),
+                       "Nothing can run on this machine until one is. Claude Code, Codex, Kimi Code, Antigravity and "
+                           + "Cursor CLI are installed here.")
+
+        func engines(_ json: String) throws -> [RunnerEngineHealth] {
+            try JSONDecoder().decode([RunnerEngineHealth].self, from: Data(json.utf8))
+        }
+        // Listed and signed in by the engines' order, whatever order the runner reports them in.
+        let reported = try engines(#"""
+        [{"engine":"cursor","installed":true,"auth":"no"},{"engine":"kimi","installed":true,"auth":"no"},
+         {"engine":"codex","installed":true,"auth":"no"},{"engine":"opencode","installed":true,"auth":"unknown"},
+         {"engine":"claude","installed":false,"auth":"no"}]
+        """#)
+        XCTAssertEqual(RunnerAttention.noCliSignedIn(engines: reported, workspaces: []), [.codex, .kimi, .cursor])
+        // Not while one is signed in or unknown, nor where none is installed.
+        let mixed = try engines(#"[{"engine":"claude","installed":true,"auth":"no"},{"engine":"codex","installed":true,"auth":"unknown"}]"#)
+        XCTAssertNil(RunnerAttention.noCliSignedIn(engines: mixed, workspaces: []))
+        XCTAssertNil(RunnerAttention.noCliSignedIn(engines: [], workspaces: []))
+        XCTAssertNil(RunnerAttention.noCliSignedIn(engines: nil, workspaces: []))
+        // A workspace on a key or a pool runs with nothing signed in; one on a login, or not run yet, is no key.
+        let claudeOut = try engines(#"[{"engine":"claude","installed":true,"auth":"no"}]"#)
+        for provider in ["deepseek", "anthropic-2", "local-vllm", "dsh", "opencode"] {
+            XCTAssertNil(RunnerAttention.noCliSignedIn(engines: claudeOut, workspaces: try workspaces(
+                #"[{"id":"w","name":"orbit","lastProvider":"\#(provider)"}]"#)), provider)
+        }
+        for provider in ["claude", "codex", "kimi", "antigravity", "cursor", "", "  "] {
+            XCTAssertEqual(RunnerAttention.noCliSignedIn(engines: claudeOut, workspaces: try workspaces(
+                #"[{"id":"w","name":"orbit","lastProvider":"\#(provider)"}]"#)), [.claude], provider)
+        }
+        XCTAssertEqual(RunnerAttention.noCliSignedIn(engines: claudeOut, workspaces: try workspaces(
+            #"[{"id":"w","name":"orbit","lastProvider":null}]"#)), [.claude])
+    }
+
     /// Antigravity is reported like OpenCode — installed, versioned, updated by the same pass — so
     /// the same case with agy raises both its update failure and an explicit sign-out.
     func testAntigravityReportsSignedOutAndItsOwnUpdateFailure() throws {

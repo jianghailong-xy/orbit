@@ -3,6 +3,7 @@ package io.orbitd.android.management
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -40,6 +41,8 @@ internal object Infrastructure {
     const val RETRY = "Retry"
 
     fun offlineLine(machine: String) = "$machine is offline"
+    /** A machine online that nothing can run on: its page's "No coding CLI is signed in", by its name. */
+    fun noCliLine(machine: String) = "$machine has no coding CLI signed in"
     /** "Last seen 1d ago · its subscriptions are unavailable until it’s back". */
     fun offlineDetail(lastHeartbeatAt: String?, nowMs: Long) =
         (lastHeartbeatAt?.let { "Last seen ${RunnerPage.ago(it, nowMs)}" } ?: "Never checked in") + " · its subscriptions are unavailable until it’s back"
@@ -65,10 +68,11 @@ internal object Infrastructure {
 
     // Needs you
 
-    /** Where a line of Needs you goes: a machine offline is its record; a pool no session can start on is its page — one of the
-     * account's own, or one it is in. */
+    /** Where a line of Needs you goes: a machine offline is its record, and so is one with no coding CLI signed in, which signs one in;
+     * a pool no session can start on is its page — one of the account's own, or one it is in. */
     sealed interface Kind {
         data class Offline(val runnerId: String) : Kind
+        data class NoCliSignedIn(val runnerId: String) : Kind
         data class PoolUnavailable(val poolId: String, val own: Boolean) : Kind
     }
 
@@ -77,23 +81,33 @@ internal object Infrastructure {
     data class Attention(val kind: Kind, val line: String, val names: List<String>, val detail: String) {
         val id: String get() = when (kind) {
             is Kind.Offline -> "offline:${kind.runnerId}"
+            is Kind.NoCliSignedIn -> "nocli:${kind.runnerId}"
             is Kind.PoolUnavailable -> "pool:${kind.poolId}"
         }
     }
 
-    /** What needs a person, a line each: each machine offline, then each pool no session can start on — the ones the account is in
-     * before its own, as the page lists them. An engine signed out on a machine is no line, as the web's machine card draws it nothing:
-     * the machine's own page says so, and signs it in (OrbitKit `Infrastructure.attention`). */
-    fun attention(runners: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>, nowMs: Long): List<Attention> {
+    /** What needs a person, a line each: each machine offline, then each machine online that nothing can run on — no coding CLI signed in
+     * and no workspace on a key (RunnerPage.noCliSignedIn, which the web's Settings row counts too) — then each pool no session can start
+     * on, the ones the account is in before its own, as the page lists them. An engine signed out beside one signed in is no line, as the
+     * web's machine card draws it nothing: the machine's own page says so, and signs it in (OrbitKit `Infrastructure.attention`).
+     * [workspaces] are the account's, each on the machine it names. */
+    fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>,
+                  nowMs: Long): List<Attention> {
         val offline = runners.filter { it.bool("online") != true }.map { runner ->
             val machine = RunnerPage.displayName(runner)
             Attention(Kind.Offline(runner.text("id")), offlineLine(machine), listOf(machine), offlineDetail(runner.str("lastHeartbeatAt"), nowMs))
+        }
+        val noCli = runners.filter { it.bool("online") == true }.mapNotNull { runner ->
+            val engines = RunnerPage.noCliSignedIn(runner, workspaces.filter { ObjectId.same(it.text("runnerId"), runner.text("id")) })
+                ?: return@mapNotNull null
+            val machine = RunnerPage.displayName(runner)
+            Attention(Kind.NoCliSignedIn(runner.text("id")), noCliLine(machine), listOf(machine), RunnerPage.noCliSignedInDetail(engines))
         }
         val unavailable = (memberPools.map { it to false } + ownPools.map { it to true }).mapNotNull { (pool, own) ->
             val reason = pool.unavailable ?: return@mapNotNull null
             Attention(Kind.PoolUnavailable(pool.id, own), poolLine(pool.label), listOf(pool.label), poolDetail(reason))
         }
-        return offline + unavailable
+        return offline + noCli + unavailable
     }
 
     // A key's model

@@ -11,9 +11,11 @@ import Foundation
 /// `runnerCopy.ts` by `RunnerPageCopyParityTests`.
 ///
 /// An item is raised only when something depends on it: an engine's signed-out login or its nearly
-/// spent quota is news only if a workspace on this machine last ran on that built-in engine. An
-/// offline runner keeps only what is still true and still actionable — that it is offline, and
-/// that it cannot replace its own binary.
+/// spent quota is news only if a workspace on this machine last ran on that built-in engine. The
+/// exception is a machine where no login CLI is signed in and no workspace runs on a key or a pool
+/// instead: nothing can run there, with a workspace or without one, and that is said once in place of
+/// each signed-out login (`noCliSignedIn`). An offline runner keeps only what is still true and still
+/// actionable — that it is offline, and that it cannot replace its own binary.
 ///
 /// Pure: the clock (`nowMs`) and the latest release are inputs, and nothing here fetches. Times a
 /// reader sees in their own time zone (a quota reset, when it was last seen) ride in `params` as
@@ -114,6 +116,7 @@ public struct RunnerAttentionInput: Decodable, Equatable, Sendable {
 /// Most severe first — the order items come out in.
 public enum RunnerAttentionKind: String, Codable, Equatable, Sendable {
     case offline
+    case noCliSignedIn
     case engineSignedOut
     case checkoutStuck
     case quotaNearLimit
@@ -464,6 +467,57 @@ public enum RunnerAttention {
             .map(\.name)
     }
 
+    /// A workspace whose sessions run on a key or a pool of the account's: a credential that needs no
+    /// sign-in on this machine. A lastProvider that is a login engine is that engine's sign-in here, and
+    /// none (nil, blank) says nothing either way (web's `runsOnKeyOrPool`).
+    private static func runsOnKeyOrPool(_ workspace: RunnerAttentionWorkspace) -> Bool {
+        guard let provider = workspace.lastProvider?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !provider.isEmpty else { return false }
+        return LoginEngine(rawValue: provider) == nil
+    }
+
+    /// The login CLIs installed on this machine, in `LoginEngine` order, when not one of them is signed in
+    /// and no workspace here runs on a key or a pool instead — then nothing can run on it, whether or not
+    /// it has a workspace yet (web's `noCliSignedIn`). Nil when one is signed in or its sign-in is unknown,
+    /// when none is installed, and when a workspace runs on a key: that machine runs without any sign-in,
+    /// so a signed-out login is news only to the workspaces on it (`signedOutItems`). Settings counts the
+    /// machine by the same answer (`Infrastructure.attention`).
+    public static func noCliSignedIn(engines: [RunnerEngineHealth]?,
+                                     workspaces: [RunnerAttentionWorkspace]) -> [LoginEngine]? {
+        let health = { (engine: LoginEngine) in engines?.first(where: { $0.engine == engine.rawValue }) }
+        let installed = LoginEngine.allCases.filter { health($0)?.installed == true }
+        guard !installed.isEmpty, installed.allSatisfy({ health($0)?.auth == "no" }),
+              !workspaces.contains(where: runsOnKeyOrPool) else { return nil }
+        return installed
+    }
+
+    public static func noCliSignedIn(_ runner: Runner, workspaces: [Agent]) -> [LoginEngine]? {
+        noCliSignedIn(engines: runner.engines, workspaces: workspaces.map(RunnerAttentionWorkspace.init))
+    }
+
+    /// What a machine `noCliSignedIn` names is told: nothing runs until one is, and every CLI it has, by
+    /// its own name.
+    public static func noCliSignedInDetail(_ engines: [LoginEngine]) -> String {
+        let names = engines.map(\.displayName)
+        let last = names.last ?? ""
+        guard names.count > 1 else { return RunnerPageCopy.attentionNoCliSignedInDetail(cli: last) }
+        let all = RunnerPageCopy.runnerNamesTwo(
+            first: names.dropLast().joined(separator: RunnerPageCopy.RUNNER_NAMES_COMMA), second: last)
+        return RunnerPageCopy.attentionNoCliSignedInDetailMany(clis: all)
+    }
+
+    /// One item for the machine `noCliSignedIn` names, listing every CLI it has and signing in the first.
+    private static func noCliSignedInItem(_ engines: [LoginEngine]) -> RunnerAttentionItem {
+        RunnerAttentionItem(
+            kind: .noCliSignedIn, tone: .bad,
+            short: RunnerPageCopy.ATTENTION_NO_CLI_SIGNED_IN_SHORT,
+            title: RunnerPageCopy.ATTENTION_NO_CLI_SIGNED_IN,
+            detail: noCliSignedInDetail(engines),
+            action: RunnerAttentionAction(kind: .signIn, engine: engines.first?.rawValue,
+                                          workspaceId: nil, command: nil),
+            params: ["engines": .array(engines.map { .string($0.rawValue) })])
+    }
+
     private static func signedOutItems(_ runner: RunnerAttentionRunner,
                                        _ workspaces: [RunnerAttentionWorkspace]) -> [RunnerAttentionItem] {
         LoginEngine.allCases.compactMap { engine in
@@ -719,7 +773,11 @@ public enum RunnerAttention {
         if offline {
             items.append(offlineItem(runner, nowMs: input.nowMs))
         } else {
-            items += signedOutItems(runner, input.workspaces)
+            if let engines = noCliSignedIn(engines: runner.engines, workspaces: input.workspaces) {
+                items.append(noCliSignedInItem(engines))
+            } else {
+                items += signedOutItems(runner, input.workspaces)
+            }
             items += checkoutItems(input.workspaces)
             items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }
