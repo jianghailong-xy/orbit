@@ -44,6 +44,8 @@
  *  (15) A new session on Automatic starts on the account it would have until that account has its share of
  *       the sessions at work on the runner, counted as they are run, and the runner's list says so.
  *  (16) The sweep does not re-send a session on a spent account on the strength of an account past its share.
+ *  (17) A session held for a far reset goes when another account has room again, one at a time; one whose
+ *       reset is near, or that is pinned, is left where it is.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -958,5 +960,34 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const held = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true } });
     assert.equal(held.status, RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
     assert.ok(held.retryAt && held.retryAt.getTime() >= Date.parse(back), `re-armed for ${held.retryAt?.toISOString()}`);
+  });
+
+  await t.test('(17) a held session goes when another account has room again, one at a time', async () => {
+    const m = await machine('held');
+    const back = new Date(Date.now() + 3 * 3_600_000);
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: fiveHours(back.toISOString()) } });
+    const armed = (at: Date, extra: Partial<Prisma.SessionUncheckedCreateInput> = {}) =>
+      sessionOn(m, 'claude', RunStatus.FAILED, { retryAt: at, lastUserText: 'go on', error: limitText, ...extra });
+    const first = await armed(back);
+    const second = await armed(new Date(back.getTime() - 60_000));
+    const near = await armed(new Date(Date.now() + 30 * 60_000));
+    const pinned = await armed(back, { claudeAccountPinned: true });
+    const full: string[] = [];
+    for (let i = 0; i < 4; i += 1) full.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK }));
+    const retries = new AutoRetryService(prisma, sessions, quiet);
+    const armedAt = async (id: string) => (await row(id)).retry_ms;
+    const before = await Promise.all([first, second, near, pinned].map(armedAt));
+
+    // Four running on Work among eight is its share: nobody goes.
+    await retries.releaseHeldRetries();
+    assert.deepEqual(await Promise.all([first, second, near, pinned].map(armedAt)), before);
+
+    // They finish, and Work has room. The furthest reset goes first, and one a pass.
+    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED } });
+    const now = new Date();
+    await retries.releaseHeldRetries(now);
+    const after = await Promise.all([first, second, near, pinned].map(armedAt));
+    assert.equal(after[0], now.getTime(), 'the furthest reset is made due');
+    assert.deepEqual(after.slice(1), before.slice(1), 'one a pass; near a reset or pinned, nothing moves it');
   });
 });

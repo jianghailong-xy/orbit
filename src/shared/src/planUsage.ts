@@ -619,8 +619,8 @@ const ACCOUNT_SHARE_HORIZON_MS = 5 * 60 * 60_000;
  * started on the account expiring first, and when that ran out all of them moved to the same next one, up
  * to 22% of whose window went on those writes alone. That account then ran out a median of 84 minutes later,
  * though it had used 15% when they arrived, and they all moved again. On 2026-10-09 this came to 14.6% of
- * everything spent. An account past its share is simply one that cannot carry another session until its
- * own reset, and whatever works there next stays there.
+ * everything spent. Held to an even split, each account lasts most of its window, and few sessions ever
+ * have to move.
  */
 function accountShare(
   ranked: ReadonlyArray<{ spentUntil: number | null; activeSessions?: number }>,

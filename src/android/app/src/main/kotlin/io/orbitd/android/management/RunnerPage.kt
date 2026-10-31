@@ -199,6 +199,12 @@ internal object EngineAccounts {
     private const val NEAR_LIMIT = 90.0
     private const val SHORT_WINDOW_NEAR_LIMIT = 80.0
     private const val SHORT_WINDOW_MINS = 5 * 60
+
+    /** The sessions an account can have before a share counts against it (shared ACCOUNT_SHARE_FLOOR). */
+    private const val SHARE_FLOOR = 3
+
+    /** How soon a spent or paused account has to be back to keep its place in the split (shared ACCOUNT_SHARE_HORIZON_MS). */
+    private const val SHARE_HORIZON_MS = 5 * 60 * 60_000L
     private const val WEEK_MINS = 7 * 24 * 60
     /** How long a Kimi Code monthly window is, for weighing it against the others (shared MONTH_MINS): longer than any
      * week, which is all its length decides here. */
@@ -326,6 +332,10 @@ internal object EngineAccounts {
      * up; one nearly spent comes after the rest; then the soonest-expiring, then the roomiest by its tightest window; ties
      * go to Default, then the lower id. Every candidate held: the one that frees up first. Null with fewer than two.
      *
+     * Where the server counted the sessions (`activeSessions`), the first of that order that can run, is not nearly spent and has
+     * less than its share is taken instead: an even split over the accounts back within five hours, never below three (shared
+     * accountShare).
+     *
      * With [defaultRemoved] — the owner removed this engine's Default from Orbit (shared accountToStartOn's option) — Default is no
      * candidate, and the choice is among the accounts that remain, the only one included; with every one of them signed out, the first
      * by id, whose sign-in the session waits on. Null only when none remains.
@@ -333,7 +343,8 @@ internal object EngineAccounts {
     fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long, defaultRemoved: Boolean = false): String? {
         val pool = if (defaultRemoved) accounts.filter { it.str("id") != DEFAULT } else accounts
         if (pool.size < (if (defaultRemoved) 1 else 2)) return null
-        class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?)
+        class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?,
+            val activeSessions: Int?)
         val candidates = pool.filter { it.str("auth") != "no" }.map { account ->
             val own = accountSnapshot(usage, account.text("id"))
             val windows = own?.let(::windows).orEmpty()
@@ -341,12 +352,21 @@ internal object EngineAccounts {
             var spentUntil = spent.maxOfOrNull { resetMs(it)?.toDouble() ?: Double.POSITIVE_INFINITY }
             isoMs(account.str("pausedUntil"))?.takeIf { it > nowMs }?.let { pause -> spentUntil = maxOf(pause.toDouble(), spentUntil ?: 0.0) }
             Candidate(account.text("id"), own?.let { nearlySpent(it, nowMs) } ?: false, own?.let { expiresAt(it, nowMs) } ?: Double.POSITIVE_INFINITY,
-                windows.maxOfOrNull(::used) ?: Double.POSITIVE_INFINITY, spentUntil)
+                windows.maxOfOrNull(::used) ?: Double.POSITIVE_INFINITY, spentUntil, account.int("activeSessions"))
         }
         val byId = compareBy<Candidate> { it.id != DEFAULT }.thenBy { it.id }
         val usable = candidates.filter { it.spentUntil == null }
-        if (usable.isNotEmpty()) return usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }
-            .then(byId)).first().id
+        if (usable.isNotEmpty()) {
+            val ranked = usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }.then(byId))
+            if (candidates.any { it.activeSessions != null }) {
+                val total = candidates.sumOf { it.activeSessions ?: 0 } + 1
+                val horizon = (nowMs + SHARE_HORIZON_MS).toDouble()
+                val sharing = candidates.count { (it.spentUntil ?: 0.0) <= horizon }.coerceAtLeast(1)
+                val share = maxOf(SHARE_FLOOR, (total + sharing - 1) / sharing)
+                ranked.firstOrNull { !it.nearLimit && (it.activeSessions ?: 0) < share }?.let { return it.id }
+            }
+            return ranked.first().id
+        }
         return candidates.sortedWith(compareBy<Candidate> { it.spentUntil ?: 0.0 }.then(byId)).firstOrNull()?.id
             ?: if (defaultRemoved) pool.map { it.text("id") }.sorted().first() else null
     }

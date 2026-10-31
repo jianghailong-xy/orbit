@@ -199,6 +199,10 @@ public enum CodexAccounts {
     /// - Every candidate spent: the one that frees up first.
     /// - Ties go to Default, then to the lower id.
     ///
+    /// Where the server counted the sessions (`RunnerEngineAccount.activeSessions`), the first of those
+    /// order that can run, is not nearly spent and has less than its share is taken instead: an even
+    /// split over the accounts back within five hours, and never below three (shared `accountShare`).
+    ///
     /// Nil with fewer than two accounts, or none signed in: nothing to choose between.
     ///
     /// With `defaultRemoved` — the owner removed this engine's Default from Orbit, and the runner reports
@@ -212,6 +216,7 @@ public enum CodexAccounts {
         guard let pool, pool.count >= (defaultRemoved ? 1 : 2) else { return nil }
         struct Candidate {
             let id: String; let nearLimit: Bool; let expiresAt: Double; let tightest: Double; let spentUntil: Double?
+            let activeSessions: Int?
         }
         let candidates: [Candidate] = pool.filter { $0.auth != "no" }.map { account in
             let own = snapshot(usage, account: account.id)
@@ -230,7 +235,8 @@ public enum CodexAccounts {
                              nearLimit: own.map { nearlySpent($0, now: now) } ?? false,
                              expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
                              tightest: own.flatMap { withLength($0).map(\.window.utilization).max() } ?? .infinity,
-                             spentUntil: spentUntil)
+                             spentUntil: spentUntil,
+                             activeSessions: account.activeSessions)
         }
         func byID(_ a: Candidate, _ b: Candidate) -> Bool {
             if (a.id == defaultID) != (b.id == defaultID) { return a.id == defaultID }
@@ -238,11 +244,21 @@ public enum CodexAccounts {
         }
         let usable = candidates.filter { $0.spentUntil == nil }
         if !usable.isEmpty {
-            return usable.sorted { a, b in
+            let ranked = usable.sorted { a, b in
                 if a.nearLimit != b.nearLimit { return !a.nearLimit }
                 if a.expiresAt != b.expiresAt { return a.expiresAt < b.expiresAt }
                 return a.tightest != b.tightest ? a.tightest < b.tightest : byID(a, b)
-            }.first?.id
+            }
+            if candidates.contains(where: { $0.activeSessions != nil }) {
+                let total = candidates.reduce(1) { $0 + ($1.activeSessions ?? 0) }
+                let horizon = now.timeIntervalSince1970 + shareHorizon
+                let sharing = candidates.filter { ($0.spentUntil ?? 0) <= horizon }.count
+                let share = max(shareFloor, Int((Double(total) / Double(max(sharing, 1))).rounded(.up)))
+                if let within = ranked.first(where: { !$0.nearLimit && ($0.activeSessions ?? 0) < share }) {
+                    return within.id
+                }
+            }
+            return ranked.first?.id
         }
         let first = candidates.sorted { a, b in
             let x = a.spentUntil ?? 0, y = b.spentUntil ?? 0
@@ -251,6 +267,12 @@ public enum CodexAccounts {
         if let first { return first.id }
         return defaultRemoved ? pool.map(\.id).min() : nil
     }
+
+    /// The sessions an account can have before a share counts against it (shared `ACCOUNT_SHARE_FLOOR`).
+    static let shareFloor = 3
+    /// How soon a spent or paused account has to be back to keep its place in the split, in seconds
+    /// (shared `ACCOUNT_SHARE_HORIZON_MS`).
+    static let shareHorizon = 5.0 * 60 * 60
 
     /// At or over this share consumed, a window is nearly spent (shared `NEAR_LIMIT_UTILIZATION`).
     static let nearLimitUtilization = 90.0

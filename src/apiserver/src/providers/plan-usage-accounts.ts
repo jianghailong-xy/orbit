@@ -321,7 +321,7 @@ export function accountAfterUsageLimitAt(
 }
 
 /** The longest a Claude session its usage limit stopped sits out its own account's reset rather than move. */
-const ACCOUNT_RESET_WAIT_MS = 45 * 60_000;
+export const ACCOUNT_RESET_WAIT_MS = 45 * 60_000;
 
 /**
  * How long after its last call a Claude conversation's cache can still be relied on at a reset: Claude Code

@@ -406,6 +406,9 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let fingerprintPrefix: String?
     /// Temporarily skipped until this time, without changing authentication or quota.
     public let pausedUntil: String?
+    /// How many sessions are at work on this account: the server's count, which keeps each account to
+    /// its share of them (`CodexAccounts.toStartOn`). Absent from an older server.
+    public let activeSessions: Int?
     /// When this signed-in account's login lapses (ISO 8601): the CLI's own expiry for it, Claude Code
     /// only. Absent where the CLI recorded none.
     public let loginExpiresAt: String?
@@ -416,7 +419,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
-                loginExpiresAt: String? = nil, kimiRegion: String? = nil) {
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -426,6 +429,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.pausedUntil = pausedUntil
         self.loginExpiresAt = loginExpiresAt
         self.kimiRegion = kimiRegion
+        self.activeSessions = activeSessions
     }
 }
 
