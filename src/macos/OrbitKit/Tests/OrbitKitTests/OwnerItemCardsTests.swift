@@ -79,6 +79,7 @@ final class OwnerItemCardsTests: XCTestCase {
             ("RECOMMENDED", CoordinatorQuestions.recommended),
             ("ANSWERED_HEADING", CoordinatorQuestions.answeredHeading),
             ("WAITING_FOR_COORDINATOR", CoordinatorQuestions.waitingForCoordinator),
+            ("QUEUED_FOR_COORDINATOR", CoordinatorQuestions.queuedForCoordinator),
             ("DELIVERED_TO_COORDINATOR", CoordinatorQuestions.deliveredToCoordinator),
             ("NOTE_PROMPT", CoordinatorQuestions.notePrompt),
             ("OWN_ANSWER_PROMPT", CoordinatorQuestions.ownAnswerPrompt),
