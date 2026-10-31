@@ -16,7 +16,7 @@ const session = (over = {}) => ({
 
 /** A server for one flow: the fleet it starts with, and what POST /sessions was asked. */
 function server(runner) {
-  const s = { runner, workspaces: [], posts: [], login: D.LOGIN_IDLE, asks: [] };
+  const s = { runner, workspaces: [], posts: [], login: D.LOGIN_IDLE, asks: [], renames: [], name: 'app' };
   s.handler = (req, url) => {
     const p = url.pathname;
     if (req.method() === 'POST' && p === '/api/sessions') {
@@ -25,6 +25,11 @@ function server(runner) {
       return { ...session(), id: SID };
     }
     if (req.method() === 'POST' && p === `/api/runners/${A}/dir-probe`) { s.asks.push(req.postDataJSON().path); return undefined; }
+    if (req.method() === 'PATCH' && p === `/api/workspaces/${D.WS_APP.id}`) {
+      s.renames.push(req.postDataJSON());
+      s.name = req.postDataJSON().name;
+      return {};
+    }
     if (req.method() === 'POST' && p === `/api/runners/${A}/login/code`) {
       s.login = { ...D.LOGIN_IDLE, status: 'done', engine: 'claude' };
       s.runner = D.AUSTIN_READY;
@@ -37,7 +42,7 @@ function server(runner) {
     if (p === `/api/runners/${A}/login`) return s.login;
     if (p === '/api/workspaces') return s.workspaces;
     if (p === '/api/sessions') return s.posts.length ? [session()] : [];
-    if (p === `/api/sessions/${SID}`) return session();
+    if (p === `/api/sessions/${SID}`) return session({ workspace: { ...D.WS_APP, name: s.name } });
     if (p === `/api/sessions/${SID}/events/page`) return { events: [], hasMore: false };
     if ([`/api/sessions/${SID}/turns`, `/api/sessions/${SID}/approvals`, `/api/sessions/${SID}/background`].includes(p)) return [];
     if (p === `/api/sessions/${SID}/diff`) return { files: [], patches: [] };
@@ -99,6 +104,24 @@ try {
     await page.locator('.msc-created').waitFor({ timeout: 8000 });
     assert.match((await page.locator('.msc-created').innerText()).replace(/\s+/g, ' '), /Created workspace app on orbit@austin · \/home\/orbit\/code\/app · Rename · Settings/);
     ok('the conversation opens with the Created workspace line');
+    await page.getByRole('button', { name: 'Rename' }).click();
+    const field = page.getByRole('textbox', { name: 'Workspace name' });
+    assert.equal(await field.inputValue(), 'app');
+    await field.fill('nope');
+    await field.press('Escape');
+    await field.waitFor({ state: 'detached' });
+    assert.equal(s.renames.length, 0);
+    assert.equal(await page.locator('.msc-created b').innerText(), 'app');
+    ok('Escape in Rename leaves the name as it was and writes nothing');
+    await page.getByRole('button', { name: 'Rename' }).click();
+    await field.fill('payments');
+    await field.press('Enter');
+    await page.locator('.msc-created b').getByText('payments').waitFor();
+    assert.deepEqual(s.renames, [{ name: 'payments' }]);
+    ok('Rename writes the workspace once, and the line shows the new name');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.waitForURL(`**/runners/${A}?workspace=${D.WS_APP.id}`, { timeout: 30_000 });
+    ok('Settings opens the workspace on its machine’s page');
     assert.deepEqual(errors.filter((e) => !/favicon|manifest/.test(e)), []);
     await context.close();
   }

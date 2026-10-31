@@ -44,6 +44,8 @@ export function CreatedWorkspaceLine({
         detail?.workspace ? { ...detail, workspace: { ...detail.workspace, name } } : detail,
       );
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
+      // The session list's rows carry the name too, and the column's title reads it from them.
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error(CREATED_RENAME_FAILED, e.message),
   });
