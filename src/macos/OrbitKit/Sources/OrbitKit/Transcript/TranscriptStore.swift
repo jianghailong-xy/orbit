@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 7
+    private static let schemaVersion = 8
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -44,6 +44,9 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// them as plain error rows and never reclassify them, so re-fetch the tail to apply the fix.
     /// v7: an interrupt row says when the runner's restart cut the turn off (`runnerRestart`). Old
     /// snapshots drew every interrupt as a Stop and would go on doing so, so re-fetch those too.
+    /// v8: a recoverable diagnostic is a `.diagnostic` row, grey and folded into one row per incident,
+    /// and a failed model-catalog refresh is one whatever its cause. Old snapshots keep those as
+    /// orange notices, a row each, or as red error rows, and never reclassify them, so re-fetch.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {
