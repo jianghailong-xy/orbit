@@ -52,8 +52,11 @@ import {
  *   - a FAILED session whose auto-retry is armed: the tick is missed, and the recovery is the retry's;
  *   - a FAILED session with no retry armed: the tick revives it (`sessions.resume` with the tick's
  *     `bg-wake:` key and no words), and a refused revive — runner offline, task replaced — is a missed
- *     tick. From the fourth tick in a row that finds the session FAILED it no longer revives, only counts
- *     missed, until a tick finds the session healthy again;
+ *     tick. A loop that has revived the session three times in a row, each revive ending FAILED again,
+ *     stops reviving it and only counts its ticks missed, until a tick finds the session healthy again.
+ *     Only a revive that went through counts toward the three: a tick skipped for an armed retry or
+ *     refused its revive spends none of them, so an outage of any length leaves the loop able to revive
+ *     the session once its runner is back;
  *   - an ended session (Completed, Trash, SUCCEEDED, CANCELLED, or being ended): the loop ends, SESSION_ENDED.
  *
  * Anything else leaves the tick waiting for the next pass, until it is an interval late: then it is
@@ -64,7 +67,7 @@ import {
 export const SCHEDULED_WAKEUP_POLL_INTERVAL_MS = 5_000;
 /** Due wakeups delivered per pass. */
 export const SCHEDULED_WAKEUP_BATCH = 25;
-/** Ticks in a row that may revive a FAILED session; the ones after them only count missed. */
+/** Revives in a row — each ending with the session FAILED again — after which a loop only counts its ticks missed. */
 export const WAKEUP_LOOP_REVIVE_LIMIT = 3;
 
 export const SCHEDULED_WAKEUP_WORKER_OPTIONS = Symbol('SCHEDULED_WAKEUP_WORKER_OPTIONS');
@@ -128,7 +131,7 @@ interface DueTick {
   loopId: string;
   dueAt: Date;
   everySeconds: number;
-  failedStreak: number;
+  reviveStreak: number;
   session: TickSession;
 }
 
@@ -278,7 +281,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
         loopId: true,
         state: true,
         dueAt: true,
-        loop: { select: { state: true, everySeconds: true, failedStreak: true } },
+        loop: { select: { state: true, everySeconds: true, reviveStreak: true } },
         session: { select: TICK_SESSION },
       },
     });
@@ -292,7 +295,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       loopId: row.loopId,
       dueAt: row.dueAt,
       everySeconds: row.loop.everySeconds,
-      failedStreak: row.loop.failedStreak,
+      reviveStreak: row.loop.reviveStreak,
       session: row.session,
     };
     const late = now.getTime() - tick.dueAt.getTime() > tick.everySeconds * 1_000;
@@ -315,9 +318,11 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
         return this.endLoopAtTick(tick);
       case 'FAILED_RECOVERING':
         // The auto-retry brings the session back; this tick is missed, and the next one comes due as usual.
-        return this.missTick(tick, 'increment');
+        return this.missTick(tick, 'keep');
       case 'FAILED':
-        if (tick.failedStreak >= WAKEUP_LOOP_REVIVE_LIMIT) return this.missTick(tick, 'increment');
+        // Three revives in a row each ended FAILED: the loop holds, rather than revive the session into the
+        // same failure on every tick, until something else brings it back healthy.
+        if (tick.reviveStreak >= WAKEUP_LOOP_REVIVE_LIMIT) return this.missTick(tick, 'keep');
         return this.reviveForTick(tick);
       case 'LIVE':
         return this.fileTickTurn(tick);
@@ -356,13 +361,20 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
   /**
    * Revive the FAILED session to deliver the tick: `sessions.resume` with the tick's `bg-wake:` key and no
    * words, the tick settled onto the revive's turn inside the revive's own transaction, so the block is
-   * written in when the runner claims it. A refusal is a missed tick.
+   * written in when the runner claims it. Only that counts toward the loop's revive streak. A refusal is a
+   * missed tick and counts toward nothing.
    */
   private async reviveForTick(tick: DueTick): Promise<ScheduledWakeupOutcome> {
     const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}wakeup:${tick.id}`;
     try {
       await this.sessions.resume(tick.session.ownerId, tick.sessionId, { clientTurnId, content: '' }, {
         onTurnWritten: async (tx, turn) => {
+          // Read again under the lock the resume holds. A session that is no longer FAILED with no retry
+          // armed — brought back, armed or ended since the pass read it, which resume would deliver to or
+          // revive all the same — is not this tick's to revive: nothing of it is kept, and the next pass
+          // decides again from what the session is then.
+          const current = await tx.session.findUniqueOrThrow({ where: { id: tick.sessionId }, select: TICK_SESSION });
+          if (tickStanding(current, new Date()) !== 'FAILED') throw new TickSessionMoved();
           await settleLoopTick(tx, this.settlement(tick, {
             delivered: { clientTurnId: turn.clientTurnId, absorbed: false },
             streak: 'increment',
@@ -372,13 +384,14 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       return 'REVIVED';
     } catch (error) {
       if (error instanceof ScheduledWakeupSettled) return 'SETTLED_ELSEWHERE';
+      if (error instanceof TickSessionMoved) return 'RETRY';
       if (!(error instanceof HttpException)) throw error;
       // Refused: the runner is offline, the task's run was replaced, the session cannot be resumed. Unless
       // it is no longer FAILED — somebody else brought it back meanwhile — which the next pass files.
       const current = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: { status: true } });
       if (current && current.status !== RunStatus.FAILED) return 'RETRY';
       this.log.warn(`tick ${tick.id} of wakeup loop ${tick.loopId} could not revive session ${tick.sessionId}, so it is counted missed: ${messageOf(error)}`);
-      return this.missTick(tick, 'increment');
+      return this.missTick(tick, 'keep');
     }
   }
 
@@ -419,6 +432,9 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
     return { tickId: tick.id, loopId: tick.loopId, sessionId: tick.sessionId, dueAt: tick.dueAt, now: new Date(), ...how };
   }
 }
+
+/** The session a revive was for is no longer FAILED with no retry armed, read under the revive's own lock. */
+class TickSessionMoved extends Error {}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

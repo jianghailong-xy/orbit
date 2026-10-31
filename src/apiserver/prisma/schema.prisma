@@ -2677,8 +2677,9 @@ model SessionWakeupLoop {
   ticksFired   Int       @default(0) @map("ticks_fired")
   /// Due times that did not: skipped, dropped, or folded into a turn already carrying this loop's tick.
   ticksMissed  Int       @default(0) @map("ticks_missed")
-  /// Ticks in a row that found the session FAILED; from the fourth on, a tick no longer revives it.
-  failedStreak Int       @default(0) @map("failed_streak")
+  /// Revives in a row, each ending with the session FAILED again; at 3 the loop holds. Armed skips, refused
+  /// revives and held ticks leave it as it is; a tick that finds the session healthy resets it.
+  reviveStreak Int       @default(0) @map("revive_streak")
   /// REQUESTED | REPLACED | OWNER_STOP | SESSION_ENDED | UNTIL_REACHED
   endedReason  String?   @map("ended_reason")
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)

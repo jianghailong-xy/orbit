@@ -25,8 +25,11 @@
 --   ticks_fired    ticks that became a run: filed as a turn, or onto a wake turn already queued.
 --   ticks_missed   due times that did not: skipped while the worker was late, dropped (FAILED session,
 --                  refused revive) or folded into a queued turn that already carried this loop's tick.
---   failed_streak  ticks in a row that found the session FAILED. Ticks 1 to 3 of a streak may revive it;
---                  later ones only count as missed. A tick that finds the session healthy resets it.
+--   revive_streak  revives in a row: ticks that found the session FAILED with no retry armed and revived it
+--                  through `sessions.resume`, with no tick finding it healthy in between. At 3 the loop holds
+--                  and only counts its ticks missed. A tick skipped for an armed retry, a revive that was
+--                  refused and a tick held at the limit leave it as it is, so an outage of any length does
+--                  not spend it; a tick that finds the session healthy resets it to 0.
 --   alerted_at     the failure the owner was last told about (the dead-man signal, contract §4).
 --
 -- `session_scheduled_wakeup.loop_id` names the loop a tick belongs to, and is NULL for a one-shot wakeup.
@@ -50,7 +53,7 @@ CREATE TABLE IF NOT EXISTS "session_wakeup_loop" (
   "until_at"      TIMESTAMPTZ(3) NOT NULL,
   "ticks_fired"   INTEGER NOT NULL DEFAULT 0,
   "ticks_missed"  INTEGER NOT NULL DEFAULT 0,
-  "failed_streak" INTEGER NOT NULL DEFAULT 0,
+  "revive_streak" INTEGER NOT NULL DEFAULT 0,
   "ended_reason"  TEXT,
   "ended_at"      TIMESTAMPTZ(3),
   "alerted_at"    TIMESTAMPTZ(3),

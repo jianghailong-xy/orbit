@@ -15,8 +15,11 @@
  *      turn that carries the loop's previous one is missed and merged into one entry; due times skipped
  *      while the worker was late are missed, and the next run says so.
  *   3. FAILED with a retry armed: the tick is skipped (missed) and the retry is left to bring it back.
- *   4. Three ticks in a row that find the session FAILED revive it; from the fourth it is held, missed
- *      only; once the session is healthy again the loop goes on, as turns.
+ *   4. Three revives in a row, each ending FAILED again: the next tick holds, missed only; once the
+ *      session is healthy again the loop goes on, as turns.
+ *   4b. An outage spends no revive: ticks skipped while the retry is armed and revives refused while the
+ *      runner is away — past MAX_OFFLINE_WAIT_MS, when the auto-retry's own sweep gives up — leave the
+ *      streak at 0, and the first tick after the runner is back revives the session.
  *   5. A one-shot wakeup and a loop live side by side: neither replaces the other, both can land on one
  *      turn, and a stop takes both and says how many of each.
  *   6. A one-shot wakeup whose session FAILED waits while its retry is armed, and is dropped when not.
@@ -54,6 +57,7 @@ import {
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
+import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerApiController } from './runner-api.controller';
 import { ScheduledWakeupDto } from './scheduled-wakeup';
@@ -81,7 +85,7 @@ interface LoopRow {
   untilAt: Date;
   ticksFired: number;
   ticksMissed: number;
-  failedStreak: number;
+  reviveStreak: number;
   endedReason: string | null;
   endedAt: Date | null;
   alertedAt: Date | null;
@@ -124,6 +128,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   );
   const worker = new ScheduledWakeupWorker(prisma, sessions);
   const claims = new QueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
+  const autoRetry = new AutoRetryService(prisma, sessions, quiet);
 
   assert.ok(existsSync(WEB_PARSER), `${WEB_PARSER} was not found: the block is read against the web client's own parser`);
   const stripped = path.join(mkdtempSync(path.join(os.tmpdir(), 'orbit-wakeup-loop-')), 'backgroundWake.mjs');
@@ -158,6 +163,20 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     });
     runners.push(runnerId);
     return { ownerId, runnerId, workspaceId, runner: { id: runnerId, ownerId } };
+  }
+
+  /** The runner goes away: it stops heartbeating and reads offline. */
+  async function goOffline(m: Machine): Promise<void> {
+    runners.splice(runners.indexOf(m.runnerId), 1);
+    await sql.query(
+      `UPDATE "runner" SET "status" = 'OFFLINE', "last_heartbeat_at" = clock_timestamp() - interval '10 minutes' WHERE "id" = $1::uuid`,
+      [m.runnerId],
+    );
+  }
+  /** The runner is back, heartbeating again. */
+  async function goOnline(m: Machine): Promise<void> {
+    await sql.query(`UPDATE "runner" SET "status" = 'ONLINE', "last_heartbeat_at" = clock_timestamp() WHERE "id" = $1::uuid`, [m.runnerId]);
+    runners.push(m.runnerId);
   }
 
   /** A session that has run a turn and is parked between turns, unless `data` says otherwise. */
@@ -204,7 +223,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
 
   const loopsOf = async (sessionId: string): Promise<LoopRow[]> => (await sql.query(
     `SELECT "id", "state", "every_seconds" AS "everySeconds", "first_due_at" AS "firstDueAt", "until_at" AS "untilAt",
-            "ticks_fired" AS "ticksFired", "ticks_missed" AS "ticksMissed", "failed_streak" AS "failedStreak",
+            "ticks_fired" AS "ticksFired", "ticks_missed" AS "ticksMissed", "revive_streak" AS "reviveStreak",
             "ended_reason" AS "endedReason", "ended_at" AS "endedAt", "alerted_at" AS "alertedAt"
        FROM "session_wakeup_loop" WHERE "session_id" = $1::uuid ORDER BY "created_at", "id"`,
     [sessionId],
@@ -333,7 +352,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal(next.dueAt.getTime() - settled.dueAt.getTime(), 300_000, 'the next tick is not one interval on');
     const after = await loopOf(id);
     assert.deepEqual(
-      [after.state, after.ticksFired, after.ticksMissed, after.failedStreak],
+      [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
       ['ACTIVE', 1, 0, 1],
       JSON.stringify(after),
     );
@@ -438,8 +457,8 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.deepEqual(await statesOf(loop.id), ['DROPPED', 'PENDING'], 'the loop was not carried on to its next tick');
     const after = await loopOf(id);
     assert.deepEqual(
-      [after.state, after.ticksFired, after.ticksMissed, after.failedStreak],
-      ['ACTIVE', 0, 1, 1],
+      [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
+      ['ACTIVE', 0, 1, 0],
       JSON.stringify(after),
     );
     const failed = await sessionRow(id);
@@ -448,7 +467,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal((await turnsOf(id)).length, 0, 'a turn was filed for a session the retry is to bring back');
   });
 
-  await t.test('three ticks in a row that find the session FAILED revive it; the fourth holds and only counts missed; once healthy the loop goes on', async () => {
+  await t.test('three revives in a row that each end FAILED again: the next tick holds and only counts missed; once healthy the loop goes on', async () => {
     const m = await machine('streak');
     const id = await session(m);
     await schedule(m, id, { recurring: true, everySeconds: 60, prompt: 'retry the batch', reason: 'the import' });
@@ -458,7 +477,7 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       const tick = await makeDue(loop.id);
       assert.equal(await worker.deliverTick(tick.id), 'REVIVED', `tick ${n} of the streak did not revive the session`);
       assert.equal((await sessionRow(id)).status, RunStatus.PENDING);
-      assert.equal((await loopOf(id)).failedStreak, n);
+      assert.equal((await loopOf(id)).reviveStreak, n);
       // The revived turn fails again, as a full context does at once.
       await failSession(id);
     }
@@ -472,9 +491,10 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       assert.equal((await turnsOf(id)).length, turnsBefore, `tick ${n} filed a turn`);
     }
     let after = await loopOf(id);
+    // A tick held at the limit spends nothing: the streak is still the three revives.
     assert.deepEqual(
-      [after.state, after.ticksFired, after.ticksMissed, after.failedStreak],
-      ['ACTIVE', 3, 2, 5],
+      [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
+      ['ACTIVE', 3, 2, 3],
       JSON.stringify(after),
     );
 
@@ -487,13 +507,68 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
     assert.equal(await worker.deliverTick(tick.id), 'DELIVERED');
     after = await loopOf(id);
     assert.deepEqual(
-      [after.state, after.ticksFired, after.ticksMissed, after.failedStreak],
+      [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
       ['ACTIVE', 4, 2, 0],
       JSON.stringify(after),
     );
     const content = (await claim(m, id)).content;
     assert.ok(content.includes('loop: tick 6, every 60 seconds'), content);
     assert.ok(content.includes('2 ticks missed since the last run'), content);
+  });
+
+  await t.test('an outage spends no revive: armed skips and refused revives leave the streak, and the first tick after the runner is back revives the session', async () => {
+    const m = await machine('outage');
+    const id = await session(m);
+    await schedule(m, id, { recurring: true, everySeconds: 60, prompt: 'advance the migration by one batch' });
+    const loop = await loopOf(id);
+    // The runner goes away mid-turn: the reaper fails the session and arms a retry that waits for the runner.
+    await goOffline(m);
+    await failSession(id, new Date(Date.now() + 30_000));
+    for (let n = 1; n <= 2; n += 1) {
+      const tick = await makeDue(loop.id);
+      assert.equal(await worker.deliverTick(tick.id), 'MISSED', `tick ${n}, while the retry is armed`);
+      assert.equal((await loopOf(id)).reviveStreak, 0, `tick ${n}, skipped for the armed retry, spent a revive`);
+    }
+
+    // MAX_OFFLINE_WAIT_MS later the runner is still away, and the auto-retry's own sweep gives up on it: the
+    // session stays FAILED with nothing armed. Only this case's retry is left for the sweep to find.
+    await sql.query(
+      `UPDATE "session" SET "retry_at" = NULL WHERE "retry_at" IS NOT NULL AND "id" <> $1::uuid`,
+      [id],
+    );
+    await sql.query(
+      `UPDATE "session" SET "finished_at" = clock_timestamp() - interval '31 minutes',
+              "retry_at" = clock_timestamp() - interval '1 second'
+        WHERE "id" = $1::uuid`,
+      [id],
+    );
+    await autoRetry.sweep();
+    const disarmed = await sessionRow(id);
+    assert.deepEqual([disarmed.status, disarmed.retryAt], [RunStatus.FAILED, null], 'the auto-retry did not give up on the runner');
+
+    // Now the ticks try to revive it, and every resume is refused while the runner is away.
+    for (let n = 3; n <= 4; n += 1) {
+      const tick = await makeDue(loop.id);
+      assert.equal(await worker.deliverTick(tick.id), 'MISSED', `tick ${n}, whose revive the runner was not there for`);
+      assert.equal((await sessionRow(id)).status, RunStatus.FAILED);
+      assert.equal((await loopOf(id)).reviveStreak, 0, `tick ${n}: a refused revive was counted as one`);
+    }
+    assert.equal((await turnsOf(id)).length, 0, 'a turn was filed while the runner was away');
+
+    // The runner is back: the next tick revives the session — the first revive of a streak, not the fifth.
+    await goOnline(m);
+    const back = await makeDue(loop.id);
+    assert.equal(await worker.deliverTick(back.id), 'REVIVED', 'the loop did not revive the session once its runner was back');
+    assert.equal((await sessionRow(id)).status, RunStatus.PENDING);
+    const after = await loopOf(id);
+    assert.deepEqual(
+      [after.state, after.ticksFired, after.ticksMissed, after.reviveStreak],
+      ['ACTIVE', 1, 4, 1],
+      JSON.stringify(after),
+    );
+    const content = (await claim(m, id)).content;
+    assert.ok(content.includes('loop: tick 5, every 60 seconds'), content);
+    assert.ok(content.includes('4 ticks missed since the last run'), content);
   });
 
   await t.test('a one-shot wakeup and a loop live side by side: neither replaces the other, both land on one turn, and a stop takes both', async () => {

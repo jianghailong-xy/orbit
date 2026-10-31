@@ -115,12 +115,18 @@ export type ScheduledWakeupReceipt =
  * replaces the running loop, if any; neither touches the other. Inside the runner door's retried
  * transaction (runnerApi.scheduledWakeup): what is replaced and what replaces it are written together, or
  * neither is.
+ *
+ * The session row is taken FOR KEY SHARE before anything else: the mode and the row the insert's foreign
+ * key takes anyway, moved earlier (common/lock-order.ts, as I4 does). Taken at the insert, it came after
+ * the waiting wakeup or the running loop this transaction had just locked, while createTurn and interrupt
+ * hold the session FOR UPDATE and then reach for those same rows: a 40P01 cycle.
  */
 export async function scheduleWakeup(
   tx: Prisma.TransactionClient,
   sessionId: string,
   dto: ScheduledWakeupDto,
 ): Promise<ScheduledWakeupReceipt> {
+  await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR KEY SHARE`;
   if (dto.recurring === true) return scheduleWakeupLoop(tx, sessionId, dto);
   // A request that names a loop's fields without asking for a loop is not quietly taken as one wakeup.
   if (dto.everySeconds !== undefined || dto.until !== undefined) {
@@ -327,7 +333,8 @@ export interface LoopTickSettlement {
   delivered?: { clientTurnId: string; absorbed: boolean };
   /** End the loop with this tick instead of writing the next one: the session it came due on has ended. */
   end?: 'SESSION_ENDED';
-  /** The tick found the session FAILED (increment), healthy (reset), or could not tell (keep). */
+  /** `revive_streak`: the tick revived the session (increment), found it healthy (reset), or neither (keep) —
+   *  a tick skipped for an armed retry, a revive that was refused, or one held at the limit. */
   streak: 'increment' | 'reset' | 'keep';
 }
 
@@ -343,21 +350,24 @@ export interface LoopTickResult {
  * tick waiting, whatever happened to the one before it: a failed delivery is a missed tick, never the
  * end of the loop.
  *
- * Under whatever its caller holds (createTurn's or the revive's Session lock, or nothing for the worker's
- * own drop), it takes the loop row and then the tick: the order endWakeupLoop takes them in, so a stop or
- * a replacement racing this meets it on the loop row. A loop that ended, or a tick something else
- * settled, throws ScheduledWakeupSettled, which rolls back everything its caller wrote with it.
+ * It takes the session row FOR KEY SHARE first — the mode and the row the next tick's insert takes anyway,
+ * moved earlier, and already held FOR UPDATE when it runs inside createTurn or the revive — then the loop
+ * row, then the tick. So the worker's own drop never holds the loop while it waits for a session that
+ * createTurn or interrupt holds FOR UPDATE on their way to that loop; and a stop or a replacement racing
+ * this meets it on the loop row. A loop that ended, or a tick something else settled, throws
+ * ScheduledWakeupSettled, which rolls back everything its caller wrote with it.
  */
 export async function settleLoopTick(
   tx: Prisma.TransactionClient,
   settlement: LoopTickSettlement,
 ): Promise<LoopTickResult> {
   const { tickId, loopId, sessionId, dueAt, now } = settlement;
+  await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR KEY SHARE`;
   const [loop] = await tx.$queryRaw<Array<{
-    state: string; everySeconds: number; untilAt: Date; reason: string | null; failedStreak: number;
+    state: string; everySeconds: number; untilAt: Date; reason: string | null; reviveStreak: number;
   }>>`
     SELECT "state", "every_seconds" AS "everySeconds", "until_at" AS "untilAt", "reason",
-           "failed_streak" AS "failedStreak"
+           "revive_streak" AS "reviveStreak"
       FROM "session_wakeup_loop"
      WHERE "id" = ${loopId}::uuid AND "session_id" = ${sessionId}::uuid
      FOR UPDATE`;
@@ -390,8 +400,8 @@ export async function settleLoopTick(
       ticksFired: { increment: fired },
       ticksMissed: { increment: missed },
       ...(settlement.streak === 'increment'
-        ? { failedStreak: loop.failedStreak + 1 }
-        : settlement.streak === 'reset' ? { failedStreak: 0 } : {}),
+        ? { reviveStreak: loop.reviveStreak + 1 }
+        : settlement.streak === 'reset' ? { reviveStreak: 0 } : {}),
       ...(ended ? { state: 'ENDED', endedReason: ended, endedAt: now } : {}),
     },
   });

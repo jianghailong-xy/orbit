@@ -87,8 +87,9 @@ That is why `WAKE_SOURCES`, `hasPendingWakeSource`, `DUE_WAKEUP`, `settleUnrunWa
   the old one. A one-shot `scheduleWakeup` and a loop never replace each other. A plain index
   `(loop_id, due_at) WHERE loop_id IS NOT NULL` serves the block's look-back (§1.5).
 - Loop columns: `state` (ACTIVE, ENDED), `every_seconds`, `prompt`, `reason` (nullable), `first_due_at`,
-  `until_at`, `ticks_fired`, `ticks_missed`, `failed_streak`, `ended_reason`, `ended_at`, `alerted_at` (C2's), and
-  `created_at`. An ENDED loop has both `ended_reason` and `ended_at`; an ACTIVE one has neither (a CHECK).
+  `until_at`, `ticks_fired`, `ticks_missed`, `revive_streak` (§1.3), `ended_reason`, `ended_at`, `alerted_at`
+  (C2's), and `created_at`. An ENDED loop has both `ended_reason` and `ended_at`; an ACTIVE one has neither (a
+  CHECK).
 - A tick row carries `loop_id`, its `due_at` and `delay_seconds` (from when it was written to when it is due), and
   the loop's `reason` (or ''). Its `prompt` stays NULL: the block reads the prompt from the loop.
 - Tick states: PENDING; DELIVERED (filed onto the wake turn named by `client_turn_id`); DROPPED (its due time
@@ -98,8 +99,12 @@ That is why `WAKE_SOURCES`, `hasPendingWakeSource`, `DUE_WAKEUP`, `settleUnrunWa
 - `ticks_fired` counts ticks that became a run of their own. `ticks_missed` counts due times that did not: skipped
   slots, dropped ticks, and ticks folded into a queued turn that already carried this loop's tick. Every due time
   is one or the other, except the tick that ends the loop with its session.
-- Lock order: every writer that takes a loop and its tick takes the loop row first (`endWakeupLoop`,
-  `settleLoopTick`), under whatever Session lock its caller holds; `common/lock-order.ts` lists the table at rank 60.
+- Lock order: every writer that takes a loop and its tick takes the session row first, then the loop row, then
+  the tick. createTurn, interrupt and the revive already hold the session FOR UPDATE. The runner door
+  (`scheduleWakeup`) and the worker's own drop (`settleLoopTick`) take it FOR KEY SHARE as their first statement:
+  the mode and the row the tick insert's foreign key takes anyway, moved earlier, as `common/lock-order.ts` I4 does.
+  Taken at the insert instead, it came after the loop row, while createTurn and interrupt hold the session FOR UPDATE
+  and then want that loop: a 40P01 cycle. `common/lock-order.ts` lists the table at rank 60.
 
 ### 1.3 Tick delivery
 
@@ -115,13 +120,18 @@ first slot after now, and the skipped slots count toward `ticks_missed`. What a 
 - **FAILED, not armed, lifecycle OPEN:** the tick revives the session with `sessions.resume`, with its `bg-wake:` key
   (`bg-wake:wakeup:<tickId>`) and an empty content. The tick is settled onto the revive's turn in the revive's own
   transaction (`onTurnWritten`), so the runner's claim writes the block in. A refusal (runner offline, task
-  replaced, and so on) counts as missed. Once three ticks in a row have found the session FAILED, later ones no
-  longer revive it and only count missed; the loop carries on by itself when the session is healthy again.
-  - As built: `failed_streak` counts the ticks in a row that found the session FAILED, armed or not. Ticks 1 to 3
-    of a streak may revive it; from the 4th on, a tick is dropped as missed. A tick that finds the session live
-    resets the streak to 0.
-  - A refusal from `resume` while the session is no longer FAILED (somebody brought it back in between) leaves the
-    tick for the next pass, which files it as a turn.
+  replaced, and so on) counts as missed. When the session is still FAILED after 3 revives in a row that actually
+  ran, it is no longer revived: its ticks only count missed, and the loop carries on by itself when the session is
+  healthy again. Only revives that ran count: a skip while the retry is armed and a refused revive do not, or an
+  outage longer than 3 ticks would use the count up before the runner is back.
+  - As built: `revive_streak` counts the revives in a row, with no tick finding the session healthy in between.
+    Below 3, a tick that finds the session FAILED with no retry armed revives it, and the revive adds 1; at 3, the
+    tick is dropped as missed. An armed skip, a refused revive and a tick held at 3 leave the streak as it is. A
+    tick that finds the session live resets it to 0.
+  - The revive reads the session again inside its own transaction, under the lock `resume` holds, and goes ahead
+    only if the session is still FAILED with no retry armed. Brought back, armed or ended in between, nothing of
+    the revive is kept and the next pass decides again; so does a refusal from `resume` while the session is no
+    longer FAILED.
 - **The session has ended** (Completed, Trash, SUCCEEDED, CANCELLED, or being ended): the loop is ENDED with reason
   `SESSION_ENDED`. As built, the tick is DROPPED, and "being ended" is a session that is not in a terminal status
   with `cancel_requested_at` set. FAILED is read first, because a failed turn sets `cancel_requested_at` to reclaim

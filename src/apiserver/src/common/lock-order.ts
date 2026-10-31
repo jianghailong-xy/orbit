@@ -230,11 +230,17 @@ export const LOCK_ORDER = [
       + 'is history, not a key — and the job gates that end such an item write it inside their own '
       + 'rank-60 transactions. '
       + '`session_wakeup_loop` (0458) is a session\'s child like the ticks it writes into '
-      + '`session_scheduled_wakeup`, and every writer that takes both takes the loop row first and its '
-      + 'tick after it (`runner-api/scheduled-wakeup.ts` `endWakeupLoop`, `settleLoopTick`): the runner '
-      + 'door\'s stop and replacement with no parent held, a tick\'s delivery under the Session lock that '
-      + 'createTurn or the revive already holds, and the Stop that ends a loop under the interrupt\'s. Two '
-      + 'of them meet on the loop row, never on a tick in the opposite order.',
+      + '`session_scheduled_wakeup`, and every writer that takes both takes the session row (30) first, '
+      + 'then the loop row, then its tick. createTurn (a tick\'s delivery), the revive (sessions.resume) '
+      + 'and interrupt (the Stop that ends a loop) already hold the session FOR UPDATE when they reach the '
+      + 'loop. The two writers that hold no session lock of their own take it FOR KEY SHARE as their first '
+      + 'statement — the runner door (`runner-api/scheduled-wakeup.ts` `scheduleWakeup`: a replacing loop, '
+      + 'and a one-shot wakeup superseding the waiting one) and the worker\'s own drop (`settleLoopTick`, '
+      + 'from `missTick` and `endLoopAtTick`) — the mode and the row their tick insert\'s foreign key takes '
+      + 'anyway, moved earlier, as I4 does. Taken at the insert instead, it came after the loop row (or the '
+      + 'superseded wakeup), while createTurn and interrupt hold the session FOR UPDATE and then reach for '
+      + 'that row: a 40P01 cycle. A stop inserts nothing and takes no session lock: it ends the loop and '
+      + 'cancels its tick, and meets the others on the loop row.',
   },
   {
     rank: 70,
