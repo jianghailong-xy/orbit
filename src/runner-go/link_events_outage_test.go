@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -51,32 +52,12 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	ticks := int(outage / (250 * time.Millisecond))
 	payload := max(4<<10, (12<<20)/max(ticks*(perTick-1), 1))
 	var mu sync.Mutex
-	var slowestEmit, slowestFlush, worstStall time.Duration
+	var emits []time.Duration // how long each emit took
+	var slowestFlush time.Duration
 	emitted, onDisk := 0, 0
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(3)
-	// The control, for the same window: a goroutine that only sleeps a short fixed time, again and again. How late it
-	// wakes is how long the whole process stalled (a loaded host, swapping, a GC pause). Such a stall delays an emit as
-	// much, and says nothing about the engine waiting on the link or the disk.
-	const controlNap = time.Millisecond
-	go func() {
-		defer wg.Done()
-		var worst time.Duration
-		for {
-			select {
-			case <-stop:
-				mu.Lock()
-				worstStall = worst
-				mu.Unlock()
-				return
-			default:
-			}
-			began := time.Now()
-			time.Sleep(controlNap)
-			worst = max(worst, time.Since(began)-controlNap)
-		}
-	}()
+	wg.Add(2)
 	go func() { // the engine's stdout reader
 		defer wg.Done()
 		tick := time.NewTicker(250 * time.Millisecond)
@@ -95,8 +76,9 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 					buf.add("turn-1", evToolResult, map[string]interface{}{"toolUseId": fmt.Sprintf("toolu_%d_%d", n, i),
 						"content": fmt.Sprintf("%d.%d %s", n, i, strings.Repeat("z", payload))}, nil)
 				}
+				took := time.Since(began)
 				mu.Lock()
-				slowestEmit = max(slowestEmit, time.Since(began))
+				emits = append(emits, took)
 				if i > 0 {
 					emitted++
 				}
@@ -178,9 +160,29 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 		}
 		n++
 	}
-	// An emit may take what the whole process stalled for, and 50ms past that.
-	if slowestEmit > 50*time.Millisecond+worstStall {
-		t.Errorf("an event took %s to emit: the engine waited on the link or the disk", slowestEmit)
+	// An emit only appends to the session's buffer in memory, and takes microseconds. An engine that waited on the link
+	// would be held until the link came back, seconds into the outage (an emit that flushed and waited to be stored took
+	// 9s and more); one that wrote each event to disk would slow every emit. So no emit may take 5s, and no more than
+	// 10% of them (3 at least) may take over 50ms. A busy host still stalls a few emits now and then (scheduling, GC,
+	// paging), and fails neither: promotion checks at a load of 29–35 saw a slowest emit of 385ms and of 444ms, and on a
+	// busy runner writing 1GB to another disk every 30s, 10 of 368 emits took over 50ms, the slowest 1.19s.
+	const slow, stuck = 50 * time.Millisecond, 5 * time.Second
+	slices.Sort(emits)
+	over := 0
+	for _, d := range emits {
+		if d > slow {
+			over++
+		}
+	}
+	allowed := max(3, len(emits)/10)
+	longest := emits[len(emits)-1]
+	t.Logf("%s: %d emits, p50 %s, p99 %s, max %s, %d over %s (%d allowed)", what, len(emits), emits[len(emits)/2],
+		emits[len(emits)*99/100], longest, over, slow, allowed)
+	if longest > stuck {
+		t.Errorf("an event took %s to emit: the engine waited on the link or the disk", longest)
+	}
+	if over > allowed {
+		t.Errorf("%d of %d events took over %s to emit: the engine waited on the link or the disk", over, len(emits), slow)
 	}
 	if outage >= 20*time.Second && onDisk == 0 {
 		t.Errorf("the session's events never went to the spool, past %d bytes of memory", linkSessionMemoryBytes)
@@ -188,7 +190,5 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	if line := strings.Join(r.logs.all(), "\n"); strings.Contains(line, "dropping") || strings.Contains(line, "not sent") {
 		t.Errorf("the log says events were dropped:\n%s", line)
 	}
-	t.Logf("%d events, at most %d on disk at once; the slowest emit %s, the slowest hand-over %s; the control's worst "+
-		"overshoot of a %s sleep, how long the whole process stalled, %s", emitted, onDisk, slowestEmit, slowestFlush,
-		controlNap, worstStall)
+	t.Logf("%d events, at most %d on disk at once; the slowest hand-over %s", emitted, onDisk, slowestFlush)
 }
