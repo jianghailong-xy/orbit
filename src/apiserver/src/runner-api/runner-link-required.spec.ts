@@ -87,6 +87,8 @@ const STAYS_ON_HTTPS = [
   'POST /runner/device/poll',
   'GET /runner/sessions/:id/attachments/:attId',
   'POST /runner/sessions/:id/attachments',
+  // The Claude region check (docs/claude-region-check-contract.md §3): it has to leave through Claude's proxy, since 2026-11-01.
+  'GET /runner/region-check',
 ];
 
 type Handler = (...args: unknown[]) => unknown;
@@ -134,7 +136,7 @@ async function through(interceptor: RunnerLinkRequiredInterceptor, context: Exec
 const switchedOn = () => new RunnerLinkRequiredInterceptor({ required: async () => true } as unknown as RunnerLinkSwitch);
 const switchedOff = () => new RunnerLinkRequiredInterceptor({ required: async () => false } as unknown as RunnerLinkSwitch);
 
-test('RunnerApiController has 53 routes: 48 the switch refuses over HTTPS, 5 kept on HTTPS (D14); a new one fails here', () => {
+test('RunnerApiController has 54 routes: 48 the switch refuses over HTTPS, 6 kept on HTTPS (D14); a new one fails here', () => {
   const routes = routesOf(RunnerApiController);
   assert.equal(REFUSED_OVER_HTTPS.length, 48);
   assert.deepEqual(
@@ -144,7 +146,7 @@ test('RunnerApiController has 53 routes: 48 the switch refuses over HTTPS, 5 kep
       + 'RUNNER_LINK_REQUIRED refuses over HTTPS (REFUSED_OVER_HTTPS; and src/runner-go/link_mode.go linkDaemonRoutes), '
       + 'or not part of it and marked @StaysOnHttps() (STAYS_ON_HTTPS, docs/runner-link-design.md D14)',
   );
-  assert.equal(routes.length, 53, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, and the directory probe\'s answer');
+  assert.equal(routes.length, 54, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, the directory probe\'s answer, and the Claude region check');
   assert.deepEqual(sorted(routes.filter((r) => staysOnHttps(r.handler)).map((r) => r.route)), sorted(STAYS_ON_HTTPS));
 });
 

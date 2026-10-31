@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { SharedRateLimiter, canonicalAddress, clientAddress, isInternalAddress, trustedProxies } from './public-surface.guard';
+import type { Request } from 'express';
+import {
+  SharedRateLimiter,
+  cameThroughTrustedProxy,
+  canonicalAddress,
+  clientAddress,
+  isInternalAddress,
+  trustedProxies,
+} from './public-surface.guard';
 
 const refused = (take: () => void) =>
   assert.throws(
@@ -87,4 +95,24 @@ test('loopback, private and link-local addresses are internal; public ones and n
   for (const address of ['203.0.113.24', '172.32.0.1', '198.51.100.7', '2001:db8:abcd::24', 'unknown', '']) {
     assert.equal(isInternalAddress(address), false, address);
   }
+});
+
+// Whether a header the nearest hop adds is that hop's word (the Claude region check, docs/claude-region-check-contract.md
+// §3): only when the hop nginx saw is a proxy TRUSTED_PROXIES names. X-Forwarded-For is never read for it.
+test('a request came through a trusted proxy only when the hop nginx saw, or the socket without one, is trusted', () => {
+  const request = (headers: Record<string, string>, peer = '172.18.0.5') =>
+    ({ headers, socket: { remoteAddress: peer } }) as unknown as Request;
+  // Behind the CDN: its edge is the hop nginx saw, in either family and either spelling.
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': '198.51.100.7' }), CDN), true);
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': ' 2001:DB8:CF:0:0:0:0:7 ' }), CDN), true);
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': '::ffff:198.51.100.7' }), CDN), true);
+  // Straight to the origin: the client's own address, whatever it wrote into X-Forwarded-For.
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': '203.0.113.24' }), CDN), false);
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': '203.0.113.24', 'x-forwarded-for': '198.51.100.7' }), CDN), false);
+  // No nginx in front: the socket's peer is the hop.
+  assert.equal(cameThroughTrustedProxy(request({}, '::ffff:198.51.100.9'), CDN), true);
+  assert.equal(cameThroughTrustedProxy(request({}, '127.0.0.1'), CDN), false);
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': 'not an address' }), CDN), false);
+  // With nothing trusted, nothing came through a trusted proxy.
+  assert.equal(cameThroughTrustedProxy(request({ 'x-real-ip': '198.51.100.7' }), NOTHING), false);
 });

@@ -1174,6 +1174,11 @@ export interface RunnerHeartbeatResponse {
    *  process that declared `cursor-key-check/v1`, each handed over once. Absent otherwise, so every
    *  other runner sees the response shape it always had. */
   cursorKeyChecks?: CursorKeyCheckCommand[];
+  /** The owner's Check again (docs/claude-region-check-contract.md §7): check the Claude region now,
+   *  once per `requestedAt`. Sent on every answer until a check at or after it reaches GET
+   *  /runner/region-check, and only to a process that declared `claude-region/v1`. Absent otherwise,
+   *  so every other runner sees the response shape it always had. */
+  regionCheckRequest?: ClaudeRegionCheckRequest;
 }
 
 // ── Claude region check (docs/claude-region-check-contract.md) ──
@@ -1250,10 +1255,9 @@ export interface RunnerRegionView {
   checkedAt: string;
 }
 
-/** The owner's Check again as a heartbeat response carries it, `regionCheckRequest` (contract §7):
- *  check the Claude region now. The server task adds that field to RunnerHeartbeatResponse together
- *  with its HEARTBEAT_DELIVERIES entry (apiserver runner-api/link-heartbeat.ts), which the type
- *  requires of every member. */
+/** The owner's Check again as a heartbeat response carries it, RunnerHeartbeatResponse
+ *  `regionCheckRequest` (contract §7): check the Claude region now. Its HEARTBEAT_DELIVERIES entry
+ *  (apiserver runner-api/link-heartbeat.ts) says how a beat over the runner link learns of it. */
 export interface ClaudeRegionCheckRequest {
   /** When the owner asked, ISO 8601. The runner checks once per value. */
   requestedAt: string;
