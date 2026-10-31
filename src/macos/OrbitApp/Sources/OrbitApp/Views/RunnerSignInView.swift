@@ -47,6 +47,10 @@ struct RunnerSignInView: View {
     var onClose: (() -> Void)? = nil
     /// Told once the sign-in this card watched has landed, so the page can fold the card away.
     var onSignedIn: (() -> Void)? = nil
+    /// The button's words where the page around the card has said whose sign-in this is.
+    var signInTitle: String? = nil
+    /// Offered beside the button, where a key that can run here is the other way (board 03, rule 5).
+    var onUseApiKey: (() -> Void)? = nil
 
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
@@ -262,8 +266,16 @@ struct RunnerSignInView: View {
     private func idle(_ model: RunnerSignInModel) -> some View {
         if engine == .kimi {
             kimiSites(model)
+            useApiKeyButton
         } else {
             signInButton(model)
+        }
+    }
+
+    @ViewBuilder private var useApiKeyButton: some View {
+        if let onUseApiKey {
+            Button(MachineSetupCopy.SETUP_USE_API_KEY, action: onUseApiKey)
+                .buttonStyle(.bordered)
         }
     }
 
@@ -316,18 +328,21 @@ struct RunnerSignInView: View {
             if model.status == .failed, let m = model.relayMessage {
                 Text(m).font(.orbitLabel).foregroundStyle(.orange)
             }
-            Button {
-                Task { await model.begin(accountName: accountName) }
-            } label: {
-                Text(model.busy
-                     ? "Starting…"
-                     : model.status == .failed
-                       // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
-                       ? (engine == .cursor ? "Get a New Link" : "Try signing in to \(engine.displayName) again")
-                       : engine == .antigravity ? "Sign in with Google" : "Sign in to \(engine.displayName)")
+            HStack(spacing: 8) {
+                Button {
+                    Task { await model.begin(accountName: accountName) }
+                } label: {
+                    Text(model.busy
+                         ? "Starting…"
+                         : model.status == .failed
+                           // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
+                           ? (engine == .cursor ? "Get a New Link" : "Try signing in to \(engine.displayName) again")
+                           : signInTitle ?? (engine == .antigravity ? "Sign in with Google" : "Sign in to \(engine.displayName)"))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.busy || !nameReady)
+                useApiKeyButton
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.busy || !nameReady)
             closeButton
         }
     }

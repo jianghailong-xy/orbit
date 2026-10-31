@@ -56,7 +56,10 @@ public enum DefaultLanding: Equatable, Sendable {
     case keepCurrent
     /// Open this workspace's session list.
     case agent(String)
-    /// The server says there are no workspaces: Runners onboarding.
+    /// The server says there are no workspaces, and this machine is online: its new session page,
+    /// where its first one is made (board rule 11).
+    case machine(String)
+    /// The server says there are no workspaces, and no machine can start one: Runners onboarding.
     case runners
 
     /// Whether this spends the one-shot landing. Only `undecided` leaves it open.
@@ -79,13 +82,17 @@ public enum LoadFailureLogic {
     /// answered (`LaunchSnapshot.landingAgentID`). While it is still the one selected, nobody has
     /// chosen anything yet, so this fetch decides afresh — a workspace deleted since the snapshot
     /// was written isn't kept.
+    ///
+    /// `firstOnlineMachine` is the first runner online, which is where an account with no workspace
+    /// lands rather than on a page of engines.
     public static func defaultLanding(agents: ListLoadState,
                                       orderedAgentIDs: [String],
                                       lastAgentID: String?,
                                       section: AppSection,
                                       selectedAgentID: String?,
                                       selectedSessionID: String?,
-                                      provisionalAgentID: String? = nil) -> DefaultLanding {
+                                      provisionalAgentID: String? = nil,
+                                      firstOnlineMachine: String? = nil) -> DefaultLanding {
         // A failed fetch leaves the empty starting list in hand; "no workspaces" read off that is
         // what sent returning users to Runners onboarding.
         guard agents.hasLoaded, !agents.lastLoadFailed else { return .undecided }
@@ -94,7 +101,7 @@ public enum LoadFailureLogic {
         if let id = landingAgent(orderedAgentIDs: orderedAgentIDs, lastAgentID: lastAgentID) {
             return .agent(id)
         }
-        return .runners
+        return firstOnlineMachine.map(DefaultLanding.machine) ?? .runners
     }
 
     /// The remembered workspace as `orderedAgentIDs` spells it, else the first of them; nil when

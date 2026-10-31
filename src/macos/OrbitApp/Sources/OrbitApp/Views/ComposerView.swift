@@ -300,6 +300,8 @@ struct ComposerView: View {
         if offeredSuggestion != nil { return "" }
         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (contract §3.2).
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
+        // A machine's new session page has no workspace to send to, and no question to answer.
+        if let machine = console.machinePlaceholder { return machine }
         return console.replyContext?.placeholder ?? "Message…"
     }
 

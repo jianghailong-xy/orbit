@@ -319,11 +319,21 @@ struct AgentContentColumn: View {
                                            description: Text(app.agents?.errorText ?? "Request failed — check your connection."))
                     Button("Retry") { Task { await app.loadAgentsThenLand() } }
                 }
-            case .content? where app.launchLandingPending:
+            case .content? where app.launchLandingPending, .empty? where app.launchLandingPending:
                 // The workspaces are in but the landing isn't: it waits for the rest of the
                 // workspace fetch (runners, providers, pools), and asking for a pick it is about
                 // to make is the "Select a workspace" a cold launch used to flash.
                 ProgressView()
+            case .empty?:
+                // Nothing to pick: a workspace is made by the session that needs one (board rule 11).
+                ContentUnavailableView {
+                    Label(MachineSetupCopy.NO_WORKSPACES_YET, systemImage: "folder")
+                } description: {
+                    Text(MachineSetupCopy.NO_WORKSPACES_DETAIL)
+                } actions: {
+                    Button(MachineSetupCopy.START_A_SESSION) { app.newSessionInCurrentAgent() }
+                        .buttonStyle(.bordered)
+                }
             default:
                 ContentUnavailableView("Select a workspace", systemImage: "folder",
                                        description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
@@ -1185,8 +1195,12 @@ struct AgentConsoleDetail: View {
     }
 
     var body: some View {
-        if showsDraft, let registry = app.consoleRegistry, let agents = app.agents,
-           let id = app.selectedAgentID, let agent = agents.agent(id) {
+        if let runnerID = app.machineDraftRunnerID {
+            // A machine's own new session page, whose Set up row put it here (board rule 1).
+            MachineDraftPage(runnerID: runnerID)
+                .id(runnerID)
+        } else if showsDraft, let registry = app.consoleRegistry, let agents = app.agents,
+                  let id = app.selectedAgentID, let agent = agents.agent(id) {
             // Draft compose state: the same ComposerView a live console uses, but its send creates a
             // new session, after which we open that session's console. One branch for both drafts, so
             // ✎ over the root's keeps what was typed — and only the one asked for takes focus: a
@@ -1462,6 +1476,10 @@ struct NewSessionView: View {
             // A draft the usage-limit card asked for starts on the account it named (board iOS 5 ⑧).
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
+            }
+            // What waited on this machine before it got this workspace.
+            if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
+                draft.restoreHeld(held)
             }
             await draft.prepareDraft()
         }

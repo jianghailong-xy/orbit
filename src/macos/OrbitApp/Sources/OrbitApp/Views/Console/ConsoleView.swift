@@ -1087,7 +1087,8 @@ struct TranscriptView: View {
                              showWorkingIndicator: console.showWorkingIndicator,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
-                             recap: recapCard)
+                             recap: recapCard,
+                             createdWorkspace: console.createdWorkspaceLine)
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
@@ -1123,6 +1124,9 @@ struct TranscriptView: View {
     @ViewBuilder
     private func transcriptRow(_ row: TranscriptRow) -> some View {
         switch row {
+        case .createdWorkspace(let line):
+            // No `AnchorRow`: what the conversation made is no "Your question".
+            CreatedWorkspaceLineView(line: line, console: console)
         case .loadOlder:
             // List laziness keeps this un-materialized — and the fetch un-fired — while the user
             // stays at the tail.

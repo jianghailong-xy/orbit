@@ -438,6 +438,8 @@ public enum DeliveryAnchor {
 
 /// One rendered transcript row, whatever it was assembled from.
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
+    /// What this conversation made as it started (`CreatedWorkspaceLine`): its first line.
+    case createdWorkspace(CreatedWorkspaceLine)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
     /// A run of consecutive tool calls, folded into one row (see `TranscriptRows.groupToolRuns`).
@@ -461,6 +463,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// `scrollTo` at an id no row carries is a silent no-op — the reader's place, lost.
     public var id: String {
         switch self {
+        case .createdWorkspace:      return "created-workspace"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .toolGroup(let cards):  return cards.first?.id ?? "tool-group-empty"
@@ -484,14 +487,19 @@ public enum TranscriptRows {
     /// this visit): this only places it — under everything the conversation said, and above the
     /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
     /// is drawn after the transcript and before the cards that ask the owner something).
+    ///
+    /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
+    /// the first page is loaded: first means first, not the top of a window that starts later.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
-                             recap: RecapCard? = nil) -> [TranscriptRow] {
+                             recap: RecapCard? = nil,
+                             createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
+        if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]

@@ -45,12 +45,13 @@ struct OrbitApp: App {
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
-            // ⌘N → New Session for the current agent. Replaces SwiftUI's default File ▸ New Window
-            // (Orbit is single-window), so the standard "New" slot now starts a session instead.
+            // ⌘N → New Session for the current agent, or with none the first online machine's new
+            // session page. Replaces SwiftUI's default File ▸ New Window (Orbit is single-window), so
+            // the standard "New" slot now starts a session instead.
             CommandGroup(replacing: .newItem) {
                 Button("New Session") { model.newSessionInCurrentAgent() }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(!model.signedIn || model.orderedAgents.isEmpty)
+                    .disabled(!model.signedIn || model.newSessionTarget == nil)
             }
             // ⌘D → complete the open session. Disabled unless a session's console is showing.
             CommandGroup(after: .newItem) {

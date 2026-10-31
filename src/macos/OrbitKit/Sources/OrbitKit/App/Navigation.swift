@@ -39,6 +39,10 @@ public enum NavNode: Hashable, Sendable {
     /// creates is filed in that folder (`POST /sessions` with a `folderId`, design §3.3) — or nil
     /// for a draft opened from a workspace's own list.
     case compose(agentID: String, folderID: String?)
+    /// A machine's own new session page (`NavState.openMachineDraft`): a machine with no workspace has
+    /// no workspace to name, and its first one is made here, in the first message (board rule 1). Its
+    /// row in the drawer is its destination, so it leads like a list: the drawer's hamburger, not back.
+    case machineDraft(runnerID: String)
     /// One folder's page (docs/session-folders-move-design.md §3.3): a workspace's folder row at the
     /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
     /// show no folders (§1).
@@ -199,6 +203,7 @@ public struct NavState: Equatable, Sendable {
     /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
     public func drawerDestination(agentID: String?) -> DrawerDestination {
         guard section == .agents else { return .section(section) }
+        if let runnerID = machineDraftOnTop { return .machine(runnerID: runnerID) }
         if let project = projectSessionsColumn { return .project(projectID: project.projectID) }
         return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
     }
@@ -210,7 +215,14 @@ public struct NavState: Equatable, Sendable {
     public var atDestinationRoot: Bool {
         guard let top = path.last else { return true }
         if case .sessionProject(_, let asDestination) = top { return asDestination }
+        if case .machineDraft = top { return true }
         return false
+    }
+
+    /// The machine whose new session page is showing.
+    public var machineDraftOnTop: String? {
+        if case .machineDraft(let runnerID) = path.last { return runnerID }
+        return nil
     }
 
     // The folder pages, read two ways because the two shells show them in two places (design §3.3).
@@ -527,6 +539,12 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// A machine's own new session page: the stack's whole content on every shell, as a project's own
+    /// page is on a phone. What is under it belongs to a workspace, and this page has none.
+    public mutating func openMachineDraft(runnerID: String) {
+        path = [.machineDraft(runnerID: runnerID)]
+    }
+
     /// Select a session's console in a three-column shell: it replaces the page the detail pane
     /// shows — or, with a folder's page showing, is pushed over it, so the folder stays the page
     /// the session list draws beside the console. Every other frame behaves exactly as
@@ -610,12 +628,15 @@ public enum DrawerDestination: Hashable, Sendable {
     case section(AppSection)
     case workspace(agentID: String)
     case project(projectID: String)
+    /// A machine's Set up row, and the new session page it opens.
+    case machine(runnerID: String)
 
     public static func == (lhs: DrawerDestination, rhs: DrawerDestination) -> Bool {
         switch (lhs, rhs) {
         case (.section(let a), .section(let b)): return a == b
         case (.workspace(let a), .workspace(let b)): return a == b
         case (.project(let a), .project(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
+        case (.machine(let a), .machine(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
         default: return false
         }
     }
@@ -625,6 +646,7 @@ public enum DrawerDestination: Hashable, Sendable {
         case .section(let section): hasher.combine(0); hasher.combine(section)
         case .workspace(let agentID): hasher.combine(1); hasher.combine(agentID)
         case .project(let projectID): hasher.combine(2); hasher.combine(PublicID.storageKey(projectID))
+        case .machine(let runnerID): hasher.combine(3); hasher.combine(PublicID.storageKey(runnerID))
         }
     }
 }

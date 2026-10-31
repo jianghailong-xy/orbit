@@ -269,6 +269,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// a session needs to move between them (`CodexAccounts.moveCapability`). Nil from an older server,
     /// which claims nothing.
     public var capabilities: [String]? = nil
+    /// The directory `orbit register` ran in: a suggestion for this machine's first workspace, to be
+    /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
+    /// nothing registered one, and from an older server.
+    public var registerDir: String? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
@@ -402,6 +406,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (`CursorRuntime.conversationStarted`, the server's own test).
     public var numTurns: Int? = nil
     public var runtimeSessionId: String? = nil
+    /// This session made its workspace (docs/first-workspace-contract.md §3.3), so the conversation
+    /// opens by saying so. Only `GET /sessions/:id` and the create answer carry it: a list row's nil
+    /// says nothing.
+    public var createdWorkspace: Bool? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -630,6 +638,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         cursorAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .cursorAccountPinned)
         numTurns = try? values.decodeIfPresent(Int.self, forKey: .numTurns)
         runtimeSessionId = try? values.decodeIfPresent(String.self, forKey: .runtimeSessionId)
+        createdWorkspace = try? values.decodeIfPresent(Bool.self, forKey: .createdWorkspace)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -844,7 +853,7 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
 /// when task/orchestration-created sessions leave their own overrides null.
 public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
-    public let name: String?
+    public var name: String?
     /// @deprecated No longer served — an agent holds no provider. Read the session's own
     /// `provider`, which is always set and is what the session actually ran on.
     public let provider: String?
@@ -865,6 +874,10 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
     public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
+    /// Its folder on the machine, and when it was deleted: the detail payload's workspace row, which
+    /// the conversation that made it reads (`CreatedWorkspaceLine`).
+    public var workDir: String? = nil
+    public var deletedAt: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -1212,13 +1225,17 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
     public let folderId: String?
+    /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
+    /// the transaction that creates it (docs/first-workspace-contract.md §3).
+    public let newWorkspace: NewWorkspaceRequest?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
-                cursorAccount: String? = nil, folderId: String? = nil) {
+                cursorAccount: String? = nil, folderId: String? = nil,
+                newWorkspace: NewWorkspaceRequest? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1237,6 +1254,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.kimiAccount = kimiAccount
         self.cursorAccount = cursorAccount
         self.folderId = folderId
+        self.newWorkspace = newWorkspace
     }
 }
 

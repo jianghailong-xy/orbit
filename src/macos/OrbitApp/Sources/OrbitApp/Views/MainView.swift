@@ -75,6 +75,8 @@ struct MainView: View {
 enum SidebarSelection: Hashable {
     case section(AppSection)
     case agent(String)
+    /// A machine with no workspace: its Set up row, and the new session page it opens.
+    case machine(String)
 }
 
 /// macOS's leftmost rail, a source list: the sections in order, with an expandable, runner-grouped
@@ -91,6 +93,7 @@ struct SectionSidebar: View {
     private var selection: Binding<SidebarSelection?> {
         Binding(
             get: {
+                if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }
                 if model.selectedSection == .agents, let id = model.selectedAgentID { return .agent(id) }
                 return .section(model.selectedSection)
             },
@@ -100,6 +103,8 @@ struct SectionSidebar: View {
                     model.selectedSection = s
                 case .agent(let id):
                     model.openAgent(id)
+                case .machine(let runnerID):
+                    model.openMachineDraft(runnerID)
                 case nil:
                     break
                 }
@@ -110,7 +115,7 @@ struct SectionSidebar: View {
     var body: some View {
         // Touch the driving fields so Observation re-renders the rail (and re-reads `selection`)
         // when the section/agent changes from outside the sidebar, e.g. a deep-link route.
-        _ = (model.selectedSection, model.selectedAgentID)
+        _ = (model.selectedSection, model.selectedAgentID, model.machineDraftRunnerID)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
         return List(selection: selection) {
             ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in
@@ -147,7 +152,7 @@ struct SectionSidebar: View {
 
     private func agentsDisclosure(shortcutIndex: [String: Int]) -> some View {
         DisclosureGroup(isExpanded: $agentsExpanded) {
-            if let agents = model.agents, !agents.items.isEmpty {
+            if let agents = model.agents, !agents.groups.isEmpty {
                 ForEach(agents.groups) { group in
                     Text(agents.runnerLabel(group.runnerId))
                         .font(.orbitLabel).foregroundStyle(.secondary)
@@ -155,6 +160,12 @@ struct SectionSidebar: View {
                         AgentRowView(agent: a, shortcutIndex: shortcutIndex[a.id],
                                      configuredProviders: agents.configuredProviders)
                             .tag(SidebarSelection.agent(a.id))
+                    }
+                    // A machine with no workspace: its header and this one row (board 03, Mac).
+                    if let machine = group.setUp {
+                        Label(MachineSetupCopy.setupTitle(machine: machine.name), systemImage: "folder.badge.plus")
+                            .foregroundStyle(Color.accentColor)
+                            .tag(SidebarSelection.machine(machine.id))
                     }
                 }
             } else {

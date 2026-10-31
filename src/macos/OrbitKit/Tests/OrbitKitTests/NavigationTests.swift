@@ -693,4 +693,45 @@ final class NavigationTests: XCTestCase {
         pane.pop()
         XCTAssertEqual(pane.path, [.runnerDetail(runnerID: "r1")], "back is the machine's record")
     }
+
+    // MARK: a machine's own new session page
+
+    /// The page is the stack's whole content, and leads like a list: the drawer's row is its destination,
+    /// and the left edge opens the drawer rather than going back.
+    func testAMachinesNewSessionPageIsADestinationOfItsOwn() {
+        var nav = NavState(section: .agents)
+        nav.push(.console(sessionID: "s1", origin: .list))
+        nav.openMachineDraft(runnerID: "austin")
+        XCTAssertEqual(nav.path, [.machineDraft(runnerID: "austin")])
+        XCTAssertEqual(nav.machineDraftOnTop, "austin")
+        XCTAssertTrue(nav.atDestinationRoot)
+        XCTAssertFalse(nav.sectionAtRoot, "the page is on the stack")
+        XCTAssertEqual(nav.drawerDestination(agentID: "w"), .machine(runnerID: "austin"))
+        XCTAssertNil(nav.focusedConsoleSessionID, "nothing streams under it")
+    }
+
+    func testTheConsoleItsFirstSessionOpensReplacesThePage() {
+        var nav = NavState(section: .agents)
+        nav.openMachineDraft(runnerID: "austin")
+        nav.replaceTop(with: .console(sessionID: "s1", origin: .list))
+        XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list)])
+        XCTAssertNil(nav.machineDraftOnTop)
+        XCTAssertFalse(nav.atDestinationRoot, "back goes to the workspace it made")
+        XCTAssertEqual(nav.drawerDestination(agentID: "w"), .workspace(agentID: "w"))
+    }
+
+    func testAMachinesPageBelongsToTheAgentsSectionOnly() {
+        var nav = NavState(section: .agents)
+        nav.openMachineDraft(runnerID: "austin")
+        nav.section = .tasks
+        XCTAssertNil(nav.machineDraftOnTop)
+        XCTAssertEqual(nav.drawerDestination(agentID: nil), .section(.tasks))
+    }
+
+    func testTwoSpellingsOfAMachineAreOneRow() {
+        let uuid = "0199b111-0000-7000-8000-000000000001"
+        XCTAssertEqual(DrawerDestination.machine(runnerID: uuid), .machine(runnerID: PublicID.toPublic(uuid)))
+        XCTAssertEqual(Set([DrawerDestination.machine(runnerID: uuid), .machine(runnerID: PublicID.toPublic(uuid))]).count, 1)
+        XCTAssertNotEqual(DrawerDestination.machine(runnerID: "a"), .workspace(agentID: "a"))
+    }
 }

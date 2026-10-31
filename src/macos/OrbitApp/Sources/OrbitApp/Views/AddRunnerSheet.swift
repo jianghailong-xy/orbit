@@ -124,10 +124,18 @@ struct AddRunnerSheet: View {
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(RunnerInk.green)
-                    Text("Runner online — “\(RunnerPageFormat.displayName(arrived))” is ready")
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Runner online — “\(RunnerPageFormat.displayName(arrived))” is ready")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(MachineSetupCopy.REGISTER_NEXT)
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Spacer(minLength: 8)
-                    Button("Open") { open(arrived) }
+                    // The next step is a session, which asks for the folder and the sign-in as it goes
+                    // (board rule 12).
+                    Button(MachineSetupCopy.START_A_SESSION) { start(arrived) }
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.small)
@@ -325,10 +333,11 @@ struct AddRunnerSheet: View {
         }
     }
 
-    /// The new runner's page, on the stack the sheet was opened over.
-    private func open(_ runner: Runner) {
+    /// The new runner's first session, on its own new session page, with Settings out of its way.
+    private func start(_ runner: Runner) {
         dismiss()
-        model.push(.runnerDetail(runnerID: runner.id))
+        model.settingsPresented = false
+        model.startSession(onMachine: runner.id)
     }
 }
 

@@ -242,7 +242,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "Text(RunnerPageCopy.RUNNER_WAITING_FOR_NEW)",
                       "arrived = RunnerPageFormat.newlyOnline(runners.runners, baseline: baseline)",
                       "try? await Task.sleep(for: .seconds(5))",
-                      "model.push(.runnerDetail(runnerID: runner.id))",
+                      "Text(MachineSetupCopy.REGISTER_NEXT)",
+                      "Button(MachineSetupCopy.START_A_SESSION) { start(arrived) }",
+                      "model.startSession(onMachine: runner.id)",
                       "RunnerSectionHeader(RunnerPageCopy.RUNNER_NO_BROWSER)",
                       "TextField(RunnerPageCopy.RUNNER_DEVICE_CODE_PLACEHOLDER, text: $code)",
                       "RunnerPageFormat.deviceCode(typed)",
@@ -282,7 +284,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
         for old in ["is now registered", "Re-register machine", "re-issues its credential", "already registered on your account"] {
             XCTAssertFalse(sheet.contains(old), "the sheet still says the old page's \(old)")
         }
-        let decide = try slice(sheet, from: "private func decide(approve: Bool) {", to: "private func open(_ runner: Runner) {")
+        let decide = try slice(sheet, from: "private func decide(approve: Bool) {", to: "private func start(_ runner: Runner) {")
         try assertInOrder(decide, ["deciding = true", "message = nil",
                                    "failure = await runners.approveDevice(userCode)",
                                    "failure = await runners.denyDevice(userCode)",
@@ -671,15 +673,19 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let page = try detail()
         let section = try slice(page, from: "private func workspacesSection(", to: "private func aboutSection(")
         XCTAssertTrue(section.contains("RunnerPageFormat.runningCount(workspace,"))
-        // The footer's "on the web" links to this runner's page there (project 34pLjYBjU6ILsehatEjJs, contract 6).
-        try assertInOrder(section, ["Text(workspacesFooter)", "private var workspacesFooter: AttributedString {",
-                                    "RunnerPageFormat.workspacesFooter(runnerID: runner.id, baseURL: model.baseURL)",
-                                    "link.link = footer.url",
-                                    "AttributedString(footer.before) + link + AttributedString(footer.after)"],
-                          "the Workspaces footer links on the web to this runner's page")
+        // With none, the way in is a session, and nothing sends anyone to the web (board rule 12).
+        try assertInOrder(section, ["if workspaces.isEmpty {",
+                                    "MachineSetupCopy.machineEmptyHere(machine: RunnerPageFormat.displayName(runner))",
+                                    "Button(MachineSetupCopy.START_A_SESSION) { startSession() }",
+                                    "if !workspaces.isEmpty {", "Text(MachineSetupCopy.RUNNER_WORKSPACES_TAP)"],
+                          "the Workspaces section's empty state and footer")
+        XCTAssertFalse(section.contains("RUNNER_WORKSPACES_FOOTER"), "the page no longer says on the web")
         let open = try slice(code(try runners()), from: "private func openWorkspace(_ id: String) {", to: "private func copy(")
         try assertInOrder(open, ["model.settingsPresented = false", "model.openAgent(id)"],
                           "the sheet comes down before the workspace opens")
+        try assertInOrder(open, ["private func startSession() {", "model.settingsPresented = false",
+                                 "model.startSession(onMachine: runner.id)"],
+                          "the sheet comes down before the machine's new session page opens")
         XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("try? await api.sessionCounts()"))
     }
 

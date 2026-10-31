@@ -267,7 +267,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(registry.contains("folderID: folderID,"), "the registry passes it to the draft console")
         let model = code(try appSource("ConsoleModel.swift"))
         XCTAssertTrue(model.contains("self.draftFolderID = folderID"))
-        XCTAssertTrue(model.contains("folderId: draftFolderID))"),
+        XCTAssertTrue(model.contains("folderId: draftFolderID,"),
                       "and the create request files the new session there")
         let request = try slice(model, from: "private func createDraftSession() async {", to: "onSessionCreated?(session)")
         XCTAssertTrue(request.contains("folderId: draftFolderID"))
