@@ -1517,8 +1517,8 @@ export class RunnerApiController {
       maxConcurrent: dto.maxConcurrent ?? 16,
       version: dto.version,
       tokenHash: sha256(runnerToken),
-      status: 'ONLINE' as const,
-      lastHeartbeatAt: new Date(),
+      // Not its status or last beat: as with a browser approval, only its own heartbeat says it is
+      // there (RunnersService.approveDeviceEnrollment).
       ...(registerDir ? { registerDir } : {}),
     };
     // Never a managed runner: its identity and credential belong to its mapping, not to a name.

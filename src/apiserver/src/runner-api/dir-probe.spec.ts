@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf, readDirProbeResult } from '../runners/dir-probe';
+import { RunnersService } from '../runners/runners.service';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -49,6 +50,24 @@ function makeController(opts: {
   );
   return { controller, updateManyCalls };
 }
+
+/** Someone is watching the folder they typed: the runner is woken for the question, after it is written. */
+test('asking wakes the runner, once the question is in its slot', async () => {
+  const order: string[] = [];
+  const prisma = {
+    runner: {
+      findFirst: async () => ({ status: 'ONLINE', lastHeartbeatAt: new Date(), presence: null }),
+      update: async () => {
+        order.push('written');
+        return {};
+      },
+    },
+  } as never;
+  const realtime = { notifyRunnerWake: (id: string) => order.push(`woken ${id}`) } as never;
+  const asked = await new RunnersService(prisma, realtime).requestDirProbe('owner', RUNNER_ID, ASKED);
+  assert.deepEqual(asked, { path: ASKED, status: 'pending' });
+  assert.deepEqual(order, ['written', `woken ${RUNNER_ID}`]);
+});
 
 /** The drain is private: it is reached here the way the heartbeat reaches it. */
 const drain = (controller: RunnerApiController) =>

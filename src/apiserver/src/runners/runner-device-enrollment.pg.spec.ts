@@ -21,7 +21,10 @@
  *   (8) X-Forwarded-For from a peer TRUSTED_PROXIES does not name is not read, and an internal address
  *       (a proxy in front that it does not name) is never called the same network;
  *   (9) an IPv6 requester, and an IPv4 one a dual-stack socket names as IPv4-mapped IPv6, each kept and
- *       compared in one spelling.
+ *       compared in one spelling;
+ *  (10) a machine just approved reads offline, never heard from, until its own first heartbeat, which
+ *       brings it online with what it declares; re-registering one neither revives it nor moves its
+ *       last beat.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runners/runner-device-enrollment.pg.spec.ts
  *
@@ -259,5 +262,61 @@ test('orbit register through the browser: approved or denied signed in, the CLI 
     const sameV4 = expect(await page(owner.login, mapped.userCode, { 'x-real-ip': '203.0.113.9' }), 200, 'the page from the same IPv4 address');
     assert.equal(sameV4.requesterIp, '203.0.113.9');
     assert.equal(sameV4.sameNetwork, true);
+  });
+
+  await t.test('(10) a machine just approved is not online until its own heartbeat, and re-registering one revives nothing', async () => {
+    const owner = await user('first-beat');
+    const listed = async (runnerId: string) => {
+      const list = expect(await api('GET', '/runners', owner.login), 200, 'the runner list');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return list.find((r: any) => toUuid(r.id) === runnerId);
+    };
+    const rowOf = async (runnerId: string) =>
+      (await sql.query('SELECT status, last_heartbeat_at FROM runner WHERE id = $1', [runnerId])).rows[0];
+
+    const started = await start(machine('first-beat'));
+    const approved = approval(expect(await decide(owner.login, started.userCode, 'approve'), 201, 'approving'));
+    const runnerId: string = approved.runnerId;
+    const collected = await poll(started.deviceCode);
+    assert.deepEqual(await rowOf(runnerId), { status: 'OFFLINE', last_heartbeat_at: null }, 'approving says nothing for the machine');
+    const waiting = await listed(runnerId);
+    assert.equal(waiting.online, false);
+    assert.equal(waiting.lastHeartbeatAt, null);
+    assert.deepEqual(waiting.capabilities, []);
+    assert.equal(waiting.engines, null);
+    const asking = expect(await api('POST', `/runners/${runnerId}/dir-probe`, owner.login, { path: '~/code' }), 400, 'asking before it beats');
+    assert.match(asking.message, /offline/);
+    assert.equal((await rowOf(runnerId)).status, 'OFFLINE');
+
+    const beat = await api('POST', '/runner/heartbeat', collected.runnerToken, {
+      status: 'ONLINE',
+      engines: [{ engine: 'claude', installed: true, auth: 'no', version: '2.3.0' }],
+    }, { 'x-orbit-runner-capabilities': 'dir-probe/v1' });
+    assert.equal(beat.status, 201, beat.text);
+    const connected = await listed(runnerId);
+    assert.equal(connected.online, true, 'its first beat brings it online');
+    assert.ok(connected.capabilities.includes('dir-probe/v1'), 'with what it declares');
+    assert.deepEqual(connected.engines.map((e: { engine: string }) => e.engine), ['claude']);
+    assert.ok(connected.lastHeartbeatAt);
+
+    // Long silent: an approval is not a beat, whatever the row says about the machine. Its last beat is the real one.
+    const heardLast = new Date(Date.now() - 3_600_000);
+    await sql.query('DELETE FROM runner_presence WHERE runner_id = $1', [runnerId]);
+    await db.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: heardLast } });
+    assert.equal((await listed(runnerId)).online, false, 'silent for an hour');
+    const again = await start(machine('first-beat'));
+    assert.equal(approval(expect(await decide(owner.login, again.userCode, 'approve'), 201, 're-approving')).replaced, true);
+    const reread = await listed(runnerId);
+    assert.equal(reread.online, false, 'still offline after it is registered again');
+    assert.equal(new Date(reread.lastHeartbeatAt).getTime(), heardLast.getTime(), 'and last heard from when it was');
+
+    // Heard a moment ago: it reads as its beats say, as with a rotated credential, and ages out if nothing comes back.
+    const heardNow = new Date(Date.now() - 10_000);
+    await db.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: heardNow } });
+    const third = await start(machine('first-beat'));
+    expect(await decide(owner.login, third.userCode, 'approve'), 201, 're-approving');
+    const still = await listed(runnerId);
+    assert.equal(still.online, true);
+    assert.equal(new Date(still.lastHeartbeatAt).getTime(), heardNow.getTime(), 'approving does not move a beat');
   });
 });

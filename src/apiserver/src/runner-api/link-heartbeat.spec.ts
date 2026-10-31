@@ -127,7 +127,7 @@ test('a writer that stops marking, or is renamed, is reported', () => {
   const real = (rel: string) => readFileSync(path.join(SRC, rel), 'utf8');
   const stripped = (rel: string) =>
     rel === 'runners/runners.service.ts'
-      ? real(rel).replace(/this\.realtime\?\.markRunnerChanged\(id\);/g, '')
+      ? real(rel).replace(/this\.realtime\?\.(?:markRunnerChanged|notifyRunnerWake)\(id\);/g, '')
       : rel === 'workspaces/workspaces.service.ts'
         ? real(rel).replace('async requestRepoCleanup(', 'async askForRepoCleanup(')
         : real(rel);

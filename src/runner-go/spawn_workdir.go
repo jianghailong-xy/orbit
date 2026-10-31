@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"syscall"
 )
 
 // startSessionProcess starts one interactive runtime and, when the start fails, replaces
@@ -16,9 +17,10 @@ import (
 // directory — turning a failed chdir into a clear `chdir <dir>` error — when SysProcAttr
 // is nil. With it set that check is skipped, so the child's chdir ENOENT comes back
 // wrapped around argv0 instead: `fork/exec /root/.local/bin/claude: no such file or
-// directory`. That reads as a missing engine binary and sends whoever is debugging it to
-// reinstall claude or restart the runner, when the engine was never the problem — the
-// agent's workDir was. Undo the mislabeling here, at the one place that knows both.
+// directory`, or `not a directory` when the workDir is a file. That reads as a broken engine
+// binary and sends whoever is debugging it to reinstall claude or restart the runner, when the
+// engine was never the problem — the agent's workDir was. Undo the mislabeling here, at the one
+// place that knows both.
 func startSessionProcess(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return explainSpawnError(cmd.Dir, err)
@@ -26,17 +28,19 @@ func startSessionProcess(cmd *exec.Cmd) error {
 	return nil
 }
 
-// explainSpawnError rewrites a spawn ENOENT that is really about the working directory.
-// Everything else is returned untouched — including a genuinely missing binary, where the
-// path already in the error IS the thing that's missing and the message is honest.
+// explainSpawnError rewrites a spawn ENOENT or ENOTDIR that is really about the working
+// directory. Everything else is returned untouched — including a genuinely missing binary, where
+// the path already in the error IS the thing that's missing and the message is honest.
 func explainSpawnError(dir string, err error) error {
-	if dir == "" || !errors.Is(err, fs.ErrNotExist) {
+	if dir == "" || !(errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) {
 		return err
 	}
-	_, statErr := os.Stat(dir)
+	info, statErr := os.Stat(dir)
 	switch {
-	case statErr == nil:
+	case statErr == nil && info.IsDir():
 		return err
+	case statErr == nil, errors.Is(statErr, syscall.ENOTDIR):
+		return fmt.Errorf("working directory %s is not a directory", dir)
 	case errors.Is(statErr, fs.ErrNotExist):
 		return fmt.Errorf("working directory %s does not exist", dir)
 	default:

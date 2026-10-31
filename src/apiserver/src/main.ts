@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { holdIdleConnections } from './common/idle-connections';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
@@ -80,6 +81,8 @@ async function bootstrap() {
   app.enableCors({ origin: origins, credentials: true });
 
   const port = Number(config.get('PORT') ?? 3000);
+  // Idle connections are held longer than any caller holds them (common/idle-connections.ts).
+  holdIdleConnections(app.getHttpServer());
   await app.listen(port);
   // eslint-disable-next-line no-console
   console.log(`orbit control plane listening on :${port}`);

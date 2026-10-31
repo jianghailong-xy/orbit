@@ -91,6 +91,61 @@ func TestStartSessionProcessBlamesTheWorkDirNotTheEngine(t *testing.T) {
 	}
 }
 
+// The same mislabeling with another errno: a workDir that is a file comes back as `fork/exec
+// <engine>: not a directory`, which read as the engine having gone. A folder named after a file
+// already on the machine got a session there, and that session this error (F7, the first workspace
+// rehearsal, task 34pLtXwjTWRAHNTdIy9Kz).
+func TestStartSessionProcessSaysAWorkDirIsNotADirectory(t *testing.T) {
+	engine, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "notes")
+	if err := os.WriteFile(file, []byte("a file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link-to-a-file")
+	if err := os.Symlink(file, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, dir := range map[string]string{
+		"a file":        file,
+		"a link to one": link,
+		"under a file":  filepath.Join(file, "project"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := exec.CommandContext(context.Background(), engine, "-test.run=XXX_no_such_test")
+			configureSessionProcessTree(cmd)
+			cmd.Dir = dir
+			err := startSessionProcess(cmd)
+			if err == nil || err.Error() != "working directory "+dir+" is not a directory" {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+}
+
+// ENOTDIR can be about the binary too, a path through a file, with a workDir nothing is wrong with.
+func TestStartSessionProcessKeepsABinaryBehindAFileHonest(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "bin")
+	if err := os.WriteFile(file, []byte("a file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	engine := filepath.Join(file, "claude")
+
+	cmd := exec.CommandContext(context.Background(), engine)
+	configureSessionProcessTree(cmd)
+	cmd.Dir = t.TempDir()
+
+	err := startSessionProcess(cmd)
+	if err == nil {
+		t.Fatal("spawning through a file must fail")
+	}
+	if !strings.Contains(err.Error(), engine) || strings.Contains(err.Error(), "working directory") {
+		t.Errorf("error must still name the binary %q and leave the workDir alone, got %q", engine, err)
+	}
+}
+
 // The other half of the contract: when the binary really is the thing that's missing, the
 // path in exec's message IS the answer and must survive untouched.
 func TestStartSessionProcessKeepsAMissingBinaryHonest(t *testing.T) {

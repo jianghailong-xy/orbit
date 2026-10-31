@@ -1244,7 +1244,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// beat function below), because only the control plane knows those directories.
 	sweepIntegrationScratch([]string{worktreesDir()}, nil)
 
-	// Heartbeat every 30s; honor server-requested cancellations.
+	// Heartbeat every 30s, and first right after the reclaim below; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
 	// A session that finds its engine signed out as it starts it says so (noteEngineSignedOut): the
@@ -1993,6 +1993,17 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			pending.endTakeover()
 		}
 		reclaimed = true
+	}
+
+	// A self-managed runner's first heartbeat, now rather than at the first tick half a minute on: until
+	// it lands, this machine reads offline with nothing reported, and someone may be watching it come up
+	// (a machine just approved has never been heard from at all). Not before the reclaim above: a beat
+	// hands out work against the supervisors it advertises, and until then there are none. The engines
+	// are a probe away, so what it finds gets a beat of its own. A managed instance has beaten already,
+	// or is waiting for that probe to (managedStartupBeat).
+	if currentManagedInstance() == nil {
+		beatNow()
+		go beatOnceProbed(loopCtx, engineHealth.probed(), beatNow)
 	}
 
 	// Reap orphan worktrees from a previous process — any checkout whose session we did

@@ -77,22 +77,50 @@ func TestAutoInstallEnginesIsOnByDefault(t *testing.T) {
 	}
 }
 
+// A runner's id as config.json keeps it, and as the web writes it in an address.
+const (
+	registerTestRunnerID       = "0198f5f4-8d9e-7a11-b2c3-4d5e6f708192"
+	registerTestRunnerPublicID = "30tWePD4IYjCW1G8zmKpO"
+)
+
 func TestRegisterReceiptNamesTheMachineAndTheNextStep(t *testing.T) {
 	host := hostnameOr()
 	name := "devbox"
 	if name == host {
 		name = "devbox-2"
 	}
-	cfg := &RunnerConfig{Name: name, ServerURL: "https://orbit.example/"}
+	cfg := &RunnerConfig{Name: name, ServerURL: "https://orbit.example/", RunnerID: registerTestRunnerID}
 	var out bytes.Buffer
 	printRegisterReceipt(&out, cfg, true, false)
 	got := out.String()
 	for _, want := range []string{
 		"✓ Setup complete — " + name + " is online.",
 		"Machine  " + name + " (" + host + ")",
-		"Next     set up a coding engine, then create a workspace on this machine.",
-		"https://orbit.example/infrastructure",
+		"Next     Start a session\n",
+		// The address the approval page's and Add a runner's Start a session open: the id as the web spells it.
+		"             https://orbit.example/runners/" + registerTestRunnerPublicID + "/new\n",
 		"orbit status · orbit doctor · orbit unregister",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("receipt lacks %q:\n%s", want, got)
+		}
+	}
+	for _, gone := range []string{"create a workspace", "/infrastructure"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("receipt still says %q:\n%s", gone, got)
+		}
+	}
+}
+
+// A runner in the terminal it registered from is told how to stop it, and given the same next step.
+func TestRegisterReceiptInTheForeground(t *testing.T) {
+	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example", RunnerID: registerTestRunnerID}
+	var out bytes.Buffer
+	printRegisterReceipt(&out, cfg, false, true)
+	got := out.String()
+	for _, want := range []string{
+		"Next     Start a session; Ctrl-C stops the runner.",
+		"https://orbit.example/runners/" + registerTestRunnerPublicID + "/new",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("receipt lacks %q:\n%s", want, got)
@@ -101,13 +129,14 @@ func TestRegisterReceiptNamesTheMachineAndTheNextStep(t *testing.T) {
 }
 
 func TestRegisterReceiptWhenTheServiceWasNotStarted(t *testing.T) {
-	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example"}
+	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example", RunnerID: registerTestRunnerID}
 	var out bytes.Buffer
 	printRegisterReceipt(&out, cfg, false, false)
 	got := out.String()
 	for _, want := range []string{
 		"✓ Setup complete — devbox is registered.",
-		"Next     start it with `orbit run`, then create a workspace in Orbit.",
+		"Next     start it with `orbit run`, then Start a session",
+		"https://orbit.example/runners/" + registerTestRunnerPublicID + "/new",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("receipt lacks %q:\n%s", want, got)

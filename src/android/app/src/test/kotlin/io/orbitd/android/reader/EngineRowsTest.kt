@@ -25,23 +25,90 @@ class EngineRowsTest {
         assertEquals("event:2", rows.last().key)
     }
 
-    @Test fun recoverableStructuredStderrBecomesANoticeRow() {
-        val rows = transcriptRows(listOf(stderr(1, "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized",
-            """"diagnostic":{"component":"model_catalog","phase":"startup","severity":"WARN","impact":"degraded","recoverable":true,"code":"codex_model_catalog_auth"}""")))
-        assertEquals("notice", rows.single().event.type)
-        assertTrue(rows.single().event.body().startsWith("Startup · model_catalog · codex_model_catalog_auth:"))
+    /** A diagnostic row as it reads: its label, the logged line it keeps whole, and how many reports folded into it. */
+    private data class DiagnosticRead(val label: String, val line: String, val repeats: Int = 1)
+    private fun diagnostic(row: TranscriptRow) = row.event.takeIf { it.type == "diagnostic" }?.let {
+        DiagnosticRead(it.fields.string("label").orEmpty(), it.body(), (it.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 0)
     }
 
-    @Test fun persistedLegacyRecoverableStderrBecomesANoticeRow() {
-        val rows = transcriptRows(listOf(stderr(1, "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated")))
-        assertEquals("notice", rows.single().event.type)
-        assertTrue(rows.single().event.body().startsWith("Startup · model_catalog · token_invalidated:"))
+    @Test fun recoverableStructuredStderrBecomesADiagnosticRow() {
+        val line = "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized"
+        val rows = transcriptRows(listOf(stderr(1, line,
+            """"diagnostic":{"component":"model_catalog","phase":"startup","severity":"WARN","impact":"degraded","recoverable":true,"code":"codex_model_catalog_auth"}""")))
+        assertEquals(listOf(DiagnosticRead("Startup · model_catalog · codex_model_catalog_auth", line)), rows.map(::diagnostic))
+    }
+
+    @Test fun persistedLegacyRecoverableStderrBecomesADiagnosticRow() {
+        val line = "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated"
+        assertEquals(listOf(DiagnosticRead("Startup · model_catalog · token_invalidated", line)), transcriptRows(listOf(stderr(1, line))).map(::diagnostic))
     }
 
     @Test fun unknownStructuredStderrKeepsTheErrorPath() {
         val rows = transcriptRows(listOf(stderr(1, "engine failed to start",
             """"diagnostic":{"component":"engine","severity":"ERROR","impact":"fatal","recoverable":false}""")))
         assertEquals(listOf("error" to "engine failed to start"), kinds(rows))
+    }
+
+    // Codex logs a failed model-catalog refresh and keeps the catalog it had, so the turn goes on. It retries on every later model
+    // request, so one session repeats the line (OrbitKit's and web's cases for it).
+    private fun refreshFailed(ts: String, reason: String) = "$ts ERROR codex_models_manager::manager: failed to refresh available models: $reason"
+    private val timedOut = "request timed out" // 2026-10-28, an iOS screenshot
+    private val childTimeout = "timeout waiting for child process to exit" // 2026-08-12, web
+    /** What a current runner attaches to either line (runner-go `codexStderrDiagnostic`). */
+    private val refreshTimeout = """"diagnostic":{"component":"model_catalog","severity":"WARN","impact":"degraded","recoverable":true,"code":"timeout"}"""
+
+    @Test fun catalogRefreshFailureFromACurrentRunnerBecomesADiagnosticRow() {
+        for (reason in listOf(timedOut, childTimeout)) {
+            val line = refreshFailed("2026-10-28T15:13:06.979719Z", reason)
+            assertEquals(listOf(DiagnosticRead("model_catalog · timeout", line)), transcriptRows(listOf(stderr(1, line, refreshTimeout))).map(::diagnostic))
+        }
+    }
+
+    @Test fun persistedCatalogRefreshFailureBecomesADiagnosticRow() {
+        for ((reason, code) in listOf(timedOut to "timeout", childTimeout to "timeout", "unexpected status 503 Service Unavailable" to "refresh_failed")) {
+            val line = refreshFailed("2026-08-12T15:31:40.112363Z", reason)
+            assertEquals(listOf(DiagnosticRead("model_catalog · $code", line)), transcriptRows(listOf(stderr(1, line))).map(::diagnostic))
+        }
+    }
+
+    /** One row per incident, counted on the first occurrence's row, as web folds it; a `resumed` starts a new engine run's row. */
+    @Test fun repeatedCatalogRefreshFailureFoldsIntoOneDiagnosticRow() {
+        for ((reason, times) in listOf(timedOut to 10, childTimeout to 3)) {
+            // The first half as an older runner stored them, the rest with the diagnostic after its upgrade.
+            val events = (0 until times).map { i ->
+                stderr(i + 1L, refreshFailed("2026-10-28T15:${13 + i}:06.979719Z", reason), if (i >= times / 2) refreshTimeout else "")
+            }
+            val first = DiagnosticRead("model_catalog · timeout", refreshFailed("2026-10-28T15:13:06.979719Z", reason), times)
+            val rows = transcriptRows(events)
+            assertEquals(listOf(first), rows.map(::diagnostic))
+            assertEquals("event:1", rows.single().key)
+
+            val again = refreshFailed("2026-10-28T16:00:06.979719Z", reason)
+            assertEquals(listOf(first, DiagnosticRead("model_catalog · timeout", again)),
+                transcriptRows(events + event(100, "system", """{"subtype":"resumed"}""") + stderr(101, again)).map(::diagnostic))
+        }
+    }
+
+    /** The runner's deliberate heads-up and an engine's recoverable diagnostic are rows of two kinds, as on web and iOS. */
+    @Test fun aNoticeAndADiagnosticAreRowsOfTwoKinds() {
+        val notice = "Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent"
+        val line = refreshFailed("2026-10-28T15:13:06.979719Z", timedOut)
+        val rows = transcriptRows(listOf(event(1, "system", """{"subtype":"init","notice":${JsonPrimitive(notice)},"noticeKind":"pool-member-switched"}"""),
+            stderr(2, line), stderr(3, line, refreshTimeout)))
+        assertEquals(listOf("notice" to notice, "diagnostic" to line), kinds(rows))
+        assertEquals(listOf(null, DiagnosticRead("model_catalog · timeout", line, 2)), rows.map(::diagnostic))
+    }
+
+    /** The row shows the engine's words without the stamp, level and module its logger opened the line with (web `parseEngineLogLine`). */
+    @Test fun aDiagnosticShowsTheEnginesWordsWithoutTheLogPreamble() {
+        assertEquals("failed to refresh available models: request timed out", EngineStderr.logText(refreshFailed("2026-10-28T15:13:06.979719Z", timedOut)))
+        assertEquals("model refresh 401 request id: req_first", EngineStderr.logText("model refresh 401 request id: req_first"))
+    }
+
+    @Test fun unrelatedErrorStderrStaysAnErrorRow() {
+        // A timeout logged by anything but the catalog refresh can be the turn's own failure.
+        val line = "2026-10-28T15:13:07.112233Z ERROR codex_core::codex: stream error: request timed out"
+        assertEquals(listOf("error" to line), kinds(transcriptRows(listOf(stderr(1, line)))))
     }
 
     @Test fun multilineApplyPatchStderrFoldsIntoOneRow() {
