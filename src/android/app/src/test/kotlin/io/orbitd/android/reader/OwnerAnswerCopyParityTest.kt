@@ -1,5 +1,6 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.cards.CoordinatorQuestions
 import io.orbitd.android.core.cards.CoordinatorQueue
 import io.orbitd.android.core.cards.OwnerAnswerLine
 import java.io.File
@@ -8,7 +9,8 @@ import org.junit.Test
 
 /** The owner's answer handed to the coordinator says the same line on every client: every word here is the one OrbitKit's
  * `OwnerAnswer.swift` and the web's `OwnerAnswerLine.tsx` declare, the line is the web's `sentToCoordinatorLine`, and the kinds a card
- * can be are OrbitKit's. A missing counterpart is a failure, never a skip (ProjectCopyParityTest's rule). */
+ * can be are OrbitKit's. Drawn as its question's Answered card, it says the web card's words (`CoordinatorQuestionCard.tsx`). A missing
+ * counterpart is a failure, never a skip (ProjectCopyParityTest's rule). */
 class OwnerAnswerCopyParityTest {
     private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
         .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
@@ -17,6 +19,7 @@ class OwnerAnswerCopyParityTest {
     private val webLine = read("src/web/src/components/OwnerAnswerLine.tsx")
     private val webEvidence = read("src/web/src/components/EvidenceDecisionCard.tsx")
     private val webReader = read("src/web/src/lib/ownerAnswer.ts")
+    private val webQuestion = read("src/web/src/components/CoordinatorQuestionCard.tsx")
 
     private fun assertHas(source: String, file: String, needle: String) =
         assertTrue("$file no longer contains $needle", source.contains(needle))
@@ -33,6 +36,13 @@ class OwnerAnswerCopyParityTest {
         assertHas(webEvidence, "EvidenceDecisionCard.tsx", "export const EVIDENCE_DECISION_SENT_TO_COORDINATOR = '${CoordinatorQueue.sent}'")
         assertHas(webEvidence, "EvidenceDecisionCard.tsx", "`\${EVIDENCE_DECISION_SENT_TO_COORDINATOR} · \${decisionReceiptTime(deliveredAt, now)}`")
         assertHas(swift, "OwnerAnswer.swift", "EvidenceDecisions.sentLine(card.deliveredAt, now: now)")
+    }
+
+    /** The answered card a turn draws in its place says, while the turn waits on the queue, the web's queued line, and when its delivery
+     * went unconfirmed, the line's own words, as the web card does. */
+    @Test fun theAnsweredCardSaysTheWebCardsWords() {
+        assertHas(webQuestion, "CoordinatorQuestionCard.tsx", "export const QUEUED_FOR_COORDINATOR = '${CoordinatorQuestions.queuedForCoordinator}'")
+        assertHas(webLine, "OwnerAnswerLine.tsx", "notice: undelivered ? '${OwnerAnswerLine.undelivered}' : null")
     }
 
     @Test fun aCardIsTheSameKindsOnEveryClient() {

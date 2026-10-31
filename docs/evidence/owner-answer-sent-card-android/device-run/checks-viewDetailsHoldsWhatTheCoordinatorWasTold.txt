@@ -1,0 +1,9 @@
+2026-10-27T16:53:08.645795Z fixture at http://localhost:48633/
+2026-10-27T16:53:08.908546Z signed in to the fixture
+2026-10-27T16:53:09.395827Z PASS the coordinator conversation
+2026-10-27T16:53:09.407508Z PASS the answered question's card
+2026-10-27T16:53:10.741220Z PASS the card's review
+2026-10-27T16:53:10.761146Z PASS the review is the record's
+2026-10-27T16:53:10.776278Z PASS the words are folded
+2026-10-27T16:53:10.950603Z PASS the words the coordinator was told
+2026-10-27T16:53:10.963078Z PASS they are the turn's, verbatim
