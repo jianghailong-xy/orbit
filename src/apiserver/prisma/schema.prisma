@@ -673,8 +673,8 @@ model Runner {
   minFreeDiskMb     Int?         @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
-  // The runner's own low-frequency record of its heartbeats: written at registration, and by a
-  // heartbeat at most every five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS).
+  // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
+  // five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS), NULL until the first.
   // Every beat lands in `presence`. Never read this column for liveness — runner-presence.ts reads
   // both and takes the later.
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
@@ -2093,6 +2093,7 @@ model Session {
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
   scheduledWakeups      SessionScheduledWakeup[]
+  wakeupLoops           SessionWakeupLoop[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
   receivedRequests      SessionRequest[] @relation("SessionRequestRecipient")
   /// What other sessions have sent this one, as §2.4's hourly limit counts it (session_message_charge).
@@ -2630,7 +2631,13 @@ model BackgroundJobWake {
 /// Code's own ScheduleWakeup keeps its timer in the engine process that Orbit recycles. PENDING until it
 /// is due, then filed onto the session's `bg-wake:` turn (DELIVERED, `clientTurnId`) or not, because the
 /// session had ended (DROPPED); a later request replaces it (SUPERSEDED) and a stop cancels it
-/// (CANCELLED). At most one PENDING row per session: a partial unique index, migration 0264.
+/// (CANCELLED). At most one PENDING one-shot row per session: a partial unique index, migration 0264,
+/// narrowed to `loop_id IS NULL` by 0458.
+///
+/// A row with `loopId` is a tick of a loop (SessionWakeupLoop): written PENDING by the transaction that
+/// settles the tick before it, and settled by the worker as DELIVERED, or DROPPED when its due time did not
+/// become a run; a stop, a replacement or the owner's Stop cancels the waiting one (CANCELLED). Its prompt
+/// stays on the loop, and at most one tick of a loop waits (partial unique index, migration 0458).
 model SessionScheduledWakeup {
   id           String    @id @default(uuid(7)) @db.Uuid
   sessionId    String    @map("session_id") @db.Uuid
@@ -2645,10 +2652,52 @@ model SessionScheduledWakeup {
   clientTurnId String?   @map("client_turn_id")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   settledAt    DateTime? @map("settled_at") @db.Timestamptz(3)
+  /// The loop this is a tick of (migration 0458); NULL for a one-shot wakeup.
+  loopId       String?   @map("loop_id") @db.Uuid
+  loop         SessionWakeupLoop? @relation(fields: [loopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   /// The worker's read: waiting and due (partial on PENDING in the migration).
   @@index([dueAt], map: "session_scheduled_wakeup_due_idx")
+  /// A loop's ticks in due order (partial on `loop_id IS NOT NULL` in the migration).
+  @@index([loopId, dueAt], map: "session_scheduled_wakeup_loop_due_idx")
   @@map("session_scheduled_wakeup")
+}
+
+/// A loop a session asked the control plane to run: `schedule_wakeup({recurring: true})`
+/// (docs/long-running-loop-contract.md §1, runner-api/scheduled-wakeup.ts). The loop generates its ticks,
+/// and each tick is an ordinary SessionScheduledWakeup row naming it, so an ACTIVE loop always has exactly
+/// one PENDING tick. Fixed rate: every tick is due a whole number of `everySeconds` after `firstDueAt`,
+/// the last one at `untilAt`. A failed turn or a FAILED session never ends a loop; `stop`, a replacing
+/// request, the owner's Stop, an ended session and `untilAt` do, and say so in `endedReason`. At most one
+/// ACTIVE loop per session: a partial unique index, migration 0458.
+model SessionWakeupLoop {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// ACTIVE | ENDED
+  state        String    @default("ACTIVE")
+  everySeconds Int       @map("every_seconds")
+  /// What each tick's turn is to do.
+  prompt       String
+  reason       String?
+  firstDueAt   DateTime  @map("first_due_at") @db.Timestamptz(3)
+  untilAt      DateTime  @map("until_at") @db.Timestamptz(3)
+  /// Ticks that became a run.
+  ticksFired   Int       @default(0) @map("ticks_fired")
+  /// Due times that did not: skipped, dropped, or folded into a turn already carrying this loop's tick.
+  ticksMissed  Int       @default(0) @map("ticks_missed")
+  /// Revives in a row, each ending with the session FAILED again; at 3 the loop holds. Armed skips, refused
+  /// revives and held ticks leave it as it is; a tick that finds the session healthy resets it.
+  reviveStreak Int       @default(0) @map("revive_streak")
+  /// REQUESTED | REPLACED | OWNER_STOP | SESSION_ENDED | UNTIL_REACHED
+  endedReason  String?   @map("ended_reason")
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// The failure the owner was last told about (the dead-man signal, contract §4).
+  alertedAt    DateTime? @map("alerted_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  ticks        SessionScheduledWakeup[]
+
+  @@map("session_wakeup_loop")
 }
 
 /// One Orbit session asking another for a reply: a `session_send` / `project_send` that carried

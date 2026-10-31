@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
@@ -827,4 +829,104 @@ test('an Antigravity sign-out is announced under the name the Providers page giv
   assert.equal(sent[0].aps.alert.title, 'HPC');
   assert.match(sent[0].aps.alert.body, /^Antigravity signed out — sessions on this runner won't start until you sign in again\.$/);
   assert.deepEqual([sent[0].engine, sent[0].kind, sent[0].runnerID], ['antigravity', 'engine-signed-out', 'runner-1']);
+});
+
+function wakeupMissedHarness(deliver?: () => Promise<void>) {
+  const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  const sent: { payload: any; collapseId?: string }[] = [];
+  (service as any).deliver = async (_tokens: unknown, body: string, _p: unknown, _pr: unknown, collapseId?: string) => {
+    if (deliver) await deliver();
+    sent.push({ payload: JSON.parse(body), collapseId });
+  };
+  return { service, sent };
+}
+
+test('a silent wakeup loop is announced under its session, collapsing on that one silence', async () => {
+  const { service, sent } = wakeupMissedHarness();
+  const alertedAt = new Date('2026-11-01T10:20:00.000Z');
+
+  await service.notifyLoopMissed({
+    ownerId: 'owner-1',
+    sessionId: 's-1',
+    title: 'Migrate the archive',
+    missed: { loopId: 'loop-1', ticks: 3, alertedAt },
+    reason: 'RUNNER_OFFLINE',
+  });
+
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.equal(payload.aps.alert.title, 'Migrate the archive');
+  assert.equal(payload.aps.alert.body, 'Wakeup loop missed 3 ticks: the runner is offline.');
+  assert.deepEqual([payload.kind, payload.sessionID, payload.aps['thread-id']], ['loop-missed', 's-1', 's-1']);
+  // Nobody's reply is waiting on it, so it must not move the "needs you" count.
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, `loop-loop-1-${alertedAt.getTime()}`);
+});
+
+test('each reason a loop is silent reads as English, and one tick is not "1 ticks"', async () => {
+  const { service, sent } = wakeupMissedHarness();
+  for (const reason of ['SESSION_FAILED', 'TURN_QUEUED'] as const) {
+    await service.notifyLoopMissed({
+      ownerId: 'owner-1', sessionId: 's-1', title: null, missed: { loopId: 'loop-1', ticks: 1, alertedAt: new Date() }, reason,
+    });
+  }
+  assert.deepEqual(sent.map((s) => [s.payload.aps.alert.title, s.payload.aps.alert.body]), [
+    ['Orbit', 'Wakeup loop missed 1 tick: the session failed.'],
+    ['Orbit', 'Wakeup loop missed 1 tick: its turn is queued and has not started.'],
+  ]);
+});
+
+test('a one-shot wakeup dropped with its FAILED session is announced once, under the wakeup', async () => {
+  const { service, sent } = wakeupMissedHarness();
+
+  await service.notifyLoopMissed({
+    ownerId: 'owner-1', sessionId: 's-1', title: 'Watch the deploy', missed: { wakeupId: 'wakeup-1' }, reason: 'SESSION_FAILED',
+  });
+
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(
+    [payload.aps.alert.title, payload.aps.alert.body, payload.kind, payload.sessionID],
+    ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1'],
+  );
+  assert.equal(collapseId, 'wakeup-wakeup-1');
+});
+
+// The shared Android fixture's two samples are these sends: fcm-transport.spec converts each to the FCM data it
+// holds, and Android's PushAuthorityTest parses that data, so the wire shape is pinned on both sides.
+test('the shared Android fixture carries what notifyLoopMissed sends, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const session = '019a0000-0000-7000-8000-000000000002';
+  const sends = [
+    ['loop-missed', {
+      ownerId: 'owner-1', sessionId: session, title: 'Migrate the archive', reason: 'RUNNER_OFFLINE',
+      missed: { loopId: '019a0000-0000-7000-8000-000000000009', ticks: 3, alertedAt: new Date('2026-11-01T10:20:00.000Z') },
+    }],
+    ['wakeup-dropped', {
+      ownerId: 'owner-1', sessionId: session, title: 'Watch the deploy', reason: 'SESSION_FAILED',
+      missed: { wakeupId: '019a0000-0000-7000-8000-00000000000a' },
+    }],
+  ] as const;
+  for (const [name, input] of sends) {
+    const { service, sent } = wakeupMissedHarness();
+    await service.notifyLoopMissed(input);
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
+    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
+});
+
+test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {
+  const { service, sent } = wakeupMissedHarness(async () => {
+    throw new Error('APNs went away');
+  });
+
+  await service.notifyLoopMissed({
+    ownerId: 'owner-1', sessionId: 's-1', title: 'Migrate the archive', missed: { loopId: 'loop-1', ticks: 2, alertedAt: new Date() }, reason: 'TURN_QUEUED',
+  });
+
+  assert.equal(sent.length, 0);
 });

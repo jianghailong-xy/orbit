@@ -69,6 +69,58 @@ public struct OwnerAnswer: Sendable, Equatable, Codable {
     }
 }
 
+// THE QUESTION'S OWN CARD (docs/mocks/owner-answer-sent-card/merged.html). Where the conversation holds
+// the record of the question an answer's turn hands over, the turn is that question's Answered card —
+// drawn where the coordinator was told, which is where its next turn starts — and the conversation does
+// not draw the record again at the moment it was answered. The owner reads "Answered" as "the agent has
+// my answer", so a line under the card saying it was sent said the same thing twice. Web parity:
+// `answeredItemKey` and `answersHandedOver` (lib/ownerAnswer.ts), `OwnerAnswerLine.tsx`.
+extension OwnerAnswer {
+    /// An answered item's key, in one spelling whichever the read it came from used: the open-items read
+    /// and the turn's card each name the item, and a lookup between them must not depend on both having
+    /// been served the same way.
+    public static func itemKey(_ itemId: String) -> String {
+        PublicID.storageKey(itemId)
+    }
+
+    /// The questions a turn of this conversation hands to its coordinator — echoed, accepted, or still on
+    /// the queue — by item key (`itemKey`). Each such turn draws the question's own card, so
+    /// `TranscriptRows.build` does not draw that card again at the moment the question was answered. A
+    /// Not yet… to a request to record the project done has no card to be, and is left out.
+    public static func handedOver(_ state: TranscriptState) -> Set<String> {
+        Set(handovers(state).compactMap { $0.ownerAnswer.map { itemKey($0.itemId) } })
+    }
+
+    /// The turn that handed one question's answer to the coordinator — the newest, should there be more
+    /// than one — whose words the question's card folds at the foot of its sheet. Nil where no turn of
+    /// this conversation did.
+    public static func handover(of itemId: String, in state: TranscriptState) -> UserBubble? {
+        let key = itemKey(itemId)
+        return handovers(state).last { $0.ownerAnswer.map { itemKey($0.itemId) } == key }
+    }
+
+    /// The ended question an answer's turn is drawn as: the record of the coordinator's question it
+    /// answers, where the conversation holds one (`records`, by `itemKey`). Nil for a Not yet… to a
+    /// request to record the project done, which has no card, and for a question the conversation cannot
+    /// draw — both keep the line.
+    public static func record(of card: OwnerAnswer,
+                              in records: [String: ProjectClosedQuestion]) -> ProjectClosedQuestion? {
+        card.kind == .coordinatorQuestion ? records[itemKey(card.itemId)] : nil
+    }
+
+    /// Every turn that hands a coordinator's question its answer, in the order the conversation draws
+    /// them: the transcript's, the accepted head's, then the queued tail's — less what waits in the tray
+    /// instead (`PendingTray.holds`), as `TranscriptRows.build` leaves it out.
+    private static func handovers(_ state: TranscriptState) -> [UserBubble] {
+        func hands(_ b: UserBubble) -> Bool { b.ownerAnswer?.kind == .coordinatorQuestion }
+        var turns: [UserBubble] = []
+        for case .user(let b) in state.items where hands(b) { turns.append(b) }
+        turns += state.accepted.filter(hands)
+        turns += state.queued.filter { hands($0) && !PendingTray.holds($0) }
+        return turns
+    }
+}
+
 /// What the line says, in the web's own words (`OwnerAnswerLine.tsx`), which
 /// `OwnerAnswerCopyParityTests` holds this end to.
 public enum OwnerAnswerCard {

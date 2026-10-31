@@ -935,24 +935,41 @@ func codexStderrIsStateInitFailure(line string) bool {
 	return strings.Contains(strings.ToLower(line), "failed to initialize sqlite state runtime")
 }
 
-// codexStderrDiagnostic recognizes startup diagnostics that do not prevent the app-server
-// from serving turns. Keep this deliberately narrow: stderr is also where the runtime reports
-// genuine startup and turn failures, and unknown lines must retain their existing treatment.
+// codexStderrDiagnostic recognizes diagnostics that do not prevent the app-server from serving
+// turns. Keep this deliberately narrow: stderr is also where the runtime reports genuine startup
+// and turn failures, and unknown lines must retain their existing treatment.
 // The diagnostic is nested under `diagnostic` while `stderr` remains the compatibility field used
 // by older clients and transcript exports.
+//
+// A failed model-catalog refresh is non-fatal whatever its cause: Codex logs it and keeps the
+// catalog it already had. It refreshes again on every model request after a failure, so the line
+// repeats through a session, and the turns themselves still complete.
 func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	lower := strings.ToLower(line)
 	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
 	if strings.Contains(lower, "codex_models_manager") &&
-		strings.Contains(lower, "failed to refresh available models") &&
-		strings.Contains(lower, "401") && tokenInvalidated {
+		strings.Contains(lower, "failed to refresh available models") {
+		if strings.Contains(lower, "401") && tokenInvalidated {
+			return map[string]interface{}{
+				"component":   "model_catalog",
+				"phase":       "startup",
+				"severity":    "WARN",
+				"impact":      "degraded",
+				"recoverable": true,
+				"code":        "token_invalidated",
+			}, true
+		}
+		// No phase: the refresh also runs in the middle of a turn, not only at startup.
+		code := "refresh_failed"
+		if strings.Contains(lower, "timed out") || strings.Contains(lower, "timeout") {
+			code = "timeout"
+		}
 		return map[string]interface{}{
 			"component":   "model_catalog",
-			"phase":       "startup",
 			"severity":    "WARN",
 			"impact":      "degraded",
 			"recoverable": true,
-			"code":        "token_invalidated",
+			"code":        code,
 		}, true
 	}
 	if strings.Contains(lower, "rmcp::transport::worker") &&

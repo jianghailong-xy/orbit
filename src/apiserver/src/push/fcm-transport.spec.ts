@@ -320,8 +320,9 @@ test('contract preserves routing, categories, zero badge and semantic notificati
 test('the shared Android wire fixture matches the real payload conversion', () => {
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
   for (const sample of fixture.samples) {
+    // A sample sent with a collapse id names it, as notifyLoopMissed's do; the rest take the fallback key.
     const actual = { ...fcmData(JSON.stringify(sample.source), sample.pushType,
-      sample.data.eventId, sample.data.sentAt), registrationKey: fixture.registered.registrationKey };
+      sample.data.eventId, sample.data.sentAt, sample.collapseId), registrationKey: fixture.registered.registrationKey };
     assert.deepEqual(actual, sample.data, sample.name);
     assert.ok(Object.values(actual).every((v) => typeof v === 'string'));
   }

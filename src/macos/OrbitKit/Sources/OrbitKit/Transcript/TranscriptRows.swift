@@ -232,7 +232,7 @@ public extension TranscriptItem {
         case .assistant(let bubble): return bubble.ts
         case .thinking(let block):   return block.finishedTs ?? block.startedTs
         case .toolCall(let card):    return card.ts
-        case .interrupt, .error, .authError, .autoRetry, .notice: return nil
+        case .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return nil
         }
     }
 }
@@ -438,6 +438,8 @@ public enum DeliveryAnchor {
 
 /// One rendered transcript row, whatever it was assembled from.
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
+    /// What this conversation made as it started (`CreatedWorkspaceLine`): its first line.
+    case createdWorkspace(CreatedWorkspaceLine)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
     /// A run of consecutive tool calls, folded into one row (see `TranscriptRows.groupToolRuns`).
@@ -461,6 +463,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// `scrollTo` at an id no row carries is a silent no-op — the reader's place, lost.
     public var id: String {
         switch self {
+        case .createdWorkspace:      return "created-workspace"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .toolGroup(let cards):  return cards.first?.id ?? "tool-group-empty"
@@ -484,14 +487,19 @@ public enum TranscriptRows {
     /// this visit): this only places it — under everything the conversation said, and above the
     /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
     /// is drawn after the transcript and before the cards that ask the owner something).
+    ///
+    /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
+    /// the first page is loaded: first means first, not the top of a window that starts later.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
-                             recap: RecapCard? = nil) -> [TranscriptRow] {
+                             recap: RecapCard? = nil,
+                             createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
+        if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]
@@ -509,7 +517,18 @@ public enum TranscriptRows {
         // Every record is placed against the same rows, so their clocks are read once — and only
         // when there is a record to place (`ReceiptAnchor.Clocks`) and the caller has not read them.
         var clocks: ReceiptAnchor.Clocks? = known
-        for card in decisionCards {
+        // A question's record that a turn of this conversation draws itself — the turn handing the
+        // owner's answer to the coordinator is that question's card, where the coordinator was told
+        // (`OwnerAnswer.handedOver`) — is not drawn a second time at the moment it was answered. The
+        // turns are read once, and only when there is a question's record to drop.
+        var handedOver: Set<String>?
+        let cards = decisionCards.filter { card in
+            guard case .coordinatorQuestionRecord(let record) = card.kind else { return true }
+            let keys = handedOver ?? OwnerAnswer.handedOver(state)
+            handedOver = keys
+            return !keys.contains(OwnerAnswer.itemKey(record.itemId))
+        }
+        for card in cards {
             switch card.placement {
             case .onArrival(nil):
                 trailingDecisions.append(card)
@@ -569,7 +588,7 @@ public enum TranscriptRows {
         // somebody, so it is shown at the tail rather than dropped with the item it arrived after.
         // Only a question: a record's own moment was resolved against the rows above, and the two
         // other answers it can give — the head of the window, or nothing at all — are already told.
-        for card in decisionCards {
+        for card in cards {
             guard case .onArrival(let anchor?) = card.placement,
                   anchoredDecisions[anchor] != nil else { continue }
             trailingDecisions.append(card)

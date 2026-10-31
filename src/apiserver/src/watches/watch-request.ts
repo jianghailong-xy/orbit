@@ -16,7 +16,10 @@ import { leafParamsProblem, predicateLeaves } from './watch-predicate';
 
 /**
  * What the Watch API refuses before it reads or writes anything: the request side of the grammars in
- * `contracts/watch.contract.json` §2 and §12, answered with the contract's refusal codes.
+ * `contracts/watch.contract.json` §2, §12 and §15, answered with the contract's refusal codes. A leaf's
+ * `params` are read by `leafParamsProblem`, the one reading the evaluator applies too: a job leaf's window
+ * below `minNoOutputSeconds`, or a `jobId` that is not one bg_run hands out, is refused here and never
+ * stored.
  *
  * Strict where the evaluator's reading of a stored predicate (`parseWatchPredicate`) is lenient on
  * purpose. A term is one of the grammar's shapes with exactly the keys its version gives that shape,
@@ -38,11 +41,12 @@ export function watchRefusal(code: WatchRefusalCode, message: string): BadReques
 /** The request's grammar version, when this build serves it. */
 export function assertPredicateVersion(version: unknown): number {
   if (typeof version !== 'number' || !WATCH_PREDICATE_VERSIONS.includes(version)) {
+    const served = WATCH_PREDICATE_VERSIONS.length > 1
+      ? `${WATCH_PREDICATE_VERSIONS.slice(0, -1).join(', ')} and ${WATCH_PREDICATE_VERSIONS[WATCH_PREDICATE_VERSIONS.length - 1]}`
+      : `${WATCH_PREDICATE_VERSIONS[0]}`;
     throw watchRefusal(
       'PREDICATE_VERSION_UNSUPPORTED',
-      `this build serves predicateVersion ${WATCH_PREDICATE_VERSIONS.join(' and ')}, and the request ${
-        version === undefined ? 'named none' : 'named another'
-      }`,
+      `this build serves predicateVersion ${served}, and the request ${version === undefined ? 'named none' : 'named another'}`,
     );
   }
   return version;

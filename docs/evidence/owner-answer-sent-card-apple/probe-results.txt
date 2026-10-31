@@ -1,0 +1,28 @@
+# iPhone probe — run https://github.com/jianghailong-xy/orbit/actions/runs/40541849876
+# probe commit 2d1ad74ffe2cc1368bd50c2302dc9b60c7d9abbf = feature 7f8e3ecf0411cf1dfe350ee1cb4f0df691721356 + .oac-probe/ + shots-only client.yml
+# results branch probe/owner-answer-card-results @ 310c05cc467d0aab52c60da61e67428af9a09bca
+# run: https://github.com/jianghailong-xy/orbit/actions/runs/40541849876
+# sha: 2d1ad74ffe2cc1368bd50c2302dc9b60c7d9abbf
+# shots: success
+==> probe zone Etc/GMT+3 (UTC-3), 13:37 there
+==> stub ready after 2s
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957: iPhone 17 Pro (E839A11B-51B4-4AD3-ACF4-A53B95B7C957) (Shutdown) 
+Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.206) seconds
+Test Case '-[OacProbeUITests.CardShotTests test1OneGreyCardWhereTheLineWas]' passed (74.219 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test2TheQueuedCardIsDashedAndSaysSo]' passed (36.042 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' passed (171.753 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' passed (37.465 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' passed (29.964 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' passed (33.688 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' passed (23.056 seconds).
+# writes the app made (the stub answers every write with 409; only the probe's own resets appear):
+      7     POST /__reset body: 
+# what each test found (labels cut to their opening words; frames are points on the 402x874 iPhone 17 Pro screen):
+one-card: 1 Answered card at (0.0, 275.0, 402.0, 172.0); its label ends: View details
+one-card: order above '我代它把批准请求发给你。问题…' at (16.0, 219.0, 354.0, 49.287109375) | card 'Answered, 11:5…' at (0.0, 275.0, 402.0, 172.0) | below '收到：批准三条。我把批准转给…' at (16.0, 453.0, 362.0, 54.57421875)
+queued: 1 Answered card at (0.0, 309.0, 402.0, 210.0); its label ends: Queued — the coordinator reads it when its current turn ends, View details
+details: 1 Answered card at (0.0, 275.0, 402.0, 172.0); its label ends: View details
+not-yet: the line 'Sent to the coordinator · 11:41' (no card)
+unheld: the line 'Sent to the coordinator · 11:52' (no card)
+unconfirmed: 1 Answered card at (0.0, 275.0, 402.0, 192.0); its label ends: The session has not confirmed it received this., View details
+dark: 1 Answered card at (0.0, 275.0, 402.0, 172.0); its label ends: View details

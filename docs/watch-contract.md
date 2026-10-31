@@ -55,6 +55,8 @@
     （§5、§7、[`watch-operations.md`](./watch-operations.md)）。
 11. **进展只来自结构化报告。** phase/current/total 由报告者声明，message 与任何文本都不是进展；停滞由集中调度判定，
     不靠每个 Watch 的 sleep（§12）。
+12. **bg_run job 的沉默由服务器判定，runner 死了也成立。** `SESSION_JOB_NO_OUTPUT_FOR` 读会话上 runner 报告维护的两列，
+    最后输出时刻在服务器自己的时钟上，runner 不再上报时沉默照样增长；job 已结束时不成立（§15）。
 
 ---
 
@@ -355,7 +357,8 @@ owner。不满足就记 `PERMISSION_REVOKED` 死信，不投递任何载荷，�
 出边。已删除的目标不算撤销，它的状态不会因此落到别人手里。`REVOKED` / `UNRESOLVABLE` 的终态 turn 不含目标，只复核观察者。
 
 **脱敏**：唤醒载荷从存储的快照按白名单重建，只保留契约列出的键：目标的 kind、id、epoch、state、changed，谓词声明过的 leaf
-（布尔值），observed 里的 status、endReason、runState、lifecycleState（单个词）与 pendingApproval（布尔值）。其他键一律丢弃，
+（布尔值），observed 里的 status、endReason、runState、lifecycleState（单个词）与 pendingApproval（布尔值），谓词读 job 输出时
+再加 `jobs`（每项只有 bg_run 的 job id 与 `lastOutputAt` 时刻，§15.1）。其他键一律丢弃，
 形状不对的值写成 `[redacted]`；不在谓词词汇里的 reason 也一样。推送只带脱敏后的 reason。`last_error` 落库前替换掉 URL 凭据、
 Bearer token、API key 与 `key=value` 形式的密钥。
 
@@ -481,7 +484,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ## 10. 边界测试向量
 
-全部 47 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
+全部 54 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
 `watchContract.spec.ts` 保证每条都有 `given` / `expect` / `why`、id 唯一、
 引用的拒绝码与状态都是本契约声明过的，且**每个 leaf 至少被一条向量覆盖**。
 
@@ -534,6 +537,13 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 | 45 | `quorum-unreachable-after-deletion-is-unresolvable` | quorum 永远够不着要说出来 |
 | 46 | `version-1-refuses-version-2-terms` | 谓词按它声明的版本解析 |
 | 47 | `continuous-policy-out-of-range-refused` | debounce/预算越界拒绝 |
+| 48 | `job-quiet-past-the-window` | job 超过窗口没有输出 = 沉默（§15） |
+| 49 | `job-output-within-the-window` | 窗口内有输出不成立，调度到截止时间 |
+| 50 | `silent-runner-is-heard-as-silence` | **runner 不再上报，沉默照样增长** |
+| 51 | `named-job-is-the-only-one-asked` | 指明 `jobId` 只看那一个 job |
+| 52 | `ended-job-is-not-quiet` | **已结束的 job 不算沉默**：等 TTL 或靠 `ANY_OF` |
+| 53 | `unreported-job-is-unknown-not-quiet` | 没报告过最后输出 = 未知，不是沉默 |
+| 54 | `version-2-refuses-the-job-leaf` | job leaf 只在 v3 文法里 |
 
 ---
 
@@ -543,6 +553,8 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
   predicateVersion 2 落地（§12）；quorum 只在创建时封存的集合上成立，动态成员资格仍未封存。
 - **进度没有 agent 工具与界面呈现**：服务端的报告门与读门已在（§12.1），MCP/CLI 的 `task_progress_report`
   与 Web/macOS 展示是后续任务。
+- **job 沉默的精度是一个上报间隔**：服务端知道的最后输出最多落后 runner 的一次心跳（一分钟），最小窗口因此是 300 秒（§15.2）。
+  客户端编辑器不提供 v2、v3 的 leaf，只读 agent 建的这类 Watch。
 - **v1 每个 Watch 只有一个动作。** 「既通知又唤醒」要等有人明确定义两个交付各自的成功与死信语义。
 - **`UNRESOLVABLE` / `REVOKED` 是终态**：不自动复活。目标回来了或权限恢复了要新建一个 Watch，
   因为那是一次新的观察关系，不是旧关系的续期。
@@ -551,7 +563,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ## 12. 结构化进度、停滞条件、quorum 与 continuous（predicateVersion 2）
 
-v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predicateVersion` 1 与 2 都被服务：谓词以请求时声明的版本存储，
+v2 在 v1 之上加四样东西，全部仍然只从数据库行判定（v3 在 v2 之上再加一个 leaf，见 §15）。`predicateVersion` 1 与 2 都被服务：谓词以请求时声明的版本存储，
 并按那个版本的文法判定，所以 v1 的 Watch 永远不会遇到它没要求过的项；v1 请求里出现 v2 的项 → `UNKNOWN_PREDICATE_KIND`。
 
 ### 12.1 结构化进度与 lifecycle epoch
@@ -645,6 +657,9 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
   404 `WATCHES_DISABLED`，读、暂停、取消、release 照常。这个 404 与没有 runner 门时一样，已发布的 runner 照样按上一条降级；
   本版工具认出这个码，明说「Watch 没开」。claim 带 `watchesDisabled` 时 runner 注入 `ORBIT_WATCHES=off`：MCP 与 CLI 不列出
   这些工具，指令里不带等待那一段，bg-guard 不拦轮询。
+- `watch_create` / `watch_update` 的 `predicateVersion` 是 `[1, 2, 3]`，描述列出各版本的 leaf、`AT_LEAST` 与 `params`。省略时工具按谓词
+  用到的项发送最低的版本：v1 谓词照旧发 1，所以新 runner 配旧服务端时这些等待照常工作；用到更新的项时发它所需的版本，服务端不认识
+  这个版本就回 `PREDICATE_VERSION_UNSUPPORTED`，原文透传，不静默丢掉 leaf（§15.4）。
 - `task_progress_report` / `orbit task progress` 不给 phase、current、total、message 时是读。工具描述写明：进展只由这份报告声明，
   不从 Bash 输出或 transcript 推断；只有 phase/current/total 变化才算进展；遇 409 `PROGRESS_REVISION_CONFLICT` 先重读，再上报。
   旧 apiserver 没有进度门（404 `Cannot …`）时明说要升级服务端，不当成「task 不存在」。
@@ -709,7 +724,78 @@ bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts 
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
 bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-task-progress.pg.spec.ts   # §12.1 runner 门：owner 隔离、revision 冲突、终态拒绝
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-events.pg.spec.ts     # §8.1 watch.changed：四类变化各一条、载荷只有 id
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-evaluator.pg.spec.ts  # §15：经 runner 门上报，job 沉默成立、输出恢复后不成立、runner 停止上报后到点成立
+(cd src/runner-go && go test -run 'Watch' .)                                      # §13、§15.4：工具 schema 与契约一致，predicateVersion 放开到 [1, 2, 3]
 ```
 
 §8.1 客户端那一半在 `src/web/src/lib/useControlPlane.watches.test.tsx`（`npx vitest run` 于 `src/web`），
 服务端信封那一半在 `src/apiserver/src/realtime/stream-for-user.spec.ts`（`npm test` 于 `src/apiserver`）。
+
+---
+
+## 15. 托管 job 的沉默：`SESSION_JOB_NO_OUTPUT_FOR`（predicateVersion 3）
+
+**状态**：项目「不会静默断掉的长跑循环」任务 D 的产物。v3 = v2 加这一个 leaf，文法的其余部分不变；`predicateVersion` 1、2、3
+都被服务，每个谓词按它请求时声明的版本判定。v2 及更早的请求里出现这个 leaf → `UNKNOWN_PREDICATE_KIND`（向量 54）。
+
+### 15.1 它回答什么
+
+「这个会话用 bg_run 起的 job，有多久没有新输出了。」target 是托管 job 的 **SESSION**：`watch_target.target_resource_id` 是 uuid，
+放不下 `bgj_` id，所以具体哪个 job 由参数指明。
+
+| `params` | 成立条件 |
+| --- | --- |
+| `{ seconds }`，`[300, 30d]` | 会话 `running_bg_jobs` 里**任一** job 在 `running_bg_job_activity` 里有最后输出时刻 L，且 `now >= L + seconds` |
+| `{ seconds, jobId }` | 同上，只看 `jobId` 这一个 job |
+
+写法：`{ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_JOB_NO_OUTPUT_FOR', params: { seconds: 1800, jobId: 'bgj_0a1b2c3d4e5f' } }`。
+`jobId` 是 bg_run 返回的 id：`bgj_` 加 1–64 个小写字母或数字。缺参、多参、越界或别的写法 → `PREDICATE_PARAMETER_INVALID`，
+目标不是 SESSION → `TARGET_KIND_MISMATCH`，都在创建时拒绝。
+
+leaf 标签带参数：`SESSION_JOB_NO_OUTPUT_FOR(1800s)`、`SESSION_JOB_NO_OUTPUT_FOR(1800s, bgj_0a1b2c3d4e5f)`，Match 的 reason 与快照的
+`leaves` 都用它。谓词读 job 时，快照里这个会话的 `observed` 多一项 `jobs`：每个在飞 job 的 `id` 与 `lastOutputAt`（从没报告过为 null）。
+job 打印的内容从不进入谓词、快照或唤醒载荷：沉默只由「输出动没动过」判定。
+
+### 15.2 事实从哪来，为什么 runner 死了也成立
+
+两列都是现成的（迁移 0288、0289），由事件摄入在同一个事务里维护：runner 每分钟（`bgJobHeartbeatInterval`）给每个在跑的 job
+发一次 `running` 报告，带 `idleMs`——距最后一次输出的**时长**而不是时间戳；服务端把它存成 `receivedAt − idleMs`，即**服务器自己
+时钟上**的时刻（`src/apiserver/src/sessions/background-job-activity.ts`）。
+
+所以 runner 停止上报——崩溃、断网、机器睡眠——这个时刻原地不动，沉默在服务器的时钟上自然增长，到点 leaf 成立（向量 50）。
+判定既不需要 runner 在场，也不需要任何事件：与 `TASK_NO_PROGRESS_FOR` 相同，求值落地时把 `next_evaluate_at` 设为最早的截止时间
+（`stallDeadline`），到点由服务所有 Watch 的同一个 claim 循环取走。job 恢复输出后，下一次报告把时刻推到最近，截止时间随之后移，
+到点的那次求值重读行、不成立、按新截止时间重新排期（向量 49）。
+
+**精度**：服务端知道的最后输出最多落后一个上报间隔（一分钟）。刚写过输出、还没来得及上报的 job，在服务端看来仍是上一次报告的
+沉默，所以一次 Match 只保证这个 job 真实沉默过至少 `seconds − 60` 秒。最小窗口因此是 `minNoOutputSeconds = 300`（五个上报间隔），
+不是 `TASK_NO_PROGRESS_FOR` 的 60 秒：进度报告是即时的，job 的输出不是。
+
+### 15.3 不成立的情形
+
+写清楚，免得有人对着一个永远不会成立的条件等下去：
+
+- **job 已结束**（向量 52）：它的终止报告把它移出 `running_bg_jobs`，leaf 对它不成立，也不再排截止时间。只盯它的 Watch 等到 TTL
+  到期，到期唤醒照常交付（§5）；要同时听到「结束」，用 `ANY_OF` 把另一个 leaf 放进来。job 退出本身由 bg_run 的 `wakeOnExit`
+  告诉起它的那个会话。TTL 宜取 job 预计时长再留余量。
+- **会话的 run 结束**：结束 run 的写入会清空 running 集合（`src/apiserver/src/sessions/running-work.ts`），leaf 不成立；要听到这件事，
+  用 `ANY_OF` 加上 `{ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_RUN_TERMINAL' }`。runner 掉线时**正在跑 turn** 的会话会被 reaper
+  以 `runner offline` 结束并清空集合，属于这一条；**停着**（`AWAITING_INPUT`）等 job 的会话不会因为 runner 掉线被结束，job 留在集合里，
+  沉默照常增长——这正是长跑等待的常见形态。
+- **从没报告过最后输出**（不带 `idleMs` 的旧 runner，向量 53）：未知不是沉默，不成立，也不排截止时间。
+- **`service`**：不进 `running_bg_jobs`（它不是在飞的工作），从不被问到。
+- **runner 接管会话**（自更新后的新进程 takeover、`resumed` 握手）：先清空集合，被接管的 job 随即以 `running` 报告带着它的 `idleMs`
+  回来；这中间短暂不成立。
+
+### 15.4 Agent 能用到，谓词里仍然没有 shell
+
+`watch_create` / `watch_update` 的 `predicateVersion` 枚举是 `[1, 2, 3]`，描述列出 v2 的 `TASK_PROGRESS_AT_LEAST`、`TASK_NO_PROGRESS_FOR`、
+`AT_LEAST` 与 `params`，以及这个 leaf（§13.1）。省略版本时工具发送谓词用到的最低版本：v1 谓词照旧发 1，旧服务端照常接受；带这个
+leaf 发 3，没有 v3 的旧服务端回 `PREDICATE_VERSION_UNSUPPORTED`，原文透传给 agent，不会被静默忽略（版本错位：server 先部署）。
+
+自唤醒保护不变：`RESUME_SESSION` 的 Watch 不能把观察者自己列为目标（`SELF_WATCH_LOOP`，§7）。这个 leaf 用来盯**别的**会话的 job，
+例如自己用 `session_create` 起的子会话；盯自己的 job 用 bg_run 的 `wakeOnStall`（runner 侧判定），或者以 `NOTIFY_USER` 盯自己。
+
+**谓词里没有 shell，服务器也没有执行命令的地方。** 外部系统（CI、部署、远端队列）的停滞这样盯：用 bg_run 跑一个只在状态变化时才
+打印一行的轮询脚本，配 `wakeOnStall`；脚本不打印就是状态没变，沉默超过阈值就是停滞。要在 runner 死了时也听到，再从另一个会话用
+这个 leaf 盯那个 job。工具描述写明了这一条。

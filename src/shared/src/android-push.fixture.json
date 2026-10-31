@@ -65,6 +65,58 @@
         "sentAt": "2026-10-04T00:00:00.000Z",
         "payload": "{\"clearSessions\":[\"019a0000-0000-7000-8000-000000000002\"],\"badge\":0}"
       }
+    },
+    {
+      "name": "loop-missed",
+      "pushType": "alert",
+      "collapseId": "loop-019a0000-0000-7000-8000-000000000009-1793528400000",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Migrate the archive",
+            "body": "Wakeup loop missed 3 ticks: the runner is offline."
+          },
+          "sound": "default",
+          "thread-id": "019a0000-0000-7000-8000-000000000002"
+        },
+        "sessionID": "019a0000-0000-7000-8000-000000000002",
+        "kind": "loop-missed"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000004",
+        "notificationKey": "loop-019a0000-0000-7000-8000-000000000009-1793528400000",
+        "sentAt": "2026-11-01T10:20:00.000Z",
+        "payload": "{\"sessionID\":\"019a0000-0000-7000-8000-000000000002\",\"kind\":\"loop-missed\",\"title\":\"Migrate the archive\",\"body\":\"Wakeup loop missed 3 ticks: the runner is offline.\",\"threadId\":\"019a0000-0000-7000-8000-000000000002\"}"
+      }
+    },
+    {
+      "name": "wakeup-dropped",
+      "pushType": "alert",
+      "collapseId": "wakeup-019a0000-0000-7000-8000-00000000000a",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Watch the deploy",
+            "body": "Scheduled wakeup dropped: the session failed."
+          },
+          "sound": "default",
+          "thread-id": "019a0000-0000-7000-8000-000000000002"
+        },
+        "sessionID": "019a0000-0000-7000-8000-000000000002",
+        "kind": "wakeup-dropped"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000005",
+        "notificationKey": "wakeup-019a0000-0000-7000-8000-00000000000a",
+        "sentAt": "2026-11-01T10:20:00.000Z",
+        "payload": "{\"sessionID\":\"019a0000-0000-7000-8000-000000000002\",\"kind\":\"wakeup-dropped\",\"title\":\"Watch the deploy\",\"body\":\"Scheduled wakeup dropped: the session failed.\",\"threadId\":\"019a0000-0000-7000-8000-000000000002\"}"
+      }
     }
   ]
 }

@@ -24,7 +24,7 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
+import { appendScheduledWakeupContext, endWakeupLoop } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -1559,7 +1559,8 @@ export class SessionsService {
    * what `create` writes after the INSERT on every other path: the uploads the session adopts and, for a shell-first or
    * attachments-only opening, the opening turn. An ordinary prompt becomes turn 1 at the claim, as for every session.
    *
-   * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`).
+   * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`). One log
+   * line says how it ended, either way: nothing else on this path does.
    */
   private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null }>(
     ownerId: string,
@@ -1568,7 +1569,7 @@ export class SessionsService {
     opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean },
   ): Promise<S> {
     const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
-    const session = await withTransactionRetry(this.prisma, async (tx) => {
+    const made = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.WORKSPACE_NAME_LOCK_NAMESPACE}, ${lockKey})`;
       const taken = await tx.workspace.findMany({
         where: { ownerId, deletedAt: null, name: { startsWith: target.name } },
@@ -1584,7 +1585,7 @@ export class SessionsService {
           enableWorktree: false,
           autoCreateWorkDir: target.autoCreateWorkDir,
         },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       const created = await insertSession(tx, workspace.id);
       if (opening.attachmentIds.length > 0) {
@@ -1601,10 +1602,15 @@ export class SessionsService {
         });
       }
       if (opening.attachmentsAlone) await this.ensurePromptSeeded(tx, created);
-      return created;
-    }, loggedRetry(this.logger, 'sessions.createInNewWorkspace'));
+      return { created, workspace };
+    }, loggedRetry(this.logger, 'sessions.createInNewWorkspace')).catch((error: unknown) => {
+      // The error's code or class, not its message, which can quote the values it was writing.
+      this.logger.warn(`workspace ${JSON.stringify(target.name)} for owner ${ownerId} on runner ${target.runnerId} at ${JSON.stringify(target.workDir)} not created: ${(error as { code?: string })?.code ?? (error as Error)?.name}`);
+      throw error;
+    });
+    this.logger.log(`workspace ${made.workspace.id} ${JSON.stringify(made.workspace.name)} for owner ${ownerId} on runner ${target.runnerId} at ${JSON.stringify(target.workDir)} created with session ${made.created.id}`);
     this.realtime.markRunnerChanged(target.runnerId);
-    return session;
+    return made.created;
   }
 
   /** pg_advisory_xact_lock namespace for the import-claim serializer (see importSession). */
@@ -6194,6 +6200,11 @@ export class SessionsService {
       // here — every one of them, because an interrupt drops the whole queue and not one named turn
       // (runner-api/wake-turn-withdraw.ts). A refusal below rolls this back too.
       await settleUnrunWakeTurns(tx, id, { interrupted: true });
+      // The composer's Stop ends the session's background work, and a wakeup loop is background work: it
+      // ends here, OWNER_STOP, with the tick it has waiting (docs/long-running-loop-contract.md §1). A plain
+      // interrupt leaves the loop running — it only took the loop's tick already queued, just above — and
+      // the next tick comes due as it would have.
+      if (stopBackgroundWork) await endWakeupLoop(tx, id, 'OWNER_STOP');
       // An exception item queued behind the interrupted turn is taken back unrun. The conversation
       // lives on, so the item stays the coordinator's and is delivered again when its next turn ends.
       await returnQueuedTurns(tx, id, { code: 'TURN_INTERRUPTED' });

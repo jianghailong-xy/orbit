@@ -40,9 +40,11 @@ import io.orbitd.android.R
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.SessionPendingTray
+import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
+import io.orbitd.android.cards.LocalAnsweredQuestions
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
@@ -223,7 +225,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
-    val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
+    val liveTail = transcript != null && state.window.newerAfter == null
+    val queuedShown = if (liveTail) queued.size else 0
+    // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
+    // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
+    val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
+        val tail = if (liveTail) accepted + queued.map { it.event } else emptyList()
+        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail, cards::open)
+    }
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
             null -> null
@@ -332,7 +341,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
     }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
