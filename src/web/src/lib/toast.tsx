@@ -146,6 +146,21 @@ const TOAST = {
     announce(headline, true, line);
     showToast({ message: headline, detail: line, tone: 'error' });
   },
+  // A part of the page that could not be drawn (LazyBoundary): nearly always its code, which a deploy
+  // replaced after this tab was opened. Reloading is the way back and the reader's to press, because
+  // it takes a half-typed message with it. Keyed: the parts that fail after this one are this toast.
+  partOfPageFailed: (): void => {
+    const headline = "Part of this page didn't load";
+    const line = 'Orbit may have been updated.';
+    announce(headline, true, line);
+    showToast({
+      message: headline,
+      subtitle: line,
+      tone: 'warning',
+      key: 'part-of-page-failed',
+      action: { label: 'Reload', ariaLabel: 'Reload the page', onClick: () => window.location.reload() },
+    });
+  },
   destroy: clearToasts,
   sessionNotice,
   // Complete/Trash are the two reversible session results. Keep the convenience method

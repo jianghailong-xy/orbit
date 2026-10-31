@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,8 @@ type supervisedSession struct {
 	uploads []string
 	// The path of every request the runner made, in arrival order.
 	paths []string
+	// The worktree snapshots the runner reported with no turn to complete, in arrival order.
+	diffs []DiffResultRequest
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -153,6 +156,13 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			s.settled = append(s.settled, req)
 			s.mu.Unlock()
 		}
+	case strings.HasSuffix(r.URL.Path, "/diff"):
+		var req DiffResultRequest
+		if json.NewDecoder(r.Body).Decode(&req) == nil {
+			s.mu.Lock()
+			s.diffs = append(s.diffs, req)
+			s.mu.Unlock()
+		}
 	}
 	_, _ = w.Write([]byte(`{}`))
 }
@@ -205,6 +215,12 @@ func (s *supervisedSession) settledTurn(turnID string) *TurnCompleteRequest {
 		}
 	}
 	return nil
+}
+
+func (s *supervisedSession) reportedDiffs() []DiffResultRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]DiffResultRequest(nil), s.diffs...)
 }
 
 // awaitParked waits for turnID to be acknowledged and for completeTurn to have handed its
@@ -488,5 +504,75 @@ func TestEngineStoppingMidSelfDrivenTurnLeavesNothingBehind(t *testing.T) {
 	clock.Advance(warmEngineTTL)
 	if cancelled != 1 {
 		t.Fatalf("the replacement engine was recycled %d times at its TTL, want 1: the dead engine's turn outlived it", cancelled)
+	}
+}
+
+// superviseClaudeSessionInWorktree runs a session in a real checkout on a branch of its own, as
+// clean as one a first turn leaves when all it did was read code.
+func superviseClaudeSessionInWorktree(t *testing.T, pool *sessionPool, script ...fakeStep) *supervisedSession {
+	t.Helper()
+	repo := initRepo(t)
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+	branch := "orbit/self-driven"
+	checkout := filepath.Join(t.TempDir(), "session-worktree")
+	mustGit(t, repo, "worktree", "add", "-b", branch, checkout)
+	return superviseClaudeSessionVia(t, pool, checkout, context.Background(), func(s *supervisedSession, apiURL string) *Transport {
+		s.job.WT = &Worktree{Path: checkout, Branch: branch, BaseSha: base, RepoDir: repo, Session: s.job.SessionID}
+		s.job.IsolationStatus = isoWorktree
+		return NewTransport(apiURL, "runner-token")
+	}, script...)
+}
+
+// A turn the engine runs on its own has no /turn-complete to carry the worktree, and no permit
+// for the heartbeat to scan it under. A session whose delivered turn ended while its subagents
+// worked, and which wrote everything once they handed back, kept that turn's empty file list for
+// good, and every client hides the git bar on an empty list.
+func TestSelfDrivenTurnReportsTheWorktreeItLeft(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSessionInWorktree(t, pool, selfDrivenScript(ownToolCallEnds...)...)
+	s.awaitParked("turn-1")
+	if files := s.settledTurn("turn-1").ChangedFiles; len(files) != 0 {
+		t.Fatalf("the delivered turn reported %#v, want the clean checkout it ended on", files)
+	}
+
+	s.fake.Release("wake")
+	s.awaitEvents("the engine's own tool_use", 1, isToolUse("toolu_own"))
+	if err := os.WriteFile(filepath.Join(s.execDir, "board.png"), []byte("the design board\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.fake.Release("tool-done")
+
+	waitUntil(t, func() bool { return len(s.reportedDiffs()) > 0 }, "the worktree the engine's own turn left was never reported")
+	diff := s.reportedDiffs()[0]
+	if len(diff.ChangedFiles) != 1 || diff.ChangedFiles[0].Path != "board.png" {
+		t.Fatalf("reported files = %#v, want the one file the turn wrote", diff.ChangedFiles)
+	}
+	if len(diff.ChangedDiff) != 1 || diff.ChangedDiff[0].Path != "board.png" {
+		t.Fatalf("reported patches = %#v, want the file's patch beside it", diff.ChangedDiff)
+	}
+	if diff.BaseSha != s.job.WT.baseSha() || diff.WorktreeBranch != s.job.WT.Branch || !diff.WorktreeDirty {
+		t.Fatalf("reported %+v, want the base and branch of a dirty checkout", diff)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.settled) != 1 {
+		t.Fatalf("%d turns were completed, want the delivered one: nobody sent the engine's own", len(s.settled))
+	}
+}
+
+// A session with no worktree has no file list for a report to refresh. The tool call after the
+// turn's end is the mark that the runner has finished with that end: it handles the stream in order.
+func TestSelfDrivenTurnWithoutAWorktreeReportsNothing(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	script := selfDrivenScript(append(append([]fakeStep(nil), ownToolCallEnds...),
+		fakeStep{Emit: "tool_use", ToolUseID: "toolu_after", ToolName: "Bash"})...)
+	s := superviseClaudeSession(t, pool, script...)
+	s.awaitParked("turn-1")
+
+	s.fake.Release("wake")
+	s.fake.Release("tool-done")
+	s.awaitEvents("the stream past the end of the engine's own turn", 1, isToolUse("toolu_after"))
+	if s.requested("/diff") {
+		t.Fatal("a session with no worktree reported one")
 	}
 }

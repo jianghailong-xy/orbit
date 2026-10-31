@@ -1,0 +1,166 @@
+diff --git a/src/web/src/components/TasksSidePanel.tsx b/src/web/src/components/TasksSidePanel.tsx
+index 5230042..40090d3 100644
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -35,7 +35,7 @@ import {
+ } from '@dnd-kit/sortable';
+ import { CSS } from '@dnd-kit/utilities';
+ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
++import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+ import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+ import type {
+   PlanUsage,
+@@ -167,6 +167,9 @@ const MIN_SIDEBAR_WIDTH = 200;
+ const MAX_SIDEBAR_WIDTH = 480;
+ const clampWidth = (w: number): number =>
+   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
++// The Workspaces count as fitting only with room left for this many project rows under them; with
++// less, the two groups scroll as one rather than leave Projects a sliver of its own.
++const PINNED_PROJECT_ROWS = 5;
+ 
+ /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
+ export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
+@@ -441,6 +444,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+   const [workspacesOpen, setWorkspacesOpen] = useState(true);
+   const [editingWorkspaces, setEditingWorkspaces] = useState(false);
+ 
++  // While every Workspace fits, with room left for PINNED_PROJECT_ROWS projects, the Workspaces stay
++  // put and only Projects scroll; otherwise the two scroll as one (docs/mocks/sidebar-projects-scroll).
++  // Measured before paint, again whenever the rail or the Workspaces group changes size.
++  const listsRef = useRef<HTMLDivElement>(null);
++  const [pinWorkspaces, setPinWorkspaces] = useState(false);
++
+   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+     return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
+@@ -600,6 +609,30 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+       },
+     ];
+   };
++  useLayoutEffect(() => {
++    const lists = listsRef.current;
++    // No observer (jsdom) leaves the default: the two groups scroll as one.
++    if (!lists || typeof ResizeObserver === 'undefined') return undefined;
++    const measure = () => {
++      const workspacesGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-workspaces');
++      const projectsGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-projects');
++      if (!workspacesGroup || !projectsGroup) return setPinWorkspaces(false);
++      const head = projectsGroup.querySelector<HTMLElement>('.tp-group-head')?.offsetHeight ?? 0;
++      const row = projectsGroup.querySelector<HTMLElement>('.tp-project')?.offsetHeight ?? 0;
++      // The least Projects keeps: the rows it has, up to PINNED_PROJECT_ROWS of them.
++      const least = Math.min(projectsGroup.scrollHeight, head + PINNED_PROJECT_ROWS * row);
++      const gap = projectsGroup.getBoundingClientRect().top - workspacesGroup.getBoundingClientRect().bottom;
++      // A rail with no height (folded to its icons) has nothing to pin.
++      setPinWorkspaces(lists.clientHeight > 0 && workspacesGroup.offsetHeight + gap + least <= lists.clientHeight);
++    };
++    measure();
++    const observer = new ResizeObserver(measure);
++    observer.observe(lists);
++    const workspacesGroup = lists.querySelector(':scope > .tp-group-workspaces');
++    if (workspacesGroup) observer.observe(workspacesGroup);
++    return () => observer.disconnect();
++  }, [openProjects.length, projectsOpen, workspacesOpen, editingWorkspaces, orderedWorkspaces.length, bareMachines.length]);
++
+   const workspaceSensors = useSensors(
+     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+@@ -837,7 +870,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+         })}
+       </div>
+ 
+-      <div className="tp-scroll autohide-scrollbar">
++      <div className="tp-scroll">
+         <div className="tp-section">
+           {topItems.map((t) => (
+             <div
+@@ -875,7 +908,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+ 
+         <div className="tp-divider" />
+ 
+-        <div className="tp-group">
++        <div ref={listsRef} className={`tp-lists autohide-scrollbar${pinWorkspaces ? ' pin-workspaces' : ''}`}>
++        <div className="tp-group tp-group-workspaces">
+           {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
+             <WorkspacesHead
+               count={orderedWorkspaces.length}
+@@ -973,7 +1007,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+             task lists that stood here are picked from the Tasks page's title now, as the phone
+             picks them from its Tasks page. Closed projects are the Projects page's to list. */}
+         {openProjects.length > 0 && (
+-          <div className="tp-group">
++          <div className="tp-group tp-group-projects autohide-scrollbar">
+             <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
+               <span className="tp-group-name">Projects</span>
+               <span className="tp-count">{openProjects.length}</span>
+@@ -990,6 +1024,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+               ))}
+           </div>
+         )}
++        </div>
+       </div>
+ 
+       <div className="tp-user">
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 58c635f..1de3ee1 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -695,12 +695,57 @@ button.toast--pill:focus-visible {
+   font-weight: 600;
+   color: var(--text-1);
+ }
++/* The rail's middle: the fixed entries stay put, and under them Workspaces and Projects scroll as
++   one (.tp-lists), unless every workspace fits with room left for the projects: then the
++   workspaces stay put too and only Projects scrolls (.pin-workspaces, set by TasksSidePanel). */
+ .tp-scroll {
+   flex: 1;
+   min-height: 0;
+-  overflow-y: auto;
++  display: flex;
++  flex-direction: column;
+   padding-bottom: 12px;
+ }
++/* Every block keeps the same scrollbar gutter, scrolling or not, so ⌘P lines up with ⌘1 whichever
++   one scrolls and no row shifts when the layout switches. */
++.tp-scroll > .tp-section {
++  flex: none;
++  overflow: hidden;
++  scrollbar-gutter: stable;
++}
++.tp-scroll > .tp-divider {
++  flex: none;
++}
++.tp-lists {
++  flex: 1 1 auto;
++  min-height: 0;
++  overflow-y: auto;
++  scrollbar-gutter: stable;
++}
++.tp-lists.pin-workspaces {
++  display: flex;
++  flex-direction: column;
++  overflow: hidden;
++  scrollbar-gutter: auto;
++}
++.tp-lists.pin-workspaces > * {
++  flex: none;
++}
++.tp-lists.pin-workspaces > .tp-group-workspaces {
++  overflow: hidden;
++  scrollbar-gutter: stable;
++}
++.tp-lists.pin-workspaces > .tp-group-projects {
++  flex: 1 1 0;
++  min-height: 0;
++  overflow-y: auto;
++  scrollbar-gutter: stable;
++}
++.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head {
++  position: sticky;
++  top: 0;
++  z-index: 1;
++  background: var(--bg-raised);
++}
+ .tp-section {
+   padding: 0 8px;
+ }

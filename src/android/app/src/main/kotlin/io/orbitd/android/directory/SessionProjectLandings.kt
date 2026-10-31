@@ -139,7 +139,7 @@ object SessionProjectLandings {
             val promotionId = record.text("promotionId").orEmpty()
             if (promotionId in joined) continue
             val at = ProjectTime.parse(record.obj("merged")?.text("at"))
-            val session = record.text("landingSessionId")?.takeIf { it.isNotEmpty() }
+            val session = record.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let(ObjectId::toPublic)
             settled += Settled(LandingsWindowRow(session ?: "merge:$promotionId", session, "PROMOTION", PromotionCards.timelineTitle(record),
                 PromotionCards.timelineDetail(record), LandingsWindowTone.MERGE, clock(at, zone), millis(at), record), at)
         }

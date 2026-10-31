@@ -1,0 +1,75 @@
+diff --git a/src/web/src/components/TasksSidePanel.tsx b/src/web/src/components/TasksSidePanel.tsx
+index 5230042..5cee777 100644
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -837,7 +837,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+         })}
+       </div>
+ 
+-      <div className="tp-scroll autohide-scrollbar">
++      <div className="tp-scroll">
+         <div className="tp-section">
+           {topItems.map((t) => (
+             <div
+@@ -875,7 +875,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+ 
+         <div className="tp-divider" />
+ 
+-        <div className="tp-group">
++        <div className="tp-group tp-group-scroll autohide-scrollbar">
+           {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
+             <WorkspacesHead
+               count={orderedWorkspaces.length}
+@@ -973,7 +973,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
+             task lists that stood here are picked from the Tasks page's title now, as the phone
+             picks them from its Tasks page. Closed projects are the Projects page's to list. */}
+         {openProjects.length > 0 && (
+-          <div className="tp-group">
++          <div className="tp-group tp-group-scroll autohide-scrollbar">
+             <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
+               <span className="tp-group-name">Projects</span>
+               <span className="tp-count">{openProjects.length}</span>
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 58c635f..15131b8 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -695,12 +695,38 @@ button.toast--pill:focus-visible {
+   font-weight: 600;
+   color: var(--text-1);
+ }
++/* The rail's middle no longer scrolls as one: the fixed entries stay put, and Workspaces and
++   Projects share what is left. Each row is sized like a grid track, so a group that needs less
++   than half keeps only what it needs and the other takes the rest; past half, each scrolls
++   inside itself (.tp-group-scroll) with its head held at the top. */
+ .tp-scroll {
+   flex: 1;
+   min-height: 0;
+-  overflow-y: auto;
++  display: grid;
++  grid-template-columns: minmax(0, 1fr);
++  /* The fixed entries and the line under them never give up height; the groups' rows, after them,
++     are the ones sized to share. */
++  grid-template-rows: max-content max-content;
++  align-content: start;
++  overflow: hidden;
+   padding-bottom: 12px;
+ }
++/* All three keep the same scrollbar gutter, scrolling or not, so ⌘P lines up with ⌘1 and no row
++   shifts when a group starts or stops scrolling (a fold gives the other group the room). */
++.tp-scroll > .tp-section {
++  overflow: hidden;
++  scrollbar-gutter: stable;
++}
++.tp-group-scroll {
++  overflow-y: auto;
++  scrollbar-gutter: stable;
++}
++.tp-group-scroll .tp-group-head {
++  position: sticky;
++  top: 0;
++  z-index: 1;
++  background: var(--bg-raised);
++}
+ .tp-section {
+   padding: 0 8px;
+ }

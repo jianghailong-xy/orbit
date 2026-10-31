@@ -2083,6 +2083,24 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 // to replace a deliberately fenced Claude process without charging the crash-respawn budget.
 const sessionProcessCurrentWorkFenced = "CURRENT_WORK_TARGET_FENCED"
 
+// pushLiveDiff reports the worktree as it stands now, with no turn to carry it. It only reads the
+// checkout (liveDiff stages into a throwaway index), so it is safe whatever the engine is doing.
+func pushLiveDiff(t *Transport, job *ClaimedSession) {
+	liveFiles, livePatches := liveDiff(job.WT)
+	liveBaseSha := job.WT.baseSha()
+	if err := t.diffResult(job.SessionID, DiffResultRequest{
+		ChangedFiles:   liveFiles,
+		ChangedDiff:    livePatches,
+		BaseSha:        liveBaseSha,
+		WorktreeDirty:  worktreeIsDirty(job.WT),
+		BranchSha:      effectiveBranchSha(job.WT),
+		BranchMerged:   branchMergedInto(job.WT),
+		WorktreeBranch: currentBranch(job.WT),
+	}); err != nil {
+		logln("diff-result failed for", job.SessionID+":", err)
+	}
+}
+
 // runClaudeSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
@@ -2760,19 +2778,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// index, like the heartbeat's liveDiffStat), so it's safe even mid-turn; no
 				// claude involvement and no turn consumed. Acked server-side on delivery, so
 				// there's no redelivery to dedup against.
-				liveFiles, livePatches := liveDiff(job.WT)
-				liveBaseSha := job.WT.baseSha()
-				if err := t.diffResult(job.SessionID, DiffResultRequest{
-					ChangedFiles:   liveFiles,
-					ChangedDiff:    livePatches,
-					BaseSha:        liveBaseSha,
-					WorktreeDirty:  worktreeIsDirty(job.WT),
-					BranchSha:      effectiveBranchSha(job.WT),
-					BranchMerged:   branchMergedInto(job.WT),
-					WorktreeBranch: currentBranch(job.WT),
-				}); err != nil {
-					logln("diff-result failed for", job.SessionID+":", err)
-				}
+				pushLiveDiff(t, job)
 			case "end":
 				endSession()
 				return
@@ -3028,6 +3034,14 @@ scanLoop:
 				}
 				inbox.clearInflight(turnID)
 				setTurn("") // turn acked; until the next message, events are session-level
+			} else if job.WT != nil {
+				// No message is waiting for this result, so a turn the engine ran on its own has
+				// ended: a subagent handing back or a background task reporting in started it after
+				// the delivered turn parked the session. It has no /turn-complete to carry what it
+				// left in the worktree, and the heartbeat only scans turns holding a permit, so
+				// this is the one report of that work. Nothing else moves the session's file list
+				// past where the delivered turn left it.
+				pushLiveDiff(t, job)
 			}
 			if len(fenced) > 0 {
 				break scanLoop

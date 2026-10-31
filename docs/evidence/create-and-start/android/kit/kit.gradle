@@ -1,0 +1,11 @@
+// Evidence kit (task 34o9etf0IZ0t5oPbYGDz9, single-task Create and start): compiles src/CreateAndStartShotsTest.kt into the app's
+// unit tests without adding it to the tree. Pass it as an extra init script, from the repository root:
+//   bash src/android/gradlew -p src/android -I docs/evidence/create-and-start/android/kit/kit.gradle \
+//     :app:testDebugUnitTest --rerun --tests 'io.orbitd.android.cards.CreateAndStart*ShotsTest'
+// The frames land in src/android/build/evidence/create-and-start-android/.
+allprojects {
+    plugins.withId('com.android.application') {
+        // rootDir is src/android; this directory is docs/evidence/create-and-start/android/kit.
+        android.sourceSets.test.java.srcDir(new File(rootDir, '../../docs/evidence/create-and-start/android/kit/src'))
+    }
+}

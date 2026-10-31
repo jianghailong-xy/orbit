@@ -1,0 +1,223 @@
+[
+  {
+    "id": "34oArlqNorqgnD6rJ3pPp",
+    "sessionId": "34oArhfHTrQGUeUJpxnYg",
+    "toolName": "orbit_task_create",
+    "input": {
+      "runAt": "2026-10-29T06:15:32Z",
+      "title": "E2E A: filed with startNow",
+      "preview": {
+        "lists": [],
+        "tasks": [
+          {
+            "ref": null,
+            "title": "E2E A: filed with startNow",
+            "listId": null,
+            "dependsOnRefs": [],
+            "dependsOnTaskIds": [],
+            "listPublicId": null,
+            "dependsOnTaskPublicIds": []
+          }
+        ],
+        "blocked": 0,
+        "assignees": [
+          {
+            "id": "34oAq3xmR89F3JEnrSIe6",
+            "name": "cas-e2e",
+            "hasRunner": true,
+            "publicId": "34oAq3xmR89F3JEnrSIe6"
+          }
+        ],
+        "scheduled": 0,
+        "taskCount": 1,
+        "startingNow": 1,
+        "externalEdges": 0,
+        "internalEdges": 0,
+        "notDispatchable": 0,
+        "titlesTruncated": 0,
+        "needsManualStart": 0,
+        "awaitingProjectStart": 0
+      },
+      "assigneeId": "34oAq3xmR89F3JEnrSIe6",
+      "description": "Filed with startNow: one approval creates and starts it.\n\nE2E-DO: commit",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "completionCriterion": "EVIDENCE_JUDGMENT",
+      "acceptsStartAfterCreate": true
+    },
+    "status": "ALLOWED",
+    "createdAt": "2026-10-29T06:15:32.251Z",
+    "decidedAt": "2026-10-29T06:15:32.956Z",
+    "publicId": "34oArlqNorqgnD6rJ3pPp",
+    "sessionPublicId": "34oArhfHTrQGUeUJpxnYg"
+  },
+  {
+    "id": "34oAroeg6RdUk5Rr3LagA",
+    "sessionId": "34oArhfHTrQGUeUJpxnYg",
+    "toolName": "orbit_task_create",
+    "input": {
+      "title": "E2E B: approved with Create and start",
+      "preview": {
+        "lists": [],
+        "tasks": [
+          {
+            "ref": null,
+            "title": "E2E B: approved with Create and start",
+            "listId": null,
+            "dependsOnRefs": [],
+            "dependsOnTaskIds": [],
+            "listPublicId": null,
+            "dependsOnTaskPublicIds": []
+          }
+        ],
+        "blocked": 0,
+        "assignees": [
+          {
+            "id": "34oAq3xmR89F3JEnrSIe6",
+            "name": "cas-e2e",
+            "hasRunner": true,
+            "publicId": "34oAq3xmR89F3JEnrSIe6"
+          }
+        ],
+        "scheduled": 0,
+        "taskCount": 1,
+        "startingNow": 0,
+        "externalEdges": 0,
+        "internalEdges": 0,
+        "notDispatchable": 0,
+        "titlesTruncated": 0,
+        "needsManualStart": 1,
+        "awaitingProjectStart": 0
+      },
+      "assigneeId": "34oAq3xmR89F3JEnrSIe6",
+      "description": "Filed without startNow; the owner presses Create and start.\n\nE2E-DO: commit",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "completionCriterion": "EVIDENCE_JUDGMENT",
+      "acceptsStartAfterCreate": true
+    },
+    "status": "ALLOWED",
+    "createdAt": "2026-10-29T06:15:34.039Z",
+    "decidedAt": "2026-10-29T06:15:34.720Z",
+    "publicId": "34oAroeg6RdUk5Rr3LagA",
+    "sessionPublicId": "34oArhfHTrQGUeUJpxnYg"
+  },
+  {
+    "id": "34oArrPelGQbkJ2jXgmx7",
+    "sessionId": "34oArhfHTrQGUeUJpxnYg",
+    "toolName": "orbit_task_create",
+    "input": {
+      "title": "E2E C: plain Create it (control)",
+      "preview": {
+        "lists": [],
+        "tasks": [
+          {
+            "ref": null,
+            "title": "E2E C: plain Create it (control)",
+            "listId": null,
+            "dependsOnRefs": [],
+            "dependsOnTaskIds": [],
+            "listPublicId": null,
+            "dependsOnTaskPublicIds": []
+          }
+        ],
+        "blocked": 0,
+        "assignees": [
+          {
+            "id": "34oAq3xmR89F3JEnrSIe6",
+            "name": "cas-e2e",
+            "hasRunner": true,
+            "publicId": "34oAq3xmR89F3JEnrSIe6"
+          }
+        ],
+        "scheduled": 0,
+        "taskCount": 1,
+        "startingNow": 0,
+        "externalEdges": 0,
+        "internalEdges": 0,
+        "notDispatchable": 0,
+        "titlesTruncated": 0,
+        "needsManualStart": 1,
+        "awaitingProjectStart": 0
+      },
+      "assigneeId": "34oAq3xmR89F3JEnrSIe6",
+      "description": "Filed without startNow; the owner presses the plain Create it.\n\nE2E-DO: commit",
+      "acceptanceCriteria": "The run left its work file in the worktree.",
+      "completionCriterion": "EVIDENCE_JUDGMENT",
+      "acceptsStartAfterCreate": true
+    },
+    "status": "ALLOWED",
+    "createdAt": "2026-10-29T06:15:35.793Z",
+    "decidedAt": "2026-10-29T06:15:36.468Z",
+    "publicId": "34oArrPelGQbkJ2jXgmx7",
+    "sessionPublicId": "34oArhfHTrQGUeUJpxnYg"
+  },
+  {
+    "id": "34oAruA9QzhoLVXt0M2kE",
+    "sessionId": "34oArhfHTrQGUeUJpxnYg",
+    "toolName": "orbit_task_batch",
+    "input": {
+      "tasks": [
+        {
+          "runAt": "2026-10-29T06:15:37Z",
+          "title": "E2E D1: batch item with startNow",
+          "assigneeId": "34oAq3xmR89F3JEnrSIe6",
+          "description": "Batch item with startNow: the server's scan starts it within the minute.\n\nE2E-DO: commit",
+          "acceptanceCriteria": "The run left its work file in the worktree.",
+          "completionCriterion": "EVIDENCE_JUDGMENT"
+        },
+        {
+          "title": "E2E D2: batch item without",
+          "assigneeId": "34oAq3xmR89F3JEnrSIe6",
+          "description": "Batch item without startNow.\n\nE2E-DO: commit",
+          "acceptanceCriteria": "The run left its work file in the worktree.",
+          "completionCriterion": "EVIDENCE_JUDGMENT"
+        }
+      ],
+      "preview": {
+        "lists": [],
+        "tasks": [
+          {
+            "ref": null,
+            "title": "E2E D1: batch item with startNow",
+            "listId": null,
+            "listPublicId": null,
+            "dependsOnRefs": [],
+            "dependsOnTaskIds": [],
+            "dependsOnTaskPublicIds": []
+          },
+          {
+            "ref": null,
+            "title": "E2E D2: batch item without",
+            "listId": null,
+            "listPublicId": null,
+            "dependsOnRefs": [],
+            "dependsOnTaskIds": [],
+            "dependsOnTaskPublicIds": []
+          }
+        ],
+        "blocked": 0,
+        "assignees": [
+          {
+            "id": "34oAq3xmR89F3JEnrSIe6",
+            "name": "cas-e2e",
+            "publicId": "34oAq3xmR89F3JEnrSIe6",
+            "hasRunner": true
+          }
+        ],
+        "scheduled": 0,
+        "taskCount": 2,
+        "startingNow": 1,
+        "externalEdges": 0,
+        "internalEdges": 0,
+        "notDispatchable": 0,
+        "titlesTruncated": 0,
+        "needsManualStart": 1,
+        "awaitingProjectStart": 0
+      }
+    },
+    "status": "ALLOWED",
+    "createdAt": "2026-10-29T06:15:37.542Z",
+    "decidedAt": "2026-10-29T06:15:38.218Z",
+    "publicId": "34oAruA9QzhoLVXt0M2kE",
+    "sessionPublicId": "34oArhfHTrQGUeUJpxnYg"
+  }
+]

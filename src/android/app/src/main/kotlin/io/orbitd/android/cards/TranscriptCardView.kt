@@ -13,9 +13,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -55,6 +57,11 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     // The owner's answer handed to the coordinator is one line that opens to the words the agent read, not a card of fields.
     if (card.key.endsWith(":ownerAnswer")) {
         OwnerAnswerLineView(card, event); return
+    }
+    // So is a fact told to this session — the coordinator told of one, or the answer to its criteria proposal: its sentence, then when it
+    // was sent, opening to the words the agent read.
+    if (card.key.endsWith(":coordinatorDelivery")) {
+        CoordinatorDeliveryLineView(card, event, open); return
     }
     val resources = LocalReaderResources.current
     val app = LocalContext.current.applicationContext as? OrbitApplication
@@ -142,6 +149,82 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
                 note?.let { AttachedNoteEntry(it.trim()) }
+            }
+        }
+    }
+}
+
+/**
+ * A fact told to this session (`CoordinatorDeliveryLine`): one line — the fact's sentence, then "Sent to the coordinator · 08:29" — in
+ * place of the owner's own bubble, which filled the screen with protocol written for the agent (web `CoordinatorDeliveryLine.tsx`, iOS
+ * `CoordinatorDeliveryLineView`). The owner's answer's pill (`OwnerAnswerLineView`): the sentence gives way with an ellipsis and the
+ * time does not; at a phone's width the two take a row each, the sentence first. Pressing it opens the words
+ * the agent read, with the task the fact names a press away. Unconfirmed, it says so in every Orbit card's words, and nothing of it goes
+ * back to the composer: nobody typed it.
+ */
+@Composable
+internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?, open: (String) -> Unit) {
+    val delivery = remember(card.source) { CoordinatorDeliveryLine.parse(card.source) } ?: return
+    var shown by rememberSaveable(card.key) { mutableStateOf(false) }
+    val state = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+    val undelivered = state in setOf("failed", "unconfirmed")
+    val tone = MaterialTheme.colorScheme.onSurfaceVariant
+    val sentence = CoordinatorDeliveryLine.sentence(delivery)
+    val sent = CoordinatorDeliveryLine.sent(delivery)
+    // A phone's width, as the web's `@media (max-width: 600px)` reads it: the window's, not the row's.
+    val phone = LocalConfiguration.current.screenWidthDp < 600
+    Column(Modifier.fillMaxWidth().testTag(card.key), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row((if (phone) Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)) else Modifier.clip(RoundedCornerShape(50)))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClickLabel = OwnerAnswerLine.told) { shown = true }.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("→", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = tone)
+            if (phone) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(sentence, Modifier.testTag("${card.key}:sentence"), style = MaterialTheme.typography.labelMedium, color = tone,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(sent, Modifier.testTag("${card.key}:sent"), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline, maxLines = 1, softWrap = false)
+                }
+            } else {
+                Text(sentence, Modifier.weight(1f, fill = false).testTag("${card.key}:sentence"), style = MaterialTheme.typography.labelMedium,
+                    color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("·", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                Text(sent, Modifier.testTag("${card.key}:sent"), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline, maxLines = 1, softWrap = false)
+            }
+            Text("›", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = tone)
+        }
+        if (undelivered) Text(OwnerAnswerLine.undelivered, style = MaterialTheme.typography.labelSmall, color = LocalOrbitColors.current.needsYou)
+    }
+    if (shown) CoordinatorDeliveryTold(card, delivery, event, open) { shown = false }
+}
+
+/** What the coordinator was told: the line it was sent as, its words verbatim, what delivery appended folded under them, and the task. */
+@Composable
+private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: CoordinatorDelivery, event: RunEvent?, open: (String) -> Unit,
+    close: () -> Unit) {
+    val words = event?.personWords().orEmpty()
+    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
+    Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(OwnerAnswerLine.told, style = MaterialTheme.typography.titleSmall)
+                    TextButton(onClick = close) { Text("Close") }
+                }
+                Text(CoordinatorDeliveryLine.sentence(delivery), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(CoordinatorDeliveryLine.sent(delivery), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
+                note?.let { AttachedNoteEntry(it.trim()) }
+                delivery.task?.let { task ->
+                    TextButton(onClick = { close(); open("orbit-task:${task.id}") }, Modifier.testTag("${card.key}:task")) {
+                        Text(CoordinatorDeliveryLine.itsTask)
+                    }
+                }
             }
         }
     }

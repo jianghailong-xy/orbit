@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -184,6 +185,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
+		wakeOnStall, err := bgOptionalStall(args, "wakeOnStall")
+		if err != nil {
+			return bgSocketResponse{Error: err.Error()}
+		}
 		status, err := s.bg.startJob(bgJobSpec{
 			Command:      getString(args, "command"),
 			Kind:         getString(args, "kind"),
@@ -194,6 +199,7 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			SessionID:    s.sessionID,
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
+			WakeOnStall:  wakeOnStall,
 		})
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
@@ -295,6 +301,33 @@ func bgOptionalBool(args map[string]interface{}, key string) (bool, error) {
 	default:
 		return false, fmt.Errorf("%s must be true or false", key)
 	}
+}
+
+// bgOptionalStall reads bg_run's wakeOnStall, {"afterSeconds": N}, as the silence it asks to be woken
+// after — zero when the call did not ask. Anything else is refused rather than run without it: a job
+// its agent believes will wake it if it hangs, and that will not, is the silence this exists to end.
+func bgOptionalStall(args map[string]interface{}, key string) (time.Duration, error) {
+	raw := args[key]
+	if raw == nil {
+		return 0, nil
+	}
+	shape := fmt.Sprintf(`%s must be {"afterSeconds": N}, N a whole number of seconds from %d to %d`,
+		key, bgWakeOnStallMinSeconds, bgWakeOnStallMaxSeconds)
+	spec, ok := raw.(map[string]interface{})
+	if !ok {
+		return 0, fmt.Errorf("%s, got %v", shape, raw)
+	}
+	for field := range spec {
+		if field != "afterSeconds" {
+			return 0, fmt.Errorf("%s; it has no field %q", shape, field)
+		}
+	}
+	seconds, ok := spec["afterSeconds"].(float64)
+	if !ok || seconds < float64(bgWakeOnStallMinSeconds) || seconds > bgWakeOnStallMaxSeconds ||
+		seconds != math.Trunc(seconds) {
+		return 0, fmt.Errorf("%s, got afterSeconds %v", shape, spec["afterSeconds"])
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 // newBgSessionToken mints the per-session credential for the socket.

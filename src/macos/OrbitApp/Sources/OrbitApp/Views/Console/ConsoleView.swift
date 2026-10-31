@@ -29,6 +29,7 @@ struct ConsoleView: View {
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var ownerAnswerTold: OwnerAnswerTold?
+    @State private var coordinatorDeliveryTold: CoordinatorDeliveryTold?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     /// Whether the reader has gone back far enough through the history for a phone's composer band to
@@ -351,6 +352,13 @@ struct ConsoleView: View {
                 .sheet(item: $ownerAnswerTold) { told in
                     OwnerAnswerSheet(told: told)
                 }
+                // And the words a fact told to this session stands for (`CoordinatorDeliveryLineView`).
+                .environment(\.openCoordinatorDelivery, { told in
+                    coordinatorDeliveryTold = told
+                })
+                .sheet(item: $coordinatorDeliveryTold) { told in
+                    CoordinatorDeliverySheet(told: told)
+                }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
                     approvalReview = target
@@ -379,6 +387,7 @@ struct ConsoleView: View {
             promotionReview = nil
             promotionReceipt = nil
             ownerAnswerTold = nil
+            coordinatorDeliveryTold = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
             readingBack = false
@@ -1066,7 +1075,8 @@ struct TranscriptView: View {
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
                                             taskStart: b.taskStart, startedCard: b.startedCard,
-                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer)
+                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer,
+                                            coordinatorDelivery: b.coordinatorDelivery)
     }
 
     private var stuckBubble: UserBubble? {
@@ -1223,7 +1233,8 @@ struct TranscriptView: View {
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
-                                       sessionMessage: bubble.sessionMessage)
+                                       sessionMessage: bubble.sessionMessage,
+                                       coordinatorDelivery: bubble.coordinatorDelivery)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)

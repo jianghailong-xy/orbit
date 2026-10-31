@@ -19,7 +19,7 @@ object CardRequests {
         fun projectPath(vararg parts: String) = listOf("projects", requireNotNull(project)) + parts
         fun encoded(body: String) = Wire.json.parseToJsonElement(body).jsonObject
         if (card.family in setOf(CardFamily.TOOL, CardFamily.QUESTION, CardFamily.PLAN, CardFamily.CREATE,
-                CardFamily.BATCH, CardFamily.DAG, CardFamily.BLOCKER, CardFamily.PROVIDER)) {
+                CardFamily.BATCH, CardFamily.DAG, CardFamily.BLOCKER, CardFamily.PROVIDER, CardFamily.DELETE)) {
             val tool = required("toolName")
             val original = row.obj("input") ?: emptyObject
             val answers = if (verb == CardVerb.ANSWER) {
@@ -38,7 +38,9 @@ object CardRequests {
             } else null
             val rules = if (verb == CardVerb.REMEMBER) ApprovalRules.remember(tool, original).also { require(it.isNotEmpty()) } else null
             val behavior = if (verb in setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)) "deny" else "allow"
-            val body = ApprovalDecision(behavior, if (verb == CardVerb.CHAT) note() else null, answers, rules)
+            // Create and start is Create task's yes that also starts the task; no other press names the key at all.
+            val body = ApprovalDecision(behavior, if (verb == CardVerb.CHAT) note() else null, answers, rules,
+                startAfterCreate = if (verb == CardVerb.CREATE_AND_START) true else null)
             return request(listOf("sessions", card.sessionId, "approvals", card.objectId, "decision"), encoded(Wire.json.encodeToString(body)))
         }
         return when (verb) {

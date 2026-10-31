@@ -83,6 +83,26 @@ class SessionProjectLandingsTest {
         assertEquals("P-12", (row.promotion?.get("promotionId") as? kotlinx.serialization.json.JsonPrimitive)?.content)
     }
 
+    @Test fun joinsARoundWithItsSessionAcrossTheTwoSpellingsTheServerSends() {
+        // `promotions/merged` sends `landingSessionId` as a UUID (the id codec does not rewrite it) while the session list sends base62
+        // ids. Compared as they came, every merge into main drew twice.
+        val window = window(listOf(row("2zwQZ2hd93IvLb59t6phi", title = "Merge project/p1 → main · #42", subject = "PROMOTION",
+            state = "SETTLED", settledAs = "MERGED", settledAt = local(27, 9, 52))), listOf(
+            merged("P-42", local(27, 9, 51), "0196e000-0000-7000-8000-000000000a42"),
+            merged("P-43", local(27, 10, 5), "0196e000-0000-7000-8000-000000000a43")))
+        val rows = window.days.flatMap { it.rows }
+        assertEquals(2, rows.size)
+        assertEquals("2zwQZ2hd93IvLb59t6phi", rows[0].key)
+        assertEquals("2zwQZ2hd93IvLb59t6phi", rows[0].sessionId)
+        assertEquals("3f1c2a9 · 2 tasks · automatically", rows[0].detail)
+        assertEquals(clock(local(27, 9, 51)), rows[0].time)
+        assertEquals("P-42", (rows[0].promotion?.get("promotionId") as? kotlinx.serialization.json.JsonPrimitive)?.content)
+        // A round whose session the read did not list keeps its own row, its session named the app's way.
+        assertEquals("2zwQZ2hd93IvLb59t6phj", rows[1].key)
+        assertEquals("2zwQZ2hd93IvLb59t6phj", rows[1].sessionId)
+        assertEquals("P-43", (rows[1].promotion?.get("promotionId") as? kotlinx.serialization.json.JsonPrimitive)?.content)
+    }
+
     @Test fun keepsAMergeOlderThanLandingSessionsAndARoundPastTheTwentyRecords() {
         val window = window(listOf(row("S-3", title = "Merge project/p1 → main · #3", subject = "PROMOTION", state = "SETTLED",
             settledAs = "MERGED", settledAt = local(25, 15))), listOf(merged("P-1", local(26, 11, 30), null, automatic = false)))

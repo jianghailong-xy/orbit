@@ -1,0 +1,186 @@
+diff --git a/src/web/src/api.ts b/src/web/src/api.ts
+index d444ffc..7b58cd8 100644
+--- a/src/web/src/api.ts
++++ b/src/web/src/api.ts
+@@ -1959,6 +1959,13 @@ export interface SessionFilePatch {
+   path: string;
+   patch?: string;
+   truncated?: boolean;
++  /** A picture's blur-up placeholder: a tiny JPEG data URL the runner made when it reported the diff,
++   *  drawn blurred at the picture's size while its own bytes load. Absent for anything else, and from
++   *  runners that predate it. */
++  preview?: string;
++  /** The picture's pixel size, sent with `preview`. */
++  width?: number;
++  height?: number;
+ }
+ 
+ /** The session's per-file diffs, kept off the session payload and fetched on demand when a
+diff --git a/src/web/src/components/SessionOutputs.tsx b/src/web/src/components/SessionOutputs.tsx
+index 5200208..2352c15 100644
+--- a/src/web/src/components/SessionOutputs.tsx
++++ b/src/web/src/components/SessionOutputs.tsx
+@@ -1378,7 +1378,7 @@ function DiffPane({
+       <span className="wt-diff-pane-path">{file.path}</span>
+     </>
+   );
+-  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} head={head} />;
++  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} patch={patch} head={head} />;
+   return (
+     <>
+       <div className="wt-diff-pane-head">
+diff --git a/src/web/src/components/WorktreeFilePreview.tsx b/src/web/src/components/WorktreeFilePreview.tsx
+index 6357b09..9601951 100644
+--- a/src/web/src/components/WorktreeFilePreview.tsx
++++ b/src/web/src/components/WorktreeFilePreview.tsx
+@@ -1,7 +1,7 @@
+ import { useEffect, useState, type ReactNode } from 'react';
+ import { DownloadOutlined } from '@ant-design/icons';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+-import type { SessionChangedFile } from '../api';
++import type { SessionChangedFile, SessionFilePatch } from '../api';
+ import { worktreeFileQuery } from '../lib/queries';
+ import {
+   FILE_DELETED,
+@@ -26,10 +26,13 @@ import { ImagePreview } from './ui/ImagePreview';
+ export function WorktreeFilePreview({
+   sessionId,
+   file,
++  patch,
+   head,
+ }: {
+   sessionId: string;
+   file: SessionChangedFile;
++  /** The file's entry in the stored diff: for a picture, the runner's blur-up placeholder and size. */
++  patch?: SessionFilePatch;
+   head: ReactNode;
+ }) {
+   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+@@ -43,7 +46,16 @@ export function WorktreeFilePreview({
+   // read when Download is pressed.
+   const q = useQuery({ ...query, enabled: image && !deleted });
+   const url = useObjectUrl(q.data);
++  // Blur-up: the runner's tiny placeholder, drawn blurred at the picture's own size from the moment
++  // the file opens, until the picture itself has been painted over it.
++  const placeholder =
++    image && !deleted && patch?.preview && patch.width && patch.height
++      ? { src: patch.preview, width: patch.width, height: patch.height }
++      : null;
++  const [painted, setPainted] = useState(false);
++  useEffect(() => setPainted(false), [url]);
+   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
++  const dims = size ?? placeholder;
+   const [broken, setBroken] = useState(false);
+   // Decode the bytes once more off-screen: it gives the pixel size for the head, and says when bytes
+   // that came back are not a picture after all.
+@@ -82,12 +94,12 @@ export function WorktreeFilePreview({
+         {head}
+         <span className="wt-preview-meta">
+           <span className="wt-preview-kind">{kind}</span>
+-          {size && (
++          {dims && (
+             <span>
+-              {size.width} × {size.height}
++              {dims.width} × {dims.height}
+             </span>
+           )}
+-          {size && bytes != null && <span aria-hidden="true">·</span>}
++          {dims && bytes != null && <span aria-hidden="true">·</span>}
+           {bytes != null && <span>{formatFileSize(bytes)}</span>}
+         </span>
+         {image && !deleted && !(q.error && !q.data) && (
+@@ -113,11 +125,12 @@ export function WorktreeFilePreview({
+             </div>
+           )}
+         </div>
+-      ) : url && !broken ? (
++      ) : (url && !broken) || (placeholder && !url && !q.error) ? (
+         <div className="wt-preview-body">
+           <button
+             type="button"
+             className="wt-preview-img"
++            disabled={!url}
+             aria-label={`Open ${name}`}
+             title="Open in viewer"
+             onClick={(e) => {
+@@ -127,14 +140,25 @@ export function WorktreeFilePreview({
+               setViewer(e.detail > 0 ? { x: e.clientX, y: e.clientY } : { x: r.x + r.width / 2, y: r.y + r.height / 2 });
+             }}
+           >
+-            <img src={url} alt={name} />
++            {url && (
++              <img src={url} alt={name} width={dims?.width} height={dims?.height} onLoad={() => setPainted(true)} />
++            )}
++            {placeholder && !painted && (
++              <>
++                <img className="wt-preview-blur" src={placeholder.src} alt="" aria-hidden="true"
++                  width={placeholder.width} height={placeholder.height} />
++                <span className="wt-preview-loading">Loading full image…</span>
++              </>
++            )}
+           </button>
+-          <ImagePreview
+-            open={viewer != null}
+-            onClose={() => setViewer(null)}
+-            items={[{ src: url, alt: name }]}
+-            origin={viewer}
+-          />
++          {url && (
++            <ImagePreview
++              open={viewer != null}
++              onClose={() => setViewer(null)}
++              items={[{ src: url, alt: name }]}
++              origin={viewer}
++            />
++          )}
+         </div>
+       ) : broken ? (
+         <FileState failure={IMAGE_UNREADABLE} onRetry={() => void q.refetch()} />
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index bdcbbe8..90b940a 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -4024,14 +4024,43 @@ button.toast--pill:focus-visible {
+   text-align: center;
+ }
+ .wt-preview-img {
++  position: relative;
+   display: inline-block;
+   max-width: 100%;
+   padding: 0;
+   border: 0;
++  border-radius: 6px;
++  overflow: hidden;
+   background: transparent;
+   cursor: zoom-in;
+   vertical-align: top;
+ }
++.wt-preview-img:disabled {
++  cursor: progress;
++}
++/* Blur-up: the runner's tiny placeholder, scaled to the picture's own box and blurred. Alone it is the
++   box; under a picture still loading it covers it, until the picture has been painted. */
++.wt-preview-img img.wt-preview-blur {
++  filter: blur(8px);
++  transform: scale(1.04);
++}
++.wt-preview-img img + img.wt-preview-blur {
++  position: absolute;
++  inset: 0;
++  width: 100%;
++  height: 100%;
++}
++.wt-preview-loading {
++  position: absolute;
++  top: 12px;
++  right: 12px;
++  padding: 3px 10px;
++  border-radius: 999px;
++  background: rgba(0, 0, 0, 0.55);
++  color: #fff;
++  font-size: 12px;
++  line-height: 18px;
++}
+ .wt-preview-img img {
+   display: block;
+   max-width: 100%;

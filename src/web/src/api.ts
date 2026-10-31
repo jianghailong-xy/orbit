@@ -3,6 +3,7 @@ import type {
   BgShell,
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  CoordinatorDeliveryCard,
   ConversationTurnKind,
   DirProbeAnswer,
   NewWorkspaceRequest,
@@ -745,6 +746,10 @@ export interface TurnCards {
   /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
    *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
   ownerAnswer?: OwnerAnswerCard;
+  /** A fact told to this session — a coordinator told of a committed fact, or a session the answer to
+   *  its criteria proposal (`CoordinatorDeliveryCard`): what the line says and when it was sent. Its
+   *  words are written for the agent. Absent on every turn a person typed. */
+  coordinatorDelivery?: CoordinatorDeliveryCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;
@@ -880,7 +885,9 @@ export const revokeWorkspacePermissionRule = (workspaceId: string, ruleId: strin
 /** Allow or deny a pending tool-permission approval; the runner's long-poll
  *  delivers the decision back to claude's --permission-prompt-tool. For an
  *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow.
- *  `rememberRules` (on an allow) auto-allows the same kinds of call for the session. */
+ *  `rememberRules` (on an allow) auto-allows the same kinds of call for the session.
+ *  `startAfterCreate` is the single-task card's Create and start, sent only when chosen, so
+ *  every other answer's body is what it always was. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
@@ -888,10 +895,11 @@ export const decideApproval = (
   message?: string,
   answers?: Record<string, string[]>,
   rememberRules?: PermissionRule[],
+  startAfterCreate?: boolean,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message, answers, rememberRules },
+    body: { behavior, message, answers, rememberRules, ...(startAfterCreate ? { startAfterCreate: true } : {}) },
   });
 
 /** Change a live session's model, permission mode, effort, fast mode and/or provider — mid-turn
@@ -1977,6 +1985,13 @@ export interface SessionFilePatch {
   path: string;
   patch?: string;
   truncated?: boolean;
+  /** A picture's blur-up placeholder: a tiny JPEG data URL the runner made when it reported the diff,
+   *  drawn blurred at the picture's size while its own bytes load. Absent for anything else, and from
+   *  runners that predate it. */
+  preview?: string;
+  /** The picture's pixel size, sent with `preview`. */
+  width?: number;
+  height?: number;
 }
 
 /** The session's per-file diffs, kept off the session payload and fetched on demand when a

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api';
-import { formatFileSize, isDrawableImage, worktreeFileFailure } from './worktreeFile';
+import { formatFileSize, isDrawableImage, isDrawnPicture, worktreeFileFailure } from './worktreeFile';
 
 describe('isDrawableImage', () => {
   it('takes the formats every browser draws, in any letter case', () => {
@@ -13,6 +13,22 @@ describe('isDrawableImage', () => {
     for (const path of ['font.woff2', 'dist.zip', 'spec.pdf', 'photo.heic', 'scan.tiff', 'png', 'a.png.zip', 'Makefile']) {
       expect(isDrawableImage(path), path).toBe(false);
     }
+  });
+});
+
+describe('isDrawnPicture', () => {
+  const file = (path: string, status = 'A', binary = true) =>
+    ({ path, status, additions: binary ? -1 : 3, deletions: binary ? -1 : 0 });
+
+  it('is a binary picture still in the worktree', () => {
+    expect(isDrawnPicture(file('docs/board.png'))).toBe(true);
+    expect(isDrawnPicture(file('shot.JPG', 'M'))).toBe(true);
+  });
+
+  it('is not a deleted picture, a text file, or a binary that is not a picture', () => {
+    expect(isDrawnPicture(file('old.png', 'D'))).toBe(false);
+    expect(isDrawnPicture(file('icon.svg', 'A', false))).toBe(false);
+    expect(isDrawnPicture(file('font.woff2'))).toBe(false);
   });
 });
 

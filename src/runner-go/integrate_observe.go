@@ -153,9 +153,15 @@ func remoteLacksRef(repoRoot, remote, ref string, fetchErr error) bool {
 	if isRefLockConflict(fetchErr) {
 		return false
 	}
-	err := exec.Command("git", "-C", repoRoot, "ls-remote", "--exit-code", remote, ref).Run()
 	var exit *exec.ExitError
-	return errors.As(err, &exit) && exit.ExitCode() == 2
+	return errors.As(lsRemoteRef(repoRoot, remote, ref), &exit) && exit.ExitCode() == 2
+}
+
+// lsRemoteRef asks the remote for one ref: `git ls-remote --exit-code`, which exits 2 when the remote has
+// no such ref.
+func lsRemoteRef(repoRoot, remote, ref string) error {
+	_, err := networkGit(repoRoot, networkGitTimeout, "ls-remote", "--exit-code", remote, ref)
+	return err
 }
 
 // integrationLockRef is the ref half of the key a job takes integrationLock under. A job that writes
