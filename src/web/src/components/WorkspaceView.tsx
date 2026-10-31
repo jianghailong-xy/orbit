@@ -476,7 +476,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
-import { lastTypedUserMessage } from '../lib/deliveredMessage';
+import { failureFollowsAnsweredMessage, lastTypedUserMessage } from '../lib/deliveredMessage';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -8281,7 +8281,13 @@ export function WorkspaceView({
   // card that promised the window's bubble had its press answered with "this session has no message
   // for a retry to re-send" (session 34b78GE7Ud2aXWq8H1JsU: the failure had landed on a turn nobody
   // sent, which the chooser refuses to walk past).
-  const retryIsTheReaders = !!retryText && !retry.sessionMessage;
+  //
+  // Nor are the window's latest words the ones a retry re-sends when the failure came after they had
+  // been answered: then it is about a message the window never saw (failureFollowsAnsweredMessage),
+  // and only the server can say which. On 2026-10-31 the sign-in card quoted the answered Watch notice
+  // above a message the runner had refused before echoing it.
+  const failureAfterAnswer = useMemo(() => failureFollowsAnsweredMessage(events), [events]);
+  const retryIsTheReaders = !!retryText && !retry.sessionMessage && !failureAfterAnswer;
   // The words a re-send would carry: the reader's own when they are the reader's to send, and the
   // server's answer whenever the press would be the server's own re-send — including when it
   // answers with nothing, which is the one thing the window cannot rule out.
@@ -9143,12 +9149,19 @@ export function WorkspaceView({
   // to the server's chooser, and are quoted — and routed — only as the server answered them.
   const authRetryText = retryIsTheReaders ? retryText : serverRetryText;
   const authRetryFromSession = retryIsTheReaders ? undefined : serverRetry?.sessionMessage;
+  // The account the session is on, while its runner reports it signed out: the card names it and signs
+  // that one in. Signing in the runner's own login instead left the session where it was. Once the
+  // session is on a signed-in account (Orbit moves one on Automatic), the card is as it was before.
+  const signedOutAccount =
+    shownAccountRow && 'auth' in shownAccountRow && shownAccountRow.auth === 'no' ? shownAccountRow : null;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
       keyName: selectedKeyName,
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
+      account: signedOutAccount?.id,
+      accountLabel: signedOutAccount ? accountNameOf(signedOutAccount) : null,
       runnerVersion: runner.version,
       googleLogin: runner.antigravity?.googleLogin,
       runtime: shownEngine,
@@ -9198,6 +9211,7 @@ export function WorkspaceView({
       runner.name,
       runner.displayName,
       runner.id,
+      signedOutAccount,
       runner.version,
       runner.online,
       runner.antigravity,

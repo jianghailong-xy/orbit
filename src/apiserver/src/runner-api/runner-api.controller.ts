@@ -44,7 +44,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
@@ -152,6 +152,7 @@ import {
   type CodexRateLimitResetResultRequest,
   type RunnerModelCatalog,
   isAccountEngine,
+  isAuthErrorText,
   withEnginePlanUsage,
   type AccountEngine,
   type NormalizedRunEvent,
@@ -8477,10 +8478,23 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const quotaSpent =
         effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+      // A run that ended because its account refused the sign-in, on the runner's own login for its
+      // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
+      // the account signed out and ends the run with the message it took undelivered. Moved below.
+      const signInEngine =
+        effectiveStatus === RunStatus.FAILED
+        && current.retryAt == null
+        && !quotaSpent
+        && isAuthErrorText(dto.error)
+        && isAccountEngine(current.provider)
+        && isBuiltinProvider(current.provider, current.providerBuiltin)
+        && (recordedEngine(current.engine) ?? current.provider) === current.provider
+          ? current.provider
+          : null;
       // Which Codex or Claude account the run spent is the session's pick or else its workspace's to
       // say, and only that account's quota says when it frees up.
       const workspace =
-        quotaSpent && accountEnvVar(current.provider) && current.workspaceId
+        (quotaSpent || signInEngine) && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
               select: {
@@ -8506,6 +8520,36 @@ export class RunnerApiController {
         : keyRetryAt
           ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
           : null;
+      // On Automatic, a refused sign-in moves the session to another of the runner's accounts that can
+      // run, and the retry armed here re-sends the message the run ended under, at once and on that
+      // account. The sweep finds that message by the claim's stamp (lostDelivery), and the claim that
+      // picks it up carries the conversation across. Pinned, decided by its workspace, or with no other
+      // account signed in, nothing moves and nothing is armed: signing in again is the remedy, as it was.
+      const signInRunner = signInEngine
+        ? await tx.runner.findUnique({
+            where: { id: runner.id },
+            select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
+          })
+        : null;
+      const signInMove = signInEngine && (signInRunner?.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[signInEngine])
+        ? accountAfterSignOut(
+            signInEngine,
+            { account: current[ACCOUNT_CHOICE[signInEngine]], pinned: current[ACCOUNT_PINNED[signInEngine]] },
+            workspace,
+            signInRunner,
+            new Date(),
+          )
+        : null;
+      const signInRetryAt = signInMove ? new Date() : null;
+      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner
+        ? {
+            [ACCOUNT_CHOICE[signInEngine]]: signInMove.to,
+            ...(signInMove.defaultRemoved ? { [ACCOUNT_PINNED[signInEngine]]: false } : {}),
+            // Owed only when no other line is, as at the claim (QueueService.accountsForClaim).
+            ...(current.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(signInEngine, signInMove, signInRunner) }),
+            retryAt: signInRetryAt,
+          }
+        : {};
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
@@ -8562,9 +8606,10 @@ export class RunnerApiController {
           // can't stay stuck on "Running Workspace…".
           ...CLEARED_RUNNING_WORK,
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
+          ...signInColumns,
         },
       });
-      const retryAt = quotaRetryAt ?? current.retryAt;
+      const retryAt = quotaRetryAt ?? signInRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
       // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
       // once every work session has finished (§10.5 O-L4 3).
@@ -9492,10 +9537,12 @@ export class RunnerApiController {
    * both where they are. `text` is the turn's latest assistant message, which for both
    * self-healing failures is the entire reply.
    *
-   * Three outcomes:
+   * Four outcomes:
    *  - an exhausted quota → arm for the moment it resets, or another account frees up first
    *    (below), leaving the attempt count alone: the sweeper counts against it while the snapshot
    *    keeps reporting the quota spent.
+   *  - a refused sign-in → on Automatic, move to another of the runner's accounts that can run
+   *    and re-send there at once (below); otherwise clear the count, as for anything else.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
    *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
    *    and its conversation, where the task's own retry starts a new session from nothing — and
@@ -9533,8 +9580,9 @@ export class RunnerApiController {
   }> {
     const quotaSpent = isUsageLimitErrorText(text);
     const rateLimited = isRateLimitApiErrorText(text);
-    if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    if (!delivered && !quotaSpent) return {};
+    const signInRefused = !quotaSpent && isAuthErrorText(text);
+    if (!quotaSpent && !signInRefused && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
+    if (!delivered && !quotaSpent && !signInRefused) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
@@ -9554,6 +9602,38 @@ export class RunnerApiController {
       },
     });
     if (!session) return {};
+    // A built-in Claude session whose account refused its sign-in — the runtime said "Failed to
+    // authenticate" — moves on Automatic to another of the runner's accounts that can run, and is
+    // re-sent there at once, as a usage limit moves it below. The events path queues the reload that
+    // re-spawns its engine there. Pinned, decided by its workspace, or with no other account signed
+    // in, it stays and nothing is armed: signing in again is the remedy, and the transcript offers it.
+    // A turn nobody delivered, with a "Switched to" line still owed, ran on the engine that move is
+    // replacing, so its refusal moves nothing again.
+    if (signInRefused) {
+      if (!delivered && session.poolSwitchNotice) return {};
+      const runner = session.provider === AgentProvider.CLAUDE
+        ? await tx.runner.findUnique({
+            where: { id: runnerId },
+            select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
+          })
+        : null;
+      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterSignOut(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner,
+            new Date(),
+          )
+        : null;
+      if (!move || !runner) return { retryAt: null, retryAttempts: 0 };
+      return {
+        ...(delivered ? { retryAt: new Date() } : {}),
+        claudeAccount: move.to,
+        ...(move.defaultRemoved ? { claudeAccountPinned: false } : {}),
+        poolSwitchNotice: accountSwitchNotice('claude', move, runner),
+      };
+    }
     if (!quotaSpent) {
       // A rate limit is the one transient failure a pool can be asked about rather than answered with the
       // ladder below: the gateway records a short throttle on the credential when a 429 outlasts the wait

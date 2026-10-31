@@ -33,6 +33,10 @@
  *  (11) With every account spent, the retry is armed for the first of them to free up — not for the
  *       reset of the one the session ran on — and when it fires, the claim starts it on that account. A
  *       pinned session waits for its own account.
+ *  (12) On Automatic, an account the runner reports signed out is left before a turn reaches it, as a
+ *       spent one is in (8). A run the runner ended because its account refused the sign-in moves to a
+ *       signed-in account, and the message it ended under is re-sent there at once. A pinned session
+ *       stays, and nothing is armed for it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -632,6 +636,112 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.deepEqual(
       { account: (await row(id)).claude_account, notice: (await row(id)).pool_switch_notice },
       { account: WORK, notice: 'Switched to Work — the usage limit on Default is reached' },
+    );
+  });
+  await t.test('(12) a signed-out account is left before a turn reaches it, and a run its refusal ended is re-sent elsewhere', async () => {
+    const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
+    const notice = 'Switched to Default — Work is signed out';
+    const refusal = 'Failed to authenticate: Claude Code is installed on this runner but not signed in — sign in from here, or run `claude auth login` on that machine.';
+    // Room on both Claude accounts: what moves these sessions is the sign-in alone.
+    const roomy = {
+      claude: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: 5, resetsAt: LATER }, sevenDay: { utilization: 10, resetsAt: LATER } },
+    } as unknown as Prisma.InputJsonValue;
+    const workOut = ENGINES.map((engine) =>
+      engine.engine === 'claude'
+        ? { ...engine, accounts: engine.accounts!.map((account) => (account.id === WORK ? { ...account, auth: 'no' as const } : account)) }
+        : engine,
+    );
+    async function roomyMachine(label: string, engines = workOut) {
+      const m = await machine(label, [CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1], engines);
+      await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: roomy } });
+      return m;
+    }
+    const pending = async (id: string) =>
+      (
+        await sql.query(
+          `SELECT kind, content FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING' ORDER BY seq`,
+          [id],
+        )
+      ).rows as Array<{ kind: string; content: string }>;
+
+    // A session woken on Work, which its runner reports signed out, starts on Default.
+    const woken = await roomyMachine('claim-signed-out');
+    const id = await sessionOn(woken, 'claude', RunStatus.PENDING, { numTurns: 0, claudeAccount: WORK });
+    const claimed = await claims.claimSessionForRunner({ id: woken.runnerId }, 0, false, false);
+    assert.ok(claimed, 'the runner was offered no session');
+    assert.equal(claimed.agent.env?.CLAUDE_CONFIG_DIR, undefined, 'started on Default');
+    assert.deepEqual(
+      { account: (await row(id)).claude_account, notice: (await row(id)).pool_switch_notice },
+      { account: 'default', notice },
+    );
+
+    // An idle resident engine on Work: the message goes behind a reload that re-spawns it on Default.
+    const idle = await roomyMachine('idle-signed-out');
+    const resident = await sessionOn(idle, 'claude', RunStatus.AWAITING_INPUT, { claudeAccount: WORK });
+    await sessions.createTurn(idle.ownerId, resident, { content: 'go on', clientTurnId: randomUUID() });
+    assert.deepEqual(await pending(resident), [
+      { kind: 'reload', content: JSON.stringify({ provider: 'claude' }) },
+      { kind: 'message', content: 'go on' },
+    ]);
+    assert.deepEqual(
+      { account: (await row(resident)).claude_account, notice: (await row(resident)).pool_switch_notice },
+      { account: 'default', notice },
+    );
+
+    /**
+     * The runner took a message for a session on Work and ended the run at its own sign-in check,
+     * before any engine started: an error under the turn, then the FAILED finalize. The runner's last
+     * report still says Work is signed in, because its probe runs every few minutes.
+     */
+    async function refusedOnWork(m: { ownerId: string; runnerId: string; workspaceId: string }, extra: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+      const sessionId = await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK, ...extra });
+      const turn = await db.conversationTurn.create({
+        data: {
+          sessionId,
+          seq: 1,
+          clientTurnId: `turn-${randomUUID()}`,
+          kind: 'message',
+          content: 'can it be a card instead?',
+          status: 'IN_FLIGHT',
+          deliveredAt: new Date(),
+          leaseDeadlineAt: new Date(Date.now() + 300_000),
+          leaseGeneration: randomUUID(),
+        },
+        select: { id: true },
+      });
+      await api.events({ id: m.runnerId }, sessionId, {
+        events: [{ seq: 1, type: RunEventType.ERROR, ts: new Date().toISOString(), turnId: turn.id, payload: { message: refusal } }],
+      });
+      await api.finalize({ id: m.runnerId }, sessionId, { status: SharedRunStatus.FAILED, error: refusal } as never);
+      return sessionId;
+    }
+
+    const m = await roomyMachine('refused', ENGINES);
+    const before = Date.now();
+    const refused = await refusedOnWork(m);
+    const armed = await row(refused);
+    assert.deepEqual({ account: armed.claude_account, notice: armed.pool_switch_notice }, { account: 'default', notice });
+    assert.ok(armed.retry_ms !== null && armed.retry_ms >= before - 1_000 && armed.retry_ms <= Date.now() + 1_000,
+      `not re-sent now: ${armed.retry_ms}`);
+
+    // The sweep re-sends the message the run ended under — not an earlier one, and not a continue.
+    const at = new Date(armed.retry_ms! + 1_000);
+    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
+    await new AutoRetryService(prisma, sessions, quiet).sweep(at);
+    const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { status: true, retryAttempts: true } });
+    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 });
+    assert.deepEqual(await pending(refused), [{ kind: 'message', content: 'can it be a card instead?' }]);
+    // ...and the claim that picks it up starts it on Default.
+    const resumed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    assert.equal(resumed?.sessionId, refused);
+    assert.equal(resumed?.agent.env?.CLAUDE_CONFIG_DIR, undefined, 'resumed on Default');
+
+    // Pinned to Work by hand, it stays there and nothing is armed: signing Work in is the remedy.
+    const pinnedMachine = await roomyMachine('refused-pinned', ENGINES);
+    const pinned = await refusedOnWork(pinnedMachine, { claudeAccountPinned: true });
+    assert.deepEqual(
+      { account: (await row(pinned)).claude_account, notice: (await row(pinned)).pool_switch_notice, retry: (await row(pinned)).retry_ms },
+      { account: WORK, notice: null, retry: null },
     );
   });
 });

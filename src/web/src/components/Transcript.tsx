@@ -204,6 +204,11 @@ export interface AuthErrorHelp {
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  /** The runner's account the session is on, while the runner reports it signed out: the one the card
+   *  signs in. Absent: the runner's own login. */
+  account?: string;
+  /** That account's name, so the card says which one to sign in. */
+  accountLabel?: string | null;
   /** The engine the session runs on — its own, fixed for its life. */
   runtime?: string;
   googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
@@ -2191,7 +2196,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
           {!help
             ? 'Authentication failed'
             : local
-                ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+                ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
                 : 'Provider authentication failed'}
         </div>
       </div>
@@ -2202,6 +2207,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
             <RunnerSignIn
               runnerId={help.runnerId}
               engine={help.provider as LoginEngine}
+              account={help.account}
               onDone={help.onRetry}
               onUseApiKey={help.onUseApiKey}
             />
