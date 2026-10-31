@@ -64,10 +64,9 @@ type RunnerConfig struct {
 	// every read by the runner or a child it starts has macOS ask the user, in the
 	// runner's name, for access.
 	WorkDir string `json:"workDir,omitempty"`
-	// AutoInstallEngines is the consent `orbit register` asks for once: may this runner
-	// install a missing coding CLI itself, the first time a session needs one? Absent in
-	// an older config reads as "no" — a background service must not start installing
-	// software on someone's machine unasked.
+	// AutoInstallEngines is this runner's consent to install a missing coding CLI
+	// itself, the first time a session needs one. `orbit register` turns it on unless
+	// --no-auto-install-engines is passed; absent in an older config reads as "no".
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
 	// LinkShadow is whether this runner mirrors the heartbeats and event batches it delivers
 	// over HTTPS to the runner link gateway, during the link's shadow period (link_shadow.go).
