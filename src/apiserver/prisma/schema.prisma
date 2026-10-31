@@ -673,8 +673,8 @@ model Runner {
   minFreeDiskMb     Int?         @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
-  // The runner's own low-frequency record of its heartbeats: written at registration, and by a
-  // heartbeat at most every five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS).
+  // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
+  // five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS), NULL until the first.
   // Every beat lands in `presence`. Never read this column for liveness — runner-presence.ts reads
   // both and takes the later.
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")

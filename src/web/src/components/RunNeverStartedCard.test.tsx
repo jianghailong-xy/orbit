@@ -170,6 +170,43 @@ describe('a session with no SOURCE refusal', () => {
     expect(card.actions).toEqual(['send-again', 'open-runner']);
   });
 
+  it('blames the working directory, not the engine, when the runner says it is the folder', () => {
+    const dir = '/home/me/orbit-repos/notes';
+    for (const words of ['is not a directory', 'does not exist', 'is not usable: stat: permission denied']) {
+      const card = facts({
+        status: 'FAILED',
+        numTurns: 0,
+        engineStartedAt: null,
+        error: `failed to spawn claude: working directory ${dir} ${words}`,
+      });
+      expect(card.cause).toBe('WORK_DIR');
+      expect(card.why).toBe('The working directory on longdeMac-mini.local can’t be used');
+      expect(card.detail).toBe(`working directory ${dir} ${words}`);
+      expect(card.foot).toBe('Ended · no engine ran · 0 turns');
+      expect(card.actions).toEqual(['send-again', 'open-runner']);
+    }
+  });
+
+  it('reads a folder’s name as a path, not as a cause', () => {
+    const card = facts({
+      status: 'FAILED',
+      numTurns: 0,
+      engineStartedAt: null,
+      error: 'failed to spawn claude: working directory /srv/offline-not-installed is not a directory',
+    });
+    expect(card.cause).toBe('WORK_DIR');
+  });
+
+  it('leaves a missing binary to the sentence that names it', () => {
+    const card = facts({
+      status: 'FAILED',
+      numTurns: 0,
+      engineStartedAt: null,
+      error: 'failed to spawn claude: fork/exec /usr/local/bin/claude: not a directory',
+    });
+    expect(card.cause).toBe('ENGINE_DIED');
+  });
+
   it('claims an engine that died on startup only for a run that produced no turn', () => {
     expect(facts({ status: 'FAILED', numTurns: 0, engineStartedAt: null, error: '' }).cause).toBe('ENGINE_DIED');
     // A failed run with turns behind it is a conversation that broke, not a run that never started.

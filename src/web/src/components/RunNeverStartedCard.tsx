@@ -47,6 +47,7 @@ export type NeverStartedCause =
   | 'ENGINE_UNSUPPORTED'
   | 'ENGINE_SIGNED_OUT'
   | 'RUNNER_OFFLINE'
+  | 'WORK_DIR'
   | 'ENGINE_DIED';
 
 /** The presses a card can offer. The host supplies the handler; an id it cannot perform is not drawn. */
@@ -187,6 +188,8 @@ const MACHINE_COPY = {
   offlineBody: (machine: string) =>
     `${machine} stopped reporting while this run was starting. Nothing was produced, and nothing was sent anywhere.`,
   offlineFoot: 'Disconnected — runner went offline', // WorkspaceView.tsx, failedTitle's words
+  /** The one sentence here no repair card carries: the machine's own words sit under it. */
+  workDirWhy: (machine: string) => `The working directory on ${machine} can’t be used`,
   diedWhy: 'The engine died before it could read your message',
   diedBody:
     'The CLI exited on startup with no output. Retrying on this runner rarely helps; the runner’s own report says what it has.',
@@ -200,6 +203,9 @@ const UPGRADE_SENTENCE = /requires (?:a newer |an? )?Orbit runner|update this ru
 const NOT_INSTALLED_SENTENCE = /isn’t installed|isn't installed|not installed/i;
 const SIGNED_OUT_SENTENCE = /needs authentication|failed to authenticate|signed out|not signed in/i;
 const OFFLINE_SENTENCE = /offline/i;
+/** What the runner says when the folder is why a process would not start (runner-go explainSpawnError),
+ *  whichever engine's start it follows. Its own clause, so `detail` can show it without the prefix. */
+const WORK_DIR_SENTENCE = /\bworking directory .+ (?:does not exist|is not a directory|is not usable: .+)$/;
 
 /** §6.1's three resolved states — the ones a SOURCE refusal can be about (SR45's Legacy split). */
 const RESOLVED_SOURCE_STATES = new Set(['SELECTED', 'PINNED', 'REFUSED']);
@@ -258,6 +264,20 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
   const dsh = runtime === 'dsh' ? dshRepair(error) : null;
   const antigravity = runtime === 'antigravity' ? antigravityRepair(error) : null;
 
+  // First: the sentence quotes a path, and the words the tests below look for can be in a folder's name.
+  const workDir = WORK_DIR_SENTENCE.exec(error);
+  if (workDir) {
+    return {
+      cause: 'WORK_DIR',
+      subject: null,
+      detail: workDir[0],
+      why: MACHINE_COPY.workDirWhy(machine),
+      body: null,
+      next: null,
+      actions: task ? ['start-again', 'open-runner'] : ['send-again', 'open-runner'],
+      foot: MACHINE_COPY.endedFoot,
+    };
+  }
   if (dsh === 'updateRunner' || antigravity === 'updateRunner' || UPGRADE_SENTENCE.test(error)) {
     return {
       cause: 'RUNNER_UPGRADE',

@@ -124,6 +124,16 @@ final class RunnerControl {
             let detail = r.output.trimmingCharacters(in: .whitespacesAndNewlines)
             message = detail.isEmpty ? "Runner service installed." : "Service installed; launchctl: \(detail)"
         }
+        await refreshUntilOnline()
+    }
+
+    /// The server reads this machine online from its first heartbeat, a moment after the service
+    /// starts, and nothing else refreshes this pane: look again until it has, but not for long.
+    private func refreshUntilOnline() async {
+        for _ in 0..<10 where status.running && serverRunner?.online != true {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await refresh()
+        }
     }
 
     /// Launch-time upkeep for a Mac an older app enrolled. That app bundled the runner, so its
