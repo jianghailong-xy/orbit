@@ -119,7 +119,7 @@ export type ScheduledWakeupReceipt =
  * The session row is taken FOR KEY SHARE before anything else: the mode and the row the insert's foreign
  * key takes anyway, moved earlier (common/lock-order.ts, as I4 does). Taken at the insert, it came after
  * the waiting wakeup or the running loop this transaction had just locked, while createTurn and interrupt
- * hold the session FOR UPDATE and then reach for those same rows: a 40P01 cycle.
+ * hold the session FOR UPDATE and then reach for those same rows: a deadlock cycle.
  */
 export async function scheduleWakeup(
   tx: Prisma.TransactionClient,

@@ -239,7 +239,7 @@ export const LOCK_ORDER = [
       + 'from `missTick` and `endLoopAtTick`) — the mode and the row their tick insert\'s foreign key takes '
       + 'anyway, moved earlier, as I4 does. Taken at the insert instead, it came after the loop row (or the '
       + 'superseded wakeup), while createTurn and interrupt hold the session FOR UPDATE and then reach for '
-      + 'that row: a 40P01 cycle. A stop inserts nothing and takes no session lock: it ends the loop and '
+      + 'that row: a deadlock cycle. A stop inserts nothing and takes no session lock: it ends the loop and '
       + 'cancels its tick, and meets the others on the loop row.',
   },
   {
