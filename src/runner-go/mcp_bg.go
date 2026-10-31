@@ -74,12 +74,12 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" kill it. A merge or commit of this session neither waits for it nor stops it: both run" +
 				" beside it and name it in their receipt, and a commit takes any file it is still writing as" +
 				" that file stands. Read its output with bg_output. To be woken when it ends or has news, set" +
-				" wakeOnExit or wakeOnOutput: Orbit then tells this session what happened, even if this" +
-				" coding-engine process has been recycled in the meantime — so a wait for CI or a deploy can end" +
-				" your turn instead of holding it open. News that comes while you are idle opens a new turn. A job" +
-				" that exits while you are still working in a turn is written into that turn, read at your next" +
-				" tool call, where this engine accepts a message mid-turn; new output always waits for your next" +
-				" turn.",
+				" wakeOnExit or wakeOnOutput; to be woken if it goes quiet while still running, set wakeOnStall:" +
+				" Orbit then tells this session what happened, even if this coding-engine process has been" +
+				" recycled in the meantime — so a wait for CI or a deploy can end your turn instead of holding it" +
+				" open. News that comes while you are idle opens a new turn. A job that exits while you are still" +
+				" working in a turn is written into that turn, read at your next tool call, where this engine" +
+				" accepts a message mid-turn; new output and silence always wait for your next turn.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -108,6 +108,26 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 					"description": "Wake this session when the command writes new output. Output gathers for 10 seconds" +
 						" before it wakes you, and one job wakes you at most once a minute, so a burst of log lines is" +
 						" one turn. For a command that prints only when something happens.",
+				},
+				"wakeOnStall": map[string]interface{}{
+					"type": "object",
+					"description": "Wake this session if the command, still running, writes nothing for afterSeconds:" +
+						" naming the job, how long it has run, when it last wrote anything, the end of its output and" +
+						" the output file. One silence wakes you once, however long it lasts; once the job writes" +
+						" again, its next silence of that length wakes you again. For a job that may hang rather than" +
+						" fail — or for something outside this machine, run as a polling script that prints only when" +
+						" the state it watches changes. A value that is not {\"afterSeconds\": N} with N a whole number" +
+						fmt.Sprintf(" of seconds from %d to %d is refused, and the job is not started.", bgWakeOnStallMinSeconds, bgWakeOnStallMaxSeconds),
+					"properties": map[string]interface{}{
+						"afterSeconds": map[string]interface{}{
+							"type":        "integer",
+							"minimum":     bgWakeOnStallMinSeconds,
+							"maximum":     bgWakeOnStallMaxSeconds,
+							"description": "How many seconds without new output count as gone quiet.",
+						},
+					},
+					"required":             []string{"afterSeconds"},
+					"additionalProperties": false,
 				},
 				"cwd": map[string]interface{}{
 					"type":        "string",

@@ -61,6 +61,7 @@ const INSTRUCTIONS = 'New tests go in new files.';
 const CARD_FIELDS: Record<keyof TurnCards, true> = {
   openItemDelivery: true,
   ownerAnswer: true,
+  coordinatorDelivery: true,
   taskStart: true,
   projectStarted: true,
   confirmationReviewRequest: true,

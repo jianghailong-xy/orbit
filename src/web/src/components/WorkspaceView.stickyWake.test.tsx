@@ -324,3 +324,63 @@ describe('the sticky bar over a background job’s news', { timeout: 60_000 }, (
     expect(scrolledTo).toEqual([question]);
   });
 });
+
+describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000 }, () => {
+  // The opposite rule from the wakes above: a fact Orbit tells the coordinator is the head of a round —
+  // the reply under it answers it — so the bar names it once it is scrolled past. In its own words: it
+  // used to read `↑ Your question` over a screen of protocol the owner never wrote.
+  const TITLE = 'Wiki model queue: one claim can take more requests than the concurrency room';
+  const TOLD = 'From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\n'
+    + `Task “${TITLE}” (34nmQgDgyywHNIUtjb9TD) submitted revision 1 of its completion evidence.`;
+  const DELIVERY_EVENTS = [
+    ...EVENTS.slice(0, 2),
+    {
+      seq: 3,
+      type: 'user',
+      payload: {
+        text: TOLD,
+        coordinatorDelivery: {
+          kind: 'EVIDENCE_SUBMITTED',
+          task: { id: TASK, title: TITLE },
+          revision: 1,
+          count: null,
+          deliveredAt: '2026-09-17T06:00:00.000Z',
+        },
+      },
+      turnId: 'turn-delivery',
+      ts: '2026-09-17T06:00:00Z',
+    },
+    { seq: 4, type: 'assistant', payload: { text: 'reading revision 1 of the evidence' }, turnId: 'turn-delivery', ts: '2026-09-17T06:00:20Z' },
+  ];
+
+  it('names it From Orbit, in its own sentence, and goes back to it when tapped', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: DELIVERY_EVENTS, hasMore: false } as never);
+    await mountTranscript('.coordinator-delivery');
+
+    expect(text('.chat-sticky-label')).toBe('↑ From Orbit');
+    expect(text('.chat-sticky-text')).toBe(`Evidence revision 1 submitted: ${TITLE}`);
+    const bar = text('.chat-sticky-question');
+    expect(bar).not.toContain('Your question');
+    expect(bar).not.toContain('has a revision of completion evidence');
+
+    const line = mounted().querySelector<HTMLElement>('.coordinator-delivery[data-seq="3"]')!;
+    expect(line, 'the delivery is drawn as its line').not.toBeNull();
+    expect(mounted().querySelector('.chat-user[data-seq="3"]'), 'drawn as the owner’s bubble').toBeNull();
+    await act(async () => {
+      mounted()
+        .querySelector<HTMLElement>('.chat-sticky-question')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(scrolledTo).toEqual([line]);
+  });
+
+  it('without its card is the bubble it was, and the bar calls it the owner’s question', async () => {
+    // The negative control: the same words with nothing recorded beside them are read as typed.
+    const bare = DELIVERY_EVENTS.map((event) => (event.seq === 3 ? { ...event, payload: { text: TOLD } } : event));
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: bare, hasMore: false } as never);
+    await mountTranscript(null);
+
+    expect(text('.chat-sticky-label')).toBe('↑ Your question');
+    expect(text('.chat-sticky-text')).toContain('has a revision of completion evidence');
+  });
+});

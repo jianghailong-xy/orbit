@@ -27,8 +27,8 @@ data class CardRecord(val title: String, val icon: Icon, val line: String, val d
  * Which cards are previews in the conversation, and what a preview says (A08-2; iOS 629e8b87d, 5a2458531). The rule is by kind,
  * never by length: a question, a plan, a batch or a restructure the server previewed, a blocker to resolve, an owner confirmation
  * and the record a reviewer's return left, a criteria decision, the project's criteria, its start, a coordinator's question and a
- * merge to main open into a full-height review where they are answered. Everything else — a tool call, a provider write, a single
- * create, the merge-check change, evidence, an exception, every receipt — stays whole in the conversation.
+ * merge to main open into a full-height review where they are answered. Everything else — a tool call, a provider write, a delete,
+ * a single create, the merge-check change, evidence, an exception, every receipt — stays whole in the conversation.
  */
 object CardPreviews {
     const val viewDetails = "View details"
@@ -180,7 +180,8 @@ object CardPreviews {
     enum class Phase { CARD, SENDING, RECORDED, CLOSED }
 
     private val allows = setOf(CardVerb.ALLOW, CardVerb.REMEMBER, CardVerb.ANSWER, CardVerb.APPROVE_PLAN, CardVerb.CREATE_TASK,
-        CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER)
+        CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER,
+        CardVerb.DELETE_IT)
     private val denies = setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)
 
     /**

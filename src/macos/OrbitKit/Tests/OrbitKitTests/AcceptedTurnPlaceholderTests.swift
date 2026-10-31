@@ -540,7 +540,8 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
         let full = QueuedTurnInfo(
             turnId: "t", kind: "message", content: "words",
             attachments: [QueuedTurnInfo.Attachment(id: "a", mimeType: "image/png")],
-            openItemDelivery: .object([:]), ownerAnswer: .object([:]), taskStart: .object([:]), projectStarted: .object([:]),
+            openItemDelivery: .object([:]), ownerAnswer: .object([:]), coordinatorDelivery: .object([:]),
+            taskStart: .object([:]), projectStarted: .object([:]),
             sessionMessage: .object([:]), sessionReplies: .array([]), authoredByOrbit: true,
             confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]),
             placement: "accepted", createdAt: Self.filedAt, targetTurnId: "t-a", delivery: "failed",

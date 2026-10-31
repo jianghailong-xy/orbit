@@ -24,10 +24,12 @@ final class OrbitAskPreviewTests: XCTestCase {
         // A merge check joins them with teeth on both sides: the server writes a session's merge
         // check only against a card a PERSON answered, so a standing rule here would be a switch
         // that turns every later proposal into a refusal the agent cannot read — the owner
-        // believing they had allowed it.
+        // believing they had allowed it. A delete has the same teeth: the server deletes only on a
+        // card a person answered, so a standing yes would answer nothing.
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
-                     "orbit_provider_delete", "orbit_project_update_integration"] {
+                     "orbit_provider_delete", "orbit_project_update_integration",
+                     "orbit_runner_delete", "orbit_agent_delete"] {
             XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
                            "\(tool) must not offer Allow & remember")
         }
@@ -35,6 +37,89 @@ final class OrbitAskPreviewTests: XCTestCase {
         // for this being about those asks and not about the `orbit_` prefix.
         XCTAssertFalse(Approvals.rememberRules(toolName: "Read", input: json("{}")).isEmpty)
         XCTAssertFalse(Approvals.rememberRules(toolName: "orbit_task_get", input: json("{}")).isEmpty)
+    }
+
+    // MARK: deleting a runner or a workspace
+
+    /// Six hours and a minute after the last heartbeat these cards report.
+    private let deleteNow: Int64 = (1_790_000_000 + 6 * 3_600 + 60) * 1_000
+    private var lastBeat: String {
+        ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_790_000_000))
+    }
+
+    /// The card as the server files it: its own reading of the runner, never the asker's words.
+    private func runnerDelete(name: String = "instance-20261027-071926", displayName: String? = nil,
+                              online: Bool = false, heardFrom: Bool = true,
+                              workspaces: String = #"[{"id":"w1","name":"c2b-loadtest","workDir":null},{"id":"w2","name":"site","workDir":"~/site"}]"#
+    ) -> DeleteApprovalPreview? {
+        let shown = displayName.map { "\"\($0)\"" } ?? "null"
+        let beat = heardFrom ? "\"\(lastBeat)\"" : "null"
+        return Approvals.deletePreview(toolName: "orbit_runner_delete", from: json("""
+            {"runnerId":"r1","name":"\(name)","displayName":\(shown),"online":\(online),
+             "lastHeartbeatAt":\(beat),"workspaces":\(workspaces)}
+            """), nowMs: deleteNow)
+    }
+
+    func testARunnerCardNamesTheRunnerWhereItStandsAndWhatGoesWithIt() throws {
+        let card = try XCTUnwrap(runnerDelete())
+        XCTAssertTrue(card.isRunner)
+        XCTAssertEqual(card.heading, "Delete this runner?")
+        XCTAssertEqual(card.noun, "runner")
+        XCTAssertEqual(card.name, "instance-20261027-071926")
+        XCTAssertEqual(card.status, "Offline · last seen 6h ago")
+        XCTAssertNil(card.workDir)
+        XCTAssertEqual(card.workspaces, [.init(id: "w1", name: "c2b-loadtest", workDir: nil),
+                                         .init(id: "w2", name: "site", workDir: "~/site")])
+        XCTAssertEqual(card.note, Approvals.deleteRunnerNote)
+        XCTAssertEqual(card.declineName, "instance-20261027-071926")
+    }
+
+    func testARunnerIsCalledWhatTheAppCallsItAndSaysWhenItWasNeverHeardFrom() {
+        XCTAssertEqual(runnerDelete(displayName: "Build box")?.name, "Build box")
+        XCTAssertEqual(runnerDelete(online: true)?.status, "Online")
+        XCTAssertEqual(runnerDelete(heardFrom: false)?.status, "Offline")
+        XCTAssertEqual(runnerDelete(workspaces: "[]")?.workspaces, [])
+    }
+
+    func testAWorkspaceCardNamesItsRunnerAndFolderAndThatItIsNotErased() throws {
+        let card = try XCTUnwrap(Approvals.deletePreview(
+            toolName: "orbit_agent_delete",
+            from: json("""
+                {"agentId":"w1","name":"c2b-loadtest","workDir":"/srv/loadtest",
+                 "runner":{"id":"r1","name":"workstation-gpu","displayName":"HPC"}}
+                """),
+            nowMs: deleteNow))
+        XCTAssertFalse(card.isRunner)
+        XCTAssertEqual(card.heading, "Delete this workspace?")
+        XCTAssertEqual(card.name, "c2b-loadtest")
+        XCTAssertEqual(card.status, "On HPC")
+        XCTAssertEqual(card.workDir, "/srv/loadtest")
+        XCTAssertEqual(card.workspaces, [])
+        XCTAssertEqual(card.note, Approvals.deleteWorkspaceNote)
+    }
+
+    func testAWorkspaceWithNoRunnerSaysSoAndAnUnnamedCardStillHasADeclineName() {
+        let card = Approvals.deletePreview(toolName: "orbit_agent_delete",
+                                           from: json(#"{"agentId":"w1","runner":null}"#),
+                                           nowMs: deleteNow)
+        XCTAssertEqual(card?.status, "On no runner")
+        XCTAssertNil(card?.workDir)
+        XCTAssertEqual(card?.declineName, "this workspace")
+        XCTAssertEqual(runnerDelete(name: "")?.declineName, "this runner")
+    }
+
+    func testOnlyTheDeleteCardsAreDeleteCards() {
+        XCTAssertNil(Approvals.deletePreview(toolName: "orbit_provider_delete", from: json("{}"),
+                                             nowMs: deleteNow))
+        XCTAssertNil(Approvals.deletePreview(toolName: "Bash", from: json("{}"), nowMs: deleteNow))
+    }
+
+    func testSayingNoToADeleteIsAConversationAboutKeepingIt() {
+        for tool in ["orbit_runner_delete", "orbit_agent_delete"] {
+            XCTAssertTrue(Approvals.isOrbitAsk(toolName: tool), tool)
+            XCTAssertEqual(Approvals.decliningPrefix(toolName: tool), "Keeping it: ")
+            XCTAssertEqual(Approvals.kind(toolName: tool), .tool, "drawn by the tool card")
+        }
     }
 
     // MARK: ending a blocker

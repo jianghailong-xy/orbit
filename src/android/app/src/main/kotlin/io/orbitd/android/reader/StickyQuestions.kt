@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
@@ -63,17 +64,21 @@ internal object StickySummary {
      * Whether the bar may point back at this turn at all: every user turn may, but a watch's wake, a background job's news or a
      * wakeup coming due — each a line inside the answer, not the head of one (A08-14) — unless somebody also typed words on a
      * background wake. A watch's wake is the whole of its turn's words, so nobody's are there. Never the owner's answer handed
-     * to the coordinator, which is such a line too (OrbitKit `StickySummary.isAnchor`).
+     * to the coordinator, which is such a line too (OrbitKit `StickySummary.isAnchor`). Always a fact told to this session
+     * (`coordinatorDelivery`): its line is one too, but the reply under it answers it, so it heads what follows (web
+     * `CoordinatorDeliveryLine`'s `data-sticky-label`).
      */
     fun isAnchor(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Boolean {
-        if (listOf("sessionMessage", "openItemDelivery", "taskStart", "projectStarted").any { event.card(cards, it) != null }) return true
+        if (listOf("sessionMessage", "openItemDelivery", "coordinatorDelivery", "taskStart", "projectStarted")
+                .any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
         if (event.card(cards, "wake") == null) return true
         return event.personWords().isNotBlank()
     }
 
-    /** The label and line for one turn, in the transcript's order: another session, an item, a task's run, a project's start, the person. */
+    /** The label and line for one turn, in the transcript's order: another session, an item, a fact told to this session, a task's run, a
+     * project's start, the person. */
     fun of(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Pair<String, String> {
         event.card(cards, "sessionMessage")?.let { from ->
             return "${ARROW}From ${from.text("fromTitle")?.trim()?.ifEmpty { null } ?: "Untitled session"}" to event.personWords()
@@ -83,6 +88,8 @@ internal object StickySummary {
             val title = item.text("title").orEmpty()
             return "${ARROW}Exception item" to if (title.lowercase().startsWith(label.lowercase())) title else "$label: $title"
         }
+        // "↑ From Orbit" and the line's own sentence — never "Your question" over words the reader did not write.
+        event.card(cards, "coordinatorDelivery")?.let { return "$ARROW${CoordinatorDeliveryLine.stickyLabel}" to CoordinatorDeliveryLine.sentence(it) }
         event.card(cards, "taskStart")?.let { return "${ARROW}Task started" to it.text("title").orEmpty() }
         event.card(cards, "projectStarted")?.let { started ->
             return ARROW + (if (started.text("by") == "CONFIRMATION") "Project started" else "Project switched on") to started.text("projectTitle").orEmpty()

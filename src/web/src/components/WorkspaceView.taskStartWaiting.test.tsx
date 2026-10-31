@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
+  CoordinatorDeliveryCard,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -132,6 +133,13 @@ const ANSWER: OwnerAnswerCard = {
   sessionId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71',
   deliveredAt: '2026-10-06T05:39:58.000Z',
 };
+const DELIVERY: CoordinatorDeliveryCard = {
+  kind: 'CRITERION_UNLANDED',
+  task: null,
+  revision: null,
+  count: 2,
+  deliveredAt: '2026-10-06T05:40:02.000Z',
+};
 const STARTED: ProjectStartedCard = {
   by: 'CONFIRMATION',
   projectId: '01a0cca0-aeaa-7618-bd5a-caccc089108c',
@@ -177,6 +185,7 @@ const REPLY: SessionReplyCard = {
 const EVERY_CARD: Required<TurnCards> = {
   openItemDelivery: ITEM,
   ownerAnswer: ANSWER,
+  coordinatorDelivery: DELIVERY,
   taskStart: TASK,
   projectStarted: STARTED,
   confirmationReviewRequest: REVIEW_REQUEST,
@@ -190,6 +199,7 @@ const EVERY_CARD: Required<TurnCards> = {
 const ACCEPTED_ONE_CARD_EACH: { field: keyof TurnCards; content: string; drawnAs: string }[] = [
   { field: 'openItemDelivery', content: '【例外待办】合并时冲突，请处理。', drawnAs: '.oic' },
   { field: 'ownerAnswer', content: 'From Orbit · owner answer: you asked "Merge now?". The owner answered: Wait.', drawnAs: '.owner-answer' },
+  { field: 'coordinatorDelivery', content: 'From Orbit · project “Queue parity” has finished work that has not landed on main', drawnAs: '.coordinator-delivery' },
   { field: 'taskStart', content: BRIEF, drawnAs: '.tsc' },
   { field: 'projectStarted', content: 'The owner started this project.', drawnAs: '.psc' },
   { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned)' },

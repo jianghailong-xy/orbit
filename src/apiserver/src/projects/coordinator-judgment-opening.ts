@@ -744,6 +744,28 @@ export function buildCoordinatorDeliveryMessage(
 }
 
 /**
+ * Which of its three readings a `PROJECT_ACCEPTANCE_LANDED` message was written in, read back off
+ * its first line: not confirmed (the owner is to be asked), confirmed with DONE still held back, or
+ * recorded DONE. The reading is the projection at the moment the words were written
+ * (`buildCoordinatorDeliveryMessage`), which no row keeps, so the words are where a client's line
+ * (`CoordinatorDeliveryCard`) learns which one the coordinator was told. Each ending is the one the
+ * builder above writes, and `coordinator-delivery-card.spec.ts` builds all three to hold them to it.
+ * Words no reading wrote — a message from before these — read as not confirmed, the reading every
+ * such message had.
+ */
+export function acceptanceLandedReadingOf(content: string | null): 'ASKED' | 'HELD' | 'DONE' {
+  const head = (content ?? '').split('\n', 1)[0]!;
+  if (head.endsWith(ACCEPTANCE_LANDED_HELD_HEAD)) return 'HELD';
+  if (head.endsWith(ACCEPTANCE_LANDED_DONE_HEAD)) return 'DONE';
+  return 'ASKED';
+}
+
+const ACCEPTANCE_LANDED_HELD_HEAD = ': its acceptance criteria have all landed and this version is confirmed, '
+  + 'but the project has not been projected DONE';
+const ACCEPTANCE_LANDED_DONE_HEAD = ': its acceptance criteria are all satisfied and landed, and it is recorded '
+  + 'as DONE on the account owner’s confirmation';
+
+/**
  * What each landing reason (`criterion-landing-reason.ts`) means, for a coordinator choosing between
  * asking for the project to be recorded done and going back to work. One sentence each, saying what
  * Orbit can and cannot see — never what to conclude.
