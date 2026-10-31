@@ -188,23 +188,34 @@ func systemdServicesRunning(unitDir, exe string) []serviceDef {
 	paths, _ := filepath.Glob(filepath.Join(unitDir, "orbit-*.service"))
 	var defs []serviceDef
 	for _, path := range paths {
-		b, err := os.ReadFile(path)
+		def, err := readSystemdServiceDef(path)
 		if err != nil {
 			continue
-		}
-		def := serviceDef{path: path, user: "root"}
-		for _, line := range strings.Split(string(b), "\n") {
-			if v, ok := strings.CutPrefix(line, "User="); ok {
-				def.user = strings.TrimSpace(v)
-			} else if v, ok := strings.CutPrefix(line, "ExecStart="); ok {
-				def.program, _, _ = strings.Cut(strings.TrimSpace(v), " ")
-			}
 		}
 		if def.program != "" && sameFile(def.program, exe) {
 			defs = append(defs, def)
 		}
 	}
 	return defs
+}
+
+// readSystemdServiceDef reads the account the unit at path runs as — root when it names no User= —
+// and the binary its ExecStart= runs, as the unit spells it. hostd's update reads the runner
+// template's binary through it too.
+func readSystemdServiceDef(path string) (serviceDef, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return serviceDef{}, err
+	}
+	def := serviceDef{path: path, user: "root"}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "User="); ok {
+			def.user = strings.TrimSpace(v)
+		} else if v, ok := strings.CutPrefix(line, "ExecStart="); ok {
+			def.program, _, _ = strings.Cut(strings.TrimSpace(v), " ")
+		}
+	}
+	return def, nil
 }
 
 // launchAgentPath is the runner's LaunchAgent plist in the account whose home is home.

@@ -126,6 +126,59 @@ func warnSelfUpdateBlocked(remote, dir string) {
 	})
 }
 
+// selfUpdateBlocked is what a runner does about a release it wants and cannot swap into dir. A
+// shared machine binary is not this user's to replace, but it is the host broker's: hostd installs
+// it once for every runner on the machine. No drain and no re-exec here either way — once the
+// broker has the new binary in place, the restart arrives from systemd. A machine without a broker
+// keeps the warning that predates it.
+func selfUpdateBlocked(remote, dir string) {
+	if reason, asked := delegateUpdateToHostd(remote, dir); asked {
+		// Still dirNotWritable — that is what this runner's install is — with the reason saying who
+		// took the update instead.
+		noteSelfUpdate(selfUpdateStateDirNotWritable, reason, dir)
+		return
+	}
+	warnSelfUpdateBlocked(remote, dir)
+}
+
+var selfUpdateDelegatedOnce sync.Once
+
+// hostdRunnerSocket is where the runner's own update checks look for the machine broker. A var
+// rather than the socketPath every interactive caller passes to hostdCall, because they run as
+// fixed-signature callbacks (selfUpdateChecker, runWithSelfUpdates' update) with nowhere to thread
+// a path through; it is the test seam for that path and nothing else.
+var hostdRunnerSocket = hostdSocketPath
+
+// delegateUpdateToHostd asks the host broker to update the machine's binary, and reports what it
+// answered and whether there was a broker to ask at all. The request names nothing — not this
+// runner's release, not a server: the broker installs what the control plane publishes to every
+// runner. Logged once, like warnSelfUpdateBlocked: the check behind it repeats every
+// selfUpdateCheckInterval, and the heartbeat reason carries each answer.
+func delegateUpdateToHostd(remote, dir string) (string, bool) {
+	if _, err := os.Stat(hostdRunnerSocket); err != nil {
+		return "", false
+	}
+	resp, err := hostdCall(hostdRunnerSocket, "update")
+	var answer string
+	switch {
+	case err != nil:
+		answer = "it did not answer: " + err.Error()
+	case !resp.OK:
+		answer = "it declined: " + resp.Error
+	case resp.Data["accepted"] == true:
+		answer = fmt.Sprintf("it is installing orbit %v for every runner on this machine", resp.Data["version"])
+	case resp.Data["skipped"] == true:
+		answer = fmt.Sprintf("it skipped the request (%v)", resp.Data["reason"])
+	default:
+		answer = fmt.Sprintf("it reports orbit %v installed, the latest release published to every runner", resp.Data["version"])
+	}
+	reason := "delegated to the host broker at " + hostdRunnerSocket + ": " + answer
+	selfUpdateDelegatedOnce.Do(func() {
+		logln(fmt.Sprintf("orbit %s available for %s, which only the host can replace; %s", remote, dir, reason))
+	})
+	return reason, true
+}
+
 // writable reports whether we can create files in dir (i.e. swap the binary there).
 func writable(dir string) bool {
 	f, err := os.CreateTemp(dir, ".orbit-wtest-")
@@ -493,7 +546,7 @@ func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
 		return "", false
 	}
 	if !installable {
-		warnSelfUpdateBlocked(m.Version, dir)
+		selfUpdateBlocked(m.Version, dir)
 		return "", false
 	}
 	return m.Version, true
@@ -548,12 +601,29 @@ var selfUpdateTarget = resolvedExecutable
 // both its version and its write contract, then atomically swaps it over the current executable.
 // The same check protects automatic upgrade, explicit reinstall and N-1 rollback.
 func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) bool {
-	ver := manifest.Version
 	exe, err := selfUpdateTarget()
 	if err != nil {
 		logf("cannot locate executable: " + err.Error() + "\n")
 		return false
 	}
+	return installRelease(server, key, manifest, exe, probeAsThisProcess, logf)
+}
+
+// releaseProbe runs the downloaded binary at path with args and returns its standard output. The
+// version and write-contract checks are the only times a download is executed before it is
+// installed, so who executes it is the installer's to say: a runner replacing its own copy runs
+// them as itself, and the root machine broker as the account that asked (hostd_update.go).
+type releaseProbe func(path string, args ...string) ([]byte, error)
+
+func probeAsThisProcess(path string, args ...string) ([]byte, error) {
+	return exec.Command(path, args...).Output()
+}
+
+// installRelease is downloadAndSwap's check and swap of the release into exe, with the probe that
+// executes the download given. hostd's central update installs through it too, so every install
+// of a release passes this one chain.
+func installRelease(server, key string, manifest Manifest, exe string, runProbe releaseProbe, logf func(string)) bool {
+	ver := manifest.Version
 	// Fail fast (before downloading) if we can't write where the binary lives.
 	if dir := filepath.Dir(exe); !writable(dir) {
 		logf(fmt.Sprintf("cannot write to %s (permission denied) — re-run with: sudo orbit upgrade\n", dir))
@@ -609,13 +679,13 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 	}
 	giveToDirOwner(tmp, filepath.Dir(exe))
 
-	probe, _ := exec.Command(tmp, "version").Output()
+	probe, _ := runProbe(tmp, "version")
 	if strings.TrimSpace(string(probe)) != ver {
 		_ = os.Remove(tmp)
 		logf("downloaded update failed self-test; keeping current version\n")
 		return false
 	}
-	capabilityProbe, err := exec.Command(tmp, "capabilities", "--json").Output()
+	capabilityProbe, err := runProbe(tmp, "capabilities", "--json")
 	var capabilities downloadedCapabilities
 	if err != nil || json.Unmarshal(capabilityProbe, &capabilities) != nil ||
 		!downloadedContractMatchesManifest(capabilities, manifest) {
@@ -682,7 +752,7 @@ func selfUpdate(server string) {
 		return
 	}
 	if !installable {
-		warnSelfUpdateBlocked(manifest.Version, dir)
+		selfUpdateBlocked(manifest.Version, dir)
 		return
 	}
 	remote := manifest.Version
