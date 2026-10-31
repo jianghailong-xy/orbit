@@ -40,7 +40,7 @@ export async function readCoordinatorDeliveryCards(
   const derived = turns.filter((turn) => isDerivedUuid(turn.clientTurnId));
   if (derived.length === 0) return cards;
 
-  // The deliveries: one read, on the partial index over DELIVERED wakes by conversation (0459).
+  // The deliveries: one read, on the partial index over DELIVERED wakes by conversation (0460).
   const byKey = new Map(derived.map((turn) => [turn.clientTurnId, turn]));
   const wakes = await db.projectCoordinatorWake.findMany({
     where: {
