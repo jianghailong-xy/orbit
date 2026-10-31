@@ -17124,6 +17124,12 @@ button.chat-jump-start:hover {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
+/* An account's own panel starts where its name does, clear of the rail (`.re-acct .re-id`'s
+   padding). The rail is drawn over whatever is beneath it, so a panel laid across the row's edge
+   had the tree's line running through its padding, against its first button. */
+.re-acct > .re-panel {
+  margin-left: 38px;
+}
 .re-panel.bad {
   background: var(--error-bg);
   border-color: var(--error-border);

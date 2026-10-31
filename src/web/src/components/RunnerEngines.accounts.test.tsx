@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -253,6 +255,17 @@ describe('a runner with two Codex accounts', () => {
     await click(button(rows(page, '.re-acct')[1], 'Sign in'));
     await click(button(page, 'Sign in to Codex'));
     expect(loginPosts()).toEqual([{ engine: 'codex', account: '3fa91c2e' }]);
+  });
+
+  it("starts an account's panel where its name does, clear of the tree's rail", () => {
+    // jsdom computes no layout, so the sheet is where this is held: the rail (.re-rail) is painted
+    // over the row, and a panel spanning the row's full width had the tree's line running through
+    // its padding, against its first button. The 38px is `.re-acct .re-id`'s own padding.
+    const css = readFileSync(
+      [resolve(process.cwd(), 'src/index.css'), resolve(process.cwd(), 'src/web/src/index.css')].find(existsSync)!,
+      'utf8',
+    );
+    expect(css).toMatch(/\.re-acct > \.re-panel \{\s*margin-left: 38px;\s*\}/);
   });
 
   it('re-signs in Default by name, not as whatever the runner defaults to', async () => {
