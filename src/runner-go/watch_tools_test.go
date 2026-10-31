@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -399,6 +400,176 @@ func TestAgentFacingTextSendsOrbitWaitsToWatches(t *testing.T) {
 	for _, reason := range []string{bgGuardDenyReason, bgGuardScheduleWakeupReason} {
 		if !strings.Contains(reason, "mcp__orbit__task_await") {
 			t.Errorf("guard refusal does not name mcp__orbit__task_await: %q", reason)
+		}
+	}
+}
+
+// watchToolDescriptor is one tool as the MCP server lists it, orchestration on.
+func watchToolDescriptor(t *testing.T, name string) map[string]interface{} {
+	t.Helper()
+	for _, tool := range toolDescriptors(false, true) {
+		if tool["name"] == name {
+			return tool
+		}
+	}
+	t.Fatalf("no tool is served as %s", name)
+	return nil
+}
+
+// The schema an agent reads is the contract's grammar, every version of it: the enum the contract serves,
+// each leaf under the version it arrives in, and the bounds a request would be refused against.
+func TestWatchToolsOfferEveryPredicateVersionTheContractServes(t *testing.T) {
+	contract := watchContract(t)
+	served := contract["servedPredicateVersions"]
+	if got := asJSON(t, watchPredicateVersions); !reflect.DeepEqual(got, served) {
+		t.Fatalf("the tools send predicateVersion %v, the contract serves %v", got, served)
+	}
+	since := map[string]int{}
+	for name, raw := range contract["leaves"].(map[string]interface{}) {
+		version := 1
+		if n, ok := raw.(map[string]interface{})["sinceVersion"].(float64); ok {
+			version = int(n)
+		}
+		since[name] = version
+	}
+	if !reflect.DeepEqual(since, watchLeafSinceVersion) {
+		t.Errorf("leaf versions here = %v, contract = %v", watchLeafSinceVersion, since)
+	}
+	limits := contract["limits"].(map[string]interface{})
+	if limits["minNoProgressSeconds"] != float64(watchMinNoProgressSeconds) || limits["minNoOutputSeconds"] != float64(watchMinNoOutputSeconds) {
+		t.Errorf("the stall minimums here are %d and %d, the contract's are %v and %v", watchMinNoProgressSeconds,
+			watchMinNoOutputSeconds, limits["minNoProgressSeconds"], limits["minNoOutputSeconds"])
+	}
+
+	for _, name := range []string{"watch_create", "watch_update"} {
+		props := watchToolDescriptor(t, name)["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		version := props["predicateVersion"].(map[string]interface{})
+		if got := asJSON(t, version["enum"]); !reflect.DeepEqual(got, served) {
+			t.Errorf("%s's predicateVersion enum = %v, want the contract's %v", name, got, served)
+		}
+		if name == "watch_create" {
+			description, _ := watchToolDescriptor(t, name)["description"].(string)
+			for _, phrase := range []string{"never runs a command", "prints only when what it polls changes", "wakeOnStall"} {
+				if !strings.Contains(description, phrase) {
+					t.Errorf("watch_create's description does not say %q", phrase)
+				}
+			}
+		}
+		grammar, _ := props["predicate"].(map[string]interface{})["description"].(string)
+		for leaf := range watchLeafSinceVersion {
+			if !strings.Contains(grammar, leaf) {
+				t.Errorf("%s's predicate description does not name %s", name, leaf)
+			}
+		}
+		for _, phrase := range []string{
+			`"kind":"AT_LEAST","count":N`, `"params"`, `{"seconds":S,"jobId":"bgj_...`, "Version 2", "Version 3",
+			"300 at least", "holds even when that runner has died", "SESSION_RUN_TERMINAL", "under ANY_OF",
+			// No shell in the grammar, and what to do instead for a system outside Orbit.
+			"no shell", "the server runs no command", "prints a line only when the state it polls changes", "wakeOnStall",
+		} {
+			if !strings.Contains(grammar, phrase) {
+				t.Errorf("%s's predicate description does not say %q:\n%s", name, phrase, grammar)
+			}
+		}
+	}
+}
+
+// What the tool sends when the agent names no version: the lowest grammar its terms are in, so a version-1
+// wait is still a version-1 request any server takes, and a later leaf goes out under the grammar it needs.
+func TestWatchCreateSendsTheLowestVersionItsPredicateNeeds(t *testing.T) {
+	job := `{"kind":"ANY","over":"ALL_TARGETS","leaf":"SESSION_JOB_NO_OUTPUT_FOR","params":{"seconds":1800,"jobId":"bgj_0a1b2c3d4e5f"}}`
+	cases := []struct {
+		name      string
+		predicate string
+		version   interface{}
+		want      float64
+	}{
+		{"a version-1 predicate", `{"kind":"ANY_OF","operands":[{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_TERMINAL"},{"kind":"ANY","over":"ALL_TARGETS","leaf":"TASK_FAILED"}]}`, nil, 1},
+		{"a task stall", `{"kind":"ANY","over":"ALL_TARGETS","leaf":"TASK_NO_PROGRESS_FOR","params":{"seconds":900}}`, nil, 2},
+		{"a progress mark", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_PROGRESS_AT_LEAST","params":{"percent":50}}`, nil, 2},
+		{"a quorum of a version-1 leaf", `{"kind":"AT_LEAST","count":2,"over":"ALL_TARGETS","leaf":"TASK_DONE"}`, nil, 2},
+		{"a quiet job", job, nil, 3},
+		{"a quiet job beside a run ending", `{"kind":"ANY_OF","operands":[` + job + `,{"kind":"ANY","over":"ALL_TARGETS","leaf":"SESSION_RUN_TERMINAL"}]}`, nil, 3},
+		// A leaf this binary does not know goes out under the newest grammar, whose refusal lists every leaf.
+		{"an unknown leaf", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_REOPENED"}`, nil, 3},
+		{"an unknown kind", `{"kind":"SHELL","command":"true"}`, nil, 3},
+		// A version the agent named is the server's to judge, never rewritten here.
+		{"a version the agent named", job, float64(2), 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, requests := watchDoor(t, http.StatusCreated, activeWatchReply)
+			mcp := watchMCP(t, srv.URL, true)
+			args := map[string]interface{}{
+				"targets":   []interface{}{map[string]interface{}{"kind": "SESSION", "id": "s1"}},
+				"predicate": tc.predicate,
+			}
+			if tc.version != nil {
+				args["predicateVersion"] = tc.version
+			}
+			if result := mcp.callTool("watch_create", args); result["isError"] == true {
+				t.Fatalf("watch_create failed: %s", watchToolText(t, result))
+			}
+			update := mcp.callTool("watch_update", map[string]interface{}{"watchId": "w1", "predicate": tc.predicate, "predicateVersion": tc.version})
+			if update["isError"] == true {
+				t.Fatalf("watch_update failed: %s", watchToolText(t, update))
+			}
+			if len(*requests) != 2 {
+				t.Fatalf("requests = %#v, want a create and an update", *requests)
+			}
+			for _, request := range *requests {
+				if request.body["predicateVersion"] != tc.want {
+					t.Errorf("%s %s sent predicateVersion %v, want %v", request.method, request.uri, request.body["predicateVersion"], tc.want)
+				}
+			}
+		})
+	}
+}
+
+// The contract's own refusals of a term under an earlier grammar are exactly the predicates this tool
+// would send under a later one: what the tool infers and what the server serves cannot disagree.
+func TestTheInferredVersionIsTheOneTheContractsGrammarNeeds(t *testing.T) {
+	checked := 0
+	for _, raw := range watchContract(t)["vectors"].([]interface{}) {
+		vector := raw.(map[string]interface{})
+		given := vector["given"].(map[string]interface{})
+		named, ok := given["predicateVersion"].(float64)
+		if !ok {
+			continue
+		}
+		predicate := given["predicate"].(map[string]interface{})
+		refused := vector["expect"].(map[string]interface{})["refusal"] == "UNKNOWN_PREDICATE_KIND"
+		if needs := minimalWatchPredicateVersion(predicate); (needs > int(named)) != refused {
+			t.Errorf("%s: the tool would send version %d for a predicate the contract %s under version %v", vector["id"],
+				needs, map[bool]string{true: "refuses", false: "accepts"}[refused], named)
+		}
+		checked++
+	}
+	if checked < 2 {
+		t.Fatalf("only %d vectors name a predicate version: the check reads nothing", checked)
+	}
+}
+
+// The CLI sends what the tools send: the lowest grammar the predicate needs, or the version it was given.
+func TestWatchCLISendsTheLowestVersionItsPredicateNeeds(t *testing.T) {
+	job := `{"kind":"ANY","over":"ALL_TARGETS","leaf":"SESSION_JOB_NO_OUTPUT_FOR","params":{"seconds":600}}`
+	for _, tc := range []struct {
+		args []string
+		want float64
+	}{
+		{[]string{"create", "--target", "SESSION:s1", "--predicate", job, "--json"}, 3},
+		{[]string{"create", "--target", "SESSION:s1", "--predicate", job, "--predicate-version", "2", "--json"}, 2},
+		{[]string{"update", "w1", "--predicate", `{"kind":"ANY","over":"ALL_TARGETS","leaf":"TASK_NO_PROGRESS_FOR","params":{"seconds":60}}`, "--json"}, 2},
+		{[]string{"update", "w1", "--predicate", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"SESSION_TURN_SETTLED"}`, "--json"}, 1},
+	} {
+		srv, requests := watchDoor(t, http.StatusOK, activeWatchReply)
+		configureWatchCLISession(t, srv.URL)
+		var out bytes.Buffer
+		if err := cmdWatchCLI(tc.args, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		if len(*requests) != 1 || (*requests)[0].body["predicateVersion"] != tc.want {
+			t.Errorf("%v sent %#v, want predicateVersion %v", tc.args, *requests, tc.want)
 		}
 	}
 }

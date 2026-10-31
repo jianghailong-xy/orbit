@@ -1,8 +1,8 @@
 {
   "name": "orbit.watch",
   "contractVersion": 1,
-  "predicateVersion": 2,
-  "servedPredicateVersions": [1, 2],
+  "predicateVersion": 3,
+  "servedPredicateVersions": [1, 2, 3],
   "doc": "docs/watch-contract.md",
   "baseline": {
     "mainCommit": "88239c791f704faad01bf8c8a6144f85539c973a"
@@ -76,6 +76,19 @@
       "isNot": [
         "TASK_FAILED: a stalled task has not failed, and a terminal task is finished rather than stalled."
       ]
+    },
+    "SESSION_JOB_NO_OUTPUT_FOR": {
+      "targetKind": "SESSION",
+      "sinceVersion": 3,
+      "params": "{ seconds: integer minNoOutputSeconds..maxTtlSeconds, jobId?: the id bg_run returned, bgj_ followed by 1 to 64 lowercase letters or digits }",
+      "definition": "A runner-hosted job the session has in flight (session.running_bg_jobs) — the one params.jobId names, or any of them without it — has a last-output instant recorded in session.running_bg_job_activity, and now >= params.seconds after that instant. The instant is in the server's own timebase (the runner reports how long the job has been silent, and ingestion stores receivedAt - idleMs), so a runner that stops reporting leaves it where it was and the silence keeps growing: a dead runner or a machine asleep is heard as silence. A job with no recorded instant (a runner that predates idleMs) is unknown, not silent. A job that ended has left running_bg_jobs, so the leaf does not hold for it: a watch on it alone waits for its TTL, or ends through another operand of an ANY_OF.",
+      "sourceColumns": ["session.running_bg_jobs", "session.running_bg_job_activity"],
+      "authority": "src/apiserver/src/sessions/background-job-activity.ts (receivedAt - idleMs, written by the event ingestion in runner-api.controller.ts); runner-go background_job.go restates each running job's silence once a minute (bgJobHeartbeatInterval)",
+      "decidedBy": "the evaluator's schedule, as for TASK_NO_PROGRESS_FOR: a landing that sees the deadline coming sets next_evaluate_at to it, and the claim that serves every due watch takes it then. No event announces silence, and none is needed.",
+      "isNot": [
+        "SESSION_RUN_TERMINAL: a quiet job is still in flight. The writes that end a session's run clear its running jobs (src/apiserver/src/sessions/running-work.ts), so an ended run is not where this leaf holds, and ANY_OF with SESSION_RUN_TERMINAL is how a watch hears that end.",
+        "TASK_NO_PROGRESS_FOR: output is not progress. A job printing a heartbeat line is not quiet, and nothing a job prints is read."
+      ]
     }
   },
 
@@ -91,7 +104,8 @@
     ],
     "versions": {
       "1": "ALL, ANY, ALL_OF and ANY_OF over the leaves that declare no sinceVersion. No AT_LEAST and no params key.",
-      "2": "Version 1 plus AT_LEAST, the params key, and the leaves that declare sinceVersion 2."
+      "2": "Version 1 plus AT_LEAST, the params key, and the leaves that declare sinceVersion 2.",
+      "3": "Version 2 plus the leaves that declare sinceVersion 3."
     },
     "notes": [
       "Closed set. No shell, no SQL, no log regex, no free-text expression.",
@@ -112,6 +126,7 @@
     "defaultContinuousWakeBudget": 10,
     "maxContinuousWakeBudget": 100,
     "minNoProgressSeconds": 60,
+    "minNoOutputSeconds": 300,
     "maxDeliveryAttempts": 8,
     "maxLiveWatchesPerOwner": 500,
     "maxLiveWatchesPerTarget": 50,
@@ -273,7 +288,7 @@
     "why": "A Match is recorded once, but what it causes costs a turn or reaches a device, and a stored snapshot can outlive the permission that let it be taken. So every attempt is checked again when it is made, and every wake counts against what one session and one account may be given.",
     "order": ["permissionRecheck", "observerLife", "continuousSpacing", "storm", "budget"],
     "permissionRecheck": "Before any payload is built, every target of the watch that still exists must belong to the watch's owner, and so must the observer session. Otherwise the delivery is a PERMISSION_REVOKED dead letter and nothing about the targets leaves the database. The watch keeps its state: a Match is immutable and every watch end is terminal. A REVOKED or UNRESOLVABLE end's turn carries no target, so only its observer is rechecked.",
-    "redaction": "A wake's payload is rebuilt from the stored snapshot through an allowlist: each target's kind, id, epoch, state and changed; the leaves the grammar declares, keyed by leaf label (the leaf, followed by its parameters when it takes any) and answered true or false; observed status, endReason, runState, lifecycleState and pendingApproval, each a single word or a boolean, and, when the predicate reads progress, observed progress phase (a single word), current and total (counts), lastProgressAt and epochStartedAt (instants); and a CONTINUOUS watch's window, budget and openWindow, each kept only when every field has its shape. Any other key is dropped, a value of the wrong shape is written [redacted], and so is a reason outside the predicate vocabulary, which includes a leaf's parameters and a CONTINUOUS Match's crossings and wake of its budget. A lastError has URL credentials, bearer tokens, API keys and key=value secrets replaced by [redacted] before it is stored.",
+    "redaction": "A wake's payload is rebuilt from the stored snapshot through an allowlist: each target's kind, id, epoch, state and changed; the leaves the grammar declares, keyed by leaf label (the leaf, followed by its parameters when it takes any) and answered true or false; observed status, endReason, runState, lifecycleState and pendingApproval, each a single word or a boolean, and, when the predicate reads progress, observed progress phase (a single word), current and total (counts), lastProgressAt and epochStartedAt (instants), and, when the predicate reads job output, observed jobs: each job's id (a bg_run job id) and lastOutputAt (an instant, or null when the runner never said); and a CONTINUOUS watch's window, budget and openWindow, each kept only when every field has its shape. Any other key is dropped, a value of the wrong shape is written [redacted], and so is a reason outside the predicate vocabulary, which includes a leaf's parameters and a CONTINUOUS Match's crossings and wake of its budget. A lastError has URL credentials, bearer tokens, API keys and key=value secrets replaced by [redacted] before it is stored.",
     "continuousSpacing": "A CONTINUOUS watch's Match deliveries are at least limits.continuousDebounceSeconds apart. One due sooner goes back to PENDING until then, its lastError headed CONTINUOUS_RATE_LIMITED, and no attempt is counted.",
     "storm": "A RESUME_SESSION wake whose observer session was already given limits.maxWakesPerObserverPerHour wakes in the last hour is a WAKE_STORM_SUPPRESSED dead letter. Counted under the observer's row lock, so the limit is exact.",
     "budget": "A RESUME_SESSION wake whose owner's watches already gave limits.maxWakesPerOwnerPerDay wakes in the last 24 hours is a WAKE_BUDGET_EXHAUSTED dead letter. Wakes to different observers of one account do not wait on each other, so concurrent ones may pass the budget by as many as are in flight.",
@@ -815,6 +830,80 @@
       "given": { "mode": "CONTINUOUS", "debounceSeconds": 1 },
       "expect": { "refusal": "CONTINUOUS_POLICY_INVALID" },
       "why": "A window shorter than the contract's lets a busy target spend the whole wake budget in seconds."
+    },
+    {
+      "id": "job-quiet-past-the-window",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
+        "params": { "seconds": 300 }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": true },
+      "why": "A job in flight that has written nothing for longer than the window is quiet, whatever the reason: hung, waiting on something that will not answer, or gone with its runner."
+    },
+    {
+      "id": "job-output-within-the-window",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 30 }],
+        "params": { "seconds": 300 }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false },
+      "why": "Output moved inside the window. The evaluator schedules the watch at the deadline that output sets, and output after it moves the deadline again."
+    },
+    {
+      "id": "silent-runner-is-heard-as-silence",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
+        "runner": "stopped reporting 340 seconds ago, when it said the job had been quiet for 60 seconds",
+        "params": { "seconds": 300 }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": true },
+      "why": "The server keeps the instant the last report placed the output at and measures from it on its own clock. A runner that died or a machine that slept cannot report, so its job reads as quiet rather than as busy forever."
+    },
+    {
+      "id": "named-job-is-the-only-one-asked",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [
+          { "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 },
+          { "id": "bgj_9f8e7d6c5b4a", "lastOutputSecondsAgo": 10 }
+        ],
+        "params": { "seconds": 300, "jobId": "bgj_9f8e7d6c5b4a" }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false },
+      "why": "Named, the leaf asks about that job alone: another job's silence is not this one's. Unnamed, the quiet job beside it would hold it."
+    },
+    {
+      "id": "ended-job-is-not-quiet",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [],
+        "ended": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
+        "params": { "seconds": 300, "jobId": "bgj_0a1b2c3d4e5f" }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false },
+      "why": "A job that ended has stopped, not stalled, and its end is bg_run's own wake to report. A watch on it alone waits for its TTL; one that has to hear an end too names it under ANY_OF."
+    },
+    {
+      "id": "unreported-job-is-unknown-not-quiet",
+      "given": {
+        "session": { "status": "AWAITING_INPUT" },
+        "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": null }],
+        "params": { "seconds": 300 }
+      },
+      "expect": { "SESSION_JOB_NO_OUTPUT_FOR": false },
+      "why": "A runner that predates idleMs never says when output last moved. Unknown is not silence, so the leaf neither holds nor schedules a deadline for it."
+    },
+    {
+      "id": "version-2-refuses-the-job-leaf",
+      "given": {
+        "predicateVersion": 2,
+        "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_JOB_NO_OUTPUT_FOR", "params": { "seconds": 300 } }
+      },
+      "expect": { "refusal": "UNKNOWN_PREDICATE_KIND" },
+      "why": "A predicate is read under the grammar it names, and the job leaf arrives in version 3. A server that serves no version 3 refuses the version itself (PREDICATE_VERSION_UNSUPPORTED), so a newer agent tool is told so instead of having the leaf dropped."
     }
   ]
 }

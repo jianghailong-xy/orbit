@@ -45,6 +45,7 @@ import {
   observationOf,
   predicateHolds,
   predicateLeafTests,
+  sessionJobsOf,
   type WatchTargetFact,
 } from './watch-predicate';
 import {
@@ -704,6 +705,8 @@ export class WatchesService {
       select: {
         id: true, sessionKind: true, status: true, endReason: true,
         completedAt: true, archivedAt: true, deletedAt: true,
+        // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
+        runningBgJobs: true, runningBgJobActivity: true,
       },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
@@ -759,6 +762,7 @@ export class WatchesService {
           archivedAt: session.archivedAt,
           deletedAt: session.deletedAt,
           pendingApproval: awaitingAnswer.has(target.id),
+          jobs: sessionJobsOf(session.runningBgJobs, session.runningBgJobActivity),
         },
       };
     });

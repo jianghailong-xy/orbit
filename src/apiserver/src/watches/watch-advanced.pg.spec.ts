@@ -1084,7 +1084,7 @@ scenario('A7', 'a quorum is counted over the sealed target set: at least N of it
     ['a percent over a hundred', { predicate: reached({ percent: 101 }) }, 'PREDICATE_PARAMETER_INVALID'],
     ['a progress leaf with no params', { predicate: term('ANY', 'TASK_PROGRESS_AT_LEAST') }, 'PREDICATE_PARAMETER_INVALID'],
     ['params on a leaf that takes none', { predicate: term('ALL', 'TASK_DONE', { seconds: 60 }) }, 'PREDICATE_PARAMETER_INVALID'],
-    ['a version this build does not serve', { predicateVersion: 3 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['a version this build does not serve', { predicateVersion: Math.max(...WATCH_PREDICATE_VERSIONS) + 1 }, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [why, body, code] of refused) {
     assert.equal(await refusalOf(() => createWatch(s, { predicate: quorum(2), targets: tasks([a, b, c]), ...body })), code, why);

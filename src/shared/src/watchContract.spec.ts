@@ -26,15 +26,38 @@ const CONTRACT = readJson('contracts/watch.contract.json');
 const STATE_MACHINES = ['watch', 'target', 'delivery'] as const;
 
 describe('watch contract', () => {
-  it('is version 1, serves predicate versions 1 and 2, and points at a document that exists', () => {
+  it('is version 1, serves predicate versions 1, 2 and 3, and points at a document that exists', () => {
     expect(CONTRACT.name).toBe('orbit.watch');
     expect(CONTRACT.contractVersion).toBe(1);
-    expect(CONTRACT.predicateVersion).toBe(2);
+    expect(CONTRACT.predicateVersion).toBe(3);
     // The newest grammar is served, and so is every one before it: a stored predicate is decided under
     // the version it was requested with, so dropping one would strand every watch written under it.
-    expect(CONTRACT.servedPredicateVersions).toEqual([1, 2]);
-    expect(Object.keys(CONTRACT.grammar.versions)).toEqual(['1', '2']);
+    expect(CONTRACT.servedPredicateVersions).toEqual([1, 2, 3]);
+    expect(Object.keys(CONTRACT.grammar.versions)).toEqual(['1', '2', '3']);
     expect(existsSync(path.join(ROOT, CONTRACT.doc))).toBe(true);
+  });
+
+  it('decides a job\'s silence from the two session columns the runner\'s reports keep, and says what it is not', () => {
+    const leaf = CONTRACT.leaves.SESSION_JOB_NO_OUTPUT_FOR;
+    expect(leaf.targetKind).toBe('SESSION');
+    expect(leaf.sinceVersion).toBe(3);
+    // The running set and the last-output instants ingestion writes; no output text, no shell, no log.
+    expect(leaf.sourceColumns).toEqual(['session.running_bg_jobs', 'session.running_bg_job_activity']);
+    expect(leaf.decidedBy).toMatch(/next_evaluate_at/u);
+    // Its shortest window is a limit of its own, and no shorter than the version-2 stall's.
+    expect(leaf.params).toMatch(/minNoOutputSeconds\.\.maxTtlSeconds/u);
+    expect(CONTRACT.limits.minNoOutputSeconds).toBeGreaterThanOrEqual(CONTRACT.limits.minNoProgressSeconds);
+    // Every vector that asks it states what the job's rows say, so a reader can rebuild them.
+    const asked = CONTRACT.vectors.filter((v: any) => 'SESSION_JOB_NO_OUTPUT_FOR' in v.expect);
+    expect(asked.map((v: any) => v.id)).toEqual(expect.arrayContaining([
+      'job-quiet-past-the-window', 'job-output-within-the-window', 'silent-runner-is-heard-as-silence', 'ended-job-is-not-quiet',
+    ]));
+    for (const v of asked) {
+      expect(Array.isArray(v.given.jobs), `${v.id} names no jobs`).toBe(true);
+      expect(v.given.params.seconds, `${v.id}'s window is out of range`).toBeGreaterThanOrEqual(CONTRACT.limits.minNoOutputSeconds);
+    }
+    // And no shell in the grammar it joined.
+    expect(CONTRACT.grammar.notes[0]).toMatch(/No shell/u);
   });
 
   it('introduces every later leaf under a served version', () => {
