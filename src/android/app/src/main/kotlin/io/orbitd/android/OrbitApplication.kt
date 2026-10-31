@@ -17,10 +17,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableStateMapOf
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.DraftTarget
+import io.orbitd.android.composer.MachineSetupState
 import io.orbitd.android.attachments.clearAttachmentHandoffs
 import io.orbitd.android.attachments.clearAttachmentImports
 import io.orbitd.android.directory.TrashingSessions
@@ -49,11 +51,24 @@ open class OrbitApplication : Application() {
     val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }
     private var composerHandle: SessionHandle? = null
     private val composers = mutableMapOf<String, ComposerModel>()
+    private val machineSetups = mutableStateMapOf<String, MachineSetupState>()
     fun composer(handle: SessionHandle, sessionId: String, target: DraftTarget? = null): ComposerModel {
         check((session.state.value as? AuthState.SignedIn)?.handle === handle)
-        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); composerHandle = handle }
+        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = handle }
         val key = ObjectId.canonical(sessionId) ?: sessionId
         return composers.getOrPut(key) { ComposerModel(session, handle, key, processScope, target) { realtime.refreshSession(); realtime.refreshDirectory() } }
+    }
+    fun machineSetup(handle: SessionHandle, runnerId: String): MachineSetupState {
+        if (composerHandle != null && composerHandle !== handle) return MachineSetupState()
+        val key = ObjectId.canonical(runnerId) ?: runnerId
+        return machineSetups[key] ?: MachineSetupState()
+    }
+    fun updateMachineSetup(handle: SessionHandle, runnerId: String, transform: (MachineSetupState) -> MachineSetupState) {
+        check((session.state.value as? AuthState.SignedIn)?.handle === handle)
+        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = handle }
+        val key = ObjectId.canonical(runnerId) ?: runnerId
+        val next = transform(machineSetups[key] ?: MachineSetupState())
+        if (next == MachineSetupState()) machineSetups.remove(key) else machineSetups[key] = next
     }
     override fun onCreate() {
         super.onCreate()
@@ -74,7 +89,7 @@ open class OrbitApplication : Application() {
                 clearAttachmentImports(this@OrbitApplication)
             }
             if ((state as? AuthState.SignedIn)?.handle !== composerHandle) {
-                composers.values.forEach { it.close() }; composers.clear(); composerHandle = null
+                composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = null
                 clearAttachmentHandoffs(this@OrbitApplication)
             }
         } }

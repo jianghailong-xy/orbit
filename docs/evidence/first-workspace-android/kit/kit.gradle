@@ -1,0 +1,7 @@
+// Evidence kit for task 34pLtXumbawMl6II4gUPa: compiles src/FirstWorkspaceDeviceShotsTest.kt into the androidTest
+// APK so nothing under src/android/app/src/androidTest changes. Pass it with -I to `gradlew -p src/android`.
+allprojects { p ->
+    p.plugins.withId('com.android.application') {
+        p.android.sourceSets.androidTest.java.srcDir(new File(p.rootProject.projectDir, '../../docs/evidence/first-workspace-android/kit/src').canonicalFile)
+    }
+}

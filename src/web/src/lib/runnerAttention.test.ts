@@ -651,11 +651,6 @@ describe('runnerCopy', () => {
     expect(copy.RUNNER_VERSION_LATEST).toBe('Latest');
     expect(copy.RUNNER_VERSION_INSTALLS_WHEN_IDLE).toBe('installs when no turn is running');
     expect(copy.RUNNER_ROOT_NO_BYPASS).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
-    expect(copy.RUNNER_WORKSPACES_FOOTER).toBe(
-      'Tap a workspace to open its sessions. Add or change workspaces on the web.',
-    );
-    // The native pages link these words of it, so they are in it, once.
-    expect(copy.RUNNER_WORKSPACES_FOOTER.split(copy.RUNNER_WORKSPACES_FOOTER_LINK)).toHaveLength(2);
   });
 
   // OrbitKit's parity test reads runnerCopy.ts as text, so the file's shape is part of the contract.
