@@ -126,6 +126,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       selfUpdate: true,
       minFreeDiskMb: true,
       reposRoot: true,
+      // Where `orbit register` ran (docs/first-workspace-contract.md §1).
+      registerDir: true,
       capabilities: true,
       heartbeatLeaseOwner: true,
       heartbeatDraining: true,

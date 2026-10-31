@@ -118,6 +118,7 @@ import {
   CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   ClaudeHistoryTranscript,
   RunnerClaudeHistoryResult,
+  RunnerDirProbeResult,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
@@ -412,6 +413,7 @@ import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, us
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
+import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -1506,6 +1508,8 @@ export class RunnerApiController {
     const ownerId = enrollment.ownerId;
     const runnerName = dto.name;
     const runnerToken = generateToken(32);
+    // The directory `orbit register` ran in, when this registration says one (docs/first-workspace-contract.md §1).
+    const registerDir = typeof dto.workDir === 'string' ? dto.workDir.trim() : '';
     const runnerData = {
       hostname: dto.hostname,
       labels: dto.labels ?? [],
@@ -1514,6 +1518,7 @@ export class RunnerApiController {
       tokenHash: sha256(runnerToken),
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
+      ...(registerDir ? { registerDir } : {}),
     };
     // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
@@ -2273,6 +2278,7 @@ export class RunnerApiController {
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
+    let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
@@ -2310,6 +2316,7 @@ export class RunnerApiController {
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
+      dirProbeRequest = await this.drainDirProbeRequest(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
       // runner never has to hold a workspace list of its own. After the relays on purpose: it is
@@ -2384,6 +2391,8 @@ export class RunnerApiController {
       // Same reasoning as the reset command above: present only while somebody is actually waiting
       // on an answer, so a runner that never asked sees the response shape it always had.
       ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
+      // The same, for the directory probe: only on the beat that hands one over.
+      ...(dirProbeRequest ? { dirProbeRequest } : {}),
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
@@ -2793,6 +2802,28 @@ export class RunnerApiController {
   }
 
   /**
+   * The path this runner should report on, if anyone is asking (docs/first-workspace-contract.md §2.3).
+   *
+   * Handed over ONCE, as the Claude history scan above is and for its reasons: what waits on it is a person choosing a
+   * folder, and an unanswered question is asked again by asking again rather than retried at a runner that may never
+   * answer. The hand-over is a compare-and-set on the state it was read in — `pending`, about that path — so two API
+   * replicas draining at the same moment give it to one runner process.
+   */
+  private async drainDirProbeRequest(runnerId: string): Promise<RunnerHeartbeatResponse['dirProbeRequest']> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { dirProbeStatus: true, dirProbePath: true, dirProbeAt: true },
+    });
+    if (r?.dirProbeStatus !== 'pending' || !r.dirProbePath) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, dirProbeStatus: 'pending', dirProbePath: r.dirProbePath },
+      data: { dirProbeStatus: 'probing' },
+    });
+    if (claimed.count === 0) return undefined;
+    return { path: r.dirProbePath, requestedAt: r.dirProbeAt?.toISOString() ?? '' };
+  }
+
+  /**
    * Runner → control plane: how the checkout repair went.
    *
    * The reported state also corrects the stored health snapshot for that root, so the warning
@@ -2888,6 +2919,30 @@ export class RunnerApiController {
         claudeHistoryStatus: result.error ? 'failed' : 'done',
         claudeHistoryResult: result as unknown as Prisma.InputJsonValue,
       },
+    });
+    return { ok: true, applied: stored.count > 0 };
+  }
+
+  /**
+   * Runner → control plane: what is at the path it was asked about (docs/first-workspace-contract.md §2.4).
+   *
+   * Stored only while the relay still names that path, as the Claude history answer is: someone choosing a folder asks
+   * about several in a row, and an answer that arrives after they moved on is dropped rather than made the verdict on
+   * the one in the field now. A probe that could not look answers too, with its `error`, and is `done` all the same.
+   * The body is re-read rather than trusted (readDirProbeResult).
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('dir-probe-result')
+  @HttpCode(200)
+  async dirProbeResult(
+    @CurrentRunner() runner: { id: string },
+    @Body() body: RunnerDirProbeResult,
+  ) {
+    const answer = readDirProbeResult(body);
+    if (!answer) throw new BadRequestException('path and result are required');
+    const stored = await this.prisma.runner.updateMany({
+      where: { id: runner.id, dirProbePath: answer.path },
+      data: { dirProbeStatus: 'done', dirProbeResult: answer as unknown as Prisma.InputJsonValue },
     });
     return { ok: true, applied: stored.count > 0 };
   }
@@ -3886,6 +3941,8 @@ export class RunnerApiController {
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
         autoInitGit: workspace?.autoInitGit ?? undefined,
+        // cf. the claim path: a folder Orbit made the workspace in is made on the machine if it is missing.
+        ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
         // cf. the claim path: the branch this session merges into (including a project task's
         // integration line), so a restarted runner still judges "already merged" against it.
         mergeTarget: s.mergeTarget

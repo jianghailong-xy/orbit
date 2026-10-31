@@ -4,6 +4,8 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   ConversationTurnKind,
+  DirProbeAnswer,
+  NewWorkspaceRequest,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -423,6 +425,13 @@ export const getSessionEventPageAfter = (
 export const getSessionEventFull = (id: string, seq: number): Promise<EventPageEvent> =>
   api<EventPageEvent>(`/sessions/${id}/events/${seq}/full`);
 
+/** The directory probe relay (docs/first-workspace-contract.md §2): ask what is at a path on a machine,
+ *  and read the answer the runner sends back with a later heartbeat. One question per machine. */
+export const askDirProbe = (runnerId: string, path: string) =>
+  api<{ path: string; status: 'pending' }>(`/runners/${runnerId}/dir-probe`, { method: 'POST', body: { path } });
+export const readDirProbe = (runnerId: string, path: string, signal?: AbortSignal) =>
+  api<DirProbeAnswer>(`/runners/${runnerId}/dir-probe?path=${encodeURIComponent(path)}`, { signal });
+
 /** The authoritative, complete list of background shells the session ever launched (derived
  *  server-side over ALL persisted events, with output recovered from the workspace's Read polls).
  *  The loaded event window only holds the most recent launches, so the tray merges this with
@@ -471,8 +480,11 @@ export const createInteractiveSession = (body: {
   /** Composed on a folder's page: the session starts filed in that folder, which has to be one of
    *  `workspaceId`'s (docs/session-folders-move-design.md §3.2). */
   folderId?: string;
+  /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
+   *  the transaction that creates it (docs/first-workspace-contract.md §3). */
+  newWorkspace?: NewWorkspaceRequest;
 }) =>
-  api<{ id: string }>('/sessions', {
+  api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
     body: {
       ...body,
@@ -1858,6 +1870,9 @@ export interface SessionDetail {
   // account (UserPreferences.defaultPermissionMode).
   workspace: {
     id: string;
+    name?: string;
+    workDir?: string | null;
+    deletedAt?: string | null;
     provider?: string | null;
     model?: string | null;
     effort?: string | null;
@@ -1873,6 +1888,9 @@ export interface SessionDetail {
     /** The Cursor CLI account this workspace's sessions run on; null is Default. */
     cursorAccount?: string | null;
   } | null;
+  /** This session made its workspace (docs/first-workspace-contract.md §3.3): the conversation opens
+   *  by saying so. Only the detail carries it. */
+  createdWorkspace?: boolean;
   branch?: string | null;
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;

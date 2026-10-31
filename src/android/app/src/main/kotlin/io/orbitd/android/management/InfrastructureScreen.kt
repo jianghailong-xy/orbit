@@ -86,7 +86,8 @@ internal class InfrastructureModel(private val api: ManagementApi) {
         access[pool.id]?.let { ProviderPools.withAccess(pool, it, nowMs) } ?: pool
     }
 
-    fun attention(runners: List<JsonObject>, nowMs: Long) = Infrastructure.attention(runners, memberPools(nowMs), ownPools(nowMs), nowMs)
+    fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, nowMs: Long) =
+        Infrastructure.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs)
 }
 
 /**
@@ -137,10 +138,11 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                 }
             }
             if (model.settled) {
-                val attention = model.attention(machines.runners, now)
+                val attention = model.attention(machines.runners, machines.workspaces, now)
                 if (attention.isNotEmpty()) NeedsYouSection(attention) { item ->
                     when (val kind = item.kind) {
                         is Infrastructure.Kind.Offline -> runner(kind.runnerId)
+                        is Infrastructure.Kind.NoCliSignedIn -> runner(kind.runnerId)
                         is Infrastructure.Kind.PoolUnavailable -> page(if (kind.own) "own:${kind.poolId}" else "shared:${kind.poolId}")
                     }
                 }
@@ -183,7 +185,8 @@ private fun NeedsYouSection(items: List<Infrastructure.Attention>, open: (Infras
                     Text(item.detail, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
                 when (item.kind) {
-                    is Infrastructure.Kind.Offline -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.DETAILS) }
+                    is Infrastructure.Kind.Offline, is Infrastructure.Kind.NoCliSignedIn ->
+                        OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.DETAILS) }
                     is Infrastructure.Kind.PoolUnavailable -> OutlinedButton(onClick = { open(item) }) { Text(Infrastructure.MANAGE) }
                 }
             }

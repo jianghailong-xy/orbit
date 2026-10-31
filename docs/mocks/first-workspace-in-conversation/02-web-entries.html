@@ -1,0 +1,66 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>没有 workspace 的机器 · Web 入口、提醒和卡片状态</title>
+<style>* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1720px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1500px; margin-bottom: 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section:first-of-type { border-top: 0; padding-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.after { background: #d9e6ff; color: #14428f; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-bottom: 26px; align-items: start; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: start; }
+.tile { margin: 0; background: #fff; border-radius: 16px; padding: 18px 20px 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04); }
+.tile-title { font-size: 16px; font-weight: 650; margin: 0 0 12px; }
+.tag { display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; margin: 0 0 8px; }
+.tag.now { background: #ffe0dc; color: #8f1d13; }
+.tag.after { background: #d9e6ff; color: #14428f; }
+.fr { position: relative; border-radius: 10px; overflow: visible; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); margin: 4px 0 12px; }
+.fr img { display: block; border-radius: 10px; }
+.fr + .fr { margin-top: 14px; }
+.fr-label { position: absolute; left: 8px; top: -10px; font-size: 11px; background: #16161a; color: #fff; border-radius: 4px; padding: 0 6px; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.num.m { position: absolute; box-shadow: 0 0 0 2.5px #fff, 0 2px 6px rgba(0,0,0,.3); z-index: 3; }
+.notes { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; line-height: 1.62; color: #34343c; }
+.notes li { display: flex; gap: 10px; margin: 7px 0; }
+.notes li .num { margin-top: 1px; width: 20px; height: 20px; font-size: 11.5px; }
+.notes i { color: #1f2a44; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 10px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 150px; font-weight: 600; color: #16161a; }
+.cmp td:nth-child(2) { background: #fff6f5; }
+.cmp td:nth-child(3) { background: #f3f7ff; }
+.sumtile { align-self: stretch; }
+.pair { margin-bottom: 22px; }
+.pair-title { font-size: 16px; font-weight: 650; margin: 0 0 10px 4px; }
+.pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.state .tile-title { font-size: 15px; }
+.notes li .t { flex: 1; min-width: 0; }
+.tile.wide { margin-bottom: 26px; }
+.tile.wide .frs { display: flex; gap: 28px; align-items: flex-start; }
+.tile.wide .notes { columns: 2; column-gap: 36px; }
+.tile.wide .notes li { break-inside: avoid; }
+</style><body><div class="board"><h1>没有 workspace 的机器 · Web 入口、提醒和卡片状态</h1><div class="lede">01 是主流程；这里是通向它的入口、让人知道「这台机器还不能用」的提醒，以及设置卡在各种情况下的样子。左边今天、右边方案，都是真页面截图。</div>
+<div class="section"><span class="sec now">入口</span><span class="sec-sub">所有「接下来做什么」都指到同一个地方：这台机器的新会话页。</span></div>
+<div class="pair"><div class="pair-title">批准页（/enroll）的下一步</div><div class="pair-row">
+<figure class="tile"><span class="tag now">今天</span><div class="fr" style="width:384px;height:448px"><img src="frames/t-enroll-400-130-480x560.png" width="384" height="448"><span class="num m" style="left:11px;top:266px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">只说 <i>Next: sign in its coding CLIs</i>，按钮去机器页，不提 workspace；而 /runners/register 说的下一步是建 workspace，两处不一致。</span></li></ol></figure>
+<figure class="tile"><span class="tag after">方案</span><div class="fr" style="width:384px;height:448px"><img src="frames/p-enroll-400-130-480x560.png" width="384" height="448"><span class="num m" style="left:11px;top:241px">1</span><span class="num m" style="left:351px;top:361px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t">统一成一个下一步：<i>Next: start your first session</i>，两件事在下一屏一起做。</span></li><li><span class="num">2</span><span class="t">主按钮 <b>Start a session</b> 打开这台机器的新会话页；机器页退成次要链接。</span></li></ol></figure></div></div><div class="pair"><div class="pair-title">Add a runner 页（/runners/register）机器上线后</div><div class="pair-row">
+<figure class="tile"><span class="tag now">今天</span><div class="fr" style="width:510px;height:135px"><img src="frames/t-register-440-500-680x180.png" width="510" height="135"><span class="num m" style="left:11px;top:20px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t"><i>Create a workspace</i> 按钮其实只是跳到机器页，表单还得自己再点开。</span></li></ol></figure>
+<figure class="tile"><span class="tag after">方案</span><div class="fr" style="width:510px;height:135px"><img src="frames/p-register-440-500-680x180.png" width="510" height="135"><span class="num m" style="left:11px;top:20px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">同一句下一步，按钮 <b>Start a session</b>。</span></li></ol></figure></div></div>
+<div class="section"><span class="sec now">不再沉默</span><span class="sec-sub">一台什么都跑不了的机器，要在能看到的地方被说出来。</span></div>
+<div class="pair"><div class="pair-title">机器页：提醒和空状态</div><div class="pair-row">
+<figure class="tile"><span class="tag now">今天</span><div class="fr" style="width:525px;height:158px"><img src="frames/t-landing-tall-250-20-700x210.png" width="525" height="158"></div><div class="fr" style="width:488px;height:105px"><img src="frames/t-landing-tall-300-915-650x140.png" width="488" height="105"><span class="num m" style="left:11px;top:45px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">两个引擎都没登录，可这台机器一个 Needs attention 都没有：规则要求「有 workspace 用这个引擎」才算（web、Apple、Android 三端同一条规则）。空状态只有一句话。</span></li></ol></figure>
+<figure class="tile"><span class="tag after">方案</span><div class="fr" style="width:525px;height:158px"><img src="frames/p-machine-250-20-700x210.png" width="525" height="158"><span class="num m" style="left:11px;top:94px">1</span></div><div class="fr" style="width:488px;height:150px"><img src="frames/p-machine-300-1035-650x200.png" width="488" height="150"><span class="num m" style="left:11px;top:45px">2</span></div><ol class="notes"><li><span class="num">1</span><span class="t">一台机器上一个编程 CLI 都没登录时，算一条 <b>No coding CLI is signed in</b>，带 Sign In。只要有一个登录了，其他没用到的引擎照旧不吵。</span></li><li><span class="num">2</span><span class="t">空状态给 <b>Start a session</b>；表单还在，<i>Add workspace</i> 降成次要按钮。</span></li></ol></figure></div></div><div class="pair"><div class="pair-title">Settings → Machines &amp; models</div><div class="pair-row">
+<figure class="tile"><span class="tag now">今天</span><div class="fr" style="width:525px;height:82px"><img src="frames/t-settings-500-850-700x110.png" width="525" height="82"><span class="num m" style="left:-2px;top:39px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t"><code>1 of 1 online</code>：看起来一切正常。</span></li></ol></figure>
+<figure class="tile"><span class="tag after">方案</span><div class="fr" style="width:525px;height:82px"><img src="frames/p-settings-500-850-700x110.png" width="525" height="82"><span class="num m" style="left:-2px;top:39px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t"><code>1 needs you</code>（琥珀色）：在线但一个 CLI 都没登录的机器也算。手机 Settings 行跟着改。</span></li></ol></figure></div></div><div class="pair"><div class="pair-title">已有 workspace 的账号（就是你这个账号的情况）</div><div class="pair-row">
+<figure class="tile"><span class="tag now">今天</span><div class="fr" style="width:261px;height:171px"><img src="frames/t-side-existing-0-150-290x190.png" width="261" height="171"><span class="num m" style="left:230px;top:124px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">新接的 orbit@austin 在侧边栏里不存在，只有 HPC 上的两个 workspace。</span></li></ol></figure>
+<figure class="tile"><span class="tag after">方案</span><div class="fr" style="width:261px;height:171px"><img src="frames/p-side-existing-0-150-290x190.png" width="261" height="171"><span class="num m" style="left:230px;top:123px">1</span></div><ol class="notes"><li><span class="num">1</span><span class="t">在线、没有 workspace 的机器排在 workspace 后面：<b>Set up orbit@austin</b>，点开就是它的新会话页。离线的不列（Machines &amp; models 已经把它算作 needs you）。</span></li></ol></figure></div></div>
+<div class="section"><span class="sec after">卡片的边界状态</span><span class="sec-sub">真页面截图，原型补丁画出。</span></div>
+<div class="grid4"><figure class="tile state"><div class="tile-title">注册目录就是 ~</div><div class="fr" style="width:344px;height:344px"><img src="frames/e-home-633-135-615x614.png" width="344" height="344"></div><ol class="notes"><li><span class="num">1</span><span class="t">不推荐 <code>~</code>：整个家目录不是默认值。默认选「新文件夹」，放在机器的 Repos Folder（<code>~/orbit-repos/</code>）下。</span></li></ol></figure><figure class="tile state"><div class="tile-title">路径不存在</div><div class="fr" style="width:344px;height:403px"><img src="frames/e-missing-633-82-615x720.png" width="344" height="403"></div><ol class="notes"><li><span class="num">1</span><span class="t"><i>No such directory on orbit@austin.</i> 按钮不可点。</span></li></ol></figure><figure class="tile state"><div class="tile-title">不是 git 仓库</div><div class="fr" style="width:344px;height:403px"><img src="frames/e-nogit-633-82-615x720.png" width="344" height="403"></div><ol class="notes"><li><span class="num">1</span><span class="t">能用，但如实说：<i>sessions will share it instead of isolating.</i></span></li></ol></figure><figure class="tile state"><div class="tile-title">机器离线</div><div class="fr" style="width:344px;height:368px"><img src="frames/e-offline-633-113-615x658.png" width="344" height="368"></div><ol class="notes"><li><span class="num">1</span><span class="t"><i>orbit@austin is offline…</i> 两步都不能做；输入框显示 Runner offline。</span></li></ol></figure></div>
+</div></body></html>

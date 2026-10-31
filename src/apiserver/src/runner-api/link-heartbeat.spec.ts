@@ -134,6 +134,7 @@ test('a writer that stops marking, or is renamed, is reported', () => {
   const problems = unmarkedWriters(stripped);
   assert.ok(problems.includes('runners/runners.service.ts#startInstall (installRequest): it does not mark the runner changed'), problems.join('\n'));
   assert.ok(problems.includes('runners/runners.service.ts#requestClaudeHistory (claudeHistoryRequest): it does not mark the runner changed'));
+  assert.ok(problems.includes('runners/runners.service.ts#requestDirProbe (dirProbeRequest): it does not mark the runner changed'));
   assert.ok(problems.includes('workspaces/workspaces.service.ts#requestRepoCleanup (repoCleanupRequest): no such declaration'));
 });
 
@@ -339,6 +340,7 @@ test('an answer that carries any command, cancellation or lost lease hands somet
     { installRequest: {} as never },
     { repoCleanupRequest: {} as never },
     { claudeHistoryRequest: {} as never },
+    { dirProbeRequest: {} as never },
     { codexRateLimitResetRequest: {} as never },
     { managedSleep: {} as never },
     { refreshModelCatalog: true },

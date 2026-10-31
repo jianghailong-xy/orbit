@@ -107,6 +107,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
+  CREATE_WORKDIR_CAPABILITY,
 } from '@orbit/shared';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -129,7 +130,7 @@ import {
   resolvePermissionMode,
 } from '../common/permission-mode';
 import { cursorDefaultPermissionMode } from '../common/permission-semantics';
-import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
@@ -174,6 +175,13 @@ import {
   SessionResumeDto,
   SessionTurnDto,
 } from './dto';
+import {
+  folderNameOf,
+  freeWorkspaceName,
+  newFolderWorkDir,
+  readNewWorkspace,
+  type NewWorkspaceTarget,
+} from './new-workspace';
 import {
   enqueueBeautifySession,
   MAX_KNOWN_TAGS_PROMPTED,
@@ -977,6 +985,11 @@ export class SessionsService {
     ) {
       throw new BadRequestException('cursorAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    // A workspace this session makes, on the machine the request names, in the transaction that creates it
+    // (docs/first-workspace-contract.md §3). Read and refused before anything else is resolved, so another account's
+    // machine is a 403 whatever the rest of the body says. Every check below then reads it as a workspace with no
+    // settings of its own, which is what it will be.
+    const newWorkspace = dto.newWorkspace == null ? null : await this.newWorkspaceFor(ownerId, dto, opts?.credential);
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -1322,7 +1335,9 @@ export class SessionsService {
       branch = null;
     }
     const runtimeSessionId = randomUUID();
-    const session = await this.writeFenced(opts?.fence, (client) => client.session.create({
+    // The session INSERT, written by itself (writeFenced) or, for a session that makes its workspace, inside that
+    // transaction with the workspace it made (createInNewWorkspace).
+    const insertSession = (client: PrismaService | Prisma.TransactionClient, madeWorkspaceId?: string) => client.session.create({
       data: {
         ...(opts?.id ? { id: opts.id } : {}),
         title,
@@ -1368,7 +1383,9 @@ export class SessionsService {
         kimiAccountPinned: pickedKimiAccount != null,
         cursorAccount,
         cursorAccountPinned: pickedCursorAccount != null,
-        workspaceId: dto.workspaceId,
+        workspaceId: madeWorkspaceId ?? dto.workspaceId,
+        // Made with its workspace: what a client draws "Created workspace …" from (docs/first-workspace-contract.md §3.3).
+        createdWorkspace: madeWorkspaceId !== undefined,
         assignedRunnerId,
         taskId: dto.taskId,
         folderId,
@@ -1393,7 +1410,15 @@ export class SessionsService {
         // columns, so there is no second statement that could write them.
         ...source.columns,
       },
-    })).catch(async (e: unknown) => {
+    });
+    const session = await (newWorkspace
+      ? this.createInNewWorkspace(ownerId, newWorkspace, insertSession, {
+          attachmentIds,
+          shell: dto.shell === true,
+          attachmentsAlone,
+        })
+      : this.writeFenced(opts?.fence, (client) => insertSession(client))
+    ).catch(async (e: unknown) => {
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
       // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
       // this INSERT names is left saying what it was really about.
@@ -1409,8 +1434,9 @@ export class SessionsService {
     });
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
-    // and cascade-delete with the session.
-    if (attachmentIds.length > 0) {
+    // and cascade-delete with the session. A session that made its workspace did this, and the
+    // two seeds below, inside that transaction (createInNewWorkspace).
+    if (attachmentIds.length > 0 && !newWorkspace) {
       await this.prisma.attachment.updateMany({
         // `taskId: null` for the same reason the validator carries it, but here it is the
         // CONCURRENT case: an upload that became a task's input between that check and this write
@@ -1423,7 +1449,7 @@ export class SessionsService {
     // turn now, using the SAME fixed clientTurnId the claim uses, so buildSession sees a turn
     // already exists and skips its default message seed. The command runs on the runner and
     // is never fed to claude as a prompt; claude still spawns (with --session-id) and idles.
-    if (dto.shell) {
+    if (dto.shell && !newWorkspace) {
       await this.insertTurn(session.id, {
         kind: 'shell',
         content: dto.prompt,
@@ -1433,7 +1459,7 @@ export class SessionsService {
     // Opened with attachments alone: seed its first turn now too. The claim reads an empty prompt
     // as an imported transcript's and lays no turn down, so without this the files would never
     // reach the engine.
-    if (attachmentsAlone) await this.seedOpeningTurn(session);
+    if (attachmentsAlone && !newWorkspace) await this.seedOpeningTurn(session);
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
@@ -1465,6 +1491,116 @@ export class SessionsService {
       ...publicSession
     } = session;
     return withSessionState(publicSession);
+  }
+
+  /**
+   * The workspace `create` is asked to make with the session (docs/first-workspace-contract.md §3.1), or the refusal:
+   * 400 for a request that does not name one folder on one machine (readNewWorkspace), 403 for a machine that is not
+   * the caller's, 409 for a new folder on a runner that cannot make one — it has not reported where its folders go, or
+   * does not declare that it makes them. Reads only.
+   *
+   * A workspace is what POST /workspaces makes, and an access token makes one only with the scope that route asks for:
+   * `sessions:write` alone does not let a token decide which folder its sessions may write in. (A token confined to
+   * workspaces never gets here: this route requires it to name one.)
+   */
+  private async newWorkspaceFor(
+    ownerId: string,
+    dto: CreateSessionDto,
+    credential: AuthCredential | undefined,
+  ): Promise<NewWorkspaceTarget> {
+    const ask = readNewWorkspace(dto.newWorkspace, dto);
+    if (credential?.kind === 'PAT' && !credential.scopes.includes('workspaces:write')) {
+      throw new PatRefusal({
+        code: 'PAT_SCOPE_MISSING',
+        scope: 'workspaces:write',
+        message: 'This access token was not granted the workspaces:write scope a new workspace needs',
+      });
+    }
+    const runner = await this.prisma.runner.findFirst({
+      where: { id: ask.runnerId, ownerId },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+    });
+    if (!runner) throw new ForbiddenException('runner not found');
+    if (ask.workDir !== undefined) {
+      return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
+    }
+    const reposRoot = runner.reposRoot?.trim();
+    const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
+    if (!makesFolders || !reposRoot) {
+      throw new ConflictException({
+        code: 'NEW_FOLDER_UNSUPPORTED',
+        message: makesFolders
+          ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
+          : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
+      });
+    }
+    return {
+      runnerId: runner.id,
+      workDir: newFolderWorkDir(reposRoot, ask.newFolder),
+      name: ask.newFolder,
+      autoCreateWorkDir: true,
+    };
+  }
+
+  /** pg_advisory_xact_lock namespace for the per-account workspace-name serializer (createInNewWorkspace). */
+  private static readonly WORKSPACE_NAME_LOCK_NAMESPACE = 4000457;
+
+  /**
+   * `create` with `newWorkspace` (docs/first-workspace-contract.md §3.2): the workspace, then the session by the ordinary
+   * path, then its first message, in one transaction — a failure anywhere leaves none of them, and above all no
+   * workspace without the session it was made for.
+   *
+   * The name is the folder's, with " 2", " 3", … when the account already has a live workspace of that name, picked
+   * under a per-account advisory lock so two requests at the same moment never take the same one. The first message is
+   * what `create` writes after the INSERT on every other path: the uploads the session adopts and, for a shell-first or
+   * attachments-only opening, the opening turn. An ordinary prompt becomes turn 1 at the claim, as for every session.
+   *
+   * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`).
+   */
+  private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null }>(
+    ownerId: string,
+    target: NewWorkspaceTarget,
+    insertSession: (tx: Prisma.TransactionClient, workspaceId: string) => PromiseLike<S>,
+    opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean },
+  ): Promise<S> {
+    const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
+    const session = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.WORKSPACE_NAME_LOCK_NAMESPACE}, ${lockKey})`;
+      const taken = await tx.workspace.findMany({
+        where: { ownerId, deletedAt: null, name: { startsWith: target.name } },
+        select: { name: true },
+      });
+      const workspace = await tx.workspace.create({
+        data: {
+          ownerId,
+          name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
+          runnerId: target.runnerId,
+          workDir: target.workDir,
+          // Isolation off, as every new workspace starts (board 04, settled item 3).
+          enableWorktree: false,
+          autoCreateWorkDir: target.autoCreateWorkDir,
+        },
+        select: { id: true },
+      });
+      const created = await insertSession(tx, workspace.id);
+      if (opening.attachmentIds.length > 0) {
+        await tx.attachment.updateMany({
+          where: { id: { in: [...opening.attachmentIds] }, sessionId: null, turnId: null, taskId: null },
+          data: { sessionId: created.id },
+        });
+      }
+      if (opening.shell) {
+        await this.insertTurnLocked(tx, created.id, {
+          kind: 'shell',
+          content: created.prompt,
+          clientTurnId: SessionsService.initialTurnClientId(created.id),
+        });
+      }
+      if (opening.attachmentsAlone) await this.ensurePromptSeeded(tx, created);
+      return created;
+    }, loggedRetry(this.logger, 'sessions.createInNewWorkspace'));
+    this.realtime.markRunnerChanged(target.runnerId);
+    return session;
   }
 
   /** pg_advisory_xact_lock namespace for the import-claim serializer (see importSession). */

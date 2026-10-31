@@ -9,6 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import type {
+  DirProbeAnswer,
   InstallEngine,
   LoginEngine,
   RunnerAccountRemoveState,
@@ -50,6 +51,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
@@ -138,6 +140,9 @@ export class RunnersService {
         // and About › Repos Folder shows where this machine clones to (reported, not configured).
         minFreeDiskMb: true,
         reposRoot: true,
+        // Where `orbit register` ran: the folder a machine's first workspace is offered, once the
+        // directory probe has found it there (docs/first-workspace-contract.md §1).
+        registerDir: true,
         // What Codex rate-limit reset admission reads about this machine
         // (docs/codex-rate-limit-reset-contract.md §4, §6.1). The web disables its reset entry on
         // the same codexResetRefusal answer the create route refuses with, so it needs the same
@@ -369,6 +374,9 @@ export class RunnersService {
     // credential) rather than duplicating, so the machine keeps its identity and
     // run history.
     const runnerToken = generateToken(32);
+    // The directory `orbit register` ran in: what this registration says, when it says one
+    // (docs/first-workspace-contract.md §1).
+    const registerDir = s.workDir?.trim();
     const data = {
       hostname: s.hostname,
       labels: s.labels,
@@ -377,6 +385,7 @@ export class RunnersService {
       tokenHash: sha256(runnerToken),
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
+      ...(registerDir ? { registerDir } : {}),
     };
     // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
@@ -997,6 +1006,49 @@ export class RunnersService {
       requestedAt: asked === path ? (runner.claudeHistoryAt?.toISOString() ?? null) : null,
       result: answers ? stored : null,
     };
+  }
+
+  /**
+   * Ask this runner what is at a path on its disk: the folder a machine's first workspace would run in, asked while it
+   * is being chosen (docs/first-workspace-contract.md §2.1).
+   *
+   * The Claude history relay's shape, for its reasons: only the runner can look, there is no workspace row yet to key an
+   * answer to, and it answers whatever path was asked last — one slot per machine, a second ask replacing the first.
+   * The previous answer stays in the row; `getDirProbe` only ever returns one about the path it is asked for.
+   *
+   * Refused while the machine is offline, as the runner list reads it (`online`): nothing would answer.
+   */
+  async requestDirProbe(ownerId: string, id: string, asked: unknown) {
+    const path = typeof asked === 'string' ? asked.trim() : '';
+    if (!path) throw new BadRequestException('path is required');
+    if (path.length > DIR_PROBE_MAX_PATH) {
+      throw new BadRequestException(`path is longer than ${DIR_PROBE_MAX_PATH} characters`);
+    }
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { status: true, ...RUNNER_BEATS } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (!runnerIsOnline(runner)) {
+      throw new BadRequestException('Runner is offline — it can only look while connected');
+    }
+    await this.prisma.runner.update({
+      where: { id },
+      data: { dirProbeStatus: 'pending', dirProbePath: path, dirProbeAt: new Date() },
+    });
+    this.realtime?.markRunnerChanged(id);
+    return { path, status: 'pending' as const };
+  }
+
+  /**
+   * What this runner last reported about a path — the answer the folder picker waits on
+   * (docs/first-workspace-contract.md §2.2): only ever one about the path asked for (dirProbeAnswerOf).
+   */
+  async getDirProbe(ownerId: string, id: string, asked: unknown): Promise<DirProbeAnswer> {
+    const path = typeof asked === 'string' ? asked.trim() : '';
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { dirProbeStatus: true, dirProbePath: true, dirProbeResult: true },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    return dirProbeAnswerOf(runner, path);
   }
 
   /** Current install-relay state, for the row to poll. */

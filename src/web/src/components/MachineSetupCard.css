@@ -1,0 +1,313 @@
+/* A machine's first workspace (docs/mocks/first-workspace-in-conversation): the setup card on its new
+   session page, the message waiting under it, and the line that opens the conversation it starts. */
+
+/* The draft pane centres its one child, so an auto margin rather than the row's centring: a card taller
+   than the pane starts at its top, where the scroller can reach it. */
+.msc-draft {
+  box-sizing: border-box;
+  width: min(668px, 100%);
+  margin: auto;
+  /* The scroller keeps 20px of its own below this, for the conversation's fade. */
+  padding: 24px 24px 4px;
+}
+
+@media (max-width: 640px) {
+  .msc-draft {
+    padding-inline: 0;
+  }
+}
+
+.msc {
+  box-sizing: border-box;
+  padding: 18px 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: left;
+}
+
+.msc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.msc-head-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+
+.msc-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.msc-sub {
+  margin-top: 2px;
+  color: var(--text-2);
+  line-height: 19px;
+}
+
+.msc-notice {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--text-1);
+}
+
+.msc-notice a,
+.msc-not-installed a {
+  color: var(--brand);
+}
+
+.msc-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.msc-num {
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.msc-num.done {
+  border: 0;
+  font-size: 22px;
+  color: var(--success-solid);
+}
+
+.msc-step-title {
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.msc-step-help {
+  margin-top: 1px;
+  color: var(--text-2);
+  line-height: 19px;
+}
+
+.msc .msc-options {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: normal;
+}
+
+.msc .msc-option {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.msc .msc-option:has([data-checked]) {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+}
+
+.msc .msc-option .orbit-choice-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.msc-option-title {
+  font-weight: 500;
+}
+
+.msc-path {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.msc-meta {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.msc-verdict {
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.msc-verdict.ok {
+  color: var(--success);
+}
+
+.msc-verdict.warn {
+  color: var(--warning);
+}
+
+.msc-verdict.bad {
+  color: var(--error);
+}
+
+.msc-verdict.wait {
+  color: var(--text-3);
+}
+
+.msc-input {
+  max-width: 380px;
+}
+
+.msc-prefix {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+
+.msc-use {
+  margin-top: 10px;
+}
+
+.msc-done-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 22px;
+}
+
+.msc-change {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 12px;
+}
+
+.msc-change:hover:enabled {
+  color: var(--brand-strong);
+  text-decoration: underline;
+}
+
+.msc-change:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.msc-alt {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.msc-step .rsi {
+  margin-top: 8px;
+}
+
+.msc-foot {
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.msc-foot.ready {
+  color: var(--success);
+}
+
+/* The first message, held until the card is done: the bubble it will be, with its state under it. Its
+   copy and time row is the sent message's, so it has no place here. */
+.msc-held {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: 14px;
+}
+
+.msc-held .chat-user-wrap {
+  margin: 0 0 0 auto;
+}
+
+.msc-held .chat-user-meta {
+  display: none;
+}
+
+.msc-held-state {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: right;
+}
+
+.msc-held-error {
+  color: var(--error);
+}
+
+/* The conversation's first line, in the small centred type of the app's own notes. */
+.msc-created {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  min-height: 20px;
+  margin: 6px 0 14px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.msc-created b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.msc-created code {
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.msc-created-mark {
+  font-size: 13px;
+  color: var(--success-solid);
+}
+
+.msc-created-sep {
+  color: var(--text-4);
+}
+
+.msc-created-name {
+  width: 160px;
+}

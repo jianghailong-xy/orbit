@@ -1,0 +1,593 @@
+diff -ruN today/src/web/src/App.tsx new/src/web/src/App.tsx
+--- today/src/web/src/App.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/App.tsx	2026-10-31 15:10:25.015477317 +0800
+@@ -108,9 +108,10 @@
+       <Navigate to="/runners/register" replace />
+     );
+   }
+-  if (runnerList.length === 1) {
+-    return <Navigate to={`/runners/${encodeId(runnerList[0].id)}`} replace />;
+-  }
++  // PROTOTYPE (first-workspace-in-conversation): no workspace anywhere — open a new session on the first
++  // machine that is online; its draft holds the setup card. Every machine offline: Machines & models.
++  const online = runnerList.find((r) => r.online);
++  if (online) return <Navigate to={`/workspaces/${encodeId(online.id)}`} replace />;
+   return <Navigate to="/infrastructure" replace />;
+ }
+ 
+diff -ruN today/src/web/src/components/MachineSetupCard.tsx new/src/web/src/components/MachineSetupCard.tsx
+--- today/src/web/src/components/MachineSetupCard.tsx	1970-01-01 08:00:00.000000000 +0800
++++ new/src/web/src/components/MachineSetupCard.tsx	2026-10-31 15:09:22.359223552 +0800
+@@ -0,0 +1,230 @@
++import { CheckCircleFilled, DesktopOutlined } from '@ant-design/icons';
++import { useQuery } from '@tanstack/react-query';
++import { useEffect, useState } from 'react';
++import type { LoginEngine } from '@orbit/shared';
++import { api } from '../api';
++import { RunnerSignIn } from './RunnerSignIn';
++import { Button } from './ui/Button';
++import { Input } from './ui/Input';
++import { Radio, RadioGroup } from './ui/Radio';
++
++// PROTOTYPE for docs/mocks/first-workspace-in-conversation. A machine with no workspace gets this card
++// in its new-session draft, where the engine hero stands for a machine that has one. It holds the two
++// steps only the owner can take: where sessions work (the folder they may read and change) and the
++// coding CLI they run on. Whatever is sent waits for both; the workspace is made from the folder as
++// that first message starts its session.
++
++const ENGINE_NAME: Record<string, string> = {
++  claude: 'Claude Code', codex: 'Codex', kimi: 'Kimi Code', antigravity: 'Antigravity', cursor: 'Cursor CLI',
++};
++const LOGIN_ENGINES = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
++
++interface DirProbe { path: string; exists: boolean; isGit: boolean; branch?: string | null }
++export interface SetupRunner {
++  id: string;
++  name: string;
++  displayName?: string | null;
++  online?: boolean;
++  reposRoot?: string | null;
++  engines?: { engine: string; installed?: boolean; auth?: string }[] | null;
++  /** Prototype fields: where `orbit register` ran, what the runner saw there, and its home. */
++  registerDir?: string | null;
++  registerDirProbe?: DirProbe | null;
++  homeDir?: string | null;
++}
++
++const tilde = (path: string, home?: string | null) =>
++  home && (path === home || path.startsWith(`${home}/`)) ? `~${path.slice(home.length)}` : path;
++const basename = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path;
++
++function verdict(p: DirProbe | null | undefined, machine: string): { text: string; tone: 'ok' | 'warn' | 'bad' | 'wait' } {
++  if (!p) return { text: `Checking on ${machine}…`, tone: 'wait' };
++  if (!p.exists) return { text: `No such directory on ${machine}.`, tone: 'bad' };
++  if (!p.isGit) return { text: 'Found · not a git repository — sessions will share it instead of isolating.', tone: 'warn' };
++  return { text: `Found · git repository${p.branch ? ` · ${p.branch}` : ''}`, tone: 'ok' };
++}
++
++type Choice = 'suggested' | 'new' | 'other';
++
++export function MachineSetupCard({
++  runner,
++  engine,
++  onEngine,
++  onUseApiKey,
++}: {
++  runner: SetupRunner;
++  engine: LoginEngine;
++  onEngine?: (engine: LoginEngine) => void;
++  onUseApiKey?: () => void;
++}) {
++  const machine = runner.displayName || runner.name;
++  const home = runner.homeDir ?? null;
++  // The folder `orbit register` ran in is offered only when it is a project of its own: the installer
++  // runs there, which is the home directory more often than not, and the whole home is no default.
++  const suggested =
++    runner.registerDir && runner.registerDir !== home && runner.registerDir !== '/' ? runner.registerDir : null;
++  const [choice, setChoice] = useState<Choice>(suggested ? 'suggested' : 'new');
++  const [newName, setNewName] = useState('');
++  const [other, setOther] = useState('');
++  const [picked, setPicked] = useState<{ path: string; probe: DirProbe | null } | null>(null);
++  const reposRoot = runner.reposRoot ?? (home ? `${home}/orbit-repos` : '~/orbit-repos');
++
++  // A typed path is checked on the machine before anything is made (prototype route; see the board's
++  // server column). Debounced like the Claude history lookup the workspace form already makes.
++  const [asked, setAsked] = useState('');
++  useEffect(() => {
++    const t = setTimeout(() => setAsked(other.trim()), 400);
++    return () => clearTimeout(t);
++  }, [other]);
++  const probe = useQuery({
++    queryKey: ['probe-dir', runner.id, asked],
++    queryFn: () => api<DirProbe>(`/runners/${runner.id}/probe-dir?path=${encodeURIComponent(asked)}`),
++    enabled: choice === 'other' && !!asked,
++  });
++
++  const signedIn = runner.engines?.find((e) => e.engine === engine)?.auth === 'yes';
++  const others = (runner.engines ?? [])
++    .filter((e) => e.installed && e.engine !== engine && LOGIN_ENGINES.includes(e.engine))
++    .map((e) => e.engine as LoginEngine);
++  const offline = runner.online === false;
++
++  const candidate =
++    choice === 'suggested' && suggested
++      ? { path: suggested, probe: runner.registerDirProbe ?? null }
++      : choice === 'new'
++        ? newName.trim() ? { path: `${reposRoot}/${newName.trim()}`, probe: null } : null
++        : other.trim() && probe.data?.exists ? { path: other.trim(), probe: probe.data } : null;
++  const ready = !!picked && signedIn;
++
++  return (
++    <div className="msc" data-proto="machine-setup">
++      <div className="msc-head">
++        <span className="msc-head-icon"><DesktopOutlined /></span>
++        <div>
++          <div className="msc-title">Set up {machine}</div>
++          <div className="msc-sub">
++            Pick where it works and sign in a coding CLI. Anything you send waits until both are done.
++          </div>
++        </div>
++      </div>
++
++      {offline && (
++        <div className="msc-offline">{machine} is offline. It can’t check folders or sign in until it’s back.</div>
++      )}
++
++      <div className="msc-step" data-step="folder">
++        {picked ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">1</span>}
++        <div>
++          {picked ? (
++            <div className="msc-done-line">
++              <span className="msc-step-title">Folder</span>
++              <span className="msc-path">{tilde(picked.path, home)}</span>
++              <span className="msc-meta">
++                {picked.probe ? verdict(picked.probe, machine).text.replace(/^Found · /, '') : 'new folder · created as the session starts'}
++              </span>
++              <button className="msc-change" type="button" onClick={() => setPicked(null)}>Change</button>
++            </div>
++          ) : (
++            <>
++              <div className="msc-step-title">Folder</div>
++              <div className="msc-step-help">
++                Where on {machine} should sessions work? They can read and change everything in it.
++              </div>
++              <RadioGroup<Choice> className="msc-options" value={choice} onValueChange={setChoice} disabled={offline}>
++                {suggested && (
++                  <Radio value="suggested" className="msc-option">
++                    <span className="msc-path">{tilde(suggested, home)}</span>
++                    <span className={`msc-verdict ${verdict(runner.registerDirProbe, machine).tone}`}>
++                      {verdict(runner.registerDirProbe, machine).text}
++                    </span>
++                    <span className="msc-meta">Where you ran orbit register</span>
++                  </Radio>
++                )}
++                <Radio value="new" className="msc-option">
++                  <span className="msc-option-title">A new folder</span>
++                  {choice === 'new' && (
++                    <Input
++                      className="msc-input"
++                      size="small"
++                      prefix={<span className="msc-prefix">{tilde(reposRoot, home)}/</span>}
++                      placeholder="name"
++                      value={newName}
++                      onChange={(e) => setNewName(e.target.value)}
++                    />
++                  )}
++                  <span className="msc-meta">Starts empty. Ask for a clone or a new project in your first message.</span>
++                </Radio>
++                <Radio value="other" className="msc-option">
++                  <span className="msc-option-title">Another folder on {machine}</span>
++                  {choice === 'other' && (
++                    <>
++                      <Input
++                        className="msc-input msc-path-input"
++                        size="small"
++                        placeholder={home ? `${home}/…` : '/path/to/project'}
++                        value={other}
++                        onChange={(e) => setOther(e.target.value)}
++                      />
++                      {asked && (
++                        <span className={`msc-verdict ${verdict(probe.data, machine).tone}`}>
++                          {verdict(probe.data, machine).text}
++                        </span>
++                      )}
++                    </>
++                  )}
++                </Radio>
++              </RadioGroup>
++              <Button
++                className="msc-use"
++                variant="primary"
++                size="small"
++                disabled={!candidate || offline}
++                onClick={() => candidate && setPicked(candidate)}
++              >
++                Use this folder
++              </Button>
++            </>
++          )}
++        </div>
++      </div>
++
++      <div className="msc-step" data-step="engine">
++        {signedIn ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">2</span>}
++        <div>
++          {signedIn ? (
++            <div className="msc-done-line">
++              <span className="msc-step-title">{ENGINE_NAME[engine]}</span>
++              <span className="msc-meta">signed in on {machine}</span>
++            </div>
++          ) : (
++            <>
++              <div className="msc-step-title">Sign in {ENGINE_NAME[engine]} on {machine}</div>
++              <div className="msc-step-help">
++                Sessions run on the coding CLIs signed in on that machine, and spend its subscription.
++              </div>
++              {!offline && <RunnerSignIn runnerId={runner.id} engine={engine} onUseApiKey={onUseApiKey} />}
++              {others.length > 0 && onEngine && (
++                <div className="msc-alt">
++                  {others.map((e, i) => (
++                    <span key={e}>
++                      {i > 0 && ' · '}
++                      <button className="msc-change" type="button" onClick={() => onEngine(e)}>
++                        Use {ENGINE_NAME[e]} instead
++                      </button>
++                    </span>
++                  ))}
++                </div>
++              )}
++            </>
++          )}
++        </div>
++      </div>
++
++      <div className={`msc-foot${ready ? ' ready' : ''}`}>
++        {ready && picked
++          ? `Ready. Send a task — Orbit adds the workspace “${basename(picked.path)}” for ${tilde(picked.path, home)} as it starts.`
++          : 'Nothing is created until you send. You can rename the workspace or change these later.'}
++      </div>
++    </div>
++  );
++}
+diff -ruN today/src/web/src/components/RunnerRegisterGuide.tsx new/src/web/src/components/RunnerRegisterGuide.tsx
+--- today/src/web/src/components/RunnerRegisterGuide.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/components/RunnerRegisterGuide.tsx	2026-10-31 15:10:25.015477317 +0800
+@@ -117,18 +117,18 @@
+             <div className="runner-status-text">
+               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
+               <div className="runner-status-sub">
+-                It's now on the Machines & models page, under Machines. Next, give it a workspace — the repo and
+-                working directory it runs tasks in.
++                It's now on the Machines & models page, under Machines. Next, start a session on it — you pick the
++                folder it works in and sign in a coding CLI there.
+               </div>
+             </div>
+             {/* The machine alone can't do anything yet: sessions and tasks both hang off an
+                 workspace, so the real next step is this runner's page, where workspaces are created. */}
+             <button
+               className="runner-done-btn"
+-              onClick={() => navigate(`/runners/${encodeId(connected.id)}`)}
++              onClick={() => navigate(`/workspaces/${encodeId(connected.id)}`)}
+               type="button"
+             >
+-              Create a workspace
++              Start a session
+             </button>
+           </div>
+         ) : (
+diff -ruN today/src/web/src/components/TasksSidePanel.tsx new/src/web/src/components/TasksSidePanel.tsx
+--- today/src/web/src/components/TasksSidePanel.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/components/TasksSidePanel.tsx	2026-10-31 15:11:26.607726771 +0800
+@@ -5,6 +5,7 @@
+   CodeOutlined,
+   DeleteOutlined,
+   DisconnectOutlined,
++  FolderAddOutlined,
+   FolderOutlined,
+   HolderOutlined,
+   LoadingOutlined,
+@@ -516,6 +517,17 @@
+   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
+   // runner is metadata on each row, not a sort key.
+   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
++  // PROTOTYPE (first-workspace-in-conversation): an online machine no workspace is on yet. It gets a row
++  // after the workspaces that opens its draft, where the setup card is.
++  const bareMachines = useMemo(
++    () =>
++      workspaces.isSuccess
++        ? (runners.data ?? []).filter(
++            (r) => r.online && !(workspaces.data ?? []).some((w) => workspaceRunnerId(w) === r.id),
++          )
++        : [],
++    [runners.data, workspaces.data, workspaces.isSuccess],
++  );
+ 
+   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
+   // the server's list settles it, and a refusal puts them back.
+@@ -862,7 +874,7 @@
+         <div className="tp-divider" />
+ 
+         <div className="tp-group">
+-          {orderedWorkspaces.length > 0 && (
++          {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
+             <WorkspacesHead
+               count={orderedWorkspaces.length}
+               open={workspacesOpen}
+@@ -929,6 +941,24 @@
+                 })}
+             </SortableContext>
+           </DndContext>
++          {(workspacesOpen || editingWorkspaces) &&
++            bareMachines.map((r) => (
++              <div
++                key={r.id}
++                className={`tp-item tp-bare${activeWorkspaceId === r.id ? ' active' : ''}`}
++                onClick={() => {
++                  navigate(`/workspaces/${encodeId(r.id)}`);
++                  onNavigate?.();
++                }}
++              >
++                <span className="tp-ico tp-workspace-icon">
++                  <FolderAddOutlined aria-hidden="true" />
++                </span>
++                <span className="tp-label tp-workspace-label">
++                  <span className="tp-workspace-name">Set up {r.displayName || r.name}</span>
++                </span>
++              </div>
++            ))}
+           {confirmation}
+         </div>
+ 
+@@ -1408,7 +1438,7 @@
+   return (
+     <div className="tp-group-head" onClick={editing ? undefined : onToggle}>
+       <span className="tp-group-name">Workspaces</span>
+-      <span className="tp-count">{count}</span>
++      {count > 0 && <span className="tp-count">{count}</span>}
+       {!editing && <CaretDownOutlined className={`tp-caret ${open ? '' : 'collapsed'}`} />}
+       <button
+         type="button"
+diff -ruN today/src/web/src/components/WorkspaceView.tsx new/src/web/src/components/WorkspaceView.tsx
+--- today/src/web/src/components/WorkspaceView.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/components/WorkspaceView.tsx	2026-10-31 15:11:26.607726771 +0800
+@@ -229,6 +229,7 @@
+ import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
+ import { mergeRepairLoopLive } from './MergeRecoveryPanel';
+ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
++import { MachineSetupCard } from './MachineSetupCard';
+ import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+ import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+ import {
+@@ -3654,6 +3655,9 @@
+     () => (workspacesQ.data ?? []).filter((a) => a.runnerId === runner.id),
+     [workspacesQ.data, runner.id],
+   );
++  // PROTOTYPE (first-workspace-in-conversation): a machine with no workspace yet. Its draft holds the
++  // setup card instead of the engine hero, and what is sent waits for that card.
++  const bareMachine = workspacesQ.isSuccess && workspacesForRunner.length === 0;
+   const lockedWorkspace = useMemo(
+     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
+     [workspacesForRunner, lockedWorkspaceId],
+@@ -9953,7 +9957,9 @@
+                 selectedEngine === AgentProvider.CURSOR && selectedRunStatus === 'RUNNING'
+                 ? CURSOR_RUNNING_PLACEHOLDER
+                 : 'Reply…'
+-              : 'Send this workspace a task…';
++              : bareMachine
++                ? `Send ${runner.displayName || runner.name} a task…`
++                : 'Send this workspace a task…';
+   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
+   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
+   // screen). Only the placeholders above that explain why the box cannot send outrank it — and
+@@ -11404,7 +11410,14 @@
+               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
+               ref={scrollRef}
+             >
+-              {!managedDraftBlocked && (
++              {!managedDraftBlocked && bareMachine ? (
++                <MachineSetupCard
++                  runner={runner}
++                  engine={shownEngine as any}
++                  onEngine={(engine) => pickDraft(engine as any, engine)}
++                  onUseApiKey={() => navigate('/providers/connect')}
++                />
++              ) : !managedDraftBlocked && (
+                 <NewSessionProviderHero
+                   current={currentDraftEngine}
+                   engines={draftEngines}
+diff -ruN today/src/web/src/index.css new/src/web/src/index.css
+--- today/src/web/src/index.css	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/index.css	2026-10-31 15:11:26.615726805 +0800
+@@ -26069,3 +26069,84 @@
+     font-size: 26px;
+   }
+ }
++
++/* ---- PROTOTYPE: a machine's first-workspace setup card (docs/mocks/first-workspace-in-conversation) ---- */
++.msc {
++  width: min(620px, 100%);
++  margin: 0 auto;
++  padding: 18px 20px 14px;
++  border: 1px solid var(--border);
++  border-radius: 12px;
++  background: var(--bg-raised);
++  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
++  font-size: 13px;
++  color: var(--text-1);
++  text-align: left;
++}
++.msc-head { display: flex; align-items: flex-start; gap: 12px; }
++.msc-head-icon {
++  flex: none; width: 34px; height: 34px; border-radius: 9px;
++  display: grid; place-items: center; font-size: 17px;
++  background: var(--brand-tint); color: var(--brand);
++}
++.msc-title { font-size: 15px; font-weight: 600; line-height: 22px; }
++.msc-sub { margin-top: 2px; color: var(--text-2); line-height: 19px; }
++.msc-offline {
++  margin-top: 12px; padding: 8px 10px; border-radius: 8px;
++  background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--text-1);
++}
++.msc-step {
++  display: grid; grid-template-columns: 22px 1fr; column-gap: 12px;
++  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle);
++}
++.msc-num {
++  width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
++  display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--text-2);
++}
++.msc-num.done { border: 0; font-size: 22px; color: var(--success-solid); }
++.msc-step-title { font-weight: 600; line-height: 22px; }
++.msc-step-help { margin-top: 1px; color: var(--text-2); line-height: 19px; }
++.msc .msc-options {
++  display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 10px;
++  font-size: 13px; line-height: normal;
++}
++.msc .msc-option {
++  display: flex; width: 100%; box-sizing: border-box; align-items: flex-start; gap: 10px; padding: 9px 12px;
++  border: 1px solid var(--border-subtle); border-radius: 8px; cursor: pointer;
++}
++.msc-option:has([data-checked]) { border-color: var(--brand-border); background: var(--brand-tint); }
++.msc-option .orbit-radio { margin-top: 2px; }
++.msc-option .orbit-choice-label { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
++.msc-option-title { font-weight: 500; }
++.msc-path { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12.5px; }
++.msc-meta { color: var(--text-3); font-size: 12px; line-height: 17px; }
++.msc-verdict { font-size: 12px; line-height: 17px; }
++.msc-verdict.ok { color: var(--success); }
++.msc-verdict.warn { color: var(--warning); }
++.msc-verdict.bad { color: var(--error); }
++.msc-verdict.wait { color: var(--text-3); }
++.msc-input { max-width: 380px; margin: 3px 0 1px; }
++.msc-prefix { color: var(--text-3); font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; }
++.msc-use { margin-top: 10px; }
++.msc-done-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-height: 22px; }
++.msc-change {
++  padding: 0; border: 0; background: none; cursor: pointer;
++  color: var(--brand); font-size: 12px;
++}
++.msc-change:hover { color: var(--brand-strong); text-decoration: underline; }
++.msc-alt { margin-top: 6px; color: var(--text-3); font-size: 12px; }
++.msc-step .rsi { margin-top: 8px; }
++.msc-foot {
++  margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--border-subtle);
++  color: var(--text-3); font-size: 12px; line-height: 17px;
++}
++.msc-foot.ready { color: var(--success); }
++/* The first message, held until the card is done: a user bubble with its state under it. */
++.msc-held { width: min(620px, 100%); margin: 14px auto 0; display: flex; flex-direction: column; align-items: flex-end; }
++.msc-held-state { margin-top: 4px; color: var(--text-3); font-size: 12px; }
++.workspace-draft:has(.msc) { flex-direction: column; justify-content: center; padding: 24px; }
++
++/* Sidebar: a machine with no workspace yet, under the workspaces. */
++.tp-item.tp-bare .tp-workspace-icon { color: var(--brand); }
++.tp-item.tp-bare .tp-workspace-name { color: var(--text-2); }
++.tp-item.tp-bare.active .tp-workspace-name { color: var(--text-1); }
+diff -ruN today/src/web/src/lib/runnerAttention.ts new/src/web/src/lib/runnerAttention.ts
+--- today/src/web/src/lib/runnerAttention.ts	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/lib/runnerAttention.ts	2026-10-31 15:14:30.844472951 +0800
+@@ -389,10 +389,30 @@
+     .map((w) => w.name);
+ }
+ 
++const CLI_NAME: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', kimi: 'Kimi Code', antigravity: 'Antigravity', cursor: 'Cursor CLI' };
++
+ function signedOutItems(
+   runner: AttentionRunner,
+   workspaces: ReadonlyArray<AttentionWorkspace>,
+ ): AttentionItem[] {
++  // PROTOTYPE (first-workspace-in-conversation): a machine where no coding CLI is signed in at all can
++  // run nothing, whether or not a workspace has used one yet — one item for it, signing in the first.
++  const installed = LOGIN_ENGINES.filter((engine) => runner.engines?.find((e) => e.engine === engine)?.installed);
++  const anySignedIn = installed.some((engine) => runner.engines?.find((e) => e.engine === engine)?.auth === 'yes');
++  if (installed.length > 0 && !anySignedIn && workspaces.length === 0) {
++    const first = installed[0];
++    return [
++      {
++        kind: 'engineSignedOut',
++        tone: 'bad',
++        short: 'No coding CLI signed in',
++        title: 'No coding CLI is signed in',
++        detail: `Nothing can run on this machine until one is. ${installed.map((e) => CLI_NAME[e] ?? LOGIN_NAME[e]).join(' and ')} ${installed.length === 1 ? 'is' : 'are'} installed here.`,
++        action: { kind: 'signIn', engine: first },
++        params: { engine: first, workspaces: [] },
++      } as AttentionItem,
++    ];
++  }
+   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
+     const health = runner.engines?.find((e) => e.engine === engine);
+     if (!health?.installed || health.auth !== 'no') return [];
+diff -ruN today/src/web/src/pages/EnrollPage.tsx new/src/web/src/pages/EnrollPage.tsx
+--- today/src/web/src/pages/EnrollPage.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/pages/EnrollPage.tsx	2026-10-31 15:10:25.015477317 +0800
+@@ -249,17 +249,20 @@
+           up by itself.
+         </p>
+         <div className="enroll-next">
+-          <div className="enroll-next-title">Next: sign in its coding CLIs</div>
++          <div className="enroll-next-title">Next: start your first session</div>
+           <div className="enroll-next-body">
+-            Sessions run on the CLIs signed in on this machine. Sign them in from its page, or run{' '}
+-            <code>orbit doctor</code> there.
++            Say what you want done. Orbit asks for the two things only you can decide — the folder it works in, and
++            a coding CLI to sign in — on the same screen.
+           </div>
+         </div>
+         <div className="enroll-actions">
+-          <a className="login-submit enroll-submit-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
+-            Open machine
++          <a className="login-submit enroll-submit-link" href={runnerId ? `/workspaces/${encodeId(runnerId)}` : '/'}>
++            Start a session
+           </a>
+         </div>
++        <a className="enroll-quiet-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
++          Open machine instead
++        </a>
+       </EnrollShell>
+     );
+   }
+diff -ruN today/src/web/src/pages/RunnerDetailPage.tsx new/src/web/src/pages/RunnerDetailPage.tsx
+--- today/src/web/src/pages/RunnerDetailPage.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/pages/RunnerDetailPage.tsx	2026-10-31 15:14:47.744541398 +0800
+@@ -1562,7 +1562,7 @@
+               {/* Kept in place while the create form is open — disabled rather than removed, so the
+                   header doesn't reflow out from under the pointer. */}
+               <Button
+-                variant="primary"
++                variant={workspaces.length === 0 ? 'default' : 'primary'}
+                 icon={<PlusOutlined />}
+                 disabled={formOpen && !editing}
+                 onClick={() => switchTo(openCreate)}
+@@ -1576,7 +1576,14 @@
+               </div>
+             ) : workspaces.length === 0 && !(formOpen && !editing) ? (
+               <div className="rd-empty">
+-                No workspaces under this runner yet — add one to start a conversation.
++                {/* PROTOTYPE (first-workspace-in-conversation): the way in is a session, not this form. */}
++                No workspaces on {runner.displayName || runner.name} yet. Start a session and pick the folder it
++                works in as you go — or add one here.
++                <div style={{ marginTop: 10 }}>
++                  <Button variant="primary" onClick={() => navigate(`/workspaces/${encodeId(runner.id)}`)}>
++                    Start a session
++                  </Button>
++                </div>
+               </div>
+             ) : (
+               <div className="rd-workspace-list">
+diff -ruN today/src/web/src/pages/SettingsPage.tsx new/src/web/src/pages/SettingsPage.tsx
+--- today/src/web/src/pages/SettingsPage.tsx	2026-10-31 14:35:00.000000000 +0800
++++ new/src/web/src/pages/SettingsPage.tsx	2026-10-31 15:10:42.955549976 +0800
+@@ -46,7 +46,12 @@
+  */
+ function machinesValue(runners: Runner[], pools: ProviderPool[]): { text: string; needsYou: boolean } {
+   const online = runners.filter((runner) => runner.online);
+-  const needsYou = runners.length - online.length + pools.filter((pool) => pool.unavailable).length;
++  // PROTOTYPE (first-workspace-in-conversation): an online machine with no coding CLI signed in runs nothing.
++  const noCli = online.filter((runner) => {
++    const logins = (runner.engines ?? []).filter((e) => e.installed && ['claude', 'codex', 'kimi', 'antigravity', 'cursor'].includes(e.engine));
++    return logins.length > 0 && !logins.some((e) => e.auth === 'yes');
++  }).length;
++  const needsYou = runners.length - online.length + noCli + pools.filter((pool) => pool.unavailable).length;
+   if (needsYou > 0) return { text: needsYou === 1 ? '1 needs you' : `${needsYou} need you`, needsYou: true };
+   return { text: runners.length === 0 ? 'None' : `${online.length} of ${runners.length} online`, needsYou: false };
+ }

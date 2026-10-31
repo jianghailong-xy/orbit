@@ -63,7 +63,7 @@ func TestAQuietLinkAnswerIsATakenBeatThatHandsOutNothing(t *testing.T) {
 		if len(quiet.CancelSessionIDs)+len(quiet.LeaseLostSessionIDs)+len(quiet.MergeRequests)+len(quiet.CommitRequests)+
 			len(quiet.ArtifactRequests)+len(quiet.IntegrationJobs)+len(quiet.WikiRepoOps)+len(quiet.CursorKeyChecks) != 0 ||
 			quiet.LoginRequest != nil || quiet.AccountRemoveRequest != nil || quiet.CodexAccountRemoveRequest != nil ||
-			quiet.InstallRequest != nil || quiet.RepoCleanupRequest != nil || quiet.ClaudeHistoryRequest != nil ||
+			quiet.InstallRequest != nil || quiet.RepoCleanupRequest != nil || quiet.ClaudeHistoryRequest != nil || quiet.DirProbeRequest != nil ||
 			quiet.CodexRateLimitResetRequest != nil || quiet.ManagedSleep != nil || quiet.RefreshModelCatalog || quiet.CheckSelfUpdate {
 			t.Errorf("a quiet answer handed something out: %+v", quiet)
 		}

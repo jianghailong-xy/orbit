@@ -149,6 +149,78 @@ class RunnerPageTest {
         assertEquals("Resets Tue, Sep 29 at 3:00 AM. ${quota.detail}", RunnerPage.attentionDetail(quota, 0L, ZoneId.of("UTC")))
     }
 
+    /** OrbitKit testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst (rule 10 of docs/mocks/first-workspace-in-conversation/04):
+     * one item, naming every CLI installed there by its own name, in the engines' order, and signing in the first. When it is raised is
+     * the case file's, above. */
+    @Test fun aMachineWithNoCodingCliSignedInNamesItsClisAndSignsInTheFirst() {
+        val item = items(input("no CLI signed in and no workspace: one item, signing in the first CLI (orbit@austin)")).single()
+        assertEquals("Nothing can run on this machine until one is. Claude Code and Codex are installed here.", item.detail)
+        assertEquals(AttentionAction("signIn", engine = "claude"), item.action)
+        assertEquals("Nothing can run on this machine until one is. Codex is installed here.", RunnerPage.noCliSignedInDetail(listOf("codex")))
+        assertEquals("Nothing can run on this machine until one is. Claude Code, Kimi Code and Antigravity are installed here.",
+            RunnerPage.noCliSignedInDetail(listOf("claude", "kimi", "antigravity")))
+        assertEquals("Nothing can run on this machine until one is. Claude Code, Codex, Kimi Code, Antigravity and Cursor CLI are installed here.",
+            RunnerPage.noCliSignedInDetail(RunnerPage.loginEngines))
+
+        fun runner(engines: String) = Json.parseToJsonElement("""{"id":"r","name":"lab","engines":$engines}""").jsonObject
+        fun workspace(provider: String?) = buildJsonObject { put("id", "w"); put("name", "orbit"); provider?.let { put("lastProvider", it) } }
+        // Listed and signed in by the engines' order, whatever order the runner reports them in.
+        val reported = runner("""[{"engine":"cursor","installed":true,"auth":"no"},{"engine":"kimi","installed":true,"auth":"no"},
+            {"engine":"codex","installed":true,"auth":"no"},{"engine":"opencode","installed":true,"auth":"unknown"},
+            {"engine":"claude","installed":false,"auth":"no"}]""")
+        assertEquals(listOf("codex", "kimi", "cursor"), RunnerPage.noCliSignedIn(reported, emptyList()))
+        // Not while one is signed in or unknown, nor where none is installed.
+        assertNull(RunnerPage.noCliSignedIn(runner("""[{"engine":"claude","installed":true,"auth":"no"},{"engine":"codex","installed":true,"auth":"unknown"}]"""), emptyList()))
+        assertNull(RunnerPage.noCliSignedIn(runner("[]"), emptyList()))
+        assertNull(RunnerPage.noCliSignedIn(runner("null"), emptyList()))
+        // A workspace on a key or a pool runs with nothing signed in; one on a login, or not run yet, is no key.
+        val claudeOut = runner("""[{"engine":"claude","installed":true,"auth":"no"}]""")
+        for (provider in listOf("deepseek", "anthropic-2", "local-vllm", "dsh", "opencode")) {
+            assertNull(provider, RunnerPage.noCliSignedIn(claudeOut, listOf(workspace(provider))))
+        }
+        for (provider in listOf("claude", "codex", "kimi", "antigravity", "cursor", "", "  ", null)) {
+            assertEquals("$provider", listOf("claude"), RunnerPage.noCliSignedIn(claudeOut, listOf(workspace(provider))))
+        }
+    }
+
+    /** The Workspaces footer's "on the web" links to this runner's page on the web, <server>/runners/<id> with the id as the web spells it
+     * (project 34pLjYBjU6ILsehatEjJs, contract 6; OrbitKit testTheWorkspacesFooterLinksOnTheWebToThisRunnersPage). */
+    @Test fun theWorkspacesFooterLinksOnTheWebToThisRunnersPage() {
+        val (before, words, after) = RunnerPage.workspacesFooter()
+        assertEquals("Tap a workspace to open its sessions. Add or change workspaces ", before)
+        assertEquals("on the web", words)
+        assertEquals(".", after)
+        assertEquals(RunnerCopy.WORKSPACES_FOOTER, before + words + after)
+        val uuid = "0199b111-0000-7000-8000-000000000001"
+        val public = io.orbitd.android.navigation.ObjectId.toPublic(uuid)
+        assertNotEquals("the web's addresses spell a runner by its public id", uuid, public)
+        assertEquals("https://orbit.example.com/runners/$public", RunnerPage.runnerWebUrl("https://orbit.example.com", uuid))
+        assertEquals("https://orbit.example.com/runners/$public", RunnerPage.runnerWebUrl("https://orbit.example.com/", public))
+        assertEquals("https://one.example:8443/orbit/runners/$public", RunnerPage.runnerWebUrl("https://one.example:8443/orbit/", uuid))
+        assertNull(RunnerPage.runnerWebUrl("not a server", uuid))
+    }
+
+    /** The new sentences are iOS's, word for word (OrbitKit RunnerPageCopy, itself held to the web's runnerCopy.ts): each RunnerCopy word
+     * by the Swift name it is ported from, a template rendered with Swift's own interpolations. */
+    @Test fun theNoCliSentencesAndTheFootersLinkAreIosOwn() {
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
+        val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText().replace(Regex("\"\\s*\\+\\s*\""), "")
+        val constants = mapOf("ATTENTION_NO_CLI_SIGNED_IN_SHORT" to RunnerCopy.NO_CLI_SIGNED_IN_SHORT, "ATTENTION_NO_CLI_SIGNED_IN" to RunnerCopy.NO_CLI_SIGNED_IN,
+            "RUNNER_NAMES_COMMA" to RunnerCopy.NAMES_COMMA, "RUNNER_WORKSPACES_FOOTER" to RunnerCopy.WORKSPACES_FOOTER,
+            "RUNNER_WORKSPACES_FOOTER_LINK" to RunnerCopy.WORKSPACES_FOOTER_LINK)
+        for ((name, said) in constants) {
+            assertTrue("RunnerPageCopy.$name is not \"$said\"", Regex("static let $name =\\s*\"${Regex.escape(said)}\"").containsMatchIn(swift))
+        }
+        val templates = mapOf("attentionNoCliSignedInDetail(cli: String)" to RunnerCopy.noCliSignedInDetail("\\(cli)"),
+            "attentionNoCliSignedInDetailMany(clis: String)" to RunnerCopy.noCliSignedInDetailMany("\\(clis)"),
+            "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"))
+        for ((signature, rendered) in templates) {
+            val body = Regex("static func ${Regex.escape(signature)} -> String \\{\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\}").find(swift)?.groupValues?.get(1)
+            assertEquals(signature, rendered, body)
+        }
+    }
+
     @Test fun pageFormatsVersionsCapacityAccountsAndCodes() {
         assertTrue(RunnerPage.compareRunnerVersions("0.1.99", "0.1.100") < 0)
         assertEquals("0.1.197", RunnerPage.latestRunnerVersion("0.1.155", listOf("0.1.197", null, "0.1.9")))

@@ -726,7 +726,12 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 	// every isolation decision below reads that dir, and the runtime spawned afterwards
 	// chdirs into it. A dir we cannot create is left for startSessionProcess to report,
 	// which names the workDir instead of blaming the engine binary.
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+	//
+	// A folder Orbit named itself (createWorkDir) is made only inside this machine's repos
+	// root; one that resolves anywhere else is left missing (create_workdir.go).
+	if job.CreateWorkDir {
+		createOrbitWorkDir(job.SessionID, baseDir)
+	} else if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		if mkErr := os.MkdirAll(baseDir, 0o755); mkErr != nil {
 			logln(fmt.Sprintf("session %s — cannot create workDir %q: %v", job.SessionID, baseDir, mkErr))
 		} else {

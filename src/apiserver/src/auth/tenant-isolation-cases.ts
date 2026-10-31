@@ -487,6 +487,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /runners/:id/self-update': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, body: { workDir: '/census' } }) },
   'GET /runners/:id/claude-history': { request: (of) => ({ params: { id: of.runnerId }, query: { workDir: '/census' } }) },
+  'POST /runners/:id/dir-probe': { request: (of) => ({ params: { id: of.runnerId }, body: { path: '/census' } }) },
+  'GET /runners/:id/dir-probe': { request: (of) => ({ params: { id: of.runnerId }, query: { path: '/census' } }) },
   'POST /runners/:id/rotate-token': { request: (of) => ({ params: { id: of.runnerId } }) },
   'GET /runners/:id/codex-rate-limit-reset': { request: (of) => ({ params: { id: of.runnerId } }) },
   'POST /runners/:id/codex-rate-limit-reset': {

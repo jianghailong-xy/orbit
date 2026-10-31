@@ -12,6 +12,9 @@ import OrbitKit
 /// account's own keys.
 struct InfrastructureLists {
     let runners: [Runner]
+    /// The account's workspaces, read with the machines: whether one runs on a key decides whether a machine
+    /// with no coding CLI signed in can run anything.
+    let workspaces: [Agent]
     let memberPools: [SharedPool]
     let ownPools: [ProviderPool]
     let keys: [ConfiguredProvider]
@@ -21,6 +24,7 @@ struct InfrastructureLists {
 
     @MainActor init(_ model: AppModel) {
         runners = model.runners?.runners ?? []
+        workspaces = model.runners?.agents ?? []
         memberPools = model.sharedPools?.pools ?? []
         ownPools = (model.agents?.providerPools ?? []).map { pool -> ProviderPool in
             guard CodexLoginPool.isLoginPool(pool),
@@ -34,8 +38,8 @@ struct InfrastructureLists {
     }
 
     var attention: [Infrastructure.Attention] {
-        Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),
-                                 ownPools: ownPools)
+        Infrastructure.attention(runners: runners, workspaces: workspaces,
+                                 memberPools: memberPools.map(SharedPools.asProviderPool), ownPools: ownPools)
     }
 
     /// The account's own Codex pools, whose people and keys are read one by one.
@@ -104,7 +108,7 @@ private struct InfrastructureAttentionRow: View {
 
     @ViewBuilder private func press(_ action: @escaping () -> Void) -> some View {
         switch item.kind {
-        case .offline:
+        case .offline, .noCliSignedIn:
             Button(Infrastructure.details, action: action)
                 .buttonStyle(.bordered)
         case .poolUnavailable:

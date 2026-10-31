@@ -553,6 +553,30 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.tildePath("/srv/orbit"), "/srv/orbit")
     }
 
+    /// The footer's "on the web" is a link to this runner's page on the web, `<server>/runners/<id>` with
+    /// the id spelt as the web's addresses spell it (project 34pLjYBjU6ILsehatEjJs, contract 6); the words
+    /// are the footer's own. Without a server the words stay plain.
+    func testTheWorkspacesFooterLinksOnTheWebToThisRunnersPage() throws {
+        let uuid = "0199b111-0000-7000-8000-000000000001"
+        let base = try XCTUnwrap(URL(string: "https://orbit.example.com"))
+        let footer = RunnerPageFormat.workspacesFooter(runnerID: uuid, baseURL: base)
+        XCTAssertEqual(footer.before, "Tap a workspace to open its sessions. Add or change workspaces ")
+        XCTAssertEqual(footer.link, "on the web")
+        XCTAssertEqual(footer.after, ".")
+        XCTAssertEqual(footer.before + footer.link + footer.after, RunnerPageCopy.RUNNER_WORKSPACES_FOOTER)
+        XCTAssertEqual(footer.url?.absoluteString, "https://orbit.example.com/runners/\(PublicID.toPublic(uuid))")
+        XCTAssertNotEqual(PublicID.toPublic(uuid), uuid, "the web's addresses spell a runner by its public id")
+        // A runner already spelt the public way is not spelt again; a server under a path keeps it.
+        let pub = PublicID.toPublic(uuid)
+        XCTAssertEqual(RunnerPageFormat.runnerWebURL(runnerID: pub, baseURL: base)?.absoluteString,
+                       "https://orbit.example.com/runners/\(pub)")
+        XCTAssertEqual(RunnerPageFormat.runnerWebURL(runnerID: pub, baseURL: URL(string: "https://one.example:8443/orbit"))?
+                           .absoluteString, "https://one.example:8443/orbit/runners/\(pub)")
+        let plain = RunnerPageFormat.workspacesFooter(runnerID: uuid, baseURL: nil)
+        XCTAssertNil(plain.url)
+        XCTAssertEqual(plain.before + plain.link + plain.after, RunnerPageCopy.RUNNER_WORKSPACES_FOOTER)
+    }
+
     /// The count and the workspace row spell one id two ways — a public id on the row, the stored UUID
     /// where a count came from somewhere that never passed the rewrite — and are still one workspace.
     func testRunningCountsAreMatchedByTheIdItself() throws {
