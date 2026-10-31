@@ -7,7 +7,8 @@ import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
 import { commitFailureCopy } from '../lib/commitFailure';
-import { sessionDiffQuery } from '../lib/queries';
+import { sessionDiffQuery, worktreeFileQuery } from '../lib/queries';
+import { isDrawnPicture } from '../lib/worktreeFile';
 import { useToast } from '../lib/toast';
 import { Drawer } from './ui/Drawer';
 import { Input } from './ui/Input';
@@ -1244,6 +1245,20 @@ function WorktreeDiffDrawer({
   const nextPath = navIdx >= 0 && navIdx < orderedPaths.length - 1 ? orderedPaths[navIdx + 1] : null;
   const navPos = navIdx >= 0 ? `${navIdx + 1}/${orderedPaths.length}` : '';
 
+  // While a picture is shown, the pictures on either side are read ahead, so ‹ › lands on one already
+  // drawn. Only once the shown picture's own bytes are in: until then they would share its download.
+  const shownPicture = !!active && isDrawnPicture(active);
+  const shownRead = useQuery({ ...worktreeFileQuery(sessionId, active?.path ?? ''), enabled: false });
+  const readAhead = shownPicture && shownRead.data !== undefined;
+  useEffect(() => {
+    if (!readAhead) return;
+    for (const path of [prevPath, nextPath]) {
+      const file = path ? files.find((f) => f.path === path) : undefined;
+      if (file && isDrawnPicture(file)) void qc.prefetchQuery(worktreeFileQuery(sessionId, file.path));
+    }
+    // Not keyed on `files`: the list is a new array on every heartbeat, while the neighbours it names rarely change.
+  }, [readAhead, prevPath, nextPath, sessionId, qc]);
+
   // The file list refreshes on every heartbeat but the stored per-file patches only refresh at
   // turn boundaries, so a working-changes file changed since the last turn end can show in the
   // list with no diff. When that happens, ask the live runner to recompute now and poll until
@@ -1378,7 +1393,7 @@ function DiffPane({
       <span className="wt-diff-pane-path">{file.path}</span>
     </>
   );
-  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} head={head} />;
+  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} patch={patch} head={head} />;
   return (
     <>
       <div className="wt-diff-pane-head">
