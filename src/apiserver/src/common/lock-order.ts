@@ -143,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -228,7 +228,13 @@ export const LOCK_ORDER = [
       + 'are the cycles such a wait closed; the timeout would not keep them harmless, since the other '
       + 'side\'s deadlock check can come before it. It takes no session lock — the item\'s `session_id` '
       + 'is history, not a key — and the job gates that end such an item write it inside their own '
-      + 'rank-60 transactions.',
+      + 'rank-60 transactions. '
+      + '`session_wakeup_loop` (0458) is a session\'s child like the ticks it writes into '
+      + '`session_scheduled_wakeup`, and every writer that takes both takes the loop row first and its '
+      + 'tick after it (`runner-api/scheduled-wakeup.ts` `endWakeupLoop`, `settleLoopTick`): the runner '
+      + 'door\'s stop and replacement with no parent held, a tick\'s delivery under the Session lock that '
+      + 'createTurn or the revive already holds, and the Stop that ends a loop under the interrupt\'s. Two '
+      + 'of them meet on the loop row, never on a tick in the opposite order.',
   },
   {
     rank: 70,

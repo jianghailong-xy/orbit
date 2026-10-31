@@ -2583,7 +2583,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is created,
       // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored
       // runner reads NULL in each new column, and every workspace and session false.
-      '0457_first_workspace_in_conversation'],
+      '0457_first_workspace_in_conversation',
+      // Wakeup loops held by the control plane (0458, docs/long-running-loop-contract.md §1): a new table,
+      // `session_wakeup_loop`, with its own CHECKs, a foreign key to `session` and one partial unique index;
+      // on `session_scheduled_wakeup`, one nullable UUID column `loop_id` added with IF NOT EXISTS, its
+      // foreign key to the new table, 0264's one-pending key dropped and created again narrowed to
+      // `loop_id IS NULL`, one more partial unique index and one partial index. `session` is only pointed
+      // at; no `task`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored wakeup reads
+      // `loop_id` NULL, which is exactly what the narrowed key held before.
+      '0458_session_wakeup_loop'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
