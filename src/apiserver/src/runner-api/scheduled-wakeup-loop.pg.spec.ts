@@ -3,7 +3,8 @@
  * one-shot wakeup: only `stop`, `until`, the session ending and the owner's Stop end it, and each end
  * leaves its reason (docs/long-running-loop-contract.md §1, project 34pUaJboWdDFzjftkEso8, task A1). A
  * loop that stops running, and a one-shot wakeup dropped with its FAILED session, are told to the owner
- * (§4, task C2).
+ * (§4, task C2). session_get says when the session is woken next, when a wakeup last reached its engine
+ * and how the loop stands (§3, task C1).
  *
  * Against real PostgreSQL, with the production code throughout — the runner door
  * (RunnerApiController.scheduledWakeup), SessionsService (createTurn, resume, interrupt), the
@@ -39,6 +40,11 @@
  *      loop whose session ended is over, not silent.
  *  13. A one-shot wakeup dropped with its FAILED session tells the owner, once; one held for an armed
  *      retry, or dropped with a session that ended, says nothing.
+ *  14. session_get, through the runner's session door: the next due time, when a tick last reached the
+ *      engine (its turn's `delivered_at`) and the ticks fired and missed. A tick filed onto a turn nobody
+ *      has taken — the runner away — leaves lastFiredAt where it was until that turn is handed out.
+ *  15. session_get's next is whichever wakeup is due first; a one-shot wakeup's run is the session's last
+ *      firing and not its loop's; an ended loop says why and when, and a newer loop is the one shown.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts
  *
@@ -73,7 +79,8 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerApiController } from './runner-api.controller';
-import { loopSilenceLimitMs, ScheduledWakeupDto } from './scheduled-wakeup';
+import { RunnerSessionsController } from './runner-sessions.controller';
+import { lastLoopRun, loopSilenceLimitMs, ScheduledWakeupDto } from './scheduled-wakeup';
 import { ScheduledWakeupWorker } from './scheduled-wakeup.worker';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
@@ -251,6 +258,13 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const schedule = (m: Machine, sessionId: string, body: Record<string, unknown>): Promise<any> =>
     runnerApi.scheduledWakeup(m.runner as never, sessionId, Object.assign(new ScheduledWakeupDto(), body));
+
+  /** What session_get answers with about the session's wakeups, as the runner's session door serves it to a
+   *  caller with the runner's own credential, in its JSON form: the times as the wire spells them. */
+  const sessionDoor = new RunnerSessionsController(sessions, {} as never, {} as never, {} as never);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wakeupsOf = async (m: Machine, sessionId: string): Promise<any> =>
+    JSON.parse(JSON.stringify(await sessionDoor.getSession(m.runner as never, undefined, undefined, undefined, sessionId))).wakeups;
 
   const loopsOf = async (sessionId: string): Promise<LoopRow[]> => (await sql.query(
     `SELECT "id", "state", "every_seconds" AS "everySeconds", "first_due_at" AS "firstDueAt", "until_at" AS "untilAt",
@@ -1030,5 +1044,120 @@ test('a wakeup loop outlives failed turns and FAILED sessions, and ends only for
       assert.equal(await signalling.deliver(wakeup.id, id, m.ownerId), 'DROPPED', `a session ${how}`);
     }
     assert.equal(rang.length, 1, 'a held wakeup, or one dropped with a session that ended, alerted');
+  });
+
+  // session_get (contract §3). Every turn time below is read through Prisma, which reads the zoneless
+  // `delivered_at` as the product does.
+
+  await t.test('session_get tells when the loop fires next, when a tick last reached the engine and how many it missed: a tick filed onto a turn nobody has taken leaves lastFiredAt where it was', async () => {
+    const m = await machine('truth');
+    const id = await session(m);
+    assert.deepEqual(await wakeupsOf(m, id), { next: null, lastFiredAt: null, loop: null }, 'a session that never asked for a wakeup');
+
+    const receipt = await schedule(m, id, { recurring: true, everySeconds: 120, prompt: 'check the queue depth', reason: 'the drain' });
+    assert.deepEqual(await wakeupsOf(m, id), {
+      next: { dueAt: receipt.dueAt, kind: 'LOOP_TICK', reason: 'the drain' },
+      lastFiredAt: null,
+      loop: {
+        state: 'ACTIVE', everySeconds: 120, until: receipt.until, nextDueAt: receipt.dueAt, lastFiredAt: null,
+        ticksFired: 0, ticksMissed: 0, endedReason: null, endedAt: null,
+      },
+    }, 'a loop that has not ticked yet');
+    const loop = await loopOf(id);
+
+    // Tick 1 is filed as a turn of its own, and nobody has been handed that turn yet: it has not fired.
+    const first = await makeDue(loop.id);
+    assert.equal(await worker.deliverTick(first.id), 'DELIVERED');
+    let wakeups = await wakeupsOf(m, id);
+    assert.equal(wakeups.lastFiredAt, null, 'a tick on a turn the engine was never handed counts as fired');
+    assert.equal(wakeups.loop.lastFiredAt, null, 'a tick on a turn the engine was never handed counts as the loop\'s run');
+    assert.deepEqual([wakeups.loop.ticksFired, wakeups.loop.ticksMissed], [1, 0]);
+    const second = (await pendingOf(loop.id))!;
+    assert.deepEqual(wakeups.next, { dueAt: second.dueAt.toISOString(), kind: 'LOOP_TICK', reason: 'the drain' });
+    assert.equal(wakeups.loop.nextDueAt, second.dueAt.toISOString());
+    assert.equal(wakeups.loop.until, (await loopOf(id)).untilAt.toISOString());
+
+    // The runner takes it: it fired when the turn was handed out, and that is the run the dead-man signal counts from.
+    await claim(m, id);
+    const [ran] = await turnsOf(id);
+    assert.ok(ran.deliveredAt, 'the claim did not hand the turn out');
+    wakeups = await wakeupsOf(m, id);
+    assert.equal(wakeups.lastFiredAt, ran.deliveredAt.toISOString());
+    assert.equal(wakeups.loop.lastFiredAt, ran.deliveredAt.toISOString());
+    assert.equal(wakeups.loop.lastFiredAt, (await lastLoopRun(prisma, loop.id))?.deliveredAt.toISOString());
+    await finishTurn(id);
+
+    // The runner goes away. Ticks 2 and 3 are filed onto one queued turn that nobody takes: the loop counts one
+    // more run and one missed tick, and its last firing is still tick 1's.
+    await goOffline(m);
+    for (const n of [2, 3]) {
+      const tick = await makeDue(loop.id);
+      assert.equal(await worker.deliverTick(tick.id), 'DELIVERED', `tick ${n}`);
+    }
+    assert.equal((await turnsOf(id))[1]?.deliveredAt, null, 'the turn ticks 2 and 3 are on was handed out');
+    wakeups = await wakeupsOf(m, id);
+    assert.equal(wakeups.lastFiredAt, ran.deliveredAt.toISOString(), 'ticks queued while the runner was away moved lastFiredAt');
+    assert.equal(wakeups.loop.lastFiredAt, ran.deliveredAt.toISOString(), 'ticks queued while the runner was away moved the loop\'s lastFiredAt');
+    assert.deepEqual([wakeups.loop.ticksFired, wakeups.loop.ticksMissed], [2, 1]);
+    const fourth = (await pendingOf(loop.id))!;
+    assert.deepEqual(wakeups.next, { dueAt: fourth.dueAt.toISOString(), kind: 'LOOP_TICK', reason: 'the drain' });
+    assert.equal(wakeups.loop.state, 'ACTIVE');
+
+    // The runner is back and takes the queued turn: that is the loop's last firing now.
+    await goOnline(m);
+    await claim(m, id);
+    const resumed = (await turnsOf(id))[1];
+    assert.ok(resumed.deliveredAt, 'the claim did not hand the queued turn out');
+    assert.ok(resumed.deliveredAt.getTime() > ran.deliveredAt.getTime());
+    wakeups = await wakeupsOf(m, id);
+    assert.equal(wakeups.lastFiredAt, resumed.deliveredAt.toISOString());
+    assert.equal(wakeups.loop.lastFiredAt, resumed.deliveredAt.toISOString());
+    assert.equal(wakeups.loop.lastFiredAt, (await lastLoopRun(prisma, loop.id))?.deliveredAt.toISOString());
+  });
+
+  await t.test('session_get\'s next is whichever wakeup is due first; a one-shot wakeup\'s run is the session\'s last firing and not the loop\'s; an ended loop says why and when', async () => {
+    const m = await machine('truth-beside');
+    const id = await session(m);
+    const started = await schedule(m, id, { recurring: true, everySeconds: 600, prompt: 'advance the migration' });
+    const once = await schedule(m, id, { delaySeconds: 60, reason: 'check CI run 4242' });
+    let wakeups = await wakeupsOf(m, id);
+    assert.deepEqual(wakeups.next, { dueAt: once.dueAt, kind: 'ONE_SHOT', reason: 'check CI run 4242' }, 'the wakeup due in a minute is not the next one');
+    assert.equal(wakeups.loop.nextDueAt, started.dueAt, 'the loop\'s waiting tick is not its own');
+
+    // The one-shot wakeup comes due, and its turn is handed out.
+    const [waiting] = await oneShotsOf(id);
+    await sql.query(`UPDATE "session_scheduled_wakeup" SET "due_at" = clock_timestamp() - interval '2 seconds' WHERE "id" = $1::uuid`, [waiting.id]);
+    assert.equal(await worker.deliver(waiting.id, id, m.ownerId), 'DELIVERED');
+    await claim(m, id);
+    const [woke] = await turnsOf(id);
+    assert.ok(woke.deliveredAt, 'the claim did not hand the turn out');
+    wakeups = await wakeupsOf(m, id);
+    assert.equal(wakeups.lastFiredAt, woke.deliveredAt.toISOString(), 'the one-shot wakeup\'s run is not the session\'s last firing');
+    assert.equal(wakeups.loop.lastFiredAt, null, 'a one-shot wakeup\'s run was counted as the loop\'s');
+    // The loop's tick is next now. The loop was given no reason, so it shows none.
+    assert.deepEqual(wakeups.next, { dueAt: started.dueAt, kind: 'LOOP_TICK', reason: null });
+    await finishTurn(id);
+
+    // A stop ends the loop: it says why and when, it has no tick waiting, and nothing is next.
+    await schedule(m, id, { stop: true });
+    const ended = await loopOf(id);
+    assert.ok(ended.endedAt);
+    assert.deepEqual(await wakeupsOf(m, id), {
+      next: null,
+      lastFiredAt: woke.deliveredAt.toISOString(),
+      loop: {
+        state: 'ENDED', everySeconds: 600, until: started.until, nextDueAt: null, lastFiredAt: null,
+        ticksFired: 0, ticksMissed: 0, endedReason: 'REQUESTED', endedAt: ended.endedAt.toISOString(),
+      },
+    }, 'a stopped loop');
+
+    // A loop started after it is the one shown.
+    const again = await schedule(m, id, { recurring: true, everySeconds: 300, prompt: 'advance the migration again', reason: 'the second pass' });
+    wakeups = await wakeupsOf(m, id);
+    assert.deepEqual(wakeups.next, { dueAt: again.dueAt, kind: 'LOOP_TICK', reason: 'the second pass' });
+    assert.deepEqual(wakeups.loop, {
+      state: 'ACTIVE', everySeconds: 300, until: again.until, nextDueAt: again.dueAt, lastFiredAt: null,
+      ticksFired: 0, ticksMissed: 0, endedReason: null, endedAt: null,
+    }, 'the loop shown is not the newest');
   });
 });

@@ -24,7 +24,7 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { appendScheduledWakeupContext, endWakeupLoop } from '../runner-api/scheduled-wakeup';
+import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -2465,6 +2465,9 @@ export class SessionsService {
     return withSessionState({
       ...compact,
       engine,
+      // When the session is woken next, when a wakeup last reached its engine, and its loop
+      // (docs/long-running-loop-contract.md §3).
+      wakeups: await readSessionWakeups(this.prisma, id),
       ...(landing ? { landing } : {}),
     });
   }
