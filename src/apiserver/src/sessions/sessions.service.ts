@@ -4675,7 +4675,7 @@ export class SessionsService {
       where: { id, ownerId },
       select: {
         id: true, changedFiles: true,
-        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
+        assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } },
       },
     });
     if (!session) throw new NotFoundException('Session not found.');
@@ -4693,8 +4693,10 @@ export class SessionsService {
     const turn = await this.insertTurn(id, {
       kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
     });
-    // The runner's heartbeat hands the request over: over the runner link, the next one is told so.
-    this.realtime.markSessionRunnerChanged(id);
+    // The runner's heartbeat hands the request over. Have it beat now rather than at its next 30s
+    // tick, as a Merge or a Commit does: whoever opened the file is watching it load. Over the runner
+    // link the same wake marks the runner changed and hints it.
+    this.realtime.notifyRunnerWake(session.assignedRunner.id);
     const deadline = Date.now() + 40_000;
     while (true) {
       const result = await this.prisma.conversationTurn.findFirst({
