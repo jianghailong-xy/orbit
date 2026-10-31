@@ -1176,6 +1176,99 @@ export interface RunnerHeartbeatResponse {
   cursorKeyChecks?: CursorKeyCheckCommand[];
 }
 
+// ── Claude region check (docs/claude-region-check-contract.md) ──
+
+/** Declared by a runner that checks which country its Claude connection to Anthropic comes out in,
+ *  and gates its Anthropic-bound Claude turns on the result (contract §1). Only such a runner is ever
+ *  gated: one without it has no effective verdict. runner-go asserts the same string. */
+export const CLAUDE_REGION_V1 = 'claude-region/v1';
+
+/** The code every region refusal carries (contract §9, §10, §12): the start of a refused or stopped
+ *  turn's `session.error`, and the `code` of the 409 a new session gets. runner-go has the same
+ *  constant. */
+export const CLAUDE_REGION_UNSUPPORTED = 'CLAUDE_REGION_UNSUPPORTED';
+
+/** TurnCompleteRequest / RunFinalizeRequest `subtype` for an Anthropic-bound Claude turn the runner
+ *  did not start or deliver because its verdict is blocked (contract §10). The control plane holds
+ *  the session in the queue instead of failing it. */
+export const CLAUDE_REGION_REFUSED_SUBTYPE = 'region_refused';
+
+/** The same `subtype` for a running turn the runner stopped after a confirmed flip to blocked (owner
+ *  decision ④, contract §10). */
+export const CLAUDE_REGION_STOPPED_SUBTYPE = 'region_stopped';
+
+/** What one region check concluded. `unknown` is a check that could not decide (contract §3). */
+export type ClaudeRegionVerdict = 'allowed' | 'blocked' | 'unknown';
+
+/** A decided verdict: what `runner.region` stores, and what effectiveRegionVerdict answers. */
+export type ClaudeRegionDecidedVerdict = Exclude<ClaudeRegionVerdict, 'unknown'>;
+
+/** The answer of GET /runner/region-check (contract §3). Every field but `viaProxy` and `asOf` is
+ *  regionVerdictFor's. */
+export interface ClaudeRegionCheckResponse {
+  verdict: ClaudeRegionVerdict;
+  /** ISO 3166-1 alpha-2 from CF-IPCountry; null when unknown. */
+  country: string | null;
+  /** ISO 3166-2 (`UA-43`) from cf-region-code, only for a country the list splits by region
+   *  (Ukraine); null otherwise. */
+  regionCode: string | null;
+  /** What Orbit calls the place, {region} in board 04's copy (CLAUDE_REGION_NAMES, or the excluded
+   *  region's name); null when unknown. */
+  name: string | null;
+  /** The runner's `viaProxy`: whether this check went through the proxy Claude uses. */
+  viaProxy: boolean;
+  /** The day the supported list was copied from Anthropic's page (CLAUDE_REGIONS_AS_OF). */
+  asOf: string;
+}
+
+/** `runner.region` as stored (contract §4). GET /runner/region-check is its only writer, and only a
+ *  decided check creates it. It never holds an address. */
+export interface RunnerRegion {
+  /** The last decided verdict. */
+  verdict: ClaudeRegionDecidedVerdict;
+  country: string;
+  regionCode: string | null;
+  name: string;
+  viaProxy: boolean;
+  /** When a check last decided, ISO 8601: what the 24-hour carry-over counts from. */
+  decidedAt: string;
+  /** When the last check of any kind arrived, unknown ones included, ISO 8601. */
+  checkedAt: string;
+  /** Consecutive blocked results. An allowed one resets it; an unknown one leaves it. */
+  blockedChecks: number;
+}
+
+/** `region` on GET /runners and GET /runners/:id (contract §6). null for a runner that does not
+ *  declare claude-region/v1, and for one no check has decided yet. */
+export interface RunnerRegionView {
+  /** The effective verdict (effectiveRegionVerdict), not the stored one. */
+  verdict: ClaudeRegionDecidedVerdict;
+  country: string;
+  regionCode: string | null;
+  name: string;
+  viaProxy: boolean;
+  checkedAt: string;
+}
+
+/** The owner's Check again as a heartbeat response carries it, `regionCheckRequest` (contract §7):
+ *  check the Claude region now. The server task adds that field to RunnerHeartbeatResponse together
+ *  with its HEARTBEAT_DELIVERIES entry (apiserver runner-api/link-heartbeat.ts), which the type
+ *  requires of every member. */
+export interface ClaudeRegionCheckRequest {
+  /** When the owner asked, ISO 8601. The runner checks once per value. */
+  requestedAt: string;
+}
+
+/** The 409 body of a session create refused because its Anthropic-bound Claude session is bound for
+ *  a runner whose effective verdict is blocked (contract §12). */
+export interface ClaudeRegionRefusal {
+  code: typeof CLAUDE_REGION_UNSUPPORTED;
+  /** Board 04's "new session 409" sentence. */
+  message: string;
+  /** The runner it is bound for. */
+  runnerId: string;
+}
+
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
 export type CodexRateLimitResetConsumeOutcome =
   | 'reset'
