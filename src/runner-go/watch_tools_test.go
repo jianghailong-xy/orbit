@@ -376,6 +376,56 @@ func TestWatchResultsSayWhatHappensNext(t *testing.T) {
 	}
 }
 
+// watch_list says of each watch when the server evaluates it next and last did, and how many of its wakes or
+// notifications never got there. A count an older server does not send is left out, never shown as none.
+func TestWatchListSaysWhenEachWatchIsEvaluatedAndWhatNeverGotThere(t *testing.T) {
+	reply := `[` +
+		`{"id":"w-waiting","state":"ACTIVE","action":"RESUME_SESSION","expiresAt":"2026-11-02T12:00:00.000Z",` +
+		`"createdAt":"2026-11-01T12:00:00.000Z","nextEvaluateAt":"2026-11-01T12:30:00.000Z",` +
+		`"lastEvaluatedAt":"2026-11-01T12:00:00.000Z","deadLetterCount":0,"targets":[],"matches":[]},` +
+		`{"id":"w-undelivered","state":"MATCHED","action":"RESUME_SESSION","expiresAt":"2026-11-02T11:00:00.000Z",` +
+		`"createdAt":"2026-11-01T11:00:00.000Z","nextEvaluateAt":null,"lastEvaluatedAt":"2026-11-01T11:05:00.000Z",` +
+		`"deadLetterCount":1,"targets":[],"matches":[{"generation":1,"matchedAt":"2026-11-01T11:05:00.000Z",` +
+		`"reason":"ALL TASK_TERMINAL 1/1","deliveries":[{"state":"DEAD_LETTER"}]}]},` +
+		`{"id":"w-older-server","state":"ACTIVE","action":"RESUME_SESSION","expiresAt":"2026-11-02T10:00:00.000Z",` +
+		`"createdAt":"2026-11-01T10:00:00.000Z","nextEvaluateAt":"2026-11-01T10:01:00.000Z",` +
+		`"lastEvaluatedAt":"2026-11-01T10:00:00.000Z","targets":[],"matches":[]}` +
+		`]`
+	srv, _ := watchDoor(t, http.StatusOK, reply)
+	result := watchMCP(t, srv.URL, false).callTool("watch_list", map[string]interface{}{})
+	text := watchToolText(t, result)
+	if result["isError"] == true {
+		t.Fatalf("watch_list failed: %s", text)
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &rows); err != nil {
+		t.Fatalf("watch_list did not answer with a list: %v\n%s", err, text)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("watch_list shows %d watches, want 3:\n%s", len(rows), text)
+	}
+	for i, want := range []map[string]interface{}{
+		{"watchId": "w-waiting", "nextEvaluateAt": "2026-11-01T12:30:00.000Z", "lastEvaluatedAt": "2026-11-01T12:00:00.000Z", "deadLetterCount": float64(0)},
+		{"watchId": "w-undelivered", "nextEvaluateAt": nil, "lastEvaluatedAt": "2026-11-01T11:05:00.000Z", "deadLetterCount": float64(1)},
+		{"watchId": "w-older-server", "nextEvaluateAt": "2026-11-01T10:01:00.000Z", "lastEvaluatedAt": "2026-11-01T10:00:00.000Z"},
+	} {
+		row := rows[i]
+		for _, key := range []string{"watchId", "nextEvaluateAt", "lastEvaluatedAt", "deadLetterCount"} {
+			got, shown := row[key]
+			wanted, expected := want[key]
+			if shown != expected || !reflect.DeepEqual(got, wanted) {
+				t.Errorf("watch %d shows %s = %#v (shown %v), want %#v (shown %v)", i, key, got, shown, wanted, expected)
+			}
+		}
+	}
+	description, _ := watchToolDescriptor(t, "watch_list")["description"].(string)
+	for _, field := range []string{"nextEvaluateAt", "lastEvaluatedAt", "deadLetterCount"} {
+		if !strings.Contains(description, field) {
+			t.Errorf("watch_list's description does not name %s: %q", field, description)
+		}
+	}
+}
+
 // The tool text an agent reads when it reaches for the loop it knows has to point at the watch instead.
 func TestAgentFacingTextSendsOrbitWaitsToWatches(t *testing.T) {
 	descriptors := map[string]map[string]interface{}{}

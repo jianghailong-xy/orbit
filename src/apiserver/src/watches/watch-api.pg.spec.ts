@@ -682,6 +682,112 @@ test('a job leaf crosses the HTTP door as written: its bg_run job id is stored, 
   );
 });
 
+// ── the schedule and the deliveries a read reports ──────────────────────────────────────────────
+
+test('every read of a watch says when it is evaluated next and was last, and how many of its deliveries are dead letters', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'schedule');
+  const observer = await session(h, owner.id, { status: 'AWAITING_INPUT' });
+  const open = await task(h, owner.id, 'OPEN');
+  const done = await task(h, owner.id, 'DONE');
+  const resumes = { action: 'RESUME_SESSION', observerSessionId: observer };
+
+  // Neither the evaluator nor the delivery worker runs in this harness, so what they would have written is written by SQL.
+  const waiting = await create(h, owner, watchBody(tasks([open])), 'a watch still waiting');
+  const deadline = new Date(Date.now() + 15 * 60_000);
+  const evaluated = new Date(Date.now() - 60_000);
+  await h.sql.query(
+    `UPDATE "watch" SET "next_evaluate_at" = $2, "last_evaluated_at" = $3 WHERE "id" = $1`,
+    [toUuid(waiting.id), deadline, evaluated],
+  );
+
+  // Matched at create: one wake on its way, and one refused for good.
+  const onItsWay = await create(h, owner, watchBody(tasks([done]), resumes), 'a match whose wake is on its way');
+  const refused = await create(h, owner, watchBody(tasks([done]), resumes), 'a match whose wake was refused');
+  await h.sql.query(
+    `UPDATE "watch_delivery" d SET "state" = 'DEAD_LETTER', "attempts" = 1, "last_error" = $2, "dead_lettered_at" = now()
+       FROM "watch_match" m WHERE m."id" = d."match_id" AND m."watch_id" = $1`,
+    [toUuid(refused.id), "OBSERVER_SESSION_ENDED: the observer session's run is over (ENDED), and a watch does not revive it"],
+  );
+
+  // Expired unmatched, and the turn its end owed its session never got there.
+  const expired = await create(h, owner, watchBody(tasks([open]), resumes), 'a resume watch whose expiry was not delivered');
+  await h.sql.query(`UPDATE "watch" SET "state" = 'EXPIRED', "next_evaluate_at" = NULL WHERE "id" = $1`, [toUuid(expired.id)]);
+  await h.sql.query(
+    `INSERT INTO "watch_delivery"("id","kind","watch_id","action","expiry_snapshot","state","attempts","last_error","dead_lettered_at")
+     VALUES (gen_random_uuid(), 'EXPIRY', $1, 'RESUME_SESSION', '{"evaluatedAt":"2026-01-01T00:00:00.000Z","targets":[]}'::jsonb,
+             'DEAD_LETTER', 1, $2, now())`,
+    [toUuid(expired.id), "OBSERVER_SESSION_ENDED: the observer session's run is over (ENDED), and a watch does not revive it"],
+  );
+
+  // A CONTINUOUS watch three Matches in: the second one's notification got there, the other two ran out of attempts.
+  const continuous = await create(h, owner, watchBody(tasks([open]), { mode: 'CONTINUOUS', wakeBudget: 5 }), 'a continuous watch');
+  for (const [generation, state] of [[1, 'DEAD_LETTER'], [2, 'DELIVERED'], [3, 'DEAD_LETTER']] as const) {
+    const match = randomUUID();
+    await h.sql.query(
+      `INSERT INTO "watch_match"("id","watch_id","generation","reason","predicate_version","per_target_snapshot")
+       VALUES ($1, $2, $3, 'ALL TASK_TERMINAL 1/1', 1, '{"evaluatedAt":"2026-01-01T00:00:00.000Z","targets":[]}'::jsonb)`,
+      [match, toUuid(continuous.id), generation],
+    );
+    await h.sql.query(
+      `INSERT INTO "watch_delivery"("id","match_id","action","state","attempts","last_error","delivered_at","dead_lettered_at")
+       VALUES (gen_random_uuid(), $1, 'NOTIFY_USER', $2::text,
+               CASE WHEN $2::text = 'DEAD_LETTER' THEN $3::int ELSE 0 END,
+               CASE WHEN $2::text = 'DEAD_LETTER' THEN 'the push service answered 503' END,
+               CASE WHEN $2::text = 'DELIVERED' THEN now() END,
+               CASE WHEN $2::text = 'DEAD_LETTER' THEN now() END)`,
+      [match, state, WATCH_LIMITS.maxDeliveryAttempts],
+    );
+  }
+  await h.sql.query(`UPDATE "watch" SET "generation" = 3 WHERE "id" = $1`, [toUuid(continuous.id)]);
+
+  const deadLetters = new Map<string, number>([
+    [waiting.id, 0], [onItsWay.id, 0], [refused.id, 1], [expired.id, 1], [continuous.id, 2],
+  ]);
+  // The times every read must answer with: the rows', read the way the product reads them.
+  const stored = new Map((await h.prisma.watch.findMany({
+    where: { ownerId: owner.id },
+    select: { id: true, nextEvaluateAt: true, lastEvaluatedAt: true },
+  })).map((row): [string, Array<string | null>] => [
+    uuidToBase62(row.id), [row.nextEvaluateAt?.toISOString() ?? null, row.lastEvaluatedAt?.toISOString() ?? null],
+  ]));
+  const facts = (watch: { nextEvaluateAt: string | null; lastEvaluatedAt: string | null; deadLetterCount: number }) =>
+    [watch.nextEvaluateAt, watch.lastEvaluatedAt, watch.deadLetterCount];
+
+  const listed = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(listed, 200, 'the list');
+  assert.equal(listed.body.length, deadLetters.size);
+  for (const watch of listed.body) {
+    assert.deepEqual(facts(watch), [...stored.get(watch.id)!, deadLetters.get(watch.id)], `the list's row of ${watch.id}`);
+  }
+  const rowOf = (id: string) => listed.body.find((watch: { id: string }) => watch.id === id);
+  assert.deepEqual(facts(rowOf(waiting.id)), [deadline.toISOString(), evaluated.toISOString(), 0], 'the waiting watch');
+  for (const ended of [onItsWay.id, refused.id, expired.id]) {
+    assert.equal(rowOf(ended).nextEvaluateAt, null, `${ended} is over and is evaluated again`);
+    assert.ok(rowOf(ended).lastEvaluatedAt, `${ended} does not say when it was last evaluated`);
+  }
+
+  // A read of one watch, and the watches that need attention, say the same of it.
+  for (const id of deadLetters.keys()) {
+    const read = await call(h, owner.bearer, 'GET', `/watches/${id}`);
+    expectStatus(read, 200, `read ${id}`);
+    assert.deepEqual(facts(read.body), facts(rowOf(id)), `the read of ${id}`);
+  }
+  const attention = await call(h, owner.bearer, 'GET', '/watches?needsAttention=true');
+  expectStatus(attention, 200, 'the watches that need attention');
+  assert.deepEqual(
+    new Map(attention.body.map((watch: { id: string; deadLetterCount: number }) => [watch.id, watch.deadLetterCount])),
+    new Map([[refused.id, 1], [expired.id, 1], [continuous.id, 2]]),
+  );
+
+  // The runner's door reads the calling session's watches through the same list (watch_list, `GET /api/runner/watches`).
+  const observed = await new WatchesService(h.prisma as unknown as PrismaService).list(owner.id, undefined, { observerSessionId: observer });
+  assert.deepEqual(
+    new Map(observed.map((watch): [string, number] => [uuidToBase62(watch.id), watch.deadLetterCount])),
+    new Map([[onItsWay.id, 0], [refused.id, 1], [expired.id, 1]]),
+  );
+});
+
 // ── permission ──────────────────────────────────────────────────────────────────────────────────
 
 test('another account\'s targets and sessions are unreadable: PERMISSION_DENIED, nothing written, and no oracle for which ids exist', { skip, timeout: 120_000 }, async () => {

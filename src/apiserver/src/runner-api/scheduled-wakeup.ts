@@ -451,6 +451,106 @@ export async function lastLoopRun(
 }
 
 /**
+ * What session_get says about a session's wakeups (docs/long-running-loop-contract.md §3): when it is
+ * woken next, when a wakeup last reached its engine, and its loop. Every time in it is read off the rows
+ * as they stand; none is written for it.
+ */
+export interface SessionWakeupsView {
+  /** The wakeup due next: the one-shot wakeup waiting, or the loop's waiting tick, whichever is due first. */
+  next: { dueAt: Date; kind: 'ONE_SHOT' | 'LOOP_TICK'; reason: string | null } | null;
+  /** When a wakeup of this session last fired: its turn handed to the engine (`conversation_turn.delivered_at`). */
+  lastFiredAt: Date | null;
+  /** The loop running, or else the last one the session ran; null when it never started one. */
+  loop: {
+    state: 'ACTIVE' | 'ENDED';
+    everySeconds: number;
+    until: Date;
+    /** Its waiting tick's due time; null once it has ended. */
+    nextDueAt: Date | null;
+    /** When a tick of it last fired, as lastLoopRun reads it: the run the dead-man signal counts from. */
+    lastFiredAt: Date | null;
+    ticksFired: number;
+    ticksMissed: number;
+    endedReason: WakeupLoopEndReason | null;
+    endedAt: Date | null;
+  } | null;
+}
+
+/**
+ * Read the session's wakeups, in one statement. A wakeup fired when its turn was handed to the engine,
+ * read the way lastLoopRun reads a loop's run: the latest-due DELIVERED row whose turn has a
+ * `delivered_at`. A wakeup filed onto a turn still queued has not fired, however long ago it was filed,
+ * and neither has one whose turn was put back in the queue.
+ */
+export async function readSessionWakeups(db: PrismaService, sessionId: string): Promise<SessionWakeupsView> {
+  const [row] = await db.$queryRaw<Array<{
+    nextDueAt: Date | null;
+    nextLoopId: string | null;
+    nextReason: string | null;
+    lastFiredAt: Date | null;
+    /** Null when the session never started a loop, and every column of the loop after it with it. */
+    loopState: 'ACTIVE' | 'ENDED' | null;
+    everySeconds: number;
+    untilAt: Date;
+    ticksFired: number;
+    ticksMissed: number;
+    endedReason: WakeupLoopEndReason | null;
+    endedAt: Date | null;
+    loopNextDueAt: Date | null;
+    loopLastFiredAt: Date | null;
+  }>>`
+    SELECT n."due_at" AS "nextDueAt", n."loop_id" AS "nextLoopId", n."reason" AS "nextReason",
+           (SELECT t."delivered_at"
+              FROM "session_scheduled_wakeup" w
+              JOIN "conversation_turn" t ON t."session_id" = w."session_id" AND t."client_turn_id" = w."client_turn_id"
+             WHERE w."session_id" = ${sessionId}::uuid AND w."state" = 'DELIVERED' AND t."delivered_at" IS NOT NULL
+             ORDER BY w."due_at" DESC, w."id" DESC
+             LIMIT 1) AS "lastFiredAt",
+           l."state" AS "loopState", l."every_seconds" AS "everySeconds", l."until_at" AS "untilAt",
+           l."ticks_fired" AS "ticksFired", l."ticks_missed" AS "ticksMissed",
+           l."ended_reason" AS "endedReason", l."ended_at" AS "endedAt",
+           (SELECT p."due_at" FROM "session_scheduled_wakeup" p
+             WHERE p."loop_id" = l."id" AND p."state" = 'PENDING') AS "loopNextDueAt",
+           (SELECT t."delivered_at"
+              FROM "session_scheduled_wakeup" w
+              JOIN "conversation_turn" t ON t."session_id" = w."session_id" AND t."client_turn_id" = w."client_turn_id"
+             WHERE w."loop_id" = l."id" AND w."state" = 'DELIVERED' AND t."delivered_at" IS NOT NULL
+             ORDER BY w."due_at" DESC
+             LIMIT 1) AS "loopLastFiredAt"
+      FROM (SELECT 1) AS "one"
+      LEFT JOIN LATERAL (
+        SELECT w."due_at", w."loop_id", w."reason"
+          FROM "session_scheduled_wakeup" w
+         WHERE w."session_id" = ${sessionId}::uuid AND w."state" = 'PENDING'
+         ORDER BY w."due_at", w."id"
+         LIMIT 1) AS n ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM "session_wakeup_loop"
+         WHERE "session_id" = ${sessionId}::uuid
+         ORDER BY "created_at" DESC, "id" DESC
+         LIMIT 1) AS l ON true`;
+  return {
+    next: row.nextDueAt
+      ? { dueAt: row.nextDueAt, kind: row.nextLoopId ? 'LOOP_TICK' : 'ONE_SHOT', reason: row.nextReason || null }
+      : null,
+    lastFiredAt: row.lastFiredAt,
+    loop: row.loopState
+      ? {
+          state: row.loopState,
+          everySeconds: row.everySeconds,
+          until: row.untilAt,
+          nextDueAt: row.loopNextDueAt,
+          lastFiredAt: row.loopLastFiredAt,
+          ticksFired: row.ticksFired,
+          ticksMissed: row.ticksMissed,
+          endedReason: row.endedReason,
+          endedAt: row.endedAt,
+        }
+      : null,
+  };
+}
+
+/**
  * Claim the owner's alert for the loop's silence since `silentSince` — its last run, or its start when it
  * has none: true for exactly one caller, however many passes or replicas reach a due tick of it. An alert
  * written before `silentSince` was for an earlier silence, which a run has ended since, so it does not hold

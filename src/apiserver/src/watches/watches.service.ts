@@ -129,13 +129,15 @@ const WATCH_VIEW_SELECT = {
 
 type WatchRow = Prisma.WatchGetPayload<{ select: typeof WATCH_VIEW_SELECT }>;
 
-/** A watch as a client reads it: every target carries its own name and standing, read with the watch (`named`). */
+/** A watch as a client reads it: every target carries its own name and standing, read with the watch (`named`),
+ *  and the watch says how many of its deliveries never got there (`deadLetterCount`). */
 type NamedWatchRow = Omit<WatchRow, 'targets'> & {
   targets: (WatchRow['targets'][number] & {
     targetTitle: string | null;
     targetStatus: WatchTargetStatusView | null;
     targetTask: WatchTargetTaskView | null;
   })[];
+  deadLetterCount: number;
 };
 
 /** A delivery as the operations read lists it: what a watch's read shows, and the watch and Match it belongs to. */
@@ -470,6 +472,9 @@ export class WatchesService {
           targetTask: row?.task ?? null,
         };
       }),
+      // Counted from the deliveries this read already carries: every Match's, and the one the watch's end owes.
+      deadLetterCount: [...watch.matches.flatMap((match) => match.deliveries), ...watch.expiryDeliveries]
+        .filter((delivery) => delivery.state === 'DEAD_LETTER').length,
     }));
   }
 

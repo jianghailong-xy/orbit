@@ -348,7 +348,9 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		{
 			"name": "watch_list",
 			"description": "List this session's watches, newest first and at most 100: each one's id, state, action, " +
-				"condition, targets and deadline. This is how to find a watch made before an engine restart or a compaction.",
+				"condition, targets and deadline, when the server evaluates it next (nextEvaluateAt, null once it has ended) " +
+				"and last did (lastEvaluatedAt), and how many of its wakes or notifications were never delivered " +
+				"(deadLetterCount; watch_get says why). This is how to find a watch made before an engine restart or a compaction.",
 			"inputSchema": obj(map[string]interface{}{
 				"state": map[string]interface{}{"type": "string", "enum": watchStates, "description": "Only watches in this state."},
 			}),
@@ -700,7 +702,13 @@ type watchSummary struct {
 	Predicate json.RawMessage `json:"predicate"`
 	ExpiresAt string          `json:"expiresAt"`
 	CreatedAt string          `json:"createdAt"`
-	Targets   []struct {
+	// When the server evaluates the condition next (null once the watch has ended) and last did.
+	NextEvaluateAt  *string `json:"nextEvaluateAt"`
+	LastEvaluatedAt *string `json:"lastEvaluatedAt"`
+	// How many of its wakes or notifications became dead letters. Nil from a server that does not count them,
+	// which is left out of the summary rather than shown as none.
+	DeadLetterCount *int `json:"deadLetterCount"`
+	Targets         []struct {
 		TargetKind string `json:"targetKind"`
 		State      string `json:"state"`
 	} `json:"targets"`
@@ -718,14 +726,19 @@ func (w watchSummary) compact() map[string]interface{} {
 		states[target.State]++
 	}
 	out := map[string]interface{}{
-		"watchId":      w.ID,
-		"state":        w.State,
-		"action":       w.Action,
-		"predicate":    w.Predicate,
-		"expiresAt":    w.ExpiresAt,
-		"createdAt":    w.CreatedAt,
-		"targets":      kinds,
-		"targetStates": states,
+		"watchId":         w.ID,
+		"state":           w.State,
+		"action":          w.Action,
+		"predicate":       w.Predicate,
+		"expiresAt":       w.ExpiresAt,
+		"createdAt":       w.CreatedAt,
+		"nextEvaluateAt":  w.NextEvaluateAt,
+		"lastEvaluatedAt": w.LastEvaluatedAt,
+		"targets":         kinds,
+		"targetStates":    states,
+	}
+	if w.DeadLetterCount != nil {
+		out["deadLetterCount"] = *w.DeadLetterCount
 	}
 	if n := len(w.Matches); n > 0 {
 		out["lastMatch"] = w.Matches[n-1]
