@@ -118,30 +118,54 @@ func scanAgentDirs(ctx context.Context, targets []AgentDirTarget) []AgentDirProb
 			continue
 		}
 		dir := expandTilde(t.WorkDir)
-		info, err := os.Stat(dir)
-		if err != nil || !info.IsDir() {
+		look := lookAtDir(ctx, dir)
+		if look.info == nil || !look.info.IsDir() {
 			out = append(out, AgentDirProbe{AgentID: t.AgentID, WorkDir: t.WorkDir, Exists: false})
 			continue
 		}
-		inside, gitErr := gitCtx(ctx, dir, "rev-parse", "--is-inside-work-tree")
-		probe := AgentDirProbe{AgentID: t.AgentID, WorkDir: t.WorkDir, Exists: true, IsGitRepo: gitErr == nil && inside == "true"}
+		probe := AgentDirProbe{AgentID: t.AgentID, WorkDir: t.WorkDir, Exists: true, IsGitRepo: look.isGit,
+			FreeBytes: look.free, TotalBytes: look.total}
 		if probe.IsGitRepo {
 			if origin, err := gitCtx(ctx, dir, "remote", "get-url", "origin"); err == nil {
 				probe.RepoURL = agentDirRepoURL(origin)
 			}
 		}
-		// Same stat pass, one extra syscall: the filesystem this directory lives on. Reported
-		// here rather than as a machine-wide figure because agents on one runner can sit on
-		// different mounts, and a run can only be gated on the disk it will write to. A
-		// platform or filesystem that won't answer leaves both fields nil rather than zero —
-		// "unknown" and "full" must not look alike to the control plane.
-		if free, total, ok := diskUsage(dir); ok {
-			probe.FreeBytes = &free
-			probe.TotalBytes = &total
-		}
 		out = append(out, probe)
 	}
 	return out
+}
+
+// dirLook is what lookAtDir found at one path.
+type dirLook struct {
+	// info is the path's os.Stat, nil when statErr says why there is none.
+	info    os.FileInfo
+	statErr error
+	// isGit: a directory inside a git work tree.
+	isGit bool
+	// free and total are the bytes of a directory's filesystem; nil when unknown.
+	free, total *uint64
+}
+
+// lookAtDir is the one look both directory answers take — an agent's working directory (scanAgentDirs) and a
+// path typed while a machine's first workspace is given a folder (probeDir) — so the two never disagree about a
+// directory.
+func lookAtDir(ctx context.Context, dir string) dirLook {
+	var look dirLook
+	look.info, look.statErr = os.Stat(dir)
+	if look.statErr != nil || !look.info.IsDir() {
+		return look
+	}
+	inside, err := gitCtx(ctx, dir, "rev-parse", "--is-inside-work-tree")
+	look.isGit = err == nil && inside == "true"
+	// Same stat pass, one extra syscall: the filesystem this directory lives on. Reported
+	// per directory rather than as a machine-wide figure because agents on one runner can sit
+	// on different mounts, and a run can only be gated on the disk it will write to. A
+	// platform or filesystem that won't answer leaves both nil rather than zero — "unknown"
+	// and "full" must not look alike to the control plane.
+	if free, total, ok := diskUsage(dir); ok {
+		look.free, look.total = &free, &total
+	}
+	return look
 }
 
 // Origin URLs can contain local credentials. Report only the clone address; SSH usernames

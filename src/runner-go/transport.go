@@ -105,6 +105,8 @@ func init() {
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
 		cursorKeyCheckCapabilityV1,
+		dirProbeCapabilityV1,
+		createWorkDirCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 }
 
@@ -926,6 +928,12 @@ func (t *Transport) cursorKeyCheckResult(b CursorKeyCheckResult) error {
 // late answer about a directory the user has since retyped can be recognised and dropped.
 func (t *Transport) claudeHistoryResult(b RunnerClaudeHistoryResult) error {
 	return t.do(nil, "POST", "/runner/claude-history-result", b, nil, 15*time.Second)
+}
+
+// dirProbeResult answers a heartbeat-delivered DirProbeCommand: what is at that path on this machine,
+// under the path as it was asked, so an answer about a path since retyped is dropped.
+func (t *Transport) dirProbeResult(b RunnerDirProbeResult) error {
+	return t.do(nil, "POST", "/runner/dir-probe-result", b, nil, 15*time.Second)
 }
 
 // loginResult reports one step of the browser-less sign-in relay: the URL to approve, then
