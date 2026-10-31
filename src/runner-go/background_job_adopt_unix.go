@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 )
 
 // adoptRecordedJobs rebuilds the jobs an earlier image of this runner handed on when it re-executed
@@ -55,29 +56,40 @@ func (p *sessionPool) adoptRecordedJobs() {
 // started it — so it is killed by its process group and reaped by its pid.
 func adoptedJob(rec bgJobRecord) *bgJob {
 	pid := rec.PID
+	// When its output last moved, as the image that handed it on saw it, so its silence — the
+	// `idleMs` it reports, and the wait for a stall wake — goes on from when it really began rather
+	// than starting over at the re-exec.
+	lastOutputAt, outputSeen := rec.LastOutputAt, rec.OutputSeen
+	if lastOutputAt.IsZero() {
+		// A record from an image that kept neither. A job whose output has been silent since it
+		// started (the honest reading of "no output before the re-exec") reports its age from its
+		// real start, so one that was already hung before the self-update is stale at once rather
+		// than after a fresh ten minutes; and what its file holds now is taken as seen, so the first
+		// read of the tail this image starts is not mistaken for output written at the re-exec.
+		lastOutputAt, outputSeen = rec.StartedAt, outputSizeOf(rec.OutputPath)
+	}
 	return &bgJob{
-		id:          rec.JobID,
-		kind:        rec.Kind,
-		command:     rec.Command,
-		description: rec.Description,
-		outputPath:  rec.OutputPath,
-		pid:         pid,
-		startedAt:   rec.StartedAt,
-		// The image that started this job never told us when its output last moved, and the record
-		// does not carry it: a job whose output has been silent since it started (which is the
-		// honest reading of "no output before the re-exec") reports its age from its real start, so
-		// one that was already hung before the self-update is stale at once rather than after a
-		// fresh ten minutes.
-		lastOutputAt: rec.StartedAt,
-		done:         make(chan struct{}),
-		wakeOnExit:   rec.WakeOnExit,
-		wakeOnOutput: rec.WakeOnOutput,
-		status:       bgStatusRunning,
-		wokenThrough: rec.WokenThrough,
-		outputWakes:  rec.OutputWakes,
-		recorded:     true,
-		kill:         func() { _ = terminateProcessTree(pid) },
-		reap:         func() int { return reapChild(pid) },
+		id:            rec.JobID,
+		kind:          rec.Kind,
+		command:       rec.Command,
+		description:   rec.Description,
+		outputPath:    rec.OutputPath,
+		pid:           pid,
+		startedAt:     rec.StartedAt,
+		lastOutputAt:  lastOutputAt,
+		outputSeen:    outputSeen,
+		done:          make(chan struct{}),
+		wakeOnExit:    rec.WakeOnExit,
+		wakeOnOutput:  rec.WakeOnOutput,
+		wakeOnStall:   time.Duration(rec.WakeOnStallSeconds) * time.Second,
+		status:        bgStatusRunning,
+		wokenThrough:  rec.WokenThrough,
+		outputWakes:   rec.OutputWakes,
+		stallWakes:    rec.StallWakes,
+		stallWokenFor: rec.StallWokenFor,
+		recorded:      true,
+		kill:          func() { _ = terminateProcessTree(pid) },
+		reap:          func() int { return reapChild(pid) },
 	}
 }
 

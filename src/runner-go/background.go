@@ -572,21 +572,30 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 
 // readCapped reads a file, returning at most the last bgTailCap bytes ("" on any error).
 func readCapped(path string) string {
+	s, _ := readCappedThrough(path)
+	return s
+}
+
+// readCappedThrough is readCapped with the offset its read ended at: how much of the file the text it
+// returns accounts for, taken from the read itself so the two always agree.
+func readCappedThrough(path string) (string, int64) {
 	f, err := os.Open(path)
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	defer f.Close()
+	var start int64
 	if info, statErr := f.Stat(); statErr == nil && info.Size() > bgTailCap {
-		if _, err := f.Seek(info.Size()-bgTailCap, io.SeekStart); err != nil {
-			return ""
+		start = info.Size() - bgTailCap
+		if _, err := f.Seek(start, io.SeekStart); err != nil {
+			return "", 0
 		}
 	}
 	data, err := io.ReadAll(io.LimitReader(f, bgTailCap))
 	if err != nil {
-		return ""
+		return "", 0
 	}
-	return string(data)
+	return string(data), start + int64(len(data))
 }
 
 // stop ends the tail for a completed/failed/killed background task, and retires a Monitor that
@@ -858,17 +867,20 @@ func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID, path string) {
 	defer tk.Stop()
 	var last string
 	read := func() {
-		s := readCapped(path)
+		s, size := readCappedThrough(path)
 		if s == "" {
 			return // file not there yet / transient — try again next tick
 		}
+		// Whether the output moved, which for a runner-hosted job is the fact its freshness is made
+		// of: recorded before the event so a reader that sees the output also sees the job as moving.
+		// Judged by how far the file has grown since it was last seen, not by this tail's own memory —
+		// so the first read of a tail that starts over is not new output, and a job adopted across a
+		// self-update keeps the silence it had (noteOutput).
+		b.noteOutput(toolUseID, size)
 		if s == last {
 			return // unchanged — don't spam an identical snapshot
 		}
 		last = s
-		// The output moved, which for a runner-hosted job is the fact its freshness is made of:
-		// recorded before the event so a reader that sees the output also sees the job as moving.
-		b.noteOutput(toolUseID)
 		b.emit(evBackgroundOutput, map[string]interface{}{
 			"shellId": shellID, "toolUseId": toolUseID, "content": s,
 		})
