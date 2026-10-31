@@ -2592,6 +2592,11 @@ func generateCommitMessage(wtPath, fallback string) string {
 	if r := []rune(diff); len(r) > maxDiffRunes {
 		diff = string(r[:maxDiffRunes]) + "\n…(diff truncated)"
 	}
+	// No model call while Claude's connection is in a region Anthropic does not offer Claude in (claude_region.go).
+	if claudeStartBlocked(context.Background(), nil) {
+		logln("commit message: " + errClaudeStartRegionBlocked.Error() + "; using the diffstat message")
+		return fallback
+	}
 	tmp, err := os.MkdirTemp("", "orbit-cmsg-")
 	if err != nil {
 		return fallback
@@ -2602,6 +2607,7 @@ func generateCommitMessage(wtPath, fallback string) string {
 	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt+diff,
 		"--model", commitMsgModel, "--output-format", "text")
 	cmd.Dir = tmp
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return fallback
