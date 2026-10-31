@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session transcript pane — live thinking scrollbar (before / after)</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/reset.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/root.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<style>
+  /* Board-only shell. Everything inside .pane is the shipped console's own classes. */
+  @font-face { font-family: 'Inter'; src: url('/var/tmp/landing-mock-render/fonts/Inter.ttf'); font-weight: 100 900; }
+  @font-face { font-family: 'Noto Sans SC'; src: url('/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf'); }
+  @font-face { font-family: 'JetBrains Mono'; src: url('/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf'); }
+  html, body, #root { height: auto !important; }
+  body {
+    margin: 0;
+    background: #e9ebef;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .panes { display: flex; gap: 40px; padding: 40px; }
+  .pane {
+    --pane-gutter: 20px;
+    width: 700px;
+    height: 800px;
+    background: var(--bg-base);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.5714285714;
+  }
+  .pane .workspace-view { flex: 1; min-height: 0; height: 100%; }
+  .pane .workspace-scroll-wrap { min-height: 0; }
+  .mock-steer {
+    margin: 2px 0 4px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .mock-placeholder {
+    padding: 12px 23px 2px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-4);
+  }
+  .mock-send {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--brand);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mock-send i {
+    display: block;
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .mock-usage { display: inline-flex; align-items: center; gap: 6px; padding-right: 6px; }
+  .mock-usage-pct { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .mock-mode { font-size: 13px; line-height: 20px; color: var(--text-2); padding: 3px 8px; }
+  .mock-check { color: var(--success-solid); display: inline-flex; }
+  .chat-tool-icon svg { display: block; }
+  .composer-box .composer-attach-btn.orbit-button { border-color: transparent; background: transparent; }
+
+  /* The shipped sheet now hides the thinking port's scrollbar (the change this board is about).
+     The before pane re-draws it, so the board still has the old state to compare against; the
+     after pane uses the shipped rules as they are. */
+  [data-pane='before'] .chat-think-port {
+    padding-right: 8px;
+    scrollbar-width: auto;
+  }
+  [data-pane='before'] .chat-think-port::-webkit-scrollbar { display: block; }
+</style>
+</head>
+<body>
+<div class="panes" id="panes"></div>
+<script>
+  const CHECK = `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7"/><path d="M4.6 8.2l2.1 2.1 4.4-4.5" stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const TERMINAL = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.6" y="2.4" width="12.8" height="11.2" rx="2"/><path d="M4.4 6.2l2.4 1.9-2.4 1.9M8.4 10.4h3.2"/></svg>`;
+  const DOC = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.9h5l3 3v9.2H4z"/><path d="M9 1.9v3h3M6.2 7.8h3.6M6.2 10.2h3.6"/></svg>`;
+
+  const REASONING = `Let's verify orbit session create requires an agent (ORBIT_AGENT_ID or --agent-id); yes, so workspace still required. Good.
+
+The earlier check also confirms the CLI resolves a workspace from the session when one is given, and from the runner's own registration otherwise, so an explicit workspace is only needed when the runner serves more than one.
+
+That matters here because the composer is drawn from the selected session, not from the account: the draft lives with the session, the permission mode comes from the session's runner, and the model list is the runner's. There is no account-wide composer, so there is nowhere to type before a session exists.
+
+Drafts are stored per session too, which is the other half of the same fact: an empty composer is not an account-level scratchpad waiting for a home, it is this session's unsent turn. The session list's new-session row is the only entry point that creates the session and the first turn together.
+
+Attachments follow the same rule: an uploaded file is tied to the turn it was sent with, so there is no tray that could hold one before the turn exists. The server also rejects a session with neither a prompt nor an attachment, which is the API-level echo of the same requirement.
+
+Now, the user's clarification about sending a prompt means they want to know whether they can send one. We can sharpen the answer:
+- Sending a prompt is a session turn. It requires a session; a session requires a workspace (or an internal runner pin). So no.
+- The composer is the prompt input; it only exists in a workspace/session context.
+- The server's POST /sessions needs a prompt and a workspace/runner; the first prompt is the session's opening turn.
+
+Let's also mention that POST /sessions requires a non-empty prompt (or attachments) — obvious`;
+
+  const fillerRow = (label) => `
+    <div class="chat-tool-card chat-tone-read">
+      <div class="chat-tool-row">
+        <span class="chat-tool-caret">›</span>
+        <span class="chat-tool-icon">${DOC}</span>
+        <span class="chat-tool-name">Read</span>
+        <span class="chat-tool-summary mono chat-path"><b class="chat-path-file">${label}.ts</b><span class="chat-path-dir">src/web/src/components</span></span>
+        <span class="chat-tool-meta">120</span>
+        <span class="chat-tool-status mock-check">${CHECK}</span>
+      </div>
+    </div>`;
+
+  const bashRow = (summary) => `
+    <div class="chat-tool-card chat-tone-exec">
+      <div class="chat-tool-row">
+        <span class="chat-tool-caret">›</span>
+        <span class="chat-tool-icon">${TERMINAL}</span>
+        <span class="chat-tool-name">Bash</span>
+        <span class="chat-tool-summary">${summary}</span>
+        <span class="chat-tool-status mock-check">${CHECK}</span>
+      </div>
+    </div>`;
+
+  const pane = (mode) => `
+  <section class="pane" data-pane="${mode}">
+    <div class="workspace-view">
+      <div class="workspace-scroll-wrap">
+        <div class="workspace-sessions" data-scroller>
+          <div data-filler></div>
+          <div class="mock-steer">Read in this turn</div>
+          ${bashRow('Check iOS workspace/session entry copy')}
+          ${bashRow('See iOS shared UI dependency')}
+          ${bashRow('Check CLI workspace creation')}
+          <div class="chat-think-live">
+            <div class="chat-think-live-head">💭 Thinking… <span class="mock-secs">4s</span></div>
+            <div class="chat-think-port" data-think>
+              <div class="chat-think-stream chat-streaming">${REASONING}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="workspace-composer">
+        <div class="composer-box">
+          <div class="composer-field"><div class="mock-placeholder">Reply...</div></div>
+          <div class="composer-toolbar">
+            <button type="button" class="composer-attach-btn orbit-button" aria-label="Attach">+</button>
+            <span class="composer-pill mock-mode">Auto</span>
+            <span class="composer-pill-spacer"></span>
+            <span class="composer-pill composer-model-pill">
+              <span class="composer-model-chip">
+                <span class="composer-model-name">DeepSeek V4.1 Flash 1017</span>
+                <span class="composer-model-effort">Max</span>
+              </span>
+            </span>
+            <span class="composer-usage mock-usage">
+              <svg class="context-ring" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle class="context-ring-track" cx="8" cy="8" r="6.5" fill="none" stroke-width="2"/>
+                <circle class="context-ring-fill" cx="8" cy="8" r="6.5" fill="none" stroke-width="2"
+                        stroke-linecap="round" stroke-dasharray="40.8" stroke-dashoffset="35.1"
+                        transform="rotate(-90 8 8)"/>
+              </svg>
+              <span class="composer-usage-pct">14%</span>
+            </span>
+            <span class="mock-send"><i></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+
+  const after = new URLSearchParams(location.search).get('after') === '1';
+  if (after) document.body.classList.add('after');
+  document.getElementById('panes').innerHTML = pane('before') + pane('after');
+
+  const labels = ['Transcript','WorkspaceView','SessionMessageCard','SessionReplyCard','SessionRecapCard',
+    'SessionOutputs','SessionFind','SessionSearch','TasksSidePanel','BatchGraph','RunnerSignIn','AppLink',
+    'TaskRunHandoffNotice','ImagePreview','ComposerMirror','ToolCards','ThinkingDraft','ScrollToBottom',
+    'QuotaWindow','SteerDelivery','TranscriptPaint','TranscriptStore','DeepLink','SessionProjectLandings',
+    'TranscriptDeepLink','TurnHead','TurnFoot','PendingTray','WatchStrip','BackgroundWake','ComposerMenu',
+    'QueueOffer','SteerTray','SessionMenu','SessionSwipe','SessionLine','SessionFolders','ProjectSessions',
+    'PromptSuggestion','ModelRouting','RetryMessage','RetryAttachments','AcceptanceCard','CriteriaCard',
+    'EvidenceHandoff','OpenItemCard','RecapRow','LandingSession','SharedFolder','TaskRunHandoff'];
+  const testLabels = ['Transcript.test','Transcript.thinking.test','Transcript.turnFoot.test',
+    'Transcript.turnHead.test','Transcript.streamingOrder.test','Transcript.turnEnd.test',
+    'WorkspaceView.test','WorkspaceView.composerStop.test','WorkspaceView.scrollToBottom.test',
+    'WorkspaceView.jumpToStart.test','WorkspaceView.queuedTurn.test','WorkspaceView.decisionStrip.test',
+    'SessionReplyCard.test','SessionRecapCard.test','SessionMessageCard.test','SessionOutputs.test',
+    'SessionProjectLandings.test','TasksSidePanel.test','ProjectTaskRow.test',
+    'ProjectCoordinatorSection.test','ProviderConnectPage.test','RunnerDetailPage.test',
+    'TaskDetailPage.test','WikiPage.test','SharedSessionPage.test','SharedProjectPage.test',
+    'api.test','App.loginNext.test','App.sharedLink.test','App.infrastructure.test'];
+  const filler = labels.map(fillerRow).join('') + testLabels.map(fillerRow).join('');
+  document.querySelectorAll('[data-filler]').forEach((el) => { el.innerHTML = filler; });
+  for (const scroller of document.querySelectorAll('[data-scroller]')) scroller.scrollTop = scroller.scrollHeight;
+  for (const port of document.querySelectorAll('[data-think]')) port.scrollTop = port.scrollHeight;
+  document.body.dataset.ready = '1';
+</script>
+</body>
+</html>

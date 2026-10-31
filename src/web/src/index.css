@@ -9968,7 +9968,15 @@ button.chat-jump-start:hover {
   /* The transcript is itself a scroller pinned to the tail; a wheel that reaches the end of this
      one must not chain up into it and fight that pin. */
   overscroll-behavior: contain;
-  padding-right: 8px;
+  /* No scrollbar of its own: the transcript owns the pane's scrollbar, and this port's bar drew a
+     second thumb 8px inside it while a turn streamed. The port still scrolls by wheel, trackpad
+     and touch; it just does not draw chrome. 16px is the old 8px padding plus the 8px gutter the
+     bar took, so the text sits exactly where it did. */
+  padding-right: 16px;
+  scrollbar-width: none;
+}
+.chat-think-port::-webkit-scrollbar {
+  display: none;
 }
 .chat-think-meta {
   color: var(--text-4);
