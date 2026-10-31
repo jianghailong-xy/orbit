@@ -31,11 +31,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * NATIVE frames of a fact told to the coordinator on a phone (docs/mocks/coordinator-delivery-line/ 03): the line as the reader
  * draws it — the sentence on its first row, "Sent to the coordinator · time" on its second — and the sticky header's capsule once the
- * line is scrolled past, `↑ From Orbit` and the sentence. Each is drawn by the production composable and written under
+ * line is scrolled past, `↑ From Orbit` and the sentence; and the owner's answer to a criteria proposal told to a task's run, which is
+ * not the coordinator, with what it opens to. Each is drawn by the production composable and written under
  * `src/android/build/evidence/coordinator-delivery-android/` beside its semantics tree; the rows' bounds are asserted, not eyeballed.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +94,47 @@ class CoordinatorDeliveryShotsTest {
         assertEquals("both rows start at the same edge", first.left, second.left, 1f)
         compose.onAllNodesWithText("Put back in the composer", useUnmergedTree = true).assertCountEquals(0)
         shot("phone-line")
+    }
+
+    /**
+     * The owner's answer to a criteria proposal a task's run filed, told to that run — the card's `toCoordinator` false: the line says
+     * "Sent to this session · time", and pressing it opens "What this session was told" over the words. Nothing says the coordinator.
+     */
+    @Test fun theTaskRunsReply() {
+        val reply = RunEvent("user", 11, buildJsonObject {
+            put("text", "From Orbit · criteria decision\n\nYour criteria proposal 34pX0YF3mJmoTBvNxc8Kt on project “Runner link v1” " +
+                "(34nmPkyh9pd8tVm1fCv2Q) was refused by the account owner at 2026-10-31T11:30:00.000Z. Nothing was applied: " +
+                "criterion 2 stays at revision 1.")
+            putJsonObject("coordinatorDelivery") {
+                put("kind", "CRITERIA_REJECTED"); put("task", JsonNull); put("revision", JsonNull); put("count", JsonNull)
+                put("deliveredAt", Instant.now().minusSeconds(3600).toString()); put("toCoordinator", false)
+            }
+        }, "turn-reply")
+        show { Column(Modifier.fillMaxWidth().padding(16.dp)) { TranscriptCardView(transcriptCards(reply).single(), {}, reply) } }
+        compose.onNodeWithTag("record:11:coordinatorDelivery:sentence", useUnmergedTree = true).assertTextEquals("Criteria proposal rejected")
+        val sent = CoordinatorDeliveryLine.sent(CoordinatorDeliveryLine.parse(reply.payload.jsonObject["coordinatorDelivery"]!!.jsonObject)!!)
+        assertTrue(sent, sent.startsWith("${CoordinatorDeliveryLine.sentToThisSession} · "))
+        compose.onNodeWithTag("record:11:coordinatorDelivery:sent", useUnmergedTree = true).assertTextEquals(sent)
+        compose.onAllNodesWithText("coordinator", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        shot("run-reply-line")
+
+        compose.onNodeWithText("Criteria proposal rejected", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(CoordinatorDeliveryLine.toldThisSession, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("was refused by the account owner", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText("coordinator", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        dialogShot("run-reply-told")
+    }
+
+    /** The dialog the line opened, which is a window of its own: its frame and every root's semantics. */
+    private fun dialogShot(name: String) {
+        compose.waitForIdle()
+        File(output, "$name-semantics.txt").writeText(compose.onAllNodes(isRoot(), useUnmergedTree = true).printToString(maxDepth = Int.MAX_VALUE))
+        val view = ShadowDialog.getLatestDialog()!!.window!!.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
     }
 
     /** Scrolled past, the reader's top bar names the line in its capsule: `↑ From Orbit`, then the line's own sentence. */
