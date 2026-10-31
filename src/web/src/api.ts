@@ -1972,6 +1972,23 @@ export const getSessionDiff = (idOrPublicId: string) =>
 export const refreshSessionDiff = (idOrPublicId: string) =>
   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
 
+/** A changed file's bytes as they are in the session's worktree now, for the diff drawer's preview
+ *  of a binary file (GET /sessions/:id/worktree-file). The control plane has the session's runner
+ *  read the file on every call, so a failure is the runner's: 404 gone from the checkout, 413 over
+ *  the upload limit, 503 runner offline, 504 no answer in time — an ApiError carrying that status.
+ *  Bearer-guarded like the attachment route, so callers draw the blob, never an `<img src>` here. */
+export const getWorktreeFile = async (idOrPublicId: string, path: string, signal?: AbortSignal): Promise<Blob> => {
+  const res = await authedFetch(
+    `/api/sessions/${encodeURIComponent(idOrPublicId)}/worktree-file?path=${encodeURIComponent(path)}`,
+    { signal, cache: 'no-store' },
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
+    throw new ApiError(typeof body?.message === 'string' ? body.message : res.statusText, res.status);
+  }
+  return res.blob();
+};
+
 /** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
  *  it wrote none. */
 export type RecapOutcome =

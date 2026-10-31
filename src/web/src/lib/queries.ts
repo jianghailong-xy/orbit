@@ -19,6 +19,7 @@ import {
   getSession,
   getSessionDiff,
   getSessionRequest,
+  getWorktreeFile,
   listShareLinks,
   listAccessTokens,
   type SessionFolder,
@@ -482,6 +483,21 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
     queryKey: ['session', id ?? null, 'diff'] as const,
     queryFn: () => getSessionDiff(id!),
     enabled: id != null,
+  });
+
+/**
+ * One changed file's current bytes from the session's worktree, for the diff drawer's preview of a
+ * binary file. Nested under the session's key like its diff, so a turn end re-reads an open picture
+ * the agent may have redrawn. No automatic retry: the server already waits up to 40s on the runner,
+ * and the preview offers Retry. Dropped a minute after the drawer stops showing it, so flipping back
+ * shows the last read at once while paging through large images never holds them all.
+ */
+export const worktreeFileQuery = (sessionId: string, path: string) =>
+  queryOptions({
+    queryKey: ['session', sessionId, 'worktree-file', path] as const,
+    queryFn: ({ signal }) => getWorktreeFile(sessionId, path, signal),
+    retry: false,
+    gcTime: 60_000,
   });
 
 /**

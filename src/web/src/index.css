@@ -3990,6 +3990,86 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   font-size: 13px;
 }
+/* A binary file's preview (WorktreeFilePreview): its kind and size in the pane head, and below it the
+   picture fitted to the pane's width (never enlarged past its own size), or a state in its place. The
+   head wraps instead of clipping: in a narrow pane (a phone, or the side panel dragged to its minimum)
+   the kind, size and Download move under the path. */
+.wt-preview-head {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.wt-preview-meta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.wt-preview-kind {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.wt-preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-sunken);
+  text-align: center;
+}
+.wt-preview-img {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  vertical-align: top;
+}
+.wt-preview-img img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+.wt-preview-img:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.wt-preview-state {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  text-align: center;
+}
+.wt-preview-state-title {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.wt-preview-state-detail {
+  max-width: 480px;
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.wt-preview-state-error {
+  max-width: 420px;
+  color: var(--error);
+  font-size: 12.5px;
+}
 /* Narrow screens: stack the file list above the diff instead of a side rail. */
 @media (max-width: 700px) {
   .wt-diff-body {
