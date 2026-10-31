@@ -165,7 +165,7 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 			"PreToolUse": []map[string]interface{}{
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
-				{"matcher": "ScheduleWakeup", "hooks": guard},
+				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
 				{"matcher": "Monitor|mcp__orbit__bg_run", "hooks": guard},
 			},

@@ -50,6 +50,20 @@ const bgGuardScheduleWakeupReason = "Orbit holds this session's wakeups on its s
 	" session even if this engine is gone by then. To wait for Orbit tasks or sessions, use" +
 	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
 
+// CronCreate is the same timer for a loop: its jobs live only in this engine process (its own
+// description says so) and fire only while the engine is idle, so a loop kept by it dies with the
+// first recycle. The loop the control plane holds (schedule_wakeup with recurring, contract §1) is
+// what replaces it, and every call is routed there — a one-shot job (recurring: false) included.
+const bgGuardCronCreateReason = "Orbit holds this session's loops on its server. Claude's CronCreate is" +
+	" unavailable here: its jobs live only inside this coding-engine process, so recycling the engine (idle TTL," +
+	" memory pressure) or restarting the runner loses them, and they fire only while the engine is idle. Use" +
+	" mcp__orbit__schedule_wakeup with recurring: true instead — everySeconds for the interval (60 to 86400" +
+	" seconds), prompt for what each tick's turn is to do, and until (ISO 8601) for when the loop ends: 7 days" +
+	" out when omitted, 30 days out at most. Orbit's server schedules every tick itself, even after this engine" +
+	" is gone, so nothing has to renew it each turn; stop: true ends it. For a single wakeup, leave recurring out" +
+	" and pass delaySeconds and reason. To wait for Orbit tasks or sessions, use" +
+	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
+
 // A poll of Orbit's own work is refused wherever it is started from — a Bash call in the turn, a background
 // shell, a Monitor, a runner-hosted job — because the wait it keeps is one the control plane holds for nothing:
 // task_await and session_await ask it to. Only while Watch is on for the session (watch_rollout.go): with
@@ -139,6 +153,9 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 	// Every call, whatever it asks for: see bgGuardScheduleWakeupReason.
 	case "ScheduleWakeup":
 		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardScheduleWakeupReason, watches)
+	// Every call too: see bgGuardCronCreateReason.
+	case "CronCreate":
+		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardCronCreateReason, watches)
 	// The readers for the engine's own background tasks (old names and new). A
 	// runner-hosted job is not one, and the id says so — the runner issued that
 	// prefix itself, so this is not a guess about who owns what.
