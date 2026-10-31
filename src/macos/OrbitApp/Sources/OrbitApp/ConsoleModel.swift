@@ -910,8 +910,14 @@ final class ConsoleModel {
     /// conversation from one to another (`CodexAccounts.moveCapability`); a draft has no conversation
     /// to carry, so it starts on any.
     var accountRowsOffered: Bool {
-        guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return false }
+        guard let engine = accountEngine, engineAccounts(engine).count >= 2,
+              !accountsRegionBlocked(engine) else { return false }
         return accountsMove(engine)
+    }
+    /// No session starts on any Claude account of a machine blocked for the Claude region, so none is
+    /// offered under its sign-in (web parity: `engineProviders` lists no accounts there).
+    private func accountsRegionBlocked(_ engine: String) -> Bool {
+        engine == ClaudeRegion.engine && ClaudeRegion.blocked(runnerRegion)
     }
     /// Whether a session here can move between `engine`'s accounts — a draft has no conversation to
     /// carry, so it starts on any. Cursor CLI's are listed on every runner: one that has not talked moves
@@ -964,7 +970,8 @@ final class ConsoleModel {
     /// are (web parity): a switch onto that engine can land on any of them. Two or more to choose from
     /// — for a session, on a runner that carries a conversation between them.
     func accountChoices(for engine: String) -> [AccountChoice] {
-        guard RunnerPageFormat.keepsAccounts(engine), engineAccounts(engine).count >= 2 else { return [] }
+        guard RunnerPageFormat.keepsAccounts(engine), engineAccounts(engine).count >= 2,
+              !accountsRegionBlocked(engine) else { return [] }
         guard accountsMove(engine) else { return [] }
         return SessionProviderChoices.accountChoices(runnerEngines?.first(where: { $0.engine == engine }),
                                                      usage: engineUsage(engine)) ?? []
