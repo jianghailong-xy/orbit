@@ -133,6 +133,9 @@ func newClaudeRegionCheck(t *Transport, machine string) *claudeRegionCheck {
 	}
 }
 
+// now is the time on the check's clock: what an answer is stamped with, and what its age is measured against.
+func (c *claudeRegionCheck) now() time.Time { return c.clock.Now() }
+
 // check asks now, through the proxy `claude` would use, and records the answer: the check at the runner's
 // start, on the engine-health clock and on the owner's Check again.
 func (c *claudeRegionCheck) check(ctx context.Context) claudeRegionVerdict {
@@ -168,7 +171,7 @@ func (c *claudeRegionCheck) carriedOver(proxy string, v claudeRegionVerdict) cla
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if last, ok := c.decided[proxy]; ok && claudeRegionHolds(last, c.clock.Now()) {
+	if last, ok := c.decided[proxy]; ok && claudeRegionHolds(last, c.now()) {
 		return last
 	}
 	return v
@@ -184,7 +187,7 @@ func (c *claudeRegionCheck) fresh(proxy string) (claudeRegionVerdict, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	v, ok := c.latest[proxy]
-	return v, ok && c.clock.Now().Sub(v.At) < claudeRegionFreshFor
+	return v, ok && c.now().Sub(v.At) < claudeRegionFreshFor
 }
 
 // lastDecided is the last decided answer through proxy, if any check through it has decided.
@@ -211,7 +214,7 @@ func (c *claudeRegionCheck) takeCheckAgain(requestedAt string) bool {
 
 func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claudeRegionVerdict {
 	v, err := c.ask(ctx, proxy)
-	v.At = c.clock.Now()
+	v.At = c.now()
 	c.mu.Lock()
 	previous, seen := c.latest[proxy]
 	stopping, confirmed := c.noteFlipLocked(proxy, v)
