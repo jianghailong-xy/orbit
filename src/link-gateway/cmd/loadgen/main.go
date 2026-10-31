@@ -14,6 +14,11 @@
 //	  -ca ca.pem -duration 1h -event-rate 2000 -out results/
 //
 // It writes series.jsonl (one line per interval), summary.json and errors.log to -out.
+//
+// One process opens its connections from one local address, which has about 28,000 ephemeral ports for one gateway
+// address. Past that, several processes play one fleet between them (-shard i/n, each its own part of it), and each opens
+// its connections from several local addresses (-source), so one host can hold a gateway's 65,000 connections and more
+// (scripts/runner-link/gateway-limit.sh). -histograms writes the latency histograms whole, so the shards' can be added up.
 package main
 
 import (
@@ -29,6 +34,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -52,6 +58,12 @@ type options struct {
 	volatileEdits float64
 	// liveRate is the live deltas a second across the fleet, on the sessions somebody watches (live.go); 0 sends none.
 	liveRate float64
+	// shard is -shard, i/n: this process plays the fleet's runners k with k mod n = i. Empty, it plays all of them.
+	shard string
+	// sources is -source: the local addresses the link's connections leave from, comma-separated. Empty, the system's.
+	sources string
+	// histograms is -histograms: write histograms.json beside summary.json.
+	histograms bool
 }
 
 // fleetRunner is one line of the fleet file (loadgen-seed.sh): a runner, the credential and process it connects with,
@@ -76,7 +88,6 @@ type loadgen struct {
 	activeSessions int
 	perSessionRate float64
 	apiClient      *http.Client
-	dialClient     *http.Client
 	ramp           chan struct{}
 	stats          *stats
 	ever           atomic.Int64
@@ -84,6 +95,16 @@ type loadgen struct {
 	notes          map[string]int64
 	// watched is how many of the fleet's running sessions somebody watches live now, as the gateway said (live.go).
 	watched atomic.Int64
+
+	// dialClients open the link's connections, one for each -source address (one with the system's choice without):
+	// a runner keeps the one of its place in this process's runners, in turn.
+	dialClients []*http.Client
+	// shard is which part of the fleet this process plays; fleetRunners and fleetActive count what every shard plays
+	// together, which -event-rate is shared by. rampRate and liveRate are this process's share of -ramp-rate and
+	// -live-rate: the flags' own values without -shard.
+	shard                     shard
+	fleetRunners, fleetActive int
+	rampRate, liveRate        float64
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -112,6 +133,10 @@ func run(args []string) int {
 	fs.BoolVar(&o.volatile, "volatile", false, "move the reports that move in production at the runner's own rates: plan usage, directory probes, running sessions' worktrees, engine checks (volatile.go)")
 	fs.Float64Var(&o.volatileEdits, "volatile-edits", 0.5, "with -volatile, the share of a running session's beats on which its worktree snapshot moved")
 	fs.Float64Var(&o.liveRate, "live-rate", 0, "live reply deltas per second across the fleet, shared by the running sessions somebody watches (live.go); 0 sends none")
+	fs.StringVar(&o.shard, "shard", "", "i/n: play shard i of n, the fleet's runners whose place k in it (among the first -runners) has k mod n = i; "+
+		"-ramp-rate and -live-rate stay the fleet's, of which each shard takes its share, and -event-rate is shared by the fleet's active sessions")
+	fs.StringVar(&o.sources, "source", "", "open the link's connections from these local addresses, comma-separated, each runner from one of them in turn (default: the system's choice)")
+	fs.BoolVar(&o.histograms, "histograms", false, "also write histograms.json: the latency histograms of the steady window and the whole run, bucket by bucket, which several shards' runs add up")
 	fs.Uint64Var(&o.seed, "seed", 1, "the random seed")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -148,6 +173,14 @@ func newLoadgen(o options) (*loadgen, error) {
 	if err != nil {
 		return nil, err
 	}
+	sh, err := parseShard(o.shard)
+	if err != nil {
+		return nil, err
+	}
+	sources, err := parseSources(o.sources)
+	if err != nil {
+		return nil, err
+	}
 	pool, err := x509.SystemCertPool()
 	if err != nil {
 		pool = x509.NewCertPool()
@@ -162,16 +195,27 @@ func newLoadgen(o options) (*loadgen, error) {
 		}
 	}
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	linkTransport := &http.Transport{
-		Proxy:               nil,
-		TLSClientConfig:     &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout: 10 * time.Second,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if o.connect != "" {
-				addr = o.connect
-			}
-			return dialer.DialContext(ctx, network, addr)
-		},
+	linkClient := func(dialer *net.Dialer) *http.Client {
+		return &http.Client{Transport: &http.Transport{
+			Proxy:               nil,
+			TLSClientConfig:     &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+			TLSHandshakeTimeout: 10 * time.Second,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				if o.connect != "" {
+					addr = o.connect
+				}
+				return dialer.DialContext(ctx, network, addr)
+			},
+		}}
+	}
+	var dialClients []*http.Client
+	for _, ip := range sources {
+		d := *dialer
+		d.LocalAddr = &net.TCPAddr{IP: ip}
+		dialClients = append(dialClients, linkClient(&d))
+	}
+	if len(dialClients) == 0 {
+		dialClients = []*http.Client{linkClient(dialer)}
 	}
 	apiTransport := &http.Transport{
 		Proxy: nil, DialContext: dialer.DialContext, MaxIdleConns: 256, MaxIdleConnsPerHost: 256,
@@ -183,21 +227,67 @@ func newLoadgen(o options) (*loadgen, error) {
 	}
 	g := &loadgen{
 		o: o, seed: o.seed,
-		apiClient:  &http.Client{Timeout: 30 * time.Second, Transport: apiTransport},
-		dialClient: &http.Client{Transport: linkTransport},
-		ramp:       make(chan struct{}),
-		stats:      newStats(errLog),
-		notes:      map[string]int64{},
+		apiClient:   &http.Client{Timeout: 30 * time.Second, Transport: apiTransport},
+		dialClients: dialClients,
+		shard:       sh, fleetRunners: len(fleet),
+		rampRate: o.rampRate / float64(sh.count), liveRate: o.liveRate / float64(sh.count),
+		ramp:  make(chan struct{}),
+		stats: newStats(errLog),
+		notes: map[string]int64{},
 	}
-	for i, fr := range fleet {
-		r := newRunner(g, i, fr)
+	// A runner is the same whichever shard plays it: it draws on the seed with its place in the fleet.
+	for k, fr := range fleet {
+		g.fleetActive += len(fr.Active)
+		if k%sh.count != sh.index {
+			continue
+		}
+		r := newRunner(g, k, fr)
+		r.dialClient = dialClients[len(g.runners)%len(dialClients)]
 		g.activeSessions += len(r.active)
 		g.runners = append(g.runners, r)
 	}
-	if g.activeSessions > 0 {
-		g.perSessionRate = o.eventRate / float64(g.activeSessions)
+	if len(g.runners) == 0 {
+		_ = errLog.Close()
+		return nil, fmt.Errorf("shard %d of %d plays no runner: the fleet has %d", sh.index, sh.count, len(fleet))
+	}
+	if g.fleetActive > 0 {
+		g.perSessionRate = o.eventRate / float64(g.fleetActive)
 	}
 	return g, nil
+}
+
+// shard is which part of the fleet one process plays: runners k with k mod count = index.
+type shard struct{ index, count int }
+
+// parseShard reads -shard, i/n; empty is the whole fleet, 0/1.
+func parseShard(v string) (shard, error) {
+	if v == "" {
+		return shard{0, 1}, nil
+	}
+	var s shard
+	if n, err := fmt.Sscanf(v, "%d/%d", &s.index, &s.count); err != nil || n != 2 || s.count < 1 || s.index < 0 || s.index >= s.count ||
+		fmt.Sprintf("%d/%d", s.index, s.count) != v {
+		return shard{}, fmt.Errorf("-shard %q is not i/n with 0 <= i < n, such as 0/2", v)
+	}
+	return s, nil
+}
+
+// parseSources reads -source: addresses of this host, each checked by binding to it.
+func parseSources(v string) ([]net.IP, error) {
+	var ips []net.IP
+	for _, item := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+		ip := net.ParseIP(item)
+		if ip == nil {
+			return nil, fmt.Errorf("-source %q is not an IP address", item)
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort(ip.String(), "0"))
+		if err != nil {
+			return nil, fmt.Errorf("-source %s is not an address of this host: %v", item, err)
+		}
+		_ = ln.Close()
+		ips = append(ips, ip)
+	}
+	return ips, nil
 }
 
 func readFleet(path string, limit int) ([]fleetRunner, error) {
@@ -255,12 +345,16 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 	if g.live() {
 		fmt.Fprintf(os.Stderr, "loadgen: %.0f live deltas/s across the sessions somebody watches\n", o.liveRate)
 	}
+	if g.shard.count > 1 {
+		fmt.Fprintf(os.Stderr, "loadgen: shard %d of %d, of a fleet of %d runners with %d active sessions; this shard ramps at %.1f/s\n",
+			g.shard.index, g.shard.count, g.fleetRunners, g.fleetActive, g.rampRate)
+	}
 
 	// The ramp: one first connection per tick.
 	rampCtx, rampDone := context.WithCancel(ctx)
 	defer rampDone()
 	go func() {
-		t := time.NewTicker(time.Duration(float64(time.Second) / o.rampRate))
+		t := time.NewTicker(time.Duration(float64(time.Second) / g.rampRate))
 		defer t.Stop()
 		for range g.runners {
 			select {
@@ -342,7 +436,7 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 
 	// The steady window opens once every runner is connected.
 	var steadyStart, steadyEnd time.Time
-	rampLimit := time.Duration(float64(len(g.runners))/o.rampRate*float64(time.Second))*2 + 2*time.Minute
+	rampLimit := time.Duration(float64(len(g.runners))/g.rampRate*float64(time.Second))*2 + 2*time.Minute
 	poll := time.NewTicker(200 * time.Millisecond)
 	for ctx.Err() == nil && g.ever.Load() < int64(len(g.runners)) && time.Since(started) < rampLimit {
 		select {
@@ -406,10 +500,28 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 		s := windowSummary(g.stats.steady, steadyEnd.Sub(steadyStart))
 		sum.Steady = &s
 	}
+	if o.shard != "" {
+		sum.Config.Shard = &shardSummary{Index: g.shard.index, Count: g.shard.count, FleetRunners: g.fleetRunners,
+			FleetActiveSessions: g.fleetActive, RampRate: g.rampRate}
+	}
+	if o.sources != "" {
+		sum.Config.Sources = strings.Split(strings.ReplaceAll(o.sources, " ", ""), ",")
+	}
 	sum.Unacknowledged = g.unacknowledged()
 	if err := writeJSON(filepath.Join(o.out, "summary.json"), sum); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return &sum, 1
+	}
+	if o.histograms {
+		h := histograms{Whole: windowHistograms(g.stats.all)}
+		if !steadyStart.IsZero() {
+			s := windowHistograms(g.stats.steady)
+			h.Steady = &s
+		}
+		if err := writeJSON(filepath.Join(o.out, "histograms.json"), h); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return &sum, 1
+		}
 	}
 	if g.stats.errLog != nil {
 		_ = g.stats.errLog.Close()
@@ -457,6 +569,39 @@ type summaryConfig struct {
 	VolatileEdits  float64  `json:"volatileEdits"`
 	// LiveRate is -live-rate; left out at 0, as every live figure is, so a run without it writes what it wrote before.
 	LiveRate float64 `json:"liveRate,omitempty"`
+	// Shard is -shard's, and Sources -source's: left out without them, so a run without them writes what it wrote before.
+	Shard   *shardSummary `json:"shard,omitempty"`
+	Sources []string      `json:"sources,omitempty"`
+}
+
+// shardSummary is the part of the fleet a shard played: Runners and ActiveSessions above are its own, FleetRunners and
+// FleetActiveSessions what every shard plays together, and RampRate its share of -ramp-rate.
+type shardSummary struct {
+	Index               int     `json:"index"`
+	Count               int     `json:"count"`
+	FleetRunners        int     `json:"fleetRunners"`
+	FleetActiveSessions int     `json:"fleetActiveSessions"`
+	RampRate            float64 `json:"rampRate"`
+}
+
+// histograms is histograms.json (-histograms): each latency histogram of summary.json whole, so that the runs of
+// several shards can be added up bucket by bucket.
+type histograms struct {
+	Steady *windowHists `json:"steady,omitempty"`
+	Whole  windowHists  `json:"whole"`
+}
+
+type windowHists struct {
+	AckBatch  histDump `json:"ackBatch"`
+	AckEvent  histDump `json:"ackEvent"`
+	BeatAck   histDump `json:"heartbeatAck"`
+	TokenMint histDump `json:"tokenMint"`
+	Dial      histDump `json:"dialToWelcome"`
+}
+
+func windowHistograms(w *window) windowHists {
+	return windowHists{AckBatch: w.ackBatch.dump(), AckEvent: w.ackEvent.dump(), BeatAck: w.beatAck.dump(),
+		TokenMint: w.tokenMs.dump(), Dial: w.dialMs.dump()}
 }
 
 type summary struct {
