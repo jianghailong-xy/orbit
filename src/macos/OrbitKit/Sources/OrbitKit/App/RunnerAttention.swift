@@ -20,6 +20,11 @@ import Foundation
 /// Pure: the clock (`nowMs`) and the latest release are inputs, and nothing here fetches. Times a
 /// reader sees in their own time zone (a quota reset, when it was last seen) ride in `params` as
 /// ISO strings for the client to format.
+///
+/// A runner whose Claude connection comes out where Anthropic doesn't offer Claude (`region`, its
+/// effective verdict blocked: docs/claude-region-check-contract.md §5, §6) raises that, in place of
+/// anything about Claude Code's own sign-in or quota there: Orbit neither starts a Claude sign-in nor
+/// runs an Anthropic account on it. Its words are `ClaudeRegionCopy`, the web's claudeRegionCopy.ts.
 
 /// A runner as GET /runners reports it — the fields these rules read (the web's `AttentionRunner`).
 /// Decodable because the case file writes its runners in this shape, without the database identity
@@ -38,6 +43,8 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
     public let minFreeDiskMb: Int?
     public let engines: [RunnerEngineHealth]?
     public let planUsage: PlanUsage?
+    /// Where its Claude connection last came out (`Runner.region`); nil for one that doesn't check.
+    public let region: RunnerRegionView?
 
     public init(_ runner: Runner) {
         name = runner.name
@@ -52,6 +59,7 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
         minFreeDiskMb = runner.minFreeDiskMb
         engines = runner.engines
         planUsage = runner.planUsage
+        region = runner.region
     }
 }
 
@@ -118,6 +126,7 @@ public enum RunnerAttentionKind: String, Codable, Equatable, Sendable {
     case offline
     case noCliSignedIn
     case engineSignedOut
+    case claudeRegionUnsupported
     case checkoutStuck
     case quotaNearLimit
     case diskLow
@@ -139,6 +148,8 @@ public enum RunnerAttentionActionKind: String, Codable, Equatable, Sendable {
     case updateEngines
     /// POST /runners/:id/self-update — Update Runner Now.
     case updateRunner
+    /// POST /runners/:id/region-check — Check again (docs/claude-region-check-contract.md §7).
+    case checkRegion
 }
 
 public struct RunnerAttentionAction: Equatable, Sendable {
@@ -482,17 +493,24 @@ public enum RunnerAttention {
     /// when none is installed, and when a workspace runs on a key: that machine runs without any sign-in,
     /// so a signed-out login is news only to the workspaces on it (`signedOutItems`). Settings counts the
     /// machine by the same answer (`Infrastructure.attention`).
+    ///
+    /// A signed-out Claude Code on a machine blocked for the Claude region (`region`) is no CLI to sign
+    /// in: Orbit won't start a Claude sign-in there, and the region's own item says why.
     public static func noCliSignedIn(engines: [RunnerEngineHealth]?,
-                                     workspaces: [RunnerAttentionWorkspace]) -> [LoginEngine]? {
+                                     workspaces: [RunnerAttentionWorkspace],
+                                     region: RunnerRegionView? = nil) -> [LoginEngine]? {
         let health = { (engine: LoginEngine) in engines?.first(where: { $0.engine == engine.rawValue }) }
-        let installed = LoginEngine.allCases.filter { health($0)?.installed == true }
+        let installed = LoginEngine.allCases.filter {
+            health($0)?.installed == true && !($0 == .claude && health($0)?.auth == "no" && region?.blocked == true)
+        }
         guard !installed.isEmpty, installed.allSatisfy({ health($0)?.auth == "no" }),
               !workspaces.contains(where: runsOnKeyOrPool) else { return nil }
         return installed
     }
 
     public static func noCliSignedIn(_ runner: Runner, workspaces: [Agent]) -> [LoginEngine]? {
-        noCliSignedIn(engines: runner.engines, workspaces: workspaces.map(RunnerAttentionWorkspace.init))
+        noCliSignedIn(engines: runner.engines, workspaces: workspaces.map(RunnerAttentionWorkspace.init),
+                      region: runner.region)
     }
 
     /// What a machine `noCliSignedIn` names is told: nothing runs until one is, and every CLI it has, by
@@ -523,6 +541,7 @@ public enum RunnerAttention {
         LoginEngine.allCases.compactMap { engine in
             guard let health = runner.engines?.first(where: { $0.engine == engine.rawValue }),
                   health.installed == true, health.auth == "no" else { return nil }
+            if engine == .claude && runner.region?.blocked == true { return nil }
             let users = workspacesOn(workspaces, engine)
             guard !users.isEmpty else { return nil }
             let name = loginName(engine)
@@ -537,6 +556,24 @@ public enum RunnerAttention {
                                               workspaceId: nil, command: nil),
                 params: ["engine": .string(engine.rawValue), "workspaces": .array(users.map(JSONValue.string))])
         }
+    }
+
+    /// Claude Code can't use Anthropic here: the place, and when it was checked, for Check again.
+    private static func claudeRegionItem(_ runner: RunnerAttentionRunner) -> RunnerAttentionItem? {
+        guard let region = runner.region, region.blocked else { return nil }
+        let name = region.name ?? ""
+        return RunnerAttentionItem(
+            kind: .claudeRegionUnsupported, tone: .warn,
+            short: ClaudeRegionCopy.CLAUDE_REGION_ATTENTION,
+            title: ClaudeRegionCopy.CLAUDE_REGION_ATTENTION,
+            detail: ClaudeRegionCopy.claudeRegionAttentionDetail(region: name),
+            action: RunnerAttentionAction(kind: .checkRegion, engine: nil, workspaceId: nil, command: nil),
+            params: [
+                "country": region.country.map(JSONValue.string) ?? .null,
+                "regionCode": region.regionCode.map(JSONValue.string) ?? .null,
+                "region": .string(name),
+                "checkedAt": region.checkedAt.map(JSONValue.string) ?? .null,
+            ])
     }
 
     /// One item per stuck checkout, however many workspaces work in it, named after the first.
@@ -596,6 +633,8 @@ public enum RunnerAttention {
         LoginEngine.allCases.compactMap { engine in
             let users = workspacesOn(workspaces, engine)
             guard !users.isEmpty else { return nil }
+            // No Anthropic account runs on a machine blocked for the region, nor is its usage read there.
+            if engine == .claude && runner.region?.blocked == true { return nil }
             // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
             let usage = CodexAccounts.usage(engine.rawValue, planUsage: runner.planUsage, engines: runner.engines)
             let health = runner.engines?.first(where: { $0.engine == engine.rawValue })
@@ -773,11 +812,13 @@ public enum RunnerAttention {
         if offline {
             items.append(offlineItem(runner, nowMs: input.nowMs))
         } else {
-            if let engines = noCliSignedIn(engines: runner.engines, workspaces: input.workspaces) {
+            if let engines = noCliSignedIn(engines: runner.engines, workspaces: input.workspaces,
+                                           region: runner.region) {
                 items.append(noCliSignedInItem(engines))
             } else {
                 items += signedOutItems(runner, input.workspaces)
             }
+            if let region = claudeRegionItem(runner) { items.append(region) }
             items += checkoutItems(input.workspaces)
             items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }

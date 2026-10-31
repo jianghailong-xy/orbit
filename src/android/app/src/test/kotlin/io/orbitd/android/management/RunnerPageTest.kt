@@ -221,6 +221,23 @@ class RunnerPageTest {
         }
     }
 
+    /** The Claude region check's item (docs/claude-region-check-contract.md): what the case file cannot carry — its detail and its
+     * action — as the web spec and OrbitKit's ClaudeRegionCopyParityTests say it. */
+    @Test fun aMachineBlockedForTheClaudeRegionSaysWhereAndOffersCheckAgain() {
+        val found = items(input("Claude region blocked: Claude Code can’t use Anthropic here, with Check again"))
+        assertEquals(1, found.size)
+        val item = found.single()
+        assertEquals("claudeRegionUnsupported", item.kind)
+        assertEquals("Claude Code can’t use Anthropic here", item.title)
+        assertEquals("Anthropic doesn’t offer Claude in mainland China.", item.detail)
+        assertEquals(AttentionAction("checkRegion"), item.action)
+        // A signed-out Claude Code there is no CLI to sign in; without the region it is, as before.
+        val lone = input("Claude region blocked, Claude the only CLI and signed out: the region, not no CLI signed in")
+        assertNull(RunnerPage.noCliSignedIn(lone["runner"]!!.jsonObject, lone.list("workspaces")))
+        val noRegion = JsonObject(lone["runner"]!!.jsonObject - "region")
+        assertEquals(listOf("claude"), RunnerPage.noCliSignedIn(noRegion, lone.list("workspaces")))
+    }
+
     @Test fun pageFormatsVersionsCapacityAccountsAndCodes() {
         assertTrue(RunnerPage.compareRunnerVersions("0.1.99", "0.1.100") < 0)
         assertEquals("0.1.197", RunnerPage.latestRunnerVersion("0.1.155", listOf("0.1.197", null, "0.1.9")))
