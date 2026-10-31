@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -206,6 +208,9 @@ type engineHealth struct {
 	installError  string
 	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
 	kimiRegion string
+	// Claude Code only: doctor's region check found Claude's connection to Anthropic in a region Anthropic does
+	// not offer Claude in (doctorRegion). Its line says so, and doctor suggests no sign-in for it.
+	regionBlocked bool
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -669,15 +674,26 @@ func signInEngine(spec engineSpec, binPath string) bool {
 	return true
 }
 
+// doctorInteractive is interactive, for runDoctor's install and sign-in passes. A variable only so that a test
+// can drive those passes.
+var doctorInteractive = interactive
+
 // runDoctor checks every engine and prints status. When stdin is interactive,
 // it offers to install anything missing and to sign in anything not signed in,
 // re-checking after each. proxyVars are threaded into installer commands so
-// installs work behind a proxy. Best-effort — never fatal.
-func runDoctor(proxyVars []envVar) []engineHealth {
+// installs work behind a proxy. anthropicBlocked is doctor's region check finding
+// Claude's connection in a region Anthropic does not offer Claude in, where Claude
+// Code is offered no sign-in. Best-effort — never fatal.
+func runDoctor(proxyVars []envVar, anthropicBlocked bool) []engineHealth {
+	check := func(spec engineSpec, servicePath string) engineHealth {
+		h := checkEngine(spec, servicePath)
+		h.regionBlocked = anthropicBlocked && spec.bin == providerClaude
+		return h
+	}
 	servicePath := serviceLoginPath()
 	healths := make([]engineHealth, len(engineSpecs))
 	for i, spec := range engineSpecs {
-		healths[i] = checkEngine(spec, servicePath)
+		healths[i] = check(spec, servicePath)
 	}
 
 	fmt.Println("\nCoding engines:")
@@ -685,7 +701,7 @@ func runDoctor(proxyVars []envVar) []engineHealth {
 		fmt.Printf("  %s\n", formatEngineLine(h))
 	}
 
-	if interactive() {
+	if doctorInteractive() {
 		// Install pass: anything missing.
 		for i := range healths {
 			if healths[i].installed {
@@ -696,14 +712,15 @@ func runDoctor(proxyVars []envVar) []engineHealth {
 			}
 			// Re-check against a freshly reconstructed PATH (the installer may have
 			// just created ~/.local/bin, already on the service's PATH).
-			healths[i] = checkEngine(healths[i].spec, serviceLoginPath())
+			healths[i] = check(healths[i].spec, serviceLoginPath())
 			fmt.Printf("  %s\n", formatEngineLine(healths[i]))
 		}
 		// Sign-in pass: anything installed but not confirmed signed in. An API-key engine has no
 		// sign-in to run, and neither has one with no sign-in argv of its own (Cursor CLI, whose Default
-		// account signs in under Orbit's directory); the hints below say what to do instead.
+		// account signs in under Orbit's directory); the hints below say what to do instead. Nor has
+		// Claude Code where Anthropic does not offer Claude: Orbit starts no Claude sign-in there.
 		for i := range healths {
-			if !healths[i].installed || healths[i].auth == authYes || healths[i].spec.apiKeyEnv != "" || len(healths[i].spec.loginArgs) == 0 {
+			if !healths[i].installed || healths[i].auth == authYes || healths[i].spec.apiKeyEnv != "" || len(healths[i].spec.loginArgs) == 0 || healths[i].regionBlocked {
 				continue
 			}
 			if !signInEngine(healths[i].spec, healths[i].path) {
@@ -737,6 +754,14 @@ func formatEngineLine(h engineHealth) string {
 	if detail == "" {
 		detail = "installed"
 	}
+	// Whether it is signed in is beside the point where Orbit uses no Anthropic account or key.
+	if h.regionBlocked {
+		line := fmt.Sprintf("✗ %s (%s) — Anthropic: region not supported", h.spec.name, detail)
+		if !h.onServicePath {
+			line += "  ⚠ not on service PATH"
+		}
+		return line
+	}
 	line := fmt.Sprintf("✓ %s (%s)", h.spec.name, detail)
 	var warn []string
 	switch h.auth {
@@ -756,15 +781,20 @@ func formatEngineLine(h engineHealth) string {
 
 func printEngineHints(healths []engineHealth) {
 	var missing, signedOut, unverified, pathIssue []engineHealth
+	// Claude Code where Anthropic does not offer Claude is not all set, and gets no sign-in hint: the Claude
+	// region section after these says why.
+	regionBlocked := false
 	for _, h := range healths {
+		regionBlocked = regionBlocked || h.regionBlocked
 		if !h.installed {
 			missing = append(missing, h)
 			continue
 		}
-		switch h.auth {
-		case authNo:
+		switch {
+		case h.regionBlocked:
+		case h.auth == authNo:
 			signedOut = append(signedOut, h)
-		case authUnknown:
+		case h.auth == authUnknown:
 			unverified = append(unverified, h)
 		}
 		if !h.onServicePath {
@@ -772,14 +802,18 @@ func printEngineHints(healths []engineHealth) {
 		}
 	}
 	if len(missing)+len(signedOut)+len(unverified)+len(pathIssue) == 0 {
-		fmt.Println("\nAll set — every engine is installed, signed in, and reachable.")
+		if !regionBlocked {
+			fmt.Println("\nAll set — every engine is installed, signed in, and reachable.")
+		}
 		return
 	}
 	if len(missing) > 0 {
 		fmt.Println("\nMissing engines (install whichever your agents use):")
 		for _, h := range missing {
-			fmt.Printf("  %s\n    install:  %s\n    or:       %s\n    sign in:  %s\n",
-				h.spec.name, h.spec.installCmd, h.spec.installAlt, h.spec.loginHint())
+			fmt.Printf("  %s\n    install:  %s\n    or:       %s\n", h.spec.name, h.spec.installCmd, h.spec.installAlt)
+			if !h.regionBlocked {
+				fmt.Printf("    sign in:  %s\n", h.spec.loginHint())
+			}
 		}
 	}
 	if len(signedOut) > 0 {
@@ -851,19 +885,88 @@ func doctorProxyVars(server string) []envVar {
 	return proxyServiceEnv(proxy, server, firstNonEmpty(os.Getenv("no_proxy"), os.Getenv("NO_PROXY")))
 }
 
+// doctorRegion is what doctor's own region check found: one request made now, the way the runner makes one
+// (claude_region.go) — through the proxy `claude` would use for Anthropic, or directly — and recorded by the
+// control plane like any other check.
+type doctorRegion struct {
+	verdict claudeRegionVerdict
+	// proxy is the proxy the check went through, "" for none.
+	proxy string
+	// err is why the check could not decide, when it failed rather than the server answering unknown.
+	err error
+}
+
+// checkDoctorRegion asks where Claude's connection to Anthropic comes out, for the runner cfg describes.
+func checkDoctorRegion(cfg *RunnerConfig) doctorRegion {
+	proxy := claudeAnthropicProxy()
+	check := newClaudeRegionCheck(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), cfg.Name)
+	v, err := check.ask(context.Background(), proxy)
+	return doctorRegion{verdict: v, proxy: proxy, err: err}
+}
+
+// formatDoctorRegion is the lines of doctor's Claude region section (board 03): where Claude's connection to
+// Anthropic comes out, and what Orbit does about it here.
+func formatDoctorRegion(r doctorRegion) []string {
+	v := r.verdict
+	place := "unknown"
+	if v.Verdict != claudeRegionUnknown {
+		code := v.RegionCode
+		if code == "" {
+			code = v.Country
+		}
+		place = v.Name + " (" + code + ")"
+	}
+	route := "direct"
+	if r.proxy != "" {
+		route = "through a proxy"
+		if u, err := url.Parse(r.proxy); err == nil {
+			route = "through the proxy " + u.Redacted()
+		}
+	}
+	lines := []string{"  Claude's route   " + place + "   " + route}
+	switch v.Verdict {
+	case claudeRegionBlocked:
+		return append(lines,
+			"  ✗ Anthropic doesn't offer Claude in "+v.Name+".",
+			"    Orbit won't use Anthropic accounts or keys here, or start a",
+			"    Claude sign-in. Claude Code still runs with other providers' keys.",
+			"    "+claudeRegionsSourceURL)
+	case claudeRegionAllowed:
+		return append(lines, "  ✓ Anthropic offers Claude in "+v.Name+".")
+	}
+	why := "  ⚠ The server couldn't tell where Claude's connection comes out."
+	var answered *transportHTTPError
+	if errors.As(r.err, &answered) && answered.statusCode == http.StatusNotFound {
+		why = "  ⚠ This server has no region check yet."
+	} else if r.err != nil {
+		why = "  ⚠ The check failed: " + firstLine(r.err.Error())
+	}
+	return append(lines, why, "    A check that can't tell never stops Claude Code.")
+}
+
 // cmdDoctor is the `orbit doctor` entry point: report engine health, offer to
 // install/sign in anything missing, and exit non-zero only when nothing is
 // installed so automation can gate on it.
 func cmdDoctor() {
 	server := ""
 	cfg := loadConfig()
+	var region *doctorRegion
 	if cfg != nil {
 		server = cfg.ServerURL
 		fmt.Printf("runner:  %s (%s)\nserver:  %s\n", cfg.Name, cfg.RunnerID, cfg.ServerURL)
+		// Checked now, before the engines: Claude Code's line and the sign-in pass go by it.
+		r := checkDoctorRegion(cfg)
+		region = &r
 	} else {
 		fmt.Println("no runner registered on this machine — run `orbit register` first")
 	}
-	healths := runDoctor(doctorProxyVars(server))
+	healths := runDoctor(doctorProxyVars(server), region != nil && region.verdict.Verdict == claudeRegionBlocked)
+	if region != nil {
+		fmt.Println("\nClaude region:")
+		for _, line := range formatDoctorRegion(*region) {
+			fmt.Println(line)
+		}
+	}
 	// Whether this machine can hold the runner link, and through what (link_doctor.go).
 	if cfg != nil {
 		checkRunnerLink(cfg, os.Stdout)

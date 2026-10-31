@@ -281,6 +281,22 @@ every session on a runner without the capability.
   `Claude sign-in isn’t available on {machine}: its connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude.`
   The runner refuses `claude auth login` with the same sentence while its own verdict is blocked.
 
+**The runner's other requests to Anthropic** wait on the answer its turns go by (§10: under 60 seconds old, else
+asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_region.go`):
+
+- **Plan usage** (`planusage.go`, for Default and every added account): no read of `api.anthropic.com`, and no token
+  refresh for one, since that talks to Anthropic too. Each account's probe logs
+  `not reading Anthropic usage while anthropic is blocked — CLAUDE_REGION_UNSUPPORTED` once and keeps its last
+  reading, as after any failed read. The first pass on an allowed answer reads again. No other engine's usage is
+  checked (⑥).
+- **Claude sign-in** (`login.go`): a login start fails at once with the sentence above, before an account is added
+  or any process starts (no `script`, no `claude auth login`). The log says
+  `login {attempt}: claude sign-in refused — CLAUDE_REGION_UNSUPPORTED`.
+- **`orbit doctor`** (`doctor.go`) makes a check of its own when it starts, as the runner makes one (§3), which the
+  route records like any other. While it answers blocked, Claude Code's line reads `Anthropic: region not supported`,
+  doctor offers and suggests no Claude sign-in, and a `Claude region` section follows the engines (board 03). The
+  address under it is `CLAUDE_REGIONS_SOURCE_URL` (§2).
+
 ## Copy of record (board 04)
 
 Every sentence a person reads, word for word. `{machine}` is the runner's name, `{region}` is `region.name`.

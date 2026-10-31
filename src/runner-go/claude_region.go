@@ -362,3 +362,30 @@ func claudeRegionRefusal(ctx context.Context, job *ClaimedSession) string {
 	}
 	return ""
 }
+
+// claudeConnectionBlocked reports whether Claude's connection to Anthropic is in a region Anthropic does not offer
+// Claude in, on the answer a turn would go on (forTurn), with the runner's name and the decided place: what the
+// runner's other credentialed requests to Anthropic wait on — a plan-usage read and the token refresh it can ask
+// for (planusage.go), and a Claude sign-in (login.go). False on an allowed or unknown answer, and in a process
+// with no check, which gates nothing.
+func claudeConnectionBlocked(ctx context.Context) (machine, region string, blocked bool) {
+	check := claudeRegion.Load()
+	if check == nil {
+		return "", "", false
+	}
+	if v := check.forTurn(ctx); v.Verdict == claudeRegionBlocked {
+		return check.machine, v.Name, true
+	}
+	return "", "", false
+}
+
+// claudeSignInRefusedMessage is why a Claude sign-in does not start on this runner (§12): board 04's sentence, the
+// one the control plane refuses a sign-in with. machine is the runner's name, region the decided name.
+func claudeSignInRefusedMessage(machine, region string) string {
+	return "Claude sign-in isn’t available on " + machine + ": its connection to Anthropic is in " + region +
+		", where Anthropic doesn’t offer Claude."
+}
+
+// claudeRegionsSourceURL is Anthropic's Supported Regions Policy, the page the list is copied from (§2):
+// @orbit/shared's CLAUDE_REGIONS_SOURCE_URL. The address board 03 prints, /supported-countries, redirects here.
+const claudeRegionsSourceURL = "https://www.anthropic.com/legal/supported-regions"
