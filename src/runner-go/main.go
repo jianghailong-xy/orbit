@@ -681,15 +681,17 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 		machine = fmt.Sprintf("%s (%s)", cfg.Name, host)
 	}
 	fmt.Fprintf(w, "    Machine  %s\n", machine)
+	// The next step the approval page and Add a runner give: this machine's new session page, whose card
+	// asks for a folder and a signed-in CLI.
 	switch {
 	case foreground:
-		fmt.Fprintln(w, "    Next     create a workspace in Orbit to send work; Ctrl-C stops the runner.")
+		fmt.Fprintln(w, "    Next     Start a session; Ctrl-C stops the runner.")
 	case serviceStarted:
-		fmt.Fprintln(w, "    Next     set up a coding engine, then create a workspace on this machine.")
+		fmt.Fprintln(w, "    Next     Start a session")
 	default:
-		fmt.Fprintln(w, "    Next     start it with `orbit run`, then create a workspace in Orbit.")
+		fmt.Fprintln(w, "    Next     start it with `orbit run`, then Start a session")
 	}
-	fmt.Fprintf(w, "             %s/infrastructure\n", strings.TrimRight(cfg.ServerURL, "/"))
+	fmt.Fprintf(w, "             %s/runners/%s/new\n", strings.TrimRight(cfg.ServerURL, "/"), publicID(cfg.RunnerID))
 	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
 }
 

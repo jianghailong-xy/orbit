@@ -117,9 +117,82 @@ func TestEngineHealthProbedClosesWithTheFirstProbe(t *testing.T) {
 	}
 }
 
+// A self-managed runner's first beat does not wait for the probe, so what the probe finds is asked a beat
+// of its own, once: a later probe is news only for the next tick.
+func TestBeatOnceProbedBeatsWhenTheProbeFirstAnswers(t *testing.T) {
+	probed := make(chan struct{})
+	var beats atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		beatOnceProbed(context.Background(), probed, func() { beats.Add(1) })
+	}()
+	time.Sleep(20 * time.Millisecond)
+	if beats.Load() != 0 {
+		t.Fatal("beat before the probe answered")
+	}
+	close(probed)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("still waiting after the probe answered")
+	}
+	if beats.Load() != 1 {
+		t.Fatalf("beats = %d, want 1", beats.Load())
+	}
+}
+
+func TestBeatOnceProbedEndsWithTheRunner(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var beats atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		beatOnceProbed(ctx, make(chan struct{}), func() { beats.Add(1) })
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("still waiting after the runner stopped")
+	}
+	if beats.Load() != 0 {
+		t.Fatalf("beats = %d, want 0", beats.Load())
+	}
+}
+
+// The wiring in runLoop: a self-managed runner asks for its first beat once it has reclaimed its sessions,
+// and not at the first tick half a minute on. Not sooner: the beat hands out merges and commits against
+// the supervisors it advertises (heartbeatMerge), and the reclaim is what makes those. The engines the
+// probe finds get a beat of their own. Its first claim is not held back for any of it.
+func TestRunLoopBeatsOnceASelfManagedRunnerHasReclaimed(t *testing.T) {
+	src, err := os.ReadFile("runloop.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	body = body[strings.Index(body, "func runLoop("):]
+	body = body[:strings.Index(body, "\n}\n")]
+
+	first := "\tif currentManagedInstance() == nil {\n\t\tbeatNow()\n\t\tgo beatOnceProbed(loopCtx, engineHealth.probed(), beatNow)\n\t}\n"
+	at := strings.Index(body, first)
+	if at < 0 {
+		t.Fatal("runLoop does not beat a self-managed runner's first heartbeat by itself, with one for the probe")
+	}
+	reclaim := strings.Index(body, "reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)")
+	reclaimed := strings.Index(body, "reclaimed = true")
+	if reclaim < 0 || reclaimed < reclaim || at < reclaimed {
+		t.Fatal("the first heartbeat is asked for before the reclaim has made the supervisors it advertises")
+	}
+	gate := strings.Index(body, "case <-startupBeatDone:")
+	if gate < at {
+		t.Fatal("the first heartbeat is asked for after the claim gate")
+	}
+}
+
 // The wiring in runLoop: a managed instance's heartbeat goroutine beats once before its ticker loop, and
-// the claim loop waits for that before its first claim. A self-managed runner does neither, so its
-// first beat is still the first tick and its first claim is not held back.
+// the claim loop waits for that before its first claim. A self-managed runner does neither: its first
+// beat is asked for by the reclaim, above, and its first claim is not held back.
 func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 	src, err := os.ReadFile("runloop.go")
 	if err != nil {

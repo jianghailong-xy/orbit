@@ -11,7 +11,8 @@ import (
 // (src/apiserver/src/managed-runners/managed-runner-manager.ts, `starting`), and the ticker's first beat
 // comes half a minute after the start. An instance woken from sleep claimed and answered turns all that
 // time while its mapping still read STARTING, and an auto retry, which waits for READY, waited as long
-// (T06, 2026-10-18). A self-managed runner has no READY to reach and claims at once, as it always has.
+// (T06, 2026-10-18). A self-managed runner has no READY to reach and claims at once, as it always has;
+// its first heartbeat follows its reclaim (runLoop).
 const (
 	// How long the first beat waits for the engine probe's first answer, so that it says what is
 	// installed and signed in here, which READY reads. The probe asks a few CLIs; a wedged one is not
@@ -20,6 +21,17 @@ const (
 	// How soon a first beat that was refused or went unanswered is sent again.
 	managedStartupBeatRetry = 2 * time.Second
 )
+
+// beatOnceProbed asks for a beat when the engine probe first answers, for a self-managed runner, whose
+// first heartbeat does not wait for it: the machine's engines reach the control plane seconds after it
+// comes up rather than at the next tick.
+func beatOnceProbed(ctx context.Context, probed <-chan struct{}, beat func()) {
+	select {
+	case <-probed:
+		beat()
+	case <-ctx.Done():
+	}
+}
 
 // managedStartupBeat sends a managed instance's first heartbeat once the engine probe has answered
 // (`probed` closed) or probeWait has passed, and again every retry while beat reports it was not
