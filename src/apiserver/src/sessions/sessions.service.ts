@@ -272,12 +272,12 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
   accountSwitchNotice,
-  accountBeforeDispatch,
   automaticAccount,
   reportedRunAccount,
   workspaceLeavesAccountToOrbit,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
+import { countedAccountBeforeDispatch, withActiveSessions } from '../providers/active-sessions';
 import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
@@ -1290,10 +1290,17 @@ export class SessionsService {
     // (docs/provider-engine-contract.md §8.2 4).
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
-    const automatic = (engine: AccountEngine) =>
-      signedInOn(engine) && targetRunner
-        ? automaticAccount(engine, { env: workspaceEnv, ...accountChoices }, targetRunner, new Date())
-        : null;
+    // Its runner's sessions are counted only when there is a pick to make, and the pick then keeps each
+    // account to its share of them.
+    const automatic = async (engine: AccountEngine) => {
+      if (!signedInOn(engine) || !targetRunner) return null;
+      const workspace = { env: workspaceEnv, ...accountChoices };
+      const now = new Date();
+      const pick = automaticAccount(engine, workspace, targetRunner, now);
+      return pick && assignedRunnerId
+        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, targetRunner, now), now)
+        : pick;
+    };
     const picked = (engine: AccountEngine, account: string | undefined) =>
       signedInOn(engine) ? account : undefined;
     const pickedCodexAccount = picked(AgentProvider.CODEX, dto.codexAccount);
@@ -1301,11 +1308,11 @@ export class SessionsService {
     const pickedAntigravityAccount = picked(AgentProvider.ANTIGRAVITY, dto.antigravityAccount);
     const pickedKimiAccount = picked(AgentProvider.KIMI, dto.kimiAccount);
     const pickedCursorAccount = picked(AgentProvider.CURSOR, dto.cursorAccount);
-    const codexAccount = pickedCodexAccount ?? automatic(AgentProvider.CODEX);
-    const claudeAccount = pickedClaudeAccount ?? automatic(AgentProvider.CLAUDE);
-    const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
-    const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
-    const cursorAccount = pickedCursorAccount ?? automatic(AgentProvider.CURSOR);
+    const codexAccount = pickedCodexAccount ?? (await automatic(AgentProvider.CODEX));
+    const claudeAccount = pickedClaudeAccount ?? (await automatic(AgentProvider.CLAUDE));
+    const antigravityAccount = pickedAntigravityAccount ?? (await automatic(AgentProvider.ANTIGRAVITY));
+    const kimiAccount = pickedKimiAccount ?? (await automatic(AgentProvider.KIMI));
+    const cursorAccount = pickedCursorAccount ?? (await automatic(AgentProvider.CURSOR));
     // Claude Code on a credential that talks to Anthropic (its own sign-in, an Anthropic key, a Claude pool), bound for
     // a runner whose Claude connection to Anthropic is in a region Anthropic does not offer Claude in: refused now with
     // the code (docs/claude-region-check-contract.md §12) rather than created to wait in the queue from its first
@@ -5668,7 +5675,9 @@ export class SessionsService {
           },
         })
       : null;
-    const move = accountBeforeDispatch(
+    const move = await countedAccountBeforeDispatch(
+      tx,
+      session.assignedRunnerId,
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,

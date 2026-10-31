@@ -1747,6 +1747,11 @@ export interface DshRuntimeHealth {
 export interface RunnerEngineAccount {
   /** Manual pause in Orbit. Sign-in and quota remain unchanged; expires automatically. */
   pausedUntil?: string | null;
+  /** How many sessions are at work on this account: running, on their way to it, waiting out a retry, or
+   *  with a turn in the last half hour. The server counts them (activeSessionsOn) and says so on what it
+   *  serves; no runner reports it. Absent from an older server, and read as nothing counted, which holds
+   *  no account back (accountToStartOn). */
+  activeSessions?: number;
   /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;

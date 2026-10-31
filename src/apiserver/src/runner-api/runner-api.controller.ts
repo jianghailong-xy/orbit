@@ -44,7 +44,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { withActiveSessions } from '../providers/active-sessions';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
@@ -1366,10 +1367,10 @@ function isTaskCriterionShapeAdvice(error: unknown): boolean {
 export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] }>;
 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
-export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
+export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique', 'findMany']; runEvent: ['findFirst'] }> & QuotaRetryTransaction;
 
 /** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
-export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
+export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique']; session: ['findMany'] }> & QuotaRetryTransaction;
 
 // The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
 // answered 426 UPGRADE_REQUIRED, but for the six marked StaysOnHttps (runner-link-required.ts).
@@ -8224,7 +8225,7 @@ export class RunnerApiController {
         ? lastRetryableError
         : lastAssistant;
       const retry = lastWord
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null)
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null, lastWord.seq)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
@@ -9899,6 +9900,9 @@ export class RunnerApiController {
    * on Automatic moves off it as below, and only the re-send is left out. Left where it was, its engine
    * stayed on the spent account and every background agent still running in it met the same limit —
    * on 2026-10-02 a session sat there until its owner moved it by hand.
+   *
+   * `seq` is the reply's own place in the session's events, from which the reply before it is found
+   * (waitsForWarmCache).
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
@@ -9906,6 +9910,7 @@ export class RunnerApiController {
     runnerId: string,
     text: string,
     delivered = true,
+    seq: number | null = null,
   ): Promise<{
     retryAt?: Date | null;
     retryAttempts?: number;
@@ -10004,22 +10009,26 @@ export class RunnerApiController {
     // (accountAfterUsageLimitAt), and the retry's dispatch moves it there. Armed for this account's reset
     // alone, it waited out a weekly limit beside an account whose 5 hours came back the same evening —
     // on 2026-10-08, a coordinator was armed five days out.
+    //
+    // Only as far as the other accounts have room for it. Moving costs the account it moves to the whole
+    // conversation (accountShare), so one past its share of the runner's sessions takes no more of them,
+    // and a re-send on its way waits for this account's reset instead, when that comes before the cache
+    // here dies (waitsForWarmCache). A message somebody sends in the meantime moves it all the same
+    // (accountBeforeDispatch).
     let elsewhere: Date | null = null;
     if (session.provider === AgentProvider.CLAUDE) {
-      const runner = await tx.runner.findUnique({
+      const row = await tx.runner.findUnique({
         where: { id: runnerId },
         select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
       });
-      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
-        ? accountAfterUsageLimit(
-            'claude',
-            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
-            session.workspace,
-            runner,
-            new Date(),
-          )
-        : null;
-      if (move && runner) {
+      const now = new Date();
+      const carries = !!row?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1);
+      const runner = row && carries ? await withActiveSessions(tx, runnerId, row, now) : row;
+      const own = { account: session.claudeAccount, pinned: session.claudeAccountPinned };
+      const move = carries ? accountAfterUsageLimit('claude', own, session.workspace, runner, now) : null;
+      const waits = !!move && !move.defaultRemoved && delivered && seq !== null
+        && await this.waitsOutClaudeLimit(tx, sessionId, seq, text, row, move.from, now);
+      if (move && runner && !waits) {
         return {
           ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
@@ -10028,21 +10037,43 @@ export class RunnerApiController {
           poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
-      elsewhere = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
-        ? accountAfterUsageLimitAt(
-            'claude',
-            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
-            session.workspace,
-            runner,
-            new Date(),
-          )
-        : null;
+      elsewhere = carries && !waits ? accountAfterUsageLimitAt('claude', own, session.workspace, runner, now) : null;
     }
     if (!delivered) return {};
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace, elsewhere);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
+  }
+
+  /**
+   * Whether a Claude session its usage limit just stopped on `account` waits for that account's reset
+   * rather than move (waitsForWarmCache). The reset is the moment its retry would be armed for
+   * (quotaRetryAt), and its last answered call the reply before the one that said so: this session's
+   * cache has lived since then, whatever else its turn has done.
+   */
+  private async waitsOutClaudeLimit(
+    tx: RetryPlanTransaction,
+    sessionId: string,
+    seq: number,
+    text: string,
+    runner: { planUsage: unknown; engines: unknown } | null,
+    account: string,
+    now: Date,
+  ): Promise<boolean> {
+    const resetsAt = parseQuotaResetAt(text, now) ?? usageLimitResetsAt(
+      withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
+      AgentProvider.CLAUDE,
+      now,
+      account,
+    );
+    if (!resetsAt) return false;
+    const reply = await tx.runEvent.findFirst({
+      where: { sessionId, type: RunEventType.ASSISTANT, seq: { lt: seq } },
+      orderBy: { seq: 'desc' },
+      select: { createdAt: true },
+    });
+    return waitsForWarmCache(resetsAt, reply?.createdAt ?? null, now);
   }
 
   /**
@@ -10072,7 +10103,7 @@ export class RunnerApiController {
     text: string,
   ): Promise<{ retryAt: Date; move?: { to: string; notice: string; unpin?: boolean } } | null> {
     const now = new Date();
-    const runner = await tx.runner.findUnique({
+    const row = await tx.runner.findUnique({
       where: { id: runnerId },
       select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
     });
@@ -10083,7 +10114,9 @@ export class RunnerApiController {
         })
       : null;
     const own = { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] };
-    const carries = !!runner?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+    const carries = !!row?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+    // As for a Claude session (retryPlanFor), an account past its share of the runner's sessions takes no more.
+    const runner = row && carries ? await withActiveSessions(tx, runnerId, row, now) : row;
     const move = carries
       ? accountAfterUsageLimit(engine, own, workspace, runner, now)
       : null;

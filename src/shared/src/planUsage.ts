@@ -493,6 +493,10 @@ export function withEnginePlanUsage(
  * - Every candidate spent: the one that frees up first, where the session's run then waits.
  * - Ties go to Default, then to the lower id, so the answer never depends on the order of the report.
  *
+ * Where the sessions were counted (RunnerEngineAccount.activeSessions), the first of those order that
+ * can run, is not nearly spent and has less than its share ({@link accountShare}) is taken instead.
+ * With none, the order above stands: a new session has no conversation to lose, so it may go over.
+ *
  * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
  * and the session runs where it always did.
  *
@@ -513,6 +517,9 @@ export function accountToStartOn(
   if (!pool || pool.length < (removed ? 1 : 2)) return null;
   const candidates = rankAccounts(engine, pool, usage, now);
   const usable = candidates.filter((c) => c.spentUntil === null);
+  const share = accountShare(candidates, now, 1);
+  const within = usable.find((c) => !c.nearLimit && withinShare(c, share));
+  if (share !== null && within) return within.id;
   if (usable.length > 0) return usable[0].id;
   const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
   if (first) return first.id;
@@ -534,6 +541,11 @@ export function codexAccountToStartOn(
  * window — ranked as {@link accountToStartOn} ranks. Never a spent one: when no other account has
  * room, moving gains nothing, and the session waits for the first account to free up, its own or
  * another ({@link accountToMoveToAt}). Null then, and for a runner with no second account.
+ *
+ * Where the sessions were counted (RunnerEngineAccount.activeSessions), only an account below its share
+ * ({@link accountShare}) takes one. With none, the session stays and waits, as it does with no room
+ * anywhere, unless `beyondShare` says somebody is waiting on this move: then any account with room
+ * will do, the ones below their share first.
  */
 export function accountToMoveTo(
   engine: AccountEngine,
@@ -541,11 +553,13 @@ export function accountToMoveTo(
   usage: PlanUsage | null | undefined,
   now: Date,
   from: string,
+  options: { beyondShare?: boolean } = {},
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
-  return (
-    rankAccounts(engine, accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
-  );
+  const ranked = rankAccounts(engine, accounts, usage, now);
+  const share = accountShare(ranked, now, 0);
+  const room = ranked.filter((c) => c.id !== from && c.spentUntil === null);
+  return (room.find((c) => withinShare(c, share)) ?? (options.beyondShare ? room[0] : undefined))?.id ?? null;
 }
 
 /** {@link accountToMoveTo} for Codex. */
@@ -563,7 +577,8 @@ export function codexAccountToMoveTo(
  * of `engine`, for what holds its retry rather than choosing where it goes ({@link accountToMoveTo}):
  * `now` while one has room, else the first moment another frees up — the reset of its spent windows,
  * or the end of its pause. Null when no other account names such a moment: a runner with no second
- * account, every other one signed out, or spent with no reset to go by.
+ * account, every other one signed out, or spent with no reset to go by. An account at its share
+ * ({@link accountShare}) is not counted among them, as it does not take the session.
  */
 export function accountToMoveToAt(
   engine: AccountEngine,
@@ -573,11 +588,54 @@ export function accountToMoveToAt(
   from: string,
 ): Date | null {
   if (!accounts || accounts.length < 2) return null;
-  const others = rankAccounts(engine, accounts, usage, now).filter((c) => c.id !== from);
+  const ranked = rankAccounts(engine, accounts, usage, now);
+  const share = accountShare(ranked, now, 0);
+  const others = ranked.filter((c) => c.id !== from && withinShare(c, share));
   if (others.some((c) => c.spentUntil === null)) return now;
   const first = Math.min(...others.map((c) => c.spentUntil ?? Number.POSITIVE_INFINITY));
   return Number.isFinite(first) ? new Date(first) : null;
 }
+
+/**
+ * The sessions an account can have before a share counts against it: below this, work stays on the
+ * account whose quota expires first, as it always has.
+ */
+const ACCOUNT_SHARE_FLOOR = 3;
+
+/** How soon a spent or paused account has to be back to keep its place in the split: within a 5-hour
+ *  window. One out for longer, on a weekly limit, leaves its work to the others. */
+const ACCOUNT_SHARE_HORIZON_MS = 5 * 60 * 60_000;
+
+/**
+ * How many active sessions each of a runner's accounts takes before it stops taking more: an even split
+ * of the sessions over the accounts that can run within {@link ACCOUNT_SHARE_HORIZON_MS}, and never
+ * below {@link ACCOUNT_SHARE_FLOOR}. `adding` is the session being placed when it is not among those
+ * counted, as a new one is not and one moving between accounts is. Null when nothing was counted: an
+ * older server, or a question that does not need the answer, and no account is held back.
+ *
+ * Moving a session is not free: the account it moves to has never cached its conversation, so its next
+ * call writes all of it again. Measured on 319 moves from 2026-10-06 to 2026-10-26: a median of 509k
+ * tokens in that one call, against 1.6k for an ordinary one. And the moves came in herds: every session
+ * started on the account expiring first, and when that ran out all of them moved to the same next one, up
+ * to 22% of whose window went on those writes alone. That account then ran out a median of 84 minutes later,
+ * though it had used 15% when they arrived, and they all moved again. On 2026-10-09 this came to 14.6% of
+ * everything spent. An account past its share is simply one that cannot carry another session until its
+ * own reset, and whatever works there next stays there.
+ */
+function accountShare(
+  ranked: ReadonlyArray<{ spentUntil: number | null; activeSessions?: number }>,
+  now: Date,
+  adding: number,
+): number | null {
+  if (ranked.every((c) => c.activeSessions === undefined)) return null;
+  const total = ranked.reduce((sum, c) => sum + (c.activeSessions ?? 0), adding);
+  const horizon = now.getTime() + ACCOUNT_SHARE_HORIZON_MS;
+  const sharing = ranked.filter((c) => c.spentUntil === null || c.spentUntil <= horizon).length;
+  return Math.max(ACCOUNT_SHARE_FLOOR, Math.ceil(total / Math.max(sharing, 1)));
+}
+
+const withinShare = (candidate: { activeSessions?: number }, share: number | null) =>
+  share === null || (candidate.activeSessions ?? 0) < share;
 
 /** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */
 const byAccountId = (a: { id: string }, b: { id: string }) =>
@@ -595,7 +653,7 @@ function rankAccounts(
   accounts: readonly RunnerEngineAccount[],
   usage: PlanUsage | null | undefined,
   now: Date,
-): Array<{ id: string; spentUntil: number | null }> {
+): Array<{ id: string; spentUntil: number | null; nearLimit: boolean; activeSessions?: number }> {
   const reported = usage ? snapshotFor(usage, engine) : undefined;
   return accounts
     .filter((account) => account.auth !== 'no')
@@ -616,6 +674,7 @@ function rankAccounts(
         expiresAt: quotaExpiresAt(snapshot, now),
         tightest: weighed.length > 0 ? Math.max(...weighed) : Number.POSITIVE_INFINITY,
         spentUntil: pause > now.getTime() ? Math.max(pause, spentUntil ?? 0) : spentUntil,
+        activeSessions: account.activeSessions,
       };
     })
     // Two accounts expiring at Infinity, or unread, subtract to NaN, which falls through to the next

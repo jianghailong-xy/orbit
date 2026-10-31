@@ -52,6 +52,7 @@ import {
   confirmationReviewRetryTurnId,
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
+import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
@@ -597,7 +598,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               engine,
               { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
               session.workspace,
-              session.assignedRunner,
+              session.assignedRunnerId && session.assignedRunner
+                ? await withActiveSessions(this.prisma, session.assignedRunnerId, session.assignedRunner, now)
+                : session.assignedRunner,
               now,
             )
           : null;
