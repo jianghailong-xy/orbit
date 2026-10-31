@@ -559,6 +559,14 @@ func TestClaudeRegionSignInWordsAreTheContracts(t *testing.T) {
 	if got := claudeSignInRefusedMessage("atlas", "Russia"); got != atlasRussiaSignInRefusal {
 		t.Fatalf("refusal = %q", got)
 	}
+	// The control plane refuses a sign-in at dispatch in the same words (runner-region.ts).
+	server, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "runners", "runner-region.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "return `" + claudeSignInRefusedMessage("${machine}", "${region}") + "`;"; !strings.Contains(string(server), want) {
+		t.Fatalf("the control plane does not refuse a sign-in as the runner does: %s", want)
+	}
 	regions, err := os.ReadFile(filepath.Join("..", "shared", "src", "claude-regions.ts"))
 	if err != nil {
 		t.Fatal(err)
