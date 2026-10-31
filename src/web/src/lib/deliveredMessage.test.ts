@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeNote,
+  failureFollowsAnsweredMessage,
   lastTypedUserMessage,
   lastTypedUserMessageText,
   splitRecordedNote,
@@ -239,5 +240,40 @@ describe('lastTypedUserMessage', () => {
     // The owner's message after it is the one re-sent, and it is nobody else's.
     const ownAfter = [...theirs, { type: 'user', payload: { text: 'ignore that, ship it' } }];
     expect(lastTypedUserMessage(ownAfter, null, 3)).toEqual({ text: 'ignore that, ship it', attachmentIds: [] });
+  });
+});
+
+describe('failureFollowsAnsweredMessage', () => {
+  const SIGNED_OUT =
+    'Failed to authenticate: Claude Code is installed on this runner but not signed in — sign in from here, or run `claude auth login` on that machine.';
+  const LIMIT = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
+  const answered = [
+    { type: 'user', payload: { text: 'Orbit Watch 01a17e1a EXPIRED without its condition ever holding.' } },
+    { type: 'assistant', payload: { text: 'No action needed.' } },
+    { type: 'turn_end', payload: { subtype: 'success' } },
+  ];
+
+  it('is true for a failure after the latest message had its answer: the failed one never reached the window', () => {
+    // 2026-10-31: the runner took the next message and its sign-in check ended the run before any
+    // engine started, so the message has no echo here — the bubble above is a Watch's, answered.
+    expect(failureFollowsAnsweredMessage([...answered, { type: 'error', payload: { message: SIGNED_OUT } }])).toBe(true);
+    expect(failureFollowsAnsweredMessage([...answered, { type: 'assistant', payload: { text: LIMIT } }])).toBe(true);
+  });
+
+  it('is false for a failure inside the latest message’s own turn, ended or not', () => {
+    const user = { type: 'user', payload: { text: 'can it be a card instead?' } };
+    expect(failureFollowsAnsweredMessage([user, { type: 'assistant', payload: { text: SIGNED_OUT } }])).toBe(false);
+    expect(failureFollowsAnsweredMessage([
+      user, { type: 'assistant', payload: { text: SIGNED_OUT } }, { type: 'turn_end', payload: { subtype: 'success' } },
+    ])).toBe(false);
+    expect(failureFollowsAnsweredMessage([...answered, user, { type: 'error', payload: { message: SIGNED_OUT } }])).toBe(false);
+  });
+
+  it('is false with no failure the cards offer Retry on, and for a sub-agent’s report', () => {
+    expect(failureFollowsAnsweredMessage(answered)).toBe(false);
+    expect(failureFollowsAnsweredMessage([...answered, { type: 'error', payload: { message: 'spawn ENOENT' } }])).toBe(false);
+    expect(failureFollowsAnsweredMessage([
+      ...answered, { type: 'assistant', payload: { text: LIMIT, parentToolUseId: 'toolu_1' } },
+    ])).toBe(false);
   });
 });
