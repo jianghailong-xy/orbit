@@ -2616,7 +2616,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // That table is not a preserved relation; no `task`, `session`, `project` or `project_acceptance_*` object nor any
       // of the six preserved triggers/functions is named, and no column, function, trigger, type or constraint is created,
       // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0460_coordinator_wake_delivered_session'],
+      '0460_coordinator_wake_delivered_session',
+      // Which country a runner's Claude connection to Anthropic comes out in (0461, docs/claude-region-check-contract.md
+      // §4, §7; runners/runner-region.ts): `runner` gains `region` (JSONB) and `region_check_requested_at` (TIMESTAMP(3)),
+      // both nullable with no default and added with IF NOT EXISTS — catalog-only. Only `runner` is altered, and it is not
+      // a preserved relation: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger, type, index or constraint is created, replaced
+      // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
+      // NULL in both.
+      '0461_runner_region'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

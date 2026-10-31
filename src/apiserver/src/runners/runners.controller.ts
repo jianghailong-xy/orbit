@@ -244,6 +244,14 @@ export class RunnersController {
     return this.runners.requestSelfUpdate(user.userId, id);
   }
 
+  // Check again: have this machine check where its Claude connection to Anthropic comes out now
+  // (docs/claude-region-check-contract.md §7). Owner-scoped like the controls above: it has that machine send a request.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/region-check')
+  requestRegionCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.requestRegionCheck(user.userId, id);
+  }
+
   // What Claude Code history already sits under a directory on this machine, asked while someone
   // is typing that directory into the new-workspace form. Owner-scoped like the relays above: it
   // reads that machine's own transcripts. The POST asks, the GET waits for the answer.

@@ -153,6 +153,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       codexAccountRemoveAccount: true,
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,
+      // Where its Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6).
+      region: true,
     },
   });
 });

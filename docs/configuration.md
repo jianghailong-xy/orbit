@@ -27,7 +27,7 @@ output into a public report: expanded values can contain secrets.
 | `PORT` | Standalone default / example `3000`; Compose fixes `3000` | API listener port. A Compose change also needs matching gateway upstreams and health checks. | No | Recreate API and affected gateway |
 | `CORS_ORIGINS` | Compose fixes `http://localhost:2086` | Allowed cross-origin browser origins. The included gateway serves web and API from one origin. | No | Recreate API after changing its service definition |
 | `PUBLIC_ORIGIN` | Optional; `http://localhost:2086` | External origin in runner installation commands, the runner's built-in server default, control-plane shared-pool routing, and the Google sign-in redirect URI. Use the external HTTPS origin for a network deployment. | No | Rebuild web and recreate API; update deployed runners as appropriate, and the redirect URI registered with Google |
-| `TRUSTED_PROXIES` | Optional; empty | Addresses and CIDR ranges of the proxies in front of the gateway, separated by commas or spaces: a CDN's published ranges (Cloudflare's are at <https://www.cloudflare.com/ips/>), a load balancer, a TLS proxy on the host. The API then reads a visitor's own address from `X-Forwarded-For`, past those proxies only: the **From** row of the register approval page, an access token's last-used address, per-visitor limits. Empty, a visitor is the address that connected to the gateway, which behind a proxy is the proxy's. An entry that is not an address or a range stops the API at start. | No | Recreate API |
+| `TRUSTED_PROXIES` | Optional; empty | Addresses and CIDR ranges of the proxies in front of the gateway, separated by commas or spaces: a CDN's published ranges (Cloudflare's are at <https://www.cloudflare.com/ips/>), a load balancer, a TLS proxy on the host. The API then reads a visitor's own address from `X-Forwarded-For`, past those proxies only: the **From** row of the register approval page, an access token's last-used address, per-visitor limits. The [Claude region check](#claude-region-check) reads Cloudflare's country headers only from those proxies. Empty, a visitor is the address that connected to the gateway, which behind a proxy is the proxy's. An entry that is not an address or a range stops the API at start. | No | Recreate API |
 | `MODEL_CATALOG_URL` | Optional; `https://models.dev/api.json` | Source for twice-daily vendor model-list refreshes. Failed fetches retain the shipped lists. | No; avoid embedding credentials in URLs | Recreate API |
 | `ORBIT_WATCHES_MODE` → container `ORBIT_WATCHES` | Optional; `on` | Watch rollout: `on`, `canary`, `drain` (no new watches), or `off` (also stops evaluation/delivery on this API). | No | Recreate API; no migration or runner release |
 | `ORBIT_WATCHES_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
@@ -125,6 +125,36 @@ so a deployment installed before them keeps managed runners off.
 volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
 the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
 run `docker compose up -d --force-recreate docker-channel apiserver`.
+
+### Claude region check
+
+Before a Claude Code turn that talks to Anthropic (the machine's own Claude sign-in, an Anthropic API key or a Claude
+pool), the runner asks the API which country its Claude connection comes out in: one request to
+`GET /api/runner/region-check`, sent through the proxy Claude Code uses for `api.anthropic.com`. The API answers from
+Cloudflare's headers and Anthropic's [Supported Regions Policy](https://www.anthropic.com/legal/supported-regions), as
+copied into Orbit. Where Anthropic doesn't offer Claude, that machine starts no Anthropic-bound Claude turn and no Claude
+sign-in. Claude Code turns on other providers' keys are not checked. There is no variable to set; the check depends on
+how the deployment is reached:
+
+- **It needs Cloudflare and `TRUSTED_PROXIES`.** The API reads the country from Cloudflare's `CF-IPCountry` header,
+  and Ukraine's region from `cf-region-code`, only when the address that connected to the gateway (`X-Real-IP`) is in
+  `TRUSTED_PROXIES`. So the deployment has to be behind Cloudflare, with Cloudflare's ranges
+  (<https://www.cloudflare.com/ips/>) in `TRUSTED_PROXIES`. From any other address those headers are whatever the client
+  wrote, and the API ignores them. `cf-region-code` comes from the zone's **Add visitor location headers** Managed
+  Transform; without it, a connection from Ukraine reads as unknown. Orbit bundles no GeoIP database.
+- **A deployment without them never blocks.** Without Cloudflare, or with `TRUSTED_PROXIES` not listing it, every check
+  answers unknown, and unknown counts as allowed. A check that fails counts the same way. An unknown result keeps a
+  machine's last decided result for up to 24 hours, and a deployment that never decides one never blocks.
+- **What the check does not see:**
+  - Only Claude's own connection. A proxy that comes out in a supported region passes, wherever the machine is.
+  - Unknown counts as allowed. A self-hosted deployment without Cloudflare can't tell the region and never blocks.
+    Production (orbitd.io) is behind Cloudflare.
+  - A runner too old to run the check is not blocked until it updates itself.
+  - Who controls the account. Anthropic's terms also restrict companies controlled from unsupported regions; that is
+    not a property of a network connection.
+  - Anthropic's list is copied into Orbit by hand, with its date and source, and changes with an Orbit release.
+
+For each machine, the API keeps the country and region the last check decided, never an address.
 
 ## PostgreSQL and backups
 

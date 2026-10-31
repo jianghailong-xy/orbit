@@ -724,10 +724,13 @@ const (
 // (runner-auth.guard.ts admitLinkCall). TestLinkDaemonRoutesAreTheControllersGuardedRoutes holds this list to the
 // controller. Registration and the device flow come before any link, and every other controller under /runner is the
 // agent tool API, which stays on HTTPS (D14). The attachments' two routes are listed because the controller serves
-// them, but their calls never pass doVia: they are multipart and raw bytes, and stay on HTTPS.
+// them, but their calls never pass doVia: they are multipart and raw bytes, and stay on HTTPS. So is the Claude region
+// check's: it is one request through the proxy Claude uses, on a transport of its own, and the apiserver answers it
+// unknown over the link (docs/claude-region-check-contract.md §3).
 var linkDaemonRoutes = []string{
 	"GET /runner/me",
 	"POST /runner/deregister",
+	"GET /runner/region-check",
 	linkRouteHeartbeat,
 	"POST /runner/integration-jobs/:id/progress",
 	"POST /runner/integration-jobs/:id/output",

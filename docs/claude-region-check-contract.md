@@ -156,16 +156,19 @@ client that reads null, or an older client that reads nothing, draws what it dra
 
 ## 7. Check again
 
-`POST /runners/:id/region-check`, owner JWT, refused while the runner is offline. It records the request; the next
-heartbeat response carries it the way `loginRequest` travels:
+`POST /runners/:id/region-check`, owner JWT, refused while the runner is offline and for a runner that does not
+declare `claude-region/v1`, which would never check. It records the request in `runner.region_check_requested_at`;
+the next heartbeat response carries it the way `loginRequest` travels:
 
 - `RunnerHeartbeatResponse.regionCheckRequest: { requestedAt }` (`ClaudeRegionCheckRequest`). Over the runner link
   it rides inside `HeartbeatAck.reconcile_json`, the same JSON, so it needs no proto change.
-- The server task adds the field to `RunnerHeartbeatResponse` together with its entry in `HEARTBEAT_DELIVERIES`
+- The field is in `RunnerHeartbeatResponse`, with its entry in `HEARTBEAT_DELIVERIES`
   (`src/apiserver/src/runner-api/link-heartbeat.ts`): that table's type requires every member of the response, so
   the field cannot land without its writer. runner-go's `HeartbeatResponse` (`types.go`) gets the same field.
-- The server sends it on every heartbeat response until the check route records a check (`checkedAt`) at or after
-  `requestedAt`. The runner checks at once, once per `requestedAt`.
+- The server sends it on every heartbeat response to a process that declares `claude-region/v1`, until a check at or
+  after `requestedAt` reaches the check route, which clears the request whatever the check answered (an unknown one
+  with no row records no `checkedAt`, §4). It stops after ten minutes without such a check. The runner checks at
+  once, once per `requestedAt`.
 - The result then goes through §3 and §4 like any other check.
 
 Board 04 offers Check again on the session card and the machine page's Claude row; a client offers it only where
@@ -316,10 +319,16 @@ The project's twelve items leave these open. They are settled here so the parall
 3. An unknown result with no row writes nothing, so a stored verdict is always decided (§4).
 4. On the wire both subtypes carry `status: FAILED`, and both errors start with `CLAUDE_REGION_UNSUPPORTED: ` (§9,
    §10). A stopped turn is not replayed.
-5. Check again is `regionCheckRequest: { requestedAt }`, sent until a check at or after it is recorded (§7). The
-   shape is in `dto.ts` now; the field joins `RunnerHeartbeatResponse` with the server task.
+5. Check again is `regionCheckRequest: { requestedAt }`, sent until a check at or after it is recorded (§7), on
+   `RunnerHeartbeatResponse` in `dto.ts`.
 6. The 409 body is `ClaudeRegionRefusal` (§12), and the push goes out when `blockedChecks` reaches 2 (§10).
 7. A key on the `anthropic` preset whose base URL was edited to another host counts as Anthropic-bound for the server
    and the web (§8), while the runner, which reads the environment, runs it. The runner keeps its verdict per proxy
    and the server keeps one per runner, so the two can disagree for a moment. The server and runner tasks decide how
    a refusal waits when `runner.region` already reads allowed.
+8. Check again is refused for a runner that does not declare `claude-region/v1`, is handed only to a process that
+   declares it, and stops after ten minutes without a check, so a runner whose checks cannot reach the route does not
+   reconcile in full on every link beat for as long as it is down (§7).
+9. A runner link call to the check route answers unknown, whatever its headers say: its connection is the link's,
+   not Claude's (§3). runner-go lists the route among the controller's guarded routes (`linkDaemonRoutes`) as it lists
+   the attachments, whose calls never go over the link either.
