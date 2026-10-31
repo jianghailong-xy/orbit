@@ -370,6 +370,9 @@ interface Quota {
  *  running, every 10 without, while the engine is signed in there) and is said to be as of then. */
 const STALE_QUOTA_MS = 30 * 60_000;
 
+/** A login with no reading: what an account on a machine blocked for its Claude region is judged on. */
+const NO_QUOTA: Quota = { windows: [], stale: null, noLimit: false };
+
 function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number, engine?: RowEngine): Quota {
   const cursor =
     engine === 'cursor'
@@ -1294,7 +1297,9 @@ function AccountRow({
           <Badge tone="info" icon={<LoadingOutlined />}>Removing…</Badge>
         </div>
       ) : (
-        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+        // On a machine blocked for its region the account can take no session there: its sign-in is all
+        // there is to say, never Available.
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, regionBlocked ? NO_QUOTA : quota, now)} />
       )}
       {/* What the engine's own row says for the same key when it is the machine's one account. */}
       {envKey ? (
@@ -1907,8 +1912,10 @@ export function MachineEngines({
         const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
         // The same question the server asks when a session starts with no account picked — which a
         // group of one, as a removed Default can leave, answers with that one.
+        // No session starts on any of them on a machine blocked for its Claude region.
+        const blockedForRegion = engine === 'claude' && claudeRegionBlocked(runner);
         const next =
-          accountEngine && accounts.length > 0
+          accountEngine && accounts.length > 0 && !blockedForRegion
             ? accounts.length === 1
               ? accounts[0].id
               : accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
@@ -1946,7 +1953,7 @@ export function MachineEngines({
                 duplicateOf={repeats.get(account.id)}
                 lastOfGroup={index === accounts.length - 1 && !removed}
                 envKey={runsOnEnvKey(health, account)}
-                regionBlocked={engine === 'claude' && claudeRegionBlocked(runner)}
+                regionBlocked={blockedForRegion}
                 signIn={signIn}
                 onSignIn={onSignIn}
               />

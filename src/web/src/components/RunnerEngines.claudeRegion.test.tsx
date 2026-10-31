@@ -176,6 +176,9 @@ describe('a machine blocked for the Claude region', () => {
       expect(text(account.querySelector('.re-quota'))).toBe('—');
       expect(buttons(account)).not.toContain('Sign in');
     }
+    // Signed in, never Available: none of them can take a session here, and none is next.
+    expect(accounts.slice(0, 2).map((account) => text(account.querySelector('.re-status')))).toEqual(['Signed in', 'Signed in']);
+    expect(text(page)).not.toContain('NEXT');
     // Team is signed out: it says so, and offers nothing that would start a Claude sign-in.
     expect(text(accounts[2].querySelector('.re-status'))).toContain('Signed out');
     expect(text(page)).not.toContain('Sign in to see quota');
