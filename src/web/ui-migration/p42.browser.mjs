@@ -805,7 +805,7 @@ test.describe('P4.2 a runner’s page', () => {
     const form = page.locator('.rd-workspace-form-new');
     await expect(form).toBeVisible();
     await fill(form.getByPlaceholder('e.g. tea-cli builder', { exact: true }), 'notes');
-    await fill(form.getByPlaceholder('/path/to/project on the runner (optional)', { exact: true }), HISTORY_DIR);
+    await fill(form.getByPlaceholder('/path/to/project on the runner', { exact: true }), HISTORY_DIR);
     const offer = form.locator('.rd-history-panel');
     await expect(offer).toBeVisible({ timeout: 15_000 });
     await form.getByText('All 2', { exact: true }).click();

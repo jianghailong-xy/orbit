@@ -251,6 +251,9 @@ export function runnerNamesMore(first: string, others: number): string {
   return `${first} and ${others} more`;
 }
 
+/** Between names that are all listed, but before the last: `Claude Code, Codex and Kimi Code`. */
+export const RUNNER_NAMES_COMMA = ', ';
+
 // MARK: Needs Attention — offline
 
 export const RUNNER_UNIT_MINUTE = 'minute';
@@ -271,6 +274,21 @@ export function attentionOfflineFor(count: number, unit: string): string {
 
 export function attentionOfflineSessionsWait(count: number): string {
   return `Its ${count} sessions wait until it checks in again.`;
+}
+
+// MARK: Needs Attention — no coding CLI on this machine is signed in
+
+export const ATTENTION_NO_CLI_SIGNED_IN_SHORT = 'No coding CLI signed in';
+export const ATTENTION_NO_CLI_SIGNED_IN = 'No coding CLI is signed in';
+
+/** `cli` is the one login CLI installed there, by its own name: `Claude Code`. */
+export function attentionNoCliSignedInDetail(cli: string): string {
+  return `Nothing can run on this machine until one is. ${cli} is installed here.`;
+}
+
+/** `clis` names every login CLI installed there: `Claude Code and Codex`. */
+export function attentionNoCliSignedInDetailMany(clis: string): string {
+  return `Nothing can run on this machine until one is. ${clis} are installed here.`;
 }
 
 // MARK: Needs Attention — an engine this machine's workspaces use is signed out

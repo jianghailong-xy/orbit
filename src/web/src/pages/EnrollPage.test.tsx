@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type DeviceEnrollment } from '../api';
+import { encodeId } from '../lib/idCodec';
 import { meQuery } from '../lib/queries';
 import * as runnerCopy from '../lib/runnerCopy';
 
@@ -222,9 +223,16 @@ describe('/enroll', { timeout: 30_000 }, () => {
     expect(denyDeviceEnrollment).not.toHaveBeenCalled();
     expect(page.querySelector('h1')?.textContent).toBe('Machine registered');
     expect(page.textContent).toContain('devbox is on your account. Go back to the terminal');
-    expect(page.textContent).toContain('Next: sign in its coding CLIs');
+    // The next step P0 settles on, the same one Add a runner names once the machine is online: both
+    // things a session needs, done from the machine's page (project 34pLjYBjU6ILsehatEjJs, contract 6).
+    const said = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(said(page.querySelector('.enroll-next-title'))).toBe('Next: sign in a coding CLI and add a workspace');
+    expect(said(page.querySelector('.enroll-next-body'))).toBe(
+      'Sessions run in a folder on this machine, on a coding CLI signed in here. Do both from its page.',
+    );
+    expect(page.textContent).not.toContain('Next: sign in its coding CLIs');
     const open_ = [...page.querySelectorAll('a')].find((a) => a.textContent === 'Open machine');
-    expect(open_?.getAttribute('href')).toMatch(/^\/runners\/[0-9A-Za-z]+$/);
+    expect(open_?.getAttribute('href')).toBe(`/runners/${encodeId(RUNNER_ID)}`);
     expect(open_?.getAttribute('href')).not.toContain(RUNNER_ID);
     expect(button(page, 'Approve')).toBeUndefined();
   });

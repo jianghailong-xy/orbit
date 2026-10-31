@@ -249,10 +249,9 @@ export function EnrollPage() {
           up by itself.
         </p>
         <div className="enroll-next">
-          <div className="enroll-next-title">Next: sign in its coding CLIs</div>
+          <div className="enroll-next-title">Next: sign in a coding CLI and add a workspace</div>
           <div className="enroll-next-body">
-            Sessions run on the CLIs signed in on this machine. Sign them in from its page, or run{' '}
-            <code>orbit doctor</code> there.
+            Sessions run in a folder on this machine, on a coding CLI signed in here. Do both from its page.
           </div>
         </div>
         <div className="enroll-actions">

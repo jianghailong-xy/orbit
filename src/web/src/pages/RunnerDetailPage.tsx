@@ -224,6 +224,7 @@ const MIB = 1024 * 1024;
 /** Each Needs Attention card's mark, by what it is about. */
 const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
   offline: <DisconnectOutlined />,
+  noCliSignedIn: <LoginOutlined />,
   engineSignedOut: <LoginOutlined />,
   checkoutStuck: <BranchesOutlined />,
   quotaNearLimit: <DashboardOutlined />,
@@ -663,8 +664,10 @@ export function RunnerDetailPage() {
     if (growing.length > 0) void Promise.all(growing.map((a) => a.finished)).then(scroll, scroll);
     else scroll();
   }, [editing]);
+  // A new workspace needs its folder as well as its name; a saved one keeps saving with a name alone.
+  const canSubmit = !!fName.trim() && (!!editing || !!fWorkDir.trim());
   const submitWorkspace = () => {
-    if (fName.trim()) saveMut.mutate();
+    if (canSubmit) saveMut.mutate();
   };
   const discard = () => {
     setFormOpen(false);
@@ -777,7 +780,9 @@ export function RunnerDetailPage() {
               setFWorkDir(e.target.value);
               setDirty(true);
             }}
-            placeholder="/path/to/project on the runner (optional)"
+            placeholder={
+              mode === 'create' ? '/path/to/project on the runner' : '/path/to/project on the runner (optional)'
+            }
           />
           {pathHint && (
             <div className={`rd-path-hint rd-path-${pathHint.tone}`}>
@@ -1099,7 +1104,7 @@ export function RunnerDetailPage() {
           variant="primary"
           onClick={submitWorkspace}
           loading={saveMut.isPending}
-          disabled={!fName.trim()}
+          disabled={!canSubmit}
         >
           {mode === 'create' ? 'Create' : 'Save'}
         </Button>

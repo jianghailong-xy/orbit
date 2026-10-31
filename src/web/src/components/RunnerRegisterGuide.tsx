@@ -117,18 +117,19 @@ export function RunnerRegisterGuide() {
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
               <div className="runner-status-sub">
-                It's now on the Machines & models page, under Machines. Next, give it a workspace — the repo and
-                working directory it runs tasks in.
+                It's now on the Machines & models page, under Machines. Next, sign in a coding CLI on it and add a
+                workspace — the folder it runs tasks in.
               </div>
             </div>
             {/* The machine alone can't do anything yet: sessions and tasks both hang off an
-                workspace, so the real next step is this runner's page, where workspaces are created. */}
+                workspace, and run on a CLI signed in there, so the real next step is this runner's page,
+                where both are done. */}
             <button
               className="runner-done-btn"
               onClick={() => navigate(`/runners/${encodeId(connected.id)}`)}
               type="button"
             >
-              Create a workspace
+              Open machine
             </button>
           </div>
         ) : (

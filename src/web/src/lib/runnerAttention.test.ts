@@ -8,6 +8,7 @@ import {
   keepFreeLabel,
   latestRunnerVersion,
   listAttentionLine,
+  noCliSignedIn,
   runnerAttention,
   runnerDisk,
   runnerListSubtitle,
@@ -71,8 +72,11 @@ describe('runnerAttention.cases.json', () => {
   });
 
   // The login names cover Antigravity too, but which engines raise a sign-in or a quota is
-  // unchanged: a signed-out Antigravity beside a case's login engines changes nothing it raises.
+  // unchanged: a signed-out Antigravity beside a case's login engines changes nothing it raises —
+  // except on a machine where no CLI is signed in, whose one item lists Antigravity among the CLIs
+  // there (below, under 'a machine where no coding CLI is signed in').
   it('raises the same items with a signed-out Antigravity beside the login engines', () => {
+    const listsIt: string[] = [];
     for (const c of CASES) {
       const engines = c.input.runner.engines;
       if (!engines) continue;
@@ -80,8 +84,16 @@ describe('runnerAttention.cases.json', () => {
         ...c.input,
         runner: { ...c.input.runner, engines: [...engines, { engine: 'antigravity', installed: true, auth: 'no' }] },
       };
+      if (noCliSignedIn(withAntigravity.runner, withAntigravity.workspaces)) {
+        listsIt.push(c.name);
+        continue;
+      }
       expect(runnerAttention(withAntigravity), c.name).toEqual(runnerAttention(c.input));
     }
+    // Only the machines that had no CLI signed in already: none of the others gains the item.
+    expect(listsIt).toEqual(
+      CASES.filter((c) => c.expected.items.some((item) => item.kind === 'noCliSignedIn')).map((c) => c.name),
+    );
   });
 });
 
@@ -211,6 +223,122 @@ describe('listAttentionLine', () => {
     expect(listAttentionLine([offline, ...online])).toBeNull();
     expect(listAttentionLine([...online, offline])).toBeNull();
     expect(listAttentionLine([offline])).toBeNull();
+  });
+});
+
+// Rule 10 of docs/mocks/first-workspace-in-conversation/04-rules: a machine where not one installed
+// login CLI is signed in says so once, with a workspace or without one — unless a workspace there runs
+// on a key or a pool, which needs no sign-in. The case file holds when; this holds what it says.
+describe('a machine where no coding CLI is signed in', () => {
+  const austin = caseNamed('no CLI signed in and no workspace: one item, signing in the first CLI (orbit@austin)').input;
+  const engine = (name: string, auth: 'yes' | 'no' | 'unknown', installed = true) => ({ engine: name, installed, auth });
+  const on = (engines: Array<ReturnType<typeof engine>>, workspaces: AttentionWorkspace[] = []): RunnerAttentionInput =>
+    ({ ...austin, runner: { ...austin.runner, engines }, workspaces }) as RunnerAttentionInput;
+  const workspace = (name: string, lastProvider: string | null, lastEngine?: string | null): AttentionWorkspace => ({
+    id: `ws-${name}`,
+    name,
+    lastProvider,
+    ...(lastEngine === undefined ? {} : { lastEngine }),
+  });
+  const kinds = (input: RunnerAttentionInput) => runnerAttention(input).map((item) => item.kind);
+
+  it('names the CLIs installed there and signs in the first, as orbit@austin’s page reads', () => {
+    const [item, ...rest] = runnerAttention(austin);
+    expect(rest).toEqual([]);
+    expect(item).toEqual({
+      kind: 'noCliSignedIn',
+      tone: 'bad',
+      short: 'No coding CLI signed in',
+      title: 'No coding CLI is signed in',
+      detail: 'Nothing can run on this machine until one is. Claude Code and Codex are installed here.',
+      action: { kind: 'signIn', engine: 'claude' },
+      params: { engines: ['claude', 'codex'] },
+    });
+  });
+
+  it('says is for one CLI and lists three or more by name, each by the name people know it by', () => {
+    const detail = (engines: string[]) =>
+      runnerAttention(on(engines.map((name) => engine(name, 'no'))))[0].detail;
+    expect(detail(['codex'])).toBe('Nothing can run on this machine until one is. Codex is installed here.');
+    expect(detail(['claude', 'kimi', 'antigravity'])).toBe(
+      'Nothing can run on this machine until one is. Claude Code, Kimi Code and Antigravity are installed here.',
+    );
+    expect(detail(['claude', 'codex', 'kimi', 'antigravity', 'cursor'])).toBe(
+      'Nothing can run on this machine until one is. Claude Code, Codex, Kimi Code, Antigravity and Cursor CLI ' +
+        'are installed here.',
+    );
+  });
+
+  it('lists and signs in by the order the engines are listed, whatever order the runner reports them in', () => {
+    const [item] = runnerAttention(on([engine('cursor', 'no'), engine('kimi', 'no'), engine('codex', 'no')]));
+    expect(item.action).toEqual({ kind: 'signIn', engine: 'codex' });
+    expect(item.params).toEqual({ engines: ['codex', 'kimi', 'cursor'] });
+    expect(item.detail).toBe(
+      'Nothing can run on this machine until one is. Codex, Kimi Code and Cursor CLI are installed here.',
+    );
+  });
+
+  it('counts only the login CLIs that are installed, and none of the engines that need no sign-in', () => {
+    const engines = [
+      engine('claude', 'no'),
+      engine('codex', 'no', false),
+      engine('opencode', 'unknown'),
+      engine('dsh', 'unknown'),
+    ];
+    const [item] = runnerAttention(on(engines));
+    expect(item.kind).toBe('noCliSignedIn');
+    expect(item.detail).toBe('Nothing can run on this machine until one is. Claude Code is installed here.');
+    // Nothing to sign in where no login CLI is installed at all.
+    expect(kinds(on([engine('opencode', 'unknown'), engine('claude', 'no', false)]))).toEqual([]);
+  });
+
+  it('is one item in place of every signed-out login, however many workspaces run on them', () => {
+    const input = on(
+      [engine('claude', 'no'), engine('codex', 'no')],
+      [workspace('app', 'claude'), workspace('tools', 'codex'), workspace('docs', 'claude', 'claude')],
+    );
+    expect(kinds(input)).toEqual(['noCliSignedIn']);
+    expect(runnerAttention(input)[0].params).toEqual({ engines: ['claude', 'codex'] });
+  });
+
+  it('is not raised once one CLI is signed in, or while one’s sign-in is unknown', () => {
+    expect(kinds(on([engine('claude', 'no'), engine('codex', 'yes')]))).toEqual([]);
+    expect(kinds(on([engine('claude', 'no'), engine('codex', 'unknown')]))).toEqual([]);
+    // Signed in: the rule before it, a signed-out login raised only for the workspaces on it.
+    const used = on([engine('claude', 'no'), engine('codex', 'yes')], [workspace('app', 'claude')]);
+    expect(kinds(used)).toEqual(['engineSignedOut']);
+    expect(runnerAttention(used)[0].detail).toBe(
+      'app runs on this machine’s Claude login — its sessions fail until you sign in again.',
+    );
+  });
+
+  it('is not raised where a workspace runs on a key or a pool, which needs no sign-in: the rule before it holds', () => {
+    const engines = [engine('claude', 'no'), engine('codex', 'no')];
+    for (const provider of ['deepseek', 'anthropic-2', 'local-vllm', 'dsh', 'opencode']) {
+      expect(kinds(on(engines, [workspace('orbit', provider)])), provider).toEqual([]);
+      expect(noCliSignedIn({ engines }, [workspace('orbit', provider)]), provider).toBeNull();
+    }
+    // Beside one on a key, a workspace on a signed-out login is still told.
+    const mixed = on(engines, [workspace('orbit', 'deepseek', 'claude'), workspace('app', 'claude')]);
+    expect(runnerAttention(mixed).map((item) => item.short)).toEqual(['Claude signed out']);
+  });
+
+  it('counts a workspace that has not run yet, or runs on a login’s own sign-in, as no key', () => {
+    const engines = [engine('claude', 'no')];
+    for (const provider of [null, '', '  ', 'claude', 'codex', 'kimi', 'antigravity', 'cursor']) {
+      expect(noCliSignedIn({ engines }, [workspace('app', provider)]), String(provider)).toEqual(['claude']);
+    }
+    expect(noCliSignedIn({ engines }, [{ id: 'ws-old', name: 'old' }])).toEqual(['claude']);
+  });
+
+  it('says only offline while the machine is offline: its sign-ins are as old as its last heartbeat', () => {
+    const offline = { ...austin, runner: { ...austin.runner, online: false } } as RunnerAttentionInput;
+    expect(kinds(offline)).toEqual(['offline']);
+  });
+
+  it('answers nothing for a runner that reports no engines', () => {
+    expect(noCliSignedIn({ engines: undefined }, [])).toBeNull();
+    expect(noCliSignedIn({ engines: [] }, [])).toBeNull();
   });
 });
 
@@ -444,6 +572,12 @@ describe('runnerCopy', () => {
     expect(copy.runnerNamesMore('orbit', 2)).toBe('orbit and 2 more');
     expect(copy.attentionOfflineFor(14, copy.RUNNER_UNIT_DAYS)).toBe('Offline for 14 days');
     expect(copy.attentionOfflineSessionsWait(3)).toBe('Its 3 sessions wait until it checks in again.');
+    expect(copy.attentionNoCliSignedInDetail('Claude Code')).toBe(
+      'Nothing can run on this machine until one is. Claude Code is installed here.',
+    );
+    expect(copy.attentionNoCliSignedInDetailMany('Claude Code and Codex')).toBe(
+      'Nothing can run on this machine until one is. Claude Code and Codex are installed here.',
+    );
     expect(copy.attentionSignedOutShort('Claude')).toBe('Claude signed out');
     expect(copy.attentionSignedOutTitle('Claude')).toBe('Claude is signed out');
     expect(copy.attentionSignedOutDetail('wikova-develop', 'Claude')).toBe(
@@ -508,6 +642,9 @@ describe('runnerCopy', () => {
       'Remove Runner',
       'Add Runner',
     ]);
+    // docs/mocks/first-workspace-in-conversation, 02: the card a machine with no CLI signed in shows.
+    expect(copy.ATTENTION_NO_CLI_SIGNED_IN).toBe('No coding CLI is signed in');
+    expect(copy.ATTENTION_NO_CLI_SIGNED_IN_SHORT).toBe('No coding CLI signed in');
     expect(copy.RUNNER_VERSION_LATEST).toBe('Latest');
     expect(copy.RUNNER_VERSION_INSTALLS_WHEN_IDLE).toBe('installs when no turn is running');
     expect(copy.RUNNER_ROOT_NO_BYPASS).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
