@@ -80,10 +80,14 @@ class SessionLandingsCopyParityTest {
     }
 
     /** The window files a landing where the Swift does: the session list's own day sections, oldest first and oldest row first, a
-     *  merge joined with its round's session by `landingSessionId`, `Now` in the order it started — and the row is no row for a
-     *  project that never had a landing, marked by the most urgent one. */
+     *  merge joined with its round's session by `landingSessionId`, both ids read in one spelling first (the record's comes as a UUID,
+     *  the session's as base62) and a round whose session the read did not list naming it the app's way, `Now` in the order it
+     *  started — and the row is no row for a project that never had a landing, marked by the most urgent one. */
     @Test fun theWindowFilesWhatTheSwiftFiles() {
-        swiftSays("""if let id = record.landingSessionId, !id.isEmpty, bySession[id] == nil { bySession[id] = record }""",
+        swiftSays("""guard let id = record.landingSessionId, !id.isEmpty else { continue }""",
+            """let key = PublicID.storageKey(id)""",
+            """if bySession[key] == nil { bySession[key] = record }""",
+            """let session = record.landingSessionId.flatMap { $0.isEmpty ? nil : PublicID.toPublic($0) }""",
             """$0.row.at != $1.row.at ? $0.row.at < $1.row.at : $0.row.key > $1.row.key""",
             """let days = buckets.enumerated().reversed().compactMap { index, rows in""",
             """cards.sort { $0.at != $1.at ? $0.at < $1.at : $0.sessionId < $1.sessionId }""",

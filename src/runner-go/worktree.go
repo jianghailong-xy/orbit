@@ -1807,7 +1807,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		}
 		// Push the rebased commits, fast-forwarding origin/<target> (target == origin/<target> after
 		// the reconcile, so origin is an ancestor of the rebased tip unless it just moved).
-		out, err := git(tmp, "push", "origin", "HEAD:refs/heads/"+target)
+		out, err := pushMergeResult(tmp, target)
 		if err == nil {
 			pushed = true
 			break
@@ -1889,6 +1889,12 @@ func namePaths(paths []string) string {
 	return out
 }
 
+// pushMergeResult is rebaseFastForward's push: the replayed commits checked out in the staging checkout
+// tmp, onto origin's target. It answers git's stdout with the error, which carries what git wrote to stderr.
+func pushMergeResult(tmp, target string) (string, error) {
+	return networkGit(tmp, networkGitTimeout, "push", "origin", "HEAD:refs/heads/"+target)
+}
+
 // mergePushAttempts bounds how many times a merge re-syncs and re-pushes when a concurrent push to
 // origin keeps beating ours — enough to absorb a racing writer, not an infinite loop.
 const mergePushAttempts = 3
@@ -1935,8 +1941,13 @@ func fetchOriginTarget(repoRoot, target string) (hasOrigin, fetched bool) {
 	if _, err := git(repoRoot, "remote", "get-url", "origin"); err != nil {
 		return false, false
 	}
-	_, err := git(repoRoot, "fetch", "origin", target)
-	return true, err == nil
+	return true, fetchOriginBranch(repoRoot, target) == nil
+}
+
+// fetchOriginBranch is fetchOriginTarget's fetch of origin's target.
+func fetchOriginBranch(repoRoot, target string) error {
+	_, err := networkGit(repoRoot, networkGitTimeout, "fetch", "origin", target)
+	return err
 }
 
 // reconcileFetchedTarget is reconcileTargetWithOrigin once origin/<target> has been fetched.

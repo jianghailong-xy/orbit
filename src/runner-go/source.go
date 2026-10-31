@@ -206,7 +206,7 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 	// its lock to one of them is retried the way an integration job's fetch retries it.
 	pinRef := sourcePinRefName(job.SessionID)
 	defer func() { _, _ = git(dir, "update-ref", "-d", pinRef) }()
-	if err := fetchRetryingRefLock(dir, "--no-tags", remote, "+"+src.Ref+":"+pinRef); err != nil {
+	if err := fetchSourcePin(dir, remote, src.Ref, pinRef); err != nil {
 		// One fetch failure, two possible meanings, and the codes have to stay apart because the
 		// answers differ: "I could not ask" is retryable and "that ref is not there" is a
 		// configuration error that will fail identically forever (§10.2). git says which by
@@ -235,6 +235,11 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 		}
 	}
 	return strings.ToLower(out), nil
+}
+
+// fetchSourcePin is resolveSourceSha's fetch: ref, from remote, into the session's own pinRef.
+func fetchSourcePin(dir, remote, ref, pinRef string) error {
+	return fetchRetryingRefLock(dir, "--no-tags", remote, "+"+ref+":"+pinRef)
 }
 
 // sourcePinRefName is the ref one session's resolution fetches into: the session's own, so no other
