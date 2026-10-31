@@ -31,6 +31,9 @@ be taken for a deployment's.
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 | `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
 | `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, an apiserver killed and started again, and a gateway started before any apiserver (502 until its next look-up, 10 s later). A Compose project of its own, removed at the end; no staging stack needed. |
+| `gateway-limit.sh` | The link gateway alone, level after level: one real gateway built from the checkout (TLS, MODE_LINK, a real NATS) against the stub backend ([src/link-gateway/cmd/linkstub](../../src/link-gateway/cmd/linkstub/README.md)) instead of apiservers and a database, loaded by loadgen shards from several source addresses. No staging stack needed. See [The gateway alone](#the-gateway-alone). |
+| `gateway-limit-report.mjs` | A `gateway-limit.sh` run's report, level by level (`report.md`, `report.json`). `gateway-limit-report.test.mjs` tests it on a synthetic run: `node --test scripts/runner-link/`. |
+| `gateway-limit-probe.go` | The runtime probe `gateway-limit.sh` adds to the gateway's binary at build time (`go build -overlay`): goroutines, GC pauses and heap from `runtime/metrics`, on a loopback port. Outside every Go module: nothing else compiles it. |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -693,3 +696,219 @@ scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --
   measurement.
 - **The second run is not the pass/fail run.** It carries the cell's live load (500 watched sessions, 20 deltas a second
   each), and is reported apart from the 1-hour run that decides the criterion.
+
+## The gateway alone
+
+What one link gateway on one machine carries is measured with `gateway-limit.sh`, not with the staging stack. At the
+loads in question the stack's database and apiservers saturate long before its gateway: at 100,000 connections the
+cell's per-operation costs would need about 51 database cores and 20 apiserver processes. So nothing of the stack runs
+but the gateway itself and NATS:
+
+- **The gateway** is built from the checkout under test and runs as a deployment's does: TLS from files (an ECDSA P-256
+  certificate from a CA the run makes), `LINK_MODE=link`, a real NATS (`docker-compose.yml`'s image and
+  `src/link-gateway/nats.conf`), the load test's logging and per-address settings (`staging.loadgen.compose.yml`), and
+  `GODEBUG=gctrace=1`, which writes a line for each GC cycle to its log. It runs in a transient scope of its own
+  (`systemd-run`) whose cgroup holds its CPU and memory allowance (`--gateway-cpus`, `--gateway-memory`; no swap). Its
+  runtime takes GOMAXPROCS from that CPU allowance. It runs on from level to level.
+- **The stub backend** ([src/link-gateway/cmd/linkstub](../../src/link-gateway/cmd/linkstub/README.md)) answers
+  everything the gateway calls, and the loadgen's link token requests, after a fixed delay (`--stub-delay`, 5 ms):
+  - the revocation list and the switch read;
+  - the welcome route, heartbeats, event batches alone and merged, and any tunnelled request;
+  - link tokens, signed with a key made for the run, which the gateway trusts.
+
+  `--stubs` processes run side by side, one per backend address in `LINK_INTERNAL_API_URLS`. The default 4 is a cell's
+  apiservers, which also sets how many merged event calls the gateway keeps out (4 per backend).
+- **The fleet** has no database. `linkstub fleet` draws runner, owner, session and process ids from a seed, in the
+  cell's shape: 1.5 runners an owner, 4 open sessions and 0.5 running. Its runner tokens name the runner and owner to
+  the stub.
+- **The loadgen** runs as `--shards` processes, each playing every n-th runner of the fleet's first `<level>` (`-shard
+  i/n`). Each opens its runners' connections from every address in `--sources`, in turn (`-source`). Each shard runs in
+  a scope of its own.
+
+```bash
+# HPC, the small-scale check (at most 3,000 connections there):
+scripts/runner-link/gateway-limit.sh --name hpc-3k --levels 1500,3000 --ramp 60s --settle 60s --steady 5m \
+  --gateway-cpus 4 --gateway-memory 4G --gateway-cpuset 0-7 --shards 2 --sources 127.0.0.2,127.0.0.3 -- -volatile
+# A machine of its own, to the limit (after the kernel settings below), the gateway's cores apart from the rig's:
+scripts/runner-link/gateway-limit.sh --name limit-1 --levels 15000,30000,45000,65000 --ramp 5m --settle 2m --steady 10m \
+  --gateway-cpus 8 --gateway-memory 32G --gateway-cpuset 0-15 --rig-cpuset 16-55 --shards 4 \
+  --sources 127.0.0.2,127.0.0.3,127.0.0.4 -- -volatile
+```
+
+Each level plays the fleet's first `<level>` runners at the cell's traffic per connection:
+
+- a heartbeat every 30 s, the gateway's Welcome interval;
+- `--events-per-connection` durable events a second (0.1333: 2,000 over 15,000), from the running sessions, a third
+  of the runners at 0.4 a second each;
+- `-volatile` after `--`, so that the reports that move in production move.
+
+The level's `--ramp` time sets `-ramp-rate`. The gateway takes 200 handshakes a second (`LINK_HANDSHAKE_RATE`): a ramp
+faster than that is refused in part, unless `--gateway-env LINK_HANDSHAKE_RATE=<n>` raises it. `gateway-limit.sh --help`
+lists every option.
+
+**What each level records** (`report.md`, `report.json`, over the level's steady window):
+
+- **The gateway**: CPU from its cgroup (mean, the highest 10 s, throttling, CPU pressure); memory from its cgroup (and
+  its anonymous memory and socket buffers) and its RSS; goroutines; GC cycles and their stop-the-world pauses (from
+  gctrace, and from the probe's histogram); open file descriptors; its connections by the address they came from (ss);
+  handshake latency (its own histogram, from the upgrade request to Welcome, and the loadgen's dial to Welcome); its
+  counters (handshakes, refusals, disconnects, backend calls and retries, write queues full) and its forwarding
+  latencies.
+- **The runners**, the shards added up: heartbeats and events acknowledged a second; HeartbeatAck and EventAck latency
+  from their histograms added up bucket by bucket (`-histograms`); errors and refusals by kind; whether every heartbeat
+  and every event was answered (over the whole level: sent equals acknowledged, and nothing unacknowledged at the end).
+- **The kernel**: ListenOverflows and ListenDrops, conntrack entries against `nf_conntrack_max` and its drops, TCP
+  sockets in use and in TIME_WAIT, socket memory against `tcp_mem`, NET_RX and NET_TX softirqs a second, the host's
+  softirq cores, and softnet drops.
+- **The host and the rig**: the host's busy cores, load, available memory and swap; the CPU, memory and CPU pressure of
+  the loadgen shards, the stubs and NATS, each from its own cgroup; and what the stubs say of themselves
+  (`GET /stub/stats`: their CPU, each route's calls and how long each took, with the delay and without).
+
+`report.md` compares each level with C2b's single gateway at 15,000 connections (task 34m88i6i8CQeU4dSuw7HM):
+
+- **CPU: 0.053 cores per 1,000 connections**, the 0.801 cores of C2b's first run (c2b-full-1h, evidence 15). Its rerun
+  took 0.791 (c2b-full-1h-r2, evidence 25).
+- **Memory: 157 KiB a connection**, the 2,298 MiB of that rerun over a full hour (evidence 25). The rerun's live run,
+  on the same gateway process about 2.3 hours old, peaked at 2,305 MiB (c2b-live-1h-r2, evidence 28). The first run's
+  3,556 MiB (243 KiB a connection) is the outlier, and nothing measured why. One candidate, unverified: it ran before
+  the keep-alive fix (f6a150f07), when the gateway reopened the backend connections Node closed every 5 s.
+
+It gives each figure as measured (the same way as C2b's) and above the idle gateway, measured for `--gap` before the
+first level.
+
+**Telling a limit of the rig from one of the gateway.** Every level's report ends with a check:
+
+- The stubs keep up while they answer within their delay (p99 within 10% and 1 ms of it) and their own work, from a
+  call's arrival to its answer being ready, stays below it. The gateway's own backend call latency shows the same thing
+  from its side.
+- The shards keep up while they wait for a CPU less than 10% of the time (their cgroup's CPU pressure).
+- The EventAck the runners wait for is compared with the one the gateway measured, from a batch's arrival to its
+  EventAck. The difference is the network and the shards' own loop.
+- The host's figures say what else ran. Before calling a limit the gateway's, `--rig-cpuset` gives the rig cores of
+  its own, and the gateway's CPU pressure and throttling say whether it waited for a CPU or used its whole allowance.
+
+**The binary under test.** The gateway runs the product code as it is. `/metrics` has no Go runtime figures, so
+`gateway-limit.sh` adds one file to the gateway's package at build time, for this binary alone: `gateway-limit-probe.go`
+(`go build -overlay`). It serves goroutines, GC pauses and heap, read from `runtime/metrics` alone (no
+`ReadMemStats` and no goroutine profile, which stop the world), on a loopback port, when the harness scrapes it every
+15 s. It lives outside every Go module, so CI, `go vet` and the product's Dockerfile never compile it. `run.json` and
+the report name the commit and the file's sha256. `--no-probe` builds the gateway without it: no goroutine count, and
+GC pauses from gctrace alone.
+
+**On HPC** (the task's rules): at most 3,000 connections; one load-test stack at a time, so the run holds
+`/var/tmp/orbit-loadgen.lock` from start to end and waits for it; it starts only with `GATEWAY_LIMIT_MIN_AVAILABLE_MB`
+(4096) of memory available, stops when the host stays below that for 15 s, and tears everything down as soon as it
+ends, however it ends.
+
+### What each level needs of the kernel
+
+Everything runs on one host, over the loopback interface: every connection takes a socket at both ends, and
+`127.0.0.0/8` gives as many source addresses as are needed without configuring any.
+
+- **Source addresses.** All connections go to the gateway's one address, so each source address has at most one
+  connection per ephemeral port (`net.ipv4.ip_local_port_range`, 32768–60999 by default: 28,232 ports). The harness
+  refuses a level that would take a source address past 90% of them. Renewals and TIME_WAIT need the rest. Widen the
+  range, or add addresses.
+- **File descriptors.** One per connection in the gateway and in its shard, and a few hundred more. The harness raises
+  each process's limit to `min(fs.nr_open, 1048576)`.
+- **conntrack.** With `nf_conntrack` loaded (Docker loads it), each connection is one entry, and each closed one stays
+  for `nf_conntrack_tcp_timeout_time_wait` (120 s). A full table drops new connections ("nf_conntrack: table full,
+  dropping packet" in `dmesg`; `drop` in the report). Keep `net.netfilter.nf_conntrack_max` at least 1.2 times the
+  level plus what the host already tracks (the harness warns otherwise), and `nf_conntrack_buckets` at a quarter of it.
+- **The listen backlog.** Go listens with `net.core.somaxconn` (4096 by default), enough for a ramp of hundreds a
+  second. ListenOverflows says when it is not, as after a gateway restart, when every runner comes back at once. Raise
+  `somaxconn` and `net.ipv4.tcp_max_syn_backlog` together.
+- **Socket memory.** Both ends' buffers count against `net.ipv4.tcp_mem` (pages; past its second value TCP is under
+  pressure and trims buffers). The report gives the most used against that value.
+- **Softirqs.** Loopback traffic is received through each CPU's backlog (`net.core.netdev_max_backlog`, 1000). Raise
+  it if `softnet dropped` grows.
+- **Memory.** About 157 KiB a connection for the gateway (C2b's rerun), and about 94 KiB a runner for the loadgen
+  (C2b's 1,371 MiB at 15,000). C2b's first run reached 243 KiB a connection for reasons nothing measured: leave the
+  gateway's allowance room for that until a level held for an hour here says otherwise.
+
+| Level | Source addresses (default ports / 1024–65535) | `nf_conntrack_max` at least | Shards (about 20,000 runners each) | Gateway memory | Loadgen memory |
+| --- | --- | --- | --- | --- | --- |
+| 3,000 | 1 / 1 (2 for the check: each is exercised) | the default 262,144 | 2 | 0.5 GB | 0.3 GB |
+| 15,000 | 1 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
+| 30,000 | 2 / 1 | 262,144 | 2 | 4.7 GB | 2.8 GB |
+| 65,000 | 3 / 2 | 262,144 | 4 | 10 GB | 6 GB |
+| 100,000 | 4 / 2 | 262,144 | 5 | 16 GB | 9.4 GB |
+| 150,000 | 6 / 3 | 262,144 | 8 | 24 GB | 14 GB |
+
+```bash
+# For 65,000 connections and more, on a machine of its own, with room to spare beyond the table's:
+sysctl -w net.ipv4.ip_local_port_range="1024 65535"     # or pass more --sources
+sysctl -w net.netfilter.nf_conntrack_max=524288
+echo 131072 > /sys/module/nf_conntrack/parameters/hashsize
+sysctl -w net.core.somaxconn=65535 net.ipv4.tcp_max_syn_backlog=65535 net.core.netdev_max_backlog=16384
+```
+
+A widened port range covers the harness's own ports (`GATEWAY_LIMIT_PORT_BASE`, 62400 and on). Each is listened on
+before any load starts, so no outgoing connection can take one; a host's other services may lose theirs. `run.json`
+keeps every setting above as the run found it.
+
+### On HPC, 2026-10-31
+
+Every run at commit 27a9028b2 (`gateway-limit-probe.go` sha256 `8ef4b3f3…f7a67`) held the load-test lock. Each had
+3,000 connections from 2 shards, 1,500 from each of 127.0.0.2 and 127.0.0.3 (the gateway's own count, `ss`), and played
+`-volatile` at 100 heartbeats and 400 events a second. Each held a 5-minute steady window after a 60 s ramp and a 60 s
+settle, with 4 stubs at 5 ms and a 4G memory allowance:
+
+```bash
+scripts/runner-link/gateway-limit.sh --name hpc-3k-probe --levels 3000 --ramp 60s --settle 60s --steady 5m \
+  --gateway-cpus 4 --gateway-memory 4G --gateway-cpuset 0-7 --shards 2 --sources 127.0.0.2,127.0.0.3 --stubs 4 -- -volatile
+```
+
+| Run | Gateway CPUs | GOMAXPROCS | Cores mean / peak 10 s | Per 1,000 connections | Memory (cgroup) | A connection | Goroutines a connection | GC pause p50 / p99 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A, with the probe | 4 cores, the P-cores (0–7) | 4 | 0.047 / 0.101 | 0.0157 | 455 MiB | 155.5 KiB | 4.03 | 1.2 / 6.9 ms |
+| B, without it | the same | 4 | 0.038 / 0.053 | 0.0126 | 455 MiB | 155.3 KiB | — | 0.085 / 5.9 ms |
+| C, unconstrained | no limit, any CPU | 24 | 0.139 / 0.213 | 0.0462 | 463 MiB | 157.9 KiB | 4.03 | 0.087 / 0.76 ms |
+| D, any core | 4 cores, any CPU | 4 | 0.096 / 0.175 | 0.0319 | 455 MiB | 155.2 KiB | 4.03 | 0.052 / 0.11 ms |
+
+- **Every run was clean.** 0 errors and 0 refusals. Every heartbeat and every event was answered: in A, 42,185 and
+  156,453, none left unacknowledged. HeartbeatAck p99 was 6.7–8.8 ms and EventAck p99 107–108 ms, the 100 ms merge
+  window and the stub's 5 ms. Dial to Welcome p99 was 11–14 ms; the gateway's handshake averaged 5.6–5.9 ms, the welcome
+  route's 5 ms included. The kernel had no listen overflows or conntrack drops, at most 4,963 tracked entries, and at
+  most 9.1 MiB of TCP socket memory.
+- **The rig was not the limit.** The loadgen shards took 0.07–0.13 cores and 282–284 MiB, and waited for a CPU at most 0.3%
+  of the time. The stubs took 0.027–0.053 cores and 36–41 MiB, and answered p99 at 6.0–6.1 ms against their 5 ms delay;
+  their own work p99 was at most 2.1 ms, the merged calls'. NATS took at most 0.001 cores. Neither is pinned, so their
+  CPU time varies with the cores they land on, up to twice from run to run. Per runner, the loadgen costs about what it
+  cost in C2b: 0.022–0.044 cores per 1,000 runners and 97 KiB each, against 0.029 and 94 KiB.
+- **The probe costs nothing measurable.** A and B's memory was the same to 0.1%. The probe's own CPU, measured on the
+  probe-built gateway idle and then read 3,000 times, is 19.2 µs a read. At one read every 15 s that is 1.3 millionths
+  of a core, 0.003% of the gateway's. A's 0.009 more cores came with a busier host: its stop-the-world pauses had p50
+  1.2 ms against B's 0.085 ms, and its cgroup's CPU pressure was 1.9% against 1.5%.
+- **The host was shared.** Other work took 9–12 of its 24 cores and swapped 450–1,760 pages a second.
+  - The memory guard stopped six attempts. Each started again from scratch once the host had held 5.6 GB for 90 s. The
+    last stop came after D's steady window and drain had ended (both shards exited 0), so D's figures stand.
+  - D ran with this README uncommitted; its binaries were the commit's.
+  - Pinned to the P-cores, which other work also used, the GC's sweep termination waited up to 6.9 ms for a CPU. On
+    any core its pauses stayed under 1 ms.
+
+**Against C2b's single gateway** (0.053 cores per 1,000 connections, and 157 KiB a connection from its rerun):
+
+- **CPU, −71% in A and −76% in B, is where the gateway runs and how many Ps its runtime has.** HPC has 8 P-cores and 16
+  slower E-cores. C2b's gateway container had no CPU limit on 56 vCPUs, so its runtime ran with GOMAXPROCS 56.
+  - On the P-cores alone with GOMAXPROCS 4 (A, B): 0.0126–0.0157 cores per 1,000 connections.
+  - The same 4-core quota on any core (D): 0.0319, 2 to 2.5 times that.
+  - No limit on any core, GOMAXPROCS 24 (C, as C2b ran): 0.0462, 1.45 times D, and within 14% of C2b.
+  - A and B are within 6% and 24% of the per-operation costs task O3 measured on HPC's P-cores behind the real stack. At
+    this traffic per connection those come to 0.0166 cores per 1,000 (0.31 ms a beat, 0.045 ms an event, 1.05 ms a
+    connect).
+
+  So the stub does not change what the gateway spends per connection; its cores and GOMAXPROCS do, by up to 3.7 times.
+  The limit task states its cpuset and GOMAXPROCS, and keeps the gateway's cores apart from the rig's.
+- **Memory matches C2b's rerun, within 1%.** The gateway took 155–158 KiB a connection here, against 157 KiB in C2b's rerun.
+  That rerun held 15,000 connections for a full hour (c2b-full-1h-r2: 2,298 MiB). Its live run, on the same process
+  about 2.3 hours old, peaked at 2,305 MiB (c2b-live-1h-r2).
+  - C2b's first run peaked at 3,556 MiB, 243 KiB a connection, and nothing measured why. One candidate, unverified: it
+    ran before the keep-alive fix (f6a150f07), when the gateway reopened the backend connections Node closed every 5 s.
+  - Both runs of that commit that ran an hour were as high: c2b-full-1h at 3,556 MiB and c2b-live-1h at 3,523 MiB.
+    Its reconnect run, with the gateway restarted every 10 minutes, peaked at 2,292 MiB.
+- **Open: whether the growth seen here levels off.** Over each 5-minute window the gateway here grew 6.5–7 MiB at
+  3,000 connections. Taken as a steady rate and scaled to 15,000 connections, that would add about 0.9 GiB over 2.3
+  hours. C2b's rerun process peaked at 2,298 MiB in its first hour and at 2,305 MiB about 2.3 hours in, so it is not a
+  steady rate at that scale. Whether it levels off at 3,000 connections only a longer run can say; the limit task holds
+  a level for an hour.

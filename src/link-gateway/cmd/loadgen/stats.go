@@ -102,6 +102,26 @@ func (h *hist) summary() histSummary {
 	return s
 }
 
+// histDump is a histogram whole, as histograms.json states it: bucket i counts the durations below Base^(i+1)
+// microseconds, and only the non-empty buckets are listed, as [i, count].
+type histDump struct {
+	Base       float64     `json:"base"`
+	Count      uint64      `json:"count"`
+	SumSeconds float64     `json:"sumSeconds"`
+	MaxMs      float64     `json:"maxMs"`
+	Buckets    [][2]uint64 `json:"buckets"`
+}
+
+func (h *hist) dump() histDump {
+	d := histDump{Base: histBase, Count: h.total, SumSeconds: h.sum, MaxMs: ms(h.max), Buckets: [][2]uint64{}}
+	for i, c := range h.counts {
+		if c > 0 {
+			d.Buckets = append(d.Buckets, [2]uint64{uint64(i), c})
+		}
+	}
+	return d
+}
+
 // counters are what one interval, the steady window or the whole run counts.
 type counters struct {
 	Connects       int64 `json:"connects"`
