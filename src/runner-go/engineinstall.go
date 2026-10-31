@@ -15,9 +15,10 @@ import (
 // session actually needs it, rather than at `orbit register`, where we don't yet know
 // which engines this machine's agents will use.
 //
-// The consent for it is collected once, at register time (RunnerConfig.AutoInstallEngines),
+// The consent for it is recorded at register time (RunnerConfig.AutoInstallEngines),
 // because this runs unattended — there is nobody at a terminal to approve `npm i -g` or
-// `curl | bash` at the moment a session claims the runner.
+// `curl | bash` at the moment a session claims the runner. A new registration turns
+// it on by default; --no-auto-install-engines turns it off.
 
 // An install is a network fetch plus a package manager; generous, but bounded so a wedged
 // installer can't hold a session's first turn open indefinitely.

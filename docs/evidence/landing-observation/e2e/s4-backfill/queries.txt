@@ -1,0 +1,1356 @@
+
+### S4 phase A (0.1.239, before the deploy) — codebase  (2026-10-29T01:56:19.493Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2')
+
+       canonical_repo_url        |       integration_ref        |         upstream_ref         | remote_name |   integration_started_at   | merge_check_command 
+---------------------------------+------------------------------+------------------------------+-------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/b/origin/s4 | refs/heads/feature/release-2 | refs/heads/feature/release-2 | origin      | 2026-10-29 01:53:43.758+00 | test -f README.md
+(1 row)
+
+
+### S4 phase A (0.1.239, before the deploy) — tasks  (2026-10-29T01:56:19.542Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by t.created_at
+
+-[ RECORD 1 ]----+---------------------------------------------------
+title            | S4-T1: the API endpoint
+status           | DONE
+auto_run         | f
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.334
+-[ RECORD 2 ]----+---------------------------------------------------
+title            | S4-T2: the storage layer
+status           | DONE
+auto_run         | f
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.349
+-[ RECORD 3 ]----+---------------------------------------------------
+title            | S4-T3: the settings page (records its own receipt)
+status           | DONE
+auto_run         | f
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.365
+-[ RECORD 4 ]----+---------------------------------------------------
+title            | S4-T4: the migration (also publishes its branch)
+status           | DONE
+auto_run         | f
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.379
+-[ RECORD 5 ]----+---------------------------------------------------
+title            | S4-T5: the release notes (needs T1 and T2)
+status           | OPEN
+auto_run         | t
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.389
+-[ RECORD 6 ]----+---------------------------------------------------
+title            | S4-T6: the settings tests (needs T3)
+status           | DONE
+auto_run         | t
+dispatch_refusal | 
+created_at       | 2026-10-29 01:53:43.402
+
+
+### S4 phase A (0.1.239, before the deploy) — sessions  (2026-10-29T01:56:19.592Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S4-T1: the API endpoint
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t1-the-api-endpoint-da0729
+base_sha        | 1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0
+branch_sha      | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+created_at      | 2026-10-29 01:53:43.501
+finished_at     | 2026-10-29 01:54:10.385
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S4-T2: the storage layer
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t2-the-storage-layer-d87d4d
+base_sha        | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+branch_sha      | 526a6a429a2633e4ada8851c028b3ad0a526543f
+created_at      | 2026-10-29 01:53:45.564
+finished_at     | 2026-10-29 01:54:10.359
+-[ RECORD 3 ]---+------------------------------------------------------
+task            | S4-T3: the settings page (records its own receipt)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t3-the-settings-page-records-its-f13991
+base_sha        | 526a6a429a2633e4ada8851c028b3ad0a526543f
+branch_sha      | a10bd145ecfaaaea90648775e499b02d9758f2fb
+created_at      | 2026-10-29 01:53:47.617
+finished_at     | 2026-10-29 01:54:10.528
+-[ RECORD 4 ]---+------------------------------------------------------
+task            | S4-T6: the settings tests (needs T3)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+base_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+branch_sha      | 8b63825e1daf024db919e3d56144842308ddb446
+created_at      | 2026-10-29 01:53:47.936
+finished_at     | 2026-10-29 01:54:10.407
+-[ RECORD 5 ]---+------------------------------------------------------
+task            | S4-T4: the migration (also publishes its branch)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+base_sha        | 8b63825e1daf024db919e3d56144842308ddb446
+branch_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+created_at      | 2026-10-29 01:53:49.667
+finished_at     | 2026-10-29 01:54:10.748
+
+
+### S4 phase A (0.1.239, before the deploy) — jobs  (2026-10-29T01:56:19.644Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by j.created_at
+
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T1: the API endpoint
+source_ref        | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:12.563+00
+finished_at       | 2026-10-29 01:54:12.675+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ff5d5dda-ef48-4e5b-a030-3e80fd3922fa:1
+-[ RECORD 2 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T2: the storage layer
+source_ref        | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:42.553+00
+finished_at       | 2026-10-29 01:54:42.608+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:8b1413c2-67bf-4cd9-987d-47404d863944:1
+-[ RECORD 3 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T3: the settings page (records its own receipt)
+source_ref        | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:12.555+00
+finished_at       | 2026-10-29 01:55:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:b47a1843-b58b-47f9-895c-030e2270a939:1
+-[ RECORD 4 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T6: the settings tests (needs T3)
+source_ref        | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:42.551+00
+finished_at       | 2026-10-29 01:55:42.611+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:d61abeef-4f0c-4403-97e7-78100fc4d7c0:1
+-[ RECORD 5 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ALREADY_LANDED
+phase             | MERGE
+task              | S4-T4: the migration (also publishes its branch)
+source_ref        | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha        | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+error_code        | 
+error_detail      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:56:12.553+00
+finished_at       | 2026-10-29 01:56:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:2beec637-796f-4aa4-be44-23db695799c0:1
+
+
+### S4 phase A (0.1.239, before the deploy) — receipts  (2026-10-29T01:56:19.693Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by r.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------
+task              | S4-T3: the settings page (records its own receipt)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+target_branch     | feature/release-2
+target_sha_before | 
+target_sha_after  | 
+recorded_by       | AGENT
+detail            | {"message": "pushed straight to the line by the agent"}
+created_at        | 2026-10-29 01:53:47.784
+
+
+### S4 phase A (0.1.239, before the deploy) — promotions  (2026-10-29T01:56:19.743Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by p.created_at
+
+-[ RECORD 1 ]--------+-----------------------------------------------------------------
+task                 | S4-T1: the API endpoint
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:43.76+00
+decided_at           | 2026-10-29 01:54:12.674+00
+-[ RECORD 2 ]--------+-----------------------------------------------------------------
+task                 | S4-T2: the storage layer
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:45.794+00
+decided_at           | 2026-10-29 01:54:42.608+00
+-[ RECORD 3 ]--------+-----------------------------------------------------------------
+task                 | S4-T3: the settings page (records its own receipt)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:47.895+00
+decided_at           | 2026-10-29 01:55:12.62+00
+-[ RECORD 4 ]--------+-----------------------------------------------------------------
+task                 | S4-T6: the settings tests (needs T3)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:48.185+00
+decided_at           | 2026-10-29 01:55:42.61+00
+-[ RECORD 5 ]--------+-----------------------------------------------------------------
+task                 | S4-T4: the migration (also publishes its branch)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ALREADY_LANDED
+source_ref           | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha           | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:49.904+00
+decided_at           | 2026-10-29 01:56:12.619+00
+
+
+### S4 phase A (0.1.239, before the deploy) — openItems  (2026-10-29T01:56:19.794Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by i.created_at
+
+-[ RECORD 1 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:afd48b0c-d711-4cff-a971-2e4a1eea769a
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}, "failureClass": "ERROR", "landingSessionId": "9400d8a4-5260-4b06-a9cf-6f67cd311f01"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:12.682+00
+resolved_at     | 2026-10-29 01:56:13.387+00
+-[ RECORD 2 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:1d37b76e-b3d3-47ff-999e-d2fc501f8345
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}, "failureClass": "ERROR", "landingSessionId": "f7375812-6991-4ab0-bd91-da5ea0ca1259"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:42.612+00
+resolved_at     | 2026-10-29 01:56:14.905+00
+-[ RECORD 3 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:8bca7d88-4851-40d2-b568-7fb9dea05d44
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}, "failureClass": "ERROR", "landingSessionId": "ffdac0e6-9d90-40b0-9ba3-e6eadb2cb3c1"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:12.626+00
+resolved_at     | 2026-10-29 01:56:16.405+00
+-[ RECORD 4 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:2ba488c1-7d80-4de1-bc59-8bbf6c3b79b5
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}, "failureClass": "ERROR", "landingSessionId": "b0736955-1b3c-4831-ad16-537ae48c23cf"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:42.615+00
+resolved_at     | 2026-10-29 01:56:17.916+00
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — codebase  (2026-10-29T01:56:22.487Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2')
+
+       canonical_repo_url        |       integration_ref        |         upstream_ref         | remote_name | delivery_mode | delivery_mode_chosen_at |   integration_started_at   | merge_check_command 
+---------------------------------+------------------------------+------------------------------+-------------+---------------+-------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/b/origin/s4 | refs/heads/feature/release-2 | refs/heads/feature/release-2 | origin      | PLATFORM      |                         | 2026-10-29 01:53:43.758+00 | test -f README.md
+(1 row)
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — tasks  (2026-10-29T01:56:22.535Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by t.created_at
+
+-[ RECORD 1 ]------+-----------------------------------------------------
+title              | S4-T1: the API endpoint
+status             | DONE
+auto_run           | f
+delivered_sha      | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+delivered_base_sha | 1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0
+delivered_branch   | orbit/task-s4-t1-the-api-endpoint-da0729
+delivered_at       | 2026-10-29 01:56:21.729+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.334
+-[ RECORD 2 ]------+-----------------------------------------------------
+title              | S4-T2: the storage layer
+status             | DONE
+auto_run           | f
+delivered_sha      | 526a6a429a2633e4ada8851c028b3ad0a526543f
+delivered_base_sha | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+delivered_branch   | orbit/task-s4-t2-the-storage-layer-d87d4d
+delivered_at       | 2026-10-29 01:56:21.744+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.349
+-[ RECORD 3 ]------+-----------------------------------------------------
+title              | S4-T3: the settings page (records its own receipt)
+status             | DONE
+auto_run           | f
+delivered_sha      | 
+delivered_base_sha | 
+delivered_branch   | 
+delivered_at       | 
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.365
+-[ RECORD 4 ]------+-----------------------------------------------------
+title              | S4-T4: the migration (also publishes its branch)
+status             | DONE
+auto_run           | f
+delivered_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+delivered_base_sha | 8b63825e1daf024db919e3d56144842308ddb446
+delivered_branch   | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+delivered_at       | 2026-10-29 01:56:21.752+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.379
+-[ RECORD 5 ]------+-----------------------------------------------------
+title              | S4-T5: the release notes (needs T1 and T2)
+status             | OPEN
+auto_run           | t
+delivered_sha      | 
+delivered_base_sha | 
+delivered_branch   | 
+delivered_at       | 
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.389
+-[ RECORD 6 ]------+-----------------------------------------------------
+title              | S4-T6: the settings tests (needs T3)
+status             | DONE
+auto_run           | t
+delivered_sha      | 8b63825e1daf024db919e3d56144842308ddb446
+delivered_base_sha | a10bd145ecfaaaea90648775e499b02d9758f2fb
+delivered_branch   | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+delivered_at       | 2026-10-29 01:56:21.757+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.402
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — sessions  (2026-10-29T01:56:22.587Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S4-T1: the API endpoint
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t1-the-api-endpoint-da0729
+base_sha        | 1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0
+branch_sha      | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+created_at      | 2026-10-29 01:53:43.501
+finished_at     | 2026-10-29 01:54:10.385
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S4-T2: the storage layer
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t2-the-storage-layer-d87d4d
+base_sha        | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+branch_sha      | 526a6a429a2633e4ada8851c028b3ad0a526543f
+created_at      | 2026-10-29 01:53:45.564
+finished_at     | 2026-10-29 01:54:10.359
+-[ RECORD 3 ]---+------------------------------------------------------
+task            | S4-T3: the settings page (records its own receipt)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t3-the-settings-page-records-its-f13991
+base_sha        | 526a6a429a2633e4ada8851c028b3ad0a526543f
+branch_sha      | a10bd145ecfaaaea90648775e499b02d9758f2fb
+created_at      | 2026-10-29 01:53:47.617
+finished_at     | 2026-10-29 01:54:10.528
+-[ RECORD 4 ]---+------------------------------------------------------
+task            | S4-T6: the settings tests (needs T3)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+base_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+branch_sha      | 8b63825e1daf024db919e3d56144842308ddb446
+created_at      | 2026-10-29 01:53:47.936
+finished_at     | 2026-10-29 01:54:10.407
+-[ RECORD 5 ]---+------------------------------------------------------
+task            | S4-T4: the migration (also publishes its branch)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+base_sha        | 8b63825e1daf024db919e3d56144842308ddb446
+branch_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+created_at      | 2026-10-29 01:53:49.667
+finished_at     | 2026-10-29 01:54:10.748
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — jobs  (2026-10-29T01:56:22.638Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by j.created_at
+
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T1: the API endpoint
+source_ref        | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:12.563+00
+finished_at       | 2026-10-29 01:54:12.675+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ff5d5dda-ef48-4e5b-a030-3e80fd3922fa:1
+-[ RECORD 2 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T2: the storage layer
+source_ref        | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:42.553+00
+finished_at       | 2026-10-29 01:54:42.608+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:8b1413c2-67bf-4cd9-987d-47404d863944:1
+-[ RECORD 3 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T3: the settings page (records its own receipt)
+source_ref        | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:12.555+00
+finished_at       | 2026-10-29 01:55:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:b47a1843-b58b-47f9-895c-030e2270a939:1
+-[ RECORD 4 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T6: the settings tests (needs T3)
+source_ref        | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:42.551+00
+finished_at       | 2026-10-29 01:55:42.611+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:d61abeef-4f0c-4403-97e7-78100fc4d7c0:1
+-[ RECORD 5 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ALREADY_LANDED
+phase             | MERGE
+task              | S4-T4: the migration (also publishes its branch)
+source_ref        | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha        | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:56:12.553+00
+finished_at       | 2026-10-29 01:56:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:2beec637-796f-4aa4-be44-23db695799c0:1
+-[ RECORD 6 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 1
+state             | QUEUED
+phase             | 
+task              | 
+source_ref        | refs/heads/feature/release-2
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 
+finished_at       | 
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a1855c-f10d-73a4-bb31-48db38b818ca:1
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — receipts  (2026-10-29T01:56:22.689Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by r.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------
+task              | S4-T3: the settings page (records its own receipt)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+target_branch     | feature/release-2
+target_sha_before | 
+target_sha_after  | 
+recorded_by       | AGENT
+detail            | {"message": "pushed straight to the line by the agent"}
+created_at        | 2026-10-29 01:53:47.784
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — promotions  (2026-10-29T01:56:22.737Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by p.created_at
+
+-[ RECORD 1 ]--------+-----------------------------------------------------------------
+task                 | S4-T1: the API endpoint
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:43.76+00
+decided_at           | 2026-10-29 01:54:12.674+00
+-[ RECORD 2 ]--------+-----------------------------------------------------------------
+task                 | S4-T2: the storage layer
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:45.794+00
+decided_at           | 2026-10-29 01:54:42.608+00
+-[ RECORD 3 ]--------+-----------------------------------------------------------------
+task                 | S4-T3: the settings page (records its own receipt)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:47.895+00
+decided_at           | 2026-10-29 01:55:12.62+00
+-[ RECORD 4 ]--------+-----------------------------------------------------------------
+task                 | S4-T6: the settings tests (needs T3)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:48.185+00
+decided_at           | 2026-10-29 01:55:42.61+00
+-[ RECORD 5 ]--------+-----------------------------------------------------------------
+task                 | S4-T4: the migration (also publishes its branch)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ALREADY_LANDED
+source_ref           | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha           | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:49.904+00
+decided_at           | 2026-10-29 01:56:12.619+00
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — observationEvents  (2026-10-29T01:56:22.786Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation |   kind   |                                                                            data                                                                             |                         text                          |         created_at         
+------------+----------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------+----------------------------
+          1 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "DEPLOY", "sourceRef": "refs/heads/feature/release-2", "targetRef": "refs/heads/feature/release-2", "generation": 1} | Queued to look for finished work on feature/release-2 | 2026-10-29 01:56:21.717+00
+(1 row)
+
+
+### S4 phase B (this branch's apiserver, the 0.1.239 runner still connected) — openItems  (2026-10-29T01:56:22.838Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by i.created_at
+
+-[ RECORD 1 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:afd48b0c-d711-4cff-a971-2e4a1eea769a
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}, "failureClass": "ERROR", "landingSessionId": "9400d8a4-5260-4b06-a9cf-6f67cd311f01"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:12.682+00
+resolved_at     | 2026-10-29 01:56:13.387+00
+-[ RECORD 2 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:1d37b76e-b3d3-47ff-999e-d2fc501f8345
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}, "failureClass": "ERROR", "landingSessionId": "f7375812-6991-4ab0-bd91-da5ea0ca1259"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:42.612+00
+resolved_at     | 2026-10-29 01:56:14.905+00
+-[ RECORD 3 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:8bca7d88-4851-40d2-b568-7fb9dea05d44
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}, "failureClass": "ERROR", "landingSessionId": "ffdac0e6-9d90-40b0-9ba3-e6eadb2cb3c1"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:12.626+00
+resolved_at     | 2026-10-29 01:56:16.405+00
+-[ RECORD 4 ]---+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:2ba488c1-7d80-4de1-bc59-8bbf6c3b79b5
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}, "failureClass": "ERROR", "landingSessionId": "b0736955-1b3c-4831-ad16-537ae48c23cf"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:42.615+00
+resolved_at     | 2026-10-29 01:56:17.916+00
+
+
+### S4 phase C (this branch's apiserver and runner) — codebase  (2026-10-29T02:01:27.283Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2')
+
+       canonical_repo_url        |       integration_ref        |         upstream_ref         | remote_name | delivery_mode | delivery_mode_chosen_at |   integration_started_at   | merge_check_command 
+---------------------------------+------------------------------+------------------------------+-------------+---------------+-------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/b/origin/s4 | refs/heads/feature/release-2 | refs/heads/feature/release-2 | origin      | PLATFORM      |                         | 2026-10-29 01:53:43.758+00 | test -f README.md
+(1 row)
+
+
+### S4 phase C (this branch's apiserver and runner) — tasks  (2026-10-29T02:01:27.330Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by t.created_at
+
+-[ RECORD 1 ]------+------------------------------------------------------
+title              | S4-T1: the API endpoint
+status             | DONE
+auto_run           | f
+delivered_sha      | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+delivered_base_sha | 1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0
+delivered_branch   | orbit/task-s4-t1-the-api-endpoint-da0729
+delivered_at       | 2026-10-29 01:56:21.729+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.334
+-[ RECORD 2 ]------+------------------------------------------------------
+title              | S4-T2: the storage layer
+status             | DONE
+auto_run           | f
+delivered_sha      | 526a6a429a2633e4ada8851c028b3ad0a526543f
+delivered_base_sha | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+delivered_branch   | orbit/task-s4-t2-the-storage-layer-d87d4d
+delivered_at       | 2026-10-29 01:56:21.744+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.349
+-[ RECORD 3 ]------+------------------------------------------------------
+title              | S4-T3: the settings page (records its own receipt)
+status             | DONE
+auto_run           | f
+delivered_sha      | 
+delivered_base_sha | 
+delivered_branch   | 
+delivered_at       | 
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.365
+-[ RECORD 4 ]------+------------------------------------------------------
+title              | S4-T4: the migration (also publishes its branch)
+status             | DONE
+auto_run           | f
+delivered_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+delivered_base_sha | 8b63825e1daf024db919e3d56144842308ddb446
+delivered_branch   | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+delivered_at       | 2026-10-29 01:56:21.752+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.379
+-[ RECORD 5 ]------+------------------------------------------------------
+title              | S4-T5: the release notes (needs T1 and T2)
+status             | DONE
+auto_run           | t
+delivered_sha      | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+delivered_base_sha | 323bd3983e4dee6441f125278b57b382383c95ad
+delivered_branch   | orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc
+delivered_at       | 2026-10-29 02:00:51.713+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.389
+-[ RECORD 6 ]------+------------------------------------------------------
+title              | S4-T6: the settings tests (needs T3)
+status             | DONE
+auto_run           | t
+delivered_sha      | 8b63825e1daf024db919e3d56144842308ddb446
+delivered_base_sha | a10bd145ecfaaaea90648775e499b02d9758f2fb
+delivered_branch   | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+delivered_at       | 2026-10-29 01:56:21.757+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:53:43.402
+
+
+### S4 phase C (this branch's apiserver and runner) — sessions  (2026-10-29T02:01:27.378Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S4-T1: the API endpoint
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t1-the-api-endpoint-da0729
+base_sha        | 1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0
+branch_sha      | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+created_at      | 2026-10-29 01:53:43.501
+finished_at     | 2026-10-29 01:54:10.385
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S4-T2: the storage layer
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t2-the-storage-layer-d87d4d
+base_sha        | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+branch_sha      | 526a6a429a2633e4ada8851c028b3ad0a526543f
+created_at      | 2026-10-29 01:53:45.564
+finished_at     | 2026-10-29 01:54:10.359
+-[ RECORD 3 ]---+------------------------------------------------------
+task            | S4-T3: the settings page (records its own receipt)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t3-the-settings-page-records-its-f13991
+base_sha        | 526a6a429a2633e4ada8851c028b3ad0a526543f
+branch_sha      | a10bd145ecfaaaea90648775e499b02d9758f2fb
+created_at      | 2026-10-29 01:53:47.617
+finished_at     | 2026-10-29 01:54:10.528
+-[ RECORD 4 ]---+------------------------------------------------------
+task            | S4-T6: the settings tests (needs T3)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+base_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+branch_sha      | 8b63825e1daf024db919e3d56144842308ddb446
+created_at      | 2026-10-29 01:53:47.936
+finished_at     | 2026-10-29 01:54:10.407
+-[ RECORD 5 ]---+------------------------------------------------------
+task            | S4-T4: the migration (also publishes its branch)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+base_sha        | 8b63825e1daf024db919e3d56144842308ddb446
+branch_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+created_at      | 2026-10-29 01:53:49.667
+finished_at     | 2026-10-29 01:54:10.748
+-[ RECORD 6 ]---+------------------------------------------------------
+task            | S4-T5: the release notes (needs T1 and T2)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc
+base_sha        | 323bd3983e4dee6441f125278b57b382383c95ad
+branch_sha      | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+created_at      | 2026-10-29 02:00:50.408
+finished_at     | 2026-10-29 02:00:51.703
+
+
+### S4 phase C (this branch's apiserver and runner) — jobs  (2026-10-29T02:01:27.425Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by j.created_at
+
+-[ RECORD 1 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T1: the API endpoint
+source_ref        | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:12.563+00
+finished_at       | 2026-10-29 01:54:12.675+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ff5d5dda-ef48-4e5b-a030-3e80fd3922fa:1
+-[ RECORD 2 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T2: the storage layer
+source_ref        | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:54:42.553+00
+finished_at       | 2026-10-29 01:54:42.608+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:8b1413c2-67bf-4cd9-987d-47404d863944:1
+-[ RECORD 3 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T3: the settings page (records its own receipt)
+source_ref        | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:12.555+00
+finished_at       | 2026-10-29 01:55:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:b47a1843-b58b-47f9-895c-030e2270a939:1
+-[ RECORD 4 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S4-T6: the settings tests (needs T3)
+source_ref        | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha        | 
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:55:42.551+00
+finished_at       | 2026-10-29 01:55:42.611+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:d61abeef-4f0c-4403-97e7-78100fc4d7c0:1
+-[ RECORD 5 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ALREADY_LANDED
+phase             | MERGE
+task              | S4-T4: the migration (also publishes its branch)
+source_ref        | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha        | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:56:12.553+00
+finished_at       | 2026-10-29 01:56:12.621+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:2beec637-796f-4aa4-be44-23db695799c0:1
+-[ RECORD 6 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 1
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/feature/release-2
+source_sha        | 
+upstream_sha      | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a1855c-f1a6-70b9-979d-972b1fd0e4f8", "baseSha": "1f1b010a759271f745c3f1f2f9ad3971ac0c8bf0", "onUpstream": true, "deliveredSha": "6180e80ad95fee78cbe1d7d6621e1aa871c6ca96", "fullyApplied": true, "onIntegrationLine": null}, {"empty": false, "taskId": "01a1855c-f1b5-74fd-aba8-d2a9b6204cd1", "baseSha": "6180e80ad95fee78cbe1d7d6621e1aa871c6ca96", "onUpstream": true, "deliveredSha": "526a6a429a2633e4ada8851c028b3ad0a526543f", "fullyApplied": true, "onIntegrationLine": null}, {"empty": false, "taskId": "01a1855c-f1d3-7027-ab7c-e709d3b3ec31", "baseSha": "8b63825e1daf024db919e3d56144842308ddb446", "onUpstream": true, "deliveredSha": "323bd3983e4dee6441f125278b57b382383c95ad", "fullyApplied": true, "onIntegrationLine": null}, {"empty": false, "taskId": "01a1855c-f1ea-7205-99d9-be78c080b4d0", "baseSha": "a10bd145ecfaaaea90648775e499b02d9758f2fb", "onUpstream": true, "deliveredSha": "8b63825e1daf024db919e3d56144842308ddb446", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {01a18563-756f-71db-b48c-b3d0ed63287d,01a18563-7582-7518-99b7-a75147abbc9b,01a18563-758d-760b-8163-f34a2f6d1acc,01a18563-7597-7167-b0a6-809cc64fcf1d}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:00:50.225+00
+finished_at       | 2026-10-29 02:00:50.276+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a1855c-f10d-73a4-bb31-48db38b818ca:1
+-[ RECORD 7 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ALREADY_LANDED
+phase             | MERGE
+task              | S4-T5: the release notes (needs T1 and T2)
+source_ref        | refs/heads/orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc
+source_sha        | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+upstream_sha      | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+target_sha_before | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {01a18563-ea9e-75ea-9a2b-8f72fb57a5d3}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:01:20.228+00
+finished_at       | 2026-10-29 02:01:20.293+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:c3d50b97-af2e-4684-9479-93d79eff8494:1
+
+
+### S4 phase C (this branch's apiserver and runner) — receipts  (2026-10-29T02:01:27.473Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by r.created_at
+
+-[ RECORD 1 ]-----+-------------------------------------------------------------------------------
+task              | S4-T3: the settings page (records its own receipt)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha        | a10bd145ecfaaaea90648775e499b02d9758f2fb
+target_branch     | feature/release-2
+target_sha_before | 
+target_sha_after  | 
+recorded_by       | AGENT
+detail            | {"message": "pushed straight to the line by the agent"}
+created_at        | 2026-10-29 01:53:47.784
+-[ RECORD 2 ]-----+-------------------------------------------------------------------------------
+task              | S4-T1: the API endpoint
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha        | 6180e80ad95fee78cbe1d7d6621e1aa871c6ca96
+target_branch     | feature/release-2
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d"}
+created_at        | 2026-10-29 02:00:50.287
+-[ RECORD 3 ]-----+-------------------------------------------------------------------------------
+task              | S4-T2: the storage layer
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha        | 526a6a429a2633e4ada8851c028b3ad0a526543f
+target_branch     | feature/release-2
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d"}
+created_at        | 2026-10-29 02:00:50.306
+-[ RECORD 4 ]-----+-------------------------------------------------------------------------------
+task              | S4-T4: the migration (also publishes its branch)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha        | 323bd3983e4dee6441f125278b57b382383c95ad
+target_branch     | feature/release-2
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d"}
+created_at        | 2026-10-29 02:00:50.317
+-[ RECORD 5 ]-----+-------------------------------------------------------------------------------
+task              | S4-T6: the settings tests (needs T3)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha        | 8b63825e1daf024db919e3d56144842308ddb446
+target_branch     | feature/release-2
+target_sha_before | 323bd3983e4dee6441f125278b57b382383c95ad
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d"}
+created_at        | 2026-10-29 02:00:50.327
+-[ RECORD 6 ]-----+-------------------------------------------------------------------------------
+task              | S4-T5: the release notes (needs T1 and T2)
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc
+source_sha        | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+target_branch     | feature/release-2
+target_sha_before | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "e1094701-ee53-447d-be05-83ed8cc81646"}
+created_at        | 2026-10-29 02:01:20.286
+
+
+### S4 phase C (this branch's apiserver and runner) — promotions  (2026-10-29T02:01:27.520Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by p.created_at
+
+-[ RECORD 1 ]--------+-----------------------------------------------------------------
+task                 | S4-T1: the API endpoint
+source_kind          | TASK_BRANCH
+state                | SUPERSEDED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:43.76+00
+decided_at           | 2026-10-29 02:00:50.293+00
+-[ RECORD 2 ]--------+-----------------------------------------------------------------
+task                 | S4-T2: the storage layer
+source_kind          | TASK_BRANCH
+state                | SUPERSEDED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:45.794+00
+decided_at           | 2026-10-29 02:00:50.308+00
+-[ RECORD 3 ]--------+-----------------------------------------------------------------
+task                 | S4-T3: the settings page (records its own receipt)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:47.895+00
+decided_at           | 2026-10-29 01:55:12.62+00
+-[ RECORD 4 ]--------+-----------------------------------------------------------------
+task                 | S4-T6: the settings tests (needs T3)
+source_kind          | TASK_BRANCH
+state                | SUPERSEDED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8
+source_sha           | 
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:48.185+00
+decided_at           | 2026-10-29 02:00:50.329+00
+-[ RECORD 5 ]--------+-----------------------------------------------------------------
+task                 | S4-T4: the migration (also publishes its branch)
+source_kind          | TASK_BRANCH
+state                | SUPERSEDED
+blocked_reason       | ALREADY_LANDED
+source_ref           | refs/heads/orbit/task-s4-t4-the-migration-also-publishes-3d42d0
+source_sha           | 323bd3983e4dee6441f125278b57b382383c95ad
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:53:49.904+00
+decided_at           | 2026-10-29 02:00:50.319+00
+-[ RECORD 6 ]--------+-----------------------------------------------------------------
+task                 | S4-T5: the release notes (needs T1 and T2)
+source_kind          | TASK_BRANCH
+state                | SUPERSEDED
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc
+source_sha           | 3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 02:00:50.669+00
+decided_at           | 2026-10-29 02:01:20.289+00
+
+
+### S4 phase C (this branch's apiserver and runner) — observationEvents  (2026-10-29T02:01:27.567Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation |   kind   |                                                                                                                                                                                                          data                                                                                                                                                                                                          |                         text                          |         created_at         
+------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------+----------------------------
+          1 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "DEPLOY", "sourceRef": "refs/heads/feature/release-2", "targetRef": "refs/heads/feature/release-2", "generation": 1}                                                                                                                                                                                                                                                            | Queued to look for finished work on feature/release-2 | 2026-10-29 01:56:21.717+00
+          1 | CLAIMED  | {"runnerId": "01a1855b-1976-70a0-ba8b-068087a16daa", "runnerName": "r2913-b-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                                                                                                                                                                                  | Claimed by runner r2913-b-runner · claim 1            | 2026-10-29 02:00:50.229+00
+          1 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                                                                                                                                                                                        | Waiting for this runner's repository lock             | 2026-10-29 02:00:50.247+00
+          1 | ROUND    | {"round": 1}                                                                                                                                                                                                                                                                                                                                                                                                           | Round 1                                               | 2026-10-29 02:00:50.252+00
+          1 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                                                                                                                                                                                           | Fetching the repository                               | 2026-10-29 02:00:50.252+00
+          1 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                                                                                                                                                                                         | Looking for finished work on feature/release-2        | 2026-10-29 02:00:50.263+00
+          1 | RESULT   | {"state": "OBSERVED", "observed": 4, "finishedAt": "2026-10-29T02:00:50.276Z", "receiptIds": ["01a18563-756f-71db-b48c-b3d0ed63287d", "01a18563-7582-7518-99b7-a75147abbc9b", "01a18563-758d-760b-8163-f34a2f6d1acc", "01a18563-7597-7167-b0a6-809cc64fcf1d"], "upstreamSha": "323bd3983e4dee6441f125278b57b382383c95ad", "requestedState": "OBSERVED", "targetShaBefore": "323bd3983e4dee6441f125278b57b382383c95ad"} | Looked at feature/release-2 · 323bd39                 | 2026-10-29 02:00:50.275+00
+(7 rows)
+
+
+### S4 phase C (this branch's apiserver and runner) — openItems  (2026-10-29T02:01:27.615Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') order by i.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:afd48b0c-d711-4cff-a971-2e4a1eea769a
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t1-the-api-endpoint-da0729"}, "failureClass": "ERROR", "landingSessionId": "9400d8a4-5260-4b06-a9cf-6f67cd311f01"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:12.682+00
+resolved_at     | 2026-10-29 01:56:13.387+00
+-[ RECORD 2 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:1d37b76e-b3d3-47ff-999e-d2fc501f8345
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t2-the-storage-layer-d87d4d"}, "failureClass": "ERROR", "landingSessionId": "f7375812-6991-4ab0-bd91-da5ea0ca1259"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:54:42.612+00
+resolved_at     | 2026-10-29 01:56:14.905+00
+-[ RECORD 3 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:8bca7d88-4851-40d2-b568-7fb9dea05d44
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t3-the-settings-page-records-its-f13991"}, "failureClass": "ERROR", "landingSessionId": "ffdac0e6-9d90-40b0-9ba3-e6eadb2cb3c1"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:12.626+00
+resolved_at     | 2026-10-29 01:56:16.405+00
+-[ RECORD 4 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | IE:2ba488c1-7d80-4de1-bc59-8bbf6c3b79b5
+title           | Integration error: merging the project branch into feature/release-2
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s4-t6-the-settings-tests-needs-t3-6842b8"}, "failureClass": "ERROR", "landingSessionId": "b0736955-1b3c-4831-ad16-537ae48c23cf"}
+resolution      | HANDLED
+resolved_by     | COORDINATOR
+resolution_note | Handled: the code is already on feature/release-2.
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:55:42.615+00
+resolved_at     | 2026-10-29 01:56:17.916+00
+-[ RECORD 5 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | LANDED_WITHOUT_CONFIRMATION
+state           | RESOLVED
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | UL:backfill:01a1855c-f10d-73a4-bb31-48db38b818ca
+title           | Reached feature/release-2 without your confirmation: 4 tasks
+payload         | {"jobId": "0b1dfd20-da3b-4e48-9c37-59b3fdc7278d", "backfill": true, "receipts": [{"title": "S4-T1: the API endpoint", "taskId": "01a1855c-f1a6-70b9-979d-972b1fd0e4f8", "observed": true, "receiptId": "01a18563-756f-71db-b48c-b3d0ed63287d", "sourceSha": "6180e80ad95fee78cbe1d7d6621e1aa871c6ca96", "recordedBy": "RUNNER", "targetBranch": "feature/release-2"}, {"title": "S4-T2: the storage layer", "taskId": "01a1855c-f1b5-74fd-aba8-d2a9b6204cd1", "observed": true, "receiptId": "01a18563-7582-7518-99b7-a75147abbc9b", "sourceSha": "526a6a429a2633e4ada8851c028b3ad0a526543f", "recordedBy": "RUNNER", "targetBranch": "feature/release-2"}, {"title": "S4-T4: the migration (also publishes its branch)", "taskId": "01a1855c-f1d3-7027-ab7c-e709d3b3ec31", "observed": true, "receiptId": "01a18563-758d-760b-8163-f34a2f6d1acc", "sourceSha": "323bd3983e4dee6441f125278b57b382383c95ad", "recordedBy": "RUNNER", "targetBranch": "feature/release-2"}, {"title": "S4-T6: the settings tests (needs T3)", "taskId": "01a1855c-f1ea-7205-99d9-be78c080b4d0", "observed": true, "receiptId": "01a18563-7597-7167-b0a6-809cc64fcf1d", "sourceSha": "8b63825e1daf024db919e3d56144842308ddb446", "recordedBy": "RUNNER", "targetBranch": "feature/release-2"}], "targetBranch": "feature/release-2"}
+resolution      | ACCEPTED
+resolved_by     | USER
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 02:00:50.34+00
+resolved_at     | 2026-10-29 02:01:22.056+00
+-[ RECORD 6 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | DELIVERY_REVIEW
+state           | OPEN
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | S4-T5: the release notes (needs T1 and T2)
+dedupe_key      | DR:OUTSIDE_DECLARED_SCOPE:01a1855c-f1dd-7291-aa7a-3b027268d6cc
+title           | Changed files it didn’t declare: S4-T5: the release notes (needs T1 and T2)
+payload         | {"paths": ["E2E_WORK_34o4RPQp6QgPyvmEG3dlc.md"], "reason": "OUTSIDE_DECLARED_SCOPE", "criterionKey": "1wDhozXRuG5Mb4hWq6IATV", "declaredPaths": ["origin/feature/release-2"]}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 02:00:50.739+00
+resolved_at     | 
+-[ RECORD 7 ]---+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | LANDED_WITHOUT_CONFIRMATION
+state           | OPEN
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | S4-T5: the release notes (needs T1 and T2)
+dedupe_key      | UL:01a1855c-f1dd-7291-aa7a-3b027268d6cc:01a18563-ea9e-75ea-9a2b-8f72fb57a5d3
+title           | Reached feature/release-2 without your confirmation: S4-T5: the release notes (needs T1 and T2)
+payload         | {"observed": true, "receiptId": "01a18563-ea9e-75ea-9a2b-8f72fb57a5d3", "sourceSha": "3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d", "recordedBy": "RUNNER", "targetBranch": "feature/release-2"}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 02:01:20.292+00
+resolved_at     | 
+

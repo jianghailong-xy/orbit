@@ -30,8 +30,20 @@ url="${BASE_URL}/dl/${asset}.gz"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp" "$tmp.gz"' EXIT
 
-echo "Downloading ${asset}..."
-if ! curl -fSL "$url" -o "$tmp.gz"; then
+# The plan comes before anything changes on the machine: what is installed, what
+# registration does, and that a missing coding engine is installed on demand.
+if [ -z "${ORBIT_NO_REGISTER:-}" ] && { : < /dev/tty; } 2>/dev/null; then
+  cat <<'EOF'
+Orbit runner setup
+  Installs Orbit, adds this machine to your account, keeps it running
+  in the background, and automatically installs an engine when work
+  needs one.
+
+EOF
+fi
+
+echo "Downloading Orbit for ${os}-${arch}..."
+if ! curl -fsSL "$url" -o "$tmp.gz"; then
   echo "orbit: download failed ($url)" >&2
   exit 1
 fi
@@ -71,7 +83,7 @@ done
 
 link=""
 if [ -n "${ORBIT_BIN_DIR:-}" ] || [ "$owner" = "root" ] || [ -n "$shared" ]; then
-  [ -z "$shared" ] || echo "note: ${shared} runs ${LINK_DIR}/${NAME} for another account, so it stays a shared binary."
+  [ -z "$shared" ] || echo "note: another account on this machine uses ${LINK_DIR}/${NAME}, so the binary stays shared."
   BIN_DIR="${ORBIT_BIN_DIR:-$LINK_DIR}"
   target="${BIN_DIR}/${NAME}"
   # BIN_DIR may not exist yet (e.g. /usr/local/bin is absent on a fresh Apple Silicon Mac),
@@ -114,14 +126,14 @@ fi
 
 ver="$("$target" version 2>/dev/null || echo '?')"
 echo ""
-echo "✓ orbit ${ver} installed to ${target}"
+echo "✓ Orbit ${ver} installed to ${target}"
 [ -z "$link" ] || echo "  ${link} -> ${target}"
 
 # Hand straight off to `orbit register` so install + connect is one command. `curl … | bash`
 # leaves stdin bound to the pipe, so reattach the terminal first — otherwise register's
-# prompts (runner name, engine install, sudo for the background service) read EOF and
-# silently take defaults. Without a terminal (CI, image build) just print the next step.
+# prompts (runner name, sudo for the background service) read EOF and silently take defaults.
+# Without a terminal (CI, image build) just print the next step.
 if [ -z "${ORBIT_NO_REGISTER:-}" ] && { : < /dev/tty; } 2>/dev/null; then
-  exec "$target" register ${1+"$@"} < /dev/tty
+  ORBIT_INSTALL_PLAN=1 exec "$target" register ${1+"$@"} < /dev/tty
 fi
 echo "Next:  ${cmd} register"

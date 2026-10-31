@@ -1485,6 +1485,201 @@
     }
   },
   {
+    "name": "no CLI signed in and no workspace: one item, signing in the first CLI (orbit@austin)",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "austin",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "noCliSignedIn",
+          "tone": "bad",
+          "short": "No coding CLI signed in",
+          "title": "No coding CLI is signed in",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "No coding CLI signed in",
+      "subtitle": "austin · v0.1.240",
+      "disk": null
+    }
+  },
+  {
+    "name": "no CLI signed in and its workspaces run on those logins or have not run: one item in place of each signed-out login",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" },
+        { "id": "ws-tools", "name": "tools", "lastProvider": "codex", "workDir": "~/tools" },
+        { "id": "ws-new", "name": "new", "lastProvider": null, "workDir": "~/new" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "noCliSignedIn",
+          "tone": "bad",
+          "short": "No coding CLI signed in",
+          "title": "No coding CLI is signed in",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "No coding CLI signed in",
+      "subtitle": "lab-host · v0.1.240",
+      "disk": null
+    }
+  },
+  {
+    "name": "no CLI signed in, but a workspace runs on a DeepSeek key: nothing, as on the Mac mini",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "no"
+          }
+        ]
+      },
+      "workspaces": [{ "id": "ws-orbit", "name": "orbit", "lastProvider": "deepseek", "workDir": "~/orbit" }],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.240",
+      "disk": null
+    }
+  },
+  {
+    "name": "no CLI signed in, a workspace on a DeepSeek key and one on the Claude login: that login, as before",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-orbit", "name": "orbit", "lastProvider": "deepseek", "workDir": "~/orbit" },
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Claude signed out",
+          "title": "Claude is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Claude signed out",
+      "subtitle": "lab-host · v0.1.240",
+      "disk": null
+    }
+  },
+  {
+    "name": "one CLI signed in and no workspace: nothing for the signed-out one",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.240",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.302 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.240"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.240",
+      "disk": null
+    }
+  },
+  {
     "name": "heartbeat exactly 90s old: still online",
     "input": {
       "runner": {

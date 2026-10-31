@@ -44,7 +44,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
@@ -118,6 +118,7 @@ import {
   CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   ClaudeHistoryTranscript,
   RunnerClaudeHistoryResult,
+  RunnerDirProbeResult,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
@@ -152,6 +153,7 @@ import {
   type CodexRateLimitResetResultRequest,
   type RunnerModelCatalog,
   isAccountEngine,
+  isAuthErrorText,
   withEnginePlanUsage,
   type AccountEngine,
   type NormalizedRunEvent,
@@ -411,6 +413,7 @@ import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, us
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
+import { readDirProbeResult } from '../runners/dir-probe';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -1505,6 +1508,8 @@ export class RunnerApiController {
     const ownerId = enrollment.ownerId;
     const runnerName = dto.name;
     const runnerToken = generateToken(32);
+    // The directory `orbit register` ran in, when this registration says one (docs/first-workspace-contract.md §1).
+    const registerDir = typeof dto.workDir === 'string' ? dto.workDir.trim() : '';
     const runnerData = {
       hostname: dto.hostname,
       labels: dto.labels ?? [],
@@ -1513,6 +1518,7 @@ export class RunnerApiController {
       tokenHash: sha256(runnerToken),
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
+      ...(registerDir ? { registerDir } : {}),
     };
     // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
@@ -2272,6 +2278,7 @@ export class RunnerApiController {
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
+    let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
@@ -2309,6 +2316,7 @@ export class RunnerApiController {
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
+      dirProbeRequest = await this.drainDirProbeRequest(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
       // runner never has to hold a workspace list of its own. After the relays on purpose: it is
@@ -2383,6 +2391,8 @@ export class RunnerApiController {
       // Same reasoning as the reset command above: present only while somebody is actually waiting
       // on an answer, so a runner that never asked sees the response shape it always had.
       ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
+      // The same, for the directory probe: only on the beat that hands one over.
+      ...(dirProbeRequest ? { dirProbeRequest } : {}),
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
@@ -2565,6 +2575,9 @@ export class RunnerApiController {
       await this.mergeReceipts
         ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
           observed: after.observed === true,
+          // §7.6 V12: a LANDED_WITHOUT_CONFIRMATION this result opened — O-R3 of an observation, the
+          // deploy-time pass's one item per project, or a check that saw the work on main (O-L6).
+          ownerItemIds: after.ownerItemIds,
         })
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
       if (after.openItemIds.length > 0) {
@@ -2789,6 +2802,28 @@ export class RunnerApiController {
   }
 
   /**
+   * The path this runner should report on, if anyone is asking (docs/first-workspace-contract.md §2.3).
+   *
+   * Handed over ONCE, as the Claude history scan above is and for its reasons: what waits on it is a person choosing a
+   * folder, and an unanswered question is asked again by asking again rather than retried at a runner that may never
+   * answer. The hand-over is a compare-and-set on the state it was read in — `pending`, about that path — so two API
+   * replicas draining at the same moment give it to one runner process.
+   */
+  private async drainDirProbeRequest(runnerId: string): Promise<RunnerHeartbeatResponse['dirProbeRequest']> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { dirProbeStatus: true, dirProbePath: true, dirProbeAt: true },
+    });
+    if (r?.dirProbeStatus !== 'pending' || !r.dirProbePath) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, dirProbeStatus: 'pending', dirProbePath: r.dirProbePath },
+      data: { dirProbeStatus: 'probing' },
+    });
+    if (claimed.count === 0) return undefined;
+    return { path: r.dirProbePath, requestedAt: r.dirProbeAt?.toISOString() ?? '' };
+  }
+
+  /**
    * Runner → control plane: how the checkout repair went.
    *
    * The reported state also corrects the stored health snapshot for that root, so the warning
@@ -2884,6 +2919,30 @@ export class RunnerApiController {
         claudeHistoryStatus: result.error ? 'failed' : 'done',
         claudeHistoryResult: result as unknown as Prisma.InputJsonValue,
       },
+    });
+    return { ok: true, applied: stored.count > 0 };
+  }
+
+  /**
+   * Runner → control plane: what is at the path it was asked about (docs/first-workspace-contract.md §2.4).
+   *
+   * Stored only while the relay still names that path, as the Claude history answer is: someone choosing a folder asks
+   * about several in a row, and an answer that arrives after they moved on is dropped rather than made the verdict on
+   * the one in the field now. A probe that could not look answers too, with its `error`, and is `done` all the same.
+   * The body is re-read rather than trusted (readDirProbeResult).
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('dir-probe-result')
+  @HttpCode(200)
+  async dirProbeResult(
+    @CurrentRunner() runner: { id: string },
+    @Body() body: RunnerDirProbeResult,
+  ) {
+    const answer = readDirProbeResult(body);
+    if (!answer) throw new BadRequestException('path and result are required');
+    const stored = await this.prisma.runner.updateMany({
+      where: { id: runner.id, dirProbePath: answer.path },
+      data: { dirProbeStatus: 'done', dirProbeResult: answer as unknown as Prisma.InputJsonValue },
     });
     return { ok: true, applied: stored.count > 0 };
   }
@@ -3882,6 +3941,8 @@ export class RunnerApiController {
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
         autoInitGit: workspace?.autoInitGit ?? undefined,
+        // cf. the claim path: a folder Orbit made the workspace in is made on the machine if it is missing.
+        ...(workspace?.autoCreateWorkDir ? { createWorkDir: true } : {}),
         // cf. the claim path: the branch this session merges into (including a project task's
         // integration line), so a restarted runner still judges "already merged" against it.
         mergeTarget: s.mergeTarget
@@ -8474,10 +8535,23 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const quotaSpent =
         effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+      // A run that ended because its account refused the sign-in, on the runner's own login for its
+      // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
+      // the account signed out and ends the run with the message it took undelivered. Moved below.
+      const signInEngine =
+        effectiveStatus === RunStatus.FAILED
+        && current.retryAt == null
+        && !quotaSpent
+        && isAuthErrorText(dto.error)
+        && isAccountEngine(current.provider)
+        && isBuiltinProvider(current.provider, current.providerBuiltin)
+        && (recordedEngine(current.engine) ?? current.provider) === current.provider
+          ? current.provider
+          : null;
       // Which Codex or Claude account the run spent is the session's pick or else its workspace's to
       // say, and only that account's quota says when it frees up.
       const workspace =
-        quotaSpent && accountEnvVar(current.provider) && current.workspaceId
+        (quotaSpent || signInEngine) && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
               select: {
@@ -8503,6 +8577,36 @@ export class RunnerApiController {
         : keyRetryAt
           ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
           : null;
+      // On Automatic, a refused sign-in moves the session to another of the runner's accounts that can
+      // run, and the retry armed here re-sends the message the run ended under, at once and on that
+      // account. The sweep finds that message by the claim's stamp (lostDelivery), and the claim that
+      // picks it up carries the conversation across. Pinned, decided by its workspace, or with no other
+      // account signed in, nothing moves and nothing is armed: signing in again is the remedy, as it was.
+      const signInRunner = signInEngine
+        ? await tx.runner.findUnique({
+            where: { id: runner.id },
+            select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
+          })
+        : null;
+      const signInMove = signInEngine && (signInRunner?.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[signInEngine])
+        ? accountAfterSignOut(
+            signInEngine,
+            { account: current[ACCOUNT_CHOICE[signInEngine]], pinned: current[ACCOUNT_PINNED[signInEngine]] },
+            workspace,
+            signInRunner,
+            new Date(),
+          )
+        : null;
+      const signInRetryAt = signInMove ? new Date() : null;
+      const signInColumns: Prisma.SessionUncheckedUpdateManyInput = signInMove && signInEngine && signInRunner
+        ? {
+            [ACCOUNT_CHOICE[signInEngine]]: signInMove.to,
+            ...(signInMove.defaultRemoved ? { [ACCOUNT_PINNED[signInEngine]]: false } : {}),
+            // Owed only when no other line is, as at the claim (QueueService.accountsForClaim).
+            ...(current.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(signInEngine, signInMove, signInRunner) }),
+            retryAt: signInRetryAt,
+          }
+        : {};
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
@@ -8559,9 +8663,10 @@ export class RunnerApiController {
           // can't stay stuck on "Running Workspace…".
           ...CLEARED_RUNNING_WORK,
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
+          ...signInColumns,
         },
       });
-      const retryAt = quotaRetryAt ?? current.retryAt;
+      const retryAt = quotaRetryAt ?? signInRetryAt ?? current.retryAt;
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
       // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
       // once every work session has finished (§10.5 O-L4 3).
@@ -8905,6 +9010,9 @@ export class RunnerApiController {
     // commit (§2.9 LS3 / errata E5). Keyed by project and task so a retried closure overwrites
     // rather than accumulates.
     const landedReceipts = new Map<string, { projectId: string; taskId: string; result: 'MERGED' | 'ALREADY_MERGED' }>();
+    // The owner items the receipt opened (§10.6 O-R3), pushed once after the commit (§7.6 V12). Keyed by
+    // project, so a retried closure overwrites rather than accumulates.
+    const openedOwnerItems = new Map<string, string[]>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -9084,7 +9192,7 @@ export class RunnerApiController {
         const receiptResult = merged
           ? (dto.alreadyMerged ? 'ALREADY_MERGED' as const : 'MERGED' as const)
           : dto.status === 'conflict' ? 'CONFLICT' as const : 'ERROR' as const;
-        await MergeReceiptService.fromRunnerMergeResult(tx, {
+        const written = await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
           taskId: current.taskId,
@@ -9118,6 +9226,7 @@ export class RunnerApiController {
               commitSha: sourceSha,
             })),
         });
+        if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
         if (task?.projectId && current.taskId
             && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
           landedReceipts.set(`${task.projectId}:${current.taskId}`, {
@@ -9136,7 +9245,9 @@ export class RunnerApiController {
     // the merge and the receipt are committed and a coordinator that could not be reached does not
     // un-record them.
     for (const [projectId, landedTaskId] of receiptProjects) {
-      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId);
+      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId, {
+        ownerItemIds: openedOwnerItems.get(projectId),
+      });
     }
     // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
     // retired (M-T13). Its own transaction, after the receipt committed.
@@ -9483,10 +9594,12 @@ export class RunnerApiController {
    * both where they are. `text` is the turn's latest assistant message, which for both
    * self-healing failures is the entire reply.
    *
-   * Three outcomes:
+   * Four outcomes:
    *  - an exhausted quota → arm for the moment it resets, or another account frees up first
    *    (below), leaving the attempt count alone: the sweeper counts against it while the snapshot
    *    keeps reporting the quota spent.
+   *  - a refused sign-in → on Automatic, move to another of the runner's accounts that can run
+   *    and re-send there at once (below); otherwise clear the count, as for anything else.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
    *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
    *    and its conversation, where the task's own retry starts a new session from nothing — and
@@ -9524,8 +9637,9 @@ export class RunnerApiController {
   }> {
     const quotaSpent = isUsageLimitErrorText(text);
     const rateLimited = isRateLimitApiErrorText(text);
-    if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    if (!delivered && !quotaSpent) return {};
+    const signInRefused = !quotaSpent && isAuthErrorText(text);
+    if (!quotaSpent && !signInRefused && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
+    if (!delivered && !quotaSpent && !signInRefused) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
@@ -9545,6 +9659,38 @@ export class RunnerApiController {
       },
     });
     if (!session) return {};
+    // A built-in Claude session whose account refused its sign-in — the runtime said "Failed to
+    // authenticate" — moves on Automatic to another of the runner's accounts that can run, and is
+    // re-sent there at once, as a usage limit moves it below. The events path queues the reload that
+    // re-spawns its engine there. Pinned, decided by its workspace, or with no other account signed
+    // in, it stays and nothing is armed: signing in again is the remedy, and the transcript offers it.
+    // A turn nobody delivered, with a "Switched to" line still owed, ran on the engine that move is
+    // replacing, so its refusal moves nothing again.
+    if (signInRefused) {
+      if (!delivered && session.poolSwitchNotice) return {};
+      const runner = session.provider === AgentProvider.CLAUDE
+        ? await tx.runner.findUnique({
+            where: { id: runnerId },
+            select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
+          })
+        : null;
+      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterSignOut(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner,
+            new Date(),
+          )
+        : null;
+      if (!move || !runner) return { retryAt: null, retryAttempts: 0 };
+      return {
+        ...(delivered ? { retryAt: new Date() } : {}),
+        claudeAccount: move.to,
+        ...(move.defaultRemoved ? { claudeAccountPinned: false } : {}),
+        poolSwitchNotice: accountSwitchNotice('claude', move, runner),
+      };
+    }
     if (!quotaSpent) {
       // A rate limit is the one transient failure a pool can be asked about rather than answered with the
       // ladder below: the gateway records a short throttle on the credential when a 429 outlasts the wait

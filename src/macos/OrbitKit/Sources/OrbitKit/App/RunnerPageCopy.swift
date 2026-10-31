@@ -74,6 +74,9 @@ public enum RunnerPageCopy {
     public static let RUNNER_WORKSPACE_WORKTREES = "Worktrees"
     public static let RUNNER_WORKSPACES_FOOTER =
         "Tap a workspace to open its sessions. Add or change workspaces on the web."
+    /// The words of RUNNER_WORKSPACES_FOOTER that link to this runner's page on the web
+    /// (`RunnerPageFormat.workspacesFooter`).
+    public static let RUNNER_WORKSPACES_FOOTER_LINK = "on the web"
     public static func runnerWorkspaceRunning(count: Int) -> String { "\(count) running" }
 
     public static let RUNNER_ABOUT_NAME = "Name"
@@ -155,6 +158,8 @@ public enum RunnerPageCopy {
     public static func runnerNamesMore(first: String, others: Int) -> String {
         "\(first) and \(others) more"
     }
+    /// Between names that are all listed, but before the last: `Claude Code, Codex and Kimi Code`.
+    public static let RUNNER_NAMES_COMMA = ", "
 
     public static let RUNNER_UNIT_MINUTE = "minute"
     public static let RUNNER_UNIT_MINUTES = "minutes"
@@ -173,6 +178,17 @@ public enum RunnerPageCopy {
     }
     public static func attentionOfflineSessionsWait(count: Int) -> String {
         "Its \(count) sessions wait until it checks in again."
+    }
+
+    public static let ATTENTION_NO_CLI_SIGNED_IN_SHORT = "No coding CLI signed in"
+    public static let ATTENTION_NO_CLI_SIGNED_IN = "No coding CLI is signed in"
+    /// `cli` is the one login CLI installed there, by its own name: `Claude Code`.
+    public static func attentionNoCliSignedInDetail(cli: String) -> String {
+        "Nothing can run on this machine until one is. \(cli) is installed here."
+    }
+    /// `clis` names every login CLI installed there: `Claude Code and Codex`.
+    public static func attentionNoCliSignedInDetailMany(clis: String) -> String {
+        "Nothing can run on this machine until one is. \(clis) are installed here."
     }
 
     public static func attentionSignedOutShort(engine: String) -> String { "\(engine) signed out" }

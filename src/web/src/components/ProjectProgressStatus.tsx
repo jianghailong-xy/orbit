@@ -132,6 +132,14 @@ const REVIEW_HEADING: Readonly<Record<string, string>> = {
   MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
 };
 
+/** The kinds whose card is headed by the item's own title, as §10.7 writes it — `Not on <branch> yet:
+ *  <task>` and `Reached <branch> without your confirmation: <task>` — because the title is the whole
+ *  of what they are about: no fact rows follow it. */
+const TITLED_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
+  'LANDING_UNOBSERVED',
+  'LANDED_WITHOUT_CONFIRMATION',
+]);
+
 function itemHeading(row: ProjectOpenItemRow): string {
   if (row.kind === 'DELIVERY_REVIEW') {
     const reason = row.facts?.review?.reason;
@@ -251,6 +259,8 @@ export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
   OPEN_LANDING: 'Open landing',
   ABANDON: 'Abandon',
+  ACCEPT: 'Accept',
+  OBSERVE: 'Observe again',
 };
 
 /** Exported names keep the web/native copy contract readable while ACTION_LABEL stays literal for
@@ -281,6 +291,8 @@ export const ACTION_CONSEQUENCES: Readonly<Record<string, string>> = {
   ASK_COORDINATOR_AGAIN: 'It goes back to the coordinator with a fresh escalation clock.',
   OPEN_LANDING: 'Open the landing: every attempt, step by step.',
   ABANDON: 'Ends this attempt. Nothing was pushed, and nothing is queued again.',
+  ACCEPT: 'You accept the work as it landed, and this item closes.',
+  OBSERVE: 'An observation of the line is queued with your reason.',
   MARK_HANDLED: 'Only if you dealt with it yourself. Your reason goes on the record.',
 };
 
@@ -338,6 +350,8 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
   'CANCEL_TASK',
   'ASK_COORDINATOR_AGAIN',
   'ABANDON',
+  'ACCEPT',
+  'OBSERVE',
 ]);
 
 /** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
@@ -347,7 +361,9 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
  *  again a FAILED task answers — so it is drawn when the row carries either address, and `RetryPress`
  *  sends it through the door its kind and its `promotionId` decide. */
 function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
-  if (action === 'ASK_COORDINATOR_AGAIN') return row.itemId;
+  // Accept answers the item itself (§10.8). Observe again is the project's door — it looks at the
+  // line, which the card's project names — so it needs nothing from the row but the row.
+  if (action === 'ASK_COORDINATOR_AGAIN' || action === 'ACCEPT' || action === 'OBSERVE') return row.itemId;
   if (action === 'RETRY') return row.taskId ?? row.promotionId ?? null;
   // The one job this item is about; a row that names none draws no Abandon.
   if (action === 'ABANDON') return row.integrationJobId ?? null;
@@ -709,6 +725,39 @@ export function markItemHandledMutationOptions(qc: QueryClient, projectId: strin
   };
 }
 
+/**
+ * Accept (§10.8): the owner's answer to work that reached main without their confirmation — it
+ * stays where it landed, and the item ends ACCEPTED. The door takes no body; undoing the work is
+ * not a door but a task the coordinator files when "Chat about this" asks it to.
+ */
+export function acceptItemMutationOptions(qc: QueryClient, projectId: string, itemId: string) {
+  return {
+    mutationFn: () =>
+      api(
+        `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}/accept`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => refreshItemWriteViews(qc, projectId),
+  };
+}
+
+/**
+ * Observe again (§10.8, O-T5): the owner's door to look at the project's line once more. It queues
+ * an observation — or joins the one already queued — and the item stays open until that observation
+ * sees the work: no item is closed by the press itself. The reason is required (blank or over 2000
+ * characters is 400 `INTEGRATION_OBSERVE_REASON_REQUIRED`), so the press asks for one first.
+ */
+export function observeIntegrationMutationOptions(qc: QueryClient, projectId: string) {
+  return {
+    mutationFn: (reason: string) =>
+      api(`/projects/${encodeURIComponent(projectId)}/integration/observe`, {
+        method: 'POST',
+        body: { reason },
+      }),
+    onSuccess: () => refreshItemWriteViews(qc, projectId),
+  };
+}
+
 export const CANCEL_TASK_MODAL_TITLE = 'Cancel this task?';
 export const CANCEL_TASK_MODAL_OK = 'Cancel task';
 /** What the confirm says, in the two facts a reader weighing it needs: what it stops, and what it
@@ -728,6 +777,27 @@ export const MARK_HANDLED_MODAL_BODY =
   'It stops being something this project owes anyone. The reason is what the record gains, because '
   + 'nothing on the line could verify the ending for itself — the task, its branch and its history '
   + 'stay where they are.';
+
+/** Observe again's dialog (§10.8): the door requires a reason, so the press asks for it, as Mark as
+ *  handled does, and says what the observation does before anything is sent. */
+export const OBSERVE_MODAL_TITLE = 'Look at the line again?';
+export const OBSERVE_MODAL_BODY =
+  'A runner fetches the line and looks for each finished task’s commit on it. Whatever it finds is '
+  + 'recorded as landed, and the tasks waiting on that work start. Your reason goes on the record.';
+export const OBSERVE_REASON_LABEL = 'Why look again?';
+/** What a refused Observe again says above the server's own words. */
+export const OBSERVE_FAILED = 'No observation was queued';
+/** What a refused Accept says above the server's own words. */
+export const ACCEPT_FAILED = 'The work was not accepted';
+
+/**
+ * The line a card says while an observation it asked for is in flight (§10.8): "Observing main…".
+ * Its own words rather than the rerun's — an observation lands nothing and re-runs nothing, it only
+ * looks. The native clients say the same sentence.
+ */
+export function observingLine(branch: string): string {
+  return `Observing ${branch}…`;
+}
 
 /**
  * The kinds an owner closes by hand (§4.7's "标记已处理"): the exceptions, which are the ones a person
@@ -1068,6 +1138,114 @@ function MarkHandledPress({
   );
 }
 
+/**
+ * Accept: the owner's one door on work that reached main without their confirmation (§10.8). No
+ * second confirmation — nothing is reverted or re-run, and the consequence line beside the press
+ * says what it records.
+ */
+function AcceptPress({
+  row,
+  projectId,
+  tier,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+  tier: PressTier;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const accept = useMutation(acceptItemMutationOptions(qc, projectId, row.itemId));
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.ACCEPT!}
+        tier={tier}
+        pending={accept.isPending}
+        onClick={() => accept.mutate()}
+      />
+      {accept.isError ? <PressError headline={ACCEPT_FAILED} error={accept.error as Error} /> : null}
+    </>
+  );
+}
+
+/**
+ * Observe again: look at the project's line once more (§10.8, O-T5) — the press on a work-not-seen
+ * card and on the card a project's failing observations open. It asks for the reason the door
+ * requires, as Mark as handled does, and a refusal (no repository bound, a reason the server will
+ * not take) leaves the dialog open over the server's own words.
+ */
+function ObservePress({
+  projectId,
+  tier,
+}: {
+  projectId: string;
+  tier: PressTier;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const fieldId = useId();
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const observe = useMutation(observeIntegrationMutationOptions(qc, projectId));
+  const trimmed = reason.trim();
+  const close = () => {
+    if (observe.isPending) return;
+    observe.reset();
+    setReason('');
+    setAsking(false);
+  };
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.OBSERVE!}
+        tier={tier}
+        pending={observe.isPending}
+        onClick={() => setAsking(true)}
+      />
+      <Dialog
+        className="project-open-item-dialog"
+        open={asking}
+        title={OBSERVE_MODAL_TITLE}
+        onClose={close}
+        footer={
+          <>
+            <Button onClick={close}>Back</Button>
+            {/* The server requires the reason, so the confirm waits for one — and the handler holds
+                the same line, because a disabled button is not a rule about what is sent. */}
+            <Button
+              variant="primary"
+              disabled={trimmed === ''}
+              loading={observe.isPending}
+              onClick={() => {
+                if (trimmed === '') return;
+                observe.mutate(trimmed, {
+                  onSuccess: () => {
+                    setReason('');
+                    setAsking(false);
+                  },
+                });
+              }}
+            >
+              {ACTION_LABEL.OBSERVE}
+            </Button>
+          </>
+        }
+      >
+        <p>{OBSERVE_MODAL_BODY}</p>
+        <label className="project-open-item-reason-label" htmlFor={fieldId}>
+          {OBSERVE_REASON_LABEL}
+        </label>
+        <Textarea
+          id={fieldId}
+          value={reason}
+          maxLength={2000}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          onChange={(event) => setReason(event.target.value)}
+        />
+        {observe.isError ? <PressError headline={OBSERVE_FAILED} error={observe.error as Error} /> : null}
+      </Dialog>
+    </>
+  );
+}
+
 /** One press of a card, by the action the server named, in the weight the card gave it. An action
  *  that writes and has no press here is one this build cannot make — and `cardActions` has already
  *  left it undrawn. */
@@ -1095,6 +1273,10 @@ function ItemPress({
       return <AskCoordinatorAgainPress row={row} projectId={projectId} tier={tier} />;
     case 'ABANDON':
       return <AbandonPress row={row} projectId={projectId} tier={tier} />;
+    case 'ACCEPT':
+      return <AcceptPress row={row} projectId={projectId} tier={tier} />;
+    case 'OBSERVE':
+      return <ObservePress projectId={projectId} tier={tier} />;
     default:
       return null;
   }
@@ -1167,7 +1349,9 @@ export function OpenItemCard({
     <ItemCard
       row={row}
       heading={itemHeading(row)}
-      tone="coordinator"
+      // An item that is the owner's from birth (§10.7's work that reached main without their
+      // confirmation) asks the owner, and wears the owner's amber like every card that does.
+      tone={row.assignee === 'OWNER' ? 'owner' : 'coordinator'}
       now={now}
       onChat={onChat}
       main={main}
@@ -1265,7 +1449,7 @@ function chainStanding(failure: NonNullable<OpenItemFacts['failure']>): string {
  * A payload this build cannot read at all is not a blank card either: it keeps the one line the
  * card had before the rows existed — the server's own sentence about the fact.
  */
-function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null {
+function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: string }): JSX.Element | null {
   const facts = row.facts;
   // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
   // which runner and since when, and where the runner had got to. An item an older build opened
@@ -1274,7 +1458,20 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
     return <LeaseFacts lease={row.lease} taskTitle={facts?.task?.title ?? null} />;
   }
   if (!facts) {
-    return row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null;
+    // §10.7's two kinds have no fact rows: their title names the work and the branch ("Not on main
+    // yet: <task>"), and the server's detail line says what was seen — the reason and the delivered
+    // commit, or the receipt. A card whose heading tells how the item became the owner's keeps that
+    // title as its first line, so it still says which work it is about.
+    const subject = TITLED_KINDS.has(row.kind) && heading !== row.title ? row.title : null;
+    if (!subject) {
+      return row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null;
+    }
+    return (
+      <>
+        <p className="project-open-item-detail project-open-item-subject">{subject}</p>
+        {row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null}
+      </>
+    );
   }
   const check = facts.check;
   return (
@@ -1390,8 +1587,15 @@ function rerunOf(
   return check ? `the re-check of the merge into ${main}` : 'the rerun of the landing';
 }
 
-/** §4.7 H1, in one line: which rerun, which generation, where it is, and since when it was asked. */
+/** §4.7 H1, in one line: which rerun, which generation, where it is, and since when it was asked.
+ *  An observation (§10.8) is no rerun and its generation is the project's count of looks, so it says
+ *  its own words: "Observing main… — queued · asked 2m ago". It only ever handles a work-not-seen
+ *  item, whose line is the project's main branch (AGENT_PUSH lands nowhere else). */
 function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number, main: string): string {
+  if (handling.jobKind === 'OBSERVE_LANDING') {
+    return `${observingLine(main)} — ${handling.state === 'RUNNING' ? 'running' : 'queued'} · asked `
+      + `${ago(handling.startedAt, now)}`;
+  }
   const where = handling.state === 'RUNNING' ? 'is running' : 'is queued';
   return `${rerunOf(row, handling.jobKind, main)} — generation ${handling.generation} ${where} · asked `
     + `${ago(handling.startedAt, now)}`;
@@ -1853,7 +2057,7 @@ function ItemCard({
           ) : null}
           {children ? <div className="project-open-item-actions">{children}</div> : null}
         </div>
-        <ItemFactRows row={row} />
+        <ItemFactRows row={row} heading={heading} />
         <ItemHandlingRows row={row} now={now} main={main} />
         <ItemChatRow row={row} onChat={onChat} />
       </div>

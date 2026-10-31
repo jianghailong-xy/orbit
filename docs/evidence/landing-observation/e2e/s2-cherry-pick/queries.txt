@@ -1,0 +1,186 @@
+
+### S2 final — codebase  (2026-10-29T02:17:15.329Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick')
+
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode |  delivery_mode_chosen_at  |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+---------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/a/origin/s2 | refs/heads/main | refs/heads/main | origin      | AGENT_PUSH    | 2026-10-29 02:16:13.57+00 | 2026-10-29 02:16:13.918+00 | 
+(1 row)
+
+
+### S2 final — tasks  (2026-10-29T02:17:15.376Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by t.created_at
+
+-[ RECORD 1 ]------+------------------------------------------------------
+title              | S2-C: push a cherry-pick of the work to main
+status             | DONE
+auto_run           | f
+delivered_sha      | ba51f23a9d8880005c0c033def52ee908c074c27
+delivered_base_sha | d711affec78a0c91beac783cd286a1de27d58718
+delivered_branch   | orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc
+delivered_at       | 2026-10-29 02:16:39.777+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 02:16:13.546
+-[ RECORD 2 ]------+------------------------------------------------------
+title              | S2-D: waits for S2-C to be on main
+status             | DONE
+auto_run           | t
+delivered_sha      | 
+delivered_base_sha | 
+delivered_branch   | 
+delivered_at       | 
+dispatch_refusal   | 
+created_at         | 2026-10-29 02:16:13.557
+
+
+### S2 final — sessions  (2026-10-29T02:17:15.425Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S2-C: push a cherry-pick of the work to main
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc
+base_sha        | d711affec78a0c91beac783cd286a1de27d58718
+branch_sha      | ba51f23a9d8880005c0c033def52ee908c074c27
+created_at      | 2026-10-29 02:16:13.629
+finished_at     | 2026-10-29 02:16:39.771
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S2-D: waits for S2-C to be on main
+kind            | CONVERSATION
+status          | AWAITING_INPUT
+end_reason      | 
+worktree_branch | orbit/task-s2-d-waits-for-s2-c-to-be-on-main-8a4530
+base_sha        | cabb1af6c657a47640c046cfe134da6b9b8df37b
+branch_sha      | 5bb2287cc3437737625e3d25a55fdb5f4d357810
+created_at      | 2026-10-29 02:17:13.8
+finished_at     | 
+
+
+### S2 final — jobs  (2026-10-29T02:17:15.475Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by j.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 1
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | cabb1af6c657a47640c046cfe134da6b9b8df37b
+target_sha_before | cabb1af6c657a47640c046cfe134da6b9b8df37b
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18571-8bea-73ac-8a80-63d16dd30e6b", "baseSha": "d711affec78a0c91beac783cd286a1de27d58718", "onUpstream": false, "deliveredSha": "ba51f23a9d8880005c0c033def52ee908c074c27", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:16:42.094+00
+finished_at       | 2026-10-29 02:16:42.142+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18571-8ba3-75dc-9a60-d3c1e29036f4:1
+-[ RECORD 2 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 2
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | cabb1af6c657a47640c046cfe134da6b9b8df37b
+target_sha_before | cabb1af6c657a47640c046cfe134da6b9b8df37b
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18571-8bea-73ac-8a80-63d16dd30e6b", "baseSha": "d711affec78a0c91beac783cd286a1de27d58718", "onUpstream": false, "deliveredSha": "ba51f23a9d8880005c0c033def52ee908c074c27", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:17:12.1+00
+finished_at       | 2026-10-29 02:17:12.162+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18571-8ba3-75dc-9a60-d3c1e29036f4:2
+
+
+### S2 final — receipts  (2026-10-29T02:17:15.523Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by r.created_at
+
+-[ RECORD 1 ]-----+-----------------------------------------------------------------------------------------------
+task              | S2-C: push a cherry-pick of the work to main
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc
+source_sha        | cabb1af6c657a47640c046cfe134da6b9b8df37b
+target_branch     | main
+target_sha_before | 
+target_sha_after  | 
+recorded_by       | AGENT
+detail            | {"message": "S2-C reached main as a cherry-pick; this is the commit on main that carries it."}
+created_at        | 2026-10-29 02:17:13.759
+
+
+### S2 final — promotions  (2026-10-29T02:17:15.571Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by p.created_at
+
+(0 rows)
+
+
+### S2 final — observationEvents  (2026-10-29T02:17:15.617Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation |   kind   |                                                                                                                           data                                                                                                                           |                    text                    |         created_at         
+------------+----------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------------------------
+          1 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "IDENTITY_FROZEN", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 1}                                                                                                               | Queued to look for finished work on main   | 2026-10-29 02:16:39.769+00
+          1 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                    | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:16:42.099+00
+          1 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                          | Waiting for this runner's repository lock  | 2026-10-29 02:16:42.119+00
+          1 | ROUND    | {"round": 1}                                                                                                                                                                                                                                             | Round 1                                    | 2026-10-29 02:16:42.125+00
+          1 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                             | Fetching the repository                    | 2026-10-29 02:16:42.125+00
+          1 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                           | Looking for finished work on main          | 2026-10-29 02:16:42.135+00
+          1 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:16:42.142Z", "receiptIds": [], "upstreamSha": "cabb1af6c657a47640c046cfe134da6b9b8df37b", "requestedState": "OBSERVED", "targetShaBefore": "cabb1af6c657a47640c046cfe134da6b9b8df37b"} | Looked at main · cabb1af                   | 2026-10-29 02:16:42.141+00
+          2 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "OBSERVE_DOOR", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 2}                                                                                                                  | Queued to look for finished work on main   | 2026-10-29 02:16:44.564+00
+          2 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                    | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:17:12.105+00
+          2 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                          | Waiting for this runner's repository lock  | 2026-10-29 02:17:12.133+00
+          2 | ROUND    | {"round": 1}                                                                                                                                                                                                                                             | Round 1                                    | 2026-10-29 02:17:12.142+00
+          2 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                             | Fetching the repository                    | 2026-10-29 02:17:12.142+00
+          2 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                           | Looking for finished work on main          | 2026-10-29 02:17:12.154+00
+          2 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:17:12.162Z", "receiptIds": [], "upstreamSha": "cabb1af6c657a47640c046cfe134da6b9b8df37b", "requestedState": "OBSERVED", "targetShaBefore": "cabb1af6c657a47640c046cfe134da6b9b8df37b"} | Looked at main · cabb1af                   | 2026-10-29 02:17:12.161+00
+(14 rows)
+
+
+### S2 final — openItems  (2026-10-29T02:17:15.666Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S2 AGENT_PUSH: the agent pushes a cherry-pick') order by i.created_at
+
+-[ RECORD 1 ]---+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | LANDING_UNOBSERVED
+state           | RESOLVED
+assignee        | COORDINATOR
+assignee_reason | DEFAULT
+task            | S2-C: push a cherry-pick of the work to main
+dedupe_key      | LU:01a18571-8bea-73ac-8a80-63d16dd30e6b:ba51f23a9d8880005c0c033def52ee908c074c27
+title           | Not on main yet: S2-C: push a cherry-pick of the work to main
+payload         | {"jobId": "d34f2aac-e474-4f61-b0cf-d6218c0facf4", "branch": "orbit/task-s2-c-push-a-cherry-pick-of-the-work-eb76dc", "reason": "APPLIED_AS_OTHER_COMMITS", "baseSha": "d711affec78a0c91beac783cd286a1de27d58718", "observedAt": "2026-10-29T02:16:42.142Z", "upstreamRef": "refs/heads/main", "deliveredSha": "ba51f23a9d8880005c0c033def52ee908c074c27", "integrationRef": "refs/heads/main", "observedLineSha": "cabb1af6c657a47640c046cfe134da6b9b8df37b", "observedUpstreamSha": "cabb1af6c657a47640c046cfe134da6b9b8df37b"}
+resolution      | LANDED
+resolved_by     | PLATFORM
+resolution_note | 
+handling_reason | The agent says it pushed; look at main again.
+handling_job_id | 5a27c8c4-772d-4e9f-81e5-814d2f27e7c0
+created_at      | 2026-10-29 02:16:42.148+00
+resolved_at     | 2026-10-29 02:17:13.752+00
+

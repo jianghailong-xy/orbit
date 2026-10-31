@@ -31,7 +31,7 @@
 
 1. 服务端已部署最终候选：`GET /api/health` 返回 ok；`_prisma_migrations` 的最新一条与候选版本一致。
 2. runner 主机为 Linux x64；`npm ci` 能访问 registry（安装使用内嵌锁文件）。服务账户 PATH 中没有 Node 26 时，安装还要能访问 nodejs.org，下载官方 Node v26.10.0。
-3. runner 未开启 AutoInstallEngines（默认就是关闭）。dsh 必须显式安装：在 Web 的 Infrastructure 页点 DeepSeek Harness 的 Install（按机器列出；机器详情页的 DeepSeek Harness 行只读）、调用 `POST /api/runners/:id/install {"engine":"dsh"}`，或在 runner 上运行 `orbit doctor`。
+3. runner 的 AutoInstallEngines 已关闭（新注册默认开启，用 `--no-auto-install-engines` 关闭）。dsh 必须显式安装：在 Web 的 Infrastructure 页点 DeepSeek Harness 的 Install（按机器列出；机器详情页的 DeepSeek Harness 行只读）、调用 `POST /api/runners/:id/install {"engine":"dsh"}`，或在 runner 上运行 `orbit doctor`。
 4. 获准使用 dsh 的用户已连接 DeepSeek key（与 Claude Code、OpenCode 共用同一把）。Key 只能经加密存储和派发进入 runner，不得写入 runner 环境、日志、文档或证据。
 
 ## 3. 分批启用步骤

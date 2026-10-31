@@ -1,0 +1,109 @@
+{
+  "promotionsCurrent": {
+    "promotionId": "5xWrfrSE3UyZJXu8890vXY",
+    "state": "SUPERSEDED",
+    "sourceKind": "TASK_BRANCH",
+    "sourceRef": "refs/heads/orbit/task-s4-t5-the-release-notes-needs-t1-an-b2b0bc",
+    "sourceSha": "3fb34ae12547f465da2a82ed4f13fbac6bfd0e9d",
+    "upstreamRef": "refs/heads/feature/release-2",
+    "commitsAhead": null,
+    "filesChanged": null,
+    "tasks": [
+      {
+        "taskId": "34o4RPQp6QgPyvmEG3dlc",
+        "title": "S4-T5: the release notes (needs T1 and T2)",
+        "taskPublicId": "34o4RPQp6QgPyvmEG3dlc"
+      }
+    ],
+    "taskIds": [
+      "34o4RPQp6QgPyvmEG3dlc"
+    ],
+    "checks": [],
+    "conflicts": [],
+    "blockedReason": null,
+    "upstream": {
+      "syncedAt": null,
+      "conflicts": false
+    },
+    "upstreamShaChecked": null,
+    "landsTreeSha": null,
+    "landsAs": "FAST_FORWARD",
+    "askedAt": "2026-10-29T02:01:20.289Z",
+    "recheckedAt": null,
+    "recheck": null,
+    "landingSessionId": null,
+    "onPass": null,
+    "execution": null,
+    "cancelRequested": false,
+    "pushBoundaryPassed": false,
+    "decidedAt": "2026-10-29T02:01:20.289Z",
+    "merged": null,
+    "promotionPublicId": "5xWrfrSE3UyZJXu8890vXY",
+    "taskPublicIds": [
+      "34o4RPQp6QgPyvmEG3dlc"
+    ]
+  },
+  "listRowAttention": {
+    "userBlockers": 0,
+    "coordinatorBlockers": 0,
+    "systemBlockers": 0,
+    "maxSeverity": null,
+    "attentionSinceAt": null,
+    "nextCheckAt": null,
+    "ownerItems": [
+      {
+        "kind": "LANDED_WITHOUT_CONFIRMATION",
+        "count": 2,
+        "oldestWaitingSince": "2026-10-29T02:00:50.339Z"
+      }
+    ],
+    "coordinatorItems": {
+      "count": 1,
+      "leadKind": "DELIVERY_REVIEW",
+      "oldestWaitingSince": "2026-10-29T02:00:50.738Z",
+      "nextEscalationAt": null
+    },
+    "startRequest": null,
+    "doneRequest": null
+  },
+  "blockersOpen": [],
+  "derivedDone": {
+    "status": "DONE",
+    "done": true,
+    "withheld": [],
+    "criteria": [
+      {
+        "definitionId": "1wDhozXRuG5Mb4hWq6IATV",
+        "satisfied": true,
+        "landing": "LANDED",
+        "independence": "INDEPENDENT",
+        "conflicts": [],
+        "remedy": null,
+        "landingReason": null,
+        "withheld": [],
+        "definitionPublicId": "1wDhozXRuG5Mb4hWq6IATV"
+      }
+    ],
+    "confirmation": "CONFIRMED",
+    "counts": {
+      "criteria": 1,
+      "met": 1,
+      "landed": 1,
+      "onMain": 1,
+      "byReason": {
+        "IN_FLIGHT": 0,
+        "ON_PROJECT_BRANCH": 0,
+        "NOTHING_TO_LAND": 0,
+        "NO_RECEIPT": 0,
+        "CODELESS": 0
+      }
+    }
+  },
+  "criteria": [
+    {
+      "text": "Release 2 is on its feature branch",
+      "satisfied": true,
+      "landing": "LANDED"
+    }
+  ]
+}

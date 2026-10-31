@@ -16,8 +16,9 @@ import (
 
 // hostdCallTimeout bounds one exchange. A broker that is wedged must not wedge
 // `orbit register` along with it: the legacy sudo path is still there, and reaching it
-// a few seconds late beats not reaching it at all.
-const hostdCallTimeout = 5 * time.Second
+// a few seconds late beats not reaching it at all. A var rather than a const only so a
+// test can drive the give-up path without sitting out five real seconds.
+var hostdCallTimeout = 5 * time.Second
 
 // hostdCall performs one exchange against the broker listening at socketPath: connect,
 // send {"v":1,"verb":...}, read the one response, close. socketPath is a parameter
@@ -79,9 +80,7 @@ func registerViaHostd(socketPath string, proxyVars []envVar) bool {
 		return false
 	}
 	unit := hostdUnit(resp)
-	fmt.Printf("\n✓ %s enabled and started — no root needed.\n"+
-		"  Status:  systemctl status %s\n"+
-		"  Logs:    journalctl -u %s -f\n", unit, unit, unit)
+	printServiceStarted("runs at boot")
 	if len(proxyVars) > 0 {
 		// The legacy path bakes the proxy into a unit it writes for this one user. The
 		// broker's template is shared by every uid on the host and carries no per-user

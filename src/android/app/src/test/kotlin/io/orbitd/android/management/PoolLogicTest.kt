@@ -100,6 +100,13 @@ class PoolLogicTest {
         assertEquals(CodexPoolView.justMe, CodexPoolView(own, null, now).who)
     }
 
+    @Test fun aResetTimeNamesItsDayOnAnyOtherDayHoweverNear() {
+        // `now` is Wednesday noon UTC; the next reset is Thursday morning, under a day out.
+        assertEquals("14:00", ProviderPools.formatResetTime("2026-10-07T14:00:00Z", now, ZoneOffset.UTC))
+        assertEquals("Thu 06:00", ProviderPools.formatResetTime("2026-10-08T06:00:00Z", now, ZoneOffset.UTC))
+        assertEquals("Sat 09:00", ProviderPools.formatResetTime("2026-10-10T09:00:00Z", now, ZoneOffset.UTC))
+    }
+
     @Test fun keyStatusesCapsAndMoneyReadAsOnIos() {
         val people = listOf(person("owner", "Olive", "ADMIN", creator = true, you = true))
         val p = pool("ADMIN", people)

@@ -411,6 +411,10 @@ type HeartbeatResponse struct {
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
 	// nobody is asking.
 	ClaudeHistoryRequest *ClaudeHistoryCommand `json:"claudeHistoryRequest,omitempty"`
+	// A path to report what is there, answered by POSTing /runner/dir-probe-result (dir_probe.go).
+	// Handed over once, as ClaudeHistoryRequest is. Nil on older control planes and whenever nobody
+	// is asking.
+	DirProbeRequest *DirProbeCommand `json:"dirProbeRequest,omitempty"`
 	// This machine's free-space floor in MB (Runner.minFreeDiskMb), which the worktree sweep
 	// reclaims checkouts against. A POINTER because absence is a value, not silence: a machine
 	// with no floor configured sends null, an older control plane sends nothing, and both mean
@@ -1010,6 +1014,40 @@ type RunnerClaudeHistoryResult struct {
 	Error         string                    `json:"error,omitempty"`
 }
 
+// DirProbeCommand mirrors @orbit/shared DirProbeCommand: one path to report what is at, asked while a
+// machine's first workspace is given a folder, before any workspace exists to name in AgentDirs
+// (docs/first-workspace-contract.md §2.3).
+type DirProbeCommand struct {
+	// Path is as asked, `~` not expanded. Echoed back exactly: the answer is matched on it.
+	Path        string `json:"path"`
+	RequestedAt string `json:"requestedAt,omitempty"`
+}
+
+// DirProbe mirrors @orbit/shared DirProbe: what one path on this machine is.
+type DirProbe struct {
+	// Path is what was looked at: `~` expanded, absolute.
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+	IsDir  bool   `json:"isDir"`
+	// IsGit: inside a git work tree; false when it is not a directory.
+	IsGit bool `json:"isGit"`
+	// Branch is the checked-out branch when IsGit; null otherwise, and on a detached HEAD.
+	Branch *string `json:"branch"`
+	// IsHome: it is this runner user's home directory.
+	IsHome bool `json:"isHome"`
+	// FreeBytes on its filesystem, for this user; null when unknown, which never means full.
+	FreeBytes *uint64 `json:"freeBytes"`
+	// Error is why the look could not be taken. Absent on success, "nothing is there" included.
+	Error string `json:"error,omitempty"`
+}
+
+// RunnerDirProbeResult mirrors @orbit/shared RunnerDirProbeResult: POST /runner/dir-probe-result.
+type RunnerDirProbeResult struct {
+	// Path is DirProbeCommand.Path, echoed exactly.
+	Path   string   `json:"path"`
+	Result DirProbe `json:"result"`
+}
+
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a
 // MergeCommand, POSTed back so the UI status bar can show merged ✓ / conflict / error.
 type MergeResultRequest struct {
@@ -1234,6 +1272,9 @@ type ClaimedSession struct {
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit: agent opted in to auto-`git init` a non-git workDir so it can be isolated.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
+	// CreateWorkDir: Orbit made this workspace in a new folder, which the runner makes before the
+	// engine starts — only inside its own repos root (create_workdir.go). Absent otherwise.
+	CreateWorkDir bool `json:"createWorkDir,omitempty"`
 	// MergeTarget is the branch this session's work merges INTO (its recorded target, else its
 	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
 	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
@@ -1450,6 +1491,8 @@ type ReclaimSession struct {
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
+	// CreateWorkDir, cf. ClaimedSession.CreateWorkDir.
+	CreateWorkDir bool `json:"createWorkDir,omitempty"`
 	// MergeTarget, cf. ClaimedSession.MergeTarget.
 	MergeTarget string `json:"mergeTarget,omitempty"`
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session

@@ -1,0 +1,182 @@
+
+### S1 final — codebase  (2026-10-29T02:16:12.902Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main')
+
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode |  delivery_mode_chosen_at   |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+----------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/a/origin/s1 | refs/heads/main | refs/heads/main | origin      | AGENT_PUSH    | 2026-10-29 02:15:13.359+00 | 2026-10-29 02:15:14.817+00 | 
+(1 row)
+
+
+### S1 final — tasks  (2026-10-29T02:16:12.979Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by t.created_at
+
+-[ RECORD 1 ]------+-----------------------------------------------------
+title              | S1-A: write the work and push it to main
+status             | DONE
+auto_run           | f
+delivered_sha      | 56dd992f92e72d4844790684d7bd4acd97ae411a
+delivered_base_sha | b24beb061bd2c9bf4e284b39f2f56b79326707af
+delivered_branch   | orbit/task-s1-a-write-the-work-and-push-it-to-70e845
+delivered_at       | 2026-10-29 02:15:39.987+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 02:15:13.322
+-[ RECORD 2 ]------+-----------------------------------------------------
+title              | S1-B: starts by itself once S1-A is seen on main
+status             | DONE
+auto_run           | t
+delivered_sha      | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+delivered_base_sha | 56dd992f92e72d4844790684d7bd4acd97ae411a
+delivered_branch   | orbit/task-s1-b-starts-by-itself-once-s1-a-is-8bf606
+delivered_at       | 2026-10-29 02:16:09.775+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 02:15:13.34
+
+
+### S1 final — sessions  (2026-10-29T02:16:13.052Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by s.created_at
+
+-[ RECORD 1 ]---+-----------------------------------------------------
+task            | S1-A: write the work and push it to main
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s1-a-write-the-work-and-push-it-to-70e845
+base_sha        | b24beb061bd2c9bf4e284b39f2f56b79326707af
+branch_sha      | 56dd992f92e72d4844790684d7bd4acd97ae411a
+created_at      | 2026-10-29 02:15:13.467
+finished_at     | 2026-10-29 02:15:39.962
+-[ RECORD 2 ]---+-----------------------------------------------------
+task            | S1-B: starts by itself once S1-A is seen on main
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s1-b-starts-by-itself-once-s1-a-is-8bf606
+base_sha        | 56dd992f92e72d4844790684d7bd4acd97ae411a
+branch_sha      | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+created_at      | 2026-10-29 02:15:42.56
+finished_at     | 2026-10-29 02:16:09.77
+
+
+### S1 final — jobs  (2026-10-29T02:16:13.111Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by j.created_at
+
+-[ RECORD 1 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 1
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | 56dd992f92e72d4844790684d7bd4acd97ae411a
+target_sha_before | 56dd992f92e72d4844790684d7bd4acd97ae411a
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18570-a0aa-760e-b40a-dfcf5d893aa0", "baseSha": "b24beb061bd2c9bf4e284b39f2f56b79326707af", "onUpstream": true, "deliveredSha": "56dd992f92e72d4844790684d7bd4acd97ae411a", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {01a18571-1215-76ff-8776-caf7ad8d5ede}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:15:42.123+00
+finished_at       | 2026-10-29 02:15:42.326+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18570-9fe6-75a6-9f54-441c421fe384:1
+-[ RECORD 2 ]-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | OBSERVE_LANDING
+generation        | 2
+state             | OBSERVED
+phase             | OBSERVE
+task              | 
+source_ref        | refs/heads/main
+source_sha        | 
+upstream_sha      | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+target_sha_before | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+error_code        | 
+error_detail      | 
+observations      | [{"empty": false, "taskId": "01a18570-a0bc-72e5-aa18-44c4d9251950", "baseSha": "56dd992f92e72d4844790684d7bd4acd97ae411a", "onUpstream": true, "deliveredSha": "5c6d17939584825de21f4c82ee01fc22a6d19b4b", "fullyApplied": true, "onIntegrationLine": null}]
+receipt_ids       | {01a18571-86a4-7659-9f7f-f041683e4dc0}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 02:16:12.102+00
+finished_at       | 2026-10-29 02:16:12.191+00
+idempotency_key   | ij:v1:OBSERVE_LANDING:01a18570-9fe6-75a6-9f54-441c421fe384:2
+
+
+### S1 final — receipts  (2026-10-29T02:16:13.176Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by r.created_at
+
+-[ RECORD 1 ]-----+-------------------------------------------------------------------------------
+task              | S1-A: write the work and push it to main
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s1-a-write-the-work-and-push-it-to-70e845
+source_sha        | 56dd992f92e72d4844790684d7bd4acd97ae411a
+target_branch     | main
+target_sha_before | 56dd992f92e72d4844790684d7bd4acd97ae411a
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "93ab93a0-1a0b-4653-977f-8c053c354594"}
+created_at        | 2026-10-29 02:15:42.357
+-[ RECORD 2 ]-----+-------------------------------------------------------------------------------
+task              | S1-B: starts by itself once S1-A is seen on main
+result            | ALREADY_MERGED
+source_branch     | orbit/task-s1-b-starts-by-itself-once-s1-a-is-8bf606
+source_sha        | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+target_branch     | main
+target_sha_before | 5c6d17939584825de21f4c82ee01fc22a6d19b4b
+target_sha_after  | 
+recorded_by       | RUNNER
+detail            | {"observed": true, "integrationJobId": "378328ee-aec8-4294-a45e-9012d49885c0"}
+created_at        | 2026-10-29 02:16:12.196
+
+
+### S1 final — promotions  (2026-10-29T02:16:13.233Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by p.created_at
+
+(0 rows)
+
+
+### S1 final — observationEvents  (2026-10-29T02:16:13.300Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation |   kind   |                                                                                                                                              data                                                                                                                                              |                    text                    |         created_at         
+------------+----------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------------------------
+          1 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "IDENTITY_FROZEN", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 1}                                                                                                                                                     | Queued to look for finished work on main   | 2026-10-29 02:15:39.959+00
+          1 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                                                          | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:15:42.133+00
+          1 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                                                                | Waiting for this runner's repository lock  | 2026-10-29 02:15:42.19+00
+          1 | ROUND    | {"round": 1}                                                                                                                                                                                                                                                                                   | Round 1                                    | 2026-10-29 02:15:42.224+00
+          1 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                                                                   | Fetching the repository                    | 2026-10-29 02:15:42.224+00
+          1 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                                                                 | Looking for finished work on main          | 2026-10-29 02:15:42.281+00
+          1 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:15:42.326Z", "receiptIds": ["01a18571-1215-76ff-8776-caf7ad8d5ede"], "upstreamSha": "56dd992f92e72d4844790684d7bd4acd97ae411a", "requestedState": "OBSERVED", "targetShaBefore": "56dd992f92e72d4844790684d7bd4acd97ae411a"} | Looked at main · 56dd992                   | 2026-10-29 02:15:42.316+00
+          2 | ENQUEUED | {"kind": "OBSERVE_LANDING", "trigger": "IDENTITY_FROZEN", "sourceRef": "refs/heads/main", "targetRef": "refs/heads/main", "generation": 2}                                                                                                                                                     | Queued to look for finished work on main   | 2026-10-29 02:16:09.769+00
+          2 | CLAIMED  | {"runnerId": "01a1856d-dc5b-710f-b6ee-34bc1df12db2", "runnerName": "r2913-a-runner", "previousState": "QUEUED", "claimGeneration": 1}                                                                                                                                                          | Claimed by runner r2913-a-runner · claim 1 | 2026-10-29 02:16:12.106+00
+          2 | STEP     | {"step": "WAITING_LOCAL_LOCK", "phase": "FETCH", "round": null}                                                                                                                                                                                                                                | Waiting for this runner's repository lock  | 2026-10-29 02:16:12.139+00
+          2 | ROUND    | {"round": 1}                                                                                                                                                                                                                                                                                   | Round 1                                    | 2026-10-29 02:16:12.145+00
+          2 | STEP     | {"step": null, "phase": "FETCH", "round": 1}                                                                                                                                                                                                                                                   | Fetching the repository                    | 2026-10-29 02:16:12.145+00
+          2 | STEP     | {"step": null, "phase": "OBSERVE", "round": 1}                                                                                                                                                                                                                                                 | Looking for finished work on main          | 2026-10-29 02:16:12.181+00
+          2 | RESULT   | {"state": "OBSERVED", "observed": 1, "finishedAt": "2026-10-29T02:16:12.191Z", "receiptIds": ["01a18571-86a4-7659-9f7f-f041683e4dc0"], "upstreamSha": "5c6d17939584825de21f4c82ee01fc22a6d19b4b", "requestedState": "OBSERVED", "targetShaBefore": "5c6d17939584825de21f4c82ee01fc22a6d19b4b"} | Looked at main · 5c6d179                   | 2026-10-29 02:16:12.19+00
+(14 rows)
+
+
+### S1 final — openItems  (2026-10-29T02:16:13.351Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S1 AGENT_PUSH: the agent pushes to main') order by i.created_at
+
+(0 rows)
+

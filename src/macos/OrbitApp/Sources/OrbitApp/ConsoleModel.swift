@@ -5205,6 +5205,11 @@ final class ConsoleModel {
         case .escalated:
             let id = DeliveredDecisionCard(kind: .escalatedItem(itemID: item.itemId)).id
             return decisionCards.contains { $0.id == id } ? id : nil
+        // Work that reached main without the owner's confirmation is in the owner's group too, so
+        // it is drawn on the same card, under its own item's id (`ExceptionCards.cards`).
+        case .landedWithoutConfirmation:
+            let id = DeliveredDecisionCard(kind: .escalatedItem(itemID: item.itemId)).id
+            return decisionCards.contains { $0.id == id } ? id : nil
         case .fusePaused:
             let id = DeliveredDecisionCard(kind: .fusePause(itemID: item.itemId)).id
             return decisionCards.contains { $0.id == id } ? id : nil
@@ -5364,6 +5369,38 @@ final class ConsoleModel {
             await refreshRulerQuestions(force: true)
         } catch {
             statusMessage = "\(ExceptionCards.abandonFailed) — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Accept (§10.8): the owner's answer to work that reached main without their confirmation. It
+    /// stays where it landed and the item ends ACCEPTED; undoing it is not a door but a task the
+    /// coordinator files when Chat about this asks it to. The read that follows publishes the item
+    /// gone; a refusal says so in the browser's own headline, over the server's words.
+    func acceptItem(_ row: ProjectOpenItemRow) async -> Bool {
+        guard let projectID, ExceptionCards.addressed(row, .accept) else { return false }
+        do {
+            try await api.acceptOpenItem(projectID: projectID, itemID: row.itemId)
+            await refreshRulerQuestions(force: true)
+            return true
+        } catch {
+            statusMessage = "\(ExceptionCards.notAccepted) — \(APIClient.failureReason(error))."
+            return false
+        }
+    }
+
+    /// Observe again (§10.8, O-T5): look at the project's line once more — the project's door, with
+    /// the reason it requires. Nothing closes at the press: the item stays open and the read that
+    /// follows shows the observation handling it (`ExceptionCards.handlingRows`). A reason the door
+    /// would refuse is not a press, as `markItemHandled` holds the same line.
+    func observeIntegration(reason: String) async -> Bool {
+        guard let projectID, let request = ExceptionCards.observeRequest(reason) else { return false }
+        do {
+            try await api.observeIntegration(projectID: projectID, request)
+            await refreshRulerQuestions(force: true)
+            return true
+        } catch {
+            statusMessage = "\(ExceptionCards.notObserved) — \(APIClient.failureReason(error))."
+            return false
         }
     }
 

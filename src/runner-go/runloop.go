@@ -388,6 +388,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		WorkDir:            r.WorkDir,
 		Branch:             r.Branch,
 		AutoInitGit:        r.AutoInitGit,
+		CreateWorkDir:      r.CreateWorkDir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,
 		TaskID:             r.TaskID,
@@ -1821,6 +1822,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}(ch.WorkDir)
 			}
+			// Say what is at a path someone is choosing as a machine's first workspace folder
+			// (dir_probe.go), off this goroutine for the reason the history scan is.
+			startDirProbe(resp.DirProbeRequest, &heartbeatOps, t.dirProbeResult)
 			// Check the Cursor API keys somebody is waiting on (cursor_key_check.go), off this goroutine for
 			// the reason the history scan is.
 			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)

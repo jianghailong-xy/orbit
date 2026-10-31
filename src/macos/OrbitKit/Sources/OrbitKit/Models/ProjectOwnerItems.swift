@@ -23,6 +23,11 @@ public enum ProjectOpenItemKind: String, Codable, Sendable {
     case deliveryReview = "DELIVERY_REVIEW"
     /// §4.6 X-E5: a landing attempt whose runner stopped reporting, escalated at birth.
     case landingLeaseExpired = "LANDING_LEASE_EXPIRED"
+    /// §10.7: a finished task's work not seen on its line — the coordinator's first, the owner's
+    /// once it escalates or is handed over.
+    case landingUnobserved = "LANDING_UNOBSERVED"
+    /// §10.7: work that reached main without the owner's confirmation — the owner's from birth.
+    case landedWithoutConfirmation = "LANDED_WITHOUT_CONFIRMATION"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -126,6 +131,10 @@ public enum ProjectOpenItemAction: String, Codable, Sendable {
     case openLanding = "OPEN_LANDING"
     /// End the timed-out landing attempt the item is about (§4.6 X-E5, J12).
     case abandon = "ABANDON"
+    /// Accept work that reached main without the owner's confirmation (§10.8): the item's own door.
+    case accept = "ACCEPT"
+    /// Look at the project's line again, with a reason (§10.8): the project's observation door.
+    case observe = "OBSERVE"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -144,6 +153,29 @@ public struct OpenItemFixTask: Codable, Equatable, Sendable {
     public init(taskId: String, title: String, state: String) {
         self.taskId = taskId
         self.title = title
+        self.state = state
+    }
+}
+
+/// The rerun of an item's failure while it is still in flight (§4.7 H1) — or, for a
+/// `LANDING_UNOBSERVED`, the observation Observe again queued or joined (§10.8): the item is being
+/// handled, not closed. `@orbit/shared`'s `OpenItemHandling`, minus the two addresses of who asked.
+public struct OpenItemHandling: Codable, Equatable, Sendable {
+    /// Why it was asked for, in the asker's words.
+    public let reason: String
+    public let startedAt: String
+    /// `LAND_TASK`, `CHECK_PROMOTION` or `OBSERVE_LANDING`.
+    public let jobKind: String
+    public let generation: Int?
+    /// `QUEUED` or `RUNNING`.
+    public let state: String
+
+    public init(reason: String, startedAt: String, jobKind: String, generation: Int? = nil,
+                state: String) {
+        self.reason = reason
+        self.startedAt = startedAt
+        self.jobKind = jobKind
+        self.generation = generation
         self.state = state
     }
 }
@@ -293,6 +325,9 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// not a shape this build reads — an item an older build opened, a pause, a question — which
     /// leaves the card drawing the server's own sentence, as it did before the rows existed.
     public let facts: OpenItemFacts?
+    /// The rerun or observation handling it while that is in flight (§4.7 H1, §10.8), or nil — for
+    /// none, and from a server that predates it.
+    public let handling: OpenItemHandling?
 
     public var id: String { itemId }
 
@@ -308,7 +343,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
                 question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
-                facts: OpenItemFacts? = nil) {
+                facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -334,6 +369,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.startRequest = startRequest
         self.doneRequest = doneRequest
         self.facts = facts
+        self.handling = handling
     }
 
     public init(from decoder: Decoder) throws {
@@ -370,6 +406,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                                                forKey: .startRequest)) ?? nil
         doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
+        handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
     }
 }
 
@@ -629,6 +666,13 @@ public struct OwnerAnswerRequest: Codable, Sendable {
 public struct OpenItemResolveRequest: Codable, Sendable {
     public let note: String
     public init(note: String) { self.note = note }
+}
+
+/// The body of `POST /projects/:id/integration/observe` (§10.8): the reason the door requires — blank
+/// or over 2000 characters is 400 `INTEGRATION_OBSERVE_REASON_REQUIRED`.
+public struct IntegrationObserveRequest: Codable, Equatable, Sendable {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
 }
 
 /// What a rerun answers (§2.3 J-T1b, §4.7 H1): the generation it queued, the failed generation it

@@ -83,6 +83,20 @@ test('needs-you counts the coordinator conversation carrying one of the four', a
   assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-blocked', 'c-coordinator']);
 });
 
+test('needs-you counts work that reached main without the owner\'s confirmation (owner 2026-10-28)', async () => {
+  const prisma = approvalPrisma();
+  const service = new PushService(prisma as any, enabledConfig());
+  // §10.7: the owner's from birth (DEFAULT), never escalated — and counted like a merge approval.
+  prisma.projectOpenItem.findMany = async () => [
+    ownerItemRow('item-3', 'c-coordinator', {
+      kind: 'LANDED_WITHOUT_CONFIRMATION',
+      title: 'Reached main without your confirmation: Add the landing receipt',
+    }),
+  ];
+
+  assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-blocked', 'c-coordinator']);
+});
+
 test('needs-you does not count an item the coordinator is still working on', async () => {
   const prisma = approvalPrisma();
   const service = new PushService(prisma as any, enabledConfig());
@@ -584,7 +598,7 @@ function ownerItemHarness(
   return { service, sent };
 }
 
-test('the four owner item kinds push', async () => {
+test('the five owner item kinds push', async () => {
   const cases: Array<{
     what: string;
     item: Record<string, unknown>;
@@ -641,6 +655,30 @@ test('the four owner item kinds push', async () => {
       kind: 'fuse-paused',
       title: 'The coordinator paused itself',
       body: 'It started 41 turns on its own today — the limit is 40 · Integration line',
+    },
+    {
+      what: 'work that reached main without the owner\'s confirmation (§10.7, owner 2026-10-28)',
+      item: openItem({
+        kind: 'LANDED_WITHOUT_CONFIRMATION',
+        title: 'Reached main without your confirmation: Add the landing receipt',
+        payload: {
+          receiptId: 'receipt-1', recordedBy: 'RUNNER', targetBranch: 'main', sourceSha: 'a'.repeat(40), observed: true,
+        },
+      }),
+      kind: 'landed-without-confirmation',
+      title: 'Landed without your confirmation',
+      body: 'Reached main without your confirmation: Add the landing receipt · Integration line',
+    },
+    {
+      what: 'the deploy-time pass\'s one item for the project (§10.9 UL:backfill)',
+      item: openItem({
+        kind: 'LANDED_WITHOUT_CONFIRMATION',
+        title: 'Reached main without your confirmation: 3 tasks',
+        payload: { backfill: true, jobId: 'job-1', targetBranch: 'main', receipts: [] },
+      }),
+      kind: 'landed-without-confirmation',
+      title: 'Landed without your confirmation',
+      body: 'Reached main without your confirmation: 3 tasks · Integration line',
     },
   ];
 

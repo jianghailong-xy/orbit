@@ -1,0 +1,11 @@
+Printing with useUnmergedTree = 'false'
+Node #2613 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #2666 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #2668 at (l=64.0, t=32.0, r=758.0, b=120.0)px, Tag: 'needs-you-bar'
+       |-Node #2669 at (l=64.0, t=32.0, r=758.0, b=120.0)px
+         Focused = 'false'
+         Role = 'Button'
+         Text = '[Landed without your confirmation, 2h, Checkout redesign]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'

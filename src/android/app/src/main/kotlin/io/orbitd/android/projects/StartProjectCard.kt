@@ -129,13 +129,16 @@ internal fun StartProjectCard(
                     Switch(draft.automatic, { onDraft(draft.copy(automatic = it)) }, enabled = editable,
                         modifier = Modifier.testTag("$tag-automatic").semantics { contentDescription = RunSettings.automatic })
                 }
-                Text(RunSettings.automaticSays(draft.automatic, draft.line, draft.hasMergeCheck, main), Modifier.testTag("$tag-automatic-says"),
+                // Where the agent pushes its own work, no merge into main asks anybody (§10.5 O-L2): its own sentence.
+                Text(if (draft.agentPushes) RunSettings.automaticSaysAgentPush(draft.automatic, main)
+                    else RunSettings.automaticSays(draft.automatic, draft.line, draft.hasMergeCheck, main), Modifier.testTag("$tag-automatic-says"),
                     style = MaterialTheme.typography.labelMedium, color = muted)
                 if (opensCoordinator) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("✦", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, color = muted)
                     Text(StartProjectCopy.opensCoordinator, Modifier.testTag("$tag-opens"), style = MaterialTheme.typography.labelMedium, color = muted)
                 }
-                ComesToYou(StartProjectCopy.comesToYou(draft.automatic, draft.line, plan.ownerConfirmed, plan.evidenceJudged, escalationSeconds, main), tag)
+                ComesToYou(StartProjectCopy.comesToYou(draft.automatic, draft.line, plan.ownerConfirmed, plan.evidenceJudged, escalationSeconds, main,
+                    RunSettings.delivery(draft.line, draft.deliveryMode)), tag)
             }
             HorizontalDivider()
             LineRow(draft, request, projectId, editable, tag, onDraft)
@@ -143,6 +146,11 @@ internal fun StartProjectCard(
             if (draft.upstream != null) {
                 HorizontalDivider()
                 MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
+            }
+            // How the work reaches main: a card whose read does not say offers no choice, and no row.
+            if (draft.deliveryMode != null) {
+                HorizontalDivider()
+                DeliveryRow(draft, editable, tag, onDraft)
             }
             HorizontalDivider()
             MergeCheckRow(draft, editable, tag, onDraft)
@@ -224,7 +232,7 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
     // Automatic on, as the reads resolve them.
     var edited by rememberSaveable(card.key, card.binding, stateSaver = draftSaver) { mutableStateOf<StartProjectCopy.Draft?>(null) }
     val draft = recorded?.settings?.let { pressed -> StartProjectCopy.Draft(pressed.line, pressed.automatic, pressed.maxConcurrentTasks,
-        pressed.mergeCheckCommand.orEmpty(), pressed.upstreamRef?.let(RunSettings::mainBranchName)) }
+        pressed.mergeCheckCommand.orEmpty(), pressed.upstreamRef?.let(RunSettings::mainBranchName), pressed.deliveryMode) }
         ?: edited ?: request?.let { StartProjectCopy.Draft.of(it.settings, integration) } ?: StartProjectCopy.Draft("PROJECT_BRANCH", true, 1)
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -254,7 +262,7 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
                     enabled = fresh && CardVerb.START in card.actions && !result.uncertain && !result.settled, starting = result.busy, error = error,
                     tag = card.key, startTag = "${card.key}:${CardVerb.START.name}",
                     onStart = { submit(CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef)))) },
+                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef), draft.deliveryMode))) },
                     // The tasks the plan names, on the project's page (the browser's link when there is no list to open).
                     onViewTasks = { card.projectId?.let { open("orbit-project:$it") } },
                     onChatAbout = chat, chatEnabled = fresh && !result.busy,
@@ -270,8 +278,8 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
 
 /** An edited draft across recreation; none saved while nothing has been edited. */
 private val draftSaver = Saver<StartProjectCopy.Draft?, List<Any?>>(
-    save = { draft -> draft?.let { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand, it.upstream) } },
-    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?) })
+    save = { draft -> draft?.let { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand, it.upstream, it.deliveryMode) } },
+    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?, it[5] as String?) })
 
 /** What still comes to the owner once the project starts with these settings. */
 @Composable
@@ -308,10 +316,43 @@ private fun LineRow(draft: StartProjectCopy.Draft, request: StartProjectCopy.Req
                     Triple("MAIN", RunSettings.lineMain(draft.main), RunSettings.lineMainHint(draft.main))).forEach { (value, title, hint) ->
                     DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
                         Text(if (draft.line == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },
-                        onClick = { menu = false; onDraft(draft.copy(line = value)) }, modifier = Modifier.testTag("$tag-line:$value"))
+                        // Off a main line the agent cannot push, so the delivery goes back to Orbit's.
+                        onClick = { menu = false; onDraft(draft.copy(line = value, deliveryMode = if (value != "MAIN" && draft.deliveryMode != null) "PLATFORM"
+                            else draft.deliveryMode)) }, modifier = Modifier.testTag("$tag-line:$value"))
                 }
             }
         }
+    }
+}
+
+/** How the work reaches main (§10.5 O-L1, A-Q21), picked from the platform's menu as the line is: Orbit lands it, or the agent pushes
+ * it there itself — a choice only a project landing directly into main has. Off a main line the menu stays on Orbit's and the line
+ * under it says why; on one it says what the chosen way means. */
+@Composable
+private fun DeliveryRow(draft: StartProjectCopy.Draft, editable: Boolean, tag: String, onDraft: (StartProjectCopy.Draft) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val chosen = RunSettings.delivery(draft.line, draft.deliveryMode)
+    Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(RunSettings.delivery, Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { menu = true }, enabled = editable && draft.line == "MAIN", modifier = Modifier.testTag("$tag-delivery")) {
+                    Text("${if (chosen == "AGENT_PUSH") RunSettings.deliveryAgentPush else RunSettings.deliveryPlatform} ▾", maxLines = 1) }
+                DropdownMenu(menu, { menu = false }) {
+                    listOf(Triple("PLATFORM", RunSettings.deliveryPlatform, RunSettings.deliveryPlatformHint(draft.main)),
+                        Triple("AGENT_PUSH", RunSettings.deliveryAgentPush, RunSettings.deliveryAgentPushHint(draft.main))).forEach { (value, title, hint) ->
+                        DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
+                            Text(if (chosen == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },
+                            onClick = { menu = false; onDraft(draft.copy(deliveryMode = value)) }, modifier = Modifier.testTag("$tag-delivery:$value"))
+                    }
+                }
+            }
+        }
+        Text(when {
+            draft.line != "MAIN" -> RunSettings.deliveryNeedsMainLine(draft.main)
+            chosen == "AGENT_PUSH" -> RunSettings.deliveryAgentPushHint(draft.main)
+            else -> RunSettings.deliveryPlatformHint(draft.main)
+        }, Modifier.testTag("$tag-delivery-hint"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

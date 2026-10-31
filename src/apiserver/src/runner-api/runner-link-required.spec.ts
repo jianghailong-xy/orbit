@@ -26,8 +26,8 @@ import {
  * RunnerApiController's routes that the switch refuses over HTTPS: the runner daemon's protocol. 44 on 2026-10-25,
  * which with STAYS_ON_HTTPS are the 49 the design counted (docs/runner-link-design.md §11.3), and 47 since 2026-10-28,
  * when the daemon's three calls that went beside the agent tool API moved here: a Cursor key check's answer, a session's
- * own key check and a background job's alert (§15.9). src/runner-go/link_mode.go holds the same routes in
- * linkDaemonRoutes.
+ * own key check and a background job's alert (§15.9). 48 since 2026-10-31: the directory probe's answer
+ * (docs/first-workspace-contract.md §2.4). src/runner-go/link_mode.go holds the same routes in linkDaemonRoutes.
  */
 const REFUSED_OVER_HTTPS = [
   'GET /runner/me',
@@ -43,6 +43,7 @@ const REFUSED_OVER_HTTPS = [
   'POST /runner/codex-rate-limit-reset-result',
   'POST /runner/repo-cleanup-result',
   'POST /runner/claude-history-result',
+  'POST /runner/dir-probe-result',
   'POST /runner/install-result',
   'POST /runner/codex-account-remove-result',
   'POST /runner/account-remove-result',
@@ -133,9 +134,9 @@ async function through(interceptor: RunnerLinkRequiredInterceptor, context: Exec
 const switchedOn = () => new RunnerLinkRequiredInterceptor({ required: async () => true } as unknown as RunnerLinkSwitch);
 const switchedOff = () => new RunnerLinkRequiredInterceptor({ required: async () => false } as unknown as RunnerLinkSwitch);
 
-test('RunnerApiController has 52 routes: 47 the switch refuses over HTTPS, 5 kept on HTTPS (D14); a new one fails here', () => {
+test('RunnerApiController has 53 routes: 48 the switch refuses over HTTPS, 5 kept on HTTPS (D14); a new one fails here', () => {
   const routes = routesOf(RunnerApiController);
-  assert.equal(REFUSED_OVER_HTTPS.length, 47);
+  assert.equal(REFUSED_OVER_HTTPS.length, 48);
   assert.deepEqual(
     sorted(routes.map((r) => r.route)),
     sorted([...REFUSED_OVER_HTTPS, ...STAYS_ON_HTTPS]),
@@ -143,7 +144,7 @@ test('RunnerApiController has 52 routes: 47 the switch refuses over HTTPS, 5 kep
       + 'RUNNER_LINK_REQUIRED refuses over HTTPS (REFUSED_OVER_HTTPS; and src/runner-go/link_mode.go linkDaemonRoutes), '
       + 'or not part of it and marked @StaysOnHttps() (STAYS_ON_HTTPS, docs/runner-link-design.md D14)',
   );
-  assert.equal(routes.length, 52, 'the 49 counted on 2026-10-25, and the three that moved here on 2026-10-28');
+  assert.equal(routes.length, 53, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, and the directory probe\'s answer');
   assert.deepEqual(sorted(routes.filter((r) => staysOnHttps(r.handler)).map((r) => r.route)), sorted(STAYS_ON_HTTPS));
 });
 

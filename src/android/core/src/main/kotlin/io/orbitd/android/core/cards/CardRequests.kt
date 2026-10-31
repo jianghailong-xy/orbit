@@ -64,6 +64,9 @@ object CardRequests {
                     // The main branch rides only as the card showed it: a press that brings no settings of its own names none, and
                     // the project keeps the one it stands on rather than taking the coordinator's suggestion as the owner's choice.
                     input.settings?.upstreamRef?.trim()?.takeIf { it.isNotBlank() }?.let { put("upstreamRef", it) }
+                    // How the work reaches main, the same way, and with a main line only: the door refuses AGENT_PUSH anywhere else
+                    // (409 DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
+                    if (settings.line == "MAIN") input.settings?.deliveryMode?.let { put("deliveryMode", it) }
                 }
                 request(projectPath("start"), body)
             }
@@ -93,6 +96,10 @@ object CardRequests {
             // J-T10's owner end of a timed-out attempt (§4.6 X-E5): the one job the item names, through the same door the landing
             // page's menu presses. It ends it, and nothing is queued again.
             CardVerb.ABANDON -> request(projectPath("integration", "jobs", required("integrationJobId"), "abandon"))
+            // §10.8: Accept answers the item itself and takes no body. Observe again queues a look at the project's line — or joins the
+            // one already queued — with the reason the door requires, and closes nothing by itself.
+            CardVerb.ACCEPT -> request(projectPath("open-items", card.objectId, "accept"))
+            CardVerb.OBSERVE -> request(projectPath("integration", "observe"), buildJsonObject { put("reason", note(ExceptionCards.observeReasonMaxLength)) })
             // The task panel's own Reopen task (`TaskReopen`): back to Open, both retirement fields cleared in the one request.
             CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
                 put("status", "OPEN"); put("supersededByTaskId", JsonNull); put("terminalReason", JsonNull)

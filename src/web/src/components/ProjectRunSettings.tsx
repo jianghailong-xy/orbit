@@ -1,12 +1,15 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { IntegrationLine, ProjectIntegrationView, ProjectPauseState } from '@orbit/shared';
+import type { DeliveryMode, IntegrationLine, ProjectIntegrationView, ProjectPauseState } from '@orbit/shared';
 import { api } from '../api';
 import {
   DEFAULT_MAIN_BRANCH,
   RUN_APPLIES_FROM_NEXT_TASK,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
+  RUN_DELIVERY,
+  RUN_DELIVERY_AGENT_PUSH,
+  RUN_DELIVERY_PLATFORM,
   RUN_EXECUTION,
   RUN_ESCALATE_AFTER,
   RUN_ESCALATE_HINT,
@@ -30,9 +33,14 @@ import {
   mainBranchName,
   mainBranchRef,
   runAutomaticHint,
+  runAutomaticHintAgentPush,
+  runDeliveryAgentPushHint,
+  runDeliveryNeedsMainLine,
+  runDeliveryPlatformHint,
   runLineLocked,
   runLineMain,
   runLineMainHint,
+  runLineMainHintAgentPush,
   runMainBranchLocked,
   runMainBranchRemembers,
   runMergeCheckHint,
@@ -72,9 +80,14 @@ import { Switch } from './ui/Switch';
  * database trigger (L4) — so the choice is drawn read-only with the reason written out. Until then
  * it can be chosen, a line nobody has decided included.
  *
- * WHAT A SAVE WRITES, AND WHERE. The line, the merge check and the escalation window are the
- * integration door's (`PATCH /projects/:id/integration`); Automatic and the concurrency limit are
- * the authorization set (`PATCH /projects/:id` with `automatic` — the project's
+ * HOW THE WORK REACHES MAIN DOES NOT LOCK (§10.5 O-L1). Orbit lands it, or the agent pushes it there
+ * itself — which only a main line takes: on a project branch, or a line nobody decided, the agent's
+ * way is drawn but not offered, with the reason (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`), and a
+ * line moved off main takes the delivery back to Orbit's in the same write.
+ *
+ * WHAT A SAVE WRITES, AND WHERE. The line, the merge check, the delivery mode and the escalation
+ * window are the integration door's (`PATCH /projects/:id/integration`); Automatic and the
+ * concurrency limit are the authorization set (`PATCH /projects/:id` with `automatic` — the project's
  * `coordinator_enabled` and nothing else — and `maxConcurrentTasks`), fenced against the
  * `configRevision` this block was drawn from. Only what was changed is sent. Pause project is not a
  * setting but a press: it stops the project moving at once (`POST /projects/:id/pause`), and
@@ -115,6 +128,8 @@ interface IntegrationSettingsBody {
   upstreamRef?: string;
   mergeCheckCommand?: string | null;
   exceptionEscalationSeconds?: number;
+  /** How the work reaches main (§10.5 O-L1); AGENT_PUSH only with a main line. */
+  deliveryMode?: DeliveryMode;
 }
 
 function updateProjectIntegration(
@@ -163,6 +178,8 @@ interface RunSettingsDraft {
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
   escalationSeconds: number;
+  /** How the work reaches main, as last chosen in this block; it counts only on a main line. */
+  deliveryMode: DeliveryMode;
 }
 
 /** The main branch the project stands on, by name — before it is bound to its repository, the one
@@ -183,7 +200,14 @@ function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject):
     maxConcurrentTasks: project.maxConcurrentTasks,
     mergeCheckCommand: view.mergeCheckCommand ?? '',
     escalationSeconds: view.escalationSeconds,
+    deliveryMode: view.deliveryMode ?? 'PLATFORM',
   };
+}
+
+/** The delivery a draft stands for: the agent pushes only on a main line (O-L1), so on any other —
+ *  a project branch, or none decided — it is Orbit's, whatever was chosen while the line was main. */
+function draftDelivery(draft: Pick<RunSettingsDraft, 'line' | 'deliveryMode'>): DeliveryMode {
+  return draft.line === 'MAIN' ? draft.deliveryMode : 'PLATFORM';
 }
 
 /** The two writes a Save makes, each holding only what changed; null for a door with nothing to
@@ -194,6 +218,7 @@ function runSettingsWrites(
   view: Pick<
     ProjectIntegrationView,
     'line' | 'repository' | 'upstreamRef' | 'lastMainBranch' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'
+    | 'deliveryMode'
   >,
   project: RunSettingsProject,
   draft: RunSettingsDraft,
@@ -207,6 +232,11 @@ function runSettingsWrites(
     ...(check !== (view.mergeCheckCommand ?? null) ? { mergeCheckCommand: check } : {}),
     ...(draft.escalationSeconds !== view.escalationSeconds
       ? { exceptionEscalationSeconds: draft.escalationSeconds }
+      : {}),
+    // Only to a server that reads it, and only when it moves — in the same write as the line that
+    // moves it, which is what the door asks of a line leaving main.
+    ...(view.deliveryMode !== undefined && draftDelivery(draft) !== view.deliveryMode
+      ? { deliveryMode: draftDelivery(draft) }
       : {}),
   };
   const authorization = {
@@ -298,6 +328,7 @@ export function ProjectRunSettings({
   // with no repository. Pausing is about the project as it stands, so its sentence names that one.
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
   const repository = view.repository || null;
+  const delivery = draftDelivery(draft);
 
   return (
     <section className="project-open-items project-run-settings" aria-label={START_HOW_IT_RUNS}>
@@ -346,7 +377,10 @@ export function ProjectRunSettings({
                 </Radio>
                 <Radio value="MAIN">
                   <b>{runLineMain(main)}</b>
-                  {view.locked ? null : (
+                  {/* While the agent pushes, no merge into main asks anybody (O-L2): its own words. */}
+                  {view.locked ? null : delivery === 'AGENT_PUSH' ? (
+                    <div className="project-integration-setting-hint">{runLineMainHintAgentPush(main)}</div>
+                  ) : (
                     <div className="project-integration-setting-hint">{runLineMainHint(main)}</div>
                   )}
                 </Radio>
@@ -383,6 +417,33 @@ export function ProjectRunSettings({
             </div>
           ) : null}
 
+          {/* How the work reaches main (§10.5 O-L1): a choice only a main line has, and one that does not
+              lock. A server that predates it reports no mode, and draws no row. */}
+          {view.deliveryMode !== undefined ? (
+            <div className="project-integration-setting">
+              <div className="project-integration-setting-label">{RUN_DELIVERY}</div>
+              <div>
+                <RadioGroup<DeliveryMode>
+                  className="project-run-lines project-run-delivery"
+                  aria-label={RUN_DELIVERY}
+                  value={delivery}
+                  onValueChange={(deliveryMode) => set({ deliveryMode })}
+                >
+                  <Radio value="PLATFORM">
+                    <b>{RUN_DELIVERY_PLATFORM}</b>
+                    <div className="project-integration-setting-hint">{runDeliveryPlatformHint(main)}</div>
+                  </Radio>
+                  <Radio value="AGENT_PUSH" disabled={draft.line !== 'MAIN'}>
+                    <b>{RUN_DELIVERY_AGENT_PUSH}</b>
+                    <div className="project-integration-setting-hint">
+                      {draft.line === 'MAIN' ? runDeliveryAgentPushHint(main) : runDeliveryNeedsMainLine(main)}
+                    </div>
+                  </Radio>
+                </RadioGroup>
+              </div>
+            </div>
+          ) : null}
+
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
             <div>
@@ -395,8 +456,12 @@ export function ProjectRunSettings({
                 <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
               </div>
               {/* The start card's sentence, for the line the project is on — or the one being chosen:
-                  what Automatic does with a merge into main depends on it. */}
-              <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)}</div>
+                  what Automatic does with a merge into main depends on it, and on who delivers the work. */}
+              {delivery === 'AGENT_PUSH' ? (
+                <div className="project-integration-setting-hint">{runAutomaticHintAgentPush(main)}</div>
+              ) : (
+                <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)}</div>
+              )}
             </div>
           </div>
 

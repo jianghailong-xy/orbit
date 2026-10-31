@@ -486,3 +486,137 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(about()[2]).toEqual(['Version', '0.1.155', 'Can’t update itself']);
   });
 });
+
+// docs/mocks/first-workspace-in-conversation 02 ("不再沉默", the machine page) and rule 10 of 04: a
+// machine where no coding CLI is signed in says so in one card, with a workspace or without one.
+describe('a machine where no coding CLI is signed in', () => {
+  it('orbit@austin: one card for it, whose Sign In opens Claude Code’s, and none per login', async () => {
+    await mount(machine('no CLI signed in and no workspace'));
+    expect(cards()).toEqual([
+      {
+        tone: 'bad',
+        title: 'No coding CLI is signed in',
+        detail: 'Nothing can run on this machine until one is. Claude Code and Codex are installed here.',
+        action: 'Sign In',
+      },
+    ]);
+    await click(button('Sign In'));
+    expect(document.querySelector('[data-testid="arrived"]')).toBeNull();
+    const claude = $('.rd-engines [data-engine="claude"]');
+    expect(claude.className).toContain('focused');
+    expect(scrolledTo.at(-1)).toBe(claude);
+    expect(text($('.re-panel .rsi-btn', claude))).toBe('Sign in to Claude Code');
+  });
+
+  it('is still the one card while its workspaces run on those logins', async () => {
+    await mount(machine('no CLI signed in and its workspaces run on those logins'));
+    expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
+      ['bad', 'No coding CLI is signed in', 'Sign In'],
+    ]);
+  });
+
+  it('is not raised where a workspace runs on a key, which needs no sign-in', async () => {
+    await mount(machine('no CLI signed in, but a workspace runs on a DeepSeek key'));
+    expect(document.querySelector('.rd-attention')).toBeNull();
+  });
+});
+
+// A machine with no workspace (board rule 12): the way in is a session, which asks for the folder as it
+// starts. The form stays, a step back, for whoever wants to set one up by hand.
+describe('the Workspaces section of a machine with none', () => {
+  const addWorkspace = () => button('Add workspace');
+
+  it('says Start a session, the same next step as the approval page and Add a runner', async () => {
+    await mount(machine('no CLI signed in and no workspace'));
+    expect(text($('.rd-empty'))).toBe(
+      'No workspaces on orbit@austin yet. Start a session and pick the folder it works in as you go — or add one here.Start a session',
+    );
+    await click(button('Start a session', $('.rd-empty')));
+    expect(text($('[data-testid="arrived"]'))).toBe(`/runners/${RUNNER_ID}/new`);
+  });
+
+  it('names the machine as the app does', async () => {
+    await mount(machine('no CLI signed in and no workspace', { displayName: 'Austin box' }));
+    expect(text($('.rd-empty'))).toContain('No workspaces on Austin box yet.');
+  });
+
+  it('Add workspace steps back to a secondary button, and still opens the form', async () => {
+    await mount(machine('no CLI signed in and no workspace'));
+    expect(addWorkspace().className).toContain('orbit-button-default');
+    expect(addWorkspace().className).not.toContain('orbit-button-primary');
+    expect(button('Start a session').className).toContain('orbit-button-primary');
+    await click(addWorkspace());
+    expect($('.rd-workspace-form')).toBeTruthy();
+    expect(document.querySelector('.rd-empty')).toBeNull();
+  });
+
+  it('with workspaces, Add workspace is the section’s primary action again, and nothing says Start a session', async () => {
+    await mount(machine('real wikova'));
+    expect(addWorkspace().className).toContain('orbit-button-primary');
+    expect($$('button').some((b) => text(b) === 'Start a session')).toBe(false);
+  });
+});
+
+// The Add workspace form: a workspace made here says which folder it runs in (P0 of
+// docs/mocks/first-workspace-in-conversation, 04). A saved one is edited as it was.
+describe('the Add workspace form', () => {
+  const form = () => $('.rd-workspace-form');
+  const field = (label: string) => {
+    const found = $$('.rd-form-field', form()).find((f) => text(f.querySelector('.rd-form-label')) === label);
+    if (!found) throw new Error(`no field labelled ${label}`);
+    return $<HTMLInputElement>('input', found);
+  };
+  const submit = (label: string) => button(label, form()) as HTMLButtonElement;
+  const type = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      input.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+  };
+  const pressEnter = async (input: HTMLInputElement) => {
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await settle();
+  };
+
+  it('creates a workspace only once it has a name and a working directory', async () => {
+    const { sent } = await mount(machine('no CLI signed in and no workspace'));
+    await click(button('Add workspace'));
+    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner');
+    expect(submit('Create').disabled).toBe(true);
+
+    await type(field('Name'), 'app');
+    expect(submit('Create').disabled).toBe(true);
+    // Enter in the name creates nothing while the folder is missing.
+    await pressEnter(field('Name'));
+    await type(field('Working directory'), '   ');
+    expect(submit('Create').disabled).toBe(true);
+    expect(sent).toEqual([]);
+
+    await type(field('Working directory'), '~/code/app');
+    expect(submit('Create').disabled).toBe(false);
+    await click(submit('Create'));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/workspaces',
+      body: { name: 'app', workDir: '~/code/app', runnerId: RUNNER_ID },
+    });
+  });
+
+  it('still saves a workspace being edited with its working directory cleared, as before', async () => {
+    const { sent } = await mount(machine('real wikova'));
+    await click($('[data-workspace-id="ws-orbit"]'));
+    expect(field('Working directory').value).toBe('/root/orbit');
+    await type(field('Working directory'), '');
+    expect(field('Working directory').placeholder).toBe('/path/to/project on the runner (optional)');
+    expect(submit('Save').disabled).toBe(false);
+    await click(submit('Save'));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ method: 'PATCH', path: '/workspaces/ws-orbit', body: { name: 'orbit' } });
+    expect((sent[0].body as { workDir?: string }).workDir).toBeUndefined();
+  });
+});

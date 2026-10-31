@@ -453,6 +453,7 @@ final class ProjectAttentionTests: XCTestCase {
             (.integrationCheckFailed, "Coordinator · checks failed · 3h"),
             (.integrationError, "Coordinator · handling an integration error · 3h"),
             (.taskFailed, "Coordinator · handling a failed task · 3h"),
+            (.landingUnobserved, "Coordinator · handling work not on the line yet · 3h"),
         ]
         for (kind, text) in phrases {
             let held = project(running: 1, lastActivityAt: .some(at(Self.minute)),

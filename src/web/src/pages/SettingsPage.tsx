@@ -11,7 +11,8 @@ import type { Runner } from '../components/TasksSidePanel';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
 import { providerPoolsQuery, type ProviderPool } from '../lib/providerPools';
-import { meQuery, runnersQuery, type Me, type UserPreferences } from '../lib/queries';
+import { meQuery, runnersQuery, workspacesQuery, type Me, type UserPreferences } from '../lib/queries';
+import { noCliSignedIn, type AttentionWorkspace } from '../lib/runnerAttention';
 import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -40,13 +41,22 @@ function Field({ label, hint, children }: { label: string; hint: ReactNode; chil
 
 /**
  * What the phone's Settings row for Machines & models says (SettingsHome.infrastructureValue in OrbitKit):
- * how many things on the page need a person — a machine offline, an account pool no session can start
- * on; an engine signed out is not one, as its machine's card draws it nothing — or, with none, how many
- * of the machines are online.
+ * how many things on the page need a person — a machine offline, a machine online where no coding CLI is
+ * signed in and nothing runs on a key instead (runnerAttention's noCliSignedIn, which its page says too),
+ * an account pool no session can start on; an engine signed out beside one signed in is not one — or,
+ * with none, how many of the machines are online.
  */
-function machinesValue(runners: Runner[], pools: ProviderPool[]): { text: string; needsYou: boolean } {
+function machinesValue(
+  runners: Runner[],
+  pools: ProviderPool[],
+  workspaces: ReadonlyArray<AttentionWorkspace & { runnerId?: string | null }>,
+): { text: string; needsYou: boolean } {
   const online = runners.filter((runner) => runner.online);
-  const needsYou = runners.length - online.length + pools.filter((pool) => pool.unavailable).length;
+  const runsNothing = online.filter((runner) =>
+    noCliSignedIn(runner, workspaces.filter((workspace) => workspace.runnerId === runner.id)),
+  );
+  const needsYou =
+    runners.length - online.length + runsNothing.length + pools.filter((pool) => pool.unavailable).length;
   if (needsYou > 0) return { text: needsYou === 1 ? '1 needs you' : `${needsYou} need you`, needsYou: true };
   return { text: runners.length === 0 ? 'None' : `${online.length} of ${runners.length} online`, needsYou: false };
 }
@@ -54,18 +64,23 @@ function machinesValue(runners: Runner[], pools: ProviderPool[]): { text: string
 /**
  * The way into Machines & models (docs/mocks/machines-and-models, 02), laid out as Sharing and Access tokens
  * are: what the page holds and the line it opens with on the left, Manage on the right — and under that
- * line what the phone's row says, once the machines and the pools have been read.
+ * line what the phone's row says, once the machines, their workspaces and the pools have been read.
  */
 function MachinesAndModels() {
   const navigate = useNavigate();
   const runners = useQuery(runnersQuery());
+  const workspaces = useQuery(workspacesQuery());
   const pools = useQuery(providerPoolsQuery());
   const shared = useQuery(sharedPoolsQuery());
   const access = useQueries({ queries: (pools.data ?? []).filter(isLoginPool).map((pool) => poolAccessQuery(pool.id)) });
   const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
   const value =
-    runners.data && !pools.isPending && !shared.isPending
-      ? machinesValue(runners.data as Runner[], accountPoolList(pools.data ?? [], shared.data ?? [], accessOf))
+    runners.data && !workspaces.isPending && !pools.isPending && !shared.isPending
+      ? machinesValue(
+          runners.data as Runner[],
+          accountPoolList(pools.data ?? [], shared.data ?? [], accessOf),
+          workspaces.data ?? [],
+        )
       : null;
   return (
     <Card title="Machines & models" style={{ marginBottom: 16 }}>

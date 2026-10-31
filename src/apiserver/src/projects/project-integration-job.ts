@@ -1274,6 +1274,8 @@ export type DeliveredIdentitySettlement =
  *     finalize, a turn that failed the session, the reaper's forced finalize, the end of a session
  *     that never ran, a refused start. A DONE task whose identity was left unfrozen because that work
  *     was still moving is frozen here; one already standing is left as the DONE froze it.
+ *   * `DEPLOY` — the deploy-time pass (§10.9, `landing-observation-backfill.ts`): a task written DONE
+ *     before its identity was frozen anywhere, frozen from its rows exactly as a finish freezes it.
  *
  * An identity that the settled work cannot name (O-L4's second case) opens `LANDING_UNOBSERVED`
  * (`IDENTITY_UNKNOWN`) in an AGENT_PUSH project (O-T1) — nobody else will see that work on the line —
@@ -1283,7 +1285,7 @@ export type DeliveredIdentitySettlement =
  */
 export async function settleDeliveredIdentity(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' },
+  input: { ownerId: string; taskId: string; after: 'DONE' | 'WORK_FINISHED' | 'DEPLOY' },
 ): Promise<DeliveredIdentitySettlement> {
   const { ownerId, taskId } = input;
   const task = await tx.task.findFirst({

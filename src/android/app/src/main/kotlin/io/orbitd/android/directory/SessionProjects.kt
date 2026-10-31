@@ -258,6 +258,8 @@ object SessionProjectCopy {
         "INTEGRATION_ERROR" -> "Handling an integration error"
         "TASK_FAILED" -> "Handling a failed task"
         "DELIVERY_REVIEW" -> "Reviewing a delivery"
+        // §10.7: work not seen on its line (the browser's `SESSION_PROJECT_COORDINATOR_COPY`, settled by R29-10).
+        "LANDING_UNOBSERVED" -> "Handling work not on the line yet"
         else -> null
     }
 

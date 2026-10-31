@@ -164,6 +164,13 @@ export async function installPilotFixtures(page, { theme = 'light', modelRouting
     if (method === 'GET' && path === '/api/runners') return json([runner]);
     if (method === 'GET' && path === '/api/workspaces') return json([{ ...WORKSPACE, modelRouting: true }]);
     if (antigravity && method === 'POST' && path === '/api/workspaces') return json({ ...WORKSPACE, id: id('021'), ...request.postDataJSON() });
+    // The form asks the runner what Claude Code history sits under the folder typed into it: none here.
+    if (antigravity && path === `/api/runners/${runner.id}/claude-history`) {
+      const workDir = method === 'POST' ? request.postDataJSON().workDir : searchParams.get('workDir');
+      if (method === 'POST') return json({ workDir, status: 'pending' });
+      const none = { workDir, windowDays: 30, conversations: 0, bytes: 0, events: 0, transcripts: [] };
+      return json({ workDir, status: 'done', requestedAt: earlier, result: none });
+    }
     if (method === 'GET' && path === '/api/task-lists') return json(lists);
     if (method === 'GET' && path === '/api/tasks/page' && searchParams.get('counts') === 'none') {
       const q = (searchParams.get('q') ?? '').toLowerCase();

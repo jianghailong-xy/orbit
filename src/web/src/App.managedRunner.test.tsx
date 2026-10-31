@@ -177,10 +177,25 @@ const consoleShows = () => container.querySelector('[data-testid="console"]')?.t
 /** Where an account lands, for each runner/workspace shape the default landing knows. */
 const LANDINGS = [
   { label: 'no runner and no workspace: the registration guide', runners: [], workspaces: [], lands: '/runners/register', shows: 'register a machine' },
-  { label: 'one runner, no workspace: that runner’s page', runners: [runner(MAC, 'Mac', true)], workspaces: [], lands: `/runners/${MAC}`, shows: 'a machine’s page' },
+  // Board rule 11: nothing to open, so the first machine that can start something.
+  { label: 'one machine online, no workspace: its new session page', runners: [runner(MAC, 'Mac', true)], workspaces: [], lands: `/runners/${MAC}/new`, shows: 'Mac|no managed state' },
   {
-    label: 'several runners, no workspace: Infrastructure',
-    runners: [runner(MAC, 'Mac', true), runner(HPC, 'HPC', false)],
+    label: 'several machines, no workspace: the first online one’s new session page',
+    runners: [runner(HPC, 'HPC', false), runner(MAC, 'Mac', true)],
+    workspaces: [],
+    lands: `/runners/${MAC}/new`,
+    shows: 'Mac|no managed state',
+  },
+  {
+    label: 'one machine offline, no workspace: Infrastructure',
+    runners: [runner(MAC, 'Mac', false)],
+    workspaces: [],
+    lands: '/infrastructure',
+    shows: 'infrastructure',
+  },
+  {
+    label: 'every machine offline, no workspace: Infrastructure',
+    runners: [runner(MAC, 'Mac', false), runner(HPC, 'HPC', false)],
     workspaces: [],
     lands: '/infrastructure',
     shows: 'infrastructure',

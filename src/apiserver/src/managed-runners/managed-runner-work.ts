@@ -78,11 +78,11 @@ function workSql(runner: Prisma.Sql) {
     RESET_OPERATION: Prisma.sql`EXISTS (SELECT 1 FROM "codex_rate_limit_reset_operation" c WHERE c."runner_id" = ${runner}
       AND (c."consume_state" IN ('PENDING', 'CLAIMED') OR (c."consume_state" = 'CONFIRMED' AND c."refresh_state" = 'PENDING')))`,
     // The runner's one-slot relays: a sign-in, an install, a checkout clean-up, an account removal, a
-    // history scan, a catalog refresh or a release check asked for and not yet over.
+    // history scan, a directory probe, a catalog refresh or a release check asked for and not yet over.
     RUNNER_OPERATION: Prisma.sql`EXISTS (SELECT 1 FROM "runner" r WHERE r."id" = ${runner} AND (
       r."login_status" = ANY (${LOGIN_IN_FLIGHT}) OR r."install_status" IN ('pending', 'installing')
       OR r."repo_cleanup_status" = 'pending' OR r."codex_account_remove_status" = 'pending'
-      OR r."claude_history_status" = 'pending' OR r."model_catalog_refresh_at" IS NOT NULL
+      OR r."claude_history_status" = 'pending' OR r."dir_probe_status" = 'pending' OR r."model_catalog_refresh_at" IS NOT NULL
       OR r."self_update_requested_at" IS NOT NULL))`,
   } satisfies Record<ManagedRunnerWork, Prisma.Sql>;
 }

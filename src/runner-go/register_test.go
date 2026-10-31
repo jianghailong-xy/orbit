@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,78 @@ func TestRegisterHelpDescribesCurrentRunnerNaming(t *testing.T) {
 		if strings.Contains(help, stale) {
 			t.Fatalf("register help still contains stale naming copy %q:\n%s", stale, help)
 		}
+	}
+}
+
+func TestAutoInstallEnginesIsOnByDefault(t *testing.T) {
+	cases := []struct {
+		name  string
+		bools map[string]bool
+		want  bool
+	}{
+		{"default", nil, true},
+		{"explicit on", map[string]bool{"auto-install-engines": true}, true},
+		{"turned off", map[string]bool{"no-auto-install-engines": true}, false},
+		{"off wins", map[string]bool{"auto-install-engines": true, "no-auto-install-engines": true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := autoInstallEnabled(tc.bools); got != tc.want {
+				t.Fatalf("autoInstallEnabled(%v) = %v, want %v", tc.bools, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRegisterReceiptNamesTheMachineAndTheNextStep(t *testing.T) {
+	host := hostnameOr()
+	name := "devbox"
+	if name == host {
+		name = "devbox-2"
+	}
+	cfg := &RunnerConfig{Name: name, ServerURL: "https://orbit.example/"}
+	var out bytes.Buffer
+	printRegisterReceipt(&out, cfg, true, false)
+	got := out.String()
+	for _, want := range []string{
+		"✓ Setup complete — " + name + " is online.",
+		"Machine  " + name + " (" + host + ")",
+		"Next     set up a coding engine, then create a workspace on this machine.",
+		"https://orbit.example/infrastructure",
+		"orbit status · orbit doctor · orbit unregister",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("receipt lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRegisterReceiptWhenTheServiceWasNotStarted(t *testing.T) {
+	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example"}
+	var out bytes.Buffer
+	printRegisterReceipt(&out, cfg, false, false)
+	got := out.String()
+	for _, want := range []string{
+		"✓ Setup complete — devbox is registered.",
+		"Next     start it with `orbit run`, then create a workspace in Orbit.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("receipt lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRegisterIdentityShowsTheHostnameOnlyWhenItDiffers(t *testing.T) {
+	host := hostnameOr()
+	if got := registerIdentity(host); got != host {
+		t.Fatalf("registerIdentity(hostname) = %q, want %q", got, host)
+	}
+	name := "devbox"
+	if name == host {
+		name = "devbox-2"
+	}
+	if got, want := registerIdentity(name), name+" ("+host+")"; got != want {
+		t.Fatalf("registerIdentity(%q) = %q, want %q", name, got, want)
 	}
 }
 
@@ -220,8 +293,8 @@ func TestAwaitDeviceApprovalEndsOnTheBrowsersDecision(t *testing.T) {
 		wantErr string
 	}{
 		{"approved after a pending poll", []string{`{"status":"pending"}`, `{"status":"approved","runnerId":"r1","runnerToken":"tok","name":"devbox"}`}, ""},
-		{"denied in the browser", []string{`{"status":"pending"}`, `{"status":"denied"}`}, "registration was denied in the browser; nothing was added to your account"},
-		{"expired before anyone decided it", []string{`{"status":"expired"}`}, "registration timed out — please run `orbit register` again"},
+		{"denied in the browser", []string{`{"status":"pending"}`, `{"status":"denied"}`}, "✗ Denied in the browser — nothing was added to your account"},
+		{"expired before anyone decided it", []string{`{"status":"expired"}`}, "✗ This approval link expired — run `orbit register` again for a new one"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

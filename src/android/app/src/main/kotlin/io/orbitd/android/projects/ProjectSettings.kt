@@ -52,6 +52,8 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 val main = stored ?: RunSettings.defaultMainBranch
                 LineSetting(view, doc, now, enabled, stored != null, main, integration)
                 stored?.let { HorizontalDivider(); MainBranchSetting(view, it, now, enabled, integration) }
+                // A server that predates the delivery mode reports none, and draws no row.
+                if (view.text("deliveryMode") != null) { HorizontalDivider(); DeliverySetting(view, enabled, main, integration) }
                 HorizontalDivider()
                 AutomaticSetting(view, doc, enabled, main, automatic)
                 HorizontalDivider()
@@ -93,7 +95,9 @@ private fun LineSetting(view: JsonObject, doc: JsonObject, now: Instant, enabled
     } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(RunSettings.tasksLandOn)
         LineOption(view, "PROJECT_BRANCH", RunSettings.lineProjectBranch, RunSettings.shortBranch(branch), RunSettings.lineProjectBranchHint, enabled, write)
-        LineOption(view, "MAIN", RunSettings.lineMain(main), null, RunSettings.lineMainHint(main), enabled, write)
+        // While the agent pushes, no merge into main asks anybody (§10.5 O-L2): its own words.
+        LineOption(view, "MAIN", RunSettings.lineMain(main), null, if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH")
+            RunSettings.lineMainHintAgentPush(main) else RunSettings.lineMainHint(main), enabled, write)
     }
 }
 
@@ -138,6 +142,36 @@ private fun LineOption(view: JsonObject, line: String, title: String, branch: St
     }
 }
 
+/** Delivery: how a finished task's work reaches main (§10.5 O-L1) — Orbit lands it, or the agent pushes it there itself. Picking one
+ * writes it, as the line does, and it does not lock with the line; but only a main line takes the agent's way, so on a project branch,
+ * or a line nobody decided, that way is drawn and not offered, with why (the door's 409 `DELIVERY_MODE_NEEDS_MAIN_LINE`). */
+@Composable
+private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, write: (JsonObject?) -> Unit) {
+    val mainLine = view.text("line") == "MAIN"
+    val chosen = RunSettings.delivery(view.text("line"), view.text("deliveryMode"))
+    Column(Modifier.testTag("project-delivery"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(RunSettings.delivery)
+        DeliveryOption(chosen == "PLATFORM", RunSettings.deliveryPlatform, RunSettings.deliveryPlatformHint(main), enabled, offered = true,
+            "project-delivery:PLATFORM") { write(RunSettings.deliveryWrite(view, "PLATFORM")) }
+        DeliveryOption(chosen == "AGENT_PUSH", RunSettings.deliveryAgentPush,
+            if (mainLine) RunSettings.deliveryAgentPushHint(main) else RunSettings.deliveryNeedsMainLine(main), enabled, offered = mainLine,
+            "project-delivery:AGENT_PUSH") { write(RunSettings.deliveryWrite(view, "AGENT_PUSH")) }
+    }
+}
+
+/** One of the two ways, ticked when it is the one; a way not [offered] here is drawn dimmed, its line saying why. */
+@Composable
+private fun DeliveryOption(chosen: Boolean, title: String, hint: String, enabled: Boolean, offered: Boolean, tag: String, choose: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled && offered, role = Role.RadioButton, onClick = choose).testTag(tag),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RadioButton(chosen, null, enabled = enabled && offered)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, color = if (offered) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            Note(hint)
+        }
+    }
+}
+
 /** Automatic writes `automatic` and nothing else: switching it off no longer stops the project. */
 @Composable
 private fun AutomaticSetting(view: JsonObject, doc: JsonObject, enabled: Boolean, main: String, write: (Boolean) -> Unit) {
@@ -148,7 +182,9 @@ private fun AutomaticSetting(view: JsonObject, doc: JsonObject, enabled: Boolean
             Switch(doc.flag("coordinatorEnabled"), { write(it) }, enabled = enabled && known, modifier = Modifier.testTag("project-automatic")
                 .semantics { contentDescription = RunSettings.automatic })
         }
-        Note(RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main))
+        // What Automatic does with a merge into main depends on the line, and on who delivers the work.
+        Note(if (RunSettings.delivery(view.text("line"), view.text("deliveryMode")) == "AGENT_PUSH") RunSettings.automaticHintAgentPush(main)
+            else RunSettings.automaticHint(if (view.text("line") == "MAIN") "MAIN" else "PROJECT_BRANCH", main))
     }
 }
 

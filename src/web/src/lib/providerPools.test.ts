@@ -172,12 +172,17 @@ describe("a member's status", () => {
     );
   });
 
-  it('says a reset time as HH:MM, with the day once it is more than a day out', () => {
-    const soon = new Date(NOW + 90 * 60 * 1000);
+  it('says a reset time as HH:MM today, with the day on any other day however near', () => {
+    // Local dates, so the day the reader sees is the day the test means.
+    const now = new Date(2026, 9, 29, 15, 0).getTime(); // Thursday afternoon
     const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    expect(formatResetTime(soon.toISOString(), NOW)).toBe(hhmm(soon));
-    const later = new Date(NOW + 3 * 24 * HOUR);
-    expect(formatResetTime(later.toISOString(), NOW)).toBe(
+    const today = new Date(2026, 9, 29, 16, 40);
+    expect(formatResetTime(today.toISOString(), now)).toBe(hhmm(today));
+    // Tomorrow morning is under a day out: a bare `06:00` read as this morning's, already past.
+    const tomorrow = new Date(2026, 9, 30, 6, 0);
+    expect(formatResetTime(tomorrow.toISOString(), now)).toBe(`Fri ${hhmm(tomorrow)}`);
+    const later = new Date(now + 3 * 24 * HOUR);
+    expect(formatResetTime(later.toISOString(), now)).toBe(
       `${later.toLocaleDateString('en-US', { weekday: 'short' })} ${hhmm(later)}`,
     );
   });

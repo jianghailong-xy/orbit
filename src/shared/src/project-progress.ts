@@ -1632,30 +1632,35 @@ export interface ProjectPromotionView<Instant = string> {
 }
 
 /**
- * The four things a project can be waiting on its OWNER for (§7.1 V1, §7.6 V12/V13).
+ * The five things a project can be waiting on its OWNER for (§7.1 V1, §7.6 V12/V13).
  *
- * Not the same list as `OpenItemKind`, and deliberately: the three kinds that are the owner's from
+ * Not the same list as `OpenItemKind`, and deliberately: the four kinds that are the owner's from
  * birth keep their own names, and every exception that BECAME theirs — because nobody acted, the
  * conversation ended, the chain ran out, somebody handed it over, or there was never a coordinator
  * — collapses into `ESCALATED`, because what the owner has to know about those is that they are now
  * theirs and not which door they came through. An exception still with the coordinator is not here
  * at all: it is the coordinator's to handle, and the owner is not told about it (owner decision 10).
+ *
+ * `LANDED_WITHOUT_CONFIRMATION` is work that reached main without the owner's confirmation (§10.7):
+ * pushed once and counted like a merge approval or a question (owner 2026-10-28).
  */
 export type OwnerItemKind =
   | 'PROMOTION_APPROVAL'
   | 'COORDINATOR_QUESTION'
   | 'ESCALATED'
-  | 'FUSE_PAUSED';
+  | 'FUSE_PAUSED'
+  | 'LANDED_WITHOUT_CONFIRMATION';
 
 /**
- * What a "needs you" push says it is about (§7.6 V12) — the same four reasons the project list
+ * What a "needs you" push says it is about (§7.6 V12) — the same five reasons the project list
  * draws its chips from (§7.1 V2), in the same words, so the phone and the page name one thing once.
  */
 export type OwnerItemPushKind =
   | 'approve-merge-to-main'
   | 'coordinator-question'
   | 'escalated-to-you'
-  | 'fuse-paused';
+  | 'fuse-paused'
+  | 'landed-without-confirmation';
 
 /** The push slug for an owner item's kind. One direction only: the slug is what leaves the server. */
 export const OWNER_ITEM_PUSH_KINDS: Record<OwnerItemKind, OwnerItemPushKind> = {
@@ -1663,10 +1668,11 @@ export const OWNER_ITEM_PUSH_KINDS: Record<OwnerItemKind, OwnerItemPushKind> = {
   COORDINATOR_QUESTION: 'coordinator-question',
   ESCALATED: 'escalated-to-you',
   FUSE_PAUSED: 'fuse-paused',
+  LANDED_WITHOUT_CONFIRMATION: 'landed-without-confirmation',
 };
 
 /**
- * One of the four things a project is waiting on its owner for, as the projects index aggregates it
+ * One of the five things a project is waiting on its owner for, as the projects index aggregates it
  * (§7.1 V1): how many items of this kind are open, and how long the oldest has been waiting.
  *
  * The count and the instant, not the items: the list row names ONE action, and which item is behind
@@ -1759,9 +1765,9 @@ export interface ProjectListAttention<Instant = string> {
   coordinatorItems?: ProjectListCoordinatorItems<Instant> | null;
   /**
    * The coordinator's open request to start this project (`START_REQUEST`, `project_request_start`)
-   * while nobody has started it — since when it has been asking — or null. The fifth thing the row
+   * while nobody has started it — since when it has been asking — or null. The sixth thing the row
    * names as waiting on the owner ("Needs you · Ready to start"), and kept out of `ownerItems`
-   * because it is none of those four: nothing escalated, and nothing pushes. Optional for the same
+   * because it is none of those five: nothing escalated, and nothing pushes. Optional for the same
    * reason the two fields above are.
    */
   startRequest?: { waitingSince: Instant } | null;
@@ -1778,7 +1784,7 @@ export interface ProjectListAttention<Instant = string> {
  * One owner item on a conversation's summary (§7.6 V13).
  *
  * It rides on the session row the clients already hold, so the Needs-you banner can say WHICH of
- * the four is waiting and open the card without a request of its own — the count alone could only
+ * the five is waiting and open the card without a request of its own — the count alone could only
  * say that something was. `itemId` is what makes the second half of that true: it is the address
  * the banner's tap and the push payload's `openItemID` both carry.
  */
@@ -1804,7 +1810,7 @@ export interface SessionOwnerItem<Instant = string> {
  * "approval" — the kinds whose count is not an approval at all.
  *
  * `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting for its owner to confirm it done.
- * `OWNER_ITEM` is one of the four above: the row says the oldest item's own word (`Escalated to
+ * `OWNER_ITEM` is one of the five above: the row says the oldest item's own word (`Escalated to
  * you`, `Paused`, …) — the same words the Needs-you banner and the card in the conversation use —
  * because on a project whose coordinator is switched off the item is the owner's precisely when
  * nobody else will take it. `START_REQUEST` is a project not started yet whose coordinator has asked

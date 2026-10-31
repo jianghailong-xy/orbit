@@ -47,8 +47,10 @@ func hostdSystemDefaults() hostdSystem {
 	}
 }
 
-// verbs is the table hostdServe dispatches through. Six verbs, one shape: resolve the
-// caller to their instance, then act on that instance.
+// verbs is the table hostdServe dispatches through. Six of them share one shape: resolve
+// the caller to their instance, then act on that instance. update is the exception — it
+// acts on the machine's shared binary, so it is the caller's uid it needs (to drop to
+// before running the download) rather than the caller's unit; see hostd_update.go.
 func (s hostdSystem) verbs() map[string]hostdVerb {
 	return map[string]hostdVerb{
 		"enable":  s.enable,
@@ -57,6 +59,7 @@ func (s hostdSystem) verbs() map[string]hostdVerb {
 		"stop":    s.unitVerb("stop"),
 		"restart": s.unitVerb("restart"),
 		"status":  s.status,
+		"update":  hostdUpdate{sys: s}.withDefaults().verb,
 	}
 }
 

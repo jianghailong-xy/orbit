@@ -14,6 +14,7 @@ import { Input } from './ui/Input';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Segmented } from './ui/Segmented';
 import { Tooltip } from './ui/Tooltip';
+import { WorktreeFilePreview } from './WorktreeFilePreview';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -995,8 +996,9 @@ function treeFiles(nodes: TreeNode[]): SessionChangedFile[] {
 }
 
 /** The changed-file list for the drawer rail, rendered as a collapsible directory tree. Collapse
- *  state is keyed by each directory's full path; binary-only dirs (build artifacts) default shut,
- *  and the user's manual toggles win and persist while live heartbeats refresh `files`. */
+ *  state is keyed by each directory's full path; binary-only dirs (build artifacts) default shut
+ *  until the shown file is in one, and the user's manual toggles win and persist while live
+ *  heartbeats refresh `files`. */
 function FileTree({
   files,
   activePath,
@@ -1009,6 +1011,16 @@ function FileTree({
   const tree = useMemo(() => buildFileTree(files), [files]);
   const [override, setOverride] = useState<Record<string, boolean>>({});
   const collapsed = (node: Extract<TreeNode, { kind: 'dir' }>) => override[node.path] ?? node.binaryOnly;
+  // ‹ › pages through binary files too, so it can land inside a binary-only folder that starts
+  // shut: open the folders on the way to the shown file, so the list says where it is.
+  useEffect(() => {
+    if (!activePath) return;
+    const dirs = activePath.split('/').slice(0, -1);
+    setOverride((o) => {
+      const open = dirs.map((_, i) => dirs.slice(0, i + 1).join('/')).filter((dir) => o[dir] !== false);
+      return open.length ? { ...o, ...Object.fromEntries(open.map((dir) => [dir, false])) } : o;
+    });
+  }, [activePath]);
   const toggle = (node: Extract<TreeNode, { kind: 'dir' }>) =>
     setOverride((o) => ({ ...o, [node.path]: !collapsed(node) }));
   return (
@@ -1225,14 +1237,8 @@ function WorktreeDiffDrawer({
     });
   };
 
-  // Prev/next file nav follows the grouped display order and skips binary files (no diff to show).
-  const orderedPaths = useMemo(
-    () =>
-      treeFiles(buildFileTree(files))
-        .filter((f) => f.additions >= 0 && f.deletions >= 0)
-        .map((f) => f.path),
-    [files],
-  );
+  // Prev/next file nav follows the grouped display order, binary files included: they preview too.
+  const orderedPaths = useMemo(() => treeFiles(buildFileTree(files)).map((f) => f.path), [files]);
   const navIdx = active ? orderedPaths.indexOf(active.path) : -1;
   const prevPath = navIdx > 0 ? orderedPaths[navIdx - 1] : null;
   const nextPath = navIdx >= 0 && navIdx < orderedPaths.length - 1 ? orderedPaths[navIdx + 1] : null;
@@ -1310,6 +1316,7 @@ function WorktreeDiffDrawer({
         <div className="wt-diff-pane">
           {active ? (
             <DiffPane
+              sessionId={sessionId}
               file={active}
               patch={activePatch}
               loading={q.isLoading}
@@ -1329,9 +1336,10 @@ function WorktreeDiffDrawer({
   );
 }
 
-/** One file's header (path + stat) and its diff body, or the right placeholder for a binary,
- *  oversized, still-loading, or empty diff. */
+/** One file's header (path + stat) and its diff body, or the right placeholder for an oversized,
+ *  still-loading, or empty diff. A binary file has no diff: it previews instead (WorktreeFilePreview). */
 function DiffPane({
+  sessionId,
   file,
   patch,
   loading,
@@ -1342,54 +1350,55 @@ function DiffPane({
   onPrev,
   onNext,
 }: {
+  sessionId: string;
   file: SessionChangedFile;
   patch?: SessionFilePatch;
   loading?: boolean;
   refreshing?: boolean;
   viewMode: 'unified' | 'split';
   onViewMode: (m: 'unified' | 'split') => void;
-  /** "3/17" position of this file within the navigable (non-binary) set. */
+  /** "3/17" position of this file among the drawer's files. */
   pos: string;
   onPrev?: () => void;
   onNext?: () => void;
 }) {
   const binary = file.additions < 0 || file.deletions < 0;
   const lang = useMemo(() => langFor(file.path), [file.path]);
+  const head = (
+    <>
+      <span className="wt-diff-nav">
+        <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
+          ‹
+        </button>
+        <span className="wt-diff-nav-pos">{pos}</span>
+        <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
+          ›
+        </button>
+      </span>
+      <span className="wt-diff-pane-path">{file.path}</span>
+    </>
+  );
+  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} head={head} />;
   return (
     <>
       <div className="wt-diff-pane-head">
-        <span className="wt-diff-nav">
-          <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
-            ‹
-          </button>
-          <span className="wt-diff-nav-pos">{pos}</span>
-          <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
-            ›
-          </button>
+        {head}
+        <span className="wt-diff-pane-stat">
+          <span className="add">+{file.additions}</span>
+          <span className="del">−{file.deletions}</span>
         </span>
-        <span className="wt-diff-pane-path">{file.path}</span>
-        {!binary && (
-          <>
-            <span className="wt-diff-pane-stat">
-              <span className="add">+{file.additions}</span>
-              <span className="del">−{file.deletions}</span>
-            </span>
-            <Segmented
-              size="small"
-              aria-label="Diff view"
-              value={viewMode}
-              onValueChange={onViewMode}
-              options={[
-                { label: 'Unified', value: 'unified' },
-                { label: 'Split', value: 'split' },
-              ]}
-            />
-          </>
-        )}
+        <Segmented
+          size="small"
+          aria-label="Diff view"
+          value={viewMode}
+          onValueChange={onViewMode}
+          options={[
+            { label: 'Unified', value: 'unified' },
+            { label: 'Split', value: 'split' },
+          ]}
+        />
       </div>
-      {binary ? (
-        <div className="wt-diff-empty">Binary file — no preview</div>
-      ) : patch?.patch ? (
+      {patch?.patch ? (
         viewMode === 'split' ? (
           <SplitDiffView patch={patch.patch} lang={lang} />
         ) : (

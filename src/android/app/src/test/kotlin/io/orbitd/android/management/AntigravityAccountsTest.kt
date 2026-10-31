@@ -315,8 +315,16 @@ class AntigravityAccountsTest {
         assertEquals("Default has room, so the machine is not short", emptyList<AttentionItem>(), quotaItems(both))
         val keyed = runner(engine(authSource = "env_key", accounts = listOf(Triple("default", null, "no"), Triple(work, "Work", "yes")), others = mapOf(work to workBuckets)))
         assertEquals("Default runs on the key, which no window holds back", emptyList<AttentionItem>(), quotaItems(keyed))
-        // Signed out where a workspace runs on it is the row's first item, as for every engine Orbit signs in.
-        val out = RunnerPage.attention(runner(engine(auth = "no", accounts = listOf(Triple("default", null, "no")))), listOf(workspace), now, null)
+        // Signed out where a workspace runs on it is the row's first item, as for every engine Orbit signs in — beside a CLI that is
+        // signed in. With no other CLI there signed in the machine can run nothing, and one item says so and signs Antigravity in
+        // (RunnerPage.noCliSignedIn, docs/mocks/first-workspace-in-conversation rule 10).
+        val signedOut = engine(auth = "no", accounts = listOf(Triple("default", null, "no")))
+        val alone = RunnerPage.attention(runner(signedOut), listOf(workspace), now, null)
+        assertEquals(listOf("No coding CLI is signed in"), alone.filter { it.kind == "noCliSignedIn" }.map { it.title })
+        assertEquals("antigravity", alone.first().action?.engine)
+        val claude = buildJsonObject { put("engine", "claude"); put("installed", true); put("auth", "yes") }
+        val beside = JsonObject(runner(signedOut) + ("engines" to JsonArray(listOf(signedOut, claude))))
+        val out = RunnerPage.attention(beside, listOf(workspace), now, null)
         assertEquals(listOf("Antigravity is signed out"), out.filter { it.kind == "engineSignedOut" }.map { it.title })
         assertEquals("antigravity", out.first().action?.engine)
     }

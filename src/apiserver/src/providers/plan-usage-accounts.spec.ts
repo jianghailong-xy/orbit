@@ -804,3 +804,91 @@ test('the line names an account by what it was renamed to in Orbit — Default t
     'Switched to Default — the usage limit on Work is reached',
   );
 });
+
+/** ENGINES with `engine`'s accounts named in `out` reported signed out, as a runner reports a lapsed login. */
+const signedOutOn = (engine: string, out: string[], auth: 'no' | 'unknown' = 'no'): RunnerEngineHealth[] =>
+  ENGINES.map((entry) =>
+    entry.engine === engine
+      ? { ...entry, accounts: entry.accounts!.map((account) => (out.includes(account.id) ? { ...account, auth } : account)) }
+      : entry,
+  );
+
+test('a session on an account its runner reports signed out is moved before its turn goes out, unless it or its workspace decides', () => {
+  const now = new Date();
+  const automatic = { env: null, codexAccount: null, claudeAccount: null };
+  const before = (
+    engine: 'claude' | 'codex',
+    engines: RunnerEngineHealth[],
+    workspace: Parameters<typeof accountBeforeDispatch>[2] = automatic,
+    pinned = false,
+    usage: unknown = null,
+  ) => accountBeforeDispatch(engine, { account: WORK, pinned }, workspace, on(engines, usage), now);
+  // Work's login lapsed and nobody's quota is spent: Default, signed in, is where the next turn goes.
+  assert.deepEqual(before('claude', signedOutOn('claude', [WORK])), { from: WORK, to: 'default', signedOut: true });
+  assert.deepEqual(before('codex', signedOutOn('codex', [WORK])), { from: WORK, to: 'default', signedOut: true });
+  // Signed in where it is, it stays — and a sign-in the runner could not read is not a sign-out.
+  assert.equal(before('claude', ENGINES), null);
+  assert.equal(before('claude', signedOutOn('claude', [WORK], 'unknown')), null);
+  // An account picked by hand stays, and so does one its workspace decides.
+  assert.equal(before('claude', signedOutOn('claude', [WORK]), automatic, true), null);
+  assert.equal(before('claude', signedOutOn('claude', [WORK]), { env: null, claudeAccount: WORK }), null);
+  assert.equal(before('claude', signedOutOn('claude', [WORK]), { env: { CLAUDE_CONFIG_DIR: WORK_HOME }, claudeAccount: null }), null);
+  // Nowhere to go: every other account signed out too, or out of quota.
+  assert.equal(before('claude', signedOutOn('claude', [WORK, 'default'])), null);
+  const defaultSpent = { claude: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: 100, resetsAt: DEFAULT_RESET } } };
+  assert.equal(before('claude', signedOutOn('claude', [WORK]), automatic, false, defaultSpent), null);
+  // The line it carries says why it moved.
+  assert.equal(
+    accountSwitchNotice('claude', { from: WORK, to: 'default', signedOut: true }, { engines: ENGINES, accountNames: null }),
+    'Switched to Default — Work is signed out',
+  );
+});
+
+test('a Claude session whose sign-in its runtime refused moves to a signed-in account and is re-sent at once', async () => {
+  const controller = new RunnerApiController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  const refused = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+  const plan = async (pinned: boolean, engines: RunnerEngineHealth[] = ENGINES, capabilities = [CLAUDE_ACCOUNT_MOVE_V1]) => {
+    const tx = transactionDouble<RetryPlanTransaction>({
+      session: {
+        findUnique: async () => ({
+          ownerId: 'owner-1',
+          provider: AgentProvider.CLAUDE,
+          retryAttempts: 0,
+          codexAccount: null,
+          claudeAccount: WORK,
+          claudeAccountPinned: pinned,
+          kimiAccount: null,
+          poolSwitchNotice: null,
+          workspace: { env: null, codexAccount: null, claudeAccount: null, kimiAccount: null },
+        }),
+      },
+      runner: {
+        findUnique: async () => ({ planUsage: null, engines, accountNames: null, accountPauses: null, defaultRemoved: [], capabilities }),
+      },
+    });
+    return (
+      controller as unknown as {
+        retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }>;
+      }
+    ).retryPlanFor(tx, 'session-1', RUNNER.id, refused);
+  };
+  // Work's login lapsed mid-run, before the runner's next probe could say so: Default is signed in.
+  const moved = await plan(false);
+  assert.equal(moved.claudeAccount, 'default');
+  assert.ok(moved.retryAt instanceof Date && moved.retryAt.getTime() <= Date.now(), 're-sent at once');
+  assert.equal(moved.poolSwitchNotice, 'Switched to Default — Work is signed out');
+  // Pinned, with no other account signed in, or on a runner that cannot carry the conversation: it
+  // stays, and nothing is armed — signing in is the remedy, as before.
+  const stays = { retryAt: null, retryAttempts: 0 };
+  assert.deepEqual(await plan(true), stays);
+  assert.deepEqual(await plan(false, signedOutOn('claude', ['default'])), stays);
+  assert.deepEqual(await plan(false, ENGINES, []), stays);
+});

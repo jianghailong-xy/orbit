@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type DeviceEnrollment } from '../api';
+import { encodeId } from '../lib/idCodec';
 import { meQuery } from '../lib/queries';
 import * as runnerCopy from '../lib/runnerCopy';
 
@@ -212,7 +213,7 @@ describe('/enroll', { timeout: 30_000 }, () => {
     expect(button(page, 'Deny')!.disabled).toBe(false);
   });
 
-  it('approving says the machine is registered and opens its page', async () => {
+  it('approving says the machine is registered, and the next step is a session on it', async () => {
     vi.mocked(getDeviceEnrollment).mockResolvedValue(enrollment());
     vi.mocked(approveDeviceEnrollment).mockResolvedValue({ ok: true, name: 'devbox', replaced: false, runnerId: RUNNER_ID });
     const page = await open(`?code=${CODE}`);
@@ -222,10 +223,20 @@ describe('/enroll', { timeout: 30_000 }, () => {
     expect(denyDeviceEnrollment).not.toHaveBeenCalled();
     expect(page.querySelector('h1')?.textContent).toBe('Machine registered');
     expect(page.textContent).toContain('devbox is on your account. Go back to the terminal');
-    expect(page.textContent).toContain('Next: sign in its coding CLIs');
-    const open_ = [...page.querySelectorAll('a')].find((a) => a.textContent === 'Open machine');
-    expect(open_?.getAttribute('href')).toMatch(/^\/runners\/[0-9A-Za-z]+$/);
-    expect(open_?.getAttribute('href')).not.toContain(RUNNER_ID);
+    // The next step is the one Add a runner and an empty machine's page name: a session on this
+    // machine, whose card asks for the folder and the sign-in (board rule 12).
+    const said = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(said(page.querySelector('.enroll-next-title'))).toBe('Next: start your first session');
+    expect(said(page.querySelector('.enroll-next-body'))).toBe(
+      'Say what you want done. Orbit asks for the two things only you can decide — the folder it works in, and a ' +
+        'coding CLI to sign in — on the same screen.',
+    );
+    expect(page.textContent).not.toContain('Next: sign in a coding CLI and add a workspace');
+    const link = (name: string) => [...page.querySelectorAll('a')].find((a) => a.textContent === name);
+    expect(link('Start a session')?.getAttribute('href')).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);
+    expect(link('Start a session')?.className).toContain('enroll-submit-link');
+    expect(link('Open machine instead')?.getAttribute('href')).toBe(`/runners/${encodeId(RUNNER_ID)}`);
+    expect(link('Open machine instead')?.getAttribute('href')).not.toContain(RUNNER_ID);
     expect(button(page, 'Approve')).toBeUndefined();
   });
 

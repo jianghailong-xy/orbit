@@ -70,9 +70,10 @@ final class InfrastructureTests: XCTestCase {
                                           presetSlug: "anthropic", state: .noQuota, next: true)])
     }
 
-    private func attention(_ runners: [Runner], own: [ProviderPool] = [], member: [ProviderPool] = [])
-        -> [Infrastructure.Attention] {
-        Infrastructure.attention(runners: runners, memberPools: member, ownPools: own, now: Self.now)
+    private func attention(_ runners: [Runner], workspaces: [Agent] = [], own: [ProviderPool] = [],
+                           member: [ProviderPool] = []) -> [Infrastructure.Attention] {
+        Infrastructure.attention(runners: runners, workspaces: workspaces, memberPools: member, ownPools: own,
+                                 now: Self.now)
     }
 
     private func says(_ line: Infrastructure.Attention) -> String { "\(line.line) · \(line.detail)" }
@@ -96,6 +97,49 @@ final class InfrastructureTests: XCTestCase {
         let never = try runner(#"{"id":"new","name":"New box","online":false}"#)
         XCTAssertEqual(says(attention([never])[0]),
                        "New box is offline · Never checked in · its subscriptions are unavailable until it’s back")
+    }
+
+    /// orbit@austin on 2026-10-31: online, Claude Code and Codex installed, neither signed in.
+    private func austin(online: Bool = true) throws -> Runner {
+        try runner(#"""
+        {"id":"austin","name":"orbit@austin","online":\#(online),"activeSessions":0,"maxConcurrent":16,
+         "lastHeartbeatAt":"2026-10-07T08:59:50.000Z","engines":[
+          {"engine":"claude","installed":true,"auth":"no"},{"engine":"codex","installed":true,"auth":"no"}]}
+        """#)
+    }
+
+    private func workspace(_ provider: String?, on runner: String = "austin") throws -> Agent {
+        let last = provider.map { #","lastProvider":"\#($0)""# } ?? ""
+        return try JSONDecoder().decode(Agent.self, from: Data(
+            #"{"id":"w-\#(runner)","name":"app","runnerId":"\#(runner)"\#(last)}"#.utf8))
+    }
+
+    /// A machine online where no coding CLI is signed in and no workspace runs on a key: nothing can run
+    /// there, which its page says (RunnerAttention's noCliSignedIn) — a line after the machines offline,
+    /// before the pools, that opens its record. Settings counts it (docs/mocks/first-workspace-in-conversation,
+    /// rule 10 of 04).
+    func testAMachineWithNoCodingCLISignedInIsALine() throws {
+        let lines = attention([try thinkPad(), try austin()], own: [claudePool(unavailable: "No account can run")])
+        XCTAssertEqual(lines.map(\.kind), [.offline(runnerID: "thinkpad"), .noCliSignedIn(runnerID: "austin"),
+                                           .poolUnavailable(poolID: "pool", own: true)])
+        XCTAssertEqual(says(lines[1]), "orbit@austin has no coding CLI signed in · Nothing can run on this machine "
+                           + "until one is. Claude Code and Codex are installed here.")
+        XCTAssertEqual(lines[1].names, ["orbit@austin"])
+        // With workspaces on those logins, or one that has not run yet, it is the same line.
+        XCTAssertEqual(attention([try austin()], workspaces: [try workspace("codex")]).map(\.kind),
+                       [.noCliSignedIn(runnerID: "austin")])
+        XCTAssertEqual(attention([try austin()], workspaces: [try workspace(nil)]).count, 1)
+    }
+
+    /// A workspace there on a key or a pool runs without any sign-in: no line. Nor once one CLI is signed in,
+    /// and an offline machine is the one line it is offline.
+    func testAMachineThatCanRunSomethingIsNoLine() throws {
+        XCTAssertEqual(attention([try austin()], workspaces: [try workspace("deepseek")]), [])
+        XCTAssertEqual(attention([try austin()], workspaces: [try workspace("anthropic-2")]), [])
+        XCTAssertEqual(attention([try austin()], workspaces: [try workspace("deepseek", on: "hpc")]).count, 1,
+                       "another machine's key does nothing for this one")
+        XCTAssertEqual(attention([try austin(online: false)]).map(\.kind), [.offline(runnerID: "austin")])
+        XCTAssertEqual(attention([try macStudio()]), [], "Claude signed in, Codex out")
     }
 
     /// A pool no session can start on: its own reason, and its page — the account's own, or one it is in,

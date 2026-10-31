@@ -359,13 +359,14 @@ func TestHostdVerbsTargetTheCallersOwnInstance(t *testing.T) {
 		})
 	}
 
-	// The table above is the whole lifecycle surface plus enable; nothing else is served.
+	// The table above is the whole lifecycle surface plus enable, and update is the one
+	// verb that is not about a single instance (hostd_update.go); nothing else is served.
 	sys := hostdSystemDefaults()
 	got := make([]string, 0, len(sys.verbs()))
 	for verb := range sys.verbs() {
 		got = append(got, verb)
 	}
-	want := map[string]bool{"enable": true, "disable": true, "start": true, "stop": true, "restart": true, "status": true}
+	want := map[string]bool{"enable": true, "disable": true, "start": true, "stop": true, "restart": true, "status": true, "update": true}
 	if len(got) != len(want) {
 		t.Fatalf("verbs = %v, want exactly %v", got, want)
 	}

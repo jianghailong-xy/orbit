@@ -32,6 +32,9 @@ public enum Infrastructure {
         return seen + " · its subscriptions are unavailable until it’s back"
     }
 
+    /// A machine online that nothing can run on: its page's "No coding CLI is signed in", by its name.
+    public static func noCliLine(machine: String) -> String { "\(machine) has no coding CLI signed in" }
+
     public static func poolLine(pool: String) -> String { "\(pool) is unavailable" }
 
     /// "No account can run · no session can start on it" — the pool's own reason first.
@@ -53,6 +56,8 @@ public enum Infrastructure {
         public enum Kind: Equatable, Sendable {
             /// A machine that is offline: its record.
             case offline(runnerID: String)
+            /// A machine online with no coding CLI signed in and nothing on a key: its record, which signs one in.
+            case noCliSignedIn(runnerID: String)
             /// A pool no session can start on: its page — one of the account's own, or one it is in.
             case poolUnavailable(poolID: String, own: Bool)
         }
@@ -68,23 +73,33 @@ public enum Infrastructure {
         public var id: String {
             switch kind {
             case .offline(let runnerID): return "offline:\(runnerID)"
+            case .noCliSignedIn(let runnerID): return "nocli:\(runnerID)"
             case .poolUnavailable(let poolID, _): return "pool:\(poolID)"
             }
         }
     }
 
-    /// What needs a person, a line each: each machine offline, then each pool no session can start on —
-    /// the ones the account is in before its own, as the page lists them. Empty while nothing does. An
-    /// engine signed out on a machine is no line, as the web's machine card draws it nothing: the machine's
-    /// own page says so, and signs it in.
-    public static func attention(runners: [Runner], memberPools: [ProviderPool], ownPools: [ProviderPool],
-                                 now: Date = Date()) -> [Attention] {
+    /// What needs a person, a line each: each machine offline, then each machine online that nothing can
+    /// run on — no coding CLI signed in and no workspace on a key (`RunnerAttention.noCliSignedIn`, which
+    /// the web's Settings row counts too) — then each pool no session can start on, the ones the account is
+    /// in before its own, as the page lists them. Empty while nothing does. An engine signed out beside one
+    /// signed in is no line, as the web's machine card draws it nothing: the machine's own page says so, and
+    /// signs it in. `workspaces` are the account's, each on the machine it names.
+    public static func attention(runners: [Runner], workspaces: [Agent], memberPools: [ProviderPool],
+                                 ownPools: [ProviderPool], now: Date = Date()) -> [Attention] {
         let offline = runners.filter { $0.online != true }.map { runner -> Attention in
             let machine = RunnerPageFormat.displayName(runner)
             return Attention(kind: .offline(runnerID: runner.id), line: offlineLine(machine: machine),
                              names: [machine],
                              detail: offlineDetail(lastHeartbeatAt: runner.lastHeartbeatAt,
                                                    nowMs: RunnerPageFormat.nowMs(now)))
+        }
+        let noCli = runners.filter { $0.online == true }.compactMap { runner -> Attention? in
+            guard let engines = RunnerAttention.noCliSignedIn(
+                runner, workspaces: workspaces.filter { $0.runnerId == runner.id }) else { return nil }
+            let machine = RunnerPageFormat.displayName(runner)
+            return Attention(kind: .noCliSignedIn(runnerID: runner.id), line: noCliLine(machine: machine),
+                             names: [machine], detail: RunnerAttention.noCliSignedInDetail(engines))
         }
         let pools = memberPools.map { (pool: $0, own: false) } + ownPools.map { (pool: $0, own: true) }
         let unavailable = pools.compactMap { entry -> Attention? in
@@ -93,7 +108,7 @@ public enum Infrastructure {
                              line: poolLine(pool: entry.pool.label), names: [entry.pool.label],
                              detail: poolDetail(reason: reason))
         }
-        return offline + unavailable
+        return offline + noCli + unavailable
     }
 
     // MARK: - A key's model and name

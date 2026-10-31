@@ -46,13 +46,15 @@ public enum ProjectAttentionSection: String, CaseIterable, Sendable, Identifiabl
     public var defaultCollapsed: Bool { self == .completed }
 }
 
-/// Why an OPEN project carries a signal. The first four are the items a project waits on its
+/// Why an OPEN project carries a signal. The first five are the items a project waits on its
 /// OWNER for, named after the item's own kind in the words the needs-you banner and push use.
 public enum ProjectAttentionReason: String, Sendable {
     case approveMergeToMain = "approve-merge-to-main"
     case coordinatorQuestion = "coordinator-question"
     case escalatedToYou = "escalated-to-you"
     case fusePaused = "fuse-paused"
+    /// Work that reached main without the owner's confirmation (§10.7, owner 2026-10-28).
+    case landedWithoutConfirmation = "landed-without-confirmation"
     /// The fifth: its coordinator has asked the owner to start it (`project_request_start`), and
     /// nobody has. A project whose coordinator has not asked is waiting on nobody, and has no reason.
     case readyToStart = "ready-to-start"
@@ -71,24 +73,25 @@ public enum ProjectAttentionReason: String, Sendable {
 
     public var isOwnerItem: Bool {
         switch self {
-        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused: return true
+        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused,
+             .landedWithoutConfirmation: return true
         default: return false
         }
     }
 
-    /// Whether the owner is being asked for something in person: one of the four items, or a
+    /// Whether the owner is being asked for something in person: one of the five items, or a
     /// coordinator's request to start the project or to record it done. One tier, and one lane —
     /// Needs attention.
     public var isNeedsYou: Bool {
         self == .readyToStart || self == .doneRequest || isOwnerItem
     }
 
-    /// One tier, not six: which of the four items — or a request to start, or to close — an owner
+    /// One tier, not seven: which of the five items — or a request to start, or to close — an owner
     /// is asked about is a fact about the project, the reader's queue is that they are asked at all.
     fileprivate var rank: Int {
         switch self {
-        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused, .readyToStart,
-             .doneRequest:
+        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused,
+             .landedWithoutConfirmation, .readyToStart, .doneRequest:
             return 1
         case .needsUser: return 2
         case .autoRemediation: return 3
@@ -146,7 +149,7 @@ public struct ProjectAttentionGroup: Equatable, Sendable, Identifiable {
 
 /// How a project reads as one line of the navigation drawer.
 public enum ProjectDrawerMark: Equatable, Sendable {
-    /// Something is waiting on the reader, with how many things wait — the four owner items and a
+    /// Something is waiting on the reader, with how many things wait — the five owner items and a
     /// coordinator asking to start the project, together. The row's amber count, as a Workspace row
     /// counts its sessions waiting on you.
     case needsYou(Int)
@@ -183,7 +186,7 @@ public enum ProjectAttention {
 
     /// Every owner item kind in the order a tie between them is settled — the contract's own order.
     private static let ownerItemOrder: [OwnerItemKind] = [
-        .promotionApproval, .coordinatorQuestion, .escalated, .fusePaused,
+        .promotionApproval, .coordinatorQuestion, .escalated, .fusePaused, .landedWithoutConfirmation,
     ]
 
     // MARK: instants
@@ -284,8 +287,8 @@ public enum ProjectAttention {
         project.attention?.doneRequest
     }
 
-    /// Whether the row leads with the start request rather than with one of the four: the one that
-    /// has waited longest, as between the four — and on a tie the four, which come first in the
+    /// Whether the row leads with the start request rather than with one of the five: the one that
+    /// has waited longest, as between the five — and on a tie the five, which come first in the
     /// fixed order for the reason `leadOwnerItem` gives. A request to close that has waited longer
     /// still is named instead.
     private static func startRequestLeads(_ project: ProjectSummary) -> Bool {
@@ -298,7 +301,7 @@ public enum ProjectAttention {
     }
 
     /// Whether the row leads with the request to record the project done: the one that has waited
-    /// longest, as the start request is — after the four and after a start request on a tie.
+    /// longest, as the start request is — after the five and after a start request on a tie.
     private static func doneRequestLeads(_ project: ProjectSummary) -> Bool {
         guard let done = doneRequest(project) else { return false }
         if let start = startRequest(project), byInstantAsc(start.waitingSince, done.waitingSince) <= 0 {
@@ -321,6 +324,7 @@ public enum ProjectAttention {
         case .coordinatorQuestion: return .coordinatorQuestion
         case .escalated: return .escalatedToYou
         case .fusePaused: return .fusePaused
+        case .landedWithoutConfirmation: return .landedWithoutConfirmation
         case .unknown: return nil
         }
     }
@@ -466,6 +470,7 @@ public enum ProjectAttention {
         case .integrationError: return "handling an integration error"
         case .taskFailed: return "handling a failed task"
         case .deliveryReview: return "reviewing a delivery"
+        case .landingUnobserved: return "handling work not on the line yet"
         case .unknown: return nil
         }
     }
@@ -480,6 +485,7 @@ public enum ProjectAttention {
             return "Needs you · \(item.count) question\(item.count == 1 ? "" : "s") from coordinator"
         case .escalated: return "Needs you · \(item.count) escalated to you"
         case .fusePaused: return "Paused · coordinator stopped itself"
+        case .landedWithoutConfirmation: return "Needs you · Landed without your confirmation"
         case .unknown: return nil
         }
     }
@@ -514,7 +520,8 @@ public enum ProjectAttention {
                 tone: .warning,
                 text: joined([readyToCloseSays, elapsedLabel(doneRequest(project)?.waitingSince, now: now)]))
 
-        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused:
+        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused,
+             .landedWithoutConfirmation:
             guard let item = leadOwnerItem(project),
                   let says = ownerItemSays(item, main: RunSettings.mainBranchName(project.mainBranch))
             else { return nil }
@@ -579,7 +586,7 @@ public enum ProjectAttention {
 
     // MARK: the drawer
 
-    /// The four owner items this project is waiting on the reader for, of the kinds this build names.
+    /// The five owner items this project is waiting on the reader for, of the kinds this build names.
     private static func waitingOwnerItems(_ project: ProjectSummary) -> [ProjectListOwnerItem] {
         guard project.status == .open else { return [] }
         return (project.attention?.ownerItems ?? []).filter { $0.kind != .unknown && $0.count > 0 }
@@ -597,14 +604,14 @@ public enum ProjectAttention {
     }
 
     /// How many things wait on the reader in this project — a merge to approve, a question, an
-    /// escalation, a pause, and a coordinator asking to start it or to record it done — together:
-    /// the row's amber count.
+    /// escalation, a pause, work that landed without their confirmation, and a coordinator asking to
+    /// start it or to record it done — together: the row's amber count.
     public static func needsYouItemCount(_ project: ProjectSummary) -> Int {
         waitingOwnerItems(project).reduce(0) { $0 + $1.count } + (waitingStartRequest(project) != nil ? 1 : 0)
             + (waitingDoneRequest(project) != nil ? 1 : 0)
     }
 
-    /// Whether anything is waiting on the reader in this project: one of the four owner items, or
+    /// Whether anything is waiting on the reader in this project: one of the five owner items, or
     /// its coordinator asking to start it or to record it done.
     public static func needsYou(_ project: ProjectSummary) -> Bool {
         needsYouItemCount(project) > 0

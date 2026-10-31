@@ -30,10 +30,14 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	if got := *asked; len(got) != 1 || got[0] != "enable" {
 		t.Fatalf("broker was asked %v, want exactly [enable]", got)
 	}
+	user := "this account"
+	if u, err := registeringUser(); err == nil {
+		user = u.Username
+	}
 	for _, want := range []string{
-		unit,
-		"Status:  systemctl status " + unit,
-		"Logs:    journalctl -u " + unit + " -f",
+		"Background service started as " + user,
+		"(runs at boot)",
+		"Stop or remove it later with `orbit unregister`",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("register output missing %q; got:\n%s", want, out)
@@ -142,6 +146,56 @@ func TestADeadSocketSaysWhyAndFallsBack(t *testing.T) {
 	}
 	if !strings.Contains(out, path) {
 		t.Errorf("register output does not name the broker it could not reach; got:\n%s", out)
+	}
+}
+
+// A broker that takes the connection and then goes quiet is the wedged-hostd case, and
+// the one registration must survive: the exchange times out, the user is told which
+// socket went silent, and the sudo path finishes the job. This runs the product chain —
+// setupServiceLinux → registerViaHostd → hostdDo → hostdCall — so that deleting
+// hostdCall's deadline, or falling through to an error instead of the legacy closure,
+// fails here rather than passing on a test's private copy of the behaviour.
+func TestASilentBrokerTimesOutAndStillFallsBack(t *testing.T) {
+	silent := make(chan struct{})
+	defer close(silent)
+	path := serveRawHostd(t, func(conn net.Conn) {
+		<-silent // accept, read nothing, answer nothing
+	})
+	shortenHostdTimeout(t)
+	commands := recordCommands(t)
+
+	installed := make(chan struct{}, 1)
+	out := captureServiceOutput(t, func() {
+		mustGiveUp(t, "register", func() {
+			if err := setupServiceLinux(path, nil, func() error { installed <- struct{}{}; return nil }); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	if len(installed) == 0 {
+		t.Error("a broker that never answers must still leave the runner installed the old way")
+	}
+	if !strings.Contains(out, path) || !strings.Contains(out, "falling back to the sudo path") {
+		t.Errorf("register output does not say which broker went silent; got:\n%s", out)
+	}
+
+	removed := make(chan struct{}, 1)
+	out = captureServiceOutput(t, func() {
+		mustGiveUp(t, "unregister", func() {
+			uninstallServiceLinux(path, func() { removed <- struct{}{} })
+		})
+	})
+	if len(removed) == 0 {
+		t.Error("a broker that never answers must still fall back to the sudo removal")
+	}
+	if !strings.Contains(out, "falling back to the sudo path") {
+		t.Errorf("unregister output does not say why it fell back; got:\n%s", out)
+	}
+
+	// Falling back is the legacy closure's job, not something the client does behind it:
+	// the client itself still ran nothing.
+	if len(*commands) != 0 {
+		t.Fatalf("the broker path shelled out to %v", *commands)
 	}
 }
 

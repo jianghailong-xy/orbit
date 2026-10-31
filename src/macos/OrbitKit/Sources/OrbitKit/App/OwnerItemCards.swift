@@ -966,6 +966,17 @@ public enum ExceptionCards {
     /// both to `NeedsYouLogic.ownerItemWord` — the banner and the card are the same fact.
     public static let escalatedTitle = "Escalated to you"
     public static let pauseTitle = "Paused"
+    /// Work that reached main without the owner's confirmation (§10.7) is the owner's from birth and
+    /// never escalated, so its card wears its own kind word — the banner's, and Android's header.
+    public static let landedTitle = "Landed without your confirmation"
+
+    /// The header a card wears: the pause's, the fifth kind's, or the escalation's — by the item it
+    /// was last read as (nil before the first read, which is drawn as an escalation, as every card
+    /// that is not a pause always was).
+    public static func title(_ kind: ProjectOpenItemKind?, isPause: Bool) -> String {
+        if isPause { return pauseTitle }
+        return kind == .landedWithoutConfirmation ? landedTitle : escalatedTitle
+    }
     /// §7.5's provenance mark, the same one the merge and question cards carry.
     public static let provenance = "FROM ORBIT"
     public static let provenanceTitle =
@@ -1400,6 +1411,10 @@ public enum ExceptionCards {
     /// about, and the press that ends a timed-out attempt.
     public static let openLanding = "Open landing"
     public static let abandon = "Abandon"
+    /// Revision 29's two doors (§10.8): the owner's answer to work that reached main without their
+    /// confirmation, and a look at the project's line once more.
+    public static let accept = "Accept"
+    public static let observeAgain = "Observe again"
     /// The door that runs the work again, and the same door said of a candidate's check — the
     /// browser's `RETRY_ACTION_LABEL` and `RERUN_CHECK_ACTION_LABEL`. Which of the two a press
     /// wears depends on what it reruns: a row that names a merge candidate re-runs that candidate's
@@ -1419,6 +1434,8 @@ public enum ExceptionCards {
         .askCoordinatorAgain: askCoordinatorAgain,
         .openLanding: openLanding,
         .abandon: abandon,
+        .accept: accept,
+        .observe: observeAgain,
     ]
 
     /// One line per door saying what pressing it does — the browser's `ACTION_CONSEQUENCES`, and the
@@ -1435,6 +1452,8 @@ public enum ExceptionCards {
         .askCoordinatorAgain: "It goes back to the coordinator with a fresh escalation clock.",
         .openLanding: "Open the landing: every attempt, step by step.",
         .abandon: "Ends this attempt. Nothing was pushed, and nothing is queued again.",
+        .accept: "You accept the work as it landed, and this item closes.",
+        .observe: "An observation of the line is queued with your reason.",
     ]
     /// J12's other half, for a claim Orbit cannot prove never pushed (a legacy claim, a v2 one that
     /// recorded a push, or a row that predates the facts) — the browser's
@@ -1547,7 +1566,9 @@ public enum ExceptionCards {
     public static func addressed(_ row: ProjectOpenItemRow, _ action: ProjectOpenItemAction,
                                  mergeCard: String? = nil) -> Bool {
         switch action {
-        case .askCoordinatorAgain, .answer: return true
+        // Accept answers the item itself (§10.8); Observe again is the project's door — it looks at
+        // the line the card's project names — so it needs nothing from the row but the row.
+        case .askCoordinatorAgain, .answer, .accept, .observe: return true
         // A RETRY is three doors under one name (§4.7, `open-item-doors.ts` integration-retry-task /
         // -promotion / task-start): a landing retry needs the task, a check re-run needs the
         // candidate, the run again a FAILED task answers needs the task too, and the row carries
@@ -1667,6 +1688,81 @@ public enum ExceptionCards {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return OpenItemResolveRequest(note: trimmed)
+    }
+
+    // MARK: - Accept and Observe again (§10.8)
+
+    /// What a refused Accept says, over the server's own words — the browser's `ACCEPT_FAILED`.
+    public static let notAccepted = "The work was not accepted"
+    /// The receipt, for an Accept made on this screen. Native-only, like `handled`.
+    public static let accepted = "Accepted"
+    /// Observe again's panel — the browser's dialog, asked in place as `Mark as handled` is: the door
+    /// requires a reason, and the panel says what the observation does before anything is sent.
+    public static let observeTitle = "Look at the line again?"
+    public static let observeBody =
+        "A runner fetches the line and looks for each finished task’s commit on it. Whatever it finds is "
+        + "recorded as landed, and the tasks waiting on that work start. Your reason goes on the record."
+    public static let observeReason = "Why look again?"
+    /// What a refused Observe again says, over the server's own words — the browser's
+    /// `OBSERVE_FAILED`.
+    public static let notObserved = "No observation was queued"
+    /// The door's own ceiling, so the field stops where the server's validation would.
+    public static let observeMaxLength = 2_000
+
+    /// What Observe again sends, or nil when it may not be sent: the reason, trimmed, which the door
+    /// requires — the browser's `trimmed === ''` holds the same line.
+    public static func observeRequest(_ reason: String) -> IntegrationObserveRequest? {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return IntegrationObserveRequest(reason: trimmed)
+    }
+
+    // MARK: - the handling rows (§4.7 H1, §10.8)
+
+    /// The label the in-flight rerun's row wears — the browser's `HANDLING_TAG`.
+    public static let handlingLabel = "Handling"
+    /// The row under it: the reason it was asked for, as it was asked.
+    public static let reasonLabel = "Reason"
+
+    /// The line a card says while an observation is in flight (§10.8): "Observing main…" — its own
+    /// words rather than a rerun's, because an observation lands nothing and re-runs nothing. The
+    /// browser's `observingLine`.
+    public static func observingLine(_ branch: String) -> String {
+        "Observing \(branch)…"
+    }
+
+    /// What the rerun is, in the card's words: a task's landing, or a candidate's check of the merge
+    /// into `main` — the browser's `rerunOf`.
+    static func rerunOf(_ row: ProjectOpenItemRow, jobKind: String?, main: String) -> String {
+        let check = jobKind.map { $0 == "CHECK_PROMOTION" } ?? (row.promotionId != nil)
+        return check ? "the re-check of the merge into \(main)" : "the rerun of the landing"
+    }
+
+    /// §4.7 H1 in one line: which rerun, which generation, where it is, and since when it was asked —
+    /// or, for an observation (§10.8), "Observing main… — queued · asked 2m ago": an observation is no
+    /// rerun, and its generation is the project's count of looks. The browser's `handlingLine`; `main`
+    /// is the project's main branch by name, which is the only line an observation looks at.
+    public static func handlingLine(_ row: ProjectOpenItemRow, _ handling: OpenItemHandling,
+                                    now: Date = Date(), main: String = RunSettings.defaultMainBranch) -> String {
+        let asked = RelativeTime.ago(handling.startedAt, now: now) ?? "unknown"
+        if handling.jobKind == "OBSERVE_LANDING" {
+            return "\(observingLine(main)) — \(handling.state == "RUNNING" ? "running" : "queued") · asked \(asked)"
+        }
+        let whereItIs = handling.state == "RUNNING" ? "is running" : "is queued"
+        let generation = handling.generation.map(String.init) ?? "?"
+        return "\(rerunOf(row, jobKind: handling.jobKind, main: main)) — generation \(generation) \(whereItIs) · asked \(asked)"
+    }
+
+    /// The card's rows about the rerun or observation handling it, while that is in flight — the
+    /// handling half of the browser's `ItemHandlingRows`: `Handling` and its line, then the reason it
+    /// was asked with. None for an item nobody is handling.
+    public static func handlingRows(_ row: ProjectOpenItemRow, now: Date = Date(),
+                                    main: String = RunSettings.defaultMainBranch) -> [FactRow] {
+        guard let handling = row.handling else { return [] }
+        var rows = [FactRow(label: handlingLabel, value: handlingLine(row, handling, now: now, main: main))]
+        let reason = handling.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !reason.isEmpty { rows.append(FactRow(label: reasonLabel, value: handling.reason)) }
+        return rows
     }
 
     /// The task this item is about, as the app's own `orbit-task:` door — what the `Open task
@@ -1827,12 +1923,18 @@ public enum ExceptionCards {
     /// same reason the plan's seal rides with `planChangeContext`).
     public static func chatContext(projectTitle: String?, row: ProjectOpenItemRow,
                                    isPause: Bool, now: Date = Date()) -> String {
-        let what = isPause ? "pause" : "exception"
+        // Work that reached main without the owner's confirmation never escalated: it was the
+        // owner's from birth, and saying nobody acted on it would be a lie about why it is theirs.
+        let landed = !isPause && row.kind == .landedWithoutConfirmation
+        let what = isPause ? "pause" : landed ? "work" : "exception"
         var out = "About the \(what)"
         if let projectTitle { out += " in “\(projectTitle)”" }
         out += isPause
             ? " — the coordinator stopped itself, and only the owner can lift it:"
-            : " that is the owner's now — no one acted on it for \(waitedBeforeEscalation(row)):"
+            : landed
+                ? " that reached main without the owner's confirmation — waiting on the owner for "
+                    + "\(waited(row, now: now)):"
+                : " that is the owner's now — no one acted on it for \(waitedBeforeEscalation(row)):"
         out += "\n\n\(row.title)"
         if !row.detailLine.isEmpty { out += "\n\(row.detailLine)" }
         out += "\n\n(open item \(row.itemId), waiting since \(row.waitingSince))"

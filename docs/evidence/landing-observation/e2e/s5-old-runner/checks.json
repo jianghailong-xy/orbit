@@ -1,0 +1,92 @@
+[
+  {
+    "phase": "5",
+    "name": "the old runner heartbeats to the new apiserver without integration-observe/v1",
+    "ok": true,
+    "detail": "3 heartbeats, version 0.1.239"
+  },
+  {
+    "phase": "5",
+    "name": "the backfill's OBSERVE_LANDING stays QUEUED, unclaimed",
+    "ok": true,
+    "detail": "QUEUED - -"
+  },
+  {
+    "phase": "5",
+    "name": "S5-H is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5",
+    "name": "S5-H's check on the old runner answered READY",
+    "ok": true,
+    "detail": "READY -"
+  },
+  {
+    "phase": "5",
+    "name": "the CHECK_PROMOTION handed to the old runner carries no sourceSha (old shape: it fetches the branch)",
+    "ok": true,
+    "detail": "refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a sourceSha=(absent)"
+  },
+  {
+    "phase": "5",
+    "name": "the candidate row itself is named by the delivered commit",
+    "ok": true,
+    "detail": "027820cf91fe356e564c7e92da682e9ded6e66fb"
+  },
+  {
+    "phase": "5",
+    "name": "the owner confirms S5-H's candidate",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5",
+    "name": "LAND_PROMOTION on the old runner landed it",
+    "ok": true,
+    "detail": "LANDED -"
+  },
+  {
+    "phase": "5",
+    "name": "a MERGED receipt on main",
+    "ok": true,
+    "detail": "MERGED main RUNNER"
+  },
+  {
+    "phase": "5",
+    "name": "S5-H2 started by itself after the landing (J9, J10 unchanged for the old runner)",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5",
+    "name": "S5-I is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5",
+    "name": "an unpublished branch still answers SOURCE_BRANCH_MISSING on the old runner (today's behaviour)",
+    "ok": true,
+    "detail": "ERROR SOURCE_BRANCH_MISSING"
+  },
+  {
+    "phase": "5",
+    "name": "no OBSERVE_LANDING was ever handed to the old runner",
+    "ok": true,
+    "detail": "12 heartbeats since the deploy"
+  },
+  {
+    "phase": "5",
+    "name": "no CHECK_PROMOTION named by its commit was handed to the old runner",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "phase": "5",
+    "name": "S4's observation is still QUEUED after all of this",
+    "ok": true,
+    "detail": "QUEUED -"
+  }
+]

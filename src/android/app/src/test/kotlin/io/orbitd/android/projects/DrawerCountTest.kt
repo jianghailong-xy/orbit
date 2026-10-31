@@ -53,6 +53,23 @@ class DrawerCountTest {
         assertEquals(0, ProjectAttention.needsYouItemCount(Json.parseToJsonElement("""{"id":"p","status":"OPEN"}""").jsonObject))
     }
 
+    /** Revision 29's fifth owner item (owner 2026-10-28): work that reached main without the owner's confirmation waits on them by its
+     * count, leads the row's chip in the owner tier in its kind word, and on a tie with the other four comes last — the web's
+     * `projectAttention.test.ts`, case for case. */
+    @Test fun workThatLandedWithoutYourConfirmationIsWaitingOnYou() {
+        assertEquals(2, count("""{"ownerItems":[${item("LANDED_WITHOUT_CONFIRMATION", 2, 4 * 3600)}]}"""))
+        val landed = project("""{"ownerItems":[${item("LANDED_WITHOUT_CONFIRMATION", 1, 2 * 3600)}]}""")
+        assertEquals(AttentionReason.LANDED_WITHOUT_CONFIRMATION, ProjectAttention.reason(landed, now))
+        assertEquals(ProjectLane.ATTENTION, ProjectAttention.lane(landed, now))
+        assertEquals(AttentionChip(true, "Needs you · Landed without your confirmation · 2h"), ProjectAttention.chip(landed, now))
+        assertEquals(DrawerMark.NeedsYou(1), ProjectAttention.drawerMark(landed))
+        val older = project("""{"ownerItems":[${item("COORDINATOR_QUESTION", 1, 35 * 60)},${item("LANDED_WITHOUT_CONFIRMATION", 1, 3 * 3600)}]}""")
+        assertEquals("the longest wait leads among the five", "Needs you · Landed without your confirmation · 3h", ProjectAttention.chip(older, now)?.text)
+        val tied = project("""{"ownerItems":[${item("LANDED_WITHOUT_CONFIRMATION", 1, 3600)},${item("FUSE_PAUSED", 1, 3600)}]}""")
+        assertEquals("a tie goes to the contract's order, where it is last", AttentionReason.FUSE_PAUSED, ProjectAttention.reason(tied, now))
+        assertEquals("a closed project asks nothing", 0, count("""{"ownerItems":[${item("LANDED_WITHOUT_CONFIRMATION", 1)}]}""", "DONE"))
+    }
+
     /** The rule and the row as M2's Swift states them, so a change there fails here rather than drifting. */
     @Test fun theSwiftCountsAndSaysItTheSameWay() {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }

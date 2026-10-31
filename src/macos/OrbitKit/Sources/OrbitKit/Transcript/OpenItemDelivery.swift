@@ -249,10 +249,12 @@ public enum OpenItemDeliveryCard {
         case .promotionApproval:      return "Merge approval"
         case .coordinatorQuestion:    return "Question"
         case .fusePaused:             return "Project paused"
-        // The browser's `KIND_LABEL` has no word for these two either; the header names them, and a
-        // second name invented here would be a wording the web does not share.
+        // The browser's `KIND_LABEL` has no word for these four either; the header names them, and
+        // a second name invented here would be a wording the web does not share.
         case .deliveryReview:         return header
         case .landingLeaseExpired:    return header
+        case .landingUnobserved:      return header
+        case .landedWithoutConfirmation: return header
         case .unknown:                return header
         }
     }

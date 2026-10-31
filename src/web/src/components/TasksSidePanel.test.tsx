@@ -187,7 +187,9 @@ describe('TasksSidePanel workspace navigation', () => {
   });
 
   it('does not add a second divider when there are no Workspace rows', () => {
-    expect(source).toMatch(/orderedWorkspaces\.length > 0 && openProjects\.length > 0 && <div className="tp-divider" \/>/);
+    expect(source).toMatch(
+      /\(orderedWorkspaces\.length > 0 \|\| bareMachines\.length > 0\) && openProjects\.length > 0 && \(\s*<div className="tp-divider" \/>/,
+    );
   });
 
   it('labels exactly the first nine Workspace shortcuts for each desktop platform', () => {

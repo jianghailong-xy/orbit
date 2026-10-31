@@ -9,14 +9,14 @@ import io.orbitd.android.projects.RunSettings
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
-/** One of the four owner items a session row carries (OrbitKit `SessionOwnerItem`, §7.6 V13). */
+/** One of the five owner items a session row carries (OrbitKit `SessionOwnerItem`, §7.6 V13). */
 /** `mainBranch` is the project's main branch, short — what a merge approval merges into — null with no repository bound. `need` is
  * the short reason an escalated item carries, which the session row says after "Escalated to you" (A08-17). */
 data class OwnerItem(val itemId: String, val kind: String, val title: String, val since: String, val mainBranch: String? = null,
     val need: String? = null)
 
 /** What the cross-session bar says, and where its press goes (OrbitKit `NeedsYouBanner`): the session that has
- * waited longest, or — when one of the four owner items is waiting — the card that item is. Two lines (the owner,
+ * waited longest, or — when one of the five owner items is waiting — the card that item is. Two lines (the owner,
  * 2026-10-21, `docs/mocks/needs-you-capsule`): [text] is what is waiting, [detail] where — the project an owner item
  * stops, or the conversation a press opens — and [since] since when, the ISO instant the bar's age is read from. */
 data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: String, val detail: String? = null,
@@ -28,14 +28,15 @@ data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: Stri
     val more: Int get() = if (ownerItem == null) 0 else maxOf(0, count - 1)
 }
 
-/** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind, the raised hand for a
- * blocked tool call; in the conversation on screen, a question's or an exception's, by the card a press goes to. */
+/** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind — work that landed without
+ * the owner's confirmation wearing the merge's, since a merge into main is what it is about — the raised hand for a blocked tool call;
+ * in the conversation on screen, a question's or an exception's, by the card a press goes to. */
 enum class NeedsYouGlyph {
     MERGE, QUESTION, WARNING, PAUSE, HAND;
 
     companion object {
         fun of(kind: String) = when (kind) {
-            "PROMOTION_APPROVAL" -> MERGE
+            "PROMOTION_APPROVAL", "LANDED_WITHOUT_CONFIRMATION" -> MERGE
             "COORDINATOR_QUESTION" -> QUESTION
             "ESCALATED" -> WARNING
             "FUSE_PAUSED" -> PAUSE
@@ -120,7 +121,7 @@ object NeedsYouLogic {
     fun doneKey(projectId: String) = "done:$projectId"
 
     /** Whether one Open row needs you (OrbitKit `SessionGrouping.bucket`): approvals pending — unless all it counts is a
-     * project waiting to be started — or one of the four owner items on it. */
+     * project waiting to be started — or one of the five owner items on it. */
     fun needsYou(row: JsonObject): Boolean =
         ((row.number("pendingApprovals") ?: 0) > 0 && row.text("waitingKind") != "START_REQUEST") || ownerItems(row).isNotEmpty()
 
@@ -146,17 +147,19 @@ object NeedsYouLogic {
             since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
     }
 
-    /** The words the bar and a session row share for one of the four; null for a kind this build does not know. A merge approval
-     * names the branch it merges into, [main]. */
+    /** The words the bar and a session row share for one of the five; null for a kind this build does not know. A merge approval
+     * names the branch it merges into, [main]. The fifth (§10.7, owner 2026-10-28) is the kind word every client copies verbatim: the
+     * bar says it over the project, `Landed without your confirmation · <project>` (§7.6 V13). */
     fun kindWord(kind: String, main: String = RunSettings.defaultMainBranch): String? = when (kind) {
         "PROMOTION_APPROVAL" -> "Approve merge to $main"
         "COORDINATOR_QUESTION" -> "Question from coordinator"
         "ESCALATED" -> "Escalated to you"
         "FUSE_PAUSED" -> "Paused"
+        "LANDED_WITHOUT_CONFIRMATION" -> "Landed without your confirmation"
         else -> null
     }
 
-    /** The word of the item that has waited longest, for a row the server says waits on one of the four (OrbitKit
+    /** The word of the item that has waited longest, for a row the server says waits on one of the five (OrbitKit
      * `oldestItemWord`); null when none is a kind this build knows. An unparseable instant sorts last, as for the bar. An escalated
      * item says its need as well — "Escalated to you · the check on the combined tree failed" — where the bar says the word alone. */
     fun oldestItemWord(items: List<OwnerItem>): String? = items.mapNotNull { item -> word(item)?.let { itemWord(item, it) to (parse(item.since) ?: Instant.MAX) } }
@@ -171,7 +174,7 @@ object NeedsYouLogic {
         return base + needSeparator + need
     }
 
-    /** The bar's first line for one owner item: which of the four, its merge named by the item's main branch (OrbitKit
+    /** The bar's first line for one owner item: which of the five, its merge named by the item's main branch (OrbitKit
      * `ownerItemWord`). The project is the second line. */
     fun ownerItemWord(item: OwnerItem): String = word(item) ?: "Needs you"
 

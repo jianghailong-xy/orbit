@@ -1,0 +1,67 @@
+[
+  {
+    "name": "delivery mode reads AGENT_PUSH on project_get",
+    "ok": true,
+    "detail": "deliveryModeChosenAt 2026-10-29T02:15:13.359Z"
+  },
+  {
+    "name": "S1-A is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "the brief named the push target (O-L3 sentence)",
+    "ok": true,
+    "detail": "origin/main"
+  },
+  {
+    "name": "origin main is the agent's commit",
+    "ok": true,
+    "detail": "56dd992f92e72d4844790684d7bd4acd97ae411a"
+  },
+  {
+    "name": "the task branch was never pushed",
+    "ok": true,
+    "detail": "refs/heads/main"
+  },
+  {
+    "name": "delivered_sha frozen = the pushed commit",
+    "ok": true,
+    "detail": "56dd992f92e72d4844790684d7bd4acd97ae411a on orbit/task-s1-a-write-the-work-and-push-it-to-70e845 at 2026-10-29T02:15:39.987Z"
+  },
+  {
+    "name": "receipt ALREADY_MERGED on main, recorded by the RUNNER, detail.observed",
+    "ok": true,
+    "detail": "source 56dd992f92e72d4844790684d7bd4acd97ae411a"
+  },
+  {
+    "name": "S1-B was started without a person (J10)",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "S1-B is DONE",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "no open item (needs-you or with the coordinator)",
+    "ok": true,
+    "detail": "{\"needsYou\":0,\"withCoordinator\":0}"
+  },
+  {
+    "name": "every receipt was recorded by the runner (no manual receipt)",
+    "ok": true,
+    "detail": "0"
+  },
+  {
+    "name": "no retried job",
+    "ok": true,
+    "detail": "0"
+  },
+  {
+    "name": "AGENT_PUSH built no promotion candidate (O-L2)",
+    "ok": true,
+    "detail": "0"
+  }
+]

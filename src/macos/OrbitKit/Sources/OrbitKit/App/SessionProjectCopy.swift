@@ -127,6 +127,7 @@ public enum SessionProjectCopy {
         case .integrationError: return "Handling an integration error"
         case .taskFailed: return "Handling a failed task"
         case .deliveryReview: return "Reviewing a delivery"
+        case .landingUnobserved: return "Handling work not on the line yet"
         case .unknown: return nil
         }
     }

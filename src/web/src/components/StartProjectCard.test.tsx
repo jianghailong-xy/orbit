@@ -669,6 +669,8 @@ describe('what a press sends', () => {
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
       mergeCheckTimeoutSeconds: 900,
+      // No integration read: no delivery choice on offer, and none sent.
+      deliveryMode: null,
     });
     // A coordinator that suggested no budget leaves the box empty, which is the default one.
     expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
@@ -678,7 +680,7 @@ describe('what a press sends', () => {
     const request = requestOf();
     expect(startBody(request, {
       line: 'PROJECT_BRANCH', upstream: null, automatic: false, maxConcurrentTasks: 5, mergeCheckCommand: '  npm test  ',
-      mergeCheckTimeoutSeconds: 90,
+      mergeCheckTimeoutSeconds: 90, deliveryMode: null,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'PROJECT_BRANCH',
@@ -693,7 +695,7 @@ describe('what a press sends', () => {
     // empty budget box is the naming that runs the check on its one-hour default.
     expect(startBody(request, {
       line: 'MAIN', upstream: null, automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: '   ',
-      mergeCheckTimeoutSeconds: null,
+      mergeCheckTimeoutSeconds: null, deliveryMode: null,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'MAIN',
@@ -1312,7 +1314,7 @@ describe('the main branch a press sends', () => {
   it('names the main branch only when the card offered one', () => {
     const draft = {
       line: 'MAIN' as const, automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: '',
-      mergeCheckTimeoutSeconds: null,
+      mergeCheckTimeoutSeconds: null, deliveryMode: null,
     };
     expect(startBody(requestOf(), { ...draft, upstream: 'master' }, null)).toMatchObject({ upstreamRef: 'refs/heads/master' });
     expect(startBody(requestOf(), { ...draft, upstream: null }, null)).not.toHaveProperty('upstreamRef');
@@ -1353,5 +1355,145 @@ describe('the merge check budget on the card', () => {
     });
     await until(() => bodies.length === 1, 'the press to reach the door');
     expect(bodies[0]).toMatchObject({ mergeCheckTimeoutSeconds: null, requestId: 'item-1' });
+  });
+});
+
+// ── how the work reaches main (§10.5 O-L1, A-Q21) ───────────────────────────────────────────────
+
+/** A request to start a project that lands directly into main, as the coordinator suggests it. */
+const suggestingMain = (): ProjectStartRequest =>
+  requestOf({ settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: null } });
+
+const deliveryField = (card: HTMLElement): HTMLElement =>
+  settingRow(card, 'Delivery').querySelector<HTMLElement>('[role="combobox"]')!;
+/** Whether the menu is the dead one: the house Select marks its own wrapper. */
+const deliveryLocked = (card: HTMLElement): boolean =>
+  settingRow(card, 'Delivery').querySelector('.orbit-select')?.getAttribute('data-disabled') === 'true';
+
+/** Opens the menu of the row named and presses the option whose bold label is `label`, in that
+ *  trigger's own list (`<trigger id>-list`) — a list that closed stays mounted in jsdom, so another
+ *  menu's options must not stand in for it — then waits for the menu to close. */
+async function choose(card: HTMLElement, row: string, label: string): Promise<void> {
+  const trigger = (): HTMLElement => settingRow(card, row).querySelector<HTMLElement>('[role="combobox"]')!;
+  await pointerPress(trigger(), `the ${row} menu`);
+  const option = (): HTMLElement | undefined =>
+    [...(document.getElementById(`${trigger().id}-list`)?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])]
+      .find((each) => each.querySelector('b')?.textContent === label);
+  await until(() => option() !== undefined, `${label} in the ${row} menu`);
+  await pointerPress(option(), label);
+  await until(() => trigger().getAttribute('aria-expanded') === 'false', `the ${row} menu to close`);
+}
+
+describe('the delivery mode on the card', () => {
+  it('offers both on a main line, Orbit’s by default, and says what the agent pushing means', async () => {
+    server.integration = integrationOf({ upstreamRef: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    server.row = rowOf('item-1', suggestingMain());
+    const { card } = await delivered();
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Delivery', 'Merge check', 'At most']);
+    expect(deliveryField(card()).textContent).toBe('Orbit lands it');
+    expect(deliveryLocked(card())).toBe(false);
+    expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
+      .toBe('The agent doesn’t push to main: Orbit lands its branch once the work is accepted.');
+    expect(comesToYou(card())).toContain('Each merge into main');
+
+    await pointerPress(deliveryField(card()), 'the delivery menu');
+    await until(() => menuOptions().length === 2, 'the delivery menu');
+    expect(menuOptions().map((option) => option.querySelector('b')?.textContent)).toEqual([
+      'Orbit lands it', 'The agent pushes it']);
+    expect(menuOptions()[1]!.textContent).toContain('The agent pushes to main itself, and Orbit checks the commits are there.');
+    await pointerPress(menuOptions()[1], 'The agent pushes it');
+
+    expect(deliveryField(card()).textContent).toBe('The agent pushes it');
+    expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
+      .toBe('The agent pushes to main itself, and Orbit checks the commits are there.');
+    // No merge into main asks anybody now (O-L2): the sentence and the list both say so.
+    expect(settingRow(card(), 'Automatic').textContent).toContain(
+      'The coordinator decides when each task is done. The agent pushes each task’s work to main itself.');
+    expect(settingRow(card(), 'Automatic').textContent).not.toContain('Each merge into main still asks you');
+    expect(comesToYou(card())).not.toContain('Each merge into main');
+
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toMatchObject({ line: 'MAIN', deliveryMode: 'AGENT_PUSH', requestId: 'item-1' });
+  });
+
+  it('records Orbit’s when the owner starts a main line without changing it', async () => {
+    server.integration = integrationOf({ upstreamRef: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    server.row = rowOf('item-1', suggestingMain());
+    const { card } = await delivered();
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).toMatchObject({ line: 'MAIN', deliveryMode: 'PLATFORM' });
+  });
+
+  it('keeps Orbit’s on a project branch, says why the agent cannot push there, and sends no mode', async () => {
+    server.integration = integrationOf({ deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    const { card } = await delivered();
+    expect(deliveryField(card()).textContent).toBe('Orbit lands it');
+    expect(deliveryLocked(card())).toBe(true);
+    expect(settingRow(card(), 'Delivery').querySelector(':scope > .start-card-hint')?.textContent)
+      .toBe('The agent can push only on a project that lands directly into main. On a project branch, Orbit lands the work.');
+    // A press opens nothing: the agent pushing is not on offer here.
+    await pointerPress(deliveryField(card()), 'the dead delivery menu');
+    expect(menuOptions()).toEqual([]);
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]!.line).toBe('PROJECT_BRANCH');
+    expect(bodies[0]).not.toHaveProperty('deliveryMode');
+  });
+
+  it('goes back to Orbit’s when the line moves off main, which the door would refuse otherwise', async () => {
+    server.integration = integrationOf({ upstreamRef: 'main', deliveryMode: 'PLATFORM', deliveryModeChosenAt: null });
+    server.row = rowOf('item-1', suggestingMain());
+    const { card } = await delivered();
+    await choose(card(), 'Delivery', 'The agent pushes it');
+    expect(deliveryField(card()).textContent).toBe('The agent pushes it');
+
+    await choose(card(), 'Tasks land on', 'A project branch');
+    expect(deliveryField(card()).textContent).toBe('Orbit lands it');
+    expect(deliveryLocked(card())).toBe(true);
+    // The draft itself went back, not only what the menu shows: the press sends no mode at all.
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).toMatchObject({ line: 'PROJECT_BRANCH' });
+    expect(bodies[0]).not.toHaveProperty('deliveryMode');
+  });
+
+  it('opens on the agent pushing where the project already chose it, on a line that stays main', () => {
+    const chose = integrationOf({ deliveryMode: 'AGENT_PUSH', deliveryModeChosenAt: '2026-10-28T09:00:00.000Z' });
+    expect(startDraftOf(suggestingMain().settings, chose).deliveryMode).toBe('AGENT_PUSH');
+    expect(startDraftOf(requestOf().settings, chose).deliveryMode).toBe('PLATFORM');
+    // A read that does not say, or a server that predates the choice: nothing on offer.
+    expect(startDraftOf(suggestingMain().settings, null).deliveryMode).toBeNull();
+    expect(startDraftOf(suggestingMain().settings, integrationOf()).deliveryMode).toBeNull();
+  });
+
+  it('draws no Delivery row for a server that predates it', async () => {
+    server.integration = integrationOf({ upstreamRef: 'main' });
+    server.row = rowOf('item-1', suggestingMain());
+    const { card } = await delivered();
+    expect(rowNames(card())).not.toContain('Delivery');
+  });
+
+  it('sends the mode with a main line only', () => {
+    const draft = {
+      upstream: null, automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: '', mergeCheckTimeoutSeconds: null,
+    };
+    expect(startBody(suggestingMain(), { ...draft, line: 'MAIN', deliveryMode: 'AGENT_PUSH' }, null))
+      .toMatchObject({ line: 'MAIN', deliveryMode: 'AGENT_PUSH' });
+    expect(startBody(suggestingMain(), { ...draft, line: 'MAIN', deliveryMode: 'PLATFORM' }, null))
+      .toMatchObject({ deliveryMode: 'PLATFORM' });
+    expect(startBody(requestOf(), { ...draft, line: 'PROJECT_BRANCH', deliveryMode: 'PLATFORM' }, null))
+      .not.toHaveProperty('deliveryMode');
+    expect(startBody(suggestingMain(), { ...draft, line: 'MAIN', deliveryMode: null }, null))
+      .not.toHaveProperty('deliveryMode');
   });
 });

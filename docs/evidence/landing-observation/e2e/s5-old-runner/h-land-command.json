@@ -1,0 +1,36 @@
+[
+  {
+    "jobId": "49ff0e8e-859d-4ac9-9dca-dcf09f347d87",
+    "kind": "LAND_PROMOTION",
+    "claimGeneration": "1",
+    "leaseOwner": "17140729-8cd8-4a35-863c-1909590d6503",
+    "workDir": "/var/tmp/r29-13-e2e/b/work/s5",
+    "remoteName": "origin",
+    "refAuthority": "REMOTE",
+    "targetRef": "refs/heads/main",
+    "upstreamRef": "refs/heads/main",
+    "sourceRef": "refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a",
+    "sessionBaseSha": "d4eef22340adf2bdb927d79752657bde0e8f520e",
+    "sourceSha": "027820cf91fe356e564c7e92da682e9ded6e66fb",
+    "promotionSourceKind": "TASK_BRANCH",
+    "upstreamShaChecked": "d4eef22340adf2bdb927d79752657bde0e8f520e",
+    "mergeTreeSha": "106c64ebbbb0b0dbaf86c66c4b6bccd8be26f0a9",
+    "checks": [
+      {
+        "name": "TASK_ACCEPTANCE",
+        "command": "ls E2E_WORK_*.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 60
+      },
+      {
+        "name": "MERGE_CHECK",
+        "command": "test -f README.md",
+        "expectedExitCode": 0,
+        "timeoutSeconds": 3600
+      }
+    ],
+    "cancelRequested": false,
+    "reportBeforePush": true,
+    "jobPublicId": "2Fd04XfGIdVyw8MkUwSetL"
+  }
+]

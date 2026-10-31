@@ -220,9 +220,7 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 		return errors.New("systemctl restart failed — is this a systemd host?")
 	}
 
-	fmt.Printf("\n✓ %s service installed and started as user %q.\n"+
-		"  Status:  systemctl status %s\n"+
-		"  Logs:    journalctl -u %s -f\n", svc, u.Username, svc, svc)
+	printServiceStarted("runs at boot")
 	return nil
 }
 
@@ -485,11 +483,19 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 		return fmt.Errorf("launchctl load failed")
 	}
 
-	fmt.Printf("\n✓ %s LaunchAgent installed and started.\n"+
-		"  Plist:   %s\n"+
-		"  Logs:    %s\n"+
-		"  Stop:    launchctl unload %s\n", label, plistPath, logPath, plistPath)
+	printServiceStarted("starts at login")
 	return nil
+}
+
+// printServiceStarted is the one success line every service path prints, so
+// `orbit register` reads the same whatever started the runner.
+func printServiceStarted(how string) {
+	user := "this account"
+	if u, err := registeringUser(); err == nil {
+		user = u.Username
+	}
+	fmt.Printf("    ✓ Background service started as %s (%s).\n"+
+		"      Stop or remove it later with `orbit unregister`.\n", user, how)
 }
 
 func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, proxyVars []envVar) string {

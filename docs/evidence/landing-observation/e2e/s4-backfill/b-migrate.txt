@@ -1,0 +1,31 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": PostgreSQL database "orbit", schema "public" at "127.0.0.1:5923"
+
+452 migrations found in prisma/migrations
+
+Applying migration `0449_apiserver_process`
+Applying migration `0450_runner_mass_disconnect`
+Applying migration `0451_recap_alert_notify_claims`
+Applying migration `0453_landing_observation_delivery_mode`
+Applying migration `0454_session_merge_requested_by`
+Applying migration `0455_device_enrollment_requester_ip`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 0449_apiserver_process/
+    └─ migration.sql
+  └─ 0450_runner_mass_disconnect/
+    └─ migration.sql
+  └─ 0451_recap_alert_notify_claims/
+    └─ migration.sql
+  └─ 0453_landing_observation_delivery_mode/
+    └─ migration.sql
+  └─ 0454_session_merge_requested_by/
+    └─ migration.sql
+  └─ 0455_device_enrollment_requester_ip/
+    └─ migration.sql
+
+All migrations have been successfully applied.

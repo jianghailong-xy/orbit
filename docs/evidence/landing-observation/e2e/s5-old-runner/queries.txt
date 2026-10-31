@@ -1,0 +1,642 @@
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — codebase  (2026-10-29T02:00:19.047Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner')
+
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode | delivery_mode_chosen_at |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+-------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/b/origin/s5 | refs/heads/main | refs/heads/main | origin      | PLATFORM      |                         | 2026-10-29 01:57:43.472+00 | test -f README.md
+(1 row)
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — tasks  (2026-10-29T02:00:19.093Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by t.created_at
+
+-[ RECORD 1 ]------+------------------------------------------------------
+title              | S5-H: publishes its task branch
+status             | DONE
+auto_run           | f
+delivered_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_base_sha | d4eef22340adf2bdb927d79752657bde0e8f520e
+delivered_branch   | orbit/task-s5-h-publishes-its-task-branch-4a838a
+delivered_at       | 2026-10-29 01:57:51.71+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.103
+-[ RECORD 2 ]------+------------------------------------------------------
+title              | S5-H2: starts once S5-H has landed
+status             | DONE
+auto_run           | t
+delivered_sha      | 90e6560db4e01ea5256e05ba75249735f0386647
+delivered_base_sha | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_branch   | orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+delivered_at       | 2026-10-29 01:58:51.853+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.123
+-[ RECORD 3 ]------+------------------------------------------------------
+title              | S5-I: only commits (branch never published)
+status             | DONE
+auto_run           | f
+delivered_sha      | ce7b944a3b290c7998c7fcced8af946b543c4211
+delivered_base_sha | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_branch   | orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+delivered_at       | 2026-10-29 01:58:51.72+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.141
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — sessions  (2026-10-29T02:00:19.142Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S5-H: publishes its task branch
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-h-publishes-its-task-branch-4a838a
+base_sha        | d4eef22340adf2bdb927d79752657bde0e8f520e
+branch_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+created_at      | 2026-10-29 01:57:43.217
+finished_at     | 2026-10-29 01:57:51.7
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S5-H2: starts once S5-H has landed
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+base_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+branch_sha      | 90e6560db4e01ea5256e05ba75249735f0386647
+created_at      | 2026-10-29 01:58:21.72
+finished_at     | 2026-10-29 01:58:51.841
+-[ RECORD 3 ]---+------------------------------------------------------
+task            | S5-I: only commits (branch never published)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+base_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+branch_sha      | ce7b944a3b290c7998c7fcced8af946b543c4211
+created_at      | 2026-10-29 01:58:22.267
+finished_at     | 2026-10-29 01:58:51.705
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — jobs  (2026-10-29T02:00:19.191Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by j.created_at
+
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | READY
+phase             | CHECK
+task              | S5-H: publishes its task branch
+source_ref        | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha      | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:58:12.561+00
+finished_at       | 2026-10-29 01:58:12.669+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:491225b0-13cc-4651-a183-f67936092d4c:1
+-[ RECORD 2 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | LAND_PROMOTION
+generation        | 1
+state             | LANDED
+phase             | VERIFY
+task              | S5-H: publishes its task branch
+source_ref        | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha      | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {01a18561-0f70-727b-9828-6f09ee21b618}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:58:13.002+00
+finished_at       | 2026-10-29 01:58:13.109+00
+idempotency_key   | ij:v1:LAND_PROMOTION:491225b0-13cc-4651-a183-f67936092d4c:1
+-[ RECORD 3 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | READY
+phase             | CHECK
+task              | S5-H2: starts once S5-H has landed
+source_ref        | refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+source_sha        | 90e6560db4e01ea5256e05ba75249735f0386647
+upstream_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+target_sha_before | 027820cf91fe356e564c7e92da682e9ded6e66fb
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:59:12.559+00
+finished_at       | 2026-10-29 01:59:12.651+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:a14bd38e-cd8d-42bf-a8c3-b7be44bbca22:1
+-[ RECORD 4 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S5-I: only commits (branch never published)
+source_ref        | refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+source_sha        | ce7b944a3b290c7998c7fcced8af946b543c4211
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:59:42.56+00
+finished_at       | 2026-10-29 01:59:42.609+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ac3c4eff-1ccb-4d81-b96c-2302476f4570:1
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — receipts  (2026-10-29T02:00:19.240Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by r.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+task              | S5-H: publishes its task branch
+result            | MERGED
+source_branch     | orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+target_branch     | main
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_after  | 027820cf91fe356e564c7e92da682e9ded6e66fb
+recorded_by       | RUNNER
+detail            | {"source": "integration-job", "landedTreeSha": "106c64ebbbb0b0dbaf86c66c4b6bccd8be26f0a9", "testedTreeSha": "106c64ebbbb0b0dbaf86c66c4b6bccd8be26f0a9", "integrationJobId": "49ff0e8e-859d-4ac9-9dca-dcf09f347d87"}
+created_at        | 2026-10-29 01:58:13.104
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — promotions  (2026-10-29T02:00:19.288Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by p.created_at
+
+-[ RECORD 1 ]--------+-----------------------------------------------------------------
+task                 | S5-H: publishes its task branch
+source_kind          | TASK_BRANCH
+state                | MERGED
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha           | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha_checked | d4eef22340adf2bdb927d79752657bde0e8f520e
+merged_sha           | 027820cf91fe356e564c7e92da682e9ded6e66fb
+receipt_ids          | {01a18561-0f70-727b-9828-6f09ee21b618}
+created_at           | 2026-10-29 01:57:43.475+00
+decided_at           | 2026-10-29 01:58:13.101+00
+-[ RECORD 2 ]--------+-----------------------------------------------------------------
+task                 | S5-H2: starts once S5-H has landed
+source_kind          | TASK_BRANCH
+state                | READY
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+source_sha           | 90e6560db4e01ea5256e05ba75249735f0386647
+upstream_sha_checked | 027820cf91fe356e564c7e92da682e9ded6e66fb
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:58:21.961+00
+decided_at           | 
+-[ RECORD 3 ]--------+-----------------------------------------------------------------
+task                 | S5-I: only commits (branch never published)
+source_kind          | TASK_BRANCH
+state                | BLOCKED
+blocked_reason       | ERROR
+source_ref           | refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+source_sha           | ce7b944a3b290c7998c7fcced8af946b543c4211
+upstream_sha_checked | 
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:58:22.48+00
+decided_at           | 2026-10-29 01:59:42.608+00
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — observationEvents  (2026-10-29T02:00:19.334Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation | kind | data | text | created_at 
+------------+------+------+------+------------
+(0 rows)
+
+
+### S5 (this branch's apiserver, the 0.1.239 runner) — openItems  (2026-10-29T02:00:19.382Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by i.created_at
+
+-[ RECORD 1 ]---+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | PROMOTION_APPROVAL
+state           | RESOLVED
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | pr:v1:491225b0-13cc-4651-a183-f67936092d4c
+title           | Merge 1 task into main?
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 13, "outputTail": "E2E_WORK_34o4XUKAgleKd4tpfxAH3.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 7, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18560-9a3f-76dd-b94a-e48c09735c61"], "sourceRef": "refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a", "promotionId": "491225b0-13cc-4651-a183-f67936092d4c", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "d4eef22340adf2bdb927d79752657bde0e8f520e"}
+resolution      | APPROVED
+resolved_by     | USER
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:58:12.672+00
+resolved_at     | 2026-10-29 01:58:12.989+00
+-[ RECORD 2 ]---+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | PROMOTION_APPROVAL
+state           | OPEN
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | pr:v1:a14bd38e-cd8d-42bf-a8c3-b7be44bbca22
+title           | Merge 1 task into main?
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 10, "outputTail": "E2E_WORK_34o4XUKAgleKd4tpfxAH3.md\nE2E_WORK_34o4XUM7Px4wdUQGmepgS.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18560-9a53-70a8-8ed0-2cc29be91254"], "sourceRef": "refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc", "promotionId": "a14bd38e-cd8d-42bf-a8c3-b7be44bbca22", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "027820cf91fe356e564c7e92da682e9ded6e66fb"}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:59:12.653+00
+resolved_at     | 
+-[ RECORD 3 ]---+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | OPEN
+assignee        | OWNER
+assignee_reason | NO_COORDINATOR
+task            | 
+dedupe_key      | IE:54f98d68-678b-488a-a752-337f0ce337c3
+title           | Integration error: merging the project branch into main
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149"}, "failureClass": "ERROR", "landingSessionId": "b70f9be7-81b4-4eb6-80ce-ecd3db4da0a3"}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:59:42.614+00
+resolved_at     | 
+
+
+### S5 — the S4 observation while only the old runner is connected  (2026-10-29T02:00:19.426Z)
+select kind, generation, state, runner_id, claimed_at, created_at from project_integration_job where project_id = (select id from project where title = 'S4 MAIN line: agents push to feature/release-2') and kind = 'OBSERVE_LANDING'
+
+      kind       | generation | state  | runner_id | claimed_at |         created_at         
+-----------------+------------+--------+-----------+------------+----------------------------
+ OBSERVE_LANDING |          1 | QUEUED |           |            | 2026-10-29 01:56:21.772+00
+(1 row)
+
+
+### S5 — the runner row  (2026-10-29T02:00:19.469Z)
+select name, version, status, last_heartbeat_at from runner
+
+      name      | version | status |    last_heartbeat_at    
+----------------+---------+--------+-------------------------
+ r2913-b-runner | 0.1.239 | ONLINE | 2026-10-29 01:56:42.547
+(1 row)
+
+
+### S5 after the runner upgrade — codebase  (2026-10-29T02:01:27.658Z)
+select canonical_repo_url, integration_ref, upstream_ref, remote_name, delivery_mode, delivery_mode_chosen_at, integration_started_at, merge_check_command
+from project_codebase where project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner')
+
+       canonical_repo_url        | integration_ref |  upstream_ref   | remote_name | delivery_mode | delivery_mode_chosen_at |   integration_started_at   | merge_check_command 
+---------------------------------+-----------------+-----------------+-------------+---------------+-------------------------+----------------------------+---------------------
+ /var/tmp/r29-13-e2e/b/origin/s5 | refs/heads/main | refs/heads/main | origin      | PLATFORM      |                         | 2026-10-29 01:57:43.472+00 | test -f README.md
+(1 row)
+
+
+### S5 after the runner upgrade — tasks  (2026-10-29T02:01:27.704Z)
+select t.title, t.status, t.auto_run_when_ready as auto_run, t.delivered_sha, t.delivered_base_sha,
+  t.delivered_branch, t.delivered_at, t.dispatch_refusal, t.created_at
+from task t where t.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by t.created_at
+
+-[ RECORD 1 ]------+------------------------------------------------------
+title              | S5-H: publishes its task branch
+status             | DONE
+auto_run           | f
+delivered_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_base_sha | d4eef22340adf2bdb927d79752657bde0e8f520e
+delivered_branch   | orbit/task-s5-h-publishes-its-task-branch-4a838a
+delivered_at       | 2026-10-29 01:57:51.71+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.103
+-[ RECORD 2 ]------+------------------------------------------------------
+title              | S5-H2: starts once S5-H has landed
+status             | DONE
+auto_run           | t
+delivered_sha      | 90e6560db4e01ea5256e05ba75249735f0386647
+delivered_base_sha | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_branch   | orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+delivered_at       | 2026-10-29 01:58:51.853+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.123
+-[ RECORD 3 ]------+------------------------------------------------------
+title              | S5-I: only commits (branch never published)
+status             | DONE
+auto_run           | f
+delivered_sha      | ce7b944a3b290c7998c7fcced8af946b543c4211
+delivered_base_sha | 027820cf91fe356e564c7e92da682e9ded6e66fb
+delivered_branch   | orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+delivered_at       | 2026-10-29 01:58:51.72+00
+dispatch_refusal   | 
+created_at         | 2026-10-29 01:57:43.141
+
+
+### S5 after the runner upgrade — sessions  (2026-10-29T02:01:27.754Z)
+select t.title as task, s.kind, s.status, s.end_reason, s.worktree_branch, s.base_sha, s.branch_sha,
+  s.created_at, s.finished_at
+from session s join task t on t.id = s.task_id where t.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by s.created_at
+
+-[ RECORD 1 ]---+------------------------------------------------------
+task            | S5-H: publishes its task branch
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-h-publishes-its-task-branch-4a838a
+base_sha        | d4eef22340adf2bdb927d79752657bde0e8f520e
+branch_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+created_at      | 2026-10-29 01:57:43.217
+finished_at     | 2026-10-29 01:57:51.7
+-[ RECORD 2 ]---+------------------------------------------------------
+task            | S5-H2: starts once S5-H has landed
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+base_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+branch_sha      | 90e6560db4e01ea5256e05ba75249735f0386647
+created_at      | 2026-10-29 01:58:21.72
+finished_at     | 2026-10-29 01:58:51.841
+-[ RECORD 3 ]---+------------------------------------------------------
+task            | S5-I: only commits (branch never published)
+kind            | CONVERSATION
+status          | SUCCEEDED
+end_reason      | task_done
+worktree_branch | orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+base_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+branch_sha      | ce7b944a3b290c7998c7fcced8af946b543c4211
+created_at      | 2026-10-29 01:58:22.267
+finished_at     | 2026-10-29 01:58:51.705
+
+
+### S5 after the runner upgrade — jobs  (2026-10-29T02:01:27.802Z)
+select j.kind, j.generation, j.state, j.phase, t.title as task, j.source_ref, j.source_sha, j.upstream_sha,
+  j.target_sha_before, j.error_code, j.error_detail, j.observations, j.receipt_ids, j.retry_of_job_id,
+  j.claimed_at, j.finished_at, j.idempotency_key
+from project_integration_job j left join project_promotion pp on pp.id = j.promotion_id
+  left join task t on t.id = coalesce(j.task_id, pp.task_id)
+where j.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by j.created_at
+
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | READY
+phase             | CHECK
+task              | S5-H: publishes its task branch
+source_ref        | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha      | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:58:12.561+00
+finished_at       | 2026-10-29 01:58:12.669+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:491225b0-13cc-4651-a183-f67936092d4c:1
+-[ RECORD 2 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | LAND_PROMOTION
+generation        | 1
+state             | LANDED
+phase             | VERIFY
+task              | S5-H: publishes its task branch
+source_ref        | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha      | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {01a18561-0f70-727b-9828-6f09ee21b618}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:58:13.002+00
+finished_at       | 2026-10-29 01:58:13.109+00
+idempotency_key   | ij:v1:LAND_PROMOTION:491225b0-13cc-4651-a183-f67936092d4c:1
+-[ RECORD 3 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | READY
+phase             | CHECK
+task              | S5-H2: starts once S5-H has landed
+source_ref        | refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+source_sha        | 90e6560db4e01ea5256e05ba75249735f0386647
+upstream_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+target_sha_before | 027820cf91fe356e564c7e92da682e9ded6e66fb
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:59:12.559+00
+finished_at       | 2026-10-29 01:59:12.651+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:a14bd38e-cd8d-42bf-a8c3-b7be44bbca22:1
+-[ RECORD 4 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 1
+state             | ERROR
+phase             | FETCH
+task              | S5-I: only commits (branch never published)
+source_ref        | refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+source_sha        | ce7b944a3b290c7998c7fcced8af946b543c4211
+upstream_sha      | 
+target_sha_before | 
+error_code        | SOURCE_BRANCH_MISSING
+error_detail      | {"ref": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149"}
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 
+claimed_at        | 2026-10-29 01:59:42.56+00
+finished_at       | 2026-10-29 01:59:42.609+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ac3c4eff-1ccb-4d81-b96c-2302476f4570:1
+-[ RECORD 5 ]-----+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind              | CHECK_PROMOTION
+generation        | 2
+state             | READY
+phase             | CHECK
+task              | S5-I: only commits (branch never published)
+source_ref        | refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+source_sha        | ce7b944a3b290c7998c7fcced8af946b543c4211
+upstream_sha      | 027820cf91fe356e564c7e92da682e9ded6e66fb
+target_sha_before | 027820cf91fe356e564c7e92da682e9ded6e66fb
+error_code        | 
+error_detail      | 
+observations      | 
+receipt_ids       | {}
+retry_of_job_id   | 54f98d68-678b-488a-a752-337f0ce337c3
+claimed_at        | 2026-10-29 02:01:22.228+00
+finished_at       | 2026-10-29 02:01:22.317+00
+idempotency_key   | ij:v1:CHECK_PROMOTION:ac3c4eff-1ccb-4d81-b96c-2302476f4570:2
+
+
+### S5 after the runner upgrade — receipts  (2026-10-29T02:01:27.851Z)
+select t.title as task, r.result, r.source_branch, r.source_sha, r.target_branch, r.target_sha_before,
+  r.target_sha_after, r.recorded_by, r.detail, r.created_at
+from session_merge_receipt r left join task t on t.id = r.task_id
+where r.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by r.created_at
+
+-[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+task              | S5-H: publishes its task branch
+result            | MERGED
+source_branch     | orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha        | 027820cf91fe356e564c7e92da682e9ded6e66fb
+target_branch     | main
+target_sha_before | d4eef22340adf2bdb927d79752657bde0e8f520e
+target_sha_after  | 027820cf91fe356e564c7e92da682e9ded6e66fb
+recorded_by       | RUNNER
+detail            | {"source": "integration-job", "landedTreeSha": "106c64ebbbb0b0dbaf86c66c4b6bccd8be26f0a9", "testedTreeSha": "106c64ebbbb0b0dbaf86c66c4b6bccd8be26f0a9", "integrationJobId": "49ff0e8e-859d-4ac9-9dca-dcf09f347d87"}
+created_at        | 2026-10-29 01:58:13.104
+
+
+### S5 after the runner upgrade — promotions  (2026-10-29T02:01:27.902Z)
+select t.title as task, p.source_kind, p.state, p.blocked_reason, p.source_ref, p.source_sha,
+  p.upstream_sha_checked, p.merged_sha, p.receipt_ids, p.created_at, p.decided_at
+from project_promotion p left join task t on t.id = p.task_id
+where p.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by p.created_at
+
+-[ RECORD 1 ]--------+-----------------------------------------------------------------
+task                 | S5-H: publishes its task branch
+source_kind          | TASK_BRANCH
+state                | MERGED
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a
+source_sha           | 027820cf91fe356e564c7e92da682e9ded6e66fb
+upstream_sha_checked | d4eef22340adf2bdb927d79752657bde0e8f520e
+merged_sha           | 027820cf91fe356e564c7e92da682e9ded6e66fb
+receipt_ids          | {01a18561-0f70-727b-9828-6f09ee21b618}
+created_at           | 2026-10-29 01:57:43.475+00
+decided_at           | 2026-10-29 01:58:13.101+00
+-[ RECORD 2 ]--------+-----------------------------------------------------------------
+task                 | S5-H2: starts once S5-H has landed
+source_kind          | TASK_BRANCH
+state                | READY
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc
+source_sha           | 90e6560db4e01ea5256e05ba75249735f0386647
+upstream_sha_checked | 027820cf91fe356e564c7e92da682e9ded6e66fb
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:58:21.961+00
+decided_at           | 
+-[ RECORD 3 ]--------+-----------------------------------------------------------------
+task                 | S5-I: only commits (branch never published)
+source_kind          | TASK_BRANCH
+state                | READY
+blocked_reason       | 
+source_ref           | refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149
+source_sha           | ce7b944a3b290c7998c7fcced8af946b543c4211
+upstream_sha_checked | 027820cf91fe356e564c7e92da682e9ded6e66fb
+merged_sha           | 
+receipt_ids          | {}
+created_at           | 2026-10-29 01:58:22.48+00
+decided_at           | 
+
+
+### S5 after the runner upgrade — observationEvents  (2026-10-29T02:01:27.949Z)
+select j.generation, e.kind, e.data, e.text, e.created_at
+from project_integration_job_event e join project_integration_job j on j.id = e.job_id
+where j.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') and j.kind = 'OBSERVE_LANDING' order by e.created_at
+
+ generation | kind | data | text | created_at 
+------------+------+------+------+------------
+(0 rows)
+
+
+### S5 after the runner upgrade — openItems  (2026-10-29T02:01:27.996Z)
+select i.kind, i.state, i.assignee, i.assignee_reason, t.title as task, i.dedupe_key, i.title, i.payload,
+  i.resolution, i.resolved_by, i.resolution_note, i.handling_reason, i.handling_job_id, i.created_at, i.resolved_at
+from project_open_item i left join task t on t.id = i.task_id
+where i.project_id = (select id from project where title = 'S5 PLATFORM work on the 0.1.239 runner') order by i.created_at
+
+-[ RECORD 1 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | PROMOTION_APPROVAL
+state           | RESOLVED
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | pr:v1:491225b0-13cc-4651-a183-f67936092d4c
+title           | Merge 1 task into main?
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 13, "outputTail": "E2E_WORK_34o4XUKAgleKd4tpfxAH3.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 7, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18560-9a3f-76dd-b94a-e48c09735c61"], "sourceRef": "refs/heads/orbit/task-s5-h-publishes-its-task-branch-4a838a", "promotionId": "491225b0-13cc-4651-a183-f67936092d4c", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "d4eef22340adf2bdb927d79752657bde0e8f520e"}
+resolution      | APPROVED
+resolved_by     | USER
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:58:12.672+00
+resolved_at     | 2026-10-29 01:58:12.989+00
+-[ RECORD 2 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | PROMOTION_APPROVAL
+state           | OPEN
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | pr:v1:a14bd38e-cd8d-42bf-a8c3-b7be44bbca22
+title           | Merge 1 task into main?
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 10, "outputTail": "E2E_WORK_34o4XUKAgleKd4tpfxAH3.md\nE2E_WORK_34o4XUM7Px4wdUQGmepgS.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18560-9a53-70a8-8ed0-2cc29be91254"], "sourceRef": "refs/heads/orbit/task-s5-h2-starts-once-s5-h-has-landed-36a3dc", "promotionId": "a14bd38e-cd8d-42bf-a8c3-b7be44bbca22", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "027820cf91fe356e564c7e92da682e9ded6e66fb"}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 01:59:12.653+00
+resolved_at     | 
+-[ RECORD 3 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | INTEGRATION_ERROR
+state           | RESOLVED
+assignee        | OWNER
+assignee_reason | NO_COORDINATOR
+task            | 
+dedupe_key      | IE:54f98d68-678b-488a-a752-337f0ce337c3
+title           | Integration error: merging the project branch into main
+payload         | {"round": 1, "jobKind": "CHECK_PROMOTION", "errorCode": "SOURCE_BRANCH_MISSING", "generation": 1, "errorDetail": {"ref": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149", "detail": "fatal: couldn't find remote ref refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149"}, "failureClass": "ERROR", "landingSessionId": "b70f9be7-81b4-4eb6-80ce-ecd3db4da0a3"}
+resolution      | HANDLED
+resolved_by     | USER
+resolution_note | The runner is upgraded; check the delivered commit.
+handling_reason | The runner is upgraded; check the delivered commit.
+handling_job_id | 6809c733-fc2d-4040-adab-5ca0ba58e529
+created_at      | 2026-10-29 01:59:42.614+00
+resolved_at     | 2026-10-29 02:01:22.311+00
+-[ RECORD 4 ]---+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kind            | PROMOTION_APPROVAL
+state           | OPEN
+assignee        | OWNER
+assignee_reason | DEFAULT
+task            | 
+dedupe_key      | pr:v1:ac3c4eff-1ccb-4d81-b96c-2302476f4570
+title           | Merge 1 task into main?
+payload         | {"checks": [{"name": "TASK_ACCEPTANCE", "command": "ls E2E_WORK_*.md", "exitCode": 0, "timedOut": false, "durationMs": 11, "outputTail": "E2E_WORK_34o4XUKAgleKd4tpfxAH3.md\nE2E_WORK_34o4XUNsDkFJJbMPdqpER.md\n", "expectedExitCode": 0}, {"name": "MERGE_CHECK", "command": "test -f README.md", "exitCode": 0, "timedOut": false, "durationMs": 6, "outputTail": "", "expectedExitCode": 0}], "landsAs": "MERGE_COMMIT", "taskIds": ["01a18560-9a65-714e-9b2e-9bfa2e19a2fb"], "sourceRef": "refs/heads/orbit/task-s5-i-only-commits-branch-never-publ-4d5149", "promotionId": "ac3c4eff-1ccb-4d81-b96c-2302476f4570", "upstreamRef": "refs/heads/main", "upstreamShaChecked": "027820cf91fe356e564c7e92da682e9ded6e66fb"}
+resolution      | 
+resolved_by     | 
+resolution_note | 
+handling_reason | 
+handling_job_id | 
+created_at      | 2026-10-29 02:01:22.319+00
+resolved_at     | 
+

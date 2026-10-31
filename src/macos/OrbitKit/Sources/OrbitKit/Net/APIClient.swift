@@ -748,6 +748,20 @@ public final class APIClient: @unchecked Sendable {
         try await post("projects/\(projectID)/open-items/\(itemID)/resolve", body: req)
     }
 
+    /// Accept work that reached main without the owner's confirmation (§10.8): it stays where it
+    /// landed, and the item ends ACCEPTED. The owner's own credential, like the doors above; the
+    /// door takes no body, and its answer is not drawn — the read that follows is.
+    public func acceptOpenItem(projectID: String, itemID: String) async throws {
+        try await postRaw("projects/\(projectID)/open-items/\(itemID)/accept", body: Optional<Empty>.none)
+    }
+
+    /// Observe again (§10.8, O-T5): queue an observation of the project's line — or join the one
+    /// already queued — with the reason the door requires. Nothing closes at the press: the item
+    /// stays open, being handled, until the observation sees the work.
+    public func observeIntegration(projectID: String, _ req: IntegrationObserveRequest) async throws {
+        try await postRaw("projects/\(projectID)/integration/observe", body: req)
+    }
+
     /// Lift the pause on the coordinator (§6.3 F-T4, mock 6 ①) — the owner's alone. Resuming
     /// without raising anything is what the plain press means, so no limits travel with it.
     public func resumeProjectFuse(projectID: String, episodeID: String) async throws -> FuseResumed {

@@ -585,7 +585,7 @@ test('(3) §10.9 6, J12: a runner without the delivered commit answers WORK_COMM
 
 // ═══ (4) O-L6: the check sees the work on main ═══════════════════════════════════════════════
 
-test('(4) §10.9 4, O-L6: a check that finds the delivered commit already on main writes the receipt, retires the candidate SUPERSEDED with its item PROMOTION_MOVED_ON and opens LANDED_WITHOUT_CONFIRMATION — never BLOCKED; J9 releases the dependent and J10 starts it',
+test('(4) §10.9 4, O-L6: a check that finds the delivered commit already on main writes the receipt, retires the candidate SUPERSEDED with its item PROMOTION_MOVED_ON and opens LANDED_WITHOUT_CONFIRMATION, pushed once after the commit — never BLOCKED; J9 releases the dependent and J10 starts it',
   { skip, timeout: 300_000 }, async () => {
     const stack = await connect();
     try {
@@ -655,25 +655,36 @@ test('(4) §10.9 4, O-L6: a check that finds the delivered commit already on mai
 
       // J10, after the commit: what the receipt released is dispatched, and in a project that moves by
       // itself the dependent J9 now lets through starts on its own.
-      const after = applied.after as { projectId: string; landedTaskId: string | null; landedTaskIds?: string[] } | null;
+      const after = applied.after as {
+        projectId: string; landedTaskId: string | null; landedTaskIds?: string[]; ownerItemIds?: string[];
+      } | null;
       assert.ok(after);
       assert.deepEqual(after.landedTaskIds ?? [after.landedTaskId], [pushed]);
+      // §7.6 V12 (owner 2026-10-28): the result hands the item it opened to the post-commit edge, which
+      // pushes it once — the edge the result door's controller calls (`afterIntegrationResult`).
+      assert.deepEqual(after.ownerItemIds, [unconfirmed.id], 'the result did not hand over the item it opened');
       const dispatched: string[] = [];
-      const j10 = new MergeReceiptService(stack.prisma, undefined, {
-        dispatchDependentsOf: (ownerId: string, doneTaskId: string) => {
-          dispatched.push(doneTaskId);
-          return stack.tasks.dispatchDependentsOf(ownerId, doneTaskId);
-        },
-      });
+      const told: string[] = [];
+      // The fifth argument is the owner-item notifier R29-9 adds; a tree without it ignores it.
+      const j10 = new (MergeReceiptService as unknown as new (...args: unknown[]) => MergeReceiptService)(
+        stack.prisma, undefined, {
+          dispatchDependentsOf: (ownerId: string, doneTaskId: string) => {
+            dispatched.push(doneTaskId);
+            return stack.tasks.dispatchDependentsOf(ownerId, doneTaskId);
+          },
+        }, undefined, { notifyOwnerItem: async (itemId: string) => { told.push(itemId); } },
+      );
       await (j10.deliverProjectFactsAfterCommit as (...args: unknown[]) => Promise<void>)
-        .call(j10, after.projectId, after.landedTaskIds ?? after.landedTaskId);
+        .call(j10, after.projectId, after.landedTaskIds ?? after.landedTaskId, { ownerItemIds: after.ownerItemIds });
       assert.deepEqual(dispatched, [pushed], 'J10 dispatched what the receipt released');
       assert.equal(await stack.db.session.count({ where: { taskId: dependent.id } }), 1,
         'J10 started the dependent by itself');
+      assert.deepEqual(told, [unconfirmed.id], 'the owner\'s phone was not told once');
 
       // A replayed result finds the job written down: one receipt.
       const replay = await report(stack, w, check, alreadyThere(sha('a')));
       assert.equal(replay.answer.accepted, false);
+      assert.equal(replay.after, null, 'a replay hands nothing over to push again');
       assert.equal((await receiptsOf(stack, pushed)).length, 1);
 
       // A runner from before this revision resolved the branch, found it on main: the same answer.

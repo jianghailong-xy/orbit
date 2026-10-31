@@ -10,6 +10,7 @@ import {
   api,
   getSessionEventPage,
   getShareLink,
+  getWorktreeFile,
   listQueuedTurns,
   listShareLinks,
   putShareLink,
@@ -381,5 +382,35 @@ describe('setAvatar', () => {
     const file = (init.body as FormData).get('file') as File;
     expect(file.name).toBe('avatar.jpg');
     expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff]));
+  });
+});
+
+describe('getWorktreeFile', () => {
+  it('asks for the file by its exact path, uncached, and hands back the bytes', async () => {
+    const bytes = new Blob(['png bytes'], { type: 'image/png' });
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, blob: async () => bytes }) as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+
+    const got = await getWorktreeFile('s1', 'docs/mocks/方案 1.png', controller.signal);
+
+    expect(got).toBe(bytes);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`/api/sessions/s1/worktree-file?path=${encodeURIComponent('docs/mocks/方案 1.png')}`);
+    expect(init.signal).toBe(controller.signal);
+    expect(init.cache).toBe('no-store');
+  });
+
+  it("rejects with the server's status and words, which the preview turns into its message", async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: false, status: 503, statusText: 'Service Unavailable',
+      json: async () => ({ statusCode: 503, message: 'The runner is offline. Try again when it is online.' }),
+    }) as unknown as Response);
+
+    const error = await getWorktreeFile('s1', 'a.png').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(503);
+    expect((error as ApiError).message).toBe('The runner is offline. Try again when it is online.');
   });
 });

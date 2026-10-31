@@ -1,0 +1,53 @@
+Printing with useUnmergedTree = 'false'
+Node #160 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #213 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #214 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #215 at (l=32.0, t=32.0, r=790.0, b=948.0)px, Tag: 'item:34R29ItemLanded00000004'
+          |-Node #218 at (l=112.0, t=60.0, r=621.0, b=100.0)px, Tag: 'item:34R29ItemLanded00000004:title'
+          | Text = '[Landed without your confirmation]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #219 at (l=60.0, t=120.0, r=187.0, b=145.0)px
+          | Text = '[FROM ORBIT]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #220 at (l=60.0, t=165.0, r=762.0, b=242.0)px, Tag: 'item:34R29ItemLanded00000004:heading'
+          | Text = '[Reached main without your confirmation: Fix the login redirect]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #221 at (l=80.0, t=280.0, r=742.0, b=807.0)px, Tag: 'item:34R29ItemLanded00000004:next'
+          |  |-Node #222 at (l=80.0, t=280.0, r=742.0, b=399.0)px, Tag: 'item:34R29ItemLanded00000004:required'
+          |  | Text = '[This work reached main without your confirmation — accept it, or use Chat about this to have the coordinator file a task that reverts it.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #224 at (l=80.0, t=415.0, r=283.0, b=511.0)px, Tag: 'item:34R29ItemLanded00000004:ACCEPT'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Accept]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #227 at (l=80.0, t=517.0, r=703.0, b=547.0)px, Tag: 'item:34R29ItemLanded00000004:ACCEPT:consequence'
+          |  | Text = '[You accept the work as it landed, and this item closes.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #229 at (l=80.0, t=563.0, r=455.0, b=659.0)px, Tag: 'item:34R29ItemLanded00000004:OPEN_TASK_SESSION'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Open task session]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #232 at (l=80.0, t=665.0, r=571.0, b=695.0)px, Tag: 'item:34R29ItemLanded00000004:OPEN_TASK_SESSION:consequence'
+          |  | Text = '[Open the task session to repair the branch.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #233 at (l=80.0, t=711.0, r=405.0, b=807.0)px
+          |    Focused = 'false'
+          |    Role = 'Button'
+          |    Text = '[Chat about this]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #236 at (l=60.0, t=845.0, r=530.0, b=875.0)px, Tag: 'item:34R29ItemLanded00000004:facts'
+          |  |-Node #237 at (l=60.0, t=845.0, r=530.0, b=875.0)px
+          |    Text = '[7d3e9b01c2a4 is on main · seen by Orbit]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #238 at (l=60.0, t=895.0, r=283.0, b=920.0)px, Tag: 'item:34R29ItemLanded00000004:owner'
+            Text = '[Owner: you · waiting 2h]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

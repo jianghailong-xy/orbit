@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Runner 安装与注册 · 终端体验重设计</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --ink:#17181c; --ink-2:#4d515a; --ink-3:#7c818c;
+    --page:#e9eaee; --card:#ffffff; --line:#dcdee4;
+    --red:#d64545; --red-bg:#fdf1f1; --red-line:#f0c9c9;
+    --blue:#2f6bff; --blue-bg:#f2f6ff; --blue-line:#c9d8ff;
+    --green:#2c9a55; --amber:#b97610; --term:#14161b; --term-bar:#1d2027;
+    --mono:"Noto Sans Mono","DejaVu Sans Mono",ui-monospace,monospace;
+  }
+  body {
+    margin:0; width:1600px; background:var(--page); color:var(--ink);
+    font:14px/1.65 "WenQuanYi Zen Hei","Noto Sans CJK SC","Droid Sans Fallback",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code, .mono { font-family:var(--mono); font-size:.92em; }
+  code { background:rgba(0,0,0,.06); border-radius:4px; padding:1px 4px; }
+  .part { padding:46px 52px 54px; }
+  .part + .part { border-top:1px solid #d3d5dc; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 10px; }
+  h2 { font-size:22px; letter-spacing:-.01em; margin:0 0 8px; }
+  h3 { font-size:16px; margin:0 0 8px; }
+  .lede { max-width:1460px; color:var(--ink-2); font-size:14.5px; line-height:1.8; margin:0 0 30px; }
+  .lede b { color:var(--ink); }
+  .row { display:flex; gap:44px; align-items:flex-start; }
+  .col { flex:1; min-width:0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.was { background:#f0e5e5; color:#a53f3f; }
+  .tag.new { background:#e3ecff; color:#1f4fc4; }
+  .term { background:var(--term); border-radius:12px; overflow:visible;
+          box-shadow:0 0 0 1px rgba(0,0,0,.18),0 18px 44px rgba(20,22,27,.22); }
+  .term-bar { height:36px; background:var(--term-bar); border-radius:12px 12px 0 0;
+              display:flex; align-items:center; gap:7px; padding:0 14px; }
+  .term-bar i { width:10px; height:10px; border-radius:50%; background:#3a3e48; }
+  .term-bar .ttl { margin-left:10px; color:#7d838f; font:11.5px var(--mono); }
+  .term-body { position:relative; padding:16px 20px 20px; white-space:pre;
+               font:12px/17px var(--mono); color:#c4c8d0; }
+  .term-body .dim { color:#7c8391; }
+  .term-body .green { color:#69c98c; }
+  .term-body .amber { color:#dfb25a; }
+  .term-body .red { color:#e07078; }
+  .term-body .blue { color:#7fa9ff; }
+  .term-body .white { color:#f2f4f8; font-weight:700; }
+  .pin { position:absolute; left:-14px; width:25px; height:25px; border-radius:50%;
+         color:#fff; font:700 12.5px/25px var(--mono); text-align:center;
+         transform:translateY(-50%); box-shadow:0 0 0 3px var(--page),0 2px 7px rgba(0,0,0,.25); }
+  .pin.red { background:var(--red); }
+  .pin.blue { background:var(--blue); }
+  .notes { list-style:none; margin:18px 0 0; padding:0; }
+  .notes li { display:flex; gap:10px; font-size:13.5px; line-height:1.72; color:#3b3f47; margin-bottom:8px; }
+  .notes .n { flex:none; width:21px; height:21px; border-radius:50%; color:#fff;
+              font:700 11.5px/21px var(--mono); text-align:center; margin-top:2px; }
+  .notes .n.red { background:var(--red); }
+  .notes .n.blue { background:var(--blue); }
+  .notes b { color:var(--ink); }
+  .legend { display:flex; gap:18px; align-items:center; color:var(--ink-3); font-size:12.5px; margin:0 0 16px; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend i { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .legend .r { background:var(--red); } .legend .b { background:var(--blue); }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:26px; }
+  .card { background:var(--card); border-radius:14px; padding:22px 24px 20px;
+          box-shadow:0 0 0 1px rgba(0,0,0,.05),0 8px 24px rgba(20,22,27,.06); }
+  .card h3 { display:flex; align-items:center; gap:9px; }
+  .card h3 .k { width:23px; height:23px; border-radius:7px; background:var(--ink); color:#fff;
+                font:700 12px/23px var(--mono); text-align:center; }
+  .card .note { font-size:13.5px; line-height:1.75; color:var(--ink-2); margin-top:12px; }
+  .card .note b { color:var(--ink); }
+  .blk { border-radius:9px; padding:10px 13px; margin-top:9px; white-space:pre-wrap;
+         font:11.5px/1.6 var(--mono); overflow-wrap:anywhere; }
+  .blk .lbl { display:block; font:700 10.5px/1 var(--mono); letter-spacing:.09em; margin-bottom:7px; }
+  .blk.was { background:var(--red-bg); border:1px solid var(--red-line); color:#5b3535; }
+  .blk.was .lbl { color:var(--red); }
+  .blk.new { background:var(--blue-bg); border:1px solid var(--blue-line); color:#24344f; }
+  .blk.new .lbl { color:var(--blue); }
+  .blk .g { color:#217a45; } .blk .a { color:#9a6410; } .blk .r { color:#b63c3c; }
+
+  .principles { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:22px 0 30px; }
+  .pr { background:var(--card); border-radius:12px; padding:16px 18px; box-shadow:0 0 0 1px rgba(0,0,0,.05); }
+  .pr .no { font:700 11px/1 var(--mono); color:var(--blue); letter-spacing:.08em; }
+  .pr h4 { font-size:14.5px; margin:6px 0 5px; }
+  .pr p { font-size:13px; line-height:1.7; color:var(--ink-2); margin:0; }
+
+  table { width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden;
+          box-shadow:0 0 0 1px rgba(0,0,0,.05); font-size:13px; }
+  th, td { text-align:left; vertical-align:top; padding:12px 16px; border-bottom:1px solid #eceef2; }
+  th { background:#f6f7f9; font-size:11.5px; letter-spacing:.05em; color:var(--ink-3); }
+  tr:last-child td { border-bottom:0; }
+  td.was { color:#7a3f3f; background:#fdf7f7; width:34%; }
+  td.new { color:#22406f; background:#f7faff; width:40%; }
+  td.why { color:var(--ink-2); }
+  td code { font-size:11.5px; }
+
+  .two { display:grid; grid-template-columns:1.15fr .85fr; gap:22px; margin-top:24px; }
+  .box { background:var(--card); border-radius:12px; padding:20px 24px; box-shadow:0 0 0 1px rgba(0,0,0,.05); }
+  .box h4 { font-size:14.5px; margin:0 0 10px; }
+  .box ul { margin:0; padding-left:18px; font-size:13.2px; line-height:1.8; color:var(--ink-2); }
+  .box li { margin-bottom:4px; }
+  .box li b { color:var(--ink); }
+  .box .path { font-family:var(--mono); font-size:12px; color:#1f4fc4; }
+  .foot { margin-top:26px; font-size:12.5px; color:var(--ink-3); }
+</style>
+</head>
+<body>
+
+<section class="part" id="part-1">
+  <h1>Runner 安装与注册 · 终端体验重设计</h1>
+  <p class="lede">
+    用户在一台 headless VPS 上跑 <code>curl -fsSL https://orbitd.io/install.sh | bash</code>。左边是终端里实际看到的（节选，完整 70+ 行），
+    右边是重设计。按最新决定：<b>取消 3 · Coding engines 步骤，自动安装默认开启</b>，终端只留名字和审批两个决定。<b>网页审批页（/enroll）上一轮已经产品化</b>，这次缺口在终端这一半：它现在是一份「安装脚本 + 诊断报告」，
+    不是一个有开始、有等待、有收尾的 setup 流程。产品文案全部英文。
+  </p>
+
+  <div class="legend"><span><i class="r"></i>今天的问题</span><span><i class="b"></i>新设计</span><span>终端复刻实机输出；换行与内部错误码按原样保留</span></div>
+
+  <div class="row">
+    <div class="col">
+      <div class="tag was">今天 · 节选 69 行</div>
+      <div class="term">
+        <div class="term-bar"><i></i><i></i><i></i><span class="ttl">root@aivps-sg: ~</span></div>
+        <div class="term-body"><span class="pin red" style="top:24.5px">1</span>$ curl -fsSL https://orbitd.io/install.sh | bash
+Downloading orbit-linux-x64...
+  % Total    % Received % Xferd  Average Speed   Time
+100  6.05M 100  6.05M    0     0  13.17M      0
+<span class="pin red" style="top:92.5px">2</span>note: /etc/systemd/system/orbit-runner-zcc.service runs
+/usr/local/bin/orbit for another account, so it stays a shared binary.
+
+✓ orbit 0.1.240 installed to /usr/local/bin/orbit
+<span class="pin red" style="top:160.5px">3</span>Runner name [aivps-sg]: orbit@austin
+
+<span class="pin red" style="top:194.5px">4</span>To finish registering this machine, open Orbit and approve it:
+
+  https://orbitd.io/enroll?code=J3BF7-JM5E2
+
+  Verification code: J3BF7-JM5E2
+
+Waiting for approval...
+
+<span class="pin red" style="top:330.5px">5</span>✓ registered runner "orbit@austin" (01a19097-232f-7419-8050-2e76ce7a5ec3).
+
+<span class="pin red" style="top:364.5px">6</span>Coding engines:
+  ✓ Claude Code (2.1.314 (Claude Code))  ⚠ not signed in
+  ✓ Codex (codex-cli 0.159.2)  ⚠ not signed in
+  ✗ Kimi Code — not installed
+  ✗ OpenCode — not installed
+  ✗ Antigravity — not installed
+  ✗ DeepSeek Harness — DSH_NOT_INSTALLED: DeepSeek Harness 0.2.0-rc.2
+  is not installed in Orbit's version directory: stat /root/.orbit/engines/
+  dsh/0.2.0-rc.2/node_modules/.bin/dsh: no such file or directory
+  ✗ Cursor CLI — CURSOR_NOT_INSTALLED: Cursor CLI 2026.10.14-941492e is
+  not installed in Orbit's version directory
+
+<span class="pin red" style="top:568.5px">7</span>Missing engines (install whichever your agents use):
+  Kimi Code
+    install:  curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
+    or:       npm install -g @moonshot-ai/kimi-code
+    sign in:  kimi login   (headless: kimi login)
+  OpenCode
+    install:  curl -fsSL https://opencode.ai/install | bash
+    or:       npm install -g opencode-ai
+    sign in:  opencode auth login   (headless: opencode auth login)
+  Antigravity
+    install:  curl -fsSL https://antigravity.google/cli/install.sh | bash
+    or:       download agy from https://antigravity.google/cli ...
+    sign in:  set GEMINI_API_KEY in the runner's environment ...
+  DeepSeek Harness
+    install:  npm ci --prefix &lt;Orbit-managed staging directory&gt; ...
+    or:       install DeepSeek Harness from Orbit or run orbit doctor
+    sign in:  connect a DeepSeek API key in Orbit ...
+  Cursor CLI
+    install:  download Cursor CLI 2026.10.14-941492e from ...
+    or:       run `orbit doctor` on this runner
+    sign in:  NO_OPEN_BROWSER=1 AGENT_CLI_CREDENTIAL_STORE=file ...
+
+Not signed in:
+  Claude Code:  claude auth login   (headless: claude setup-token)
+  Codex:  codex login   (headless: codex login --device-auth)
+
+<span class="pin red" style="top:1010.5px">8</span>May this runner install a coding CLI by itself when a session first
+needs one?
+  (otherwise that session fails and you install it here with `orbit doctor`)
+  [Y/n]
+
+Sign in to the engines you'll use: press the sign-in button in Orbit,
+or run `orbit doctor` here.
+<span class="pin red" style="top:1146.5px">9</span>Created symlink '/etc/systemd/system/multi-user.target.wants/orbit-runner-root.service'
+✓ orbit-runner-root service installed and started as user "root".
+  Status:  systemctl status orbit-runner-root
+  Logs:    journalctl -u orbit-runner-root -f
+</div>
+      </div>
+      <ul class="notes">
+        <li><span class="n red">1</span><span><b>下载只报资产名，不报版本、大小、接下来会发生什么。</b>curl 原始进度条之后直接跳到安装结果，用户不知道后面还有多久。</span></li>
+        <li><span class="n red">2</span><span><b>把另一台机器的内部细节放到首屏。</b><code>orbit-runner-zcc.service</code> 是另一个账号的 unit，用户既不需要也无法处理。</span></li>
+        <li><span class="n red">3</span><span><b>名字提示没有上下文。</b>没说这个名字用在哪、能不能改；用户只能猜。</span></li>
+        <li><span class="n red">4</span><span><b>审批入口对一台 headless 机器没有指向。</b>「open Orbit」是 app、网页还是这台机器？浏览器不会自动打开；没说链接 10 分钟过期，也没说要和页面核对同一个码。<code>Waiting for approval...</code> 是死等，没有倒计时、进度或取消方式。</span></li>
+        <li><span class="n red">5</span><span><b>注册成功把内部 UUID 放进括号。</b>没有账号名、机器页链接或「接下来做什么」。</span></li>
+        <li><span class="n red">6</span><span><b>引擎清单的状态词互相打架。</b>已安装但未登录是 <code>✓</code> + <code>⚠</code>；可选引擎没装是用红色 <code>✗</code>；版本号把 CLI 名又包了一层（<code>Claude Code (2.1.314 (Claude Code))</code>）；DSH / Cursor 把 <code>DSH_NOT_INSTALLED</code> 和真实路径 <code>stat … no such file or directory</code> 原样打出来。</span></li>
+        <li><span class="n red">7</span><span><b>五个可选引擎的安装命令占了 20+ 行，还和下面的「Not signed in」重复。</b>第一次使用的人只需要知道自己实际要用的 1–2 个，其余应该在需要时再看。</span></li>
+        <li><span class="n red">8</span><span><b>自动安装授权埋在一大段诊断中间。</b>用 <code>runner / session / coding CLI</code> 这些第一次出现的词；默认 Y 是一次「允许在这台机器上装软件」的授权，后果却没讲清。</span></li>
+        <li><span class="n red">9</span><span><b>整台机器上最大的副作用最后才出现，而且只有一行。</b>root systemd unit、立即启动、开机自启；上面那行 symlink 没头没尾。以 root 安装时只写 <code>as user "root"</code>，没有提醒 agent 会继承 root 权限。结尾停在 <code>journalctl</code>，没有回执，也没有「现在能做什么」。</span></li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="tag new">新设计 · 两个步骤 + 一张回执</div>
+      <div class="term">
+        <div class="term-bar"><i></i><i></i><i></i><span class="ttl">root@aivps-sg: ~</span></div>
+        <div class="term-body"><span class="pin blue" style="top:24.5px">1</span>$ curl -fsSL https://orbitd.io/install.sh | bash
+
+<span class="white">Orbit runner setup</span>
+  Installs Orbit, adds this machine to your account, keeps it running
+  in the background, and automatically installs an engine when work
+  needs one.
+
+<span class="green">✓</span> Orbit 0.1.240 installed to /usr/local/bin/orbit
+
+<span class="pin blue" style="top:194.5px">2</span><span class="white">1 · Name this machine</span>
+    Shown in Orbit. You can rename it later.
+    Name [aivps-sg]: <span class="blue">orbit@austin</span>
+
+<span class="pin blue" style="top:262.5px">3</span><span class="white">2 · Approve this machine</span>
+    Approving: <span class="white">orbit@austin</span> (aivps-sg)
+    Open this link on a device with a browser:
+
+      <span class="blue">https://orbitd.io/enroll?code=J3BF7-JM5E2</span>
+
+    The page must show the same code:  <span class="amber">J3BF7-JM5E2</span>
+    Only approve if you just ran this command.
+
+    <span class="dim">Waiting for approval… 9:41 left · Ctrl-C to cancel</span>
+    <span class="green">✓</span> Approved — orbit@austin is now a runner.
+    <span class="green">✓</span> Background service started as root (runs at boot).
+      Stop or remove it later with `orbit unregister`.
+    <span class="dim">Running as root — agents will have root access on this machine.
+    For production, register with a dedicated user.</span>
+
+<span class="pin blue" style="top:534.5px">4</span><span class="green">✓</span> <span class="white">Setup complete — orbit@austin is online.</span>
+
+    Machine  orbit@austin (aivps-sg)
+    Next     set up a coding engine, then create a workspace on this machine.
+             <span class="blue">https://orbitd.io/infrastructure</span>
+    <span class="dim">orbit status · orbit doctor · orbit unregister</span>
+</div>
+      </div>
+      <ul class="notes">
+        <li><span class="n blue">1</span><span><b>开场说清要做什么</b>：装、接入账号、后台常驻，以及缺引擎时自动安装。安装结果只占一行；共享二进制只在真正相关时用 dim 一行带过。</span></li>
+        <li><span class="n blue">2</span><span><b>名字有解释、有默认值、可改名。</b>默认仍是 hostname，回车即用。</span></li>
+        <li><span class="n blue">3</span><span><b>审批块把要批准的身份、链接、要核对的码、剩余时间，以及页面上的安全规则「只在你刚运行时批准」放在一起</b>；等待是一行会走的字，<code>Ctrl-C</code> 是出口。headless 机器说「在带浏览器的设备上打开」，桌面机器则说「浏览器已打开」。批准后立刻告诉你是哪台机器，以及服务已经起来。</span></li>
+        <li><span class="n blue">4</span><span><b>引擎不再是一个步骤。</b>注册时不再探测、列出、登录引擎，也不再把授权问题夹在诊断里；自动安装默认开启，引擎状态和登录都放在 Orbit 机器页，终端只保留 <code>orbit doctor</code> 作为备用。首屏因此少 30 行，也不会再出现 <code>DSH_NOT_INSTALLED</code> 这类内部错误码。</span></li>
+        <li><span class="n blue">5</span><span><b>服务先声明、再执行</b>（需要 sudo 时也会提前说），完成只用一行；结尾是一张回执：机器名、下一步链接、三条命令。红色只留给真正的失败。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="part-2">
+  <h2>四个关键时刻，逐个对照</h2>
+  <p class="lede" style="margin-bottom:0">左栏是今天终端里的原话，右栏是新设计。引擎步骤取消后，注册只剩两个人工决定：名字和审批。</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3><span class="k">1</span>审批入口与等待</h3>
+      <div class="blk was"><span class="lbl">今天</span>To finish registering this machine, open Orbit and approve it:
+  https://orbitd.io/enroll?code=J3BF7-JM5E2
+  Verification code: J3BF7-JM5E2
+Waiting for approval...</div>
+      <div class="blk new"><span class="lbl">新设计</span>Approving: orbit@austin (aivps-sg)
+Open this link on a device with a browser:
+  https://orbitd.io/enroll?code=J3BF7-JM5E2
+The page must show the same code:  J3BF7-JM5E2
+Only approve if you just ran this command.
+<span class="g">Waiting for approval… 9:41 left · Ctrl-C to cancel
+✓ Approved — orbit@austin is now a runner.</span></div>
+      <div class="note"><b>问题：</b>网页审批页有 10 分钟倒计时、账号、来源 IP 和「只在你刚运行时批准」的安全提示，终端一项都没有；headless 机器上「open Orbit」落不到任何界面；链接很快被后面的输出顶出屏幕。<b>新设计：</b>显示要批准的身份，把码和剩余时间做成等待界面的一部分。</div>
+    </div>
+
+    <div class="card">
+      <h3><span class="k">2</span>引擎：从步骤降为回执一行</h3>
+      <div class="blk was"><span class="lbl">今天</span>Coding engines:
+  <span class="g">✓</span> Claude Code (2.1.314 (Claude Code))  <span class="a">⚠ not signed in</span>
+  <span class="g">✓</span> Codex (codex-cli 0.159.2)  <span class="a">⚠ not signed in</span>
+  <span class="r">✗</span> Kimi Code — not installed
+  <span class="r">✗</span> DeepSeek Harness — DSH_NOT_INSTALLED: ... stat ...
+  ... 还有 Missing engines 的 20+ 行安装命令</div>
+      <div class="blk new"><span class="lbl">新设计</span>(no Coding engines step)
+
+<span class="g">✓</span> Setup complete — orbit@austin is online.
+
+  Machine  orbit@austin (aivps-sg)
+  Next     set up a coding engine, then create a workspace on this machine.
+           https://orbitd.io/infrastructure</div>
+      <div class="note"><b>问题：</b>引擎诊断占了首屏一半，把「可选」画成失败，还泄漏内部错误码；用户还没决定用哪个引擎，就被要求理解五个。<b>新设计：</b>注册不猜引擎；状态、安装、登录都在 Orbit 机器页，终端只留 <code>orbit doctor</code> 作为备用。回执用一句 Next 回答「接下来做什么」。</div>
+    </div>
+
+    <div class="card">
+      <h3><span class="k">3</span>自动安装：从提问改为默认允许</h3>
+      <div class="blk was"><span class="lbl">今天</span>May this runner install a coding CLI by itself when a session first
+needs one?
+  (otherwise that session fails and you install it here with `orbit doctor`)
+  [Y/n]</div>
+      <div class="blk new"><span class="lbl">新设计</span>Orbit runner setup
+  Installs Orbit, adds this machine to your account, keeps it running
+  in the background, and automatically installs an engine when work
+  needs one.
+
+(no question — on by default; opt out with
+ `orbit register --no-auto-install-engines`)</div>
+      <div class="note"><b>问题：</b>问题夹在诊断中间，读者还以为是在问「要不要现在装上面这些」；<code>runner / session / coding CLI</code> 都是新词；默认 Y 是一次装软件的授权，没有解释。<b>新设计：</b>不提问，默认允许；在开场说明里披露，保留显式关闭的 flag。自动安装只解决「装」，不解决登录，所以回执的下一步仍是 set up a coding engine。</div>
+    </div>
+
+    <div class="card" style="grid-column:1/-1">
+      <h3><span class="k">4</span>后台服务与收尾</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="blk was" style="margin-top:0"><span class="lbl">今天</span>Created symlink '/etc/systemd/system/multi-user.target.wants/orbit-runner-root.service'
+<span class="g">✓</span> orbit-runner-root service installed and started as user "root".
+  Status:  systemctl status orbit-runner-root
+  Logs:    journalctl -u orbit-runner-root -f
+
+(结束)</div>
+        <div class="blk new" style="margin-top:0"><span class="lbl">新设计</span><span class="g">✓</span> Background service started as root (runs at boot).
+  Running as root — agents will have root access on this machine.
+  For production, register with a dedicated user.
+  Stop or remove it later with `orbit unregister`.
+
+<span class="g">✓</span> Setup complete — orbit@austin is online.
+
+  Machine  orbit@austin (aivps-sg)
+  Next     set up a coding engine, then create a workspace on this machine.
+           https://orbitd.io/infrastructure
+  orbit status · orbit doctor · orbit unregister</div>
+      </div>
+      <div class="note"><b>问题：</b>整台机器上最大的副作用（root 服务、开机自启、agent 继承 root 权限）装完才用一行告知；上面那行 symlink 没头没尾；结束后没有回执，用户不知道成功了没有、下一步去哪。<b>新设计：</b>先声明副作用（需要 sudo 时也先说明），完成后给回执和下一步。</div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="part-3">
+  <h2>设计原则</h2>
+  <div class="principles">
+    <div class="pr"><div class="no">01 · WIZARD, NOT REPORT</div><h4>安装器是向导，不是诊断报告</h4><p>每一步先说「现在做什么」，再给一行结果。诊断信息留给 <code>orbit doctor</code>。</p></div>
+    <div class="pr"><div class="no">02 · SHOW WHAT YOU CAN DO NOW</div><h4>只保留现在要做的决定</h4><p>首屏只有两个决定：名字和审批；引擎状态、安装命令和诊断都交给 Orbit 机器页和 <code>orbit doctor</code>。</p></div>
+    <div class="pr"><div class="no">03 · THREE STATES</div><h4>状态词只有三种</h4><p>Orbit 机器页和 <code>orbit doctor</code> 里：<code>ready</code> / <code>needs sign-in</code> / 不出现。红色只留给真正的失败。</p></div>
+    <div class="pr"><div class="no">04 · WAITING IS UI</div><h4>等待也是一个界面</h4><p>链接、核对码、剩余时间、取消方式、结果。不能只留一行 <code>Waiting...</code>。</p></div>
+    <div class="pr"><div class="no">05 · DECLARE SIDE EFFECTS</div><h4>副作用先声明再执行</h4><p>后台服务、sudo、开机自启、自动安装软件，都要在执行前说清，并给出撤销命令。</p></div>
+    <div class="pr"><div class="no">06 · END WITH A RECEIPT</div><h4>结束要有回执</h4><p>机器名、在线状态、下一步入口、三条常用命令。不要停在日志命令上。</p></div>
+  </div>
+
+  <h2 style="margin-top:34px">文案对照</h2>
+  <table>
+    <thead><tr><th>今天</th><th>新设计</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td class="was"><code>✓ registered runner "orbit@austin" (01a19097-…).</code></td><td class="new"><code>✓ Approved — orbit@austin is now a runner.</code></td><td class="why">UUID 对人没有意义；审批完成是用户刚做过的动作，用同一个词收尾。</td></tr>
+      <tr><td class="was"><code>Waiting for approval...</code></td><td class="new"><code>Waiting for approval… 9:41 left · Ctrl-C to cancel</code></td><td class="why">等待要有时间边界和出口；网页已经有核对码和「只在你刚运行时批准」，终端不能只是死等。</td></tr>
+      <tr><td class="was"><code>✓ Claude Code (2.1.314 (Claude Code)) ⚠ not signed in</code></td><td class="new">不出现；取消整个 Coding engines 步骤。回执只写 <code>Next  set up a coding engine…</code></td><td class="why">注册时不猜用户要用哪个引擎；状态、安装、登录都在 Orbit 机器页，终端只留下一步。</td></tr>
+      <tr><td class="was"><code>✗ DeepSeek Harness — DSH_NOT_INSTALLED: … stat … no such file or directory</code></td><td class="new">不出现；需要时看 <code>orbit doctor</code></td><td class="why">内部错误码和真实路径是给排障的，不是给第一次安装的人。</td></tr>
+      <tr><td class="was"><code>Missing engines (install whichever your agents use):</code> + 20 行</td><td class="new">不出现；引擎由 Orbit 机器页管理</td><td class="why">渐进披露：首屏只回答「接下来做什么」。</td></tr>
+      <tr><td class="was"><code>May this runner install a coding CLI by itself when a session first needs one?</code></td><td class="new">不提问；默认允许，开场说明披露；<code>--no-auto-install-engines</code> 关闭</td><td class="why">少一个决定，但不偷偷做：默认值写进开场说明，显式关闭的 flag 保留。</td></tr>
+      <tr><td class="was"><code>✓ orbit-runner-root service installed and started as user "root". Status… Logs…</code></td><td class="new"><code>✓ Background service started as root (runs at boot).</code><br><code>Running as root — agents will have root access.</code><br><code>Stop or remove it later with orbit unregister.</code></td><td class="why">先声明副作用（包括 root 权限的后果），再给撤销；systemd 细节降到 <code>orbit status</code>。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="part" id="part-4">
+  <h2>落地范围</h2>
+  <div class="two">
+    <div class="box">
+      <h4>改哪里</h4>
+      <ul>
+        <li><span class="path">src/web/public/install.sh</span> — 下载只留一行、开场说明自动安装、共享二进制提示降级为 dim、交接给 register。</li>
+        <li><span class="path">src/runner-go/main.go</span> — 名字提示、审批/等待/批准文案、删除引擎步骤与授权提问、默认 <code>AutoInstallEngines=true</code>、回执。</li>
+        <li><span class="path">src/runner-go/doctor.go</span> — 首屏不再调用；<code>orbit doctor</code> 保留完整清单与状态词。</li>
+        <li><span class="path">src/runner-go/service.go</span> — 服务安装前声明、完成后一行结果、失败时给可执行的修复。</li>
+        <li><span class="path">src/web/src/pages/EnrollPage.tsx</span> — 已重做；只需让「核对码」和批准后的「Open machine」与终端文案互相呼应。</li>
+        <li><span class="path">src/apiserver/src/runner-api/runner-api.controller.ts#devicePoll</span>（可选）— 返回审批账号和机器公开 id，回执里就能写账号与精确机器页链接；不返回也能用 <code>/infrastructure</code>。</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>不做什么</h4>
+      <ul>
+        <li><b>不引入 TUI 依赖。</b>二进制目前零依赖；ANSI 颜色 + <code>\r</code> 就够，非 TTY 自动退回纯文本。</li>
+        <li><b>不在 register 里交互式装/登录引擎。</b>现有的「按需安装 + 网页 RunnerSignIn」已经覆盖，终端不再造第二套。</li>
+        <li><b>不把引擎步骤搬回来。</b>状态放在回执和 Orbit 机器页；<code>orbit doctor</code> 保留完整清单。</li>
+        <li><b>非交互注册也默认允许自动安装。</b>provisioning 脚本不想装软件时，用 <code>--no-auto-install-engines</code> 关闭；这取代了原来「没有 TTY 就不授权」的默认。</li>
+        <li><b>CLI 文案保持英文。</b>产品文案规则；本地化留给客户端界面。</li>
+      </ul>
+      <h4 style="margin-top:18px">验收</h4>
+      <ul>
+        <li>golden 输出：批准 / 拒绝 / 过期 / 服务失败 / 无引擎，交互与非交互各一份。</li>
+        <li><code>NO_COLOR</code> 与非 TTY 快照必须仍可读，不出现 ANSI 残留。</li>
+        <li>默认配置写 <code>autoInstallEngines=true</code>；<code>--no-auto-install-engines</code> 仍能关闭。</li>
+        <li>手动跑三种环境：headless VPS（SSH）、桌面 macOS、已有引擎的机器。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="foot">终端复刻自用户 2026-10-31 在 aivps-sg 上的实际输出；节选保留了换行与内部错误码。网页审批页截图见 <code>docs/mocks/enroll-redesign/</code>。</p>
+</section>
+
+</body>
+</html>

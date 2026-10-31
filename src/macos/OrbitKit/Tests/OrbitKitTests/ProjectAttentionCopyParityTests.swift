@@ -75,6 +75,9 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
                       "the chip no longer takes the main branch off the row")
         XCTAssertTrue(web.contains(
             "FUSE_PAUSED: () => '\(ProjectAttention.ownerItemSays(item(.fusePaused, 1))!)',"))
+        XCTAssertTrue(web.contains(
+            "LANDED_WITHOUT_CONFIRMATION: () => '\(ProjectAttention.ownerItemSays(item(.landedWithoutConfirmation, 1))!)',"),
+                      "the fifth's chip drifted")
 
         // Rendered with a sentinel count and put back into the web's template spelling.
         let escalated = ProjectAttention.ownerItemSays(item(.escalated, 23))!
@@ -182,6 +185,7 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
             ("INTEGRATION_CHECK_FAILED", "checks failed"),
             ("INTEGRATION_ERROR", "handling an integration error"),
             ("TASK_FAILED", "handling a failed task"),
+            ("LANDING_UNOBSERVED", "handling work not on the line yet"),
         ]
         for (kind, phrase) in phrases {
             XCTAssertTrue(web.contains("\(kind): '\(phrase)',"), "coordinator phrase for \(kind) drifted")

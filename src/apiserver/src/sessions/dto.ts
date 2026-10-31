@@ -1,6 +1,6 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
+import type { NewWorkspaceRequest, SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
@@ -48,6 +48,10 @@ export interface CreateSessionDto {
    *  the runner is then derived from the workspace's machine. */
   assignedRunnerId?: string;
   workspaceId?: string;
+  /** Instead of `workspaceId`, with `assignedRunnerId`: a workspace on that machine made in the same transaction as
+   *  the session and its first message — `{ workDir }` for a folder already there, `{ newFolder }` for one the runner
+   *  makes under its reposRoot (docs/first-workspace-contract.md §3). */
+  newWorkspace?: NewWorkspaceRequest;
   /** @deprecated The same field under its pre-rename name, still sent by every shipped client.
    *  `workspaceId` wins when both are present; the controller collapses them. */
   agentId?: string;

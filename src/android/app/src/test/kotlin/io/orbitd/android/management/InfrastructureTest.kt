@@ -59,8 +59,9 @@ class InfrastructureTest {
     private fun codexPool(id: String, label: String, unavailable: String? = null) =
         Pool(id, label.lowercase(), label, "codex", emptyList(), unavailable, null)
 
-    private fun attention(runners: List<JsonObject>, own: List<Pool> = emptyList(), member: List<Pool> = emptyList()) =
-        Infrastructure.attention(runners, member, own, now)
+    private fun attention(runners: List<JsonObject>, own: List<Pool> = emptyList(), member: List<Pool> = emptyList(),
+                          workspaces: List<JsonObject> = emptyList()) =
+        Infrastructure.attention(runners, workspaces, member, own, now)
     private fun says(line: Infrastructure.Attention) = "${line.line} · ${line.detail}"
 
     // Needs you
@@ -197,6 +198,51 @@ class InfrastructureTest {
     }
 
     // Settings' row
+
+    /** orbit@austin on 2026-10-31: online, Claude Code and Codex installed, neither signed in. */
+    private fun austin(online: Boolean = true) = obj("""{"id":"austin","name":"orbit@austin","online":$online,"activeSessions":0,
+        "maxConcurrent":16,"lastHeartbeatAt":"2026-10-07T08:59:50.000Z","engines":[
+         {"engine":"claude","installed":true,"auth":"no"},{"engine":"codex","installed":true,"auth":"no"}]}""")
+    private fun workspace(provider: String?, on: String = "austin") = buildJsonObject {
+        put("id", "w-$on"); put("name", "app"); put("runnerId", on); provider?.let { put("lastProvider", it) }
+    }
+
+    /** OrbitKit testAMachineWithNoCodingCLISignedInIsALine: a machine online where no coding CLI is signed in and no workspace runs on a
+     * key — nothing can run there, which its page says (RunnerPage.noCliSignedIn) — is a line after the machines offline, before the pools,
+     * that opens its record (docs/mocks/first-workspace-in-conversation, rule 10 of 04). */
+    @Test fun aMachineWithNoCodingCliSignedInIsALine() {
+        val lines = attention(listOf(thinkPad, austin()), own = listOf(claudePool(unavailable = "No account can run")))
+        assertEquals(listOf(Infrastructure.Kind.Offline("thinkpad"), Infrastructure.Kind.NoCliSignedIn("austin"),
+            Infrastructure.Kind.PoolUnavailable("pool", true)), lines.map { it.kind })
+        assertEquals("orbit@austin has no coding CLI signed in · Nothing can run on this machine until one is. Claude Code and Codex are " +
+            "installed here.", says(lines[1]))
+        assertEquals(listOf("orbit@austin"), lines[1].names)
+        assertEquals("nocli:austin", lines[1].id)
+        // With workspaces on those logins, or one that has not run yet, it is the same line.
+        assertEquals(listOf(Infrastructure.Kind.NoCliSignedIn("austin")), attention(listOf(austin()), workspaces = listOf(workspace("codex"))).map { it.kind })
+        assertEquals(1, attention(listOf(austin()), workspaces = listOf(workspace(null))).size)
+    }
+
+    /** OrbitKit testAMachineThatCanRunSomethingIsNoLine: a workspace there on a key or a pool runs without any sign-in, so no line; nor once
+     * one CLI is signed in; and an offline machine is the one line it is offline. */
+    @Test fun aMachineThatCanRunSomethingIsNoLine() {
+        assertEquals(emptyList<Infrastructure.Attention>(), attention(listOf(austin()), workspaces = listOf(workspace("deepseek"))))
+        assertEquals(emptyList<Infrastructure.Attention>(), attention(listOf(austin()), workspaces = listOf(workspace("anthropic-2"))))
+        assertEquals("another machine's key does nothing for this one", 1,
+            attention(listOf(austin()), workspaces = listOf(workspace("deepseek", on = "hpc"))).size)
+        assertEquals(listOf(Infrastructure.Kind.Offline("austin")), attention(listOf(austin(online = false))).map { it.kind })
+        assertEquals("Claude signed in, Codex out", emptyList<Infrastructure.Attention>(), attention(listOf(macStudio)))
+    }
+
+    /** OrbitKit testAMachineWithNoCodingCLISignedInNeedsYou: Settings' row counts that line, as the web's Settings row counts the machine. */
+    @Test fun settingsCountsAMachineWithNoCodingCliSignedIn() {
+        fun value(runners: List<JsonObject>, workspaces: List<JsonObject>) =
+            Infrastructure.settingsValue(attention(runners, workspaces = workspaces).size, runners)
+        assertEquals("1 needs you", value(listOf(austin()), emptyList()))
+        assertEquals("1 needs you", value(listOf(austin()), listOf(workspace("claude"))))
+        assertEquals("1 of 1 online", value(listOf(austin()), listOf(workspace("deepseek"))))
+        assertEquals("2 need you", value(listOf(austin(), thinkPad), emptyList()))
+    }
 
     /** SettingsHome.infrastructureValue: "1 needs you", "2 need you"; with none, how many of the machines are online. */
     @Test fun settingsRowSaysWhatNeedsYouElseTheMachinesOnline() {

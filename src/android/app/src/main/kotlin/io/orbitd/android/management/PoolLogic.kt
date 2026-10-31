@@ -321,10 +321,12 @@ internal object ProviderPools {
         return short.replace(" · ", " ")
     }
     fun quotaReading(row: UsageRow) = "${compactWindowLabel(row.label)} ${row.percent}%"
-    /** `14:30` within a day, `Thu 14:30` beyond it. */
+    /** `14:30` today, `Thu 14:30` on any other day — even tomorrow's bare time would read as today's. */
     fun formatResetTime(iso: String, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
         val at = isoMs(iso) ?: return null
-        val pattern = if (at - nowMs < 24 * 60 * 60 * 1000L) "HH:mm" else "EEE HH:mm"
+        val resetsToday = Instant.ofEpochMilli(at).atZone(zone).toLocalDate() ==
+            Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
+        val pattern = if (resetsToday) "HH:mm" else "EEE HH:mm"
         return DateTimeFormatter.ofPattern(pattern, Locale.US).withZone(zone).format(Instant.ofEpochMilli(at))
     }
 

@@ -171,6 +171,8 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
                        "the integration line's landing")
         assertDeclares(web, "IF_CONFIRMED_AUTO_MAIN", OwnerConfirmations.autoMain,
                        "Automatic's landing")
+        assertDeclares(web, "IF_CONFIRMED_AGENT_PUSHED", OwnerConfirmations.agentPushed,
+                       "an AGENT_PUSH project's landing (§10.5 O-L2)")
         assertDeclares(web, "IF_CONFIRMED_ENDS_SESSION", OwnerConfirmations.endsSession,
                        "the run the confirmation ends")
         // Drawn once, by the card (where it sits is the web card's own test).

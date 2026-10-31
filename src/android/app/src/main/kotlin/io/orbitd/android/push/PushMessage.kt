@@ -47,7 +47,10 @@ data class PushPayload(
     }
 
     companion object {
-        val ownerItemKinds = setOf("approve-merge-to-main", "coordinator-question", "escalated-to-you", "fuse-paused")
+        /** The five owner items' pushes (§7.6 V12): the fifth, work that reached main without the owner's confirmation (§10.7, owner
+         * 2026-10-28), is pushed once and routed like a question — to the conversation its card is in, else its project. */
+        val ownerItemKinds = setOf("approve-merge-to-main", "coordinator-question", "escalated-to-you", "fuse-paused",
+            "landed-without-confirmation")
     }
 }
 

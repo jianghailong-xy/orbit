@@ -13,6 +13,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  DeliveryMode,
   ProjectBranchCandidates,
   ProjectIntegrationView,
   ProjectLastMainBranch,
@@ -33,6 +34,9 @@ import {
   DEFAULT_MAIN_BRANCH,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
+  RUN_DELIVERY,
+  RUN_DELIVERY_AGENT_PUSH,
+  RUN_DELIVERY_PLATFORM,
   RUN_LINE_PROJECT_BRANCH,
   RUN_LINE_PROJECT_BRANCH_HINT,
   RUN_MAIN_BRANCH,
@@ -65,6 +69,10 @@ import {
   planTaskRest,
   projectStarted,
   runAutomaticSays,
+  runAutomaticSaysAgentPush,
+  runDeliveryAgentPushHint,
+  runDeliveryNeedsMainLine,
+  runDeliveryPlatformHint,
   runLastChoiceFor,
   runLineMain,
   runLineMainHint,
@@ -156,6 +164,9 @@ export interface StartSettingsDraft {
   mergeCheckCommand: string;
   /** The check's budget in seconds — null, an empty box, for the one-hour default. */
   mergeCheckTimeoutSeconds: number | null;
+  /** How the work reaches main (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read
+   *  that does not say, or a server that predates it. AGENT_PUSH only while the line is main. */
+  deliveryMode: DeliveryMode | null;
 }
 
 /** The most tasks a project may run at once, as the door bounds it (`MAX_PROJECT_CONCURRENT_TASKS`). */
@@ -174,7 +185,7 @@ export function startDraftOf(
   settings: ProjectStartSettings,
   standing: Pick<
     ProjectIntegrationView,
-    'repository' | 'upstreamRef' | 'upstreamChosenAt' | 'lastMainBranch'
+    'repository' | 'upstreamRef' | 'upstreamChosenAt' | 'lastMainBranch' | 'deliveryMode'
   > | null = null,
 ): StartSettingsDraft {
   return {
@@ -188,6 +199,11 @@ export function startDraftOf(
     // The coordinator's budget when it suggested one, and an empty box — the default — when it did
     // not: what it sends is what the card opens on, and the owner may change it.
     mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
+    // Offered once the read says the server takes it: what the project already chose when that is
+    // AGENT_PUSH on a line that stays main, and otherwise PLATFORM — the default (A-Q21).
+    deliveryMode: standing?.deliveryMode === undefined
+      ? null
+      : settings.line === 'MAIN' && standing.deliveryMode === 'AGENT_PUSH' ? 'AGENT_PUSH' : 'PLATFORM',
   };
 }
 
@@ -220,6 +236,9 @@ export function startBody(
     maxConcurrentTasks: draft.maxConcurrentTasks ?? request.settings.maxConcurrentTasks,
     mergeCheckCommand: draft.mergeCheckCommand.trim() || null,
     mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds,
+    // With a main line only: the door refuses AGENT_PUSH anywhere else (409
+    // DELIVERY_MODE_NEEDS_MAIN_LINE), and a card that offered no choice records none.
+    ...(draft.line === 'MAIN' && draft.deliveryMode ? { deliveryMode: draft.deliveryMode } : {}),
     requestId,
   };
 }
@@ -363,6 +382,8 @@ export function StartProjectCard({
   // The branch every sentence about where work goes names: the one on the card, or main for a
   // project with no repository to have another.
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
+  // The agent pushes its own work only on a main line (§10.5 O-L2): no merge into main asks anybody.
+  const agentPushes = draft.line === 'MAIN' && draft.deliveryMode === 'AGENT_PUSH';
   const comesToYou = startComesToYou({
     automatic: draft.automatic,
     line: draft.line,
@@ -370,12 +391,18 @@ export function StartProjectCard({
     evidenceJudged: plan.evidenceJudged,
     escalationSeconds: facts.escalationSeconds,
     main,
+    deliveryMode: agentPushes ? 'AGENT_PUSH' : 'PLATFORM',
   });
   const set = (patch: Partial<StartSettingsDraft>) => onDraft({ ...draft, ...patch });
   // The two lines the menu offers, each with what it means and, for a project branch, its name.
   const lines = [
     { value: 'PROJECT_BRANCH' as const, label: RUN_LINE_PROJECT_BRANCH, hint: RUN_LINE_PROJECT_BRANCH_HINT, branch },
     { value: 'MAIN' as const, label: runLineMain(main), hint: runLineMainHint(main), branch: null },
+  ];
+  // The two ways the work reaches main, each with what it means (§10.5 O-L1).
+  const deliveries = [
+    { value: 'PLATFORM' as const, label: RUN_DELIVERY_PLATFORM, hint: runDeliveryPlatformHint(main) },
+    { value: 'AGENT_PUSH' as const, label: RUN_DELIVERY_AGENT_PUSH, hint: runDeliveryAgentPushHint(main) },
   ];
   // The plan by level: what starts now, what runs together, and the task that needs the owner.
   const levels = plan.levels ? (
@@ -474,7 +501,11 @@ export function StartProjectCard({
                 onCheckedChange={(automatic) => set({ automatic })}
               />
             </div>
-            <div className="start-card-hint">{runAutomaticSays(draft.automatic, draft.line, hasMergeCheck, main)}</div>
+            <div className="start-card-hint">
+              {agentPushes
+                ? runAutomaticSaysAgentPush(draft.automatic, main)
+                : runAutomaticSays(draft.automatic, draft.line, hasMergeCheck, main)}
+            </div>
             {opensCoordinator ? <div className="start-card-opens">{START_OPENS_COORDINATOR}</div> : null}
             <div className="start-card-comes">
               <div className="start-card-comes-head">{START_COMES_TO_YOU}</div>
@@ -498,7 +529,8 @@ export function StartProjectCard({
                 disabled={!editable}
                 matchTriggerWidth={false}
                 onValueChange={(line) => {
-                  if (line) set({ line });
+                  // Off a main line the agent cannot push, so the delivery goes back to Orbit's.
+                  if (line) set({ line, ...(line !== 'MAIN' && draft.deliveryMode ? { deliveryMode: 'PLATFORM' } : {}) });
                 }}
                 options={lines.map(({ value, label }) => ({ value, label }))}
                 renderOption={(option) => {
@@ -533,6 +565,40 @@ export function StartProjectCard({
               {lastMainBranch && draft.upstream === lastMainBranch.branch ? (
                 <div className="start-card-hint">{runLastChoiceFor(lastMainBranch.repository)}</div>
               ) : null}
+            </div>
+          ) : null}
+          {/* How the work reaches main (§10.5 O-L1, A-Q21): Orbit lands it, or the agent pushes it
+              there itself — a choice only a project landing directly into main has. On a project
+              branch the menu stays on Orbit's and the line under it says why. */}
+          {draft.deliveryMode !== null ? (
+            <div className="start-card-row">
+              <div className="start-card-row-head">
+                <span>{RUN_DELIVERY}</span>
+                <Select
+                  className="start-card-line start-card-delivery"
+                  aria-label={RUN_DELIVERY}
+                  value={agentPushes ? 'AGENT_PUSH' : 'PLATFORM'}
+                  disabled={!editable || draft.line !== 'MAIN'}
+                  matchTriggerWidth={false}
+                  onValueChange={(deliveryMode) => {
+                    if (deliveryMode) set({ deliveryMode });
+                  }}
+                  options={deliveries.map(({ value, label }) => ({ value, label }))}
+                  renderOption={(option) => (
+                    <div className="start-card-line-option">
+                      <b>{option.label}</b>
+                      <div className="start-card-hint">
+                        {deliveries.find((entry) => entry.value === option.value)?.hint}
+                      </div>
+                    </div>
+                  )}
+                />
+              </div>
+              <div className="start-card-hint">
+                {draft.line !== 'MAIN'
+                  ? runDeliveryNeedsMainLine(main)
+                  : agentPushes ? runDeliveryAgentPushHint(main) : runDeliveryPlatformHint(main)}
+              </div>
             </div>
           ) : null}
           <div className="start-card-row">

@@ -198,12 +198,21 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains("branches: console.startIntegration?.branches,"),
                       "the conversation's card offers the branches the integration read reported")
         XCTAssertTrue(start.contains("lastMainBranch: console.startIntegration?.lastMainBranch,"))
-        XCTAssertTrue(start.contains("Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,"),
-                      "the Automatic sentence follows the switch and the line chosen")
-        XCTAssertTrue(start.contains("hasMergeCheck: draft.hasMergeCheck, main: draft.main))"),
-                      "and names the main branch on the card")
-        XCTAssertTrue(start.contains("escalationSeconds: escalationSeconds, main: draft.main)"),
+        XCTAssertTrue(start.contains("Text(draft.automaticSays)"),
+                      "the Automatic sentence follows the switch, the line and the delivery chosen, and "
+                          + "names the main branch on the card (`StartSettingsDraft.automaticSays`)")
+        XCTAssertTrue(start.contains("escalationSeconds: escalationSeconds, main: draft.main,"),
                       "and so does what still comes to the owner")
+        XCTAssertTrue(start.contains("deliveryMode: draft.agentPushes ? .agentPush : .platform)"),
+                      "which has no merge into main in it while the agent pushes (§10.5 O-L2)")
+        // Delivery (§10.5 O-L1, A-Q21): a row only where the read offers the choice, the agent's way
+        // only on a main line, and a line moved off main takes the delivery back to Orbit's.
+        XCTAssertTrue(start.contains("if draft.deliveryMode != nil {") && start.contains("deliveryRow(editable: editable)"))
+        XCTAssertTrue(start.contains("Toggle(isOn: deliveryBinding(.platform, draft))")
+                      && start.contains("Toggle(isOn: deliveryBinding(.agentPush, draft))"))
+        XCTAssertTrue(start.contains(".disabled(!editable || draft.line != .main)"))
+        XCTAssertTrue(start.contains("Text(draft.deliveryHint)"), "with what it means, or why it is not offered")
+        XCTAssertTrue(start.contains("update { $0.chooseLine(line) }"))
         XCTAssertTrue(start.contains("Text(RunSettings.mergeCheckHint(draft.main))"))
         XCTAssertTrue(start.contains("let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,"),
                       "what still comes to the owner is listed under the switch, off the same draft")

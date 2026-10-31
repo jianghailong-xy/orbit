@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>会话流 · 流式思考块不再画第二条滚动条</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  @font-face { font-family: 'Inter'; src: url('/var/tmp/landing-mock-render/fonts/Inter.ttf'); font-weight: 100 900; }
+  @font-face { font-family: 'Noto Sans SC'; src: url('/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf'); }
+  @font-face { font-family: 'JetBrains Mono'; src: url('/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf'); }
+
+  body.m { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .zh { font-family: 'Noto Sans SC', 'Inter', sans-serif; }
+  .m-sheet { width: 1600px; }
+  .m-h1 { font-size: 24px; }
+  .m-sub { font-size: 13.5px; line-height: 1.85; max-width: 1500px; }
+  .m-sub code, .m-notes code, .m-cap code, .m-code code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; }
+  .m-sub .ui, .m-cap .ui { font-family: 'Inter', sans-serif; }
+
+  .fig { position: relative; line-height: 0; }
+  .shot { display: block; width: 700px; height: 800px; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .10), 0 2px 6px rgba(15, 23, 42, .06); }
+  .fig + .m-cap { margin-top: 12px; }
+
+  .bar-mark {
+    position: absolute;
+    border: 2px dashed var(--warning-solid);
+    border-radius: 9px;
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+  .bar-mark.good { border-color: var(--success-solid); }
+  .bar-mark > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .m-n.good { background: var(--success-solid); }
+
+  .m-grid2 { gap: 20px; }
+  .m-grid2 > .m-stage { padding: 16px 20px 18px; }
+  .m-stage .shot { margin: 0; }
+
+  .zoom-row { display: flex; align-items: flex-start; gap: 26px; }
+  .zoom-cell { flex: none; width: 300px; }
+  .zoom-fig { position: relative; line-height: 0; }
+  .zoom-fig img { display: block; width: 300px; height: 555px; border-radius: 8px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .10); }
+  .zoom-cell .m-cap { margin-top: 8px; line-height: 1.65; }
+  .zr { position: absolute; border: 2px dashed var(--warning-solid); border-radius: 9px; box-sizing: border-box; pointer-events: none; }
+  .zr.good { border-color: var(--success-solid); }
+  .zl { position: absolute; display: inline-block; white-space: nowrap; font-size: 11px; font-weight: 700;
+        color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 2px 7px; line-height: 16px; }
+  .zl::after { content: ''; position: absolute; left: 100%; top: 50%; width: 24px; height: 1.5px; background: currentColor; }
+  .zl.good { background: var(--success-solid); }
+  .zoom-notes { flex: 1 1 auto; min-width: 0; }
+  .zoom-notes .m-notes { margin-top: 0; }
+  .zoom-notes .m-notes li { display: block; line-height: 1.75; }
+  .zoom-notes .m-notes li + li { margin-top: 7px; }
+  .m-code {
+    margin: 12px 0 0;
+    padding: 10px 14px;
+    background: #f7f8fa;
+    border: 1px solid #e3e6eb;
+    border-radius: 8px;
+    font: 11.5px/1.8 'JetBrains Mono', ui-monospace, monospace;
+    color: var(--text-1);
+    white-space: pre;
+  }
+  .m-code .c { color: var(--text-3); }
+  .m-foot { margin: 18px 2px 0; font-size: 12.5px; line-height: 1.75; color: var(--text-3); }
+  .m-foot b { color: var(--text-2); }
+</style>
+</head>
+<body class="m zh">
+<section class="m-sheet">
+  <h1 class="m-h1">会话流 · 流式思考块不再画自己的滚动条</h1>
+  <p class="m-sub">
+    你截图里右侧并排的两条滚动条，是同一个面板里两个滚动区各自画出来的：外层是会话滚动区
+    <code>.workspace-sessions</code>；内侧那条属于直播中的思考块 <code>.chat-think-port</code>——它被限制成约 11em 高、自己可滚
+    （DeepSeek 一轮推理常有几万字，不能让它把回答和工具行挤出屏幕），于是思考块的条就贴在会话条内侧 8px 处。
+    两条都跟着尾部停在底部，看起来像「右边有两条」。
+  </p>
+  <p class="m-sub" style="margin-top:-10px">
+    修改：让思考块继续可滚，但<b>不画自己的滚动条</b>。外层会话条不动；思考块原来的 8px 条槽用 8px 内边距补回
+    （<code>padding-right: 8px → 16px</code>），所以文字宽度、换行都不变，唯一的区别是少一条条。
+  </p>
+
+  <div class="m-grid2">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">现状</span>直播的思考块 · 右侧两条滚动条</div>
+      <div class="fig">
+        <img class="shot" src="01a-before.png" alt="">
+        <span class="bar-mark" style="left:658px; top:512px; width:28px; height:172px">
+          <span class="m-n">1</span>
+        </span>
+      </div>
+      <p class="m-cap">
+        <b>① 两条并排。</b>外侧是会话滚动条（<code>.workspace-sessions</code>）；它内侧 8px 是思考块自己的滚动条
+        （<code>.chat-think-port</code>，11em 高的视口）。两条都在底部，短的只覆盖思考块那一段。
+      </p>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">修改后</span>同一条流 · 右侧只剩会话滚动条</div>
+      <div class="fig">
+        <img class="shot" src="01b-after.png" alt="">
+        <span class="bar-mark good" style="left:666px; top:512px; width:22px; height:172px">
+          <span class="m-n good">✓</span>
+        </span>
+      </div>
+      <p class="m-cap">
+        <b>✓ 只剩一条。</b>思考块照常可以用滚轮 / 触控板在块内回看，滚回底部恢复自动跟随；只是不再画自己的滚动条。
+        文字位置与修改前一致（原来的条槽由内边距补回）。
+      </p>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k">放大 2×</span>滚动条所在的那一小块（同一段面板，未加标注）</div>
+    <div class="zoom-row">
+      <div class="zoom-cell">
+        <div class="zoom-fig">
+          <img src="01a-zoom.png" alt="">
+          <span class="zr" style="left:186px; top:330px; width:60px; height:200px"></span>
+          <span class="zl" style="right:138px; top:339px">两条并排</span>
+        </div>
+        <p class="m-cap"><b>现状 ①</b> 左边短线是思考块的滚动条，右边长线是会话的滚动条；两条之间只隔 8px。</p>
+      </div>
+      <div class="zoom-cell">
+        <div class="zoom-fig">
+          <img src="01b-zoom.png" alt="">
+          <span class="zr good" style="left:210px; top:330px; width:36px; height:200px"></span>
+          <span class="zl good" style="right:114px; top:339px">一条</span>
+        </div>
+        <p class="m-cap"><b>修改后 ✓</b> 只剩会话条。思考块内仍是可滚动的 11em 视口，只是不画条。</p>
+      </div>
+      <div class="zoom-notes">
+        <ul class="m-notes">
+          <li><b>为什么原来是两条：</b>思考块为了不被超长推理撑爆，自己是一个滚动区
+            （<code>max-height: 11em; overflow-y: auto</code>）。两个滚动区都使用全局的 8px 滚动条样式，所以并排。</li>
+          <li><b>改法：</b>思考块保留滚动、去掉自己的条。滚轮进入思考块时仍回看历史推理；滚回底部恢复跟随。
+            <code>overscroll-behavior: contain</code> 保持现状，滚到头不会带动外层会话。</li>
+          <li><b>零位移：</b>隐藏滚动条会让内容自动多出 8px 宽，所以右内边距从 8px 改为 16px，行的换行位置与改前完全相同。</li>
+          <li><b>范围：</b>只改 Web 控制台的 <code>src/web/src/index.css</code> 一处；组件逻辑、服务端、原生客户端（iOS / macOS / Android）都不动。</li>
+        </ul>
+        <pre class="m-code"><span class="c">/* src/web/src/index.css — .chat-think-port */</span>
+padding-right: 16px;      <span class="c">/* was 8px + the scrollbar's own 8px gutter */</span>
+scrollbar-width: none;
+.chat-think-port::-webkit-scrollbar { display: none; }</pre>
+      </div>
+    </div>
+  </div>
+
+  <p class="m-foot">
+    <b>图的来源：</b>面板按控制台的真实结构和 <code>index.css</code> 重绘（会话行、思考块、输入框都是真实类名），
+    内容取自你截图里的那一轮；两条滚动条由 Chromium 实际绘制，不是画的。改后的规则已落在
+    <code>index.css</code>；改前那一栏在面板里还原了旧规则用于对照，两张图用的是同一份样式表。
+  </p>
+</section>
+</body>
+</html>

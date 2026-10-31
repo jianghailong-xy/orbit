@@ -1136,16 +1136,17 @@ public enum ProjectPage {
         }
     }
 
-    /// Which of the four owner items this row is, as the console that draws its card names them —
+    /// Which of the five owner items this row is, as the console that draws its card names them —
     /// what lets a press land on the card rather than only on the conversation.
     public static func ownerItemKind(_ row: ProjectOpenItemRow) -> OwnerItemKind {
         switch row.kind {
         case .promotionApproval: return .promotionApproval
         case .coordinatorQuestion: return .coordinatorQuestion
         case .fusePaused: return .fusePaused
+        case .landedWithoutConfirmation: return .landedWithoutConfirmation
         case .unknown: return .unknown
         case .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed,
-             .deliveryReview, .landingLeaseExpired:
+             .deliveryReview, .landingLeaseExpired, .landingUnobserved:
             return .escalated
         }
     }
@@ -1198,8 +1199,11 @@ public enum ProjectPage {
         t.dependencyState != "READY" && (t.landingWaitCount ?? 0) > 0
     }
 
+    /// Every state the platform still has in hand, and the three failures — and an AGENT_PUSH task
+    /// waiting to be seen on its line (§10.9), which has no receipt yet either: it waits in Pending
+    /// landing, never in Landed.
     private static let integratingStates: Set<String> = [
-        "QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER",
+        "QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION",
     ]
     private static let landedStates: Set<String> = ["ON_INTEGRATION_LINE", "ON_UPSTREAM"]
 
@@ -1251,6 +1255,15 @@ public enum ProjectPage {
         }
     }
 
+    /// §10.9's tag for an AGENT_PUSH task its line has not been seen to carry yet: "Waiting to be seen
+    /// on main · 9f1c2ab" — the delivered commit, short — and the words alone while the identity is
+    /// not frozen. Once seen, the row reads `On <branch>`. The browser's `waitingToBeSeenOn`.
+    public static func waitingToBeSeenOn(_ branch: String, deliveredSha: String?) -> String {
+        let words = "Waiting to be seen on \(branch)"
+        guard let sha = deliveredSha, !sha.isEmpty else { return words }
+        return "\(words) · \(String(sha.prefix(7)))"
+    }
+
     /// Where a row stands between "done" and "on main", naming who has a failure.
     public static func integrationTag(_ t: ProjectTaskRow, ref: String?, upstreamRef: String?) -> Tag? {
         if waitsForLanding(t) {
@@ -1269,6 +1282,10 @@ public enum ProjectPage {
         case "CHECK_FAILED": return Tag(text: "Checks failed · \(who)", tone: .danger)
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
         case "AWAITING_OWNER": return Tag(text: "Awaiting your approval", tone: .warning)
+        case "AWAITING_OBSERVATION":
+            return Tag(text: waitingToBeSeenOn(RunSettings.mainBranchName(upstreamRef),
+                                               deliveredSha: integration.deliveredSha),
+                       tone: .neutral)
         case "ON_INTEGRATION_LINE": return Tag(text: "On \(ref ?? "the project branch")", tone: .success)
         case "ON_UPSTREAM": return Tag(text: "On \(RunSettings.mainBranchName(upstreamRef))", tone: .success)
         default: return nil

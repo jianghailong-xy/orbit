@@ -1,0 +1,587 @@
+diff --git a/src/web/src/api.ts b/src/web/src/api.ts
+index 7f74490..d444ffc 100644
+--- a/src/web/src/api.ts
++++ b/src/web/src/api.ts
+@@ -1972,6 +1972,23 @@ export const getSessionDiff = (idOrPublicId: string) =>
+ export const refreshSessionDiff = (idOrPublicId: string) =>
+   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
+ 
++/** A changed file's bytes as they are in the session's worktree now, for the diff drawer's preview
++ *  of a binary file (GET /sessions/:id/worktree-file). The control plane has the session's runner
++ *  read the file on every call, so a failure is the runner's: 404 gone from the checkout, 413 over
++ *  the upload limit, 503 runner offline, 504 no answer in time — an ApiError carrying that status.
++ *  Bearer-guarded like the attachment route, so callers draw the blob, never an `<img src>` here. */
++export const getWorktreeFile = async (idOrPublicId: string, path: string, signal?: AbortSignal): Promise<Blob> => {
++  const res = await authedFetch(
++    `/api/sessions/${encodeURIComponent(idOrPublicId)}/worktree-file?path=${encodeURIComponent(path)}`,
++    { signal, cache: 'no-store' },
++  );
++  if (!res.ok) {
++    const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
++    throw new ApiError(typeof body?.message === 'string' ? body.message : res.statusText, res.status);
++  }
++  return res.blob();
++};
++
+ /** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
+  *  it wrote none. */
+ export type RecapOutcome =
+diff --git a/src/web/src/components/SessionOutputs.tsx b/src/web/src/components/SessionOutputs.tsx
+index 5df4213..5200208 100644
+--- a/src/web/src/components/SessionOutputs.tsx
++++ b/src/web/src/components/SessionOutputs.tsx
+@@ -14,6 +14,7 @@ import { Input } from './ui/Input';
+ import { Menu, type MenuItem } from './ui/Menu';
+ import { Segmented } from './ui/Segmented';
+ import { Tooltip } from './ui/Tooltip';
++import { WorktreeFilePreview } from './WorktreeFilePreview';
+ import hljs from 'highlight.js/lib/core';
+ import typescript from 'highlight.js/lib/languages/typescript';
+ import javascript from 'highlight.js/lib/languages/javascript';
+@@ -995,8 +996,9 @@ function treeFiles(nodes: TreeNode[]): SessionChangedFile[] {
+ }
+ 
+ /** The changed-file list for the drawer rail, rendered as a collapsible directory tree. Collapse
+- *  state is keyed by each directory's full path; binary-only dirs (build artifacts) default shut,
+- *  and the user's manual toggles win and persist while live heartbeats refresh `files`. */
++ *  state is keyed by each directory's full path; binary-only dirs (build artifacts) default shut
++ *  until the shown file is in one, and the user's manual toggles win and persist while live
++ *  heartbeats refresh `files`. */
+ function FileTree({
+   files,
+   activePath,
+@@ -1009,6 +1011,16 @@ function FileTree({
+   const tree = useMemo(() => buildFileTree(files), [files]);
+   const [override, setOverride] = useState<Record<string, boolean>>({});
+   const collapsed = (node: Extract<TreeNode, { kind: 'dir' }>) => override[node.path] ?? node.binaryOnly;
++  // ‹ › pages through binary files too, so it can land inside a binary-only folder that starts
++  // shut: open the folders on the way to the shown file, so the list says where it is.
++  useEffect(() => {
++    if (!activePath) return;
++    const dirs = activePath.split('/').slice(0, -1);
++    setOverride((o) => {
++      const open = dirs.map((_, i) => dirs.slice(0, i + 1).join('/')).filter((dir) => o[dir] !== false);
++      return open.length ? { ...o, ...Object.fromEntries(open.map((dir) => [dir, false])) } : o;
++    });
++  }, [activePath]);
+   const toggle = (node: Extract<TreeNode, { kind: 'dir' }>) =>
+     setOverride((o) => ({ ...o, [node.path]: !collapsed(node) }));
+   return (
+@@ -1225,14 +1237,8 @@ function WorktreeDiffDrawer({
+     });
+   };
+ 
+-  // Prev/next file nav follows the grouped display order and skips binary files (no diff to show).
+-  const orderedPaths = useMemo(
+-    () =>
+-      treeFiles(buildFileTree(files))
+-        .filter((f) => f.additions >= 0 && f.deletions >= 0)
+-        .map((f) => f.path),
+-    [files],
+-  );
++  // Prev/next file nav follows the grouped display order, binary files included: they preview too.
++  const orderedPaths = useMemo(() => treeFiles(buildFileTree(files)).map((f) => f.path), [files]);
+   const navIdx = active ? orderedPaths.indexOf(active.path) : -1;
+   const prevPath = navIdx > 0 ? orderedPaths[navIdx - 1] : null;
+   const nextPath = navIdx >= 0 && navIdx < orderedPaths.length - 1 ? orderedPaths[navIdx + 1] : null;
+@@ -1310,6 +1316,7 @@ function WorktreeDiffDrawer({
+         <div className="wt-diff-pane">
+           {active ? (
+             <DiffPane
++              sessionId={sessionId}
+               file={active}
+               patch={activePatch}
+               loading={q.isLoading}
+@@ -1329,9 +1336,10 @@ function WorktreeDiffDrawer({
+   );
+ }
+ 
+-/** One file's header (path + stat) and its diff body, or the right placeholder for a binary,
+- *  oversized, still-loading, or empty diff. */
++/** One file's header (path + stat) and its diff body, or the right placeholder for an oversized,
++ *  still-loading, or empty diff. A binary file has no diff: it previews instead (WorktreeFilePreview). */
+ function DiffPane({
++  sessionId,
+   file,
+   patch,
+   loading,
+@@ -1342,54 +1350,55 @@ function DiffPane({
+   onPrev,
+   onNext,
+ }: {
++  sessionId: string;
+   file: SessionChangedFile;
+   patch?: SessionFilePatch;
+   loading?: boolean;
+   refreshing?: boolean;
+   viewMode: 'unified' | 'split';
+   onViewMode: (m: 'unified' | 'split') => void;
+-  /** "3/17" position of this file within the navigable (non-binary) set. */
++  /** "3/17" position of this file among the drawer's files. */
+   pos: string;
+   onPrev?: () => void;
+   onNext?: () => void;
+ }) {
+   const binary = file.additions < 0 || file.deletions < 0;
+   const lang = useMemo(() => langFor(file.path), [file.path]);
++  const head = (
++    <>
++      <span className="wt-diff-nav">
++        <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
++          ‹
++        </button>
++        <span className="wt-diff-nav-pos">{pos}</span>
++        <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
++          ›
++        </button>
++      </span>
++      <span className="wt-diff-pane-path">{file.path}</span>
++    </>
++  );
++  if (binary) return <WorktreeFilePreview key={file.path} sessionId={sessionId} file={file} head={head} />;
+   return (
+     <>
+       <div className="wt-diff-pane-head">
+-        <span className="wt-diff-nav">
+-          <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
+-            ‹
+-          </button>
+-          <span className="wt-diff-nav-pos">{pos}</span>
+-          <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
+-            ›
+-          </button>
++        {head}
++        <span className="wt-diff-pane-stat">
++          <span className="add">+{file.additions}</span>
++          <span className="del">−{file.deletions}</span>
+         </span>
+-        <span className="wt-diff-pane-path">{file.path}</span>
+-        {!binary && (
+-          <>
+-            <span className="wt-diff-pane-stat">
+-              <span className="add">+{file.additions}</span>
+-              <span className="del">−{file.deletions}</span>
+-            </span>
+-            <Segmented
+-              size="small"
+-              aria-label="Diff view"
+-              value={viewMode}
+-              onValueChange={onViewMode}
+-              options={[
+-                { label: 'Unified', value: 'unified' },
+-                { label: 'Split', value: 'split' },
+-              ]}
+-            />
+-          </>
+-        )}
++        <Segmented
++          size="small"
++          aria-label="Diff view"
++          value={viewMode}
++          onValueChange={onViewMode}
++          options={[
++            { label: 'Unified', value: 'unified' },
++            { label: 'Split', value: 'split' },
++          ]}
++        />
+       </div>
+-      {binary ? (
+-        <div className="wt-diff-empty">Binary file — no preview</div>
+-      ) : patch?.patch ? (
++      {patch?.patch ? (
+         viewMode === 'split' ? (
+           <SplitDiffView patch={patch.patch} lang={lang} />
+         ) : (
+diff --git a/src/web/src/components/WorktreeFilePreview.tsx b/src/web/src/components/WorktreeFilePreview.tsx
+new file mode 100644
+index 0000000..b934b2d
+--- /dev/null
++++ b/src/web/src/components/WorktreeFilePreview.tsx
+@@ -0,0 +1,187 @@
++import { useEffect, useState, type ReactNode } from 'react';
++import { DownloadOutlined } from '@ant-design/icons';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import type { SessionChangedFile } from '../api';
++import { worktreeFileQuery } from '../lib/queries';
++import {
++  FILE_DELETED,
++  IMAGE_UNREADABLE,
++  formatFileSize,
++  isDrawableImage,
++  worktreeFileFailure,
++  type WorktreeFileFailure,
++} from '../lib/worktreeFile';
++import { Button } from './ui/Button';
++import { ImagePreview } from './ui/ImagePreview';
++
++/**
++ * A binary file in the diff drawer. Git has no patch for it, so the pane shows the file itself, read
++ * from the session's worktree by its runner (GET /sessions/:id/worktree-file), as the native clients'
++ * WorktreeFilePreview does: a picture is drawn, fitted to the pane and opening in the full-screen
++ * viewer when pressed; anything else is offered as a download. What is read is the file as it is now,
++ * not a before/after pair: a modified picture shows its current version.
++ *
++ * `head` is the pane head's start (file nav and path); the kind, size and Download follow it.
++ */
++export function WorktreeFilePreview({
++  sessionId,
++  file,
++  head,
++}: {
++  sessionId: string;
++  file: SessionChangedFile;
++  head: ReactNode;
++}) {
++  const name = file.path.slice(file.path.lastIndexOf('/') + 1);
++  const dot = name.lastIndexOf('.');
++  const kind = dot > 0 ? name.slice(dot + 1).toUpperCase() : 'FILE';
++  const deleted = (file.status || '').toUpperCase().startsWith('D');
++  const image = isDrawableImage(file.path);
++  const qc = useQueryClient();
++  const query = worktreeFileQuery(sessionId, file.path);
++  // Only a picture is read on opening: the drawer has something to draw with it. Anything else is
++  // read when Download is pressed.
++  const q = useQuery({ ...query, enabled: image && !deleted });
++  const url = useObjectUrl(q.data);
++  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
++  const [broken, setBroken] = useState(false);
++  // Decode the bytes once more off-screen: it gives the pixel size for the head, and says when bytes
++  // that came back are not a picture after all.
++  useEffect(() => {
++    setSize(null);
++    setBroken(false);
++    if (!url) return;
++    let live = true;
++    const probe = new window.Image();
++    probe.onload = () => live && setSize({ width: probe.naturalWidth, height: probe.naturalHeight });
++    probe.onerror = () => live && setBroken(true);
++    probe.src = url;
++    return () => {
++      live = false;
++    };
++  }, [url]);
++  const [viewer, setViewer] = useState<{ x: number; y: number } | null>(null);
++  const [saving, setSaving] = useState(false);
++  const [saveFailure, setSaveFailure] = useState<WorktreeFileFailure | null>(null);
++  const download = async (): Promise<void> => {
++    if (q.data) return saveBlob(q.data, name);
++    setSaving(true);
++    setSaveFailure(null);
++    try {
++      saveBlob(await qc.fetchQuery(query), name);
++    } catch (error) {
++      setSaveFailure(worktreeFileFailure(error));
++    } finally {
++      setSaving(false);
++    }
++  };
++  const bytes = q.data?.size;
++  return (
++    <>
++      <div className="wt-diff-pane-head">
++        {head}
++        <span className="wt-preview-meta">
++          <span className="wt-preview-kind">{kind}</span>
++          {size && (
++            <span>
++              {size.width} × {size.height}
++            </span>
++          )}
++          {size && bytes != null && <span aria-hidden="true">·</span>}
++          {bytes != null && <span>{formatFileSize(bytes)}</span>}
++        </span>
++        {image && !deleted && !(q.error && !q.data) && (
++          <Button size="small" icon={<DownloadOutlined />} disabled={!q.data} onClick={() => void download()}>
++            Download
++          </Button>
++        )}
++      </div>
++      {deleted ? (
++        <FileState failure={FILE_DELETED} />
++      ) : !image ? (
++        <div className="wt-preview-state">
++          <div className="wt-preview-state-title">No preview available</div>
++          <div className="wt-preview-state-detail">
++            This file can’t be previewed here. Download it to open it in another app.
++          </div>
++          <Button variant="primary" icon={<DownloadOutlined />} loading={saving} onClick={() => void download()}>
++            Download
++          </Button>
++          {saveFailure && (
++            <div className="wt-preview-state-error">
++              {saveFailure.title}. {saveFailure.detail}
++            </div>
++          )}
++        </div>
++      ) : url && !broken ? (
++        <div className="wt-preview-body">
++          <button
++            type="button"
++            className="wt-preview-img"
++            aria-label={`Open ${name}`}
++            title="Open in viewer"
++            onClick={(e) => {
++              const r = e.currentTarget.getBoundingClientRect();
++              setViewer({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
++            }}
++          >
++            <img src={url} alt={name} />
++          </button>
++          <ImagePreview
++            open={viewer != null}
++            onClose={() => setViewer(null)}
++            items={[{ src: url, alt: name }]}
++            origin={viewer}
++          />
++        </div>
++      ) : broken ? (
++        <FileState failure={IMAGE_UNREADABLE} onRetry={() => void q.refetch()} />
++      ) : q.error ? (
++        <FileState failure={worktreeFileFailure(q.error)} onRetry={() => void q.refetch()} />
++      ) : (
++        <div className="wt-diff-empty">Loading file…</div>
++      )}
++    </>
++  );
++}
++
++function FileState({ failure, onRetry }: { failure: WorktreeFileFailure; onRetry?: () => void }) {
++  return (
++    <div className="wt-preview-state">
++      <div className="wt-preview-state-title">{failure.title}</div>
++      <div className="wt-preview-state-detail">{failure.detail}</div>
++      {failure.canRetry && onRetry && (
++        <Button size="small" onClick={onRetry}>
++          Retry
++        </Button>
++      )}
++    </div>
++  );
++}
++
++/** An object URL for the blob while it is shown, revoked when the blob changes or the pane goes. */
++function useObjectUrl(blob: Blob | undefined): string | null {
++  const [url, setUrl] = useState<string | null>(null);
++  useEffect(() => {
++    if (!blob) {
++      setUrl(null);
++      return;
++    }
++    const made = URL.createObjectURL(blob);
++    setUrl(made);
++    return () => URL.revokeObjectURL(made);
++  }, [blob]);
++  return url;
++}
++
++/** Hand the bytes to the browser as a download under the file's own name. */
++function saveBlob(blob: Blob, name: string): void {
++  const href = URL.createObjectURL(blob);
++  const a = document.createElement('a');
++  a.href = href;
++  a.download = name;
++  document.body.appendChild(a);
++  a.click();
++  a.remove();
++  setTimeout(() => URL.revokeObjectURL(href), 10_000);
++}
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index b71961b..c709b30 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -3990,6 +3990,80 @@ button.toast--pill:focus-visible {
+   color: var(--text-3);
+   font-size: 13px;
+ }
++/* A binary file's preview (WorktreeFilePreview): its kind and size in the pane head, the picture
++   fitted to the pane's width below (never enlarged past its own size), or a state in its place. */
++.wt-preview-meta {
++  flex: none;
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  color: var(--text-3);
++  font-size: 12px;
++  font-variant-numeric: tabular-nums;
++}
++.wt-preview-kind {
++  padding: 1px 6px;
++  border-radius: 4px;
++  background: var(--fill-inset);
++  color: var(--text-2);
++  font-size: 10.5px;
++  font-weight: 600;
++}
++.wt-preview-body {
++  flex: 1 1 auto;
++  min-height: 0;
++  overflow: auto;
++  padding: 16px;
++  background: var(--bg-sunken);
++  text-align: center;
++}
++.wt-preview-img {
++  display: inline-block;
++  max-width: 100%;
++  padding: 0;
++  border: 0;
++  background: transparent;
++  cursor: zoom-in;
++  vertical-align: top;
++}
++.wt-preview-img img {
++  display: block;
++  max-width: 100%;
++  height: auto;
++  border-radius: 6px;
++  box-shadow: 0 0 0 1px var(--border-subtle);
++}
++.wt-preview-img:focus-visible {
++  outline: 2px solid var(--brand);
++  outline-offset: 2px;
++  border-radius: 6px;
++}
++.wt-preview-state {
++  flex: 1 1 auto;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  padding: 32px;
++  text-align: center;
++}
++.wt-preview-state-title {
++  color: var(--text-1);
++  font-size: 14px;
++  font-weight: 600;
++}
++.wt-preview-state-detail {
++  max-width: 480px;
++  margin-bottom: 6px;
++  color: var(--text-3);
++  font-size: 13px;
++}
++.wt-preview-state-error {
++  max-width: 420px;
++  color: var(--error);
++  font-size: 12.5px;
++}
+ /* Narrow screens: stack the file list above the diff instead of a side rail. */
+ @media (max-width: 700px) {
+   .wt-diff-body {
+diff --git a/src/web/src/lib/queries.ts b/src/web/src/lib/queries.ts
+index 003a128..b2e3f5f 100644
+--- a/src/web/src/lib/queries.ts
++++ b/src/web/src/lib/queries.ts
+@@ -19,6 +19,7 @@ import {
+   getSession,
+   getSessionDiff,
+   getSessionRequest,
++  getWorktreeFile,
+   listShareLinks,
+   listAccessTokens,
+   type SessionFolder,
+@@ -484,6 +485,21 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
+     enabled: id != null,
+   });
+ 
++/**
++ * One changed file's current bytes from the session's worktree, for the diff drawer's preview of a
++ * binary file. Nested under the session's key like its diff, so a turn end re-reads an open picture
++ * the agent may have redrawn. No automatic retry: the server already waits up to 40s on the runner,
++ * and the preview offers Retry. Dropped a minute after the drawer stops showing it, so flipping back
++ * shows the last read at once while paging through large images never holds them all.
++ */
++export const worktreeFileQuery = (sessionId: string, path: string) =>
++  queryOptions({
++    queryKey: ['session', sessionId, 'worktree-file', path] as const,
++    queryFn: ({ signal }) => getWorktreeFile(sessionId, path, signal),
++    retry: false,
++    gcTime: 60_000,
++  });
++
+ /**
+  * Per-label task progress for the Batches view, scoped to a list when one is open.
+  *
+diff --git a/src/web/src/lib/worktreeFile.ts b/src/web/src/lib/worktreeFile.ts
+new file mode 100644
+index 0000000..2a7eee4
+--- /dev/null
++++ b/src/web/src/lib/worktreeFile.ts
+@@ -0,0 +1,75 @@
++import { ApiError } from '../api';
++
++/** A file the diff drawer can draw: the formats every browser decodes. The extension is all there is
++ *  before the bytes are read, and it decides whether they are read at all — anything else (an
++ *  archive, a font, a PDF, HEIC that only Safari draws) is offered as a download instead. */
++export function isDrawableImage(path: string): boolean {
++  return /\.(?:png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(path);
++}
++
++/** Why a worktree file can't be shown, and whether reading it again can help. */
++export interface WorktreeFileFailure {
++  title: string;
++  detail: string;
++  canRetry: boolean;
++}
++
++// The native clients' words (OrbitKit WorktreeFileFailure, Android's twin), so one file reads the same
++// on every client.
++export const FILE_DELETED: WorktreeFileFailure = {
++  title: 'File deleted',
++  detail: 'This file is no longer in the current worktree.',
++  canRetry: false,
++};
++
++export const IMAGE_UNREADABLE: WorktreeFileFailure = {
++  title: "Couldn't preview image",
++  detail: 'The image may be incomplete or damaged. Try reading the file again.',
++  canRetry: true,
++};
++
++/** A failed read of GET /sessions/:id/worktree-file, by the status the server answered. */
++export function worktreeFileFailure(error: unknown): WorktreeFileFailure {
++  switch (error instanceof ApiError ? error.status : 0) {
++    case 404:
++      return {
++        title: 'File not found',
++        detail: 'The file may have moved or been removed from the current worktree.',
++        canRetry: true,
++      };
++    case 413:
++      return {
++        title: 'File too large',
++        detail: 'This file exceeds the download limit. Open it on the runner instead.',
++        canRetry: false,
++      };
++    case 503:
++      return {
++        title: 'Runner unavailable',
++        detail: 'The runner is offline or cannot read this file right now. Try again when it is connected.',
++        canRetry: true,
++      };
++    case 504:
++      return {
++        title: 'File request timed out',
++        detail: 'The runner did not return this file in time. Try again.',
++        canRetry: true,
++      };
++    case 400:
++    case 403:
++      return { title: 'File unavailable', detail: (error as ApiError).message, canRetry: false };
++    default:
++      return {
++        title: "Couldn't load file",
++        detail: error instanceof Error && error.message ? error.message : 'Something went wrong. Try again.',
++        canRetry: true,
++      };
++  }
++}
++
++/** "412 KB", "3.4 MB": a file's size as the preview's head states it. */
++export function formatFileSize(bytes: number): string {
++  if (bytes < 1024) return `${bytes} B`;
++  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
++  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
++}

@@ -250,9 +250,10 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertNil(ProviderPools.spentNote(stuck, now: now))
     }
 
-    func testAResetTimeIsHoursAndMinutesWithinADayAndGetsItsDayBeyond() {
+    func testAResetTimeIsHoursAndMinutesTodayAndGetsItsDayOnAnyOtherDay() {
         XCTAssertEqual(ProviderPools.formatResetTime("2026-09-25T10:30:00.000Z", now: now, timeZone: utc), "10:30")
-        XCTAssertEqual(ProviderPools.formatResetTime("2026-09-26T08:59:00Z", now: now, timeZone: utc), "08:59")
+        // Tomorrow morning is under a day out: its bare time would read as this morning's, already past.
+        XCTAssertEqual(ProviderPools.formatResetTime("2026-09-26T08:59:00Z", now: now, timeZone: utc), "Sat 08:59")
         XCTAssertEqual(ProviderPools.formatResetTime("2026-09-26T09:00:00.000Z", now: now, timeZone: utc), "Sat 09:00")
         XCTAssertNil(ProviderPools.formatResetTime("soon", now: now, timeZone: utc))
     }

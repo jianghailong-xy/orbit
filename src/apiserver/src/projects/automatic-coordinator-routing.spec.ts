@@ -80,6 +80,20 @@ test('a delivery review is a kind the coordinator carries, with the doors any ca
   );
 });
 
+test('work that reached main without the owner\'s confirmation is the fifth owner item, by its own name '
+  + '(§10.7, owner 2026-10-28)', () => {
+  // The owner's from birth (DEFAULT), like a merge approval: not an escalation, and not nothing.
+  assert.equal(
+    ownerItemKind({ kind: 'LANDED_WITHOUT_CONFIRMATION', assignee: 'OWNER', assigneeReason: 'DEFAULT' }),
+    'LANDED_WITHOUT_CONFIRMATION',
+  );
+  assert.equal(
+    ownerItemKind({ kind: 'LANDED_WITHOUT_CONFIRMATION', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }),
+    null,
+    'an item with the coordinator is not the owner\'s, whatever its kind',
+  );
+});
+
 const reviewPayload = {
   reason: 'OUTSIDE_DECLARED_SCOPE',
   paths: ['src/runner-go/worktree.go', 'src/shared/src/project-done.ts'],

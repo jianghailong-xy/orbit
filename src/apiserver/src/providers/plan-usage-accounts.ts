@@ -187,6 +187,9 @@ export interface AccountMove {
   paused?: boolean;
   /** Left because it was on a Default the owner removed from Orbit (removedDefaultMove). */
   defaultRemoved?: boolean;
+  /** Left because the account it was on is signed out: its runner reports it so, or it refused the
+   *  session's sign-in (accountAfterSignOut). */
+  signedOut?: boolean;
 }
 
 /**
@@ -230,6 +233,10 @@ function removedDefaultMove(
  * failed turn it costs first. Null when the session is pinned, its workspace decides, its account is
  * not known to be spent (a window at 100% whose reset has not passed), or no other account has room.
  *
+ * An account the runner reports signed out is left the same way. Nothing runs on it until somebody
+ * signs it in again, and on 2026-10-31 a session stayed on one for over an hour after its login lapsed,
+ * beside two accounts that were signed in: its next message failed at the runner's sign-in check.
+ *
  * A session on a Default the owner removed from Orbit moves whatever else holds: pinned or not, and
  * whether or not the pick has room (removedDefaultMove).
  */
@@ -246,10 +253,12 @@ export function accountBeforeDispatch(
   const from = runAccount(engine, workspace?.env, { [ACCOUNT_CHOICE[engine]]: session.account }, runner, now);
   if (!from) return null;
   const usage = weighedPlanUsage(runner?.planUsage, runner?.engines);
+  const accounts = accountsOn(engine, runner, now);
   const paused = runnerAccountPausedUntil(runner?.accountPauses, engine, from, now) !== null;
-  if (!paused && !planUsageBlockedUntil(usage, engine, now, from)) return null;
-  const to = accountToMoveTo(engine, accountsOn(engine, runner, now), usage, now, from);
-  return to ? { from, to, ...(paused ? { paused: true } : {}) } : null;
+  const signedOut = accounts?.find((account) => account.id === from)?.auth === 'no';
+  if (!paused && !signedOut && !planUsageBlockedUntil(usage, engine, now, from)) return null;
+  const to = accountToMoveTo(engine, accounts, usage, now, from);
+  return to ? { from, to, ...(paused ? { paused: true } : signedOut ? { signedOut: true } : {}) } : null;
 }
 
 export function accountAfterUsageLimit(
@@ -267,6 +276,25 @@ export function accountAfterUsageLimit(
   const usage = weighedPlanUsage(runner?.planUsage, runner?.engines);
   const to = accountToMoveTo(engine, accountsOn(engine, runner, now), usage, now, from);
   return to ? { from, to } : null;
+}
+
+/**
+ * Where a built-in session goes when the account it ran on refused its sign-in. Either the runtime
+ * said "Failed to authenticate", or the runner found the account signed out before it could start the
+ * engine. The answer is accountAfterUsageLimit's: another of the runner's accounts that can run now,
+ * for a session on Automatic whose workspace leaves the account to Orbit. The account it ran on is
+ * left whatever the runner last reported of it, because that report can be minutes older than the
+ * refusal. Null when the session stays; then signing that account in again is the remedy.
+ */
+export function accountAfterSignOut(
+  engine: AccountEngine,
+  session: { account?: string | null; pinned?: boolean },
+  workspace: AccountWorkspace | null | undefined,
+  runner: AccountRunner | null | undefined,
+  now: Date,
+): AccountMove | null {
+  const move = accountAfterUsageLimit(engine, session, workspace, runner, now);
+  return move && !move.defaultRemoved ? { ...move, signedOut: true } : move;
 }
 
 /**
@@ -308,7 +336,8 @@ export function accountLabel(engine: AccountEngine, id: string, runner: NamedRun
  * The transcript line for a session moved off an account whose usage limit it hit — the twin of
  * pool-select.ts poolSwitchNotice, in the same words, and like it never a possessive on a label. Without
  * it the quota gauge jumping between two turns reads as a broken gauge. A session moved off a Default the
- * owner removed from Orbit is told so, by the name Default goes by.
+ * owner removed from Orbit is told so, by the name Default goes by, and one moved off a signed-out
+ * account is told that.
  */
 export function accountSwitchNotice(
   engine: AccountEngine,
@@ -317,6 +346,9 @@ export function accountSwitchNotice(
 ): string {
   if (move.defaultRemoved) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is no longer used by Orbit`;
+  }
+  if (move.signedOut) {
+    return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is signed out`;
   }
   return move.paused
     ? `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is paused`

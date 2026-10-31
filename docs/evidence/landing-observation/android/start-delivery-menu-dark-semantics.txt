@@ -1,0 +1,190 @@
+Printing with useUnmergedTree = 'false'
+1) Node #1448 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #1501 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #1502 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=117.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #1503 at (l=32.0, t=32.0, r=790.0, b=2285.0)px, Tag: 'start-card'
+          |-Node #1505 at (l=32.0, t=32.0, r=66.0, b=78.0)px
+          | ClearAndSetSemantics = 'true'
+          |-Node #1506 at (l=78.0, t=35.0, r=790.0, b=75.0)px
+          | Text = '[Start this project?]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1508 at (l=32.0, t=98.0, r=316.0, b=146.0)px
+          | Text = '[Checkout redesign]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1509 at (l=32.0, t=150.0, r=403.0, b=180.0)px, Tag: 'start-card-asked'
+          | Text = '[The coordinator asked 12m ago]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1510 at (l=32.0, t=200.0, r=790.0, b=316.0)px
+          |  |-Node #1512 at (l=56.0, t=224.0, r=195.0, b=254.0)px
+          |  | Text = '[Coordinator]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1513 at (l=56.0, t=262.0, r=537.0, b=292.0)px, Tag: 'start-card-why-text'
+          |    Text = '[The tasks are filed and the criteria are set.]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1514 at (l=32.0, t=348.0, r=301.0, b=373.0)px
+          | Text = '[DONE WHEN · 1 CRITERION]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1516 at (l=32.0, t=393.0, r=60.0, b=423.0)px
+          | Text = '[1]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1517 at (l=76.0, t=393.0, r=790.0, b=441.0)px, Tag: 'start-card-criterion:0'
+          | Text = '[A buyer can pay with a saved card in two taps.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1518 at (l=32.0, t=461.0, r=790.0, b=563.0)px
+          | Text = '[Orbit derives done from these 1 criteria and nothing else. If they change later, it asks you to confirm the new version — the project keeps running.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1519 at (l=32.0, t=595.0, r=168.0, b=620.0)px
+          | Text = '[HOW IT RUNS]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1520 at (l=32.0, t=640.0, r=790.0, b=1679.0)px
+          |  |-Node #1523 at (l=56.0, t=688.0, r=662.0, b=736.0)px
+          |  | Text = '[Automatic]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1524 at (l=662.0, t=680.0, r=766.0, b=744.0)px, Tag: 'start-card-automatic'
+          |  | ContentDescription = '[Automatic]'
+          |  | Focused = 'false'
+          |  | Role = 'Switch'
+          |  | ToggleableState = 'On'
+          |  | Actions = [OnClick, RequestFocus]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1526 at (l=56.0, t=772.0, r=766.0, b=838.0)px, Tag: 'start-card-automatic-says'
+          |  | Text = '[The coordinator decides when each task is done. Each merge into main still asks you.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1527 at (l=76.0, t=866.0, r=746.0, b=1051.0)px, Tag: 'start-card-comes-to-you'
+          |  |  |-Node #1528 at (l=76.0, t=866.0, r=229.0, b=891.0)px
+          |  |  | Text = '[COMES TO YOU]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #1530 at (l=76.0, t=901.0, r=85.0, b=931.0)px
+          |  |  | ClearAndSetSemantics = 'true'
+          |  |  |-Node #1531 at (l=99.0, t=901.0, r=574.0, b=931.0)px
+          |  |  | Text = '[P4 · Pay with a saved card · you confirm it]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #1533 at (l=76.0, t=941.0, r=85.0, b=971.0)px
+          |  |  | ClearAndSetSemantics = 'true'
+          |  |  |-Node #1534 at (l=99.0, t=941.0, r=350.0, b=971.0)px
+          |  |  | Text = '[Each merge into main]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #1536 at (l=76.0, t=981.0, r=85.0, b=1011.0)px
+          |  |  | ClearAndSetSemantics = 'true'
+          |  |  |-Node #1537 at (l=99.0, t=981.0, r=393.0, b=1011.0)px
+          |  |  | Text = '[Any change to the criteria]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #1539 at (l=76.0, t=1021.0, r=85.0, b=1051.0)px
+          |  |  | ClearAndSetSemantics = 'true'
+          |  |  |-Node #1540 at (l=99.0, t=1021.0, r=498.0, b=1051.0)px
+          |  |    Text = '[Problems it can’t resolve within 2 h]'
+          |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1543 at (l=56.0, t=1117.0, r=448.0, b=1165.0)px
+          |  | Text = '[Tasks land on]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1545 at (l=448.0, t=1101.0, r=782.0, b=1181.0)px, Tag: 'start-card-line'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Directly into main ▾]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1551 at (l=56.0, t=1215.0, r=636.0, b=1263.0)px
+          |  | Text = '[Main branch]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1552 at (l=636.0, t=1199.0, r=782.0, b=1279.0)px, Tag: 'start-card-main-branch'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[main]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1559 at (l=56.0, t=1321.0, r=521.0, b=1369.0)px
+          |  | Text = '[Delivery]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1561 at (l=521.0, t=1305.0, r=782.0, b=1385.0)px, Tag: 'start-card-delivery'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Orbit lands it ▾]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1564 at (l=56.0, t=1393.0, r=782.0, b=1459.0)px, Tag: 'start-card-delivery-hint'
+          |  | Text = '[The agent doesn’t push to main: Orbit lands its branch once the work is accepted.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1567 at (l=56.0, t=1497.0, r=766.0, b=1545.0)px, Tag: 'start-card-merge-check'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Merge check, Set]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1573 at (l=56.0, t=1599.0, r=175.0, b=1647.0)px
+          |  | Text = '[At most]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1575 at (l=288.0, t=1599.0, r=538.0, b=1647.0)px, Tag: 'start-card-at-most'
+          |  | Text = '[3 tasks at a time]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #1576 at (l=546.0, t=1575.0, r=778.0, b=1671.0)px
+          |     |-Node #1577 at (l=546.0, t=1583.0, r=662.0, b=1663.0)px, Tag: 'start-card-at-most-minus'
+          |     | ContentDescription = '[At most: fewer]'
+          |     | Focused = 'false'
+          |     | Role = 'Button'
+          |     | Text = '[−]'
+          |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |     | MergeDescendants = 'true'
+          |     |-Node #1580 at (l=662.0, t=1583.0, r=778.0, b=1663.0)px, Tag: 'start-card-at-most-plus'
+          |       ContentDescription = '[At most: more]'
+          |       Focused = 'false'
+          |       Role = 'Button'
+          |       Text = '[+]'
+          |       Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |       MergeDescendants = 'true'
+          |-Node #1583 at (l=32.0, t=1699.0, r=790.0, b=1801.0)px, Tag: 'start-card-note'
+          | Text = '[Automatic is on by default. The rest is the coordinator’s suggestion. You can change any of these later on the project page.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1584 at (l=32.0, t=1833.0, r=315.0, b=1858.0)px
+          | Text = '[PLAN · 4 TASKS IN 3 LEVELS]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #1585 at (l=32.0, t=1878.0, r=790.0, b=2124.0)px
+          |  |-Node #1587 at (l=56.0, t=1902.0, r=766.0, b=1942.0)px, Tag: 'start-card-level:1'
+          |  | Text = '[1, P1, Ship the delivery mode picker, Now]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1593 at (l=56.0, t=1958.0, r=766.0, b=1998.0)px, Tag: 'start-card-level:2'
+          |  | Text = '[2, P2 · P3, 2 in parallel]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1598 at (l=56.0, t=2014.0, r=766.0, b=2054.0)px, Tag: 'start-card-level:3'
+          |  | Text = '[3, P4, Pay with a saved card, You]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #1605 at (l=56.0, t=2070.0, r=195.0, b=2100.0)px, Tag: 'start-card-view-tasks'
+          |    Focused = 'false'
+          |    Role = 'Button'
+          |    Text = '[View tasks ›]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #1606 at (l=32.0, t=2144.0, r=790.0, b=2240.0)px, Tag: 'start-card-confirm'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Text = '[Start the project]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #1609 at (l=32.0, t=2260.0, r=790.0, b=2285.0)px, Tag: 'start-card-caption'
+            Text = '[Starts P1 now · confirms this criterion · seal dddddddddddd]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+2) Node #1611 at (l=0.0, t=0.0, r=560.0, b=242.0)px
+ |-Node #1612 at (l=0.0, t=0.0, r=560.0, b=242.0)px
+   [IsPopup]
+    |-Node #1613 at (l=0.0, t=0.0, r=560.0, b=242.0)px
+      IsContainer = 'true'
+       |-Node #1614 at (l=0.0, t=16.0, r=560.0, b=226.0)px
+         IsTraversalGroup = 'true'
+         VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+         Actions = [ScrollBy, ScrollByOffset]
+          |-Node #1615 at (l=0.0, t=16.0, r=560.0, b=121.0)px, Tag: 'start-card-delivery:PLATFORM'
+          | Focused = 'false'
+          | Text = '[✓ Orbit lands it, The agent doesn’t push to main: Orbit lands its branch once the work is accepted.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          | MergeDescendants = 'true'
+          |-Node #1620 at (l=0.0, t=121.0, r=560.0, b=226.0)px, Tag: 'start-card-delivery:AGENT_PUSH'
+            Focused = 'false'
+            Text = '[The agent pushes it, The agent pushes to main itself, and Orbit checks the commits are there.]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+            MergeDescendants = 'true'

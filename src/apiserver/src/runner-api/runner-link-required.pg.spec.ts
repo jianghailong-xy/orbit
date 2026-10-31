@@ -7,10 +7,10 @@
  *
  *   1. 0446 made the one table it describes.
  *   2. Never switched, it reads off on the administrators' route and on the gateway's, and every one of
- *      RunnerApiController's 52 routes serves an HTTPS call as it always has: none answers 426.
+ *      RunnerApiController's 53 routes serves an HTTPS call as it always has: none answers 426.
  *   3. Only a signed-in administrator reads or switches it: not a member, not an access token, not the gateway's secret,
  *      not anybody unsigned; a body that is not a boolean is refused, and turning it off while it is off writes nothing.
- *   4. Switched on — on the replica that took the PUT at once, on the other within a second — each of the 47 daemon
+ *   4. Switched on — on the replica that took the PUT at once, on the other within a second — each of the 48 daemon
  *      routes, read off the controller, answers an HTTPS call that names no caller 426 UPGRADE_REQUIRED, saying why and
  *      to run `orbit upgrade`. A token the runner guard refuses is still answered 401. Asking for it again writes nothing.
  *   5. Switched on, what is never refused: the 5 routes kept on HTTPS (registration, the device flow, the attachments,
@@ -154,8 +154,8 @@ test('RUNNER_LINK_REQUIRED: the daemon routes refuse HTTPS while it is on, and s
     await sql.end().catch(() => undefined);
   });
 
-  assert.equal(ROUTES.length, 52, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
-  assert.equal(DAEMON_ROUTES.length, 47);
+  assert.equal(ROUTES.length, 53, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
+  assert.equal(DAEMON_ROUTES.length, 48);
 
   // ── accounts, the machine, its checkout and a session on it ──────────────────────────────────────────────────────
   const account = async (name: string, role: 'ADMIN' | 'MEMBER') => {

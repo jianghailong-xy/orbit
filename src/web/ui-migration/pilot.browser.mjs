@@ -458,6 +458,8 @@ test.describe('workspace account pilot', () => {
     await page.goto(PILOT_PATHS.runner);
     await page.getByRole('button', { name: /Add workspace/ }).click();
     await page.getByPlaceholder('e.g. tea-cli builder').fill('Antigravity pilot');
+    // A new workspace says which folder it runs in: Create waits for both.
+    await page.getByPlaceholder('/path/to/project on the runner', { exact: true }).fill('/home/orbit/antigravity-pilot');
     await page.locator('.rd-adv-toggle').click();
     const account = page.locator('.rd-form-field').filter({ has: page.locator('.rd-form-label', { hasText: /^Antigravity account$/ }) });
     await expect(account.locator('.rd-codex-account')).toContainText('Automatic');

@@ -149,6 +149,36 @@ describe('the cards the owner presses, on the line', () => {
     expect(onlyEscalation).toContain('Escalated to you · Checks failed');
   });
 
+  // §10.7 / §7.6 V13 (owner 2026-10-28): work that reached main without the owner's confirmation is
+  // theirs from birth — no escalation marker — and the line names it by the kind word the server's
+  // `need` carries, which all three clients copy verbatim.
+  it('names work that reached main without the owner’s confirmation by its kind word', () => {
+    const landed = item({
+      itemId: '4pULanded000000000001',
+      kind: 'LANDED_WITHOUT_CONFIRMATION',
+      title: 'Reached main without your confirmation: Fix the login redirect',
+      detailLine: '7d3e9b01c2a4 is on main · seen by Orbit',
+      assigneeReason: 'DEFAULT',
+      escalatedAt: null,
+      waitingSince: '2026-10-29T01:00:00.000Z',
+      actions: ['ACCEPT', 'OPEN_TASK_SESSION'],
+      requiredAction: 'This work reached main without your confirmation — accept it, or use Chat about this '
+        + 'to have the coordinator file a task that reverts it.',
+    });
+    const html = renderToStaticMarkup(
+      <DecisionStrip
+        queue={queue()}
+        open={false}
+        hasCard={() => true}
+        onToggle={() => {}}
+        needsYou={[{ ...pointer(landed, false), need: 'Landed without your confirmation' }]}
+      />,
+    );
+    expect(html).toContain('>Landed without your confirmation<');
+    expect(html).toContain('aria-label="1 waiting: Landed without your confirmation"');
+    expect(html).not.toContain('Escalated to you');
+  });
+
   it('keeps needsYou to anchored exceptions, not question or merge cards', () => {
     const html = renderToStaticMarkup(
       <DecisionStrip

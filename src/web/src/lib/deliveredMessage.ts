@@ -22,7 +22,7 @@
  * older reading of the text to fall back on.
  */
 
-import type { SessionMessageCard } from '@orbit/shared';
+import { isAuthErrorText, isRetryableApiErrorText, isUsageLimitErrorText, type SessionMessageCard } from '@orbit/shared';
 import { parseSessionMessage } from './sessionMessage';
 
 /**
@@ -80,11 +80,8 @@ export function lastTypedUserMessage(
   // image-only turn has a non-empty echo made solely of delivery context; choosing first and
   // splitting second would stop there and hide the older message that can actually be retried.
   for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type !== 'user') continue;
-    const echoed = (events[i].payload as { text?: unknown } | undefined)?.text;
-    if (typeof echoed !== 'string') continue;
-    const typed = splitRecordedNote(events[i].payload)?.text ?? echoed;
-    if (typed.trim()) {
+    const typed = typedText(events[i]);
+    if (typed) {
       const sessionMessage = parseSessionMessage(events[i].payload);
       return {
         text: typed,
@@ -97,6 +94,44 @@ export function lastTypedUserMessage(
     text: numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '',
     attachmentIds: [],
   };
+}
+
+/** What a person typed into a `user` event, without the note delivery appended; null when the
+ *  event is not one, or carries no words of theirs. */
+function typedText(event: { type: string; payload?: unknown }): string | null {
+  if (event.type !== 'user') return null;
+  const echoed = (event.payload as { text?: unknown } | undefined)?.text;
+  if (typeof echoed !== 'string') return null;
+  const typed = splitRecordedNote(event.payload)?.text ?? echoed;
+  return typed.trim() ? typed : null;
+}
+
+/** A failure the transcript's cards offer Retry on: a refused sign-in, a spent quota, or a provider
+ *  that could not answer, said in a workspace's own reply or in an `error` event. */
+function retryableFailure(event: { type: string; payload?: unknown }): boolean {
+  const payload = (event.payload ?? {}) as { text?: unknown; message?: unknown; parentToolUseId?: unknown };
+  if (payload.parentToolUseId) return false;
+  const text = event.type === 'assistant' ? payload.text : event.type === 'error' ? payload.message : undefined;
+  return typeof text === 'string' && (isAuthErrorText(text) || isUsageLimitErrorText(text) || isRetryableApiErrorText(text));
+}
+
+/**
+ * Whether one of those failures came after the latest typed message had finished its turn — a
+ * `turn_end` lies between them. Then the failure is about a message the window does not hold, and
+ * its latest words are not what a retry would re-send. The message may be one the runner took and
+ * lost before it could echo it: its sign-in check ends the run before any engine starts, and on
+ * 2026-10-31 the card quoted the answered Watch notice above it instead. Or the turn may be one
+ * nobody sent. Only the server knows which message a retry re-sends then (`getSessionRetryMessage`).
+ */
+export function failureFollowsAnsweredMessage(events: readonly { type: string; payload?: unknown }[]): boolean {
+  let typed = events.length - 1;
+  while (typed >= 0 && !typedText(events[typed])) typed--;
+  let ended = false;
+  for (let i = typed + 1; i < events.length; i++) {
+    if (events[i].type === 'turn_end') ended = true;
+    else if (ended && retryableFailure(events[i])) return true;
+  }
+  return false;
 }
 
 /** The latest authored user text in echoed events, with the first-turn prompt fallback. */

@@ -1,0 +1,125 @@
+Printing with useUnmergedTree = 'false'
+Node #530 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+ |-Node #583 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+   IsContainer = 'true'
+    |-Node #584 at (l=0.0, t=0.0, r=822.0, b=2200.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #585 at (l=32.0, t=32.0, r=790.0, b=1944.0)px, Tag: 'item:34R29ItemUnobservedOwn2'
+          |-Node #588 at (l=112.0, t=60.0, r=361.0, b=100.0)px, Tag: 'item:34R29ItemUnobservedOwn2:title'
+          | Text = '[Escalated to you]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #589 at (l=60.0, t=120.0, r=187.0, b=145.0)px
+          | Text = '[FROM ORBIT]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #590 at (l=60.0, t=165.0, r=637.0, b=200.0)px, Tag: 'item:34R29ItemUnobservedOwn2:heading'
+          | Text = '[Now yours — the coordinator handed it over]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #591 at (l=80.0, t=238.0, r=742.0, b=1097.0)px, Tag: 'item:34R29ItemUnobservedOwn2:next'
+          |  |-Node #592 at (l=80.0, t=238.0, r=742.0, b=357.0)px, Tag: 'item:34R29ItemUnobservedOwn2:required'
+          |  | Text = '[This task’s work is not on main yet — record the commit that carries it, or send the task back to push it.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #594 at (l=80.0, t=373.0, r=565.0, b=469.0)px, Tag: 'item:34R29ItemUnobservedOwn2:RETURN_COORDINATOR'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Ask the coordinator again]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #597 at (l=80.0, t=475.0, r=742.0, b=541.0)px, Tag: 'item:34R29ItemUnobservedOwn2:RETURN_COORDINATOR:consequence'
+          |  | Text = '[It goes back to the coordinator with a fresh escalation clock.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #599 at (l=80.0, t=557.0, r=455.0, b=653.0)px, Tag: 'item:34R29ItemUnobservedOwn2:OPEN_TASK_SESSION'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Open task session]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #602 at (l=80.0, t=659.0, r=571.0, b=689.0)px, Tag: 'item:34R29ItemUnobservedOwn2:OPEN_TASK_SESSION:consequence'
+          |  | Text = '[Open the task session to repair the branch.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #604 at (l=80.0, t=713.0, r=287.0, b=793.0)px, Tag: 'item:34R29ItemUnobservedOwn2:OBSERVE'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Observe again]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #607 at (l=80.0, t=807.0, r=693.0, b=837.0)px, Tag: 'item:34R29ItemUnobservedOwn2:OBSERVE:consequence'
+          |  | Text = '[An observation of the line is queued with your reason.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #609 at (l=80.0, t=861.0, r=251.0, b=941.0)px, Tag: 'item:34R29ItemUnobservedOwn2:CANCEL_TASK'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Cancel task]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #612 at (l=80.0, t=955.0, r=614.0, b=985.0)px, Tag: 'item:34R29ItemUnobservedOwn2:CANCEL_TASK:consequence'
+          |  | Text = '[The task is cancelled and its open item closes.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #613 at (l=80.0, t=1001.0, r=405.0, b=1097.0)px
+          |    Focused = 'false'
+          |    Role = 'Button'
+          |    Text = '[Chat about this]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #616 at (l=60.0, t=1135.0, r=762.0, b=1244.0)px, Tag: 'item:34R29ItemUnobservedOwn2:facts'
+          |  |-Node #617 at (l=60.0, t=1135.0, r=646.0, b=1170.0)px
+          |  | Text = '[Not on main yet: Draw the observation cards]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #618 at (l=60.0, t=1178.0, r=762.0, b=1244.0)px
+          |    Text = '[Its commit was not found on the line · delivered 3b7e0d91a6c2]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #619 at (l=60.0, t=1264.0, r=762.0, b=1332.0)px, Tag: 'item:34R29ItemUnobservedOwn2:handling'
+          |  |-Node #620 at (l=60.0, t=1264.0, r=762.0, b=1294.0)px, Tag: 'item:34R29ItemUnobservedOwn2:fact:Handling'
+          |  |  |-Node #621 at (l=60.0, t=1264.0, r=184.0, b=1294.0)px
+          |  |  | Text = '[Handling]'
+          |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |  |-Node #623 at (l=196.0, t=1264.0, r=693.0, b=1294.0)px
+          |  |    Focused = 'false'
+          |  |    Actions = [RequestFocus]
+          |  |     |-Node #625 at (l=196.0, t=1264.0, r=693.0, b=1294.0)px
+          |  |       Text = '[Observing main… — running · asked 2m ago]'
+          |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #626 at (l=60.0, t=1302.0, r=762.0, b=1332.0)px, Tag: 'item:34R29ItemUnobservedOwn2:fact:Reason'
+          |     |-Node #627 at (l=60.0, t=1302.0, r=184.0, b=1332.0)px
+          |     | Text = '[Reason]'
+          |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |     |-Node #629 at (l=196.0, t=1302.0, r=722.0, b=1332.0)px
+          |       Focused = 'false'
+          |       Actions = [RequestFocus]
+          |        |-Node #631 at (l=196.0, t=1302.0, r=722.0, b=1332.0)px
+          |          Text = '[I pushed the rebased commit to main by hand]'
+          |          Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #633 at (l=80.0, t=1370.0, r=742.0, b=1853.0)px, Tag: 'item:34R29ItemUnobservedOwn2:observe-panel'
+          |  |-Node #634 at (l=80.0, t=1370.0, r=381.0, b=1405.0)px
+          |  | Text = '[Look at the line again?]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #635 at (l=80.0, t=1417.0, r=742.0, b=1555.0)px
+          |  | Text = '[A runner fetches the line and looks for each finished task’s commit on it. Whatever it finds is recorded as landed, and the tasks waiting on that work start. Your reason goes on the record.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #636 at (l=80.0, t=1567.0, r=742.0, b=1745.0)px, Tag: 'item:34R29ItemUnobservedOwn2:observe-reason'
+          |  | ContentDataType = 'AndroidContentDataType(androidAutofillType=1)'
+          |  | EditableText = 'The runner can reach the repository again — its deploy key was rotated.'
+          |  | Focused = 'true'
+          |  | ImeAction = 'Default'
+          |  | InputText = 'The runner can reach the repository again — its deploy key was rotated.'
+          |  | IsEditable = 'true'
+          |  | Text = '[Why look again?]'
+          |  | TextSelectionRange = 'TextRange(71, 71)'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, InsertTextAtCursor, MagnifierPositionInRoot, OnAutofillText, OnClick, OnLongClick, PasteText, PerformImeAction, RequestFocus, SetSelection, SetText, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #647 at (l=80.0, t=1757.0, r=251.0, b=1853.0)px, Tag: 'item:34R29ItemUnobservedOwn2:observe-back'
+          |  | Focused = 'false'
+          |  | Role = 'Button'
+          |  | Text = '[Back]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |  | MergeDescendants = 'true'
+          |  |-Node #650 at (l=267.0, t=1757.0, r=580.0, b=1853.0)px, Tag: 'item:34R29ItemUnobservedOwn2:observe-confirm'
+          |    Focused = 'false'
+          |    Role = 'Button'
+          |    Text = '[Observe again]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+          |    MergeDescendants = 'true'
+          |-Node #632 at (l=60.0, t=1891.0, r=618.0, b=1916.0)px, Tag: 'item:34R29ItemUnobservedOwn2:owner'
+            Text = '[Owner: you · waiting 1h 10m · came to the owner at 1h 1m]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

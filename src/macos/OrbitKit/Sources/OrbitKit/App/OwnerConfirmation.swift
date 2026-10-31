@@ -262,12 +262,14 @@ public struct OwnerConfirmationBranch: Codable, Equatable, Sendable {
 }
 
 /// How the task's work reaches main once it is DONE: not at all, onto the project's integration
-/// line with main asking the owner again, or onto main by itself once the check is clean. `NONE` is
-/// `landsNothing` here so that it can never be read as an optional's `.none`.
+/// line with main asking the owner again, onto main by itself once the check is clean, or pushed
+/// there by the agent itself in an `AGENT_PUSH` project (§10.5 O-L2). `NONE` is `landsNothing` here
+/// so that it can never be read as an optional's `.none`.
 public enum OwnerConfirmationLanding: String, Codable, Equatable, Sendable {
     case landsNothing = "NONE"
     case lineThenOwner = "LINE_THEN_OWNER"
     case autoMain = "AUTO_MAIN"
+    case agentPushed = "AGENT_PUSHED"
 }
 
 /// The task's run, which its DONE ends, with its `bg_run` jobs still running.
@@ -631,6 +633,9 @@ public enum OwnerConfirmations {
     public static let lineThenOwner =
         "Goes onto the integration line; merging into main asks you again"
     public static let autoMain = "Lands on main by itself if the checks pass"
+    /// An AGENT_PUSH project's task (§10.5 O-L2): no merge card follows the confirmation — the agent
+    /// pushes the work itself, and an observation records the landing once it sees the commit.
+    public static let agentPushed = "Pushed to main by the agent; Orbit records it once it sees the commit there"
     public static let endsSession = "Ends this session"
     /// The four above that name main, said of the project's main branch (`ifConfirmed.mainBranch`):
     /// for a project on main, each says its constant's words.
@@ -645,6 +650,9 @@ public enum OwnerConfirmations {
     }
     public static func autoMain(_ main: String) -> String {
         "Lands on \(main) by itself if the checks pass"
+    }
+    public static func agentPushed(_ main: String) -> String {
+        "Pushed to \(main) by the agent; Orbit records it once it sees the commit there"
     }
 
     /// What the card's mark says about itself, now that an agent's words can stand on it twice — the
@@ -988,7 +996,8 @@ public enum OwnerConfirmations {
     /// project's main branch by name, which the read carries (`mainBranch`).
     ///
     /// The branch row says confirming does not merge it only where the landing is read and is not
-    /// Automatic's — there the DONE does lead to main, as the landing row says.
+    /// Automatic's — there the DONE does lead to main, as the landing row says. An AGENT_PUSH
+    /// project's DONE merges nothing either: its agent pushes, which is what its landing row says.
     public static func ifConfirmedRows(_ ifConfirmed: OwnerConfirmationIfConfirmed?)
         -> [IfConfirmedRow] {
         guard let ifConfirmed else { return [] }
@@ -1006,7 +1015,7 @@ public enum OwnerConfirmations {
         let main = RunSettings.mainBranchName(ifConfirmed.mainBranch)
         if let branch = ifConfirmed.branch, branch.onMain != .yes {
             let unmerged = branch.onMain == .no
-            let staysOff = landing == .landsNothing || landing == .lineThenOwner
+            let staysOff = landing == .landsNothing || landing == .lineThenOwner || landing == .agentPushed
             rows.append(IfConfirmedRow(
                 kind: .branch,
                 lead: unmerged ? notOn(main) : noRecordOn(main),
@@ -1018,6 +1027,8 @@ public enum OwnerConfirmations {
             rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner(main)))
         } else if landing == .autoMain {
             rows.append(IfConfirmedRow(kind: .landing, lead: autoMain(main)))
+        } else if landing == .agentPushed {
+            rows.append(IfConfirmedRow(kind: .landing, lead: agentPushed(main)))
         }
         if let ends = ifConfirmed.endsSession {
             let jobs = ends.runningBgJobs

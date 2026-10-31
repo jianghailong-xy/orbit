@@ -28,7 +28,7 @@ function fixture() {
   let onRead: (turn: Row) => Promise<void> = async () => {};
   const session = {
     id: SESSION, ownerId: OWNER, assignedRunnerId: RUNNER,
-    assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date() },
+    assignedRunner: { id: RUNNER, status: 'ONLINE', lastHeartbeatAt: new Date() },
     changedFiles: [
       { path: 'one/card.png', status: 'A' }, { path: 'two/card.png', status: 'M' },
       { path: 'gone.png', status: 'D' },
@@ -88,17 +88,17 @@ function fixture() {
     }
   };
   const api = new RunnerApiController(db as never, {} as never, {} as never, {} as never, {} as never, {} as never);
-  // The sessions whose runner a request was marked for (RealtimeService.markSessionRunnerChanged): the runner's
-  // heartbeat hands the request over, and over the runner link it is told so.
-  const marked: string[] = [];
+  // The runners a request woke (RealtimeService.notifyRunnerWake): the runner's heartbeat hands the request over,
+  // and the wake has it beat now instead of at its next tick.
+  const woken: string[] = [];
   const service = new SessionsService(
     db as never,
     {} as never,
-    { markSessionRunnerChanged: (sessionId: string) => void marked.push(sessionId) } as never,
+    { notifyRunnerWake: (runnerId: string) => void woken.push(runnerId) } as never,
   );
   const realtime = new RealtimeService(db as never, {} as never);
   return {
-    service, realtime, session, marked,
+    service, realtime, session, woken,
     turns: () => turns, attachments: () => attachments,
     onRead: (callback: typeof onRead) => { onRead = callback; },
     addTurn: (content: string, overrides: Row = {}) => {
@@ -136,6 +136,7 @@ test('only the owner can fetch an existing changed file and an offline runner qu
   f.session.assignedRunner.status = 'OFFLINE';
   await assert.rejects(f.service.getWorktreeFileForOwner(OWNER, SESSION, 'one/card.png'), expectStatus(503));
   assert.equal(f.turns().length, 0);
+  assert.deepEqual(f.woken, [], 'a refused request wakes no runner');
 });
 
 test('same-basename files and repeated previews fetch fresh request-scoped bytes, then remove only their temporary upload', async () => {
@@ -156,7 +157,7 @@ test('same-basename files and repeated previews fetch fresh request-scoped bytes
   assert.equal(new Set(f.turns().map((turn) => turn.clientTurnId)).size, 3);
   assert.equal(f.turns().every((turn) => turn.status === 'ANSWERED'), true);
   assert.deepEqual(f.attachments().map((row) => row.id), [transcriptImage.id]);
-  assert.deepEqual(f.marked, [SESSION, SESSION, SESSION], 'each request is marked for the session\'s runner');
+  assert.deepEqual(f.woken, [RUNNER, RUNNER, RUNNER], 'each request wakes the session\'s runner');
 });
 
 test('runner callbacks refuse cross-owner, cross-session, already-linked and older uploads atomically', async () => {

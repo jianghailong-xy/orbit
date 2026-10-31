@@ -140,6 +140,9 @@ func TestSelfUpdateStatusDirNotWritable(t *testing.T) {
 			exe, restarts := runnerOn(t, tc.runs)
 			current := fileBytes(t, exe)
 			setTestInstallable(t, "/usr/local/bin", false)
+			// A machine without a host broker, whatever the one running the tests has at
+			// /run/orbit/host.sock (a broker takes the update instead: selfupdate_test.go).
+			pointRunnerAtBroker(t, filepath.Join(t.TempDir(), "absent.sock"))
 			cp := serveRollout(t, latest, &previous, tc.assign)
 			registerWith(t, cp.srv.URL)
 

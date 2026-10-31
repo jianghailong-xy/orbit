@@ -327,6 +327,8 @@ final class NeedsYouLogicTests: XCTestCase {
             (.coordinatorQuestion, "Question from coordinator", .question),
             (.escalated, "Escalated to you", .warning),
             (.fusePaused, "Paused", .pause),
+            // The fifth (§10.7, owner 2026-10-28): the merge's mark, as Android draws it.
+            (.landedWithoutConfirmation, "Landed without your confirmation", .merge),
         ]
         for (kind, text, glyph) in expected {
             let session = coordinator("c1", project: "Integration line",

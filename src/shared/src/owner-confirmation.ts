@@ -51,8 +51,11 @@ export interface OwnerConfirmationBranch {
  *    asks the owner.
  *  - AUTO_MAIN — it goes onto the project's own branch, and with Automatic on the platform merges
  *    it into main by itself once the check is clean.
+ *  - AGENT_PUSHED — the project delivers by AGENT_PUSH (§10.5 O-L2): the agent pushes its commits to
+ *    main itself, so no merge card follows; Orbit records the landing once an observation sees the
+ *    commit there.
  */
-export type OwnerConfirmationLanding = 'NONE' | 'LINE_THEN_OWNER' | 'AUTO_MAIN';
+export type OwnerConfirmationLanding = 'NONE' | 'LINE_THEN_OWNER' | 'AUTO_MAIN' | 'AGENT_PUSHED';
 
 /** The task's run, which its DONE ends (`end_reason` task_done). */
 export interface OwnerConfirmationEndsSession {
