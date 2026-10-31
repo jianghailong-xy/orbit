@@ -5,7 +5,7 @@ const all = JSON.parse(fs.readFileSync(boxesFile, 'utf8'));
 const out = {};
 for (const [shot, b] of Object.entries(all)) {
   const boxes = {};
-  for (const key of ['nav', 'scroll', 'ws', 'wsHead', 'pj', 'pjHead', 'user', 'firstWsRow', 'firstPjRow']) {
+  for (const key of ['nav', 'scroll', 'lists', 'ws', 'wsHead', 'pj', 'pjHead', 'user', 'firstWsRow', 'firstPjRow']) {
     const v = b[key];
     if (v) boxes[key] = [v.x, v.y, v.w, v.h];
   }

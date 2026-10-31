@@ -27,7 +27,7 @@ function serve(dist) {
   });
 }
 const trees = {};
-for (const t of ['today', 'proto']) trees[t] = await serve(`${K}/${t}/src/web/dist`);
+for (const t of ['today', 'proto', 'proto2']) trees[t] = await serve(`${K}/${t}/src/web/dist`);
 
 // Variants drawn over a build: A = proto with the Workspaces group never scrolling (only Projects
 // do); C = today with each group head held at the top of the one scroll.
@@ -37,6 +37,13 @@ const CSS = {
   C: `.tp-group-head { position: sticky; top: 0; z-index: 1; background: var(--bg-raised); }`,
   // B' = proto with the two groups split 2:1 when both overflow (fr tracks: no hand-back when one is short).
   B2: `.tp-scroll { grid-template-rows: max-content max-content minmax(0, 2fr) max-content minmax(0, 1fr); }`,
+  // PIN = proto2's "only Projects scroll" layout forced on, whatever the measurement says: the rule
+  // taken literally, with no room kept for the projects.
+  PIN: `.tp-lists { display: flex; flex-direction: column; overflow: hidden; scrollbar-gutter: auto; }
+    .tp-lists > * { flex: none; }
+    .tp-lists > .tp-group-workspaces { overflow: hidden; scrollbar-gutter: stable; }
+    .tp-lists > .tp-group-projects { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+    .tp-lists > .tp-group-projects .tp-group-head { position: sticky; top: 0; z-index: 1; background: var(--bg-raised); }`,
 };
 const D = { w: 1440, h: 800 };
 const SCENES = {
@@ -52,6 +59,18 @@ const SCENES = {
   'today-drawer': { tree: 'today', vp: { w: 390, h: 760 }, drawer: true },
   'a-rest': { tree: 'proto', vp: D, css: 'A' },
   'b2-rest': { tree: 'proto', vp: D, css: 'B2' },
+  // The owner's rule (proto2): Workspaces fit -> only Projects scroll; else both scroll as one.
+  'd-tall-rest': { tree: 'proto2', vp: { w: 1440, h: 1300 } },
+  'd-tall-scrolled': { tree: 'proto2', vp: { w: 1440, h: 1300 }, scroll: { sel: 'projects', to: 8 * 36 } },
+  'd-laptop-rest': { tree: 'proto2', vp: D },
+  'd-laptop-scrolled': { tree: 'proto2', vp: D, scroll: { sel: '.tp-lists', to: 330 } },
+  'd-900-literal': { tree: 'proto2', vp: { w: 1440, h: 900 }, css: 'PIN' },
+  'd-900': { tree: 'proto2', vp: { w: 1440, h: 900 } },
+  'd-900-literal-scrolled': { tree: 'proto2', vp: { w: 1440, h: 900 }, css: 'PIN', scroll: { sel: 'projects', to: 4 * 36 } },
+  'd-900-scrolled': { tree: 'proto2', vp: { w: 1440, h: 900 }, scroll: { sel: '.tp-lists', to: 'end' } },
+  'd-1000': { tree: 'proto2', vp: { w: 1440, h: 1000 } },
+  'd-ws-folded': { tree: 'proto2', vp: D, fold: 'Workspaces' },
+  'd-drawer': { tree: 'proto2', vp: { w: 390, h: 760 }, drawer: true },
   'c-scrolled': { tree: 'today', vp: D, css: 'C', scroll: { sel: '.tp-scroll', to: 'projects-head' } },
 };
 
@@ -131,7 +150,7 @@ for (const name of wanted) {
     const visibleRows = (g, sel) => {
       if (!g) return 0;
       const gb = g.getBoundingClientRect();
-      const scroller = g.closest('.tp-scroll');
+      const scroller = g.closest('.tp-lists') ?? g.closest('.tp-scroll');
       const sb = scroller.getBoundingClientRect();
       const top = Math.max(gb.top, sb.top), bottom = Math.min(gb.bottom, sb.bottom, window.innerHeight);
       let n = 0;
@@ -145,6 +164,8 @@ for (const name of wanted) {
       ws: rel(ws), wsHead: rel(ws?.querySelector('.tp-group-head')),
       pj: rel(pj), pjHead: rel(pj?.querySelector('.tp-group-head')),
       user: rel(document.querySelector('.app-nav .tp-user')),
+      lists: rel(document.querySelector('.app-nav .tp-lists')),
+      pinned: !!document.querySelector('.app-nav .tp-lists.pin-workspaces'),
       wsRows: visibleRows(ws, '.tp-workspace-name'), pjRows: visibleRows(pj, '.tp-project'),
       firstWsRow: rel(ws?.querySelector('.tp-item')), firstPjRow: rel(pj?.querySelector('.tp-project')),
       wsScroll: ws ? { top: ws.scrollTop, height: ws.scrollHeight, client: ws.clientHeight } : null,
@@ -153,7 +174,7 @@ for (const name of wanted) {
   }, clip);
   allBoxes[name] = { vp: s.vp, clip, px: { w: Math.round(clip.width * 2), h: Math.round(clip.height * 2) }, ...boxes,
     errors, unhandled: fx.unhandled.slice(0, 8) };
-  console.log(name, JSON.stringify({ wsRows: boxes.wsRows, pjRows: boxes.pjRows, errors: errors.length, unhandled: fx.unhandled.length }));
+  console.log(name, JSON.stringify({ pinned: boxes.pinned, wsRows: boxes.wsRows, pjRows: boxes.pjRows, errors: errors.length, unhandled: fx.unhandled.length }));
   await context.close();
 }
 fs.writeFileSync(boxesFile, JSON.stringify(allBoxes, null, 1));

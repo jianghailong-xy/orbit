@@ -1,9 +1,11 @@
 // Renders docs/mocks/sidebar-projects-scroll/board.html, one PNG per section.b-part (board-N.png).
 // Served over HTTP so the board can fetch its prototype.patch; marks drawn after layout.
-//   node render.mjs <board dir>
+//   node render.mjs <board dir> [board file] [png prefix]
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const K = '/var/tmp/sidebar-scroll-mock';
 const DIR = path.resolve(process.argv[2]);
+const FILE = process.argv[3] ?? 'board.html';
+const PREFIX = process.argv[4] ?? 'board';
 const ROOT = path.dirname(DIR); // docs/mocks, for ../session-list-projects/web.css
 const { chromium } = await import(`${K}/today/node_modules/playwright/index.mjs`);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.patch': 'text/plain; charset=utf-8' };
@@ -23,9 +25,9 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
-await page.goto(`http://127.0.0.1:${server.address().port}/${path.basename(DIR)}/board.html`, { waitUntil: 'networkidle' });
+await page.goto(`http://127.0.0.1:${server.address().port}/${path.basename(DIR)}/${FILE}`, { waitUntil: 'networkidle' });
 await page.evaluate(() => document.fonts.ready);
-await page.waitForFunction(() => document.getElementById('patch')?.textContent.length > 0);
+await page.waitForFunction(() => [...document.querySelectorAll('[data-patch]')].every((e) => e.textContent.length > 0) && (!document.getElementById('patch') || document.getElementById('patch').textContent.length > 0));
 await page.evaluate(() => window.drawMarks());
 const parts = await page.locator('section.b-part').count();
 for (let i = 0; i < parts; i++) {
@@ -35,8 +37,8 @@ for (let i = 0; i < parts; i++) {
     await page.setViewportSize({ width: Math.ceil(Math.max(1500, box.x + box.width + 60)), height: Math.ceil(box.y + box.height + 60) });
     await page.evaluate(() => window.drawMarks());
   }
-  await el.screenshot({ path: path.join(DIR, `board-${i + 1}.png`) });
-  console.log(`board-${i + 1}.png`, Math.round(box.width), 'x', Math.round(box.height));
+  await el.screenshot({ path: path.join(DIR, `${PREFIX}-${i + 1}.png`) });
+  console.log(`${PREFIX}-${i + 1}.png`, Math.round(box.width), 'x', Math.round(box.height));
 }
 console.log('errors', JSON.stringify(errors));
 await browser.close(); server.close();
