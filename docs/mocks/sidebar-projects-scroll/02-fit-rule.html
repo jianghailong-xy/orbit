@@ -46,6 +46,7 @@
 <section id="part-1" class="b-part">
   <h1>Web 侧栏：Workspaces 放得下就只滚 Projects，放不下就一起滚</h1>
   <p class="lede b-w">按你的规则做的原型。导航（Projects / Tasks / Wiki）始终固定。Workspaces 能全放下、而且下面还能给 Projects 留至少 5 行时，Workspaces 也固定，只滚 Projects；否则 Workspaces 和 Projects 作为一个整体滚。每张图都是真实 Web 控制台的截图（静态构建加假数据：今天 = main 91fde3cab，建议 = 同一棵树打上 <code>prototype-2.patch</code>）；13 个 Workspace、24 个项目，名字是示例；红色虚线和数字是标注。上一版（两组各一半）是同一目录的 board-1…4.png。</p>
+  <p class="lede b-w" style="margin-top:-14px"><span class="tag rec">11-01 已定</span> 拍板 1 选<b>照字面</b>：Workspaces 和 Projects 组头放得下，就只滚 Projects（13 个 Workspace 时窗口 799 高起），不另给 Projects 留行；拍板 2 选<b>导航固定</b>。已按此实现；下面的图和 <code>prototype-2.patch</code> 是拍板前的原型（留 5 行）。</p>
 
   <div class="b-row">
     <div>
@@ -152,7 +153,7 @@
     <div>
       <h3 class="b-q">拍板 1 · 「放得下」要给 Projects 留几行（13 个 Workspace 时的分界线）</h3>
       <div class="b-opt b-rec">
-        <h4><span class="tag rec">推荐</span>5 行 · 窗口 980 高起只滚 Projects</h4>
+        <h4>5 行 · 窗口 980 高起只滚 Projects</h4>
         <p class="b-pro">只滚 Projects 时，框里至少 5 行：等你的那几个（排最前）一定看得见。</p>
       </div>
       <div class="b-opt">
@@ -161,14 +162,14 @@
         <p class="b-con">Projects 框最矮 3 行，滚起来有点挤。</p>
       </div>
       <div class="b-opt">
-        <h4><span class="tag no">不推荐</span>照字面 · 799 高起</h4>
+        <h4><span class="tag rec">已选</span>照字面 · 799 高起</h4>
         <p class="b-con">13 寸（800 高）上就只滚 Projects，框里一行都没有；900 高 2.8 行（③ 的 <span class="b-red">1</span>）。</p>
       </div>
     </div>
     <div>
       <h3 class="b-q">拍板 2 · 一起滚的时候，导航跟不跟着滚</h3>
       <div class="b-opt b-rec">
-        <h4><span class="tag rec">推荐</span>固定（图里就是）</h4>
+        <h4><span class="tag rec">已选</span>固定（图里就是）</h4>
         <p class="b-pro">Projects / Tasks / Wiki 永远点得到；两种滚法下导航都在原地，切换时不跳。</p>
         <p class="b-con">一起滚时列表少 125 px 高。</p>
       </div>
