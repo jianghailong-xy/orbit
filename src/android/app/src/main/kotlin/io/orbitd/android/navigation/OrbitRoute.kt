@@ -99,6 +99,9 @@ val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESS
  * spellings of its id are one destination. */
 fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
 
+/** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
+fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
+
 /** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
 val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
 

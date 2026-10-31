@@ -25,7 +25,9 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     parent: CoroutineScope, val target: DraftTarget? = null, private val refresh: () -> Unit = {}) {
     private val job = SupervisorJob(parent.coroutineContext[Job])
     private val scope = CoroutineScope(parent.coroutineContext + job)
-    private val api = ComposerApi(auth, handle, sessionId, target)
+    internal val api = ComposerApi(auth, handle, sessionId, target)
+    /** Set by a bare machine's new session page to decide whether Send holds the message or creates the workspace and session. */
+    var machineSend: ((HeldMessage) -> MachineSend)? = null
     private val key = "composer-v1:${ObjectId.canonical(sessionId) ?: sessionId}"
     private val disk = Mutex()
     private val uploadSlots = Semaphore(2)
@@ -141,10 +143,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 // Keep text editable while uploads finish. Failed or removed uploads cannot be silently sent.
                 while (uploads.isNotEmpty()) uploads.values.toList().joinAll()
                 mutable.update { it.copy(busy = true, waiting = false) }
-                val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
-                if (state.value.draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
+                val draft = state.value.draft
+                check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
+                val detail = if (target?.isMachineDraft == true) {
+                    runCatching { api.detail() }.getOrElse {
+                        val runner = state.value.catalog?.runner
+                        MachineSetup.machineDraft(
+                            target.runnerId.orEmpty(),
+                            runner?.let(RunnerPage::displayName) ?: target.runnerId.orEmpty(),
+                            runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE,
+                        )
+                    }
+                } else api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
+                if (draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
                     // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
-                    val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + state.value.draft.resumeConfig),
+                    val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + draft.resumeConfig),
                         state.value.catalog?.providers.orEmpty()))
                     mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0),
                         notice = "Engine: $engine · Provider: ${detail.text("provider").orEmpty()} · Model: ${detail.text("model").orEmpty()} · " +
@@ -154,31 +167,46 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val endpoint = if (target != null) {
                     check(detail.flag("enabled") != false) { "Workspace is disabled." }; "create"
                 } else sendEndpoint(detail)
-                val draft = state.value.draft
-                check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
                 // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal): the command stays here (A07-5).
                 if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
-                val id = UUID.randomUUID().toString()
-                val body = buildJsonObject {
-                    if (endpoint in setOf("resume", "create")) draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
-                    if (target != null) {
-                        if (draft.resumeConfig["model"] == null) seedModel?.let { put("model", it) }
-                        put("workspaceId", target.workspaceId); target.folderId?.let { put("folderId", it) }
-                        put("prompt", content); put("shell", shell)
-                        draft.resumeConfig.text("account")?.let { account ->
-                            val provider = draft.resumeConfig.text("provider") ?: detail.text("provider")
-                            // codexAccount, claudeAccount, antigravityAccount or kimiAccount: the engines that keep several accounts.
-                            if (provider != null && RunnerPage.keepsAccounts(provider) && account != "automatic") put("${provider}Account", account)
+                var newWorkspace: NewWorkspaceRequest? = null
+                if (target?.isMachineDraft == true) {
+                    val decision = machineSend?.invoke(HeldMessage(content = content, shell = shell, attachments = draft.attachments))
+                        ?: MachineSend.Hold
+                    when (decision) {
+                        MachineSend.Nothing -> return@launch
+                        MachineSend.AlreadyWaiting -> {
+                            OrbitToasts.show(MachineSetupCopy.HELD_ALREADY_WAITING, detail = MachineSetupCopy.HELD_ALREADY_WAITING_DETAIL, tone = ToastTone.INFO)
+                            return@launch
                         }
-                    } else {
-                        if (endpoint == "resume") draft.resumeConfig["account"]?.let { put("account", it) }
-                        put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
-                        if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
+                        MachineSend.Hold -> {
+                            mutable.update {
+                                it.copy(
+                                    draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList()),
+                                    error = null,
+                                    notice = null,
+                                )
+                            }
+                            persist()
+                            return@launch
+                        }
+                        is MachineSend.Create -> newWorkspace = decision.newWorkspace
                     }
+                }
+                val id = UUID.randomUUID().toString()
+                val body = if (target != null) {
+                    buildCreateBody(detail, content, shell, draft.attachments, seedModel, newWorkspace)
+                } else buildJsonObject {
+                    if (endpoint == "resume") {
+                        draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
+                        draft.resumeConfig["account"]?.let { put("account", it) }
+                    }
+                    put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
+                    if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
                 }
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
@@ -409,12 +437,113 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         val engine = (if (target == null) detail.text("engine") else null) ?: state.value.catalog?.providerEngines(provider)?.firstOrNull() ?: return values
         return JsonObject(values + ("engine" to JsonPrimitive(engine)))
     }
+    private suspend fun draftOrSessionDetail(): JsonObject = if (target?.isMachineDraft == true) {
+        runCatching { api.detail() }.getOrElse {
+            val runner = state.value.catalog?.runner
+            MachineSetup.machineDraft(
+                target.runnerId.orEmpty(),
+                runner?.let(RunnerPage::displayName) ?: target.runnerId.orEmpty(),
+                runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE,
+            )
+        }
+    } else api.detail()
+
+    private fun buildCreateBody(
+        detail: JsonObject,
+        content: String,
+        shell: Boolean,
+        attachments: List<StagedAttachment>,
+        seedModel: String?,
+        newWorkspace: NewWorkspaceRequest?,
+    ): JsonObject {
+        val config = state.value.draft.resumeConfig
+        return buildJsonObject {
+            config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
+            if (config["model"] == null) seedModel?.let { put("model", it) }
+            if (newWorkspace != null) {
+                put("assignedRunnerId", target?.runnerId ?: detail.text("runnerId").orEmpty())
+                put("newWorkspace", newWorkspace.toJson())
+                val effective = JsonObject(detail + config)
+                val engine = config.text("engine") ?: state.value.catalog?.engineOf(effective)
+                    ?: detail.text("lastEngine") ?: ProviderEngines.CLAUDE
+                val provider = config.text("provider") ?: detail.text("lastProvider") ?: engine
+                put("engine", engine)
+                put("provider", provider)
+            } else {
+                put("workspaceId", target!!.workspaceId)
+                target.folderId?.let { put("folderId", it) }
+            }
+            put("prompt", content)
+            put("shell", shell)
+            config.text("account")?.let { account ->
+                val provider = config.text("provider") ?: detail.text("lastProvider") ?: detail.text("provider")
+                if (provider != null && RunnerPage.keepsAccounts(provider) && account != "automatic") {
+                    put("${provider}Account", account)
+                }
+            }
+            putJsonArray("attachmentIds") { attachments.mapNotNull { it.remoteId }.forEach { add(it) } }
+        }
+    }
+
+    /**
+     * The message that waited under a machine's setup card, going by itself (rule 6): the composer's current draft is untouched.
+     * Answers null on success, or why it was refused.
+     */
+    suspend fun sendHeld(held: HeldMessage, newWorkspace: NewWorkspaceRequest, seedModel: String? = null): String? {
+        if (target == null) return null
+        mutable.update { it.copy(busy = true, error = null, notice = null) }
+        return try {
+            val detail = draftOrSessionDetail()
+            val body = buildCreateBody(detail, held.content, held.shell, held.attachments, seedModel, newWorkspace)
+            val accepted = api.mutation("create", body)
+            val created = accepted.text("id") ?: error("Creation response has no session id.")
+            mutable.update {
+                it.copy(
+                    draft = it.draft.copy(resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
+                    notice = "Message accepted.",
+                    error = null,
+                    acknowledgementPending = false,
+                    switchNote = null,
+                )
+            }
+            held.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
+            persist()
+            refresh()
+            null
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (e: Exception) {
+            failure(e)
+        } finally {
+            mutable.update { it.copy(busy = false) }
+        }
+    }
+
+    /** A waiting message taken back: its words and files return to the composer under any draft. */
+    fun restoreHeld(held: HeldMessage) {
+        val body = if (held.shell) "!${held.content}" else held.content
+        fun apply(draft: ComposerDraft): ComposerDraft {
+            val next = if (held.content.isEmpty()) draft else draft.under(body)
+            return next.copy(attachments = next.attachments + held.attachments)
+        }
+        if (state.value.loaded) {
+            mutable.update { it.copy(draft = apply(it.draft)) }
+            launch { persist() }
+        } else {
+            launch {
+                withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch
+                mutable.update { it.copy(draft = apply(it.draft)) }
+                persist()
+            }
+        }
+    }
+
     fun config(requested: JsonObject, accountOnly: Boolean = false) {
         if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
-                val detail = api.detail()
+                val detail = draftOrSessionDetail()
                 val values = withEngine(requested, detail)
                 // A provider picked for the session says what it will do and when, in place of the line that only said it was kept.
                 val note = switchNote(detail, values)

@@ -183,32 +183,14 @@ class RunnerPageTest {
         }
     }
 
-    /** The Workspaces footer's "on the web" links to this runner's page on the web, <server>/runners/<id> with the id as the web spells it
-     * (project 34pLjYBjU6ILsehatEjJs, contract 6; OrbitKit testTheWorkspacesFooterLinksOnTheWebToThisRunnersPage). */
-    @Test fun theWorkspacesFooterLinksOnTheWebToThisRunnersPage() {
-        val (before, words, after) = RunnerPage.workspacesFooter()
-        assertEquals("Tap a workspace to open its sessions. Add or change workspaces ", before)
-        assertEquals("on the web", words)
-        assertEquals(".", after)
-        assertEquals(RunnerCopy.WORKSPACES_FOOTER, before + words + after)
-        val uuid = "0199b111-0000-7000-8000-000000000001"
-        val public = io.orbitd.android.navigation.ObjectId.toPublic(uuid)
-        assertNotEquals("the web's addresses spell a runner by its public id", uuid, public)
-        assertEquals("https://orbit.example.com/runners/$public", RunnerPage.runnerWebUrl("https://orbit.example.com", uuid))
-        assertEquals("https://orbit.example.com/runners/$public", RunnerPage.runnerWebUrl("https://orbit.example.com/", public))
-        assertEquals("https://one.example:8443/orbit/runners/$public", RunnerPage.runnerWebUrl("https://one.example:8443/orbit/", uuid))
-        assertNull(RunnerPage.runnerWebUrl("not a server", uuid))
-    }
-
     /** The new sentences are iOS's, word for word (OrbitKit RunnerPageCopy, itself held to the web's runnerCopy.ts): each RunnerCopy word
      * by the Swift name it is ported from, a template rendered with Swift's own interpolations. */
-    @Test fun theNoCliSentencesAndTheFootersLinkAreIosOwn() {
+    @Test fun theNoCliSentencesAreIosOwn() {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
             .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText().replace(Regex("\"\\s*\\+\\s*\""), "")
         val constants = mapOf("ATTENTION_NO_CLI_SIGNED_IN_SHORT" to RunnerCopy.NO_CLI_SIGNED_IN_SHORT, "ATTENTION_NO_CLI_SIGNED_IN" to RunnerCopy.NO_CLI_SIGNED_IN,
-            "RUNNER_NAMES_COMMA" to RunnerCopy.NAMES_COMMA, "RUNNER_WORKSPACES_FOOTER" to RunnerCopy.WORKSPACES_FOOTER,
-            "RUNNER_WORKSPACES_FOOTER_LINK" to RunnerCopy.WORKSPACES_FOOTER_LINK)
+            "RUNNER_NAMES_COMMA" to RunnerCopy.NAMES_COMMA)
         for ((name, said) in constants) {
             assertTrue("RunnerPageCopy.$name is not \"$said\"", Regex("static let $name =\\s*\"${Regex.escape(said)}\"").containsMatchIn(swift))
         }
