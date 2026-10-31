@@ -88,10 +88,12 @@ final class LoadFailureLogicTests: XCTestCase {
     /// Defaults to the launch default: Workspaces, nothing picked yet.
     private func landing(_ agents: ListLoadState, ids: [String], last: String? = nil,
                          section: AppSection = .agents, agentID: String? = nil,
-                         sessionID: String? = nil, provisional: String? = nil) -> DefaultLanding {
+                         sessionID: String? = nil, provisional: String? = nil,
+                         machine: String? = nil) -> DefaultLanding {
         LoadFailureLogic.defaultLanding(agents: agents, orderedAgentIDs: ids, lastAgentID: last,
                                         section: section, selectedAgentID: agentID,
-                                        selectedSessionID: sessionID, provisionalAgentID: provisional)
+                                        selectedSessionID: sessionID, provisionalAgentID: provisional,
+                                        firstOnlineMachine: machine)
     }
 
     func testFailedWorkspaceFetchDecidesNothingAndLeavesTheLandingOpen() {
@@ -111,6 +113,25 @@ final class LoadFailureLogicTests: XCTestCase {
         let decision = landing(history(.begin, .succeed), ids: [])
         XCTAssertEqual(decision, .runners)
         XCTAssertTrue(decision.latches)
+    }
+
+    /// Board rule 11: an account with no workspace lands where it can start, not on a page of engines.
+    func testNoWorkspaceLandsOnTheFirstOnlineMachine() {
+        let decision = landing(history(.begin, .succeed), ids: [], machine: "austin")
+        XCTAssertEqual(decision, .machine("austin"))
+        XCTAssertTrue(decision.latches)
+    }
+
+    func testAWorkspaceWinsOverAnyMachine() {
+        XCTAssertEqual(landing(history(.begin, .succeed), ids: ["a"], machine: "austin"), .agent("a"))
+    }
+
+    func testAMachineLandingWaitsForAnAnswerLikeAnyOther() {
+        XCTAssertEqual(landing(history(.begin, .fail), ids: [], machine: "austin"), .undecided)
+    }
+
+    func testAChoiceAlreadyMadeIsKeptOverAMachine() {
+        XCTAssertEqual(landing(history(.begin, .succeed), ids: [], section: .tasks, machine: "austin"), .keepCurrent)
     }
 
     func testLandsOnTheRememberedWorkspace() {

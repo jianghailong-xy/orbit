@@ -439,6 +439,12 @@ export interface WatchView {
   matches: WatchMatchView[];
   /** At most one, and only for a RESUME_SESSION watch that expired, was revoked or became unresolvable; a cancelled watch has none. A dead letter shows here just as it does on a Match. */
   expiryDeliveries: WatchExpiryDeliveryView[];
+  /**
+   * How many of the watch's deliveries are dead letters — a wake or a notification that never got there — across its
+   * Matches and `expiryDeliveries`, whichever code each stopped under; each one says why where it is. Absent from an
+   * older server.
+   */
+  deadLetterCount?: number;
 }
 
 /** The bounds a progress report is held to (contract `progress.limits`); the database's CHECKs hold the same. */
