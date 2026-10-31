@@ -5744,8 +5744,9 @@ export class RunnerApiController {
   }
 
   /**
-   * A runner-hosted background job asks to wake its session: it exited, or it wrote something new,
-   * and it was started with bg_run's wakeOnExit / wakeOnOutput (runner-go background_job.go).
+   * A runner-hosted background job asks to wake its session: it exited, it wrote something new, or it
+   * is still running and has written nothing for as long as it asked, and it was started with bg_run's
+   * wakeOnExit / wakeOnOutput / wakeOnStall (runner-go background_job.go).
    *
    * The wake becomes a turn of the session through createTurn, so it is queued, claimed and delivered
    * the way any turn is — into the engine that is resident, or into one resumed for it, which is the
@@ -5761,12 +5762,14 @@ export class RunnerApiController {
    * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
    * the turn, and no turn is opened for it. It then joins only a steer still waiting for that same
    * turn. A job's new output always waits for the next turn, joining the wake queued there — written
-   * into the running turn, a job that prints every minute would interrupt it every minute.
+   * into the running turn, a job that prints every minute would interrupt it every minute. So does a
+   * stall: a job gone quiet is news for the agent's next decision, not an interruption of this one.
    *
-   * Except that a job's exit is the last thing it says: steered, it takes that job's own output wake
-   * off the next-turn queue with it (`takeJobOffNextTurnQueue`), and an output wake arriving once the
-   * exit is on file is DROPPED (`StaleBackgroundWake`) — otherwise each would open a turn after the
-   * exit was read, to report output the exit already reported.
+   * Except that a job's exit is the last thing it says: steered, it takes that job's own output or
+   * stall wake off the next-turn queue with it (`takeJobOffNextTurnQueue`), and an output or stall wake
+   * arriving once the exit is on file is DROPPED (`StaleBackgroundWake`) — otherwise each would open a
+   * turn after the exit was read, to report output the exit already reported, or a job that has ended
+   * as still running.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/background-wake')
@@ -5776,6 +5779,8 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: BackgroundWakeDto,
   ): Promise<BackgroundWakeReceipt> {
+    // A stall wake's last output is this instant less the silence the runner reports (fileBackgroundJobWake).
+    const receivedAt = new Date();
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
     const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
@@ -5789,13 +5794,13 @@ export class RunnerApiController {
           steerIfLive: dto.trigger === 'exit',
           coalesce: async (tx, session, route) => {
             if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            if (dto.trigger === 'output' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
-              throw new StaleBackgroundWake(dto.jobId);
+            if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+              throw new StaleBackgroundWake(dto.jobId, dto.trigger);
             }
             const queued = await undeliveredWakeTurn(tx, sessionId, route);
             merged = queued !== null;
             const filedOn = queued?.clientTurnId ?? clientTurnId;
-            await fileBackgroundJobWake(tx, sessionId, filedOn, dto);
+            await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
             if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
             return queued;
           },
@@ -5803,8 +5808,8 @@ export class RunnerApiController {
       );
       return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
     } catch (e) {
-      // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output its job's
-      // exit already reported (StaleBackgroundWake).
+      // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output or a stall
+      // its job's exit already reported (StaleBackgroundWake).
       if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
         return { outcome: 'DROPPED' };
       }
