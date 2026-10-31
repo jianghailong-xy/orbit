@@ -237,6 +237,13 @@ struct ToolApprovalCard: View {
             Approvals.blockerResolvePreview(toolName: approval.toolName ?? "", from: $0)
         }
     }
+    /// Deleting a runner or a workspace: what the server read about it when it filed the card.
+    private var deleting: DeleteApprovalPreview? {
+        approval.input.flatMap {
+            Approvals.deletePreview(toolName: approval.toolName ?? "", from: $0,
+                                    nowMs: Int64(Date().timeIntervalSince1970 * 1_000))
+        }
+    }
 
     /// The field written for the agent that will execute the task, folded to a line that carries its
     /// length. It is the longest thing on the card by an order of magnitude — 1.4k to 3.9k characters
@@ -396,6 +403,26 @@ struct ToolApprovalCard: View {
                          detail: "The agent says it no longer blocks",
                          rows: blocker.reason.isEmpty ? [] : [blocker.reason],
                          markdown: true)
+        } else if let deleting {
+            // The header stays on one line, so the name takes the row under it and wraps: this is
+            // the card where a name must not be cut short. The split a single create makes too.
+            ApprovalHeader(symbol: "trash", title: deleting.heading, tone: .orange,
+                           badge: deleting.noun)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(deleting.name).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(deleting.status).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let workDir = deleting.workDir {
+                    Text(workDir).font(.orbitMono).foregroundStyle(.secondary)
+                        .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its leaf
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if deleting.isRunner { deletedWithIt(deleting.workspaces) }
+                Text(deleting.note).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                            tone: .orange, badge: approval.toolName ?? "Tool")
@@ -406,6 +433,29 @@ struct ToolApprovalCard: View {
                     .font(.orbitMono).foregroundStyle(.secondary)
                     .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// What goes with a runner, by name: the workspaces are what the owner may not have had in mind.
+    /// With none, the card says so, because an empty place reads as a list that failed to load.
+    @ViewBuilder
+    private func deletedWithIt(_ workspaces: [DeleteApprovalPreview.Workspace]) -> some View {
+        if workspaces.isEmpty {
+            Text(Approvals.deleteNoWorkspaces).font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(Approvals.deleteGoesWith).font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(workspaces) { workspace in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("− \(workspace.name)").font(.orbitProse)
+                    if let workDir = workspace.workDir {
+                        Text(workDir).font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .lineLimit(2).truncationMode(.middle)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -425,6 +475,7 @@ struct ToolApprovalCard: View {
         if create != nil { return "Create it" }
         if dag != nil { return "Apply changes" }
         if blocker != nil { return "Resolve it" }
+        if deleting != nil { return Approvals.deleteAction }
         return "Allow"
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
@@ -482,6 +533,7 @@ struct ToolApprovalCard: View {
         if let batch { return "\(batch.taskCount) new task\(batch.taskCount == 1 ? "" : "s")" }
         if let dag { return dag.listTitle }
         if let blocker { return blocker.declineName }
+        if let deleting { return deleting.declineName }
         return approval.toolName ?? ""
     }
 }
