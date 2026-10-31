@@ -50,11 +50,12 @@ struct CoordinatorDeliveryLineView: View {
             Button {
                 openTold(CoordinatorDeliveryTold(card: card, text: text, attached: attached))
             } label: {
-                // A capsule on one row; a rounded rectangle once the pill holds two.
+                // A capsule on one row; a rounded rectangle once the pill holds two. Off a phone the row
+                // count is decided by the width (`words`), so the corner is one a single row draws as a capsule.
                 if stacked {
                     pill(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
-                    pill(in: Capsule())
+                    pill(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
             .buttonStyle(.plain)
@@ -104,18 +105,32 @@ struct CoordinatorDeliveryLineView: View {
         let sentence = CoordinatorDeliveryCard.sentence(card)
         let sent = CoordinatorDeliveryCard.sent(card)
         if stacked {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sentence).lineLimit(1).truncationMode(.tail)
-                Text(sent).lineLimit(1).foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            twoRows(sentence, sent)
         } else {
-            HStack(spacing: 4) {
-                Text(sentence).lineLimit(1).truncationMode(.tail)
-                Text("· \(sent)").lineLimit(1).fixedSize().foregroundStyle(.tertiary)
-                    .layoutPriority(1)
+            // One row while the sentence keeps room to be read; a column too narrow for that — the Mac console
+            // beside the session list, an iPad split — gets the phone's two rows. One row there cut the sentence
+            // to its first letter: "E · Sent to the coordinator · 10/31/26, 11:42 PM" (the Mac probe, 2026-11-01).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 4) {
+                    Text(sentence).lineLimit(1).truncationMode(.tail)
+                        .frame(minWidth: Self.sentenceFloor, idealWidth: Self.sentenceFloor, alignment: .leading)
+                    Text("· \(sent)").lineLimit(1).fixedSize().foregroundStyle(.tertiary)
+                        .layoutPriority(1)
+                }
+                twoRows(sentence, sent)
             }
         }
+    }
+
+    /// The least of the sentence one row keeps (its first few words) before the line takes two rows instead.
+    private static let sentenceFloor: CGFloat = 160
+
+    private func twoRows(_ sentence: String, _ sent: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(sentence).lineLimit(1).truncationMode(.tail)
+            Text(sent).lineLimit(1).foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
