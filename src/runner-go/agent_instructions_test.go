@@ -208,6 +208,35 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	}
 }
 
+// A reply hands a file over by linking it, and only out of the session's own directories: the facts
+// TestAttachLocalReplyFiles* hold the runner to. Every engine reads this text, so it is asserted in
+// every form of it. The commit clause is the price of the copy the paragraph asks for, which the next
+// `git add -A` stages (commitWorktree, finalizeWorktree), so it may not be dropped on its own.
+func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
+	exe := "/usr/local/bin/orbit"
+	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		for _, phrase := range []string{
+			"`[name](path)`",
+			"`![name](path)`",
+			"inside your working directory or this session's uploads directory",
+			"/tmp included",
+			"copy the file there first and link the copy",
+			"can end up in a commit",
+			"the uploads directory or a git-ignored path",
+		} {
+			if !strings.Contains(got, phrase) {
+				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
+			}
+		}
+		for i := 0; i < len(got); i++ {
+			if got[i] > 127 {
+				t.Fatalf("the instructions must stay ASCII for codex's context value; byte %d is %q", i, got[i])
+			}
+		}
+	}
+}
+
 // advertisedCapabilityFamilies is every family `orbit capabilities` composes, paired with whether
 // the document offers that family only where the orchestration grant exists. buildCLICapabilities
 // appends sessionCLICapabilities, agentCLICapabilities and runnerCLICapabilities inside its
