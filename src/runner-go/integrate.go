@@ -1055,7 +1055,7 @@ var integrationPush = func(repoRoot, scratch, remote, targetRef, tested, expecte
 		_, err := git(repoRoot, "update-ref", targetRef, tested, expectedBefore)
 		return err
 	}
-	_, err := git(scratch, "push", remote, tested+":"+targetRef)
+	_, err := networkGit(scratch, networkGitTimeout, "push", remote, tested+":"+targetRef)
 	return err
 }
 
@@ -1897,7 +1897,7 @@ func fetchRetryingRefLock(dir string, args ...string) error {
 		if attempt > 0 {
 			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 		}
-		if _, err = git(dir, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
+		if _, err = networkGit(dir, networkGitTimeout, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
 			return err
 		}
 	}

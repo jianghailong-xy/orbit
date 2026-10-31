@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -88,10 +89,15 @@ const (
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
 
-	// A job can ask to wake its session — when it exits, or when it writes something new. These are
-	// the two triggers a wake names.
+	// A job can ask to wake its session — when it exits, when it writes something new, or when it has
+	// written nothing for a while although it still runs. These are the three triggers a wake names.
 	bgWakeOnExit   = "exit"
 	bgWakeOnOutput = "output"
+	bgWakeOnStall  = "stall"
+
+	// bgWakeOnStallMaxSeconds is the most afterSeconds bg_run's wakeOnStall takes: thirty days, longer
+	// than any session waits on one job, and far inside what a time.Duration can hold.
+	bgWakeOnStallMaxSeconds = 30 * 24 * 60 * 60
 
 	// bgWakeOutputWindow is how long new output gathers before it wakes the session. A CI log lands a
 	// hundred lines at a time, and the wake should carry the burst rather than its first line.
@@ -105,12 +111,28 @@ const (
 	// bg_output away, and the wake names the file.
 	bgWakeExcerptCap = 2000
 
-	// bgWakeAttempts bounds how often one wake is tried against a control plane that does not
-	// answer, bgWakeRetryDelay apart and growing: long enough for a blip, short enough that a session
-	// ending behind it is not held up.
+	// bgWakeAttempts is how often a wake is tried against a control plane that does not answer before
+	// anything else is asked, bgWakeRetryDelay apart and doubling. It is the whole budget of the wake a
+	// handed-on job's late end sends (endHandedOffJob), which a runner on its way out waits for, and the
+	// least every other wake gets, even from a session that ended while it was being sent.
 	bgWakeAttempts   = 3
 	bgWakeRetryDelay = 2 * time.Second
+	// bgWakeRetryDelayCap is the longest wait between two attempts of a wake that goes on being tried
+	// past bgWakeAttempts (bgWakeRetryWindow).
+	bgWakeRetryDelayCap = 30 * time.Second
 )
+
+// bgWakeRetryWindow is how long a wake sent from a goroutine of its own goes on being tried against a
+// control plane that does not answer, for as long as its session lives. Three attempts six seconds
+// apart do not outlast the twenty seconds a deploy takes the control plane away for, and a wake lost
+// that way is news nobody hears: a job that ended, or one that hung. A variable only so a test need
+// not sit it out.
+var bgWakeRetryWindow = 10 * time.Minute
+
+// bgWakeOnStallMinSeconds is the least afterSeconds bg_run's wakeOnStall takes: a shorter silence is
+// one a working job keeps between two lines, and every wake is a turn somebody pays for. A variable
+// only so a test can ask for a few seconds of silence rather than sit a minute out for each wake.
+var bgWakeOnStallMinSeconds = 60
 
 // bgDrainWaitCap is how long a drain waits for jobs (not services) to finish
 // before killing them. A drain runs where the checkout is about to be
@@ -141,6 +163,14 @@ type bgJobSpec struct {
 	// when it has written something new (bgWakeOutputWindow, bgWakeOutputInterval).
 	WakeOnExit   bool
 	WakeOnOutput bool
+	// WakeOnStall, when set, asks for a wake once the job, still running, has written nothing for this
+	// long (bg_run's wakeOnStall.afterSeconds; watchForStall).
+	WakeOnStall time.Duration
+}
+
+// bgStallConfig is a job's wakeOnStall as bg_run takes it and bg_list shows it.
+type bgStallConfig struct {
+	AfterSeconds int `json:"afterSeconds"`
 }
 
 // bgJobStatus is one job as the agent sees it. Field names are the wire names of
@@ -150,19 +180,20 @@ type bgJobStatus struct {
 	// The same id under the name the event stream uses for it. A background_task
 	// carries shellId, so a job and its events can be matched without a mapping
 	// table that could disagree with itself.
-	ShellID       string `json:"shellId"`
-	Kind          string `json:"kind"`
-	Command       string `json:"command"`
-	Description   string `json:"description,omitempty"`
-	Status        string `json:"status"`
-	PID           int    `json:"pid"`
-	ExitCode      *int   `json:"exitCode"`
-	OutputPath    string `json:"outputPath"`
-	StartedAt     string `json:"startedAt"`
-	EndedAt       string `json:"endedAt,omitempty"`
-	HoldsWorktree bool   `json:"holdsWorktree"`
-	WakeOnExit    bool   `json:"wakeOnExit,omitempty"`
-	WakeOnOutput  bool   `json:"wakeOnOutput,omitempty"`
+	ShellID       string         `json:"shellId"`
+	Kind          string         `json:"kind"`
+	Command       string         `json:"command"`
+	Description   string         `json:"description,omitempty"`
+	Status        string         `json:"status"`
+	PID           int            `json:"pid"`
+	ExitCode      *int           `json:"exitCode"`
+	OutputPath    string         `json:"outputPath"`
+	StartedAt     string         `json:"startedAt"`
+	EndedAt       string         `json:"endedAt,omitempty"`
+	HoldsWorktree bool           `json:"holdsWorktree"`
+	WakeOnExit    bool           `json:"wakeOnExit,omitempty"`
+	WakeOnOutput  bool           `json:"wakeOnOutput,omitempty"`
+	WakeOnStall   *bgStallConfig `json:"wakeOnStall,omitempty"`
 }
 
 // bgJobOutput is one incremental read of a job's output file.
@@ -192,6 +223,9 @@ type bgJob struct {
 
 	wakeOnExit   bool
 	wakeOnOutput bool
+	// wakeOnStall is the silence that wakes the session for this job while it runs (watchForStall),
+	// zero for a job that did not ask.
+	wakeOnStall time.Duration
 
 	status   string
 	exitCode *int
@@ -202,8 +236,19 @@ type bgJob struct {
 	// sessions/background-job-activity.ts). It starts at the job's launch, which is the truth:
 	// nothing can have been written before the process existed, so a job that has produced nothing
 	// at all reports its own age rather than an instant that never happened. The output tail moves
-	// it forward whenever the file changes (bgTailer.noteOutput). Written under bgTailer.mu.
+	// it forward whenever the file grows past outputSeen (bgTailer.noteOutput). Written under bgTailer.mu.
 	lastOutputAt time.Time
+	// outputSeen is how much of the output file the tail had found when it last moved lastOutputAt. A
+	// tail that starts over — the one the image that adopted the job starts — compares its first read
+	// with it, so what was there already is not taken for output written just now, and what the job
+	// wrote while no image was watching still is.
+	outputSeen int64
+	// stallWakes is how many stall wakes this job has finished sending — answered, or given up on after
+	// bgWakeRetryWindow — which numbers the next one; stallWokenFor is the silence the last of them was
+	// about, named by the lastOutputAt it began at. One silence is one wake: output moves lastOutputAt
+	// past it, and the next silence is new.
+	stallWakes    int
+	stallWokenFor time.Time
 	// killReason records that this process is dying because we asked, so the
 	// waiter reports "killed" rather than inventing a completion out of the exit
 	// status a SIGKILL leaves behind.
@@ -250,6 +295,9 @@ func (j *bgJob) statusLocked() bgJobStatus {
 		HoldsWorktree: j.status == bgStatusRunning,
 		WakeOnExit:    j.wakeOnExit,
 		WakeOnOutput:  j.wakeOnOutput,
+	}
+	if j.wakeOnStall > 0 {
+		st.WakeOnStall = &bgStallConfig{AfterSeconds: int(j.wakeOnStall / time.Second)}
 	}
 	if !j.endedAt.IsZero() {
 		st.EndedAt = j.endedAt.UTC().Format(time.RFC3339)
@@ -325,6 +373,7 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		done:         make(chan struct{}),
 		wakeOnExit:   spec.WakeOnExit,
 		wakeOnOutput: spec.WakeOnOutput,
+		wakeOnStall:  spec.WakeOnStall,
 		status:       bgStatusRunning,
 		kill:         func() { _ = terminateSessionProcessTree(cmd) },
 		reap: func() int {
@@ -430,6 +479,9 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	b.startTail(jobID, jobID, outputPath, false)
 	if spec.WakeOnOutput {
 		b.startOutputWakes(job)
+	}
+	if spec.WakeOnStall > 0 {
+		b.startStallWakes(job)
 	}
 
 	waiterStarted = true
@@ -551,13 +603,17 @@ func (b *bgTailer) heartbeatJobs() {
 // plane drops a job whose output has not moved within the threshold out of the clients' in-flight
 // marker while leaving it in `runningBgShells` — it is still a process, it is just no longer moving.
 //
-// Taken from the tail that saw the file change, not from the file's mtime: the tail is what a
-// reader could see move, so a job that rewrites the same bytes back into the file has produced
-// nothing, and a file something else touched is not this job's output.
-func (b *bgTailer) noteOutput(toolUseID string) {
+// Taken from the tail that read the file, not from the file's mtime: the tail is what a reader could
+// see move, and a file something else touched is not this job's output. size is how much of the file
+// that read accounted for. Output is the file growing past what was seen last (outputSeen) — by
+// length rather than by the snapshot, so a job printing the same line over and over is still moving
+// once the end of its file reads the same every time, and so a tail that starts over (the one the
+// image that adopted the job starts) does not take what was already there for output written now.
+func (b *bgTailer) noteOutput(toolUseID string, size int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if job := b.jobs[toolUseID]; job != nil && job.status == bgStatusRunning {
+	if job := b.jobs[toolUseID]; job != nil && job.status == bgStatusRunning && size != job.outputSeen {
+		job.outputSeen = size
 		job.lastOutputAt = time.Now()
 	}
 }
@@ -670,8 +726,8 @@ func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) 
 // names of POST /runner/sessions/:id/background-wake; the control plane files the wake as a turn
 // of the session and writes these facts into it (apiserver runner-api/background-job-wake.ts).
 type bgWake struct {
-	// WakeID names this wake, so a retry of it is recognised: `<jobId>:exit`, or
-	// `<jobId>:output:<n>` for the job's n-th output wake.
+	// WakeID names this wake, so a retry of it is recognised: `<jobId>:exit`, `<jobId>:output:<n>`
+	// for the job's n-th output wake, or `<jobId>:stall:<n>` for its n-th stall wake.
 	WakeID      string `json:"wakeId"`
 	JobID       string `json:"jobId"`
 	Trigger     string `json:"trigger"`
@@ -687,6 +743,12 @@ type bgWake struct {
 	OutputOffset  int64  `json:"outputOffset"`
 	OutputSize    int64  `json:"outputSize"`
 	OutputExcerpt string `json:"outputExcerpt"`
+	// ElapsedMs and IdleMs are a stall wake's: how long the job had run, and how long it had written
+	// nothing, when the wake was sent. Durations rather than instants, as a `running` report's idleMs
+	// is (runningPayload): the control plane restates the last output as receivedAt - idleMs on its
+	// own clock.
+	ElapsedMs *int64 `json:"elapsedMs,omitempty"`
+	IdleMs    *int64 `json:"idleMs,omitempty"`
 }
 
 // wakeLocked is one wake about this job, and marks the output it reports as reported. Caller holds
@@ -705,10 +767,15 @@ func (j *bgJob) wakeLocked(trigger string, size int64) bgWake {
 		OutputOffset: j.wokenThrough,
 		OutputSize:   size,
 	}
-	if trigger == bgWakeOnOutput {
+	switch trigger {
+	case bgWakeOnOutput:
 		j.outputWakes++
 		wake.WakeID = fmt.Sprintf("%s:%s:%d", j.id, bgWakeOnOutput, j.outputWakes)
-	} else {
+	case bgWakeOnStall:
+		// Counted once it has finished sending (watchForStall): until then a self-update hands it on
+		// as owed, and the next image sends it under this same id.
+		wake.WakeID = fmt.Sprintf("%s:%s:%d", j.id, bgWakeOnStall, j.stallWakes+1)
+	default:
 		wake.WakeID = j.id + ":" + bgWakeOnExit
 	}
 	if size > j.wokenThrough {
@@ -805,9 +872,73 @@ func (b *bgTailer) watchOutputForWakes(job *bgJob) {
 	}
 }
 
-// sendWake hands one wake to the control plane without holding up whoever found it, and retries a
-// control plane that does not answer for a little while. One that cannot be delivered is logged
-// and dropped: the job's end is still in its durable event, which the session's next turn is told.
+// startStallWakes watches a job that asked to be woken when it goes quiet, for as long as it runs.
+func (b *bgTailer) startStallWakes(job *bgJob) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopping {
+		return
+	}
+	b.wg.Add(1)
+	go b.watchForStall(job)
+}
+
+// watchForStall wakes the session when the job, still running, has written nothing for as long as it
+// asked (wakeOnStall). One silence is one wake: the silence is named by the lastOutputAt it began at,
+// a wake answered for it is remembered by that name (stallWokenFor), and output that moves
+// lastOutputAt on begins a silence the watch has not reported. So a job that hangs is reported once
+// however long it hangs, and a job that prints again and then hangs again is reported again.
+//
+// The wake is delivered from here rather than from a goroutine of its own, so no second one starts
+// while the control plane has not answered the first, and it counts as sent only once that is over.
+// A self-update that hands the job on meanwhile records it as still owed, and the next image sends it
+// again under the same id, which the control plane recognises.
+func (b *bgTailer) watchForStall(job *bgJob) {
+	defer b.wg.Done()
+	tick := time.NewTicker(bgPollInterval)
+	defer tick.Stop()
+	for {
+		var now time.Time
+		select {
+		case <-job.done:
+			return
+		case <-b.ctx.Done():
+			return
+		case now = <-tick.C:
+		}
+		size := outputSizeOf(job.outputPath)
+		b.mu.Lock()
+		if job.handedOff {
+			// The runner's next image watches it, from the record this one brought up to date.
+			b.mu.Unlock()
+			return
+		}
+		// Output the tail has not read yet is output all the same. The tail reads every
+		// bgPollInterval, so a silence judged from its last read alone can end a moment after it was
+		// reported — and the same silence, now dated from that read, would be reported again.
+		if size > job.outputSeen {
+			job.outputSeen, job.lastOutputAt = size, now
+		}
+		silence := job.lastOutputAt
+		if job.status != bgStatusRunning || silence.Equal(job.stallWokenFor) || now.Sub(silence) < job.wakeOnStall {
+			b.mu.Unlock()
+			continue
+		}
+		wake := job.wakeLocked(bgWakeOnStall, size)
+		elapsed, idle := max(now.Sub(job.startedAt), 0).Milliseconds(), job.idleMillis(now)
+		wake.ElapsedMs, wake.IdleMs = &elapsed, &idle
+		b.mu.Unlock()
+		b.deliverWake(wake, true)
+		b.mu.Lock()
+		job.stallWakes++
+		job.stallWokenFor = silence
+		b.mu.Unlock()
+	}
+}
+
+// sendWake hands one wake to the control plane without holding up whoever found it. One that cannot
+// be delivered is logged and dropped: the job's end is still in its durable event, which the session's
+// next turn is told.
 func (b *bgTailer) sendWake(wake bgWake) {
 	if b.wake == nil {
 		return
@@ -821,26 +952,57 @@ func (b *bgTailer) sendWake(wake bgWake) {
 	b.mu.Unlock()
 	go func() {
 		defer b.wg.Done()
-		b.deliverWake(wake)
+		b.deliverWake(wake, true)
 	}()
 }
 
-// deliverWake sends one wake, retrying a control plane that does not answer for a little while.
-func (b *bgTailer) deliverWake(wake bgWake) {
+// deliverWake sends one wake until the control plane answers it — takes it, or refuses it in a way
+// that asking again would not change. A control plane that does not answer is asked again,
+// bgWakeRetryDelay apart and doubling, bgWakeAttempts times in all. A patient sender — every wake sent
+// from a goroutine of its own — then goes on asking, the waits capped at bgWakeRetryDelayCap, until the
+// control plane answers, the session ends or bgWakeRetryWindow has passed: a deploy takes the control
+// plane away for longer than the first three attempts last. An impatient one is a runner on its way out
+// (endHandedOffJob), which waits for this and stops at bgWakeAttempts, as it always has.
+func (b *bgTailer) deliverWake(wake bgWake, patient bool) {
 	if b.wake == nil {
 		return
 	}
 	wake.OutputExcerpt = wakeExcerpt(wake.OutputPath)
+	giveUpAt := time.Now().Add(bgWakeRetryWindow)
+	wait := bgWakeRetryDelay
 	for attempt := 1; ; attempt++ {
 		err := b.wake(wake)
 		if err == nil {
 			return
 		}
-		if attempt == bgWakeAttempts || !isRetryableTransportError(err) {
+		if !isRetryableTransportError(err) {
+			if wake.Trigger == bgWakeOnStall && isTransportHTTPStatus(err, http.StatusBadRequest) {
+				// The one refusal a version mismatch makes: a control plane older than wakeOnStall
+				// refuses every stall wake as malformed, and the agent that asked is never woken for it.
+				logln("the control plane refused the stall wake of background job", wake.JobID,
+					"— a control plane older than wakeOnStall refuses every one, so the session will not hear"+
+						" that the job went quiet; upgrade the control plane:", err)
+			} else {
+				logln("could not wake the session for background job", wake.JobID+":", err)
+			}
+			return
+		}
+		if attempt < bgWakeAttempts {
+			time.Sleep(wait)
+			wait = min(2*wait, bgWakeRetryDelayCap)
+			continue
+		}
+		if !patient || b.ctx.Err() != nil || time.Now().Add(wait).After(giveUpAt) {
 			logln("could not wake the session for background job", wake.JobID+":", err)
 			return
 		}
-		time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
+		select {
+		case <-b.ctx.Done():
+			logln("could not wake the session for background job", wake.JobID, "before the session ended:", err)
+			return
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, bgWakeRetryDelayCap)
 	}
 }
 

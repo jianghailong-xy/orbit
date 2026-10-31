@@ -21,9 +21,12 @@ data class QuestionOption(val label: String, val description: String? = null)
 @Serializable
 data class CardQuestion(val question: String, val header: String? = null,
     val options: List<QuestionOption> = emptyList(), val multiSelect: Boolean = false)
+/** [startAfterCreate] is true on the single-task card's Create and start alone; left null, `Wire.json` writes no key for it, so
+ * every other yes posts the body it always has. */
 @Serializable
 data class ApprovalDecision(val behavior: String, val message: String? = null,
-    val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null)
+    val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
+    val startAfterCreate: Boolean? = null)
 @Serializable
 data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
 @Serializable
@@ -51,6 +54,8 @@ enum class CardFamily {
 enum class CardVerb(val label: String) {
     ALLOW("Allow"), DENY("Deny"), REMEMBER("Allow & remember"), ANSWER("Submit"),
     APPROVE_PLAN("Approve & run"), KEEP_PLANNING("Keep planning"), CREATE_TASK("Create task"),
+    /** The single-task card's second yes (web `CREATE_AND_START`): the task is created and its run started in the one press. */
+    CREATE_AND_START("Create and start"),
     CREATE_PROJECT("Create project"), CREATE_BATCH("Create tasks"), CHANGE_DAG("Apply changes"),
     RESOLVE_BLOCKER("Resolve blocker"), CHAT("Chat about this"), CONFIRM_EVIDENCE("Confirm done"),
     SEND_BACK("Send back"), CONFIRM_OWNER("Confirm done"), APPROVE_CRITERIA("Approve changes"),
@@ -116,7 +121,11 @@ object CardCatalog {
             val actions = if (approval.status != "PENDING" || !unexpired) emptyList() else when (family) {
                 CardFamily.QUESTION -> listOf(CardVerb.ANSWER, CardVerb.CHAT)
                 CardFamily.PLAN -> listOf(CardVerb.APPROVE_PLAN, CardVerb.KEEP_PLANNING)
-                CardFamily.CREATE -> listOf(if (approval.toolName == "orbit_task_create") CardVerb.CREATE_TASK else CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                // A task nothing would start by itself, on a card whose runner can act on the choice, is offered its start in the
+                // same press, right after the plain yes.
+                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") listOfNotNull(CardVerb.CREATE_TASK,
+                    CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
+                    else listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)

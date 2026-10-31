@@ -1,0 +1,42 @@
+Probe run: https://github.com/jianghailong-xy/orbit/actions/runs/40830345204 (push-triggered on probe/create-and-start-ios)
+Probe commit: a974d3331d005b9f0df39ca26ceec48cb61beeea = d63a15a5b + this work's src/macos + docs/evidence/create-and-start/ios/probe-harness,
+              with the harness's ci/client.probe.yml as .github/workflows/client.yml
+
+Jobs on that commit (gh run view):
+  Create and start probe (iPhone + Mac, light and dark): success
+  iOS (generate + build): success
+  macOS (build + test): success
+  Font tokens (bare system(size:) audit): success
+  macOS OrbitKit test on the base commit (baseline): success
+  Navigation (one push mechanism per stack): success
+
+macOS gate (Xcode 26.3, Apple Swift version 6.2.4):
+  test-orbitkit: success — Executed 4122 tests, with 5 tests skipped and 0 failures (0 unexpected)
+  build-orbitapp: success — Build complete! (193.81s)
+iOS gate: build-ios: success — ** BUILD SUCCEEDED **
+Baseline (OrbitKit swift test on the base commit d63a15a5b): Executed 4118 tests, with 5 tests skipped and 0 failures (0 unexpected)
+
+Shots (macos-26: macOS 26.6.2, Xcode 26.6, Apple Swift 6.3.3; iPhone 17 Pro simulator, iOS 26.5), one test per platform, light then dark:
+  mac: test0CreateAndStartIsOfferedWhereNothingWouldStartTheTaskAndSendsTheStart passed (90.949 s)
+  ios: test0CreateAndStartIsOfferedWhereNothingWouldStartTheTaskAndSendsTheStart passed (81.289 s)
+
+What the presses sent, from each platform's stub request log (BODY: the body as the stub decoded it, keys sorted;
+RAW: the bytes as they came). Per appearance: Create and start on ap2, then Create it on ap1.
+  mac:
+    06:49:57 BODY /api/sessions/C1/approvals/ap2/decision {"behavior": "allow", "startAfterCreate": true}
+    06:49:57 RAW /api/sessions/C1/approvals/ap2/decision {"startAfterCreate":true,"behavior":"allow"}
+    06:50:04 BODY /api/sessions/C1/approvals/ap1/decision {"behavior": "allow"}
+    06:50:04 RAW /api/sessions/C1/approvals/ap1/decision {"behavior":"allow"}
+    06:50:36 BODY /api/sessions/C1/approvals/ap2/decision {"behavior": "allow", "startAfterCreate": true}
+    06:50:36 RAW /api/sessions/C1/approvals/ap2/decision {"startAfterCreate":true,"behavior":"allow"}
+    06:50:41 BODY /api/sessions/C1/approvals/ap1/decision {"behavior": "allow"}
+    06:50:41 RAW /api/sessions/C1/approvals/ap1/decision {"behavior":"allow"}
+  ios:
+    06:56:44 BODY /api/sessions/C1/approvals/ap2/decision {"behavior": "allow", "startAfterCreate": true}
+    06:56:44 RAW /api/sessions/C1/approvals/ap2/decision {"startAfterCreate":true,"behavior":"allow"}
+    06:56:50 BODY /api/sessions/C1/approvals/ap1/decision {"behavior": "allow"}
+    06:56:50 RAW /api/sessions/C1/approvals/ap1/decision {"behavior":"allow"}
+    06:57:12 BODY /api/sessions/C1/approvals/ap2/decision {"behavior": "allow", "startAfterCreate": true}
+    06:57:12 RAW /api/sessions/C1/approvals/ap2/decision {"startAfterCreate":true,"behavior":"allow"}
+    06:57:20 BODY /api/sessions/C1/approvals/ap1/decision {"behavior": "allow"}
+    06:57:20 RAW /api/sessions/C1/approvals/ap1/decision {"behavior":"allow"}

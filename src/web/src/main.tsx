@@ -16,7 +16,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
-import { BootGate } from './components/BootGate';
+import { AppBoundary, BootGate } from './components/BootGate';
 import { ThemeProvider } from './lib/theme';
 import { scheduleProactiveRefresh } from './api';
 import { installPaneSlideOnPopState } from './lib/paneTransition';
@@ -53,9 +53,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         {/* The text and links every page inherits (components/ui/root.css). The theme is <html data-theme>. */}
         <AppRoot>
           <BrowserRouter>
-            <BootGate>
-              <App />
-            </BootGate>
+            <AppBoundary>
+              <BootGate>
+                <App />
+              </BootGate>
+            </AppBoundary>
             <ToastViewport />
           </BrowserRouter>
         </AppRoot>

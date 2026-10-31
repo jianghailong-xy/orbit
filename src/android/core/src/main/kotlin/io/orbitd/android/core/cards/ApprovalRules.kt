@@ -20,6 +20,13 @@ object ApprovalRules {
         tool == "Bash" -> bash(input.text("command") ?: "")
         else -> listOf(PermissionRule(tool))
     }
+    /** Whether the single-task card offers Create and start (web `offersCreateAndStart`): only when the server's forecast says
+     * nothing would start the task by itself (`needsManualStart` is 1). One that starts on its own, now or at its runAt, waits on a
+     * prerequisite, cannot run or waits for its project to start has nothing for the press to add, and a card whose forecast
+     * could not be read says nothing either way. Nor a card the server did not mark `acceptsStartAfterCreate`: its runner, or the
+     * server itself, predates the choice and would only create the task. */
+    fun offersCreateAndStart(tool: String, input: JsonObject): Boolean = tool == "orbit_task_create" &&
+        input.flag("acceptsStartAfterCreate") && input.obj("preview")?.number("needsManualStart") == 1
     fun bash(command: String): List<PermissionRule> {
         val segments = mutableListOf<String>()
         val part = StringBuilder()

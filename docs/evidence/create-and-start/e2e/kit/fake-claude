@@ -1,0 +1,309 @@
+#!/usr/bin/python3 -I
+"""Fake `claude` CLI for the R29-13 landing-observation e2e stacks (NOT Claude Code: no model, account or network).
+
+Adapted from src/android/scripts/a11-stack/fake-claude. It speaks just enough of Claude Code's stream-json protocol
+for the runner to run real sessions: `--version` / `auth status` answer like a signed-in CLI; a stream-json session
+answers every control_request with success and, per user message, replays the user frame, then system/init, one
+assistant text and one result.
+
+What a turn does is read off its prompt, one directive per line (the scenario scripts put them in task descriptions
+or in messages they send):
+
+  E2E-DO: <action> [<action> ...]   (task runs only: ORBIT_TASK_ID set and the cwd is the task's worktree)
+      commit            commit E2E_WORK_<task id>.md in the worktree (always done first; the commit is the task's
+                        work; one file per task, so the work of two tasks never conflicts)
+      push-upstream     git push <remote> HEAD:<branch> -- the work goes straight to the line, the task branch is
+                        never pushed. <remote>/<branch> is read from the brief's own sentence (O-L3: "Push your
+                        commits to <remote>/<branch> before you finish"), else from E2E-UPSTREAM. Like an agent
+                        that pulls before it pushes, it first fetches <branch> and rebases onto it when the line
+                        has moved, so what it pushes is the task branch's own tip
+      push-cherry-pick  fetch <branch>, cherry-pick -x the work onto it in a scratch worktree (a DIFFERENT commit
+                        with the same change) and push that to <remote>/<branch>; the task branch keeps the original
+      push-task-branch  git push <remote> HEAD:refs/heads/<the task branch>
+      merge-receipt     record the push through the orbit MCP server's merge_receipt tool (ALREADY_MERGED, this
+                        session, sourceSha = HEAD, targetBranch = <branch>), as an agent that records its own
+                        push does
+  E2E-UPSTREAM: <remote>/<branch>    where push-* go when the brief does not say (a PLATFORM brief says "Do not push")
+  E2E-MCP <id> <tool> <json-arguments>   (any session) call one orbit MCP tool through `orbit mcp` -- the server
+                        the runner put in --mcp-config, run with this session's own environment -- after a
+                        `git fetch` in the cwd; the answer is logged under <id> and is the turn's reply
+
+Anything else is acknowledged. Every action is logged as one JSON line to $R2913_FAKE_LOG.
+"""
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import uuid
+
+VERSION = '2.1.312'
+ARGS = sys.argv[1:]
+
+
+def arg(flag):
+    for i, a in enumerate(ARGS):
+        if a == flag and i + 1 < len(ARGS):
+            return ARGS[i + 1]
+        if a.startswith(flag + '='):
+            return a.split('=', 1)[1]
+    return ''
+
+
+def log(kind, **extra):
+    path = os.environ.get('R2913_FAKE_LOG')
+    if not path:
+        return
+    rec = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds'), 'pid': os.getpid(),
+           'kind': kind, 'session': os.environ.get('ORBIT_SESSION_ID', ''), 'task': os.environ.get('ORBIT_TASK_ID', ''),
+           'cwd': os.getcwd(), **extra}
+    with open(path, 'a') as f:
+        f.write(json.dumps(rec) + '\n')
+
+
+def out(obj):
+    sys.stdout.write(json.dumps(obj) + '\n')
+    sys.stdout.flush()
+
+
+def text_of(message):
+    content = (message or {}).get('content')
+    if isinstance(content, str):
+        return content
+    return '\n'.join(b.get('text') or '' for b in content or [] if isinstance(b, dict) and b.get('type') == 'text')
+
+
+def result(sid, text, is_error):
+    return {'type': 'result', 'subtype': 'success', 'is_error': is_error, 'num_turns': 1, 'result': text,
+            'session_id': sid, 'duration_ms': 50, 'duration_api_ms': 0, 'total_cost_usd': 0,
+            'usage': {'input_tokens': 0, 'output_tokens': 0, 'cache_creation_input_tokens': 0,
+                      'cache_read_input_tokens': 0}}
+
+
+def assistant(sid, text):
+    return {'type': 'assistant', 'session_id': sid, 'parent_tool_use_id': None,
+            'message': {'role': 'assistant', 'model': arg('--model') or 'r2913-fake',
+                        'content': [{'type': 'text', 'text': text}]}}
+
+
+def git(*argv, cwd=None):
+    r = subprocess.run(['git', *argv], capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL, cwd=cwd)
+    return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def must(*argv, cwd=None):
+    code, so, se = git(*argv, cwd=cwd)
+    if code != 0:
+        raise RuntimeError(f'git {" ".join(argv)} exited {code}: {se[-400:]}')
+    return so
+
+
+# ── MCP: one tools/call through the orbit server the runner configured ─────────────────────────────────────────
+def orbit_mcp_command():
+    path = arg('--mcp-config')
+    try:
+        with open(path) as f:
+            server = json.load(f)['mcpServers']['orbit']
+        return [server['command'], *server.get('args', [])]
+    except (OSError, KeyError, ValueError):
+        return ['orbit', 'mcp']
+
+
+def mcp_call(tool, arguments):
+    proc = subprocess.Popen(orbit_mcp_command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    def send(obj):
+        proc.stdin.write(json.dumps(obj) + '\n')
+        proc.stdin.flush()
+    def recv():
+        line = proc.stdout.readline()
+        return json.loads(line) if line else None
+    try:
+        send({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+              'params': {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'r2913-fake', 'version': '1'}}})
+        recv()
+        send({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+        send({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': tool, 'arguments': arguments}})
+        answer = recv()
+    finally:
+        try:
+            proc.stdin.close()
+            proc.wait(timeout=30)
+        except Exception:  # noqa: BLE001
+            proc.kill()
+    res = (answer or {}).get('result') or {}
+    text = '\n'.join(c.get('text', '') for c in res.get('content', []) if isinstance(c, dict))
+    return {'isError': bool(res.get('isError')) or 'error' in (answer or {}), 'text': text or json.dumps(answer)}
+
+
+def mcp_directives(prompt):
+    done = []
+    for m in re.finditer(r'^E2E-MCP\s+(\S+)\s+(\S+)\s+(\{.*\})\s*$', prompt, re.M):
+        call_id, tool, raw = m.group(1), m.group(2), m.group(3)
+        fetched = git('fetch', '--quiet', 'origin')
+        try:
+            arguments = json.loads(raw)
+            answer = mcp_call(tool, arguments)
+        except Exception as e:  # noqa: BLE001 - report, never crash the turn
+            arguments, answer = raw, {'isError': True, 'text': f'fake engine could not call {tool}: {e}'}
+        log('mcp', id=call_id, tool=tool, arguments=arguments, fetchExit=fetched[0], **answer)
+        done.append(f'[{call_id}] {tool} -> {"ERROR " if answer["isError"] else ""}{answer["text"][:1500]}')
+    return done
+
+
+# ── task work ─────────────────────────────────────────────────────────────────────────────────────────────────
+def push_target(prompt):
+    m = re.search(r'Push your commits to (\S+?)/(\S+?) before you finish', prompt)
+    if m:
+        return m.group(1), m.group(2), 'brief (O-L3)'
+    m = re.search(r'^E2E-UPSTREAM:\s*(\S+?)/(\S+)\s*$', prompt, re.M)
+    if m:
+        return m.group(1), m.group(2), 'E2E-UPSTREAM'
+    return None, None, None
+
+
+def task_work(prompt):
+    actions = []
+    for m in re.finditer(r'^E2E-DO:\s*(.+)$', prompt, re.M):
+        actions += m.group(1).split()
+    if not actions:
+        return 'r2913 fake engine: no E2E-DO directive; nothing done. No model was called.', False
+    first = (prompt.strip().splitlines() or [''])[0][:120]
+    rec = {'actions': actions}
+    said = []
+    try:
+        branch_now = must('rev-parse', '--abbrev-ref', 'HEAD')
+        base = must('rev-parse', 'HEAD')
+        work_file = f'E2E_WORK_{os.environ.get("ORBIT_TASK_ID", "") or "x"}.md'
+        with open(work_file, 'a') as f:
+            f.write(f'- {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} '
+                    f'{os.environ.get("ORBIT_TASK_ID", "")}: {first}\n')
+        must('add', work_file)
+        must('-c', 'user.name=R29-13 Fake Agent', '-c', 'user.email=agent@r2913.test', 'commit', '-qm',
+             f'e2e work for task {os.environ.get("ORBIT_TASK_ID", "")}')
+        work = must('rev-parse', 'HEAD')
+        rec.update(taskBranch=branch_now, parent=base, commit=work)
+        said.append(f'committed {work[:10]} on {branch_now}')
+        remote, branch, source = push_target(prompt)
+        rec.update(remote=remote, branch=branch, pushTargetFrom=source)
+        if 'push-upstream' in actions:
+            if not branch:
+                raise RuntimeError('push-upstream: the brief names no branch and there is no E2E-UPSTREAM')
+            must('fetch', '--quiet', remote, f'refs/heads/{branch}')
+            line_tip = must('rev-parse', 'FETCH_HEAD')
+            if git('merge-base', '--is-ancestor', line_tip, 'HEAD')[0] != 0:
+                must('-c', 'user.name=R29-13 Fake Agent', '-c', 'user.email=agent@r2913.test', 'rebase', '--quiet', line_tip)
+                work = must('rev-parse', 'HEAD')
+                rec.update(rebasedOnto=line_tip, commit=work)
+                said.append(f'rebased onto {remote}/{branch} {line_tip[:10]} -> {work[:10]}')
+            code, so, se = git('push', remote, f'HEAD:refs/heads/{branch}')
+            rec['pushUpstream'] = {'exit': code, 'out': (so + '\n' + se)[-600:]}
+            if code != 0:
+                raise RuntimeError(f'push to {remote}/{branch} exited {code}: {se[-300:]}')
+            said.append(f'pushed {work[:10]} to {remote}/{branch} ({source}); the task branch was not pushed')
+        if 'push-cherry-pick' in actions:
+            if not branch:
+                raise RuntimeError('push-cherry-pick: no branch named')
+            must('fetch', '--quiet', remote, f'refs/heads/{branch}')
+            line_tip = must('rev-parse', 'FETCH_HEAD')
+            scratch = tempfile.mkdtemp(prefix='r2913-cp-')
+            os.rmdir(scratch)
+            must('worktree', 'add', '--detach', scratch, line_tip)
+            try:
+                must('-c', 'user.name=R29-13 Fake Agent', '-c', 'user.email=agent@r2913.test', 'cherry-pick', '-x', work, cwd=scratch)
+                picked = must('rev-parse', 'HEAD', cwd=scratch)
+                code, so, se = git('push', remote, f'{picked}:refs/heads/{branch}', cwd=scratch)
+                rec['pushCherryPick'] = {'lineTipBefore': line_tip, 'picked': picked, 'exit': code, 'out': (so + '\n' + se)[-600:]}
+                if code != 0:
+                    raise RuntimeError(f'push of the cherry-pick exited {code}: {se[-300:]}')
+            finally:
+                git('worktree', 'remove', '--force', scratch)
+            said.append(f'pushed a cherry-pick of {work[:10]} as {picked[:10]} to {remote}/{branch}; '
+                        f'the task branch keeps {work[:10]}')
+        if 'push-task-branch' in actions:
+            remote_for_branch = remote or 'origin'
+            code, so, se = git('push', remote_for_branch, f'HEAD:refs/heads/{branch_now}')
+            rec['pushTaskBranch'] = {'exit': code, 'out': (so + '\n' + se)[-600:]}
+            said.append(f'pushed the task branch {branch_now} (exit {code})')
+        if 'merge-receipt' in actions:
+            answer = mcp_call('merge_receipt', {'result': 'ALREADY_MERGED', 'sourceSha': work, 'targetBranch': branch,
+                                                'sourceBranch': branch_now,
+                                                'message': 'pushed straight to the line by the agent'})
+            rec['mergeReceipt'] = answer
+            said.append(f'merge_receipt -> {"ERROR " if answer["isError"] else ""}{answer["text"][:300]}')
+        log('task-work', ok=True, **rec)
+        return 'r2913 fake engine: ' + '; '.join(said) + '. No model was called.', False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('task-work', ok=False, error=str(e), **rec)
+        return f'r2913 fake engine: {"; ".join(said)}; FAILED: {e}', True
+
+
+def turn(sid, prompt):
+    """Returns (assistant text, is_error)."""
+    parts = mcp_directives(prompt)
+    if parts:
+        return 'r2913 fake engine:\n' + '\n'.join(parts), False
+    if os.environ.get('ORBIT_TASK_ID') and '/worktrees/' in os.getcwd():
+        return task_work(prompt)
+    return 'r2913 fake engine: acknowledged. No model was called.', False
+
+
+def main():
+    if '--version' in ARGS or '-v' in ARGS[:1]:
+        print(f'{VERSION} (Claude Code)')
+        return 0
+    if ARGS[:1] == ['auth']:
+        if ARGS[1:2] == ['status']:
+            print(json.dumps({'loggedIn': True, 'authMethod': 'r2913-fake', 'apiProvider': 'firstParty'}))
+        else:
+            print('[]' if ARGS[1:2] == ['list'] else '{}')
+        return 0
+    sid = arg('--session-id') or arg('--resume') or str(uuid.uuid4())
+    if arg('--input-format') != 'stream-json':
+        # one-shot `claude -p …` (commit messages, titles, recaps): a short canned answer
+        prompt = ARGS[-1] if ARGS and not ARGS[-1].startswith('-') else ''
+        text = 'r2913 fake engine reply.'
+        if prompt.startswith('/model '):
+            print(f'Set model to {prompt.split(None, 1)[1].strip()} (r2913 fake) for this session only')
+            return 0
+        fmt = arg('--output-format')
+        if fmt == 'json':
+            print(json.dumps(result(sid, text, False)))
+        elif fmt == 'stream-json':
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'r2913-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, False))
+        else:
+            print(text)
+        return 0
+    log('session', sessionId=sid)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        kind = msg.get('type')
+        if kind == 'control_request':
+            out({'type': 'control_response',
+                 'response': {'subtype': 'success', 'request_id': msg.get('request_id'), 'response': {}}})
+        elif kind == 'user':
+            out(msg)  # --replay-user-messages: the echo is the delivery acknowledgement
+            prompt = text_of(msg.get('message'))
+            text, is_error = turn(sid, prompt)
+            log('turn', isError=is_error, prompt=prompt[:300], reply=text[:600])
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'r2913-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, is_error))
+    log('stdin-closed')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
