@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/url"
 	"os"
@@ -121,9 +122,9 @@ Options:
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
-  --auto-install-engines   Let the runner install a missing coding-engine CLI itself, the first
-  --no-auto-install-engines  time a session needs one. Asked interactively when neither is
-                           passed; an unattended register defaults to not installing.
+  --no-auto-install-engines  Do not let the runner install a missing coding-engine CLI itself;
+                           the session fails and you install it with orbit doctor.
+                           Installing on demand is the default.
   --proxy [<url>]          Use an HTTP proxy for claude on the runner so it can reach
                            the Anthropic API on a proxied network. Bare --proxy uses
                            $https_proxy/$http_proxy; or pass a URL. If omitted and a
@@ -162,7 +163,7 @@ Usage:
 Reports, for Claude Code, Codex, Kimi Code, OpenCode, and Antigravity, whether the CLI is installed, its version, a
 best-effort sign-in check, and whether the background service's PATH can see it —
 with the exact install/sign-in command for anything that's missing. Exits non-zero
-when no engine is installed. Runs automatically at the end of 'orbit register'.
+when no engine is installed.
 `,
 	"resume": `orbit resume — resume a session in this terminal
 
@@ -456,17 +457,36 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	}
 
 	server := strings.TrimRight(getStr(flags, "server", defaultServer), "/")
+	foreground := bools["foreground"]
+	// --foreground (and --no-service) skip installing the background service.
+	withService := !bools["no-service"] && !foreground
+	// `orbit register` run directly (not through install.sh) gets the same opening
+	// plan; the installer prints it before downloading.
+	if interactive() && os.Getenv("ORBIT_INSTALL_PLAN") != "1" {
+		fmt.Print("\nOrbit runner setup\n")
+		if withService {
+			fmt.Print("  Registers this machine, keeps it running in the background, and\n" +
+				"  automatically installs an engine when work needs one.\n")
+		} else {
+			fmt.Print("  Registers this machine and automatically installs an engine when\n" +
+				"  work needs one.\n")
+		}
+	}
 	// Register just this machine as a runner; agents are registered separately.
 	// The name defaults to the hostname — confirm/edit it interactively unless
 	// --name was passed.
 	name := flags["name"]
 	if name == "" {
+		if interactive() {
+			fmt.Print("\n1 · Name this machine\n    Shown in Orbit. You can rename it later.\n")
+		}
 		name = promptName(defaultRunnerName())
+	} else if interactive() {
+		fmt.Printf("\n1 · Name this machine\n    %s (from --name)\n", name)
 	}
 	labels := parseLabels(flags["labels"])
 	maxConcurrent := getInt(flags, "max-concurrent", 16)
 	token := flags["token"]
-	foreground := bools["foreground"]
 	// The directory Claude Code runs in (the project to work on). Defaults to the
 	// register cwd so a runner registered inside a repo operates on that repo.
 	workDir := flags["workdir"]
@@ -475,8 +495,6 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			workDir = cwd
 		}
 	}
-	// --foreground (and --no-service) skip installing the background service.
-	withService := !bools["no-service"] && !foreground
 	// The runner spawns claude -p, which on a proxied network must use the same
 	// HTTP proxy to reach the Anthropic API. Let the user opt in.
 	proxyVars := proxyServiceEnv(resolveProxy(flags, bools), server, firstNonEmpty(os.Getenv("no_proxy"), os.Getenv("NO_PROXY")))
@@ -496,7 +514,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			os.Exit(1)
 		}
 		finishRegister(res.RunnerID, res.RunnerToken, res.Name,
-			server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
+			server, labels, maxConcurrent, workDir, false, withService, foreground, proxyVars, bools)
 		return
 	}
 
@@ -510,23 +528,40 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		os.Exit(1)
 	}
 	link := server + "/enroll?code=" + url.QueryEscape(start.UserCode)
-	fmt.Printf("\nTo finish registering this machine, open Orbit and approve it:\n\n"+
-		"  %s\n\n  Verification code: %s\n\nWaiting for approval...\n", link, start.UserCode)
+	if interactive() {
+		fmt.Print("\n2 · Approve this machine\n")
+		fmt.Printf("    Approving: %s\n", registerIdentity(name))
+		if remoteMachine() {
+			fmt.Println("    Open this link on a device with a browser:")
+		} else {
+			fmt.Println("    Open this link in your browser:")
+		}
+		fmt.Printf("\n      %s\n\n", link)
+		fmt.Printf("    The page must show the same code:  %s\n", start.UserCode)
+		fmt.Println("    Only approve if you just ran this command.")
+		fmt.Println()
+	} else {
+		fmt.Printf("\nTo finish registering this machine, open this link and approve it:\n\n"+
+			"  %s\n\n  Verification code: %s\n", link, start.UserCode)
+	}
 	openBrowser(link)
 
-	poll, err := awaitDeviceApproval(t, start, time.Sleep)
+	poll, err := awaitDeviceApproval(t, start, registerWait(start, interactive()))
+	if interactive() {
+		fmt.Println()
+	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "\n%v\n", err)
 		os.Exit(1)
 	}
 	finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
-		server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
+		server, labels, maxConcurrent, workDir, true, withService, foreground, proxyVars, bools)
 }
 
 // awaitDeviceApproval polls a device registration until the browser decides it: the approved poll,
 // or why there is none — denied there, or not decided before it expired.
 func awaitDeviceApproval(t *Transport, start *DeviceStartResponse, sleep func(time.Duration)) (*DevicePollResponse, error) {
-	timedOut := errors.New("registration timed out — please run `orbit register` again")
+	timedOut := errors.New("✗ This approval link expired — run `orbit register` again for a new one")
 	deadline := time.Now().Add(time.Duration(start.ExpiresIn) * time.Second)
 	interval := time.Duration(max(1, start.Interval)) * time.Second
 	for time.Now().Before(deadline) {
@@ -539,7 +574,7 @@ func awaitDeviceApproval(t *Transport, start *DeviceStartResponse, sleep func(ti
 		case "approved":
 			return poll, nil
 		case "denied":
-			return nil, errors.New("registration was denied in the browser; nothing was added to your account")
+			return nil, errors.New("✗ Denied in the browser — nothing was added to your account")
 		case "expired":
 			return nil, timedOut
 		}
@@ -547,66 +582,115 @@ func awaitDeviceApproval(t *Transport, start *DeviceStartResponse, sleep func(ti
 	return nil, timedOut
 }
 
-// autoInstallConsent decides whether this runner may install an engine CLI on its own when a
-// session first needs one (see ensureEngine). Explicit flags win; otherwise we ask. An
-// unattended register — a provisioning script, no terminal to answer — records no consent
-// rather than assuming it: installing software on someone's machine is not a default.
-func autoInstallConsent(bools map[string]bool) bool {
-	switch {
-	case bools["no-auto-install-engines"]:
-		return false
-	case bools["auto-install-engines"]:
-		return true
-	case interactive():
-		return confirm("\nMay this runner install a coding CLI by itself when a session first needs one?\n"+
-			"  (otherwise that session fails and you install it here with `orbit doctor`)\n  [Y/n] ", true)
+// registerIdentity is what the approval page shows: the runner name, and the
+// hostname when --name chose something else.
+func registerIdentity(name string) string {
+	host := hostnameOr()
+	if host == "" || host == name {
+		return name
 	}
-	return false
+	return fmt.Sprintf("%s (%s)", name, host)
 }
 
-// finishRegister persists the machine runner credential and installs the
-// background service (unless running in the foreground).
-func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool, proxyVars []envVar, bools map[string]bool) {
+// registerWait is awaitDeviceApproval's sleep. On a terminal it keeps one line
+// counting down the link's life; without one it just sleeps.
+func registerWait(start *DeviceStartResponse, show bool) func(time.Duration) {
+	if !show {
+		return time.Sleep
+	}
+	deadline := time.Now().Add(time.Duration(start.ExpiresIn) * time.Second)
+	line := func() string {
+		return fmt.Sprintf("    Waiting for approval… %s left · Ctrl-C to cancel ", clockUntil(deadline))
+	}
+	fmt.Print(line())
+	return func(d time.Duration) {
+		time.Sleep(d)
+		fmt.Printf("\r%s", line())
+	}
+}
+
+func clockUntil(deadline time.Time) string {
+	s := int(time.Until(deadline).Seconds())
+	if s < 0 {
+		s = 0
+	}
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
+}
+
+// finishRegister persists the machine runner credential, installs the background
+// service (unless running in the foreground), and prints the setup receipt.
+func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, browserApproved, withService, foreground bool, proxyVars []envVar, bools map[string]bool) {
 	cfg := &RunnerConfig{
 		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
 		Name: name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
+		// Engines are installed on demand by default; --no-auto-install-engines
+		// turns that off. There is no prompt: the installer's plan says so.
+		AutoInstallEngines: autoInstallEnabled(bools),
 	}
 	if err := saveConfig(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to save config:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("\n✓ registered runner %q (%s).\n", cfg.Name, cfg.RunnerID)
+	if browserApproved {
+		fmt.Printf("\n    ✓ Approved — %s is now a runner.\n", cfg.Name)
+	} else {
+		fmt.Printf("\n    ✓ %s is now a runner.\n", cfg.Name)
+	}
 
-	// Report the engines but install nothing: which ones this machine needs depends on
-	// the agents you point at it, which don't exist yet. They're installed on demand
-	// instead, the first time a session actually asks for one — so all registration
-	// needs is the consent for that, which has to be collected here because the runtime
-	// install happens unattended.
-	runDoctor(false, proxyVars)
-	cfg.AutoInstallEngines = autoInstallConsent(bools)
-	if err := saveConfig(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, "failed to save config:", err)
-		os.Exit(1)
+	serviceStarted := false
+	if withService {
+		if err := setupService(machineHome(), proxyVars); err != nil {
+			fmt.Fprintf(os.Stderr, "\n✗ Could not start the background service: %s\n", firstLine(err.Error()))
+			fmt.Fprintln(os.Stderr, "  Start it in the foreground instead:  orbit run")
+		} else {
+			serviceStarted = true
+		}
 	}
-	fmt.Println("\nSign in to the engines you'll use: press the sign-in button in Orbit, or run `orbit doctor` here.")
+	if u, err := registeringUser(); err == nil && u.Username == "root" {
+		fmt.Println("    Running as root — agents will have root access on this machine.")
+		fmt.Println("    For production, register with a dedicated user.")
+	}
+	printRegisterReceipt(os.Stdout, cfg, serviceStarted, foreground)
 
 	if foreground {
-		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
+		fmt.Printf("\nrunning %q in the foreground — Ctrl-C to stop\n", cfg.Name)
 		// If an update re-execs this process it should come back as a runner, not
 		// repeat registration and re-issue the credential from the original argv.
 		os.Args = []string{os.Args[0], "run"}
 		clearInheritedSessionContext()
 		runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
-		return
 	}
-	if !withService {
-		fmt.Println("  Start it with:  orbit run")
-		return
+}
+
+// autoInstallEnabled is the register-time default: engines install on demand
+// unless this registration turned it off.
+func autoInstallEnabled(bools map[string]bool) bool {
+	return !bools["no-auto-install-engines"]
+}
+
+// printRegisterReceipt is the last thing a successful registration prints: what
+// this machine is, and the one thing to do next.
+func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foreground bool) {
+	state := "is registered"
+	if serviceStarted {
+		state = "is online"
 	}
-	if err := setupService(machineHome(), proxyVars); err != nil {
-		fmt.Fprintf(os.Stderr, "\nnote: could not auto-install the background service (%s)\n", firstLine(err.Error()))
-		fmt.Fprintln(os.Stderr, "  you can run it in the foreground instead:  orbit run")
+	fmt.Fprintf(w, "\n✓ Setup complete — %s %s.\n\n", cfg.Name, state)
+	machine := cfg.Name
+	if host := hostnameOr(); host != "" && host != cfg.Name {
+		machine = fmt.Sprintf("%s (%s)", cfg.Name, host)
 	}
+	fmt.Fprintf(w, "    Machine  %s\n", machine)
+	switch {
+	case foreground:
+		fmt.Fprintln(w, "    Next     create a workspace in Orbit to send work; Ctrl-C stops the runner.")
+	case serviceStarted:
+		fmt.Fprintln(w, "    Next     set up a coding engine, then create a workspace on this machine.")
+	default:
+		fmt.Fprintln(w, "    Next     start it with `orbit run`, then create a workspace in Orbit.")
+	}
+	fmt.Fprintf(w, "             %s/infrastructure\n", strings.TrimRight(cfg.ServerURL, "/"))
+	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
 }
 
 // cmdUnregister tears down this machine's runner: stops/removes the service,
@@ -1090,7 +1174,7 @@ func promptName(def string) string {
 	if !interactive() {
 		return def
 	}
-	fmt.Printf("Runner name [%s]: ", def)
+	fmt.Printf("    Name [%s]: ", def)
 	line, _ := stdinReader.ReadString('\n')
 	if s := strings.TrimSpace(line); s != "" {
 		return s

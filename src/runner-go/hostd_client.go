@@ -79,9 +79,7 @@ func registerViaHostd(socketPath string, proxyVars []envVar) bool {
 		return false
 	}
 	unit := hostdUnit(resp)
-	fmt.Printf("\n✓ %s enabled and started — no root needed.\n"+
-		"  Status:  systemctl status %s\n"+
-		"  Logs:    journalctl -u %s -f\n", unit, unit, unit)
+	printServiceStarted("runs at boot")
 	if len(proxyVars) > 0 {
 		// The legacy path bakes the proxy into a unit it writes for this one user. The
 		// broker's template is shared by every uid on the host and carries no per-user
