@@ -202,7 +202,8 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
  * `CoordinatorDeliveryLineView`). The owner's answer's pill (`OwnerAnswerLineView`): the sentence gives way with an ellipsis and the
  * time does not; at a phone's width the two take a row each, the sentence first. Pressing it opens the words
  * the agent read, with the task the fact names a press away. Unconfirmed, it says so in every Orbit card's words, and nothing of it goes
- * back to the composer: nobody typed it.
+ * back to the composer: nobody typed it. Where this conversation is not the project's coordinator — the owner's answer to a criteria
+ * proposal a task's run filed — the line says "Sent to this session" and opens to "What this session was told".
  */
 @Composable
 internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?, open: (String) -> Unit) {
@@ -219,7 +220,7 @@ internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row((if (phone) Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)) else Modifier.clip(RoundedCornerShape(50)))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClickLabel = OwnerAnswerLine.told) { shown = true }.padding(horizontal = 12.dp, vertical = 6.dp),
+            .clickable(onClickLabel = CoordinatorDeliveryLine.told(delivery)) { shown = true }.padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("→", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = tone)
             if (phone) {
@@ -243,7 +244,8 @@ internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?
     if (shown) CoordinatorDeliveryTold(card, delivery, event, open) { shown = false }
 }
 
-/** What the coordinator was told: the line it was sent as, its words verbatim, what delivery appended folded under them, and the task. */
+/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, what delivery appended folded under
+ * them, and the task. */
 @Composable
 private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: CoordinatorDelivery, event: RunEvent?, open: (String) -> Unit,
     close: () -> Unit) {
@@ -254,7 +256,7 @@ private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: Coordinator
             Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(OwnerAnswerLine.told, style = MaterialTheme.typography.titleSmall)
+                    Text(CoordinatorDeliveryLine.told(delivery), style = MaterialTheme.typography.titleSmall)
                     TextButton(onClick = close) { Text("Close") }
                 }
                 Text(CoordinatorDeliveryLine.sentence(delivery), style = MaterialTheme.typography.labelMedium,

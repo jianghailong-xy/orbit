@@ -153,6 +153,9 @@ final class CoordinatorDeliveryCopyParityTests: XCTestCase {
                     "an unnamed revision left out", Self.webReader)
         assertBuilt(web, "count: sentence.includes('{count}') ? card.count as number : null,",
                     "an unnamed count left out", Self.webReader)
+        // Only the server's own false says this conversation is not the coordinator, as this end reads it.
+        assertBuilt(web, "toCoordinator: card.toCoordinator !== false,", "who the conversation is to the project",
+                    Self.webReader)
     }
 
     // MARK: the words
@@ -213,17 +216,28 @@ final class CoordinatorDeliveryCopyParityTests: XCTestCase {
 
     /// One line in both clients: the sentence, then what a version handed to its coordinator says, on the
     /// receipt clock; opened, the owner's answer's heading over the words, and the task's link at the foot.
+    /// Where the conversation is not the project's coordinator, both ends say this session instead.
     func testTheLineIsTheWebLineWordForWord() throws {
         let reader = try flat(Self.webReader)
         assertBuilt(reader, "export const COORDINATOR_DELIVERY_STICKY_LABEL = '\(CoordinatorDeliveryCard.stickyLabel)';",
                     "the sticky bar's label", Self.webReader)
         assertBuilt(reader, "export const COORDINATOR_DELIVERY_ITS_TASK = '\(CoordinatorDeliveryCard.itsTask)';",
                     "the task's link", Self.webReader)
+        assertBuilt(reader,
+                    "export const COORDINATOR_DELIVERY_SENT_TO_SESSION = '\(CoordinatorDeliveryCard.sentToThisSession)';",
+                    "where a reply to a task's run says it went", Self.webReader)
+        assertBuilt(reader,
+                    "export const COORDINATOR_DELIVERY_SESSION_TOLD = '\(CoordinatorDeliveryCard.toldThisSession)';",
+                    "the heading over that reply's words", Self.webReader)
 
         let line = try flat(Self.webLine)
         assertBuilt(line, "const sentence = coordinatorDeliverySentence(card);", "the line's sentence", Self.webLine)
-        assertBuilt(line, "{sentToCoordinatorLine(card.deliveredAt)}", "the line's time", Self.webLine)
-        assertBuilt(line, "{OWNER_ANSWER_TOLD}", "the heading over the words", Self.webLine)
+        assertBuilt(line, "{sentLine(card)}", "the line's time", Self.webLine)
+        assertBuilt(line, "? sentToCoordinatorLine(card.deliveredAt)", "the coordinator's time", Self.webLine)
+        assertBuilt(line, ": `${COORDINATOR_DELIVERY_SENT_TO_SESSION} · ${decisionReceiptTime(card.deliveredAt)}`;",
+                    "this session's time, on the same clock", Self.webLine)
+        assertBuilt(line, "{card.toCoordinator ? OWNER_ANSWER_TOLD : COORDINATOR_DELIVERY_SESSION_TOLD}",
+                    "the heading over the words", Self.webLine)
         assertBuilt(line, ">\(CoordinatorDeliveryCard.undelivered)<", "what an unconfirmed turn says", Self.webLine)
         assertBuilt(line, "{COORDINATOR_DELIVERY_ITS_TASK}", "the task's link at the foot", Self.webLine)
         // The sticky bar's anchor: the label and the sentence, as `StickySummary` names the turn here.
@@ -241,6 +255,12 @@ final class CoordinatorDeliveryCopyParityTests: XCTestCase {
                        "Evidence revision 1 submitted: Fix the claim · "
                            + "\(EvidenceDecisions.sentToCoordinator) · "
                            + EvidenceDecisions.receiptTime(card.deliveredAt, now: sameDay))
+        let run = CoordinatorDelivery(kind: .criteriaRejected, deliveredAt: card.deliveredAt, toCoordinator: false)
+        XCTAssertEqual(CoordinatorDeliveryCard.line(run, now: sameDay),
+                       "Criteria proposal rejected · \(CoordinatorDeliveryCard.sentToThisSession) · "
+                           + EvidenceDecisions.receiptTime(run.deliveredAt, now: sameDay))
+        XCTAssertEqual(CoordinatorDeliveryCard.heading(run), CoordinatorDeliveryCard.toldThisSession)
+        XCTAssertEqual(CoordinatorDeliveryCard.heading(card), CoordinatorDeliveryCard.told)
     }
 
     /// The browser draws the line from the card, in the transcript's own dispatch, as this end does.

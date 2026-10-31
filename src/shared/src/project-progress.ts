@@ -1457,7 +1457,8 @@ export type CoordinatorDeliveryKind = (typeof COORDINATOR_DELIVERY_KINDS)[number
  * Without this a client had nothing else to draw the turn from, and drew the platform's message as a
  * bubble the owner had typed. Recorded beside the runner's echo like `OwnerAnswerCard`, so a client
  * draws the turn as one line — `Evidence revision 1 submitted: <task> · Sent to the coordinator ·
- * 07:30 PM` — that opens to those words. The sentence is the clients' to write from these fields
+ * 07:30 PM`, or `Sent to this session` where this conversation is not the project's coordinator
+ * (`toCoordinator`) — that opens to those words. The sentence is the clients' to write from these fields
  * (web `coordinatorDeliverySentence`, OrbitKit `CoordinatorDelivery`, Android
  * `CoordinatorDeliveryLine`), one copy held by parity tests.
  */
@@ -1481,6 +1482,16 @@ export interface CoordinatorDeliveryCard {
    * the owner's evidence card reads as `Sent to the coordinator`), or the reply turn's own.
    */
   deliveredAt: string;
+  /**
+   * Whether this conversation is the project's coordinator, by the project's own pointer
+   * (`project.coordinator_session_id`) as it stood when the card was read: when the runner echoed
+   * the turn, for the card stored with the echo. True for every fact a coordinator is told. For the
+   * answer to a criteria proposal it is true only where the proposal was filed from the conversation
+   * coordinating that project; filed from anywhere else, a task's run above all, it is false, and
+   * the line says `Sent to this session` and opens to `What this session was told`. A client reads a
+   * card stored before this field existed as true, the way it was drawn.
+   */
+  toCoordinator: boolean;
 }
 
 /**

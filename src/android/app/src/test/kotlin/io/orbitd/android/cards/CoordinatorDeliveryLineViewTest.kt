@@ -37,10 +37,11 @@ class CoordinatorDeliveryLineViewTest {
     private val told = "From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\n" +
         "Task “$title” (34nmQgDgyywHNIUtjb9TD) submitted revision 1 of its completion evidence."
     private val delivered = Instant.now().toString()
-    private fun delivery(kind: String = "EVIDENCE_SUBMITTED", task: Boolean = true) = buildJsonObject {
+    private fun delivery(kind: String = "EVIDENCE_SUBMITTED", task: Boolean = true, toCoordinator: Boolean? = null) = buildJsonObject {
         put("kind", kind)
         if (task) putJsonObject("task") { put("id", "34nmQgDgyywHNIUtjb9TD"); put("title", title) } else put("task", JsonNull)
         put("revision", 1); put("count", JsonNull); put("deliveredAt", delivered)
+        toCoordinator?.let { put("toCoordinator", it) }
     }
     private val sentence = "Evidence revision 1 submitted: $title"
     private val sent get() = CoordinatorDeliveryLine.sent(CoordinatorDeliveryLine.parse(delivery())!!)
@@ -99,6 +100,45 @@ class CoordinatorDeliveryLineViewTest {
         compose.waitForIdle()
         compose.onNodeWithText(OwnerAnswerLine.told, useUnmergedTree = true).assertIsDisplayed()
         compose.onAllNodesWithText(CoordinatorDeliveryLine.itsTask, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /**
+     * The owner's answer to a criteria proposal a task's run filed is told to that run, not to the coordinator: its line says it was sent
+     * to this session, pressing it is labelled and opens as what this session was told, and nothing on either says the coordinator.
+     */
+    @Test fun aReplyToATasksRunSaysThisSession() {
+        val card = delivery("CRITERIA_REJECTED", task = false, toCoordinator = false)
+        val event = echo(card)
+        show { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        val run = CoordinatorDeliveryLine.parse(card)!!
+        assertTrue(CoordinatorDeliveryLine.sent(run).startsWith("Sent to this session · "))
+        compose.onNodeWithText("Criteria proposal rejected", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText(CoordinatorDeliveryLine.sent(run), useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText("Sent to the coordinator", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        val line = compose.onNode(hasClickAction() and hasText("Criteria proposal rejected")).fetchSemanticsNode()
+        assertEquals("What this session was told", line.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
+
+        compose.onNodeWithText("Criteria proposal rejected", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(CoordinatorDeliveryLine.toldThisSession, useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText(OwnerAnswerLine.told, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Sent to the coordinator", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText(told, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /** Told to the project's coordinator, the same reply says what every delivery says. */
+    @Test fun aReplyToTheCoordinatorSaysWhatItSaid() {
+        val card = delivery("CRITERIA_APPROVED", task = false, toCoordinator = true)
+        val event = echo(card)
+        show { TranscriptCardView(transcriptCards(event).single(), {}, event) }
+        compose.onNodeWithText(CoordinatorDeliveryLine.sent(CoordinatorDeliveryLine.parse(card)!!), useUnmergedTree = true)
+            .assertIsDisplayed().assertTextContains("Sent to the coordinator", substring = true)
+        val line = compose.onNode(hasClickAction() and hasText("Criteria proposal approved")).fetchSemanticsNode()
+        assertEquals(OwnerAnswerLine.told, line.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
+        compose.onNodeWithText("Criteria proposal approved", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(OwnerAnswerLine.told, useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText(CoordinatorDeliveryLine.toldThisSession, useUnmergedTree = true).assertCountEquals(0)
     }
 
     /** Unconfirmed, the line says so in every Orbit card's words — and offers none of the agent's words back to the composer. */
