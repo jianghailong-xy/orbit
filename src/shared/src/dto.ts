@@ -916,6 +916,81 @@ export interface RunnerClaudeHistoryResult {
  *  than an "All N" that quietly imports fewer than it says. */
 export const CLAUDE_HISTORY_MAX_TRANSCRIPTS = 200;
 
+/** What a runner declares when it answers the directory probe relay (DirProbeCommand,
+ *  docs/first-workspace-contract.md §2). A client asks only a runner that declares it. */
+export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
+
+/** What a runner declares when it makes a claimed session's work dir on request
+ *  (ClaimedSession.createWorkDir, docs/first-workspace-contract.md §4). POST /sessions makes a
+ *  workspace in a new folder only on a runner that declares it. */
+export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
+
+/** Control plane → runner: what is at one path on this machine (docs/first-workspace-contract.md §2).
+ *
+ *  The sibling of ClaudeHistoryCommand, for the same reason: it is asked while a folder for a
+ *  machine's first workspace is being chosen, before any workspace row exists — `agentDirs` names
+ *  workspaces, and this names a bare path. One slot per runner, since it answers whatever path was
+ *  asked last; handed to one heartbeat, once. */
+export interface DirProbeCommand {
+  /** The path as asked: `~` not expanded — the runner expands it. Echoed back exactly as
+   *  RunnerDirProbeResult.path, which is what the answer is matched on. */
+  path: string;
+  /** When the user asked, echoed back for log correlation. */
+  requestedAt?: string;
+}
+
+/** What one path on a runner is, as the runner found it. */
+export interface DirProbe {
+  /** The path the runner looked at: `~` expanded, absolute. */
+  path: string;
+  /** Something is at that path. */
+  exists: boolean;
+  /** It is a directory. */
+  isDir: boolean;
+  /** It is inside a git work tree. False when it is not a directory. */
+  isGit: boolean;
+  /** The checked-out branch when `isGit`; null otherwise, and on a detached HEAD. */
+  branch: string | null;
+  /** It is the runner user's home directory. */
+  isHome: boolean;
+  /** Free bytes on its filesystem, as available to the runner's user. Null when unknown — a missing
+   *  path, a platform with no answer — which never means "full". */
+  freeBytes: number | null;
+  /** Why the runner could not look. Absent on success, including the ordinary success of finding
+   *  nothing there (`exists: false`). */
+  error?: string;
+}
+
+/** Runner → control plane: POST /runner/dir-probe-result. */
+export interface RunnerDirProbeResult {
+  /** DirProbeCommand.path, echoed exactly: the answer is stored only while the relay still names it,
+   *  so one about a path the person has since retyped is dropped. */
+  path: string;
+  result: DirProbe;
+}
+
+/** GET /runners/:id/dir-probe?path= — the answer a folder picker waits on. */
+export interface DirProbeAnswer {
+  /** The path asked about: the query, trimmed. */
+  path: string;
+  /** `pending` while the runner has yet to answer about this path, `done` once it has, `idle` when
+   *  nobody is asking about it. */
+  status: 'idle' | 'pending' | 'done';
+  /** The answer about this path only — never one about a path asked earlier. */
+  result: DirProbe | null;
+}
+
+/** POST /sessions `newWorkspace`: the workspace a session makes in its own transaction, on its
+ *  `assignedRunnerId`, when the request names no workspace (docs/first-workspace-contract.md §3).
+ *  Exactly one of the two. */
+export interface NewWorkspaceRequest {
+  /** A folder on that machine, already confirmed there through the directory probe relay. */
+  workDir?: string;
+  /** A new folder under the runner's reposRoot: one path segment of 1–64 characters from
+   *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
+  newFolder?: string;
+}
+
 /** Runner → control plane: how the repair went, and where the checkout's old content lives now. */
 export interface RunnerRepoCleanupResult {
   root: string;
@@ -1069,6 +1144,10 @@ export interface RunnerHeartbeatResponse {
    *  POST /runner/claude-history-result. Absent on older control planes, and whenever nobody is
    *  waiting on an answer — the new-workspace form is the only thing that asks. */
   claudeHistoryRequest?: ClaudeHistoryCommand;
+  /** A path to report what is there, answered via POST /runner/dir-probe-result
+   *  (docs/first-workspace-contract.md §2.3). Present only on the heartbeat that hands it over, once;
+   *  absent on older control planes, and whenever nobody is asking. */
+  dirProbeRequest?: DirProbeCommand;
   /** Integration jobs this runner has just claimed: the platform's own git work, putting a task's
    *  branch onto its project's integration line
    *  (docs/project-integration-line-contract.md §2.3 J-T2). Sent only to a process that declared
@@ -1828,6 +1907,11 @@ export interface ClaimedSession {
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
+  /** Present, and true, only for a workspace Orbit made in a new folder (Workspace.autoCreateWorkDir,
+   *  docs/first-workspace-contract.md §4): a runner that declares `create-workdir/v1` makes workDir
+   *  (`mkdir -p`, 0755) before the engine starts when it is missing — only when the resolved path lies
+   *  inside its own resolved reposRoot. Absent otherwise, never false. */
+  createWorkDir?: boolean;
   /** The branch this session's work merges INTO (its recorded mergeTarget, else its agent's
    *  defaultMergeTarget) — the same branch the status bar's Merge button names. The runner
    *  judges "already merged" against it, so work landed in e.g. `develop` isn't reported
@@ -2257,6 +2341,8 @@ export interface ReclaimSession {
   branch?: string;
   /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
   autoInitGit?: boolean;
+  /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */
+  createWorkDir?: boolean;
   /** Branch this session merges into, cf. ClaimedSession.mergeTarget. */
   mergeTarget?: string;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */

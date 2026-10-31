@@ -404,6 +404,16 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       await sql.query(`UPDATE "runner" SET claude_history_status = 'done' WHERE id = $1`, [runnerId]);
       assert.equal((await settle()).filter((a) => a.claudeHistoryRequest).length, 0);
     });
+    await t3.test('dirProbeRequest (RunnersService.requestDirProbe): claimed once', async () => {
+      const ask = await deliveredAfter(() => runners.requestDirProbe(ownerId, runnerId, '~/src/app'), (a) => a.dirProbeRequest);
+      assert.equal(ask?.path, '~/src/app');
+      // Claimed: probing, which keeps the runner reconciling until its answer lands, and is never handed out again.
+      const probing = await beat();
+      assert.ok(isFull(probing.answer), 'while it is probing, every beat reconciles in full, as over HTTPS');
+      assert.equal(probing.answer.dirProbeRequest, undefined);
+      await sql.query(`UPDATE "runner" SET dir_probe_status = 'done' WHERE id = $1`, [runnerId]);
+      assert.equal((await settle()).filter((a) => a.dirProbeRequest).length, 0);
+    });
     await t3.test('agentDirs (WorkspacesService.update)', async () => {
       const dirs = await deliveredAfter(
         () => workspaces.update(ownerId, workspaceId, { workDir: '/home/u/src/app-moved' } as never),

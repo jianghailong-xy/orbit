@@ -764,6 +764,25 @@ model Runner {
   // ago, never the record of what was imported.
   claudeHistoryResult Json?     @map("claude_history_result")
 
+  /// The directory `orbit register` ran in, as the CLI reported it (migration 0457): written when a device
+  /// registration is approved and by a token registration that carries one, overwritten by the next that does. A
+  /// suggestion the setup card probes before offering it, never a default (docs/first-workspace-contract.md §1).
+  registerDir    String?   @map("register_dir")
+  /// One-slot "what is at this path on this machine?" relay (migration 0457, docs/first-workspace-contract.md §2),
+  /// the shape of the Claude history relay above. Asked while a folder for a first workspace is being chosen, before
+  /// any workspace row exists to key an answer to.
+  ///   NULL     — nobody is asking
+  ///   pending  — the next heartbeat carries the request
+  ///   probing  — handed to one heartbeat; never handed out again
+  ///   done     — dirProbeResult holds the answer FOR dirProbePath
+  dirProbeStatus String?   @map("dir_probe_status")
+  /// The path as asked (`~` not expanded), kept beside the answer so a late answer about a path the person has since
+  /// retyped reads as stale rather than as the verdict on the current one.
+  dirProbePath   String?   @map("dir_probe_path")
+  dirProbeAt     DateTime? @map("dir_probe_at")
+  /// @orbit/shared RunnerDirProbeResult: the asked path and what the runner found there. Advisory and disposable.
+  dirProbeResult Json?     @map("dir_probe_result")
+
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
@@ -1192,6 +1211,10 @@ model Workspace {
   // worktree (the workspace's concurrent sessions then share one working tree); the
   // merge/commit/diff machinery is skipped since there's no isolated branch.
   enableWorktree      Boolean   @default(false) @map("enable_worktree")
+  /// The work dir is a folder Orbit asked the runner to make (migration 0457): a workspace POST /sessions made with
+  /// `newFolder`, under the runner's reposRoot. Its claims carry `createWorkDir`, and the runner makes the directory
+  /// (`mkdir -p`, only inside its own reposRoot) before the engine starts. False for every other workspace.
+  autoCreateWorkDir   Boolean   @default(false) @map("auto_create_work_dir")
   // The branch this workspace's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Workspace-scoped so a chosen target sticks across all its sessions.
@@ -1616,6 +1639,10 @@ model Session {
   // this is durable provenance, and it is what "remove the conversations this directory's history
   // brought in" selects on — long after every import has finished.
   importedAt           DateTime? @map("imported_at")
+  /// Whether this session made its own workspace: POST /sessions with `newWorkspace`, which writes the workspace,
+  /// the session and its first message in one transaction (migration 0457, docs/first-workspace-contract.md §3).
+  /// Clients draw "Created workspace …" as the conversation's first line from it. False for every other session.
+  createdWorkspace     Boolean   @default(false) @map("created_workspace")
   provider             String    @default("claude")
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.

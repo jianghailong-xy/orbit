@@ -267,6 +267,29 @@ export class RunnersController {
     return this.runners.getClaudeHistory(user.userId, id, workDir ?? '');
   }
 
+  // What is at a path on this machine, asked while the folder for its first workspace is being chosen
+  // (docs/first-workspace-contract.md §2). Owner-scoped like the relays above: it reads that machine's disk. The POST
+  // asks, the GET waits for the answer.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/dir-probe')
+  askDirProbe(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: { path?: string },
+  ) {
+    return this.runners.requestDirProbe(user.userId, id, dto?.path);
+  }
+
+  @PatForbidden('RUNNER_CONTROL')
+  @Get(':id/dir-probe')
+  dirProbe(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('path') path?: string,
+  ) {
+    return this.runners.getDirProbe(user.userId, id, path);
+  }
+
   @PatForbidden('RUNNER_CREDENTIALS')
   @Post(':id/rotate-token')
   rotateToken(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
