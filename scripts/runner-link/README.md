@@ -24,12 +24,25 @@ be taken for a deployment's.
 | `gen-event-kind-fixtures.mjs` | Regenerate `src/runner-go/testdata/b8-link-events.json` from the apiserver's event rules: `isNoiseSystemEvent`, the live-only types and the coordinator-context boundary subtypes, which the runner's link event stream mirrors. |
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
-| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). `loadgen-report.test.mjs` tests it on synthetic runs: `node --test scripts/runner-link/`. |
+| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`), and a second verdict that counts only the errors a caller saw, each once (task C2b). `--from-report <report.json>` gives the second verdict of a run whose records are gone. `loadgen-report.test.mjs` tests it on synthetic runs and on C2b's two judging runs: `node --test scripts/runner-link/`. |
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
 | `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
-| `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task O3's inputs are `cell-inputs.json`. See [The cell's size](#the-cells-size). |
+| `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task C2b's inputs are `cell-inputs.json`, task O3's that file at bf061ef45. See [The cell's size](#the-cells-size) and [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 | `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
+| `reconnect-drill.sh` | Task C2b's two gateway restarts, beside a load test that is running: it waits for the whole fleet and the loadgen's settle, then measures a release (SIGTERM, the gateway drains) at `--first` (10 minutes) into the steady window and a crash (SIGKILL) at `--second` (20 minutes) with `reconnect-probe.sh`, and reduces both with `reconnect-report.mjs`. See [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
+| `reconnect-probe.sh` | One gateway restart, measured: the welcome walk's depth before it, `pg_stat_statements` around it, the gateway's `/metrics` and each container's CPU and memory every second, the old process's exit and who started the new one (Docker 29.9.2 does not apply the restart policy to `docker kill`, so after 5 s it runs `docker start` itself), the reconnect's milestones, the reaper's lines and the web gateway's link tokens. It reads four apiservers, `apiserver` to `apiserver-d`, as C2b's reconnect run had. |
+| `reconnect-report.mjs` | A `reconnect-probe.sh` directory reduced to the figures C2b reported: the handshake's quantiles, the welcome route's calls and their database time, what the reconnect added to each container's CPU, each process's counters, the reaper. |
+| `welcome-walk-cost.sh` | The welcome route's walk, timed in the database on the sessions a finished run left: 40 sessions spread over the depths they hold, the fastest of five `EXPLAIN (ANALYZE, TIMING OFF, BUFFERS)` in one backend, and a least-squares fit of its cost against a session's stored events. Its header still says `\timing`, which C2b's fix replaced with `EXPLAIN`. |
+| `thread_peaks.py` | Each apiserver's main thread over a run's steady window, from `threads.jsonl`: its mean, its busiest 10 s and 60 s, and its share of its process. `report.md` gives the means alone. `python3 -I scripts/runner-link/thread_peaks.py <run dir>`. |
+| `vacuum-sampler.sh` | Read-only: the vacuums and analyzes in progress every 2 s, one JSON line each, from one long-lived `psql` backend. Stop it with `kill`, then end its backend with `pg_terminate_backend`: the `psql` that `docker exec` started outlives it. It names C2b's stack, `orbit-link-c2b`. |
+| `vacuum_windows.py` | The database's 10 s CPU peak over a run's steady window: over the whole window, and inside and outside the vacuums `vacuum-sampler.sh` saw, with each vacuum's table, start and length. A share of 8 cores unless given `--db-cpus`. |
+| `lock-sampler.sh` | Read-only: every 2 s, the backends waiting on a heavyweight lock, the lock each waits for and the backends holding it, with their wait events. It found the NOTIFY commit lock behind C2b's lock timeouts on COMMIT. It names C2b's stack, `orbit-link-c2b`. |
+| `minute_timeline.py` | A run minute by minute: link tokens by status, the gateway's heartbeat `lost` retries and `cancelled` calls, welcome timeouts, the apiservers' slow requests with the slowest, and the database's memory. `--mark HH:MM:SS=label` marks a moment, such as a kill. |
+| `tcp-counters.sh` | The kernel's TCP counters in each container's own network namespace, as one JSON line: one before a run and one after give who reset what (`TCPAbortOnClose`, `OutRsts`, `EstabResets`, the listen queue's overflows). Needs `sudo`. It names C2b's stack, `orbit-link-c2b`. |
+| `pgmem-snap.sh` | A shell function to source, `snap <label>`: one JSON line of the database container's memory, its `memory.events` and its page cache's scans and refaults. It names C2b's stack, `orbit-link-c2b`. |
+| `fsync_bench.py` | The disk's fsync latency, to compare a machine with C2b's: `python3 -I scripts/runner-link/fsync_bench.py <file> <count> <bytes>`. |
+| `ed25519_bench.mjs` | One Node thread's speed at the Ed25519 check a link token takes, to compare a machine's cores with C2b's: `node scripts/runner-link/ed25519_bench.mjs`. |
 | `gateway-routes-check.sh` | The web gateway's routes for several apiservers (`gateway/several-apiservers/`) on stand-ins that answer with their own name: which nginx loads which configuration (an nginx older than 1.27.3 loads `gateway/nginx.conf` and refuses the routes), one session's streams on one apiserver, the sessions spread over all of them, link tokens on all of them, the rest on the first, an apiserver killed and started again, and a gateway started before any apiserver (502 until its next look-up, 10 s later). A Compose project of its own, removed at the end; no staging stack needed. |
 | `gateway-limit.sh` | The link gateway alone, level after level: one real gateway built from the checkout (TLS, MODE_LINK, a real NATS) against the stub backend ([src/link-gateway/cmd/linkstub](../../src/link-gateway/cmd/linkstub/README.md)) instead of apiservers and a database, loaded by loadgen shards from several source addresses. No staging stack needed. See [The gateway alone](#the-gateway-alone). |
 | `gateway-limit-report.mjs` | A `gateway-limit.sh` run's report, level by level (`report.md`, `report.json`). `gateway-limit-report.test.mjs` tests it on a synthetic run: `node --test scripts/runner-link/`. |
@@ -488,7 +501,9 @@ steady window after 2 minutes' settle:
 ### The cell's size
 
 Task O3 (2026-10-26) measured what each operation costs once tasks O1 and O2 were in, and projected the cell's size
-from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives the result for operators.
+from it: four apiservers and 8 database cores, below. Task C2b (2026-10-31) then measured the cell at its full load and
+sized it at six apiservers and 11 database cores ([Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b)).
+[docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives the result for operators.
 
 **How it was measured.**
 
@@ -521,8 +536,9 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
   indexes 1,070 bytes, its tool calls about 400.
 - **Peaks.** The database's 10-second peak was 1.40 times its mean with events, and the apiserver's 1.17.
 
-**What the projection takes** ([cell-inputs.json](cell-inputs.json), each cost with the runs it rests on;
-`node scripts/runner-link/cell-spec.mjs scripts/runner-link/cell-inputs.json` prints every step of the arithmetic):
+**What the projection took** (cell-inputs.json as of bf061ef45, each cost with the runs it rests on:
+`git show bf061ef45:scripts/runner-link/cell-inputs.json`; `cell-spec.mjs` prints every step of the arithmetic. The
+file holds C2b's inputs now):
 
 | Input | Value | From |
 | --- | --- | --- |
@@ -630,14 +646,16 @@ standby was synchronous. A cell's database needs a synchronous standby (`synchro
 - **The live relay, measured cleanly.**
   - On HPC, 24 attempts at the live pair on the 3,000-runner fleet (2026-10-26, 13:25–23:13Z) and 12 on a 600-runner
     fleet (until the coordinator's deadline, 06:00Z on 2026-10-27) were all void. The host swapped in 132–17,944 pages/s.
-  - C2b measures it on the dedicated machine, with `--watch 500` and `-live-rate 10000` at the cell's scale.
+  - C2b measured it on a machine of its own, with `--watch 500` and `-live-rate 10000` at the cell's scale: 0.0882 ms
+    of apiserver CPU a delta over four apiservers, 0.0999 ms over six ([Re-testing at cell
+    scale](#re-testing-at-cell-scale-task-c2b)).
 - **The design question: do the session streams need spreading over every apiserver?** It would take a web-gateway
   route sending `GET /api/sessions/:id/events` to every apiserver (proposal only; not in the deployment). Or the first
   apiserver leaves `LINK_INTERNAL_API_URLS` once (b) is done.
 - **What else the first apiserver carries.** People's own requests, the web, the apps and their streams, are not
   measured here.
-- **The beat's split by kind, re-measured on a quiet host** (C2b). The share reconciled in full in production is the
-  25% estimate.
+- **The beat's split by kind, re-measured on a quiet host.** C2b did not run it (`--mark-every`): its projection takes
+  the mixed beat, 11.4% reconciled in full. The share reconciled in full in production is the 25% estimate.
 - **What each apiserver's own background work costs the database.** The jobs that run in every process repeat their
   reads N times (the reaper's sweep, the task sweep), on a production database larger than staging's.
 
@@ -655,47 +673,139 @@ These are upper bounds, from 0.21 ms a statement. None of them is implemented.
 
 ### Re-testing at cell scale (task C2b)
 
-**The machine.** One machine of its own, for the whole stack and the loadgen, with one kind of core. On it, the
-containers need no pinning.
+Task C2b (34m88i6i8CQeU4dSuw7HM) ran the cell's load an hour at a time on a machine of its own on 2026-10-31. Its
+reports are the task's comments "C2b 证据 12" to "C2b 证据 30", evidence 12 to 30 below. The cell's size they led to is
+in docs/runner-link-design.md §15.3 and [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size).
 
-- **32 cores.** At the cell's peak the stack takes about 18:
-  - the database's allocation, 8;
-  - four apiservers, about 1 core each;
-  - one link gateway carrying all 15,000 connections, 1 to 2 cores;
-  - the loadgen and the watchers, about 1 core each;
-  - NATS and nginx, less than 1.
+**The machine.** A GCE c2d-standard-56: 56 vCPU (28 cores of AMD EPYC 7B13, two threads each), 220 GiB of memory, a
+500 GB pd-ssd, no swap. Over an hour the host had 7.7 of its cores busy on average, 10.8 with the live deltas, and
+never less than 204 GiB of memory available. After the six runs below, the task's last session report gave the
+database 58 GB and the WAL archive 151 GB.
 
-  The rest is room for the host, the samplers, and a gateway release's reconnects.
-- **64 GB of memory.** The database 16 GB, four apiservers up to 3 GB each, the gateway about 3 GB (190 KB a connection),
-  the loadgen about 1.5 GB.
-- **200 GB of SSD.** An hour at 2,000 events a second stores about 11 GB of tables, and writes about 40 GB of WAL into
-  the stack's archive before it is compressed.
-
-**The stack**, in the cell's shape, except that one gateway node carries every connection:
+**The stack**, in the cell's shape, except that one gateway node carries every connection. These are the reruns'
+settings; C2b's first four runs had 4 apiservers and 8 database cores:
 
 ```bash
 export ORBIT_LINK_STAGING_PROJECT=orbit-link-c2b ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c2b
-export ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 \
-  ORBIT_LINK_STAGING_DB_CPUS=8 ORBIT_LINK_STAGING_DB_MEM=16g
+export ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_SPREAD=1 \
+  ORBIT_LINK_STAGING_BACKENDS=6 ORBIT_LINK_STAGING_DB_CPUS=11 ORBIT_LINK_STAGING_DB_MEM=16g
 scripts/runner-link/staging-up.sh
 docker exec orbit-link-c2b-postgres psql -U orbit -d orbit -c "ALTER SYSTEM SET shared_buffers = '4GB'" \
   -c "ALTER SYSTEM SET max_wal_size = '8GB'" -c "ALTER SYSTEM SET max_connections = 200"
 docker restart orbit-link-c2b-postgres && scripts/runner-link/staging-up.sh --no-build
 scripts/runner-link/loadgen-seed.sh seed                 # 10,000 owners, 15,000 runners, 40,000 open sessions
-scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 2000 -volatile
-scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name live-1h --watch 500 -- \
-  -duration 1h -event-rate 2000 -volatile -live-rate 10000
 ```
 
+**The runs**, as C2b ran them, each with its `arm` under the host's lock:
+
+```bash
+# The heartbeats alone, first: the other runs' costs are taken against it.
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name hb -- -duration 10m -event-rate 0 -volatile -ramp-rate 60 -settle 3m'
+# The hour that decides the criterion: C2b's rerun, on six apiservers and 11 cores (its first, full-1h, had four and 8).
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name full-1h-r2 -- -duration 1h -event-rate 2000 -volatile -ramp-rate 60 -settle 3m'
+# Two gateway restarts, the drill beside the run in a shell of its own (C2b ran these on four apiservers and 8 cores).
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name reconnect -- -duration 30m -event-rate 2000 -volatile -ramp-rate 60 -settle 3m'
+scripts/runner-link/reconnect-drill.sh --out <a directory of its own>
+# The cell's live load, reported apart: C2b's rerun (its first, live-1h, had four apiservers and 8 cores).
+flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name live-1h-r2 --watch 500 -- -duration 1h -event-rate 2000 -volatile -live-rate 10000 -ramp-rate 60 -settle 3m'
+```
+
+- **The heartbeats-only run comes first.** `loadgen-baseline.mjs` takes the other runs' costs against it, and
+  `cell-inputs.json` holds them.
+- **`-ramp-rate 60 -settle 3m` on every run.** At the loadgen's 150 connections a second and 30 s, the first machine's
+  four apiservers saturated their main threads in the ramp, and the heartbeats stayed bunched in 30-second waves through
+  the steady window (evidence 6).
 - **`-volatile`.** The reports that move in production move at their production rates (the coordinator's ruling of
-  2026-10-25), so beats reconcile in full about as often as they would there.
-- **The database's CPU peak** in the report is a share of `ORBIT_LINK_STAGING_DB_CPUS`: the 8 cores the spec gives the
-  database.
-- **What the report holds.** Each apiserver's main thread is in the report (`threads.jsonl`): the spec has each at most
-  60% busy at the peak. `loadgen-connects.mjs` gives the ramp's cost per connect beside the gateway-release
-  measurement.
-- **The second run is not the pass/fail run.** It carries the cell's live load (500 watched sessions, 20 deltas a second
-  each), and is reported apart from the 1-hour run that decides the criterion.
+  2026-10-25), so beats reconcile in full about as often as they would there: 11.4% of them in C2b's runs.
+- **The live run is not the judging run.** It carries the cell's live load (500 watched sessions, 20 deltas a second
+  each), and is reported apart from the hour that decides the criterion.
+- **The reconnect run's drill.** `reconnect-drill.sh` waits for the whole fleet and the settle, then releases the
+  gateway (SIGTERM) 10 minutes into the steady window and crashes it (SIGKILL) at 20 minutes. Each `reconnect-probe.sh`
+  holds 5 minutes of baseline first, then writes its records under `--out`, which the comments do not name.
+
+Where and when C2b ran each:
+
+| Run | Apiservers, database cores | Code | What it gave |
+| --- | --- | --- | --- |
+| `hb` | 4, 8 | 736f80245 | The heartbeats' costs, the base of the others'; the database's 10 s peak at 24.1% of 8 cores (evidence 12, 13) |
+| `full-1h` | 4, 8 | 736f80245 | The first judging run: the database's peak at 57.4% of 8 cores, and six link-token 502s from the apiserver's keep-alive race, fixed since (evidence 15 to 17) |
+| `reconnect` | 4, 8 | 736f80245 | Two gateway restarts at 2,000 events a second: the fleet whole about 110 s after each restart, the handshake's p99 321 and 213 ms, every Welcome answered, no session reaped (evidence 18 to 20) |
+| `live-1h` | 4, 8 | 736f80245 | The cell's live load on four apiservers: their main threads at 0.63 to 0.64 at the 10 s peak, the database at 66.8% of 8 cores; the live delta's cost (evidence 21 to 23) |
+| `full-1h-r2` | 6, 11 | f6a150f07 | The judging rerun, the criterion met: the database's peak at 53.2% of 11 cores, vacuums included, and no error a caller saw (evidence 24 to 26) |
+| `live-1h-r2` | 6, 11 | f6a150f07 | The live load on the cell's size: the main threads at 0.49 to 0.52 at the 10 s peak, the database at 50.3% of 11 cores (evidence 27 to 29) |
+
+**The costs and the projection**, as C2b took them:
+
+```bash
+runs=/var/tmp/orbit-link-c2b/loadgen/runs
+node scripts/runner-link/loadgen-baseline.mjs $runs/hb $runs/full-1h --target-events 2000        # a heartbeat, an event (evidence 17)
+node scripts/runner-link/loadgen-baseline.mjs $runs/hb $runs/full-1h --live $runs/live-1h        # a live delta (evidence 23)
+node scripts/runner-link/loadgen-connects.mjs $runs/hb                                           # a connect, from the ramp (evidence 23)
+node scripts/runner-link/cell-spec.mjs scripts/runner-link/cell-inputs.json                      # the cell's size (evidence 23)
+node scripts/runner-link/loadgen-baseline.mjs $runs/hb $runs/full-1h-r2 --live $runs/live-1h-r2  # a live delta over six (evidence 29)
+```
+
+`cell-inputs.json` holds these costs, each with its source. The projection is linear in each rate: six apiservers, each
+main thread 52% busy at the peak and 62% with one down, and 11 database cores, 6.26 of them at the 10 s peak
+(evidence 23). The reruns then measured a stack of that size. Only the live delta's cost was measured again there:
+0.0999 ms of apiserver CPU a delta over six apiservers, against 0.0882 over four (evidence 29).
+
+**What to read off each run.**
+
+- **The report's two verdicts.** `loadgen-report.mjs` counts as an error every call the gateway sent again and every
+  ERROR line of the database's log, and a link token's 502 twice, as the runner's and as the web gateway's: the judging
+  rerun read FAIL on 28 of them. The coordinator's rule (2026-10-31) counts what a caller saw: an error a runner or a
+  watcher was told of, a call that failed in the end, a 5xx, each once. The report now gives that count and a verdict
+  by it beside its own. `--from-report <report.json>` gives them for a run whose records are gone, such as C2b's,
+  from the report.json its comments hold: 0 and PASS for the rerun, 6 and FAIL for the first judging run.
+- **The database's peak** is the whole hour's busiest 10 s, vacuums included (the coordinator's rule), as a share of
+  `ORBIT_LINK_STAGING_DB_CPUS`. Run `vacuum-sampler.sh <out.jsonl>` beside the hour, then
+  `python3 -I scripts/runner-link/vacuum_windows.py <run dir> <out.jsonl> --db-cpus 11` for the peaks inside and outside
+  the vacuums, with when each ran. The rerun's peak fell in an autovacuum of `run_event`, at 53.2%; outside the vacuums
+  it was 43.4% (evidence 26).
+- **Each apiserver's main thread.** `report.md` and `streams.md` give its mean alone. The peaks the spec's 60% applies to
+  come from `threads.jsonl`: `python3 -I scripts/runner-link/thread_peaks.py <run dir>`, evidence 6's method.
+- **`arm` resets the welcome walk's depth.** It takes the last run's sessions out of the fleet, and the new ones start at
+  seq 1, so a database kept from earlier runs does not deepen the walk. The depth comes from the event rate and the
+  time alone: at most 340 and 600 events at the reconnect run's two restarts. For deeper walks, `welcome-walk-cost.sh`
+  times the walk's statement on the sessions a finished run left: C2b timed 40 of 728 to 1,648 events (evidence 20).
+- **The reconnect.** `reconnect-probe.sh` reads four apiservers, `apiserver` to `apiserver-d`, as C2b's reconnect run
+  had: on the cell's six it leaves `apiserver-e` and `apiserver-f` out of its CPU and reaper figures. C2b did not repeat
+  the reconnect on six apiservers and 11 cores, nor after the keep-alive fix.
+- **The other records.** `minute_timeline.py` places a run's errors minute by minute, `lock-sampler.sh` the backends
+  waiting on a lock (the NOTIFY commit lock, evidence 29), `tcp-counters.sh`, read before and after a run, who reset a
+  connection, and `pgmem-snap.sh` the database's memory: through both reruns it sat at its 16 GiB limit (evidence 26,
+  29). `vacuum-sampler.sh`, `lock-sampler.sh`, `tcp-counters.sh` and `pgmem-snap.sh` name C2b's stack,
+  `orbit-link-c2b`, as the stack above does.
+- **The machine.** `fsync_bench.py` and `ed25519_bench.mjs` compared C2b's machine with the first one, an
+  e2-standard-32: one thread checked an Ed25519 signature 1.20 times as fast. Run them first on another machine.
+- **A runner user other than root** needs polkit's leave to start `loadgen-run.sh`'s scope. Without it the loadgen exits
+  1 at once, and `loadgen.stderr` says `Failed to start transient scope unit: Interactive authentication required.`
+  C2b's machine had this rule for its runner's user, `c2b`, followed by `systemctl restart polkit`; `loadgen-run.sh` is
+  unchanged:
+
+  ```javascript
+  // /etc/polkit-1/rules.d/49-orbit-loadgen.rules
+  polkit.addRule(function (action, subject) {
+    if (subject.user !== "c2b") return undefined;
+    if (action.id === "org.freedesktop.systemd1.manage-units" ||
+        action.id === "org.freedesktop.systemd1.manage-unit-files") {
+      return polkit.Result.YES;
+    }
+    return undefined;
+  });
+  ```
+
+**C2b's scripts** are here as its comments hold them, each byte for byte: `reconnect-drill.sh` from evidence 14, which
+gives its blob id, and the rest from evidence 30 (34pf8irLkAmLKigGLKsBO), which gives each one's size and sha256.
+Evidence 30 replaces evidence 14's text of `reconnect-probe.sh`, `reconnect-report.mjs` and `welcome-walk-cost.sh`,
+which C2b fixed after it. What is new beside their text: their modes, the shell scripts executable but `pgmem-snap.sh`,
+which is sourced (evidence 14's modes for its four); and `staging-name-check.sh` runs the three that source
+`staging-lib.sh` (`reconnect-drill.sh`, `reconnect-probe.sh`, `welcome-walk-cost.sh`) with a project outside
+`orbit-link-*`, which they refuse before anything runs. Left out: `check.sh` and `status.sh`, C2b's live views of a
+run in progress. Everything they show is in the run's records and its report afterwards, and they name the first
+run's four apiservers (`status.sh`) and 8 database cores (`check.sh`), which a stack of the cell's size would have
+them change.
 
 ## The gateway alone
 

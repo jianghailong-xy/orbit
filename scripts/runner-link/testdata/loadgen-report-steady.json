@@ -4,6 +4,7 @@
   "dirty": false,
   "loadTestLock": true,
   "verdict": false,
+  "callerVerdict": false,
   "criteria": [
     {
       "name": "connections",
@@ -69,6 +70,11 @@
     "postgresErrorLines": 0,
     "deadlocks": 0,
     "natsErrorLines": 0
+  },
+  "callerErrorCounts": {
+    "runners": 0,
+    "http5xx": 0,
+    "welcomesUnanswered": 0
   },
   "gatewayErrors": {
     "backend_retries{kind=\"welcome\",reason=\"lost\"}": 7
