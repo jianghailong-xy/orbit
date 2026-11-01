@@ -1,0 +1,679 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-11-02). Orbit Files: evidence files stop going into the repository.
+     Phases M1 (storage) and M2 (evidence citations) of the repo-size work the owner approved on 11-02
+     ("按建议": local volume by default, 30 / 14 day retention, explicit upload first, gate holds and
+     asks, board approval as a hint first).
+     This board: today, the proposal, data + binding + retention, what the owner sees on an iPhone,
+     and the decided / open choices with the landing steps.
+     Design doc: docs/orbit-files-design.md. Code baseline: main 01d68ff4a.
+     Real numbers: measured on the HPC checkout on 11-02 (git rev-list/cat-file, du over 264 worktrees).
+     Sample text: the task, project, criterion and file names are made up in the shape of real ones —
+     the repo is public. Product copy inside the phones is English (it is what would ship); the
+     annotations are Chinese.
+     Phone geometry and the evidence card follow docs/mocks/evidence-waits-for-coordinator/board.html
+     (393 × 852 pt, OrbitApp tokens: card padding 14 / radius 14, labels 13, prose 17).
+     Render: node <kit>/render.mjs board.html <outdir> (one PNG per section#part-N, 2x). -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Orbit Files：证据文件不再进仓库 — 设计图</title>
+<style>
+  :root {
+    --blue: #007AFF; --accent: #3E69F6;
+    --label: #000; --label2: rgba(60,60,67,.6); --label3: rgba(60,60,67,.36);
+    --sep: rgba(60,60,67,.29);
+    --green: #248A3D; --red: #D93025; --orange: #E8780C; --amber: #B25F00;
+    --mk: #E5484D; --mkfill: #F08A24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 1960px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1800px; margin: 0 0 6px; }
+  .lede b, .cap b, .box b, .steps b, .pick b { color: #16161a; }
+  code, .mono { font-family: "DejaVu Sans Mono", monospace; }
+  code { font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.new { background: #dfe8ff; color: #2346c4; }
+  .tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .tag.done { background: #def3e3; color: #1d6b33; }
+  .row { display: flex; gap: 38px; align-items: flex-start; margin-top: 22px; }
+  figure { margin: 0; flex: none; width: 393px; }
+  .cap { margin-top: 16px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .cap li .n { position: absolute; left: 0; top: 2px; }
+  .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mkfill);
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+  .box { background: #fff; border-radius: 20px; padding: 18px 22px 20px; box-shadow: 0 8px 26px rgba(0,0,0,.08);
+         font-size: 14px; line-height: 1.75; color: #4d4d56; }
+  .box h3 { margin: 0 0 8px; font-size: 15.5px; color: #16161a; }
+  .box ul, .box ol { margin: 6px 0 0; padding-left: 18px; }
+  .box li { margin-top: 4px; }
+  .box p { margin: 10px 0 0; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 22px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 22px; }
+  .big { font: 700 34px/1.1 "Inter", sans-serif; color: #16161a; letter-spacing: -.02em; }
+  .big small { font-size: 15px; font-weight: 600; color: #6b6b75; letter-spacing: 0; margin-left: 4px; }
+
+  /* ── flow lanes ── */
+  .flow { display: grid; grid-template-columns: 150px 1fr; gap: 16px 18px; align-items: center; margin-top: 18px; }
+  .lane { font: 600 14px/1.4 "Inter", "Noto Sans SC", sans-serif; color: #16161a; }
+  .lane small { display: block; font-weight: 400; font-size: 12.5px; color: #6b6b75; }
+  .chain { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; }
+  .nd { flex: none; background: #fff; border: 1.5px solid #d4d4dc; border-radius: 12px; padding: 9px 13px; font-size: 13.5px; line-height: 1.45; color: #2b2b31; max-width: 350px; }
+  .nd b { color: #16161a; }
+  .nd.blue { border-color: #8aa6f7; background: #f1f5ff; }
+  .nd.grey { border-color: #b9b9c2; background: #f2f2f5; }
+  .nd.you { border-color: #f0b4a9; background: #fff2ef; }
+  .nd.ok { border-color: #9fd1ac; background: #f0faf2; }
+  .nd.new { box-shadow: 0 0 0 3px rgba(62,105,246,.18); }
+  .ar { flex: none; width: 92px; text-align: center; font-size: 12px; line-height: 1.3; color: #6b6b75; position: relative; padding-bottom: 12px; }
+  .ar::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 4px; height: 2px; background: #a9a9b3; }
+  .ar::before { content: ""; position: absolute; right: 4px; bottom: 0; border: 5px solid transparent; border-left: 8px solid #a9a9b3; border-right: 0; }
+  .ar.w { width: 128px; }
+  .ar.ww { width: 184px; }
+  .newtag { display: inline-block; font: 700 10.5px/1 "Inter", sans-serif; color: #2346c4; background: #dfe8ff; border-radius: 5px; padding: 3px 5px; margin-left: 6px; vertical-align: 2px; }
+  .chgtag { display: inline-block; font: 700 10.5px/1 "Inter", sans-serif; color: #8a5300; background: #fff0d1; border-radius: 5px; padding: 3px 5px; margin-left: 6px; vertical-align: 2px; }
+
+  table.rules { border-collapse: separate; border-spacing: 0; width: 100%; margin-top: 14px; font-size: 14px; line-height: 1.6; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  table.rules th { text-align: left; font-size: 13px; color: #6b6b75; font-weight: 600; padding: 10px 16px; background: #f1f1f5; }
+  table.rules td { padding: 10px 16px; border-top: 1px solid #ececf1; vertical-align: top; color: #3a3a42; }
+  table.rules td.num { text-align: right; font-family: "DejaVu Sans Mono", monospace; font-size: 13px; white-space: nowrap; }
+  table.rules tr.hot td { background: #fff6f4; }
+  table.rules tr.ok td { background: #f3faf5; }
+  table.rules tr.chg td { background: #f6f8ff; }
+
+  .pick { border: 2px solid #3E69F6; border-radius: 18px; padding: 14px 18px; background: #fff; }
+  .pick.no { border-color: #d9d9e0; }
+  .pick ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.7; color: #4d4d56; }
+  .q { background: #fff; border-radius: 20px; padding: 18px 20px; box-shadow: 0 8px 26px rgba(0,0,0,.08); }
+  .q h3 { margin: 0 0 10px; font-size: 16px; color: #16161a; }
+  .q .ab { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .q .ab > div { border-radius: 14px; padding: 10px 13px; font-size: 13.5px; line-height: 1.6; color: #4d4d56; }
+  .q .a { border: 2px solid #3E69F6; background: #f6f8ff; }
+  .q .b { border: 1.5px solid #d9d9e0; background: #fafafb; }
+  .q .ab b { display: block; color: #16161a; margin-bottom: 3px; }
+  .q .why { margin-top: 10px; font-size: 13.5px; line-height: 1.65; color: #4d4d56; }
+  .q .why b { color: #2346c4; }
+  .steps { margin-top: 10px; font-size: 15px; line-height: 1.72; color: #4d4d56; }
+  .steps ol { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 12px 0 12px 44px; border-top: 1px solid #e0e0e6; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 13px; width: 28px; height: 28px; border-radius: 8px;
+                      background: #2346c4; color: #fff; font: 700 14px/28px "Inter", sans-serif; text-align: center; }
+  .steps .cost { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 7px; margin-left: 8px; background: #e7ecff; color: #2346c4; vertical-align: 1px; }
+
+  /* ── numbered sequence ── */
+  .seq { margin: 4px 0 0; padding: 0; list-style: none; counter-reset: q; }
+  .seq li { position: relative; padding: 9px 0 9px 36px; border-top: 1px solid #ececf1; font-size: 14px; line-height: 1.6; color: #3a3a42; }
+  .seq li:first-child { border-top: 0; }
+  .seq li::before { counter-increment: q; content: counter(q); position: absolute; left: 0; top: 10px; width: 24px; height: 24px; border-radius: 50%;
+                    background: #3E69F6; color: #fff; font: 700 12.5px/24px "Inter", sans-serif; text-align: center; }
+  .seq li b { color: #16161a; }
+
+  /* ── data model ── */
+  .dm { background: #fff; border-radius: 16px; border: 1.5px solid #d4d4dc; padding: 12px 16px 14px; font: 13px/1.75 "DejaVu Sans Mono", monospace; color: #3a3a42; }
+  .dm.blue { border-color: #8aa6f7; background: #f6f8ff; }
+  .dm h4 { margin: 0 0 6px; font: 700 14px/1.4 "Inter", "Noto Sans SC", sans-serif; color: #16161a; }
+  .dm h4 small { font-weight: 400; color: #6b6b75; font-size: 12.5px; margin-left: 6px; }
+  .dm .f { display: block; }
+  .dm .f.add { color: #2346c4; }
+  .dm .f.chg { color: #8a5300; }
+  .dm .f.dim { color: #9a9aa4; }
+  .dmar { text-align: center; font: 12px/1.3 "Inter", "Noto Sans SC", sans-serif; color: #6b6b75; padding: 6px 0; }
+
+  /* ── the phone, 393 × 852 pt ── */
+  .phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: var(--label);
+           box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08);
+           font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 30px 0 46px; z-index: 3; }
+  .sb .time { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .sb .sys { display: flex; gap: 6px; align-items: center; font-size: 15px; font-weight: 600; }
+  .sb .bat { background: #000; color: #fff; border-radius: 6px; font: 700 12.5px/1 "Inter", sans-serif; padding: 3px 5px; position: relative; }
+  .sb .bat::after { content: ""; position: absolute; right: -4px; top: 6px; width: 2.5px; height: 5px; border-radius: 0 2px 2px 0; background: #b9b9be; }
+  .phone.dark .sb { color: #fff; } .phone.dark .sb svg path, .phone.dark .sb svg rect { fill: #fff; } .phone.dark .sb .bat { background: #fff; color: #000; }
+  .nav { position: absolute; top: 54px; left: 0; right: 0; height: 59px; background: #fff; z-index: 2; }
+  .circ { position: absolute; top: 5px; width: 46px; height: 46px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.07);
+          box-shadow: 0 2px 10px rgba(0,0,0,.09); display: grid; place-items: center; }
+  .circ.back { left: 16px; } .circ.more { right: 16px; }
+  .ttl { position: absolute; left: 72px; right: 72px; top: 9px; text-align: center; }
+  .t1 { display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+  .t1 .cp { font-size: 12.5px; font-weight: 600; background: #EFEFF3; border-radius: 9px; padding: 1px 7px; }
+  .t2 { font-size: 12.5px; line-height: 16px; color: var(--label2); margin-top: 3px; white-space: nowrap; }
+  .ny { position: absolute; top: 113px; left: 0; right: 0; height: 38px; background: #F8EDE2; display: flex; align-items: center;
+        padding: 0 14px 0 16px; gap: 10px; font-size: 16px; z-index: 2; white-space: nowrap; }
+  .ny .dot { width: 8px; height: 8px; border-radius: 50%; background: #F08A24; flex: none; }
+  .ny .tx2 { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .tx { position: absolute; left: 0; right: 0; bottom: 261px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 261px; background: #fff; z-index: 2; }
+  .band::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .brow { position: absolute; left: 16px; right: 16px; height: 29px; border: 1px solid #E3E3E6; background: #F6F6F6; border-radius: 10px;
+          display: flex; align-items: center; gap: 8px; padding: 0 11px; font-size: 14.5px; white-space: nowrap; }
+  .brow b { font-weight: 600; } .brow .v { color: var(--label2); font-size: 13.5px; } .brow .c { margin-left: auto; }
+  .cmp { position: absolute; left: 16px; right: 16px; top: 89px; height: 88px; border: 1px solid #E3E3E6; background: #FAFAFA; border-radius: 26px; padding: 13px 16px; }
+  .cmp .ph { font-size: 17px; color: rgba(60,60,67,.3); }
+  .cmp .tb { position: absolute; left: 14px; right: 9px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 16px; color: #55555e; }
+  .cmp .tb .md { margin-left: auto; color: #000; font-weight: 600; white-space: nowrap; font-size: 15px; } .cmp .tb .md span { color: var(--label2); font-weight: 400; }
+  .cmp .tb .send { width: 32px; height: 32px; border-radius: 50%; background: #D8D8DD; display: grid; place-items: center; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 4; }
+  .phone.dark .home { background: #fff; }
+
+  /* ── the evidence card (EvidenceDecisionCard) ── */
+  .ev { margin: 12px 16px 0; border-radius: 14px; padding: 14px; background: rgba(0,122,255,.07); border: 1px solid rgba(0,122,255,.28); position: relative; flex: none; }
+  .evh { display: flex; align-items: center; gap: 9px; }
+  .chipb { width: 24px; height: 24px; border-radius: 7px; background: rgba(0,122,255,.16); display: grid; place-items: center; flex: none; }
+  .evh .t { font-size: 17px; font-weight: 700; line-height: 22px; }
+  .evp { margin-top: 10px; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .evt { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--label2); line-height: 18px; }
+  .evs { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(0,122,255,.08); }
+  .evs .k, .evg { font-size: 13px; font-weight: 700; color: var(--label2); line-height: 18px; }
+  .evs .v { margin-top: 2px; font-size: 17px; line-height: 22px; }
+  .evg { margin-top: 10px; }
+  .gap { margin-top: 6px; display: flex; gap: 9px; padding: 8px 10px; border-radius: 10px; background: rgba(255,149,0,.10); font-size: 17px; line-height: 22px; }
+  .gap .ex { color: #FF9500; font-weight: 800; flex: none; width: 7px; }
+  .fold { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--accent); }
+  .evm { margin-top: 8px; font: 11.5px/16px "DejaVu Sans Mono", monospace; color: var(--label2); }
+  .acts { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .btn { height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 15px; font-weight: 600; }
+  .btn.pri { background: var(--blue); color: #fff; }
+  .btn.sec { background: rgba(120,120,128,.12); color: var(--blue); }
+
+  /* ── NEW: the files block inside the card ── */
+  .fb { margin-top: 10px; }
+  .fb .ths { margin-top: 6px; display: flex; gap: 6px; }
+  .fb .tr { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .fb .tr b { font-weight: 600; color: var(--label); }
+  .more { width: 56px; height: 56px; border-radius: 9px; background: rgba(120,120,128,.12); display: grid; place-items: center;
+          font: 600 15px/1 "Inter", sans-serif; color: var(--label2); flex: none; }
+
+  /* fake screenshots, drawn small */
+  .th { width: 56px; height: 56px; border-radius: 9px; overflow: hidden; position: relative; flex: none; border: 1px solid rgba(0,0,0,.08); background: #f4f5f8; }
+  .th.dk { background: #1c1d22; border-color: rgba(0,0,0,.2); }
+  .th .bar { position: absolute; left: 6px; right: 6px; top: 6px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.13); }
+  .th.dk .bar { background: rgba(255,255,255,.2); }
+  .th .side { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: rgba(0,0,0,.06); }
+  .th.dk .side { background: rgba(255,255,255,.07); }
+  .th .menu { position: absolute; left: 11px; right: 12px; top: 16px; border-radius: 5px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.2); padding: 3px; }
+  .th.desk .menu { left: 20px; right: 8px; }
+  .th.dk .menu { background: #2e2f36; }
+  .th .menu i { display: block; height: 4px; margin: 2px 0; border-radius: 2px; background: rgba(0,0,0,.15); }
+  .th .menu i.on { background: #3E69F6; height: 5px; }
+  .th.dk .menu i { background: rgba(255,255,255,.24); } .th.dk .menu i.on { background: #6b8dff; }
+  .th.sel .menu { top: 26px; }
+  .th.big { width: 100%; height: auto; aspect-ratio: 1; border-radius: 6px; }
+  .th.big .bar { height: 7px; top: 9px; left: 9px; right: 9px; }
+  .th.big .menu { top: 26%; padding: 5px; border-radius: 7px; }
+  .th.big .menu i { height: 6px; margin: 4px 0; } .th.big .menu i.on { height: 7px; }
+  .th.big.desk .side { width: 24%; }
+  .th.big.desk .menu { left: 34%; right: 10%; }
+  .th.big.sel .menu { top: 40%; }
+  .th.exp { background: #f2f2f5; border-style: dashed; border-color: #c9c9d0; display: grid; place-items: center; }
+  .th.exp span { font: 600 9.5px/1.15 "Inter", sans-serif; color: #9a9aa4; text-align: center; }
+
+  /* ── the sheet ── */
+  .phone.sheetp { background: #C7C7C7; }
+  .sheet { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 30px 30px 54px 54px; overflow: hidden; }
+  .grab { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #D4D4D8; }
+  .shn { position: absolute; top: 12px; left: 0; right: 0; height: 63px; padding-top: 3px; text-align: center; font-size: 17px; font-weight: 600; line-height: 44px; background: #fff; z-index: 2; }
+  .x { z-index: 3; position: absolute; right: 16px; top: 15px; width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.08);
+       box-shadow: 0 2px 10px rgba(0,0,0,.08); display: grid; place-items: center; }
+  .shb { position: absolute; top: 75px; left: 0; right: 0; bottom: 0; padding: 4px 16px 0; overflow: hidden; }
+  .prov { display: flex; justify-content: space-between; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .trc { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(120,120,128,.08); }
+  .trc .h { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; line-height: 20px; }
+  .trc .s { margin-top: 3px; font-size: 13px; line-height: 18px; color: var(--label2); padding-left: 23px; }
+  .grp { margin-top: 14px; }
+  .grp .gh { display: flex; align-items: baseline; gap: 6px; font-size: 13px; font-weight: 700; line-height: 18px; color: var(--label2); }
+  .grp .gh span { font-weight: 400; }
+  .grp .gg { margin-top: 6px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+
+  /* ── the viewer ── */
+  .phone.dark { background: #000; color: #fff; }
+  .vtop { position: absolute; top: 54px; left: 0; right: 0; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 17px; z-index: 2; }
+  .vtop .pos { font-weight: 600; }
+  .vtop .done { font-weight: 600; color: #4C8DFF; }
+  .vimg { position: absolute; left: 26px; right: 26px; top: 116px; height: 588px; border-radius: 8px; overflow: hidden; background: #1c1d22; }
+  .vimg .hd { position: absolute; left: 0; right: 0; top: 0; height: 44px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .vimg .hd i { position: absolute; left: 16px; top: 16px; width: 120px; height: 12px; border-radius: 6px; background: rgba(255,255,255,.22); }
+  .vimg .ln { position: absolute; left: 16px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.1); }
+  .vimg .field { position: absolute; left: 16px; right: 16px; top: 168px; height: 40px; border-radius: 10px; border: 1.5px solid #6b8dff; box-shadow: 0 0 0 3px rgba(107,141,255,.3); }
+  .vimg .field i { position: absolute; left: 12px; top: 14px; width: 110px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.4); }
+  .vimg .pop { position: absolute; left: 16px; right: 16px; top: 214px; border-radius: 12px; background: #2e2f36; box-shadow: 0 10px 30px rgba(0,0,0,.5); padding: 6px; }
+  .vimg .pop div { height: 38px; border-radius: 8px; position: relative; }
+  .vimg .pop div i { position: absolute; left: 12px; top: 14px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.3); }
+  .vimg .pop div.on { background: rgba(107,141,255,.28); }
+  .vimg .pop div.on i { background: #fff; }
+  .vmeta { position: absolute; left: 0; right: 0; bottom: 40px; padding: 0 22px; font-size: 13px; line-height: 19px; color: rgba(255,255,255,.62); }
+  .vmeta b { display: block; color: #fff; font-size: 15px; font-weight: 600; margin-bottom: 2px; font-family: "DejaVu Sans Mono", monospace; font-size: 13.5px; }
+  .vdots { position: absolute; left: 0; right: 0; bottom: 118px; display: flex; justify-content: center; gap: 7px; }
+  .vdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.3); }
+  .vdots i.on { background: #fff; }
+  .vshare { position: absolute; right: 22px; bottom: 44px; }
+
+  /* ── snippets: a card at phone width, out of its phone ── */
+  .snip { width: 393px; background: #fff; border-radius: 24px; padding: 4px 0 16px; box-shadow: 0 8px 26px rgba(0,0,0,.10); position: relative; }
+  .snip .sl { font: 600 11.5px/1 "DejaVu Sans Mono", monospace; color: #8a8a93; letter-spacing: .04em; padding: 14px 18px 2px; text-transform: uppercase; }
+
+  /* ── marks: dashed outline + numbered dot, placed after layout ── */
+  .ol-mk { position: absolute; border: 2px dashed var(--mk); border-radius: 12px; z-index: 6; pointer-events: none; }
+  .dot-mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--mkfill); color: #fff; z-index: 7;
+            font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+</style>
+<body>
+
+<!-- ════════════════════════════════ 1 · today ════════════════════════════════ -->
+<section class="part" id="part-1">
+  <h1>Orbit Files：证据文件不再进仓库</h1>
+  <p class="lede">第一、二阶段：<b>M1 存储</b>（把现有附件升级成按 sha256 存的文件）和 <b>M2 证据引用</b>（证据能直接引用文件，卡片上能看图）。方向 11-02 已定，五项默认按推荐。</p>
+  <span class="tag now">今天 · 证据文件只能走仓库</span>
+  <div class="flow">
+    <div class="lane">执行会话<small>跑测试、截图</small></div>
+    <div class="chain">
+      <div class="nd">截图、Playwright 报告、日志<br>写进 <code>docs/evidence/&lt;任务&gt;/</code></div>
+      <div class="ar w">回合结束<br><code>git add -A</code></div>
+      <div class="nd">自动提交到会话分支</div>
+      <div class="ar ww"><code>task_evidence_submit</code></div>
+      <div class="nd">证据 <code>{kind: "COMMIT", ref: sha}</code><br>引用只有三种：工具调用、commit、checkpoint 包</div>
+    </div>
+    <div class="lane">判定的人<small>协调者或你</small></div>
+    <div class="chain">
+      <div class="nd you"><b>协调者</b>在另一台 runner 上<br>runner 取附件只认本会话<br>只能去读那个 commit 里的文件</div>
+      <div class="ar"></div>
+      <div class="nd you"><b>你</b>的证据卡片上只有<br>「5 checked for you」一行<br>要看图得去 GitHub</div>
+    </div>
+    <div class="lane">仓库<small>所有人付成本</small></div>
+    <div class="chain">
+      <div class="nd grey">落地进 main</div>
+      <div class="ar"></div>
+      <div class="nd grey">每次克隆、每个 worktree、<br>每次 CI 都背着这些文件</div>
+      <div class="ar"></div>
+      <div class="nd grey">进了历史永远删不掉<br>手工瘦身后还会再涨回来</div>
+    </div>
+  </div>
+
+  <div class="grid4">
+    <div class="box"><h3>仓库历史（压缩后）</h3><div class="big">96%<small>是产物</small></div>
+      <p>证据 1,013 MiB、设计稿 626 MiB、CI 截图 273 MiB；代码和文档一共 78 MiB。GitHub 显示 1.91 GiB。</p></div>
+    <div class="box"><h3>近 30 天的证据</h3><div class="big">109<small>个目录</small></div>
+      <p>每个目录中位数 <b>33 个文件、8 张截图、1.7 MiB</b>；p90 是 142 个文件、33 张截图、7.8 MiB。按类型：图片 56%、JSON 报告 30%、日志 11%。</p></div>
+    <div class="box"><h3>问题是数量，不是大文件</h3><div class="big">4<small>个超过 5 MB</small></div>
+      <p>1 MB 以下的 23,137 个文件合计约 1.2 GiB，没有一个超过附件现有的 25 MiB 上限。按单文件大小拦截，一个都拦不住。</p></div>
+    <div class="box"><h3>这台机器上</h3><div class="big">218<small>GiB</small></div>
+      <p>根盘（已用 93%）上 195 个 worktree 的 <code>docs/</code> 占 218 GiB。base-ui 证据瘦身到 391 MiB 后又涨回 715 MiB。</p></div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════ 2 · proposal ════════════════════════════════ -->
+<section class="part" id="part-2">
+  <h2>建议：Orbit Files</h2>
+  <p class="lede">把现有附件升级成按内容寻址的文件：字节按 sha256 存一份（自托管默认本地卷），Postgres 只放元数据。证据新增 <code>FILE</code> 引用，sha256 进证据摘要；判定者按需取文件；你在卡片上直接看图。<b>链接还是 <code>orbit-attachment:</code>，三端已经会渲染。</b></p>
+  <span class="tag new">建议</span>
+  <div class="flow">
+    <div class="lane">执行会话<small>截图、报告</small></div>
+    <div class="chain">
+      <div class="nd">截图目录、Playwright 报告<br>写在哪都行，不必进仓库</div>
+      <div class="ar w"><code>file_upload</code><br>MCP / CLI</div>
+      <div class="nd blue new"><b>Orbit Files</b><span class="newtag">NEW</span><br>引用行在 Postgres<br>字节在本地卷或 S3，按 sha256 去重</div>
+      <div class="ar ww"><code>task_evidence_submit</code></div>
+      <div class="nd blue new">证据 <code>{kind: "FILE", ref}</code><span class="newtag">NEW</span><br>服务器记下 sha256，进证据摘要<br>判定之后字节换不了</div>
+    </div>
+    <div class="lane">判定的人</div>
+    <div class="chain">
+      <div class="nd ok"><b>协调者</b>：<code>file_fetch</code> 取到自己的<br>uploads 目录（工作区之外，不会被提交）<br>新规则：有权判这个任务，就能取它引用的文件</div>
+      <div class="ar"></div>
+      <div class="nd ok"><b>你</b>：证据卡片上有缩略图和测试摘要<br>点开看全部文件和大图</div>
+    </div>
+    <div class="lane">仓库</div>
+    <div class="chain">
+      <div class="nd ok">只有代码和文档</div>
+      <div class="ar"></div>
+      <div class="nd ok">克隆、worktree、CI 不再背证据</div>
+    </div>
+  </div>
+
+  <div class="grid4">
+    <div class="box"><h3>runner</h3><ul>
+      <li>MCP 和 CLI：<code>file_upload</code>、<code>file_fetch</code>、<code>file_list</code></li>
+      <li>上传目录时打成一个文件夹包</li>
+      <li>取文件写进本会话 uploads 目录</li>
+      <li>agent 指引：日志引用工具调用，截图和报告用 <code>file_upload</code></li></ul></div>
+    <div class="box"><h3>apiserver</h3><ul>
+      <li>文件服务：流式写盘，边写边算 sha256，本地和 S3 两个后端</li>
+      <li>证据 <code>FILE</code> 解析器，sha256 进摘要</li>
+      <li>Playwright JSON、JUnit XML 抽测试摘要</li>
+      <li>保留期清理、用量接口</li></ul></div>
+    <div class="box"><h3>客户端</h3><ul>
+      <li>证据卡片：文件区、测试摘要</li>
+      <li>Evidence files 页、大图、过期占位</li>
+      <li>Settings：存储用量</li>
+      <li>Web、Apple、Android 共用一份英文文案</li></ul></div>
+    <div class="box"><h3>部署</h3><ul>
+      <li>compose：<code>./data/files</code> 绑定挂载，和 <code>./data/postgres</code> 一个习惯</li>
+      <li>pgbackup 侧车把 <code>./data/files</code> 和 WAL 归档一起同步</li>
+      <li><code>ORBIT_FILES_BACKEND=local | s3</code></li></ul></div>
+  </div>
+  <p class="lede" style="margin-top:18px"><b>不变：</b>对话里的图片、你上传的文件、任务附件、分享链接照旧；已有证据里的 COMMIT 引用照旧有效；不改写 git 历史。</p>
+</section>
+
+<!-- ════════════════════════════════ 3 · data ════════════════════════════════ -->
+<section class="part" id="part-3">
+  <h2>数据、证据绑定、保留期</h2>
+  <p class="lede">一个对象两层存储：引用行沿用 <code>attachment</code> 表，字节挪到按 sha256 命名的 <code>file_blob</code>。证据保存时把 sha256 写进 check，所以证据版本钉住的是确切的字节，和 commit 一样。</p>
+  <div class="row" style="gap:30px">
+    <div style="width:560px;flex:none">
+      <span class="tag new">数据</span>
+      <div class="dm"><h4>attachment<small>引用行，沿用现有表</small></h4>
+        <span class="f">id · ownerId · sessionId | turnId | taskId</span>
+        <span class="f add">+ evidenceId · bundleId</span>
+        <span class="f">fileName · mimeType · sizeBytes</span>
+        <span class="f add">+ sha256 → file_blob</span>
+        <span class="f add">+ retention · expiresAt · expiredAt · pinnedAt</span>
+        <span class="f chg">data (bytea) → 迁移完后为空</span></div>
+      <div class="dmar">sha256 ↓（多行引用同一份字节）</div>
+      <div class="dm blue"><h4>file_blob<small>新表，一份字节一行</small></h4>
+        <span class="f">sha256 (PK) · sizeBytes · storage: local | s3</span>
+        <span class="f">lastReferencedAt</span>
+        <span class="f dim">本地路径 files/3f/3f9a1c07…</span></div>
+      <div class="dmar">被证据引用 ↓</div>
+      <div class="dm"><h4>task_completion_evidence.evidence<small>现有 JSON，多一种 check</small></h4>
+        <span class="f">checks: [</span>
+        <span class="f">&nbsp;&nbsp;{ kind: "TOOL_CALL", ref: "toolu_…" },</span>
+        <span class="f add">&nbsp;&nbsp;{ kind: "FILE", ref: "34qF…", sha256: "3f9a…" }</span>
+        <span class="f">]</span>
+        <span class="f dim">sha256 由服务器写入，进 evidenceDigest</span></div>
+    </div>
+
+    <div style="width:560px;flex:none">
+      <span class="tag new">一版证据从上传到判定</span>
+      <div class="box" style="padding:12px 20px 14px">
+        <ol class="seq">
+          <li>执行会话 <code>file_upload ./shots</code> → 一个文件夹包加 8 张截图；<code>file_upload report.json --as test-report</code> → 测试摘要。</li>
+          <li><code>task_evidence_submit</code>：<code>{kind: "FILE", ref: 包 id}</code>，日志照旧引用工具调用。</li>
+          <li>服务器解析：文件是你的、在本任务的会话里上传 → 写入 sha256 → 进证据摘要。引用别的任务的文件直接拒绝。</li>
+          <li>投递给协调者：列出每个文件的名字、大小，和现成的 <code>file_fetch</code> 调用。</li>
+          <li>协调者按需 <code>file_fetch</code>，看图，判 Confirm done 或退回。</li>
+          <li>保留期跟着变：被确认的这一版留到任务删除；之前被退回的版本 30 天后过期。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div style="flex:1">
+      <span class="tag done">保留期 · 11-02 已定</span>
+      <table class="rules">
+        <tr><th>文件的状态</th><th>什么时候过期</th></tr>
+        <tr class="hot"><td>用 <code>file_upload</code> 上传，还没被证据引用</td><td>上传 <b>14 天</b>后</td></tr>
+        <tr class="ok"><td>被最新一版证据引用（还没判，或已确认）</td><td>不过期</td></tr>
+        <tr class="hot"><td>那一版被退回，或被新版本取代</td><td>从那一刻起 <b>30 天</b>后</td></tr>
+        <tr class="ok"><td>任务完成时被确认的那一版</td><td>任务删除时</td></tr>
+        <tr class="ok"><td>钉住的文件</td><td>不过期</td></tr>
+        <tr><td>对话里的图片、你上传的文件、任务附件</td><td>照旧，跟会话或任务走</td></tr>
+      </table>
+      <p class="lede" style="margin-top:12px;font-size:14px">多处引用按最晚的算。过期只删字节：文件名、大小、sha256 和判定记录都在。</p>
+      <div class="snip" id="sn-exp" style="margin-top:10px"><div class="sl">Superseded revision, 30 days later</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════ 4 · card ════════════════════════════════ -->
+<section class="part" id="part-4">
+  <h2>你看到什么（iPhone；Mac、Web、Android 结构相同）</h2>
+  <p class="lede">卡片只多一块文件区：一行缩略图、一行测试摘要，用卡片现有的小标题和灰字，不新造颜色。没有 <code>FILE</code> 引用的证据，卡片和今天完全一样。</p>
+  <div class="row">
+    <figure>
+      <span class="tag now">① 今天</span>
+      <div class="phone" id="p-today"></div>
+      <div class="cap"><b>证据里的截图在卡片上看不到</b><ol>
+        <li><span class="n">1</span>引用只汇总成一行「5 checked for you」；截图在某个 commit 里。</li>
+        <li><span class="n">2</span>截图在哪只写在提交者的说明里（某个 commit 的 <code>docs/evidence/…</code>），要看得自己去 GitHub 翻。</li></ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">② 建议 · 默认态</span>
+      <div class="phone" id="p-card"></div>
+      <div class="cap"><b>判定标准下面就是证据本身</b><ol>
+        <li><span class="n">1</span><code>FILES · 9 · 1.8 MB</code>：最多 4 张缩略图，多出来的写「+5」。</li>
+        <li><span class="n">2</span>测试摘要一行灰字；有失败时这一行变成失败用例名。</li>
+        <li><span class="n">3</span>其余照旧（往下滑）：缺口、「checked for you」、Confirm done。</li></ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">③ 展开态 · 点文件区</span>
+      <div class="phone sheetp" id="p-sheet"></div>
+      <div class="cap"><b>全部文件，按目录分组</b><ol>
+        <li><span class="n">1</span>第几版证据、文件数和大小。</li>
+        <li><span class="n">2</span>测试摘要在最上面，点开看失败和跳过的用例。</li>
+        <li><span class="n">3</span>按上传时的目录分组，每组写文件数。</li></ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">③ 展开态 · 点一张图</span>
+      <div class="phone dark" id="p-view"></div>
+      <div class="cap"><b>大图，左右滑切换</b><ol>
+        <li><span class="n">1</span>第几张 / 共几张。</li>
+        <li><span class="n">2</span>文件路径、大小、尺寸、sha256 前 8 位；右下角存储或分享。</li></ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ════════════════════════════════ 5 · landing ════════════════════════════════ -->
+<section class="part" id="part-5">
+  <h2>已定、待定、落地</h2>
+  <div class="row" style="gap:28px;margin-top:14px">
+    <div style="width:470px;flex:none">
+      <span class="tag done">11-02 已定（「按建议」）</span>
+      <div class="box"><ol>
+        <li><b>自托管默认存本地卷</b>，Postgres 只放元数据；S3 兼容存储可选。</li>
+        <li><b>保留期</b>：被取代的证据 30 天，探针和临时输出 14 天。</li>
+        <li><b>先显式上传</b>（<code>file_upload</code>），提交闸门兜底（M3）。</li>
+        <li><b>闸门先拦再问</b>，不自动上传（M3）。</li>
+        <li><b>设计稿批准先做提示</b>（M4）。</li></ol></div>
+      <span class="tag new" style="margin-top:22px">落地（按代价排）</span>
+      <div class="steps"><ol>
+        <li><b>存储层 + 旧附件迁移</b><span class="cost">服务端</span><br>用户看不出变化，先上线，看迁移和备份。</li>
+        <li><b>agent 接口</b><span class="cost">runner + 服务端</span><br><code>file_upload/fetch/list</code> 和指引。</li>
+        <li><b>证据 FILE 引用 + 判定者取文件</b><span class="cost">服务端 + runner</span></li>
+        <li><b>证据卡片</b><span class="cost">Web → Apple → Android</span></li>
+        <li><b>测试报告摘要</b><span class="cost">服务端 + 三端</span></li>
+        <li><b>保留清理、用量、备份同步</b><span class="cost">服务端 + compose</span></li></ol></div>
+      <p class="lede" style="margin-top:8px;font-size:14px">1–3 做完，agent 就不必往仓库放证据；4 让你在 Orbit 里直接看图。</p>
+    </div>
+    <div style="flex:1">
+      <span class="tag open">待定 · 要你拍板</span>
+      <div class="grid3" style="grid-template-columns:1fr 1fr;margin-top:0;gap:18px">
+        <div class="q"><h3>1. 存储对象怎么来</h3><div class="ab">
+          <div class="a"><b>A（推荐）· 升级现有附件</b>链接继续是 <code>orbit-attachment:</code>，加 sha256 和存储后端。</div>
+          <div class="b"><b>B · 另建一套</b>新表、新链接、新路由。</div></div>
+          <div class="why"><b>推荐 A：</b>三端已经会渲染这个链接，runner 已经会上传和改写，分享链接和租户隔离测试都已覆盖；B 要把这些全部再做一遍。</div></div>
+        <div class="q"><h3>2. 判定者怎么拿文件</h3><div class="ab">
+          <div class="a"><b>A（推荐）· 按需取</b>投递消息里列出文件和现成的 <code>file_fetch</code> 调用。</div>
+          <div class="b"><b>B · 投递时全部预取</b>放进判定者的 uploads 目录。</div></div>
+          <div class="why"><b>推荐 A：</b>p90 的证据有 142 个文件，判定通常只看几张；B 每次投递都要搬全部字节。</div></div>
+        <div class="q"><h3>3. 到期后什么时候删字节</h3><div class="ab">
+          <div class="a"><b>A（推荐）· 先打墓碑，宽限后再删</b>宽限 7 天，且不早于 Postgres 备份的保留期。</div>
+          <div class="b"><b>B · 到期立即删</b></div></div>
+          <div class="why"><b>推荐 A：</b>恢复备份后，元数据还能找到字节；误判过期也有挽回的时间。</div></div>
+        <div class="q"><h3>4. 单文件上限</h3><div class="ab">
+          <div class="a"><b>A（推荐）· 保持 25 MiB</b>上传改成流式写盘，以后调大只改配置。</div>
+          <div class="b"><b>B · 现在就提到 100 MiB 以上</b>并做分片上传。</div></div>
+          <div class="why"><b>推荐 A：</b>HEAD 里没有文件超过 25 MiB，最大的 trace 包已经按摘要处理；分片等真有需要再做。</div></div>
+      </div>
+      <p class="lede" style="margin-top:16px;font-size:14px"><b>后面几步建在同一个存储上：</b>M3 提交闸门提示 <code>file_upload</code>；M4 每版设计稿是一个文件夹包；M5 CI 用只能写文件的 token 上传；M6 被排除路径里的新文件转成 Orbit Files（顺带解决 <code>git add -A</code> 返回 1）；M7 把 <code>docs/evidence</code> 导入。</p>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ── glyphs (from docs/mocks/evidence-waits-for-coordinator/board.html) ── */
+const IC = {
+  loc: '<svg width="13" height="13" viewBox="0 0 16 16"><path d="M14.6 1.4 1.8 7.1l5.6 1.5 1.5 5.6z" fill="#000"/></svg>',
+  signal: '<svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.1" y="5.4" width="3.2" height="6.6" rx="1"/><rect x="10.2" y="2.7" width="3.2" height="9.3" rx="1"/><rect x="15.3" y="0" width="3.2" height="12" rx="1"/></svg>',
+  wifi: '<svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 11.6 6 9a3.6 3.6 0 0 1 5 0zM3.6 6.6a7 7 0 0 1 9.8 0l-1.6 1.6a4.8 4.8 0 0 0-6.6 0zM1.2 4.2a10.4 10.4 0 0 1 14.6 0l-1.6 1.6a8.2 8.2 0 0 0-11.4 0z" fill="#000"/></svg>',
+  back: '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 2.5 10 10 18" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  more: '<svg width="22" height="6" viewBox="0 0 22 6"><circle cx="3" cy="3" r="2.4"/><circle cx="11" cy="3" r="2.4"/><circle cx="19" cy="3" r="2.4"/></svg>',
+  chevR: (c = '#B8B8BE', h = 13) => `<svg width="${h * 0.6}" height="${h}" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  chevD: (c = '#3E69F6') => `<svg width="11" height="7" viewBox="0 0 11 7"><path d="M1.2 1.2 5.5 5.6 9.8 1.2" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  term: '<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1" y="1.5" width="18" height="13" rx="2.6"/><path d="M5 6l2.4 2L5 10M9.4 10.4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  box: '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1.5" y="1.5" width="14" height="14" rx="2.5"/><path d="M5 8.7 7.4 11 12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  sendUp: '<svg width="14" height="16" viewBox="0 0 14 16"><path d="M7 14V2.5M2 7.2 7 2.2l5 5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  xmark: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 2.5l11 11M13.5 2.5l-11 11" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg>',
+  seal: (c = '#007AFF') => {
+    const pts = []; const n = 12;
+    for (let i = 0; i < n * 2; i++) { const r = i % 2 ? 6.2 : 7.6; const a = Math.PI * i / n - Math.PI / 2; pts.push(`${(8 + r * Math.cos(a)).toFixed(2)},${(8 + r * Math.sin(a)).toFixed(2)}`); }
+    return `<svg width="15" height="15" viewBox="0 0 16 16"><polygon points="${pts.join(' ')}" fill="${c}" stroke="${c}" stroke-width="1.4" stroke-linejoin="round"/><path d="M5 8.2 7.1 10.3 11.2 5.9" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  },
+  shield: '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" stroke="#3E69F6" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 1 1.6 2.9v3.6c0 3.1 2.1 5.4 4.9 6.5 2.8-1.1 4.9-3.4 4.9-6.5V2.9z"/><path d="M4.4 7 6 8.6l2.9-3" stroke-linecap="round"/></svg>',
+  ckc: (c = '#248A3D', s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="${c}"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* SF square.and.arrow.up, white */
+  share: '<svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15V2M5.5 6.5 10 2l4.5 4.5"/><path d="M6.5 10H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 22h12a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 16 10h-2.5"/></svg>',
+};
+
+/* ── sample data: made up in the shape of a real web-migration task (the repo is public) ── */
+const PROJECT = 'Web 客户端…';
+const TASK = 'P4.3 · 下拉菜单的键盘窗口（Menu / Select）';
+const CRIT = '桌面和手机上用键盘操作菜单与下拉选择时，焦点、滚动和关闭行为与迁移前一致。';
+const GAPS = [
+  '只在 Chromium 和 WebKit 上跑过，没有跑 Firefox。',
+  '手机视口是模拟尺寸，没有在实体机上跑。',
+];
+/* eight screenshots in four folders: light/dark × phone/desktop; `sel` is the Select scene */
+const SHOTS = [
+  { dir: 'chromium-light-phone', cls: '', name: 'menu-open.png' },
+  { dir: 'chromium-light-phone', cls: 'sel', name: 'select-scroll.png' },
+  { dir: 'chromium-dark-phone', cls: 'dk', name: 'menu-open.png' },
+  { dir: 'chromium-dark-phone', cls: 'dk sel', name: 'select-scroll.png' },
+  { dir: 'chromium-light-desktop', cls: 'desk', name: 'menu-open.png' },
+  { dir: 'chromium-light-desktop', cls: 'desk sel', name: 'select-scroll.png' },
+  { dir: 'webkit-light-phone', cls: '', name: 'menu-open.png' },
+  { dir: 'webkit-light-phone', cls: 'sel', name: 'select-scroll.png' },
+];
+const thumb = (cls, big) => `<div class="th ${cls}${big ? ' big' : ''}"><div class="side"></div><div class="bar"></div><div class="menu"><i></i><i class="on"></i><i></i><i></i></div></div>`;
+
+/* ── phone chrome ── */
+function statusBar(time) {
+  return `<div class="sb"><span class="time">${time}${IC.loc}</span><span class="sys">${IC.signal}${IC.wifi}<span class="bat">67</span></span></div>`;
+}
+function nav(sub) {
+  return `<div class="nav"><div class="circ back">${IC.back}</div>
+     <div class="ttl"><div class="t1">${PROJECT}<span class="cp">Coordinator</span>${IC.chevR('#8e8e93', 12)}</div>
+     <div class="t2">${sub}</div></div>
+     <div class="circ more">${IC.more}</div></div>`;
+}
+function needsYou(text) {
+  return `<div class="ny"><span class="dot"></span><span class="tx2">${text}</span>${IC.chevD('#C7C7CC')}</div>`;
+}
+function band() {
+  return `<div class="band">
+    <div class="brow" style="top:13px">${IC.term}<b>Background processes</b><span class="v">12 total</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="brow" style="top:51px">${IC.box}<b>Tasks</b><span class="v">1 running · 9/14 done</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="cmp"><div class="ph">Message...</div><div class="tb"><span style="font-size:28px;font-weight:300;line-height:1;color:#55555e">+</span><span>Auto</span><span class="md">Opus 5.5 <span>Max</span></span><span class="send">${IC.sendUp}</span></div></div>
+  </div><div class="home"></div>`;
+}
+
+/* ── the evidence card: today, and with the files block ── */
+function filesBlock(o = {}) {
+  const at = (k) => (o.mk && o.mk[k] ? ` data-mk="${o.mk[k]}"` : '');
+  const tiles = o.expired
+    ? SHOTS.slice(0, 4).map(() => '<div class="th exp"><span>Expired<br>Dec 2</span></div>').join('')
+    : SHOTS.slice(0, 4).map((s) => thumb(s.cls)).join('');
+  return `<div class="fb">
+    <div${at('files')}><div class="evg" style="margin-top:0">FILES · 9 · 1.8 MB${o.expired ? ' · EXPIRED DEC 2' : ''}</div>
+    <div class="ths">${tiles}<div class="more">+5</div></div></div>
+    <div class="tr"${at('report')}>${IC.ckc(o.expired ? '#AEAEB2' : '#248A3D', 14)}<span><b>Playwright</b> · 46 passed · 0 failed · 2 skipped</span></div>
+  </div>`;
+}
+function evidenceCard(o = {}) {
+  const at = (k) => (o.mk && o.mk[k] ? ` data-mk="${o.mk[k]}"` : '');
+  return `<div class="ev">
+    <div class="evh"><span class="chipb">${IC.seal()}</span><span class="t">Does this evidence settle the task?</span></div>
+    <div class="evp">From Orbit</div>
+    <div class="evt">${TASK}</div>
+    <div class="evs"><div class="k">WHAT IT HAS TO SATISFY</div><div class="v">${CRIT}</div></div>
+    ${o.files ? filesBlock({ mk: o.mk }) : ''}
+    <div${at('rest')}>
+    <div class="evg">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 2</div>
+    ${GAPS.map((g) => `<div class="gap"><span class="ex">!</span><span>${g}</span></div>`).join('')}
+    <div class="fold"${at('checks')}>${IC.shield}<span>5 checked for you · all held</span> ${IC.chevD()}</div>
+    <div class="fold"${at('account')}>the submitter’s full account (912 characters) ${IC.chevD()}</div>
+    <div class="evm"${at('meta')}>34qF2bXw… · rev 2 · 7c41e09…</div>
+    </div>
+    <div class="acts"><div class="btn pri">Confirm done</div><div class="btn sec">Chat about this</div></div>
+  </div>`;
+}
+
+/* ── 4 · ① today ── */
+document.getElementById('p-today').innerHTML = statusBar('2:46') +
+  nav('Waiting for approval · Open · just now') + needsYou('1 open question below') +
+  `<div class="tx" style="top:151px">${evidenceCard({ mk: { checks: 1, account: 2 } })}</div>` + band();
+
+/* ── 4 · ② the card with files ── */
+document.getElementById('p-card').innerHTML = statusBar('2:46') +
+  nav('Waiting for approval · Open · just now') + needsYou('1 open question below') +
+  `<div class="tx" style="top:151px">${evidenceCard({ files: true, mk: { files: 1, report: 2, rest: 3 } })}</div>` + band();
+
+/* ── 4 · ③ the Evidence files sheet ── */
+const groups = [...new Set(SHOTS.map((s) => s.dir))].map((dir) => {
+  const shots = SHOTS.filter((s) => s.dir === dir);
+  return `<div class="grp"><div class="gh">${dir} <span>${shots.length}</span></div><div class="gg">${shots.map((s) => thumb(s.cls, true)).join('')}</div></div>`;
+});
+document.getElementById('p-sheet').innerHTML = statusBar('2:47') +
+  `<div class="sheet"><div class="grab"></div><div class="shn">Evidence files</div><div class="x">${IC.xmark}</div>
+   <div class="shb">
+     <div class="prov" data-mk="1" style="padding-right:18px"><span>Revision 2 · 2:41 PM</span><span>9 files · 1.8 MB</span></div>
+     <div class="trc" data-mk="2"><div class="h">${IC.ckc('#248A3D', 16)}<span>Playwright report</span><span style="margin-left:auto">${IC.chevR('#8e8e93', 12)}</span></div>
+       <div class="s">46 passed · 0 failed · 2 skipped · 38 s</div></div>
+     <div data-mk="3">${groups.slice(0, 2).join('')}</div>
+     ${groups.slice(2).join('')}
+   </div></div><div class="home" style="background:#000"></div>`;
+
+/* ── 4 · ③ the viewer ── */
+document.getElementById('p-view').innerHTML = statusBar('2:47') +
+  `<div class="vtop"><span class="done">Done</span><span class="pos" data-mk="1">3 of 8</span><span style="width:40px"></span></div>
+   <div class="vimg">
+     <div class="hd"><i></i></div>
+     <div class="ln" style="top:64px;width:220px"></div><div class="ln" style="top:84px;width:280px"></div><div class="ln" style="top:104px;width:180px"></div>
+     <div class="ln" style="top:140px;width:90px;background:rgba(255,255,255,.18)"></div>
+     <div class="field"><i></i></div>
+     <div class="pop"><div><i style="width:120px"></i></div><div class="on"><i style="width:150px"></i></div><div><i style="width:100px"></i></div><div><i style="width:132px"></i></div><div><i style="width:86px"></i></div></div>
+   </div>
+   <div class="vdots"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div>
+   <div class="vmeta" data-mk="2"><b>chromium-dark-phone/menu-open.png</b>214 KB · 780 × 1688 · sha256 3f9a1c07</div>
+   <div class="vshare">${IC.share}</div>
+   <div class="home"></div>`;
+
+/* ── 3 · the expired files block, out of its phone ── */
+document.getElementById('sn-exp').insertAdjacentHTML('beforeend',
+  `<div style="padding:0 16px"><div class="ev" style="margin:10px 0 0">
+     <div class="evh"><span class="chipb">${IC.seal('#8E8E93')}</span><span class="t">Does this evidence settle the task?</span></div>
+     <div class="evt">${TASK} · rev 1</div>
+     ${filesBlock({ expired: true })}
+   </div></div>`);
+
+/* marks: dashed outline + numbered dot, placed after layout. Clipped to the scrolling area the
+   element sits in (.tx transcript, .shb sheet body), so a mark never lands on the band below it. */
+window.drawMarks = function drawMarks() {
+  document.querySelectorAll('.phone').forEach((phone) => {
+    const pr = phone.getBoundingClientRect();
+    phone.querySelectorAll('[data-mk]').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const area = el.closest('.tx, .shb');
+      const cr = area ? area.getBoundingClientRect() : pr;
+      const top = Math.max(r.top, cr.top + 2, pr.top + 2), bottom = Math.min(r.bottom, cr.bottom - 2, pr.bottom - 2);
+      if (bottom <= top) return;
+      const o = document.createElement('div');
+      o.className = 'ol-mk';
+      o.style.left = (r.left - pr.left - 4) + 'px'; o.style.top = (top - pr.top - 4) + 'px';
+      o.style.width = (r.width + 8) + 'px'; o.style.height = (bottom - top + 8) + 'px';
+      phone.appendChild(o);
+      const d = document.createElement('div');
+      d.className = 'dot-mk'; d.textContent = el.dataset.mk;
+      d.style.left = Math.min(r.right - pr.left - 8, pr.width - 26) + 'px'; d.style.top = (top - pr.top - 14) + 'px';
+      phone.appendChild(d);
+    });
+  });
+};
+</script>
+</body>
+</html>
