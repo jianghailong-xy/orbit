@@ -70,18 +70,25 @@ describe('each selfUpdate state, as the rule words it', () => {
     const card = cardOf(inputOf('selfUpdate dirNotWritable and behind'));
     expect(card.title).toBe('Install folder isn’t writable');
     expect(card.short).toBe('Install folder isn’t writable');
+    // sudo runs the binary by its path in that folder: it looks a bare `orbit` up only on its secure_path.
     expect(card.detail).toBe(
       'It can’t write to /usr/local/bin, so it can’t replace its own binary — still on 0.1.190, latest is 0.1.197. ' +
-        'On that machine, run sudo orbit upgrade once; after that it updates itself.',
+        'On that machine, run sudo /usr/local/bin/orbit upgrade once; after that it updates itself.',
     );
-    expect(card.action).toEqual({ kind: 'copyCommand', command: 'sudo orbit upgrade' });
+    expect(card.action).toEqual({ kind: 'copyCommand', command: 'sudo /usr/local/bin/orbit upgrade' });
     expect(card.params).toEqual({
       version: '0.1.190',
       latest: '0.1.197',
       state: 'dirNotWritable',
       installDir: '/usr/local/bin',
     });
-    // A runner that didn't say which folder.
+    // An account's own copy, by its path the same way.
+    expect(
+      cardOf(
+        reporting('selfUpdate dirNotWritable and behind', { state: 'dirNotWritable', installDir: '/home/lab/.orbit/bin' }),
+      ).action,
+    ).toEqual({ kind: 'copyCommand', command: 'sudo /home/lab/.orbit/bin/orbit upgrade' });
+    // A runner that didn't say which folder: the command as it always was.
     expect(cardOf(reporting('selfUpdate dirNotWritable and behind', { state: 'dirNotWritable' })).detail).toBe(
       'It can’t write to its install folder, so it can’t replace its own binary — still on 0.1.190, latest is ' +
         '0.1.197. On that machine, run sudo orbit upgrade once; after that it updates itself.',
@@ -317,7 +324,7 @@ describe('each selfUpdate state on a runner’s page', () => {
         title: 'Install folder isn’t writable',
         detail:
           'It can’t write to /usr/local/bin, so it can’t replace its own binary — still on 0.1.190, latest is ' +
-          '0.1.197. On that machine, run sudo orbit upgrade once; after that it updates itself.',
+          '0.1.197. On that machine, run sudo /usr/local/bin/orbit upgrade once; after that it updates itself.',
         action: 'Copy Command',
       },
     ]);
@@ -325,7 +332,7 @@ describe('each selfUpdate state on a runner’s page', () => {
     // A check now would find the same folder: nothing to press but the command.
     expect(aboutActions()).toEqual([]);
     await click($$('.rd-attention-action button')[0]);
-    expect(copyText).toHaveBeenCalledWith('sudo orbit upgrade');
+    expect(copyText).toHaveBeenCalledWith('sudo /usr/local/bin/orbit upgrade');
   });
 
   it('disabledByEnv: the card says what turned it off and how to turn it on, with no button', async () => {

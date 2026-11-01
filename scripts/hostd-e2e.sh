@@ -421,12 +421,13 @@ wait_until 15 unit_running orbit-runner-alice.service || fail 2 "orbit-runner-al
 legacy_pid=$(main_pid orbit-runner-alice.service)
 [ "$(csh "euid $legacy_pid")" = "$UID_A" ] || fail 2 "orbit-runner-alice.service's process is not alice's"
 # docs: "Set up the machine once" — the same command run without root changes nothing and says what
-# to run instead.
+# to run instead; typed as a bare `orbit`, which sudo would look up only on its secure_path, the line
+# to re-run names the binary by its path.
 out=$(as alice "orbit host setup --server $SERVER" 2>&1)
 setup_rc=$?
 show "$out"
 [ "$setup_rc" -ne 0 ] || fail 2 "orbit host setup run by alice exited 0"
-grep -qxF "orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo orbit host setup --server $SERVER" <<<"$out" ||
+grep -qxF "orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo $BIN host setup --server $SERVER" <<<"$out" ||
   fail 2 "orbit host setup run by alice did not say that it needs root and what to re-run"
 [ "$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)" = "$TEMPLATE_SHA" ] || fail 2 "orbit host setup run by alice rewrote $TEMPLATE"
 check_no_sudo "after creating the accounts"
@@ -477,13 +478,14 @@ show "$out"
 [ "$rc" -eq 1 ] || fail 2b "orbit host setup under /usr/local and /usr/local/bin root:staff 2775 exited $rc, want 1"
 grep -qxF "orbit host: refusing to set this host up with $BIN: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775)." <<<"$out" ||
   fail 2b "orbit host setup did not name both directories the staff group can write"
-grep -qxF "  sudo chmod g-w /usr/local/bin /usr/local" <<<"$out" && grep -qxF "  sudo orbit host setup --server $SERVER" <<<"$out" ||
+grep -qxF "  sudo chmod g-w /usr/local/bin /usr/local" <<<"$out" && grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
   fail 2b "orbit host setup did not say how to take the group's write access back"
 [ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
-# docs: "Set up the machine once" — `sudo chmod g-w /usr/local/bin /usr/local`, then setup again.
+# docs: "Set up the machine once" — `sudo chmod g-w /usr/local/bin /usr/local`, then setup again:
+# `sudo /usr/local/bin/orbit host setup --server <PUBLIC_ORIGIN>`.
 cx chmod g-w /usr/local/bin /usr/local || fail 2b "chmod g-w /usr/local/bin /usr/local failed"
 dirs=$(cx stat -c '%n %U:%G %a' /usr/local/bin /usr/local | paste -sd, -)
-out=$(cx orbit host setup --server "$SERVER" 2>&1)
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
 rc=$?
 show "$out"
 [ "$rc" -eq 0 ] || fail 2b "orbit host setup with $dirs exited $rc"
@@ -646,9 +648,10 @@ wait_until 90 runner_logged "$refusal" ||
 machine_version_is "$V2" || fail 6b "$BIN is now $(cx "$BIN" --version); hostd must leave $V2 in place" orbit-hostd.service
 [ "$(main_pid "$UNIT_A")" = "$pre_a" ] && [ "$(main_pid "$UNIT_T")" = "$pre_t" ] ||
   fail 6b "a runner instance restarted although nothing was installed" "$UNIT_A" "$UNIT_T"
-# docs: "Known limitations" — one way out: root installs each release, `sudo orbit upgrade`, which
-# replaces the shared binary where it is and restarts no instance...
-out=$(cx orbit upgrade 2>&1)
+# docs: "Known limitations" — one way out: root installs each release with
+# `sudo /usr/local/bin/orbit upgrade`, which replaces the shared binary where it is and restarts no
+# instance...
+out=$(cx "$BIN" upgrade 2>&1)
 rc=$?
 show "$out"
 [ "$rc" -eq 0 ] || fail 6b "orbit upgrade (root) exited $rc"

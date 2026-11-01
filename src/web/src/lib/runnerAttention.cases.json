@@ -2317,7 +2317,7 @@
     }
   },
   {
-    "name": "selfUpdate dirNotWritable and behind: its install folder isn’t writable, with sudo orbit upgrade to copy",
+    "name": "selfUpdate dirNotWritable and behind: its install folder isn’t writable, with sudo /usr/local/bin/orbit upgrade to copy",
     "input": {
       "runner": {
         "name": "lab",

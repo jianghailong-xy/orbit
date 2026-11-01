@@ -452,7 +452,7 @@ bash scripts/test-codex-reset-fault-injection.sh
    - 已经是镜像版本号的 runner 在这一步没有变化；版本号更低的 runner 会随自更新拿到功能（§9.1）。
 2. **bump 版本，再发一次 web。**
    - runner 自更新前先 drain，最多 100 秒。
-   - 非 root 用户跑的 runner 自己装不上新二进制，会记 `cannot be installed`。要先 `sudo orbit upgrade`，再重启它的服务。
+   - 非 root 用户跑的 runner 自己装不上新二进制，会记 `cannot be installed`。要先执行那行日志给出的 `sudo <安装目录>/orbit upgrade`（旧安装是 `sudo /usr/local/bin/orbit upgrade`），再重启它的服务。
    - 检查每台 runner 是否已声明 capability：
      ```sql
      SELECT name, version, 'codex-rate-limit-reset-v1' = ANY (capabilities) AS reset

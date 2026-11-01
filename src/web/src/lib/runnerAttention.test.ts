@@ -610,6 +610,7 @@ describe('runnerCopy', () => {
       'It runs as a regular user, so it can’t replace its own binary — still on 0.1.155, latest is 0.1.197. ' +
         'On that machine, run sudo orbit upgrade.',
     );
+    expect(copy.runnerUpgradeCommandIn('/home/lab/.orbit/bin')).toBe('sudo /home/lab/.orbit/bin/orbit upgrade');
     expect(copy.attentionEngineUpdateFailed('Claude Code')).toBe('Claude Code update failed');
     expect(copy.attentionEngineUpdateDetail('18d behind 2.1.270')).toBe(
       '18d behind 2.1.270. Orbit retries every 30 min — Update Engines Now tries again right away.',

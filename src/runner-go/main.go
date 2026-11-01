@@ -187,9 +187,9 @@ Usage:
   orbit upgrade
 
 Use this if the startup auto-update isn't working. On an install whose binary still
-sits in root's /usr/local/bin, sudo orbit upgrade moves it into ~/.orbit/bin of the
-account the runner service runs as, links /usr/local/bin/orbit to it and restarts the
-service, so later releases install themselves.
+sits in root's /usr/local/bin, sudo /usr/local/bin/orbit upgrade moves it into
+~/.orbit/bin of the account the runner service runs as, links /usr/local/bin/orbit to
+it and restarts the service, so later releases install themselves.
 `,
 	"engine-update": `orbit engine-update — update the coding-engine CLIs now
 

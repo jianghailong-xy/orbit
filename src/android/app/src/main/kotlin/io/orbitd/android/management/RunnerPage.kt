@@ -107,7 +107,11 @@ internal object RunnerCopy {
     const val REPAIR = "Repair"
     const val SET_A_RESERVE = "Set a Reserve…"
     const val COPY_COMMAND = "Copy Command"
+    /** The upgrade command when the runner doesn't say where it is installed: one too old to report it. */
     const val UPGRADE_COMMAND = "sudo orbit upgrade"
+    /** The upgrade command for a runner that reports its install folder (`selfUpdate.installDir`). sudo runs the binary by its path:
+     * it looks a bare `orbit` up only on its secure_path, which an account's own ~/.orbit/bin is never on. */
+    fun upgradeCommandIn(folder: String) = "sudo $folder/orbit upgrade"
     const val UPDATES_TURN_ON = "To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — " +
         "on a Mac, opening the latest Orbit app does this."
     /** A machine where no coding CLI is signed in (RunnerPage.noCliSignedIn): the list's short line, the card's title, and what it is
@@ -739,7 +743,8 @@ internal object RunnerPage {
 
     /**
      * Behind the latest release, and not catching up by itself. A runner that reports where its updates stand
-     * (`selfUpdate`) is taken at its word: `dirNotWritable` points to sudo orbit upgrade, once; `disabledByEnv` says why,
+     * (`selfUpdate`) is taken at its word: `dirNotWritable` points to `sudo <installDir>/orbit upgrade`, once (to [RunnerCopy.UPGRADE_COMMAND]
+     * when it doesn't say which folder); `disabledByEnv` says why,
      * with how to turn it back only for ORBIT_NO_SELFUPDATE; `failed` offers Update Runner Now, so only while online.
      * `enabled`, `waitingForIdle`, `heldByRollout` and a state this client doesn't know raise nothing. One too old to
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
@@ -756,10 +761,13 @@ internal object RunnerPage {
                 AttentionAction("copyCommand", command = command))
         }
         return when (report.str("state")) {
-            "dirNotWritable" -> AttentionItem("cannotSelfUpdate", "warn", "Install folder isn’t writable", "Install folder isn’t writable",
-                "It can’t write to ${report.str("installDir") ?: "its install folder"}, so it can’t replace its own binary — still on $version, " +
-                    "latest is $latest. On that machine, run $command once; after that it updates itself.",
-                AttentionAction("copyCommand", command = command))
+            "dirNotWritable" -> {
+                val upgrade = report.str("installDir")?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::upgradeCommandIn) ?: command
+                AttentionItem("cannotSelfUpdate", "warn", "Install folder isn’t writable", "Install folder isn’t writable",
+                    "It can’t write to ${report.str("installDir") ?: "its install folder"}, so it can’t replace its own binary — still on $version, " +
+                        "latest is $latest. On that machine, run $upgrade once; after that it updates itself.",
+                    AttentionAction("copyCommand", command = upgrade))
+            }
             "disabledByEnv" -> {
                 val detail = "${runnerSaid(report.str("reason"), "Its updater is switched off")}, so it doesn’t update itself — still on $version, latest is $latest."
                 AttentionItem("cannotSelfUpdate", "warn", "Updates are turned off", "Updates are turned off",

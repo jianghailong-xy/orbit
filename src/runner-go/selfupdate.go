@@ -118,11 +118,17 @@ var selfUpdateBlockedOnce sync.Once
 // warnSelfUpdateBlocked reports the one condition that otherwise pins a runner
 // to an old release with no trace. Logged once per process: it is a standing
 // state, not an event, and the check that finds it repeats every
-// selfUpdateCheckInterval.
+// selfUpdateCheckInterval. The command it gives names this binary by its path in
+// dir: sudo looks a bare `orbit` up only on its secure_path, which an account's own
+// ~/.orbit/bin is never on.
 func warnSelfUpdateBlocked(remote, dir string) {
 	selfUpdateBlockedOnce.Do(func() {
+		name := "orbit"
+		if exe, err := resolvedExecutable(); err == nil {
+			name = filepath.Base(exe)
+		}
 		logln(fmt.Sprintf("orbit %s available but cannot be installed: %s is not writable by this user; "+
-			"staying on %s — run `sudo orbit upgrade`", remote, dir, version))
+			"staying on %s — run `sudo %s upgrade`", remote, dir, version, filepath.Join(dir, name)))
 	})
 }
 
@@ -626,7 +632,7 @@ func installRelease(server, key string, manifest Manifest, exe string, runProbe 
 	ver := manifest.Version
 	// Fail fast (before downloading) if we can't write where the binary lives.
 	if dir := filepath.Dir(exe); !writable(dir) {
-		logf(fmt.Sprintf("cannot write to %s (permission denied) — re-run with: sudo orbit upgrade\n", dir))
+		logf(fmt.Sprintf("cannot write to %s (permission denied) — re-run with: sudo %s upgrade\n", dir, exe))
 		return false
 	}
 
@@ -701,7 +707,7 @@ func installRelease(server, key string, manifest Manifest, exe string, runProbe 
 	return true
 }
 
-// giveToDirOwner hands a file written as root (`sudo orbit upgrade`) to whoever owns the
+// giveToDirOwner hands a file written as root (`sudo ~/.orbit/bin/orbit upgrade`) to whoever owns the
 // directory it sits in, so the binary in an account's ~/.orbit/bin stays that account's.
 func giveToDirOwner(path, dir string) {
 	if os.Geteuid() != 0 {
@@ -827,7 +833,7 @@ func upgrade(server string) {
 			version, m.Version, server)
 		return
 	}
-	// As root — the `sudo orbit upgrade` a runner that cannot update itself asks for — first
+	// As root — the `sudo /usr/local/bin/orbit upgrade` a runner that cannot update itself asks for — first
 	// move a legacy install out of root's /usr/local/bin, so this release lands where the
 	// runner can replace it next time. Its service restarts once the release is in place.
 	var restart func()

@@ -751,7 +751,7 @@ export interface RunnerHeartbeatRequest {
  *  - `disabledByEnv`: turned off — ORBIT_NO_SELFUPDATE, a development build, or a platform no
  *    release is published for; `reason` says which.
  *  - `dirNotWritable`: `installDir` is not writable by the runner's user, so no release can be
- *    swapped in until someone runs `sudo orbit upgrade` there.
+ *    swapped in until someone runs `sudo <installDir>/orbit upgrade`.
  *  - `waitingForIdle`: a release is waiting for the turns in flight to end.
  *  - `failed`: the release check or the install failed; `reason` is the runner's own words.
  *  - `heldByRollout`: a newer release exists, but its staged rollout has not reached this runner. */
