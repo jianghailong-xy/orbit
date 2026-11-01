@@ -67,6 +67,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.AntigravityRepair
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
@@ -285,6 +286,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
     LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
+    // A turn the runner refused for its Claude region: the card reads where the runner's connection came out and what else can run here
+    // off the runner and the providers, and the composer's catalogue names a provider picked from it (docs/claude-region-check-contract.md).
+    val regionError = ClaudeRegion.isRegionError(snapshotDetail?.string("error"))
+    LaunchedEffect(regionError, console.runnerId) {
+        if (!regionError) return@LaunchedEffect
+        console.reload()
+        if (composer.state.value.let { it.catalog == null && !it.catalogLoading }) composer.loadCatalog()
+    }
     // A07-18: what this page reads off the runner — the composer's catalogue, the cards' runner — again on every reconnect, and
     // once a minute while the session streams, so a read that failed as the page opened, or a quota read before the phone slept,
     // does not stay that way.
@@ -518,14 +527,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // holds the keyboard.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionPendingTray(composer, state.session, unreadSteers) }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
-                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
+                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
                     chat = {
                         // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
                         composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
                         composerFocused = true; composeFocus++
                     },
                     sendAgain = { composer.retryFailed() },
-                    openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
+                    openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) },
+                    // The region card's Move to another machine: the session's own Move…, as its menu opens it.
+                    move = listed?.takeIf { it.workspace != null }?.let { session -> { action = DirectoryDialog.Move(session) } })
                 // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
                 // `queuedAntigravityRepair`).
                 val queuedDetail = console.detail

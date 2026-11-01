@@ -2,6 +2,8 @@ package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
+import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.ClaudeRegionCopy
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -114,10 +116,6 @@ internal object RunnerCopy {
     const val NO_CLI_SIGNED_IN = "No coding CLI is signed in"
     fun noCliSignedInDetail(cli: String) = "Nothing can run on this machine until one is. $cli is installed here."
     fun noCliSignedInDetailMany(clis: String) = "Nothing can run on this machine until one is. $clis are installed here."
-    /** A machine blocked for the Claude region (docs/claude-region-check-contract.md): its attention line and card title, and the
-     * card's detail — OrbitKit ClaudeRegionCopy, the web's claudeRegionCopy.ts. */
-    const val CLAUDE_REGION_ATTENTION = "Claude Code can’t use Anthropic here"
-    fun claudeRegionAttentionDetail(region: String) = "Anthropic doesn’t offer Claude in $region."
     /** Names listed in one sentence: the last after "and", the rest between commas — `Claude Code, Codex and Kimi Code`. */
     fun namesTwo(first: String, second: String) = "$first and $second"
     const val NAMES_COMMA = ", "
@@ -584,7 +582,7 @@ internal object RunnerPage {
         // there, and the region's own item says why.
         val installed = loginEngines.filter {
             engineHealth(runner, it)?.bool("installed") == true &&
-                !(it == "claude" && engineHealth(runner, it)?.str("auth") == "no" && regionBlocked(runner))
+                !(engineHealth(runner, it)?.str("auth") == "no" && claudeRegionBlocked(runner, it))
         }
         if (installed.isEmpty() || installed.any { engineHealth(runner, it)?.str("auth") != "no" }) return null
         if (workspaces.any(::runsOnKeyOrPool)) return null
@@ -604,7 +602,7 @@ internal object RunnerPage {
 
     private fun signedOutItems(runner: JsonObject, workspaces: List<JsonObject>) = loginEngines.mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true && it.str("auth") == "no" } ?: return@mapNotNull null
-        if (engine == "claude" && regionBlocked(runner)) return@mapNotNull null
+        if (claudeRegionBlocked(runner, engine)) return@mapNotNull null
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
         val name = loginNames.getValue(engine)
         AttentionItem("engineSignedOut", "bad", "$name signed out", "$name is signed out",
@@ -613,15 +611,28 @@ internal object RunnerPage {
             AttentionAction("signIn", engine = health.str("engine")), names = users)
     }
 
-    /** Whether this runner's effective Claude region verdict is blocked (`region`, docs/claude-region-check-contract.md §5, §6):
-     * Orbit then runs no Anthropic account on it and starts no Claude sign-in. Null for one that doesn't check. */
-    private fun regionBlocked(runner: JsonObject) = runner.obj("region")?.str("verdict") == "blocked"
+    /** Whether [engine] is Claude Code on a machine whose Claude connection comes out where Anthropic doesn't offer Claude (the runner's
+     * effective verdict, `region`, docs/claude-region-check-contract.md §5, §6; OrbitKit RunnerPageFormat.claudeRegionBlocked): Orbit runs
+     * no Anthropic account there and starts no Claude sign-in, so its row says so, and Check Again stands where Sign In and Add Account
+     * would. A runner that reads no region is never blocked. */
+    fun claudeRegionBlocked(runner: JsonObject, engine: String?) = engine == ClaudeRegion.ENGINE && ClaudeRegion.blocked(runner.obj("region"))
+
+    /** What a machine blocked for the Claude region says under its engines (web `re-login-note`, board 03's group footnote): why, and
+     * what still runs there; then when it was checked and where Claude's connection came out. */
+    data class RegionNote(val note: String, val checked: String?)
+
+    fun claudeRegionNote(runner: JsonObject, nowMs: Long): RegionNote? {
+        val region = runner.obj("region")?.takeIf(ClaudeRegion::blocked) ?: return null
+        val name = region.str("name")?.takeIf { it.isNotEmpty() } ?: return null
+        val checked = region.str("checkedAt")?.let { ClaudeRegionCopy.claudeRegionChecked(ago(it, nowMs), name, region.bool("viaProxy") == true) }
+        return RegionNote(ClaudeRegionCopy.claudeRegionMachineNote(name), checked)
+    }
 
     /** Claude Code can't use Anthropic here, with Check again (OrbitKit RunnerAttention's claudeRegionItem). */
     private fun claudeRegionItem(runner: JsonObject): AttentionItem? {
-        val region = runner.obj("region")?.takeIf { it.str("verdict") == "blocked" } ?: return null
-        return AttentionItem("claudeRegionUnsupported", "warn", RunnerCopy.CLAUDE_REGION_ATTENTION, RunnerCopy.CLAUDE_REGION_ATTENTION,
-            RunnerCopy.claudeRegionAttentionDetail(region.str("name").orEmpty()), AttentionAction("checkRegion"))
+        val region = runner.obj("region")?.takeIf(ClaudeRegion::blocked) ?: return null
+        return AttentionItem("claudeRegionUnsupported", "warn", ClaudeRegionCopy.CLAUDE_REGION_ATTENTION, ClaudeRegionCopy.CLAUDE_REGION_ATTENTION,
+            ClaudeRegionCopy.claudeRegionAttentionDetail(region.str("name").orEmpty()), AttentionAction("checkRegion"))
     }
 
     /** One item per stuck checkout, however many workspaces work in it, named after the first. */
@@ -655,7 +666,7 @@ internal object RunnerPage {
     private fun quotaItems(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long) = loginEngines.mapNotNull { engine ->
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
         // No Anthropic account runs on a machine blocked for the region, nor is its usage read there.
-        if (engine == "claude" && regionBlocked(runner)) return@mapNotNull null
+        if (claudeRegionBlocked(runner, engine)) return@mapNotNull null
         // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
         val usage = EngineAccounts.usage(engine, runner)
         val health = engineHealth(runner, engine)
@@ -859,16 +870,18 @@ internal object RunnerPage {
     }
     fun antigravityCanSignIn(runner: JsonObject) = runner.obj("antigravity")?.str("googleLogin") == "available" &&
         engineHealth(runner, "antigravity")?.bool("installed") == true
-    /** Every engine Orbit signs in, and Antigravity only where the runner offers its Google sign-in. */
-    fun canSignIn(runner: JsonObject, engine: String) = when (engine) {
+    /** Every engine Orbit signs in, and Antigravity only where the runner offers its Google sign-in. No Claude sign-in starts on a machine
+     * blocked for the Claude region (contract §12). */
+    fun canSignIn(runner: JsonObject, engine: String) = !claudeRegionBlocked(runner, engine) && when (engine) {
         "antigravity" -> antigravityCanSignIn(runner)
         ProviderEngines.CURSOR -> CursorRuntime.signsIn(runner)
         else -> true
     }
     /** Add Account: an engine that keeps accounts — Antigravity's only on a runner that keeps an added Google account apart
      * from Default's (antigravity-account-login/v1), Kimi's only on one that signs the account it adds into a KIMI_CODE_HOME
-     * of its own (kimi-account-login/v1); an older one would sign Default in again in its place. */
-    fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) && when (engine) {
+     * of its own (kimi-account-login/v1); an older one would sign Default in again in its place. Never Claude Code's on a machine
+     * blocked for the Claude region: an account is added by signing it in. */
+    fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) && !claudeRegionBlocked(runner, engine) && when (engine) {
         "antigravity" -> antigravityCanSignIn(runner) && EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN in runner.strings("capabilities")
         "kimi" -> EngineAccounts.KIMI_ACCOUNT_LOGIN in runner.strings("capabilities")
         // Cursor CLI's only on a runner that signs a named account into its own directory (a Linux one today, D4), and runs it at all.
@@ -907,6 +920,9 @@ internal object RunnerPage {
      * Google here says why (given its [runner]); one on the machine's Gemini key says "env key", whose Default counts as in. A Cursor
      * CLI this runner can't run at all says why, in the tone the web's badge has (CursorRuntime.state). */
     fun engineStatus(health: JsonObject, runner: JsonObject? = null): Pair<String, String>? {
+        // Claude's connection from this machine comes out where Anthropic doesn't offer Claude: the row's whole story, which no install or
+        // sign-in here changes (web's orange Region not supported).
+        if (runner != null && claudeRegionBlocked(runner, health.text("engine"))) return ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED to "warn"
         if (health.text("engine") == ProviderEngines.DSH) return dshStatus(health, runner)
         if (health.text("engine") == ProviderEngines.CURSOR && runner != null) {
             val state = CursorRuntime.state(runner)
@@ -969,6 +985,8 @@ internal object RunnerPage {
      * starts on, which the row names above it (engineNextAccount), while it is not signed out. Every window, and every account's, is
      * the engine page's to list. */
     fun engineWindows(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): List<UsageRow> {
+        // No Anthropic usage is read on a machine blocked for the Claude region: nothing to gauge.
+        if (claudeRegionBlocked(runner, engine)) return emptyList()
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return emptyList()
         val account = when {
             health.list("accounts").size >= 2 || removedDefault(health) != null -> nextAccount(runner, health, nowMs)
@@ -992,6 +1010,8 @@ internal object RunnerPage {
      * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between, or, while its
      * Default is removed from Orbit, the one that remains. */
     fun marksNext(runner: JsonObject, engine: String, account: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        // No session starts on any Claude account of a machine blocked for the region (web parity).
+        if (claudeRegionBlocked(runner, engine)) return false
         val health = engineHealth(runner, engine) ?: return false
         return nextAccount(runner, health, nowMs) == account
     }
@@ -1001,7 +1021,8 @@ internal object RunnerPage {
 
     /** One account's own windows, all of them: Default's are the engine snapshot's, another's its entry under `accounts`. */
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =
-        accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let(::usageRows).orEmpty()
+        if (claudeRegionBlocked(runner, engine)) emptyList()
+        else accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let(::usageRows).orEmpty()
 
     /** A Cursor CLI account's usage limit met this period, and until when (cursorUsageLimit), off the runner's report of the engine. */
     fun cursorSpent(runner: JsonObject, account: String, nowMs: Long): CursorSpent? =
