@@ -182,9 +182,9 @@ test('a diagram is kept when its every word is one a sentence with a verified fo
     'The runner polls[2].',
   ].join('\n');
   const body = parseSectionBody(markdown, 2);
-  assert.equal(keepSourcedDiagrams(body, [true, true]), body, 'every word is sourced: the body stands as it is');
+  assert.equal(keepSourcedDiagrams(body, [true, true], []), body, 'every word is sourced: the body stands as it is');
   // The only sentence that says "turn", "stored" and "delivered" has no verified footnote.
-  const dropped = keepSourcedDiagrams(body, [false, true]);
+  const dropped = keepSourcedDiagrams(body, [false, true], []);
   assert.deepEqual(dropped.blocks, [{ kind: 'paragraph' }, { kind: 'paragraph' }]);
   assert.deepEqual(dropped.sentences.map((sentence) => [sentence.text, sentence.block]), [['A turn is stored before it is delivered.', 0], ['The runner polls.', 1]]);
   assert.deepEqual([dropped.diagrams, dropped.diagramsDropped], [[], 1]);
@@ -204,7 +204,7 @@ test('a flowchart\'s own words need no source, and a section keeps one diagram',
     '  r[runner]',
     '```',
   ].join('\n'), 1);
-  const kept = keepSourcedDiagrams(body, [true]);
+  const kept = keepSourcedDiagrams(body, [true], []);
   assert.deepEqual(kept.blocks.map((block) => block.kind), ['paragraph', 'diagram']);
   assert.deepEqual([kept.diagrams.length, kept.diagramsDropped], [1, 1], 'the second one is one too many');
   assert.match(kept.blocks[1].text ?? '', /"Start"[\s\S]*\|"yes"\|/u);
@@ -225,7 +225,7 @@ test('a word is the same word with another ending; a code name, a path or a numb
     '  s[Store turn] --> d[Deliver] -->|lost| r[Retries]',
     '```',
   ].join('\n'), 1);
-  assert.equal(keepSourcedDiagrams(body, [true]).diagrams.length, 1);
+  assert.equal(keepSourcedDiagrams(body, [true], []).diagrams.length, 1);
   // Dropped: no sourced sentence says "cache", in any form.
   const more = parseSectionBody([
     'The server stores a turn before it delivers it[1].',
@@ -235,7 +235,7 @@ test('a word is the same word with another ending; a code name, a path or a numb
     '  s[Store turn] --> c[Cache] --> d[Deliver]',
     '```',
   ].join('\n'), 1);
-  assert.equal(keepSourcedDiagrams(more, [true]).diagramsDropped, 1);
+  assert.equal(keepSourcedDiagrams(more, [true], []).diagramsDropped, 1);
 });
 
 test('the words inside a sourced sentence\'s code names count; a label\'s own code name and a number are only themselves', () => {
@@ -252,11 +252,29 @@ test('the words inside a sourced sentence\'s code names count; a label\'s own co
     `  a["${label}"]`,
     '```',
   ].join('\n'), 2);
-  const kept = (label: string): number => keepSourcedDiagrams(section(label), [true, false]).diagrams.length;
+  const kept = (label: string): number => keepSourcedDiagrams(section(label), [true, false], []).diagrams.length;
   assert.equal(kept('Session read by worker'), 1, 'session and worker are inside sourced code names');
   assert.equal(kept('Sessions'), 1, 'and another ending of them is the same word');
   assert.equal(kept('sessionId'), 1, 'a code name a sentence says whole');
   assert.equal(kept('sessionName'), 0, 'a code name is compared whole: it is not made up of two sentences\' parts');
   assert.equal(kept('500'), 0, 'a number inside a code name is no number a sentence says');
   assert.equal(kept('queue'), 0, 'the words inside a sentence with no verified footnote do not count');
+});
+
+test('a diagram may name what the document verifies elsewhere, read the way its sentences are; nothing else widens', () => {
+  const body = (label: string): ReturnType<typeof parseSectionBody> => parseSectionBody([
+    'The runner polls[1].',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    `  a["${label}"]`,
+    '```',
+  ].join('\n'), 1);
+  const kept = (label: string, sources: readonly string[]): number => keepSourcedDiagrams(body(label), [true], sources).diagrams.length;
+  assert.equal(kept('lease', []), 0, 'no source says lease');
+  assert.equal(kept('lease', ['A lost delivery waits out its lease.']), 1, 'a source says it');
+  assert.equal(kept('Leases', ['A lost delivery waits out its lease.']), 1, 'and another ending of it is the same word');
+  assert.equal(kept('session', ['export function claim(sessionId: string) {']), 1, 'a word inside a source\'s code name counts');
+  assert.equal(kept('sessionName', ['the sessionId and the fileName']), 0, 'a label\'s code name is compared whole');
+  assert.equal(kept('500', ['the limit-500 flag']), 0, 'a number inside a code name is no number a source says');
 });
