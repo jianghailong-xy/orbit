@@ -176,7 +176,8 @@ struct RunnerMachineTile: View {
 }
 
 /// One quota window: its name and how much is used, the gauge, and when it resets — the Codex pool
-/// page's `CodexWindowRow`, amber from 90% (`PlanUsageRow.nearLimit`).
+/// page's `CodexWindowRow`, amber from 90% (`PlanUsageRow.nearLimit`), and a full red gauge once spent
+/// (`PlanUsageRow.spent`), which an Antigravity bucket at 0% remaining would otherwise leave empty.
 struct RunnerWindowRow: View {
     let row: PlanUsageRow
     let resets: String?
@@ -196,7 +197,8 @@ struct RunnerWindowRow: View {
                     .foregroundStyle(Color.secondary)
                     .monospacedDigit()
             }
-            RunnerGauge(fraction: Double(row.percent) / 100, tint: warn ? RunnerInk.full : Color.accentColor)
+            RunnerGauge(fraction: row.spent ? 1 : Double(row.percent) / 100,
+                        tint: row.spent ? RunnerInk.red : warn ? RunnerInk.full : Color.accentColor)
             if let resets {
                 Text(resets)
                     .font(.orbitMeta)

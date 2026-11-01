@@ -962,6 +962,18 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
     /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
     public var nearLimit: Bool { window.utilization >= 90 }
+    /// Nothing left of the window. Its bar is drawn full and red whichever way the row counts: an
+    /// Antigravity bucket at 0% remaining would otherwise be an empty track that reads as no data.
+    public var spent: Bool { window.utilization >= 100 }
+}
+
+/// The compact iOS Plan usage sheet's height for its rows (the sheet fits a detent to them): 66 pt a
+/// row, and 24 more for a row that names its bucket on a line above (an Antigravity bucket's id).
+/// Five Antigravity buckets measured at 66 each ran ~85 pt short, pushing the title into the grabber.
+public enum PlanUsageSheetLayout {
+    public static func rowsHeight(_ rows: [PlanUsageRow]) -> Int {
+        rows.reduce(0) { $0 + 66 + ($1.groupLabel == nil ? 0 : 24) }
+    }
 }
 
 private func isApproximateWindow(_ minutes: Int, _ expected: Int) -> Bool {
