@@ -92,9 +92,12 @@ public struct RecapCard: Equatable, Sendable {
 
     /// The card's name, over the recap.
     public static let word = "Recap"
-    /// The refresh button, as VoiceOver and the pointer's help read it.
+    /// The ⋯ at the end of the recap that holds Refresh and Hide (the owner, 2026-11-02,
+    /// docs/mocks/session-recap-display/07-last-line B), as VoiceOver reads it.
+    public static let more = "Recap actions"
+    /// The menu's item that writes the recap again now.
     public static let refresh = "Refresh recap"
-    /// The × that hides this recap in this conversation on this device, read the same ways.
+    /// The menu's item that hides this recap in this conversation on this device.
     public static let hide = "Hide recap"
     public static let upToDate = "The recap is already up to date."
     public static let tooLittle = "There's too little to recap yet."
