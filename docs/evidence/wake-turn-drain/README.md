@@ -93,6 +93,36 @@ line number is the statement's first line; the task named the line after it (`re
 the session row. `session_scheduled_wakeup`, `session_wakeup_loop` and `background_job_wake` cascade with it, so no
 wakeup is left pointing anywhere.
 
+### Re-run on the merged tree (rework, 2026-11-01)
+
+The first delivery could not land, because its project branch was 21 commits behind main. This branch merges F
+(`4fdfe0948`) onto the project tip `8bd5f629f`, then main `d0afbd2d2`, which brings in the Claude region check (project
+`34pUviip3QOsQ9iIAwHia`). The same command over the merged tree finds 39 statements. 37 are the ones above, with the
+same text and only their line numbers moved; nothing was added between `1031a2052` and the project tip. Two are new,
+both from main's region check (`dcc1a1d9f`), and neither answers or deletes a queued turn:
+
+| Site (merged tree) | What it does | Why no change |
+| --- | --- | --- |
+| `runner-api/runner-api.controller.ts:6426` `turnComplete`, `region_refused` | Puts the one turn the runner refused for its region back in the queue (by id: PENDING, `delivered_at` cleared) and the session back to PENDING under the hold. It returns before the failed-turn drain. | The turn is requeued, not answered, and keeps its key, like the `dequeueTurn` pause above. A wakeup on it is delivered by the claim after the hold lifts. If the held session is ended first, `transitionEnd`'s settlement drops it. |
+| `runner-api/runner-api.controller.ts:9067` `restRegionGatedRun` (from `finalize`, `region_stopped`) | Answers the IN_FLIGHT message and shell turns: the turn the engine was running when the stop came. A `region_refused` finalize writes no turn. Either way it returns before finalize's drain. | It touches only turns already handed to the engine, which the settlement never touches either: their ticks ran and stay counted. PENDING turns, wake turns included, stay queued. |
+
+Also checked:
+
+- `region_stopped` in `turnComplete` sets `failSession` to false, so the failed-turn drain and its settlement do not
+  run, and turns queued behind the stopped one stay PENDING. `restRegionGatedRun` also calls
+  `terminalizePendingCurrentWorkSteers` (`current-work-delivery.ts:212` above), which touches steers only.
+- Main's other changes to `sessions.service.ts` and `queue.service.ts` write no `conversation_turn`. A create refused
+  for the region throws before anything is written. A region-held session moves to another workspace with its queue
+  untouched. The claim's hold writes only `session.error`.
+- No migration writes `conversation_turn` (`git grep` over `src/apiserver/prisma/migrations/*/migration.sql`: 0 files),
+  and main adds no migration.
+- The five drains still call `settleUnrunWakeTurns(tx, id, { drained: true })` right before they answer the queue:
+  `reaper.service.ts:908`, `runner-api.controller.ts:7218` and `:8903`, `sessions.service.ts:7776` and `:7796`. The
+  region branches of `turnComplete` and `finalize` return before both the settlement and the after-commit push.
+
+So the merge adds no drain path, and the fix and its cases are unchanged. The runs on the merged tree are listed in
+task F's evidence revision 2.
+
 ## The fix
 
 `src/apiserver/src/runner-api/wake-turn-withdraw.ts`: `settleUnrunWakeTurns` gains a fourth door, `{ drained: true }`.
