@@ -1088,19 +1088,28 @@ heading it comes from.
 
 Every account's runner runs one binary, and the host broker runs it as root, so it has to be the machine's own: a
 regular file root owns and only root can write, in directories only root can write all the way up to `/`, such as
-`/usr/local/bin/orbit`. Setup writes the binary it runs from, links resolved, into the units, and refuses any other
-before it writes or runs anything (see below). Install the machine's copy as root before setup
-([install.sh](../src/web/public/install.sh) can put it in a directory of your choosing).
+`/usr/local/bin/orbit`. Every account has to be able to execute it, too: the file and each of those directories need
+execute permission for others. Setup writes the binary it runs from, links resolved, into the units, and refuses any
+other before it writes or runs anything (see below).
 
-Then, once, as root:
+[install.sh](../src/web/public/install.sh) does not put that copy in place: on a machine that is not set up, it
+installs into `~/.orbit/bin/orbit` of whichever account runs it, root included. An account's copy there is the
+account's to replace, and root's is in a home no other account can enter. So first, as the account that ran
+install.sh, put a machine-level copy in place:
 
 ```bash
-sudo orbit host setup --server https://orbit.example.com
+sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
 ```
 
-`--server` is the deployment's `PUBLIC_ORIGIN`. With the binary in place, this is the only step that needs root: from
-here on, no account needs root to register, check or remove its runner, or to have it updated. Setup writes five
-files, each one whole every time it runs, so running it again is safe:
+Then, once, set the machine up from that copy:
+
+```bash
+sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check or
+remove its runner, or to have it updated. Setup writes five files, each one whole every time it runs, so running it
+again is safe:
 
 - `/etc/systemd/system/orbit-runner@.service`: the template every account's runner is an instance of,
   `orbit-runner@<uid>.service`. An instance is named by its account's uid and runs as that account (`User=%i`), so no
@@ -1133,23 +1142,35 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo orbit host setup --server https://orbit.example.com
 ```
 
-In the same way, it refuses a binary that an account could change: every account's runner would run what that account
-put there, and the broker would run it as root. The installer's own layout is one: it keeps the copy an account
-installed in that account's `~/.orbit/bin`, with `/usr/local/bin/orbit` only a link to it, and the account, or any
-agent it runs, can replace that copy:
+In the same way, it refuses a binary that other accounts cannot execute, since each account's runner runs it as that
+account. Root's own copy is one: install.sh puts it in `/root/.orbit`, which it makes mode 0700, inside `/root`, which
+is normally 0700 too:
+
+```text
+orbit host: refusing to set this host up with /root/.orbit/bin/orbit: /root/.orbit, a directory above it, cannot be entered by others (mode 0700); /root, a directory above it, cannot be entered by others (mode 0700).
+Every account's runner would run this binary as that account, so every account has to be able to execute it: it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /root/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+It also refuses a binary that an account could change: every account's runner would run what that account put there,
+and the broker would run it as root. An account's own copy is one, which the account, or any agent it runs, can
+replace, whether setup runs from it or through the link to it that earlier releases of install.sh made
+`/usr/local/bin/orbit`:
 
 ```text
 orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid 1000 rather than root.
 Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Put a root-owned copy in place, then set the host up from it:
-  sudo install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
   sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
-The first command replaces the link with a copy root owns, and leaves the account's own copy as it was, run by
-nothing now. A directory its group can write is refused too. Older Debian installs have `/usr/local` and
-`/usr/local/bin` owned by `root:staff` with mode 2775, which would let any member of `staff` put another binary in
-place, so setup names every such directory (the mode it reports leaves out the setgid bit):
+In both, the first command puts a copy root owns at `/usr/local/bin/orbit`, in place of any link there, and leaves the
+copy it was made from as it was. A directory its group can write is refused too. Older Debian installs have
+`/usr/local` and `/usr/local/bin` owned by `root:staff` with mode 2775, which would let any member of `staff` put
+another binary in place, so setup names every such directory (the mode it reports leaves out the setgid bit):
 
 ```text
 orbit host: refusing to set this host up with /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775).

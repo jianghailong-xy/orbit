@@ -150,13 +150,14 @@ func hostSetup(env hostSetupEnv, server string) error {
 const machineBinaryPath = "/usr/local/bin/orbit"
 
 // checkBinary refuses exe — before anything is written or run — unless it is fit to be
-// named in ExecStart= (checkMachineBinary, the rule hostd's update holds it to as well),
-// saying which part of the rule it breaks and what to run instead.
+// named in ExecStart=: the machine's own (checkMachineBinary, the rule hostd's update holds
+// it to as well), and one every account can execute (checkRunnable). Either way it says
+// which part of the rule it breaks and what to run instead.
 func (env hostSetupEnv) checkBinary(exe, server string) error {
 	path := env.path(exe)
 	err := checkMachineBinary(path, env.path("/"), env.rootUID)
 	if err == nil {
-		return nil
+		return env.checkRunnable(exe, server)
 	}
 	var fault *machineBinaryError
 	if !errors.As(err, &fault) {
@@ -173,12 +174,8 @@ func (env hostSetupEnv) checkBinary(exe, server string) error {
 		how = "Take that write access back, then set the host up again:"
 		fix = fmt.Sprintf("sudo chmod %s %s", bits, strings.Join(fault.writable, " "))
 	case exe != machineBinaryPath:
-		// Another account's copy, or one in its directories: what the units can run is a
-		// copy root owns where the machine's binary belongs, and setup is run from that
-		// copy so that it is the one they name.
-		how = "Put a root-owned copy in place, then set the host up from it:"
-		fix = fmt.Sprintf("sudo install -o root -g root -m 0755 %s %s", path, machineBinaryPath)
-		rerun = fmt.Sprintf("sudo %s host setup --server %s", machineBinaryPath, server)
+		// Another account's copy, or one in its directories.
+		how, fix, rerun = machineCopy(path, server)
 	default:
 		// Already where the machine's binary belongs, only not root's.
 		how = "Make it root's, then set the host up again:"
@@ -188,6 +185,60 @@ func (env hostSetupEnv) checkBinary(exe, server string) error {
 		"Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: "+
 		"it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.\n"+
 		"%s\n  %s\n  %s", path, fault, how, fix, rerun)
+}
+
+// checkRunnable refuses exe, which checkMachineBinary has already found to be the machine's
+// own, unless every account can execute it: each account's runner runs it as that account,
+// so the file and every directory from its own up to / need the execute bit for others.
+// Root's own copy is what fails it — install.sh puts it in root's home, normally 0700 — and
+// systemd would then fail every other account's runner at exec (203/EXEC). Setup's question
+// alone, not checkMachineBinary's: hostd's update replaces in place the file setup named.
+func (env hostSetupEnv) checkRunnable(exe, server string) error {
+	path, top := env.path(exe), env.path("/")
+	var closed, reasons []string
+	for at := path; ; at = filepath.Dir(at) {
+		fi, err := os.Stat(at)
+		if err != nil {
+			return fmt.Errorf("cannot inspect %s, the binary the units would run: %w", path, err)
+		}
+		if perm := fi.Mode().Perm(); perm&0o001 == 0 {
+			closed = append(closed, at)
+			switch at {
+			case path:
+				reasons = append(reasons, fmt.Sprintf("others cannot execute it (mode %04o)", perm))
+			case filepath.Dir(path):
+				reasons = append(reasons, fmt.Sprintf("its directory %s cannot be entered by others (mode %04o)", at, perm))
+			default:
+				reasons = append(reasons, fmt.Sprintf("%s, a directory above it, cannot be entered by others (mode %04o)", at, perm))
+			}
+		}
+		if at == top || at == filepath.Dir(at) {
+			break
+		}
+	}
+	if len(closed) == 0 {
+		return nil
+	}
+	how, fix, rerun := machineCopy(path, server)
+	if exe == machineBinaryPath {
+		// Already where the machine's binary belongs, where a copy would land on itself.
+		how = "Let every account run it, then set the host up again:"
+		fix = "sudo chmod o+x " + strings.Join(closed, " ")
+		rerun = fmt.Sprintf("sudo %s host setup --server %s", env.invokedAs, server)
+	}
+	return fmt.Errorf("refusing to set this host up with %s: %s.\n"+
+		"Every account's runner would run this binary as that account, so every account has to be able to execute it: "+
+		"it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).\n"+
+		"%s\n  %s\n  %s", path, strings.Join(reasons, "; "), how, fix, rerun)
+}
+
+// machineCopy is the way out for a binary that cannot be the machine's where it is: a copy
+// root owns where the machine's binary belongs, and setup run from that copy so that it is
+// the one the units name.
+func machineCopy(path, server string) (how, fix, rerun string) {
+	return "Put a root-owned copy in place, then set the host up from it:",
+		fmt.Sprintf("sudo install -o 0 -g 0 -m 0755 %s %s", path, machineBinaryPath),
+		fmt.Sprintf("sudo %s host setup --server %s", machineBinaryPath, server)
 }
 
 // hostSetupFiles is the whole installation as data: the unit files, the tmpfiles.d

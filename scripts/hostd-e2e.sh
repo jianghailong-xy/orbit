@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # End-to-end acceptance for multi-user runners without root (orbit-hostd + orbit-runner@<uid>).
 #
-# On a real systemd, in a throwaway container that has no sudo at all, root runs
-# `orbit host setup` once. From then on two ordinary accounts — one with a dot in its name —
-# register, survive a kill -9, take a central update and unregister, none of it as root.
+# On a real systemd, in a throwaway container that has no sudo at all, root installs orbit with
+# src/web/public/install.sh, which puts it in root's own home, sees `orbit host setup` refuse that
+# copy, puts the machine's copy in place and runs setup from it, once. From then on two ordinary
+# accounts — one with a dot in its name — register, survive a kill -9, take a central update and
+# unregister, none of it as root.
 #
 #   bash scripts/hostd-e2e.sh
 #
-# Prints one PASS or FAIL line per assertion (numbered as in the task: 1 setup · 2 accounts and a
-# legacy unit · 2b setup refusing a binary an account could change · 3 alice registers · 4 test.user
+# Prints one PASS or FAIL line per assertion (numbered as in the task: 0 setup refusing root's own
+# copy, which other accounts cannot execute · 1 setup · 2 accounts and a legacy unit · 2b setup
+# refusing a binary an account could change · 3 alice registers · 4 test.user
 # registers · 5 kill -9 · 6 update · 6b a binary directory the staff group can write · 7 alice
 # unregisters · 8 test.user unregisters past a legacy unit · 9 no sudo throughout). The first FAIL
 # prints systemctl status and the journal of the units involved and exits 1; a harness problem (no
@@ -20,8 +23,8 @@
 # itself, since this machine has no sudo (assertion 9).
 #
 # Needs docker — 28 or newer, for --security-opt writable-cgroups — and a Go toolchain. Builds from
-# this tree: orbit four times (the release setup installs, the one the stub control plane publishes
-# as the update, and the two step 6b publishes), the stub control plane
+# this tree: orbit four times (the release root installs and sets the machine up from, the one the
+# stub control plane publishes as the update, and the two step 6b publishes), the stub control plane
 # (scripts/hostd-e2e/stubserver) and the image (scripts/hostd-e2e/Dockerfile). The container is not
 # privileged — under --privileged its systemd would apply its sysctl and udev defaults to the host —
 # and has no network, so nothing in it can reach a real control plane.
@@ -42,7 +45,11 @@ V3="0.1.902" # published while /usr/local/bin is the staff group's too (6b)
 V4="0.1.903" # published once it is root's alone again (6b)
 PROXY="http://proxy.example.com:3128" # alice's --proxy, which the shared template cannot carry
 BIN="/usr/local/bin/orbit"
+HOME_COPY="/root/.orbit/bin/orbit" # root's own copy, where install.sh puts it (step 0)
 TEMPLATE="/etc/systemd/system/orbit-runner@.service"
+# The five files `orbit host setup` installs.
+SETUP_FILES=("$TEMPLATE" /etc/systemd/system/orbit-hostd.socket /etc/systemd/system/orbit-hostd.service
+  /usr/lib/tmpfiles.d/orbit-hostd.conf /etc/orbit/config.json)
 CTR="orbit-hostd-e2e-$$-$RANDOM"
 WORK=""
 ACCOUNTS=()
@@ -290,31 +297,74 @@ wait_until 90 system_up || harness_fail "systemd in the container did not come u
 echo "    $(cx systemctl --version | head -1), $(cx sh -c '. /etc/os-release; echo "$PRETTY_NAME"'), docker $(docker version --format '{{.Server.Version}}')"
 
 cx mkdir -p /opt/orbit-e2e /srv/orbit-dl || harness_fail "mkdir in the container failed"
-# docs: "Set up the machine once" — the machine's own binary, a regular file root owns and only root
-# can write, in directories only root can write all the way up to / (as this image has them already).
-docker cp -q "$WORK/orbit-$V1" "$CTR:$BIN" &&
-  docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
+docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
   docker cp -q "$HERE/in-container.sh" "$CTR:/opt/orbit-e2e/in-container.sh" &&
   docker cp -q "$WORK/release-$V2" "$CTR:/opt/orbit-e2e/release-$V2" &&
   docker cp -q "$WORK/release-$V3" "$CTR:/opt/orbit-e2e/release-$V3" &&
   docker cp -q "$WORK/release-$V4" "$CTR:/opt/orbit-e2e/release-$V4" &&
   docker cp -q "$WORK/release-$V1/." "$CTR:/srv/orbit-dl/" ||
   harness_fail "copying into the container failed"
-cx chown -R root:root "$BIN" /opt/orbit-e2e /srv/orbit-dl && cx chmod 0755 "$BIN" /opt/orbit-e2e/stubserver ||
+cx chown -R root:root /opt/orbit-e2e /srv/orbit-dl && cx chmod 0755 /opt/orbit-e2e/stubserver ||
   harness_fail "chown/chmod in the container failed"
 
-# The stub publishes $V1 — the release setup installs — until step 6 publishes $V2.
+# The stub publishes $V1 — the release install.sh downloads in step 0 — until step 6 publishes $V2.
 cx systemd-run --quiet --unit=orbit-e2e-stub /opt/orbit-e2e/stubserver serve -addr "127.0.0.1:$PORT" -dl /srv/orbit-dl ||
   harness_fail "cannot start the stub control plane"
 wait_until 20 cx /opt/orbit-e2e/stubserver get "$SERVER/dl/version.json" >/dev/null 2>&1 ||
   harness_fail "the stub control plane did not come up"
 check_no_sudo "before setup"
 
+# --- 0. root installs orbit the default way, and setup refuses that copy -------------------------
+
+echo "==> 0. root: install.sh the default way (ORBIT_NO_REGISTER=1), then $HOME_COPY host setup --server $SERVER"
+# install.sh downloads with `curl -fsSL URL -o FILE`, and this image has no curl: for that one run, a
+# stand-in first on its PATH fetches URL with the stub's own client.
+docker exec -i "$CTR" sh -c 'mkdir -p /opt/orbit-e2e/curl && cat >/opt/orbit-e2e/curl/curl && chmod 0755 /opt/orbit-e2e/curl/curl' <<'EOF' || harness_fail "cannot put the curl stand-in in place"
+#!/bin/sh
+[ "$#" -eq 4 ] && [ "$1" = -fsSL ] && [ "$3" = -o ] || { echo "curl stand-in: unexpected call: curl $*" >&2; exit 2; }
+exec /opt/orbit-e2e/stubserver get "$2" >"$4"
+EOF
+# docs: "Set up the machine once" — install.sh, run by root the default way (`curl … | bash`), installs
+# into root's own home and puts no machine's copy in place.
+out=$(docker exec -i "$CTR" env ORBIT_NO_REGISTER=1 ORBIT_BASE_URL="$SERVER" \
+  PATH="/opt/orbit-e2e/curl:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash <"$ROOT/src/web/public/install.sh" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 0 "install.sh run by root exited $rc"
+grep -qxF "✓ Orbit $V1 installed to $HOME_COPY" <<<"$out" || fail 0 "install.sh did not report orbit $V1 installed to $HOME_COPY"
+[ "$(cx stat -c '%F %U' "$HOME_COPY")" = "regular file root" ] && [ "$(cx sha256sum "$HOME_COPY" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 0 "$HOME_COPY is not a regular file of root's holding the $V1 release"
+cx test ! -e "$BIN" && cx test ! -L "$BIN" || fail 0 "install.sh left something at $BIN on a machine that is not set up"
+levels=$(cx stat -c '%n %a' /root /root/.orbit "$HOME_COPY" | paste -sd, -)
+# docs: "Set up the machine once" — setup refuses root's copy, which no other account can execute, and
+# says how to put the machine's copy in place.
+out=$(cx "$HOME_COPY" host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 0 "orbit host setup from $HOME_COPY exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with $HOME_COPY: /root/.orbit, a directory above it, cannot be entered by others (mode 0700); /root, a directory above it, cannot be entered by others (mode 0700)." <<<"$out" ||
+  fail 0 "orbit host setup did not refuse $HOME_COPY naming /root, which other accounts cannot enter"
+grep -qxF "  sudo install -o 0 -g 0 -m 0755 $HOME_COPY $BIN" <<<"$out" && grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 0 "orbit host setup did not say how to put the machine's copy in place and set the host up from it"
+for f in "${SETUP_FILES[@]}"; do
+  cx test ! -e "$f" || fail 0 "the refused orbit host setup wrote $f"
+done
+cx test ! -e /run/orbit || fail 0 "the refused orbit host setup created /run/orbit"
+cx systemctl is-enabled --quiet orbit-hostd.socket 2>/dev/null &&
+  fail 0 "orbit-hostd.socket is enabled after the refused orbit host setup" orbit-hostd.socket
+check_no_sudo "after root's install"
+pass 0 "root: install.sh (ORBIT_NO_REGISTER=1, ORBIT_BASE_URL=$SERVER) exit 0, the real file is $HOME_COPY (root's, the $V1 release; $levels), nothing at $BIN; orbit host setup from it refused (exit 1) naming /root/.orbit and /root, which others cannot enter, and giving install -o 0 -g 0 -m 0755 $HOME_COPY $BIN, then setup from $BIN; none of the five files setup installs written, no /run/orbit, orbit-hostd.socket not enabled"
+
 # --- 1. root sets the machine up, once -----------------------------------------------------------
 
-echo "==> 1. root: orbit host setup --server $SERVER"
-# docs: "Set up the machine once" — `sudo orbit host setup --server <PUBLIC_ORIGIN>`.
-out=$(cx orbit host setup --server "$SERVER" 2>&1)
+echo "==> 1. root: the machine's copy of ~/.orbit/bin/orbit at $BIN, then $BIN host setup --server $SERVER"
+# docs: "Set up the machine once" — the machine's copy first: a regular file root owns and only root
+# can write, in directories only root can write all the way up to / (as this image has them already).
+csh 'install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit' || fail 1 "putting the machine's copy in place failed"
+[ "$(cx stat -c '%F %u %g %a' "$BIN")" = "regular file 0 0 755" ] && [ "$(cx sha256sum "$BIN" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 1 "$BIN is not a regular file of uid 0 and gid 0, mode 0755, holding the $V1 release"
+# docs: "Set up the machine once" — `sudo /usr/local/bin/orbit host setup --server <PUBLIC_ORIGIN>`.
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
 rc=$?
 show "$out"
 [ "$rc" -eq 0 ] || fail 1 "orbit host setup exited $rc"
@@ -347,7 +397,7 @@ show "$out"
   fail 1 "orbit-runner-root.service is still there after root unregistered" orbit-runner-root.service
 [ -z "$(csh "runner_pids 0")" ] || fail 1 "root still runs a runner after unregistering" orbit-runner-root.service
 check_no_sudo "after setup"
-pass 1 "orbit host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%i, ExecStart=$BIN run), orbit-hostd.socket (active) and orbit-hostd.service installed; root's own orbit register refused by hostd (orbit-runner@0.service not enabled), taken by the legacy path with its root warning, then unregistered"
+pass 1 "install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit $BIN (root) made $BIN a regular file of uid 0 and gid 0, mode 0755, the $V1 release; $BIN host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%i, ExecStart=$BIN run), orbit-hostd.socket (active) and orbit-hostd.service installed; root's own orbit register refused by hostd (orbit-runner@0.service not enabled), taken by the legacy path with its root warning, then unregistered"
 
 # --- 2. two accounts, and the unit alice's runner had before the broker existed ------------------
 
@@ -386,12 +436,10 @@ pass 2 "accounts alice (uid $UID_A) and test.user (uid $UID_T) created; legacy /
 
 echo "==> 2b. root: orbit host setup through a link into alice's ~/.orbit/bin, then under /usr/local root:staff 2775"
 # What setup installs, as step 1 left it: a refused setup must not change a byte of it.
-SETUP_FILES=("$TEMPLATE" /etc/systemd/system/orbit-hostd.socket /etc/systemd/system/orbit-hostd.service
-  /usr/lib/tmpfiles.d/orbit-hostd.conf /etc/orbit/config.json)
 setup_sums() { cx sha256sum "${SETUP_FILES[@]}"; }
 sums=$(setup_sums) || harness_fail "cannot read the files setup installed"
-# The layout install.sh leaves for an account that runs it: the account's own copy in its
-# ~/.orbit/bin, and $BIN a link to that copy.
+# The layout earlier releases of install.sh left for an account that ran them: the account's own copy
+# in its ~/.orbit/bin, and $BIN a link to that copy.
 cx install -d -o alice -g alice /home/alice/.orbit/bin &&
   cx install -o alice -g alice -m 0755 "$BIN" /home/alice/.orbit/bin/orbit &&
   cx ln -sf /home/alice/.orbit/bin/orbit "$BIN" || harness_fail "cannot give alice the installer's layout"
@@ -403,14 +451,14 @@ show "$out"
 [ "$rc" -eq 1 ] || fail 2b "orbit host setup through the link into alice's home exited $rc, want 1"
 grep -qxF "orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid $UID_A rather than root." <<<"$out" ||
   fail 2b "orbit host setup did not refuse the binary the link leads to as alice's"
-grep -qxF "  sudo install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit $BIN" <<<"$out" &&
+grep -qxF "  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit $BIN" <<<"$out" &&
   grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
   fail 2b "orbit host setup did not say how to put a root-owned copy in place and set the host up from it"
 [ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
 cx grep -qx "ExecStart=$BIN run" "$TEMPLATE" && cx grep -qx "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service ||
   fail 2b "the runner template and the hostd unit no longer run $BIN"
 # docs: "Set up the machine once" — the root-owned copy in place of the link, then setup from it.
-cx install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit "$BIN" || fail 2b "installing the root-owned copy failed"
+cx install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit "$BIN" || fail 2b "installing the root-owned copy failed"
 [ "$(cx stat -c '%F %U %a' "$BIN")" = "regular file root 755" ] && [ "$(cx sha256sum "$BIN" | cut -d' ' -f1)" = "$SHA_V1" ] ||
   fail 2b "$BIN is not a root-owned 0755 copy of the $V1 build after install"
 [ "$(cx stat -c '%F %U %a' /home/alice/.orbit/bin/orbit)" = "regular file alice 755" ] || fail 2b "install changed alice's own copy"
@@ -447,7 +495,7 @@ cx chgrp root /usr/local /usr/local/bin && cx chmod g-s /usr/local /usr/local/bi
   harness_fail "cannot put /usr/local and alice's home back as they were"
 check_machine_binary 2b "$SHA_V1"
 check_no_sudo "after setup's refusals"
-pass 2b "orbit host setup run through $BIN, a link to alice's ~/.orbit/bin/orbit, refused (exit 1: it belongs to uid $UID_A rather than root) with the five files it installs unchanged; install -o root -g root -m 0755 replaced the link with a root-owned copy and setup from it exited 0; under /usr/local and /usr/local/bin root:staff 2775 refused (exit 1, both directories named), then chmod g-w /usr/local/bin /usr/local ($dirs) and setup exited 0; the runner template and hostd unit ran $BIN throughout"
+pass 2b "orbit host setup run through $BIN, a link to alice's ~/.orbit/bin/orbit, refused (exit 1: it belongs to uid $UID_A rather than root) with the five files it installs unchanged; install -o 0 -g 0 -m 0755 replaced the link with a root-owned copy and setup from it exited 0; under /usr/local and /usr/local/bin root:staff 2775 refused (exit 1, both directories named), then chmod g-w /usr/local/bin /usr/local ($dirs) and setup exited 0; the runner template and hostd unit ran $BIN throughout"
 
 # --- 3. alice registers, without root ------------------------------------------------------------
 
@@ -687,4 +735,4 @@ pass 8 "test.user: orbit unregister exit 0 without root; $UNIT_T disabled and in
 # --- 9. no sudo, throughout ----------------------------------------------------------------------
 
 pass 9 "no sudo anywhere: absent from the image and from root's, alice's and test.user's PATH at all $SUDO_CHECKS checkpoints from before setup to the last unregister, and no register or unregister by alice or test.user fell back to the sudo path"
-echo "==> all 11 assertions passed"
+echo "==> all 12 assertions passed"
