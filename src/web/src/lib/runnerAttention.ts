@@ -1,6 +1,7 @@
 import type { LoginEngine, ReportedEngine, RunnerRepoHealth } from '@orbit/shared';
 import { codexAccountSnapshot, withEnginePlanUsage } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
+import { CLAUDE_REGION_ATTENTION, claudeRegionAttentionDetail } from './claudeRegionCopy';
 import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
 import { ago, ENGINE_CLI_NAME, updateNoteOf, webShowsEngine } from './runnerEngines';
@@ -100,6 +101,11 @@ import {
  *
  * Times a reader sees in their own time zone (a quota reset, when it was last seen) never appear
  * formatted in `detail`: they ride in `params` as ISO strings for each client to format.
+ *
+ * A runner whose Claude connection comes out where Anthropic doesn't offer Claude (`region`, its
+ * effective verdict blocked: docs/claude-region-check-contract.md §5, §6) raises that, in place of
+ * anything about Claude Code's own sign-in or quota there: Orbit neither starts a Claude sign-in nor
+ * runs an Anthropic account on it, so neither is the reader's to fix.
  */
 
 /** A runner as GET /runners reports it — the fields these rules read. */
@@ -117,6 +123,7 @@ export type AttentionRunner = Pick<
   | 'minFreeDiskMb'
   | 'engines'
   | 'planUsage'
+  | 'region'
 >;
 
 /** One of that runner's workspaces as GET /workspaces reports it. */
@@ -148,6 +155,7 @@ export type AttentionKind =
   | 'offline'
   | 'noCliSignedIn'
   | 'engineSignedOut'
+  | 'claudeRegionUnsupported'
   | 'checkoutStuck'
   | 'quotaNearLimit'
   | 'diskLow'
@@ -157,8 +165,9 @@ export type AttentionKind =
 export type AttentionTone = 'bad' | 'warn' | 'idle';
 
 export interface AttentionAction {
-  /** updateRunner: POST /runners/:id/self-update — Update Runner Now. */
-  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines' | 'updateRunner';
+  /** updateRunner: POST /runners/:id/self-update — Update Runner Now. checkRegion: POST
+   *  /runners/:id/region-check — Check again. */
+  kind: 'signIn' | 'repair' | 'setReserve' | 'copyCommand' | 'updateEngines' | 'updateRunner' | 'checkRegion';
   engine?: ReportedEngine;
   /** repair: POST /workspaces/:id/repo-cleanup for any workspace in the stuck checkout. */
   workspaceId?: string;
@@ -415,6 +424,9 @@ function runsOnKeyOrPool(workspace: AttentionWorkspace): boolean {
   return !!provider && !(LOGIN_ENGINES as string[]).includes(provider);
 }
 
+/** Whether this runner's effective Claude region verdict is blocked: null for one that doesn't check. */
+const regionBlocked = (runner: Pick<AttentionRunner, 'region'>): boolean => runner.region?.verdict === 'blocked';
+
 /**
  * The login CLIs installed on this machine, in LOGIN_ENGINES order, when not one of them is signed in
  * and no workspace here runs on a key or a pool instead — then nothing can run on it, whether or not
@@ -423,10 +435,15 @@ function runsOnKeyOrPool(workspace: AttentionWorkspace): boolean {
  * news only to the workspaces on it (signedOutItems). Settings counts the machine by the same answer.
  */
 export function noCliSignedIn(
-  runner: Pick<AttentionRunner, 'engines'>,
+  runner: Pick<AttentionRunner, 'engines' | 'region'>,
   workspaces: ReadonlyArray<AttentionWorkspace>,
 ): LoginEngine[] | null {
-  const installed = LOGIN_ENGINES.filter((engine) => runner.engines?.find((e) => e.engine === engine)?.installed);
+  // A signed-out Claude Code on a machine blocked for the region is no CLI to sign in: Orbit won't
+  // start a Claude sign-in there, and the region's own item says why.
+  const installed = LOGIN_ENGINES.filter((engine) => {
+    const health = runner.engines?.find((e) => e.engine === engine);
+    return health?.installed && !(engine === 'claude' && health.auth === 'no' && regionBlocked(runner));
+  });
   if (installed.length === 0) return null;
   if (installed.some((engine) => runner.engines?.find((e) => e.engine === engine)?.auth !== 'no')) return null;
   if (workspaces.some(runsOnKeyOrPool)) return null;
@@ -458,6 +475,7 @@ function signedOutItems(
   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
     const health = runner.engines?.find((e) => e.engine === engine);
     if (!health?.installed || health.auth !== 'no') return [];
+    if (engine === 'claude' && regionBlocked(runner)) return [];
     const users = workspacesOn(workspaces, engine);
     if (users.length === 0) return [];
     const name = LOGIN_NAME[engine];
@@ -476,6 +494,21 @@ function signedOutItems(
       },
     ];
   });
+}
+
+/** Claude Code can't use Anthropic here: the place, and when it was checked, for Check again. */
+function claudeRegionItem(runner: AttentionRunner): AttentionItem | null {
+  const region = runner.region;
+  if (!region || region.verdict !== 'blocked') return null;
+  return {
+    kind: 'claudeRegionUnsupported',
+    tone: 'warn',
+    short: CLAUDE_REGION_ATTENTION,
+    title: CLAUDE_REGION_ATTENTION,
+    detail: claudeRegionAttentionDetail(region.name),
+    action: { kind: 'checkRegion' },
+    params: { country: region.country, regionCode: region.regionCode, region: region.name, checkedAt: region.checkedAt },
+  };
 }
 
 /** One item per stuck checkout, however many workspaces work in it, named after the first. */
@@ -532,6 +565,8 @@ function quotaItems(
   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
     const users = workspacesOn(workspaces, engine);
     if (users.length === 0) return [];
+    // No Anthropic account runs on a machine blocked for the region, nor is its usage read there.
+    if (engine === 'claude' && regionBlocked(runner)) return [];
     // Antigravity's quota travels with its engine's health, not in the heartbeat's planUsage.
     const usage = planUsageSnapshotForProvider(withEnginePlanUsage(runner.planUsage, runner.engines), engine);
     const health = runner.engines?.find((e) => e.engine === engine);
@@ -737,6 +772,8 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
   } else {
     const noCli = noCliSignedIn(runner, workspaces);
     items.push(...(noCli ? [noCliSignedInItem(noCli)] : signedOutItems(runner, workspaces)));
+    const region = claudeRegionItem(runner);
+    if (region) items.push(region);
     items.push(...checkoutItems(workspaces));
     items.push(...quotaItems(runner, workspaces, nowMs));
     const disk = diskItem(runner, workspaces);

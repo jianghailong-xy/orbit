@@ -76,6 +76,14 @@ class CoordinatorDeliveryCopyParityTest {
         assertHas(web, "coordinatorDelivery.ts", "export const COORDINATOR_DELIVERY_ITS_TASK = '${CoordinatorDeliveryLine.itsTask}';")
     }
 
+    /** Where a reply told to a session that is not the project's coordinator says it went, and the heading its words open under. */
+    @Test fun thisSessionsWordsAreTheWebs() {
+        assertHas(web, "coordinatorDelivery.ts",
+            "export const COORDINATOR_DELIVERY_SENT_TO_SESSION = '${CoordinatorDeliveryLine.sentToThisSession}';")
+        assertHas(web, "coordinatorDelivery.ts",
+            "export const COORDINATOR_DELIVERY_SESSION_TOLD = '${CoordinatorDeliveryLine.toldThisSession}';")
+    }
+
     /** What makes a payload a card at all. One that is not must parse as NOTHING at either end, never as half a line. */
     @Test fun theWebReadsACardByTheseRules() {
         assertHas(web, "coordinatorDelivery.ts", "(payload as { coordinatorDelivery?: unknown } | null)?.coordinatorDelivery")
@@ -88,5 +96,7 @@ class CoordinatorDeliveryCopyParityTest {
         assertHas(web, "coordinatorDelivery.ts", "if (sentence.includes('{task}') && !named) return null;")
         assertHas(web, "coordinatorDelivery.ts", "if (sentence.includes('{revision}') && !positive(card.revision)) return null;")
         assertHas(web, "coordinatorDelivery.ts", "if (sentence.includes('{count}') && !positive(card.count)) return null;")
+        // Only the server's own false says the conversation is not the coordinator.
+        assertHas(web, "coordinatorDelivery.ts", "toCoordinator: card.toCoordinator !== false,")
     }
 }

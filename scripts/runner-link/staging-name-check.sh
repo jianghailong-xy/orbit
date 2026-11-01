@@ -19,7 +19,7 @@ for tool in docker curl node git openssl jq flock systemd-run systemctl go psql 
 done
 
 scripts=(staging-up.sh staging-down.sh staging-client.sh staging-check.sh staging-check-link.sh staging-check-switch.sh staging-check-relay.sh
-  loadgen-seed.sh loadgen-run.sh)
+  loadgen-seed.sh loadgen-run.sh reconnect-drill.sh reconnect-probe.sh welcome-walk-cost.sh)
 refused=(orbit orbit-postgres orbit-apiserver orbit-link orbit-link- orbit-linkx Orbit-link-x orbit-link-X x-orbit-link-y
   orbit-link-a/../b "orbit-link-a b" orbit-link-.hidden)
 fail=0

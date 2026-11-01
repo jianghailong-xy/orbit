@@ -91,7 +91,8 @@ final class WatchWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching,"))
         // The account's Session recaps switch is read from the row, off only when explicitly off.
         XCTAssertTrue(row.contains("recaps: app.user?.preferences?.showRecaps ?? true"))
-        XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching))"))
+        // …and the machine, whose name a session held for the Claude region says (ClaudeRegionTests).
+        XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))"))
         // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
         XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
         let indicator = code(try slice(source("Views/AgentsView.swift"),

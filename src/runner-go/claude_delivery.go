@@ -391,6 +391,54 @@ func failUndeliveredTurn(turnID string, cause error, job *ClaimedSession, comple
 	}
 }
 
+// refuseRegionTurn settles a turn whose message was not delivered because this runner's connection
+// to Anthropic is in a region Anthropic does not offer Claude in (claude_region.go). FAILED, as
+// failUndeliveredTurn reports, so that a control plane that predates the subtype records an
+// ordinary failure with the reason in view; one that knows it puts the session back in the queue
+// with the message still waiting (docs/claude-region-check-contract.md §10). Either way the report
+// ends this engine: the completion of a failed turn stops it before it is sent.
+func refuseRegionTurn(turnID, refusal string, job *ClaimedSession, completeTurn turnCompleter) {
+	if err := completeTurn(TurnCompleteRequest{
+		TurnID:           turnID,
+		Status:           stFailed,
+		Result:           refusal,
+		Error:            refusal,
+		Subtype:          claudeRegionRefusedSubtype,
+		RuntimeSessionID: currentRuntimeSessionID(job),
+		BranchSha:        effectiveBranchSha(job.WT),
+	}); err != nil {
+		logln("region refusal turn-complete failed for", job.SessionID+":", err)
+	}
+}
+
+// stopRegionTurn settles a running turn a confirmed flip stopped (claude_region.go, owner decision ④):
+// FAILED, as refuseRegionTurn reports, under region_stopped and with board 04's "stopped" sentence,
+// which a control plane that knows the subtype answers without failing the session or replaying the
+// turn (docs/claude-region-check-contract.md §10). The turn ran, so what it left in the worktree goes
+// with it, as with any turn's end. The report ends this engine's run, as the completion of a failed
+// turn does.
+func stopRegionTurn(turnID, sentence string, job *ClaimedSession, completeTurn turnCompleter) {
+	liveFiles, livePatches := liveDiff(job.WT)
+	if err := completeTurn(TurnCompleteRequest{
+		TurnID:           turnID,
+		Status:           stFailed,
+		Result:           sentence,
+		Error:            sentence,
+		Subtype:          claudeRegionStoppedSubtype,
+		RuntimeSessionID: currentRuntimeSessionID(job),
+		IsolationStatus:  job.IsolationStatus,
+		ChangedFiles:     liveFiles,
+		ChangedDiff:      livePatches,
+		BaseSha:          job.WT.baseSha(),
+		WorktreeDirty:    worktreeIsDirty(job.WT),
+		BranchSha:        effectiveBranchSha(job.WT),
+		BranchMerged:     branchMergedInto(job.WT),
+		WorktreeBranch:   currentBranch(job.WT),
+	}); err != nil {
+		logln("region stop turn-complete failed for", job.SessionID+":", err)
+	}
+}
+
 // subtypeSteer marks a completion that settles one mid-turn message rather than the
 // session's own turn. The control plane does not take the runner's word for it — it reads
 // the turn's kind off the row — but the runner needs to tell them apart locally, because a

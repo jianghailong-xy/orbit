@@ -1,28 +1,29 @@
 {
   "cell": { "connections": 15000, "heartbeatsPerSecond": 500, "eventsPerSecond": 2000, "liveDeltasPerSecond": 10000,
-            "renewalsPerSecond": 4.5, "fullReconcileShare": 0.25 },
+            "renewalsPerSecond": 4.5, "fullReconcileShare": 0.114 },
   "costs": {
-    "beatUnflagged": { "apiserverMs": 0.59, "databaseMs": 0.63, "gatewayMs": 0.31 },
-    "beatFull": { "apiserverMs": 2.39, "databaseMs": 6.37, "gatewayMs": 0.31 },
-    "event": { "apiserverMs": 0.47, "databaseMs": 0.761, "gatewayMs": 0.045 },
-    "liveDelta": { "apiserverMs": 0.042, "gatewayMs": 0.017, "natsMs": 0.013, "webGatewayMs": 0.0085, "databaseMs": 0.019 },
-    "connect": { "apiserverMs": 4.74, "databaseMs": 8.62, "gatewayMs": 1.05, "webGatewayMs": 0.16 },
-    "idlePerProcess": { "apiserverCores": 0.004, "databaseCores": 0.008 },
-    "apiserverMainThreadShare": 0.91,
-    "gatewayBytesPerConnection": 190000
+    "beatUnflagged": { "apiserverMs": 1.88, "databaseMs": 3.35, "gatewayMs": 0.77 },
+    "beatFull": { "apiserverMs": 1.88, "databaseMs": 3.35, "gatewayMs": 0.77 },
+    "event": { "apiserverMs": 0.419, "databaseMs": 1.032, "gatewayMs": 0.208 },
+    "liveDelta": { "apiserverMs": 0.0882, "gatewayMs": 0.0642, "natsMs": 0.031, "webGatewayMs": 0.0201, "databaseMs": 0.0293 },
+    "connect": { "apiserverMs": 13.4, "databaseMs": 21.773, "gatewayMs": 3.03, "webGatewayMs": 0.216 },
+    "idlePerProcess": { "apiserverCores": 0.0275, "databaseCores": 0.0075 },
+    "apiserverMainThreadShare": 0.913,
+    "gatewayBytesPerConnection": 160000
   },
   "rules": { "peakOverMean": { "apiserver": 1.2, "database": 1.5 }, "apiserverMainThreadMax": 0.6,
              "apiserverMainThreadMaxOneDown": 0.75, "databaseCpuMax": 0.6, "gatewayNodesMin": 3,
-             "gatewayConnectionsPerNodeMax": 7500, "gatewayHandshakesPerSecond": 200, "sessionStreamsSpread": false },
+             "gatewayConnectionsPerNodeMax": 7500, "gatewayHandshakesPerSecond": 200, "sessionStreamsSpread": true },
   "sources": {
-    "beatUnflagged, beatFull": "O1, pinned to the P-cores, reports moving (-volatile): README 'The heartbeat after task O1'. Every O3 attempt at the split was void; O3's clean mixed beat (o3-hb-1, 10.3% in full) read 0.86/1.03 ms, 23%/14% above O1's mixed 0.70/0.90 ms.",
-    "beat gatewayMs": "O3 o3-hb-1 (clean, pinned): loadgen-baseline.mjs",
-    "event": "O2: 0.761 ms database, 0.47 ms apiserver at 400 events/s, unpinned on mixed cores with other work on the host (the coordinator's rule for sizing). O3 o3-ev400-1 (clean, pinned): 0.445/0.58 ms.",
-    "event gatewayMs": "O3 o3-ev400-1: 0.07 ms a batch of 1.55 events",
-    "liveDelta": "ORDER OF MAGNITUDE (the coordinator's fallback): 12 control and 12 live attempts on the 3,000-runner fleet, all void by swap-in (132-10,368 pages/s); per part the higher of the medians over all attempts and the means of the three least swapped (live-estimate.json).",
-    "connect": "O3 o3-hb-1's ramp: loadgen-connects.mjs",
-    "idlePerProcess": "apiserver: each of the two processes of the documented override, idle 03:00-05:55Z 2026-10-27 (threads-2.jsonl): 0.004 cores. database: O1's idle figure for the whole one-apiserver stack (0.008); per process OPEN.",
-    "apiserverMainThreadShare": "O3, o3-ev400-1 (thread sampler)",
-    "gatewayBytesPerConnection": "C2 at 12,000 connections; O3 155-194 KB at 3,000"
+    "all": "MEASURED by task C2b (34m88i6i8CQeU4dSuw7HM) on 2026-10-31, on GCE c2d-standard-56 (AMD EPYC 7B13, 56 vCPU): main 736f80245, 4 apiservers, 8 database cores, one link gateway node, as its comment 'C2b evidence 23' (34pav7N9HNp3sKsZc9r4j) lists them. What cell-spec.mjs prints from them is a PROJECTION: evidence 23's projection A, 6 apiservers and 11 database cores. Task O3's inputs, measured on HPC, are this file at bf061ef45.",
+    "fullReconcileShare": "Measured: 11.4% of the beats of hb and full-1h were reconciled in full, with -volatile (the reports that move in production moving at their production rates). It only labels the beat: both beat rows hold the mixed beat at that share. O3's estimate for production, 25%, is not in this projection.",
+    "beatUnflagged, beatFull": "The mixed beat in both rows, as evidence 10 had it: C2b did not run the split by kind (--mark-every). hb against full-1h: loadgen-baseline.mjs runs/hb runs/full-1h --target-events 2000 (evidence 17, 34pY4C4SzwzzqqEh5Xgc5; evidence 23).",
+    "event": "The same command: full-1h's 2,000 events/s, 1.55 events a batch, 64 batches a merged call (evidence 17, evidence 23).",
+    "liveDelta": "live-1h (--watch 500, -live-rate 10000) less full-1h, per delta the watchers received: loadgen-baseline.mjs runs/hb runs/full-1h --live runs/live-1h (evidence 23). An upper bound: the watchers' streams themselves (pings, the durable events beside the deltas) count in it. Over 6 apiservers, live-1h-r2 less full-1h-r2, the apiservers' share was 0.0999 ms (evidence 29, 34peyxbDEZJh4PDL58LEc).",
+    "connect": "hb's ramp, loadgen-connects.mjs (evidence 23): a link token minted, TLS, Hello, Welcome and the first beat reconciled in full.",
+    "idlePerProcess": "The idle stack over 60 s (evidence 23): the apiservers 0.022, 0.020, 0.048 and 0.020 cores, 0.0275 on average; the database 0.030 cores with the 4 apiservers, 0.0075 for each.",
+    "apiserverMainThreadShare": "full-1h's threads.jsonl (evidence 23).",
+    "gatewayBytesPerConnection": "hb: the link gateway's 2,288 MiB at 15,000 connections (evidence 23).",
+    "rules": "O3's, but for sessionStreamsSpread: the session streams and link tokens are spread over every apiserver (34nb3xgCijTDzQJVXDVT7), as on C2b's stack (ORBIT_LINK_STAGING_SPREAD=1). Evidence 23's projection A."
   }
 }

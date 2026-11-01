@@ -1,0 +1,702 @@
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [NestFactory] Starting Nest application...
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] PrismaModule dependencies initialized +51ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] OutcomeReconcilerModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ConfigHostModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] HealthModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] AppModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProjectHandoffModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProjectAttributionModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProviderEngineMigrationModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] LandingObservationBackfillModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM    WARN [PushService] APNs not configured — iOS pushes disabled
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM    WARN [PushService] FCM not configured — Android pushes disabled
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ConfigModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ManagedRunnerGateModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] JwtModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] WatchEvaluatorModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] AttachmentsModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] EventsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] OutcomeReconcilerHttpModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] MetricsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] PushModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] SharedModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProjectAcceptanceModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] WatchDeliveryModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ScheduledWakeupModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] UsersModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] RealtimeModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] SessionRequestWorkerModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] SessionTagsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] SessionFoldersModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] RunnersModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] WatchesModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] WikiModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ManagedRunnerModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] QueueModule dependencies initialized +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ShareLinksModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] CoordinatorJudgmentModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProvidersModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] WorkspacesModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] TaskListsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] AuthModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] ProjectsModule dependencies initialized +2ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] RunnerApiModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] SessionsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] LinkPreviewsModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [InstanceLoader] TasksModule dependencies initialized +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] PushController {/api/push}: +6ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/push/register, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/push/unregister, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SessionsController {/api/sessions}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/merge-repair, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/import, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/import-batch, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/imported, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/remove-imported, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/counts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/search, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/compact, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id, GET} route +2ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/compact, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/landing/log, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/artifacts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/worktree-file, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/diff, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/diff/refresh, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/recap, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/turns, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/turns/current-work-routing, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/turns, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/turns/:turnId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/turns/:turnId/steer, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/resume, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/config, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/account, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/interrupt, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/end, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/merge, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/merge-receipts, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/merge-receipts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/commit, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/adopt-branch, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/retry-message, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/retry-message, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/auto-retry, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/auto-retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/complete, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/archive, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/restore, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/pin, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/pin, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/move-targets, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/move, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/tags, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/purge, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/approvals, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/approvals/:approvalId/decision, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/background, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/events/page, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/events/search, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/events/:seq/full, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/events, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SessionRequestsController {/api/session-requests}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-requests/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SessionTagsController {/api/session-tags}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-tags, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-tags, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-tags/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-tags/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] EventsController {/api}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/events, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] MetricsController {/api/metrics}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/metrics, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] HealthController {/api/health}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/health, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] DispatchPauseController {/api/admin/dispatch-pause}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/dispatch-pause, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/dispatch-pause, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ProvidersController {/api/providers}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id/key, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id/balance, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id/usage, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/presets, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/test, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id/key-check, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/mine/:id, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/members, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/members/:memberId/pause, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/members/:providerId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/codex-login, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/codex-login, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/codex-login, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/pools/:id/codex-login/account, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AdminProvidersController {/api/admin/providers}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/providers, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/providers, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/providers/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/providers/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SharedPoolsController {/api/providers/shared-pools}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/leave, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/people, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/people/:userId, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/people/:userId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/keys, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/keys/:keyId, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/keys/:keyId/secret, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/providers/shared-pools/:id/keys/:keyId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] PoolGatewayController {/api/gw/codex}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/gw/codex, ALL} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/gw/codex/{*path}, ALL} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AuthController {/api/auth}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/login, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/methods, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/setup-status, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/bootstrap, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/refresh, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/logout, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/capabilities, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/change-password, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AccessTokensController {/api/access-tokens}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/:id, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] PatSelfController {/api/pat}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/pat/self, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/pat/self, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] PatDeviceLoginController {/api/access-tokens/device}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/device/start, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/device/poll, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/device/:userCode, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/device/:userCode/approve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/access-tokens/device/:userCode/deny, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] GoogleAuthController {/api/auth/google}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/start, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/callback, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/exchange, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/link, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/link/confirm, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/auth/google/link, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AdminSignInController {/api/admin/sign-in}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/sign-in/google, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/sign-in/google, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] UsersController {/api/users}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me/avatar, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me/avatar, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me/avatar, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/users/me/preferences, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AdminController {/api/admin}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/avatar, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/role, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/disabled, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/impersonate, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/access-tokens, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/access-tokens/:tokenId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/identities/google, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WorkspacesController {/api/workspaces}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/reorder, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id/repo-cleanup, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id/permission-rules, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/workspaces/:id/permission-rules/:ruleId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WorkspacesController {/api/agents}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/reorder, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id/repo-cleanup, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id/permission-rules, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/agents/:id/permission-rules/:ruleId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SessionFoldersController {/api/session-folders}: +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-folders, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-folders, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-folders/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/session-folders/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TasksController {/api/tasks}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/page, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/counts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/active, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/labels, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/dependency-graph, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/dependency-graph/expand, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/dependency-graph/nodes, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/attribution, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/row, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/batch-create, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/batch-execute, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/batch-stop, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/batch-delete, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/batch-assign, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/execute, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/comments, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/comments/:commentId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/dependencies, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/dependencies/:dependsOnTaskId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] PendingEvidenceJudgmentsController {/api/tasks/evidence-decisions}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/evidence-decisions/pending, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TaskCompletionEvidenceController {/api/tasks/:taskId/evidence}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/evidence, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/evidence/legacy-import, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/evidence/decision, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/evidence, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TaskOwnerConfirmationController {/api/tasks/:taskId/owner-confirmation}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/owner-confirmation, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:taskId/owner-confirmation, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TaskProgressController {/api/tasks}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/progress, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/progress, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SessionCreatedTasksController {/api/sessions}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/created-tasks, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TaskModelRoutingReportController {/api/tasks/model-routing}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/model-routing/report, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] TaskListsController {/api/task-lists}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id/console, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id/revisions, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id/revisions/:version/restore, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/task-lists/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] LinkPreviewsController {/api/link-previews}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/link-previews, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WatchesController {/api/watches}: +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/deliveries, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/deliveries/:id/retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/:id/pause, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/:id/resume, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/watches/:id/cancel, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ProjectsController {/api/projects}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/sidebar, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/panorama, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/panorama/blocking, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/panorama/ready, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/page, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/dependency-graph, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/checkpoints, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/checkpoints, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/attempts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/handoffs, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/handoffs/:handoffId/decision, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/acceptance/merge-evidence, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/acceptance/confirmation, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/acceptance/confirmation, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/start, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/done, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/pause, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/resume, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/acceptance/criteria-decisions/pending, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/acceptance/criteria-decisions/:intentId, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/open-items, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/fuse/:episodeId/resume, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/open-items/:itemId/answer, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/open-items/:itemId/return-to-coordinator, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/open-items/:itemId/accept, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/open-items/:itemId/resolve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/blockers/:blockerId/resolve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/integration, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/integration, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/coordinator, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/coordinator/replace, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/coordinator/status, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/coordinator/rebind, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ProjectPromotionController {/api/projects/:projectId/promotions}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:projectId/promotions/current, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:projectId/promotions/merged, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:projectId/promotions/:promotionId/confirm, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:projectId/promotions/:promotionId/decline, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:projectId/promotions/:promotionId/cancel, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ProjectDoneNotYetController {/api/projects}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/done-requests/:itemId/decline, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ProjectIntegrationRetryController {/api/projects}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/integration/retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/integration/skip-merge-check, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/integration/jobs/:jobId/retry, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/promotions/:promotionId/integration/retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/integration/jobs/:jobId/abandon, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/integration/observe, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/tasks/:taskId/integration/stop, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnersController {/api/runners}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/reorder, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/enrollment-tokens, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/enrollment-tokens, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/device/:userCode, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/device/:userCode/approve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/device/:userCode/deny, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/login, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/login, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/login/code, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/login, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/accounts/:engine/:account, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/accounts/:engine/default/restore, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/accounts/:engine/:account, PATCH} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/accounts/:engine/:account/pause, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/codex-accounts/:account, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/install, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/install, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/install, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/engine-update, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/refresh-models, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/self-update, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/claude-history, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/claude-history, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/dir-probe, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/dir-probe, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/rotate-token, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] CodexRateLimitResetController {/api/runners}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/codex-rate-limit-reset, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/codex-rate-limit-reset, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runners/:id/codex-rate-limit-reset/:operationId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerApiController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/register, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/device/start, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/device/poll, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/me, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/deregister, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/heartbeat, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/integration-jobs/:jobId/progress, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/integration-jobs/:jobId/output, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/integration-jobs/:jobId/release, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/integration-jobs/:jobId/result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/repo-ops/:id/progress, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/repo-ops/:id/fragments, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/repo-ops/:id/result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/codex-rate-limit-reset-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/repo-cleanup-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/claude-history-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/dir-probe-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/install-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/codex-account-remove-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/account-remove-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/login-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/cursor-key-check-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/claim, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wake, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/reclaim, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/source/pin, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/takeover-leases, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/activate-leases, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/release-leases, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/orchestration-credential, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/inbox, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/attachments/:attId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/attachments, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/artifacts/result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/approvals, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/approvals/:approvalId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/background-wake, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/notify, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/scheduled-wakeup, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/naming, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/cursor-key-check, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/turns/:turnId/suggestion, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/turn-complete, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/events, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/finalize, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/complete, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/import-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/worktrees-removable, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/merge-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/commit-result, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/diff, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/meta, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/events, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerTasksController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/batch-create, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/labels, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/page, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/batch-pin, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/attribution, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/dependency-graph, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id, PATCH} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/execute, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/dependencies, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/dependencies/:dependsOnTaskId, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/comments, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/batch-preview, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists/:id/dag-preview, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists/:id/dag-apply, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/task-lists/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerTaskCompletionEvidenceController {/api/runner/tasks/:taskId/evidence}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/evidence, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/evidence/decision, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/evidence, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerTaskOwnerConfirmationController {/api/runner/tasks/:taskId/owner-confirmation}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/owner-confirmation/claim, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/owner-confirmation/review, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/owner-confirmation/return, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:taskId/owner-confirmation, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerTaskProgressController {/api/runner/tasks/:id/progress}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/progress, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/tasks/:id/progress, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerServiceTokensController {/api/runner/service-tokens}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/service-tokens, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/service-tokens, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/service-tokens/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerSessionsController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/import, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/search, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/turns, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/session-requests/:id/reply, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/interrupt, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/merge, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/merge-receipts, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/merge-receipts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/end, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/complete-session, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/sessions/:id/archive, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerAgentsController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/workspaces, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/agents, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/workspaces, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/agents, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/workspaces/:id, PATCH} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/agents/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerRunnersController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/runners, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerEngineInstallController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/runners/:id/engine-install, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/runners/:id/engine-install, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerDeleteController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/runners/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/workspaces/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerProvidersController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/providers, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/providers, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/providers/:slug, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/providers/:slug, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerNotifyController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/notify, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerProjectsController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/coordinator/ensure, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/coordinator/messages, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/integration, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/acceptance/merge-evidence, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/handoffs, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/blockers/:blockerId/resolve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/owner-questions, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/start-requests, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/done-requests, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/open-items/:itemId/resolve, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/open-items/:itemId/hand-over, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/tasks/:taskId/integration/retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/tasks/:taskId/integration/skip-merge-check, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/promotions/:promotionId/integration/retry, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/integration/jobs/:jobId/abandon, POST} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id/integration/observe, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/projects/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerWatchesController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches/:id/cancel, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/watches/:id/release, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerReleaseController {/api/runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/release, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerWikiController {/api/runner/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/search, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/changesets, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/verifications, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/verifications/request, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/notes, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/import, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/import-jobs, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/spaces/:id/import-jobs/:jobId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/wiki/entries/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerLinkTokenController {/api/runner/link-token}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/link-token, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/link-token/revocations, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerLinkWelcomeController {/api/runner/link}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/link/welcome, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerLinkEventsController {/api/runner/link}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/link/events, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerLinkRequiredController {/api/admin/runner-link-required}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/runner-link-required, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/runner-link-required, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] RunnerLinkModeController {/api/runner/link}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/runner/link/mode, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/search, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id, PATCH} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/workspaces, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/entries, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/topics/:slug, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/timeline, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/entries/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/entries/:id/reject, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/entries/:id/confirm, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/review, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/changesets, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/changesets/:id/decide, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/changesets/:id/revert, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/verifications/reopen, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiArticlesController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/articles, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/article-index, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/articles/:slug, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/articles/:slug/:part, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiRunsController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/changesets/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiHealthController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/health, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiPlanController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/versions, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/versions/:version, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/edits, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/versions/:version/confirm, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/redraft, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/plan/versions/:version/build, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/plan-proposals/:id/decide, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiDocsController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/docs, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/doc-index, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/docs/:slug, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiSystemModelController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/system-model, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] WikiJobsController {/api/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/jobs, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AdminWikiController {/api/admin/wiki}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/wiki/users/:id/spaces, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/wiki/spaces/:id/plan/build, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] AttachmentsController {/api/attachments}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/attachments, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/attachments/:id, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/attachments/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] SharedController {/api/shared}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/tasks/:taskId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/docs/:slug, GET} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/events, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/events/:seq, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/sessions/:sessionId, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/sessions/:sessionId/events, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/sessions/:sessionId/events/:seq, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/attachments/:id, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/shared/:token/artifacts, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ShareLinksController {/api}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/share, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/share, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/share, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/sessions/:id/share, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/share, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/share, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/tasks/:id/share, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/share, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/share, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/projects/:id/share, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/share, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/share, PUT} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/wiki/spaces/:id/share, DELETE} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/share-links, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/share-links/turn-off, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/share-links/:id, DELETE} route +1ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] OutcomeSurfacesController {/api/outcomes}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/outcomes/inbox, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ManagedRunnerController {/api/managed-runner}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner, GET} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/ensure, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/retry, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/wake, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/sleep, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/delete, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ManagedRunnerAdmissionController {/api/managed-runner/admission}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/managed-runner/admission, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RoutesResolver] ManagedRunnerAdminController {/api/admin/managed-runners}: +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [RouterExplorer] Mapped {/api/admin/managed-runners/:id/volume-switch, POST} route +0ms
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [Realtime] LISTEN/NOTIFY active (instance a7206b33)
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [ControlPlaneLeader] apiserver process 1dce0cc7 now runs the reaper, the task sweep and the auto-retry sweep
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM    WARN [ModelCatalog] model catalogue refresh failed (fetch failed) — keeping current lists
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 started (full scan)
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 {"step":"backfill","table":"session","rowId":null,"ownerId":null,"action":"NOOP","note":"every session and pinned task has an engine, recorded or derivable"}
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 {"step":"check","table":"provider_pool_member","rowId":null,"ownerId":null,"action":"NOOP","note":"no account pool holds a DeepSeek Harness row"}
+[Nest] 3020495  - 11/01/2026, 5:07:07 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 {"step":"check","table":"managed_runner","rowId":null,"ownerId":null,"action":"NOOP","note":"every managed runner starts on a built-in engine; none is rewritten"}
+[Nest] 3020495  - 11/01/2026, 5:07:08 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 {"step":"alias-reference","table":"provider_slug_alias","rowId":null,"ownerId":null,"action":"NOOP","note":"no open session or task pin, preference, maintenance setting or fallback names a retired provider name"}
+[Nest] 3020495  - 11/01/2026, 5:07:08 AM     LOG [ProviderEngineMigration] provider-engine-migration ce46545d-2304-4043-8ca8-5c8ac2d65896 finished: {"version":1,"fullScan":true,"complete":true,"leftOver":0,"failures":[],"legacyRowsLeft":0,"actions":{"NOOP":4},"steps":{"backfill":{"NOOP":1},"check":{"NOOP":2},"alias-reference":{"NOOP":1}},"resolutions":{"same":0,"changed":0},"aliasReferences":0}
+[Nest] 3020495  - 11/01/2026, 5:07:08 AM     LOG [NestApplication] Nest application successfully started +11ms
+orbit control plane listening on :13910
+[Nest] 3020495  - 11/01/2026, 5:19:07 AM    WARN [Reaper] reaped session 01a193cb-cd0c-740c-b949-f3a5c4243401 -> FAILED (runner offline)
+[Nest] 3020495  - 11/01/2026, 5:28:40 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 515ms
+[Nest] 3020495  - 11/01/2026, 5:33:30 AM    WARN [ScheduledWakeup] wakeup loop 01a193cb-cec0-772c-a840-72a16c1e7ba8 of session 01a193cb-cd0c-740c-b949-f3a5c4243401 has not run for 16 ticks (RUNNER_OFFLINE); its owner is told
+[Nest] 3020495  - 11/01/2026, 5:47:40 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 549ms
+[Nest] 3020495  - 11/01/2026, 5:47:40 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 570ms
+[Nest] 3020495  - 11/01/2026, 5:49:07 AM    WARN [AutoRetry] auto-retry of 01a193cb-cd0c-740c-b949-f3a5c4243401 disarmed: runner never came back
+[Nest] 3020495  - 11/01/2026, 5:49:31 AM    WARN [ScheduledWakeup] tick 01a193ef-8958-759e-aec0-38cc917027dc of wakeup loop 01a193cb-cec0-772c-a840-72a16c1e7ba8 could not revive session 01a193cb-cd0c-740c-b949-f3a5c4243401, so it is counted missed: the runner is offline; it must be online to resume this session
+[Nest] 3020495  - 11/01/2026, 5:50:31 AM    WARN [ScheduledWakeup] tick 01a193f0-7430-7489-a980-3a94b0fb3fb4 of wakeup loop 01a193cb-cec0-772c-a840-72a16c1e7ba8 could not revive session 01a193cb-cd0c-740c-b949-f3a5c4243401, so it is counted missed: the runner is offline; it must be online to resume this session
+[Nest] 3020495  - 11/01/2026, 5:51:31 AM    WARN [ScheduledWakeup] tick 01a193f1-5ef0-769c-805b-f31065dafde7 of wakeup loop 01a193cb-cec0-772c-a840-72a16c1e7ba8 could not revive session 01a193cb-cd0c-740c-b949-f3a5c4243401, so it is counted missed: the runner is offline; it must be online to resume this session
+[Nest] 3020495  - 11/01/2026, 5:52:31 AM    WARN [ScheduledWakeup] tick 01a193f2-498a-77b9-ba7c-63d770cefce3 of wakeup loop 01a193cb-cec0-772c-a840-72a16c1e7ba8 could not revive session 01a193cb-cd0c-740c-b949-f3a5c4243401, so it is counted missed: the runner is offline; it must be online to resume this session
+[Nest] 3020495  - 11/01/2026, 5:55:03 AM    WARN [SlowRequestInterceptor] POST /api/runner/sessions/:id/events 1253ms
+[Nest] 3020495  - 11/01/2026, 5:55:04 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 1533ms
+[Nest] 3020495  - 11/01/2026, 6:25:02 AM    WARN [ScheduledWakeup] wakeup loop 01a193c9-fa78-75ee-aad5-7ef1e9e847e9 of session 01a193c9-f813-708a-8cfc-ce2f4f165e80 has not run for 3 ticks (RUNNER_OFFLINE); its owner is told
+[Nest] 3020495  - 11/01/2026, 7:03:13 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 3444ms
+[Nest] 3020495  - 11/01/2026, 7:03:14 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 3556ms
+[Nest] 3020495  - 11/01/2026, 7:03:14 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 3668ms
+[Nest] 3020495  - 11/01/2026, 7:03:14 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 560ms
+[Nest] 3020495  - 11/01/2026, 7:18:33 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 574ms
+[Nest] 3020495  - 11/01/2026, 7:20:02 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 1131ms
+[Nest] 3020495  - 11/01/2026, 7:20:03 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 804ms
+[Nest] 3020495  - 11/01/2026, 7:21:31 AM    WARN [SlowRequestInterceptor] POST /api/runner/heartbeat 601ms

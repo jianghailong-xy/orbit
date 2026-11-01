@@ -18,7 +18,9 @@ import OrbitKit
 /// the answer's is, so a recycled row cannot dismiss it. Undelivered, it says so and offers nothing to
 /// put back in the composer: the words are the platform's. Web parity: `CoordinatorDeliveryLine.tsx`,
 /// every word from OrbitKit's `CoordinatorDeliveryCard`, which `CoordinatorDeliveryCopyParityTests`
-/// holds to the web's.
+/// holds to the web's. Where this conversation is not the project's coordinator (`toCoordinator`) — the
+/// owner's answer to a criteria proposal a task's run filed — the line, its hint and its sheet say this
+/// session instead.
 struct CoordinatorDeliveryLineView: View {
     @Environment(\.openCoordinatorDelivery) private var openTold
     #if os(iOS)
@@ -60,7 +62,7 @@ struct CoordinatorDeliveryLineView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(CoordinatorDeliveryCard.line(card))
-            .accessibilityHint("Opens what the coordinator was told")
+            .accessibilityHint(CoordinatorDeliveryCard.openHint(card))
             if undelivered {
                 // Amber, not red: the turn was handed to a session that has not confirmed it.
                 Text(CoordinatorDeliveryCard.undelivered).font(.orbitMeta).foregroundStyle(.orange)
@@ -154,8 +156,8 @@ extension EnvironmentValues {
     }
 }
 
-/// What the coordinator was told: the line it was sent as, then the words verbatim, then the task the
-/// fact names.
+/// What the coordinator was told — or this session, where it is not the project's coordinator: the line it
+/// was sent as, then the words verbatim, then the task the fact names.
 struct CoordinatorDeliverySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -185,7 +187,7 @@ struct CoordinatorDeliverySheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
             }
-            .navigationTitle(CoordinatorDeliveryCard.told)
+            .navigationTitle(CoordinatorDeliveryCard.heading(told.card))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

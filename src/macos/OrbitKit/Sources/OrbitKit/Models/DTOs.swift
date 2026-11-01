@@ -277,11 +277,41 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
+    /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
+    /// has decided yet, or an older server: never gated, drawn as before.
+    public var region: RunnerRegionView? = nil
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
         engines?.first { $0.engine == engine.rawValue }
     }
+}
+
+/// `region` on GET /runners (docs/claude-region-check-contract.md §6, the web's `RunnerRegionView`):
+/// where the runner's Claude connection to Anthropic last came out. `verdict` is the effective one —
+/// blocked only for a blocked check under 24 hours old. Every field is optional and the verdict a raw
+/// string, so a newer control plane cannot make the runner list undecodable.
+public struct RunnerRegionView: Codable, Equatable, Sendable {
+    public let verdict: String?
+    public let country: String?
+    public let regionCode: String?
+    public let name: String?
+    public let viaProxy: Bool?
+    public let checkedAt: String?
+
+    public init(verdict: String?, country: String? = nil, regionCode: String? = nil, name: String? = nil,
+                viaProxy: Bool? = nil, checkedAt: String? = nil) {
+        self.verdict = verdict
+        self.country = country
+        self.regionCode = regionCode
+        self.name = name
+        self.viaProxy = viaProxy
+        self.checkedAt = checkedAt
+    }
+
+    /// Whether this runner's Anthropic-bound Claude turns are gated now.
+    public var blocked: Bool { verdict == "blocked" }
 }
 
 /// Why an ended session cannot currently be resumed on its original runner. Unknown values stay

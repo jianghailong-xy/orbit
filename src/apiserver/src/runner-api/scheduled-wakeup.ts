@@ -1,7 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  deriveSessionLifecycleState,
+  deriveSessionRunState,
+  SessionLifecycleState,
+  SessionRunState,
+} from '@orbit/shared';
 import { IsBoolean, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
+import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { stripNul } from './strip-nul';
 
 /**
@@ -284,6 +291,38 @@ export async function markScheduledWakeupDelivered(
   if (count !== 1) throw new ScheduledWakeupSettled(`scheduled wakeup ${wakeupId} is no longer waiting`);
 }
 
+/** What a session a wakeup came due on reads as, for deciding what the wakeup does. */
+export const TICK_SESSION = {
+  ownerId: true,
+  status: true,
+  endReason: true,
+  completedAt: true,
+  archivedAt: true,
+  deletedAt: true,
+  cancelRequestedAt: true,
+  retryAt: true,
+  retryClaimedAt: true,
+} as const satisfies Prisma.SessionSelect;
+
+export type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION }>;
+
+/**
+ * Where the session a wakeup came due on stands: the scheduled-wakeup worker decides a due wakeup by it, and a
+ * drain that answers a wakeup's queued turn unrun settles the wakeup by it (wake-turn-withdraw.ts). FAILED is
+ * read before "being ended": a failed turn sets `cancel_requested_at` to reclaim its runner slot, and a FAILED
+ * session is not ending for it.
+ */
+export function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED_RECOVERING' | 'FAILED' | 'LIVE' {
+  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return 'ENDED';
+  const run = deriveSessionRunState(session);
+  if (run === SessionRunState.SUCCEEDED || run === SessionRunState.ENDED) return 'ENDED';
+  if (run === SessionRunState.FAILED) {
+    const claimed = session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
+    return session.retryAt != null || claimed ? 'FAILED_RECOVERING' : 'FAILED';
+  }
+  return session.cancelRequestedAt != null ? 'ENDED' : 'LIVE';
+}
+
 /** A due wakeup whose session had ended: it wakes nobody. False when something else settled it first. */
 export async function dropScheduledWakeup(prisma: PrismaService, wakeupId: string): Promise<boolean> {
   const { count } = await prisma.sessionScheduledWakeup.updateMany({
@@ -448,6 +487,106 @@ export async function lastLoopRun(
      ORDER BY w."due_at" DESC
      LIMIT 1`;
   return run ?? null;
+}
+
+/**
+ * What session_get says about a session's wakeups (docs/long-running-loop-contract.md §3): when it is
+ * woken next, when a wakeup last reached its engine, and its loop. Every time in it is read off the rows
+ * as they stand; none is written for it.
+ */
+export interface SessionWakeupsView {
+  /** The wakeup due next: the one-shot wakeup waiting, or the loop's waiting tick, whichever is due first. */
+  next: { dueAt: Date; kind: 'ONE_SHOT' | 'LOOP_TICK'; reason: string | null } | null;
+  /** When a wakeup of this session last fired: its turn handed to the engine (`conversation_turn.delivered_at`). */
+  lastFiredAt: Date | null;
+  /** The loop running, or else the last one the session ran; null when it never started one. */
+  loop: {
+    state: 'ACTIVE' | 'ENDED';
+    everySeconds: number;
+    until: Date;
+    /** Its waiting tick's due time; null once it has ended. */
+    nextDueAt: Date | null;
+    /** When a tick of it last fired, as lastLoopRun reads it: the run the dead-man signal counts from. */
+    lastFiredAt: Date | null;
+    ticksFired: number;
+    ticksMissed: number;
+    endedReason: WakeupLoopEndReason | null;
+    endedAt: Date | null;
+  } | null;
+}
+
+/**
+ * Read the session's wakeups, in one statement. A wakeup fired when its turn was handed to the engine,
+ * read the way lastLoopRun reads a loop's run: the latest-due DELIVERED row whose turn has a
+ * `delivered_at`. A wakeup filed onto a turn still queued has not fired, however long ago it was filed,
+ * and neither has one whose turn was put back in the queue.
+ */
+export async function readSessionWakeups(db: PrismaService, sessionId: string): Promise<SessionWakeupsView> {
+  const [row] = await db.$queryRaw<Array<{
+    nextDueAt: Date | null;
+    nextLoopId: string | null;
+    nextReason: string | null;
+    lastFiredAt: Date | null;
+    /** Null when the session never started a loop, and every column of the loop after it with it. */
+    loopState: 'ACTIVE' | 'ENDED' | null;
+    everySeconds: number;
+    untilAt: Date;
+    ticksFired: number;
+    ticksMissed: number;
+    endedReason: WakeupLoopEndReason | null;
+    endedAt: Date | null;
+    loopNextDueAt: Date | null;
+    loopLastFiredAt: Date | null;
+  }>>`
+    SELECT n."due_at" AS "nextDueAt", n."loop_id" AS "nextLoopId", n."reason" AS "nextReason",
+           (SELECT t."delivered_at"
+              FROM "session_scheduled_wakeup" w
+              JOIN "conversation_turn" t ON t."session_id" = w."session_id" AND t."client_turn_id" = w."client_turn_id"
+             WHERE w."session_id" = ${sessionId}::uuid AND w."state" = 'DELIVERED' AND t."delivered_at" IS NOT NULL
+             ORDER BY w."due_at" DESC, w."id" DESC
+             LIMIT 1) AS "lastFiredAt",
+           l."state" AS "loopState", l."every_seconds" AS "everySeconds", l."until_at" AS "untilAt",
+           l."ticks_fired" AS "ticksFired", l."ticks_missed" AS "ticksMissed",
+           l."ended_reason" AS "endedReason", l."ended_at" AS "endedAt",
+           (SELECT p."due_at" FROM "session_scheduled_wakeup" p
+             WHERE p."loop_id" = l."id" AND p."state" = 'PENDING') AS "loopNextDueAt",
+           (SELECT t."delivered_at"
+              FROM "session_scheduled_wakeup" w
+              JOIN "conversation_turn" t ON t."session_id" = w."session_id" AND t."client_turn_id" = w."client_turn_id"
+             WHERE w."loop_id" = l."id" AND w."state" = 'DELIVERED' AND t."delivered_at" IS NOT NULL
+             ORDER BY w."due_at" DESC
+             LIMIT 1) AS "loopLastFiredAt"
+      FROM (SELECT 1) AS "one"
+      LEFT JOIN LATERAL (
+        SELECT w."due_at", w."loop_id", w."reason"
+          FROM "session_scheduled_wakeup" w
+         WHERE w."session_id" = ${sessionId}::uuid AND w."state" = 'PENDING'
+         ORDER BY w."due_at", w."id"
+         LIMIT 1) AS n ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM "session_wakeup_loop"
+         WHERE "session_id" = ${sessionId}::uuid
+         ORDER BY "created_at" DESC, "id" DESC
+         LIMIT 1) AS l ON true`;
+  return {
+    next: row.nextDueAt
+      ? { dueAt: row.nextDueAt, kind: row.nextLoopId ? 'LOOP_TICK' : 'ONE_SHOT', reason: row.nextReason || null }
+      : null,
+    lastFiredAt: row.lastFiredAt,
+    loop: row.loopState
+      ? {
+          state: row.loopState,
+          everySeconds: row.everySeconds,
+          until: row.untilAt,
+          nextDueAt: row.loopNextDueAt,
+          lastFiredAt: row.loopLastFiredAt,
+          ticksFired: row.ticksFired,
+          ticksMissed: row.ticksMissed,
+          endedReason: row.endedReason,
+          endedAt: row.endedAt,
+        }
+      : null,
+  };
 }
 
 /**

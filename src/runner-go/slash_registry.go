@@ -251,6 +251,11 @@ func ensureClaudeSlashRegistry(ctx context.Context) bool {
 	if !slashReg.emptyFor(providerClaude) || !claudeCLIAvailable() {
 		return false
 	}
+	// No start while Claude's connection is in a region Anthropic does not offer Claude in (claude_region.go): the
+	// registry keeps what it has, and the first pass on an allowed answer probes.
+	if claudeStartBlocked(ctx, nil) {
+		return false
+	}
 	commands, skills, err := probeClaudeSlashAssets(ctx)
 	if err != nil {
 		logln("slash registry probe failed:", err)
@@ -289,7 +294,7 @@ func probeClaudeSlashAssets(ctx context.Context) (commands, skills []string, err
 		"--no-session-persistence",
 	)
 	cmd.Dir = dir
-	cmd.Env = envWithAgent(nil)
+	cmd.Env = claudeQuietEnv(envWithAgent(nil), nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, nil, err

@@ -1,0 +1,1 @@
+card-check: detail 48 label="Checked 13:42 · Claude’s connection: mainland China (no proxy)" value="" frame=(26.0, 598.0, 350.0, 26.333333333333258) hittable=true

@@ -9,6 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import type {
+  ClaudeRegionCheckRequest,
   DirProbeAnswer,
   InstallEngine,
   LoginEngine,
@@ -18,7 +19,7 @@ import type {
   RunnerLoginState,
   SlashCommandInfo,
 } from '@orbit/shared';
-import { LOGIN_FAILURE_REASONS } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
@@ -53,6 +54,7 @@ import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../man
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
+import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -169,6 +171,9 @@ export class RunnersService {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
+        // Where this machine's Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6), read
+        // with the capabilities above: only a runner that declares claude-region/v1 has a region to show.
+        region: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -210,6 +215,7 @@ export class RunnersService {
       codexAccountRemoveMessage,
       selfUpdate,
       presence,
+      region,
       ...r
     }, index) => ({
       ...r,
@@ -220,6 +226,8 @@ export class RunnersService {
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
+      // The effective verdict, never the stored one; null without the capability or a decided check.
+      region: runnerRegionView({ region, capabilities: r.capabilities }, new Date(now)),
       engines: used[index],
       antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
@@ -531,6 +539,19 @@ export class RunnersService {
         ? (namesAccount ? accountLoginTooOld('cursor') : CURSOR_LOGIN_TOO_OLD)
         : null;
     if (refusal) throw new BadRequestException(refusal);
+    // Claude's sign-in talks to Anthropic, so it is not started on a runner whose Claude connection to Anthropic is in
+    // a region Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12): no login request is
+    // recorded for its heartbeat to carry, and the refusal is board 04's sentence under the code. The runner refuses
+    // `claude auth login` in the same words while its own verdict is blocked. One that does not declare
+    // claude-region/v1 is never refused (⑤).
+    const regionBlocked = engine === 'claude' ? blockedRunnerRegion(runner, new Date()) : null;
+    if (regionBlocked) {
+      throw new ConflictException({
+        code: CLAUDE_REGION_UNSUPPORTED,
+        message: claudeRegionSignInRefusal(regionMachineName(runner), regionBlocked.name),
+        runnerId: id,
+      });
+    }
     const r = await this.prisma.runner.update({
       where: { id },
       data: {
@@ -942,6 +963,36 @@ export class RunnersService {
     }
     const requestedAt = new Date();
     await this.prisma.runner.update({ where: { id }, data: { selfUpdateRequestedAt: requestedAt } });
+    this.realtime?.notifyRunnerWake(id);
+    return { requestedAt: requestedAt.toISOString() };
+  }
+
+  /**
+   * Check again (docs/claude-region-check-contract.md §7): have this runner check where its Claude connection to
+   * Anthropic comes out now, rather than at its next check, up to five minutes away.
+   *
+   * It writes one timestamp, which every heartbeat of the runner hands over as `regionCheckRequest` until a check at or
+   * after it reaches GET /runner/region-check, and wakes the runner so that heartbeat is now. It answers with that
+   * timestamp; the check's result lands in runner.region like any other. A second press before a check has answered the
+   * first asks again with a newer date, which the runner checks once more for.
+   *
+   * Refused while the machine is offline, as the runner list reads it (`online`): nothing would answer. Refused for a
+   * runner that does not declare claude-region/v1: it would never check, and the request would wait for nothing.
+   */
+  async requestRegionCheck(ownerId: string, id: string): Promise<ClaudeRegionCheckRequest> {
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { status: true, capabilities: true, ...RUNNER_BEATS },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (!runnerIsOnline(runner)) {
+      throw new BadRequestException('Runner is offline — it can only check while connected');
+    }
+    if (!runner.capabilities.includes(CLAUDE_REGION_V1)) {
+      throw new BadRequestException('Runner is too old to check its Claude region — update it, then try again.');
+    }
+    const requestedAt = new Date();
+    await this.prisma.runner.update({ where: { id }, data: { regionCheckRequestedAt: requestedAt } });
     this.realtime?.notifyRunnerWake(id);
     return { requestedAt: requestedAt.toISOString() };
   }

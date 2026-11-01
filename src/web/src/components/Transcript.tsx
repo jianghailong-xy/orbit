@@ -131,6 +131,7 @@ import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
+import { claudeRegionErrorLine } from '../lib/claudeRegion';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -1389,7 +1390,13 @@ function buildTranscript(
         // and the ESC byte is invisible in HTML — what would show is literal "[31m" garbage.
         const msg = stripAnsi(String(p.message ?? 'error'));
         turnAccountedFor = true;
-        if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
+        // The Claude region check (docs/claude-region-check-contract.md §9, §10): a refusal is the held
+        // session's card's to say, with its ways out, so it draws no line here; a turn stopped by a
+        // confirmed flip has no card, and says its sentence without the code.
+        const region = claudeRegionErrorLine(msg);
+        if (region === null) break;
+        if (region !== undefined) into(parent).push({ kind: 'error', seq: ev.seq, message: region });
+        else if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
         // Codex reports quota failures as `error` events. Give them the same card as quota
         // assistant text so they carry the session's pending retry.
         else if (isUsageLimitErrorText(msg)) autoRetry(parent, ev.seq, msg, 'quota');
@@ -3236,12 +3243,15 @@ function transcriptUrlTransform(url: string): string {
   return referenceUrlTransform(url);
 }
 
+// A path on the runner's disk. `private` and `var` are a Mac runner's temp files: `/tmp` resolves to
+// `/private/tmp` and `$TMPDIR` sits under `/var/folders`. A path that misses this list is a
+// site-relative link, and a click on it opens a console page that does not exist.
 function isLocalImageSrc(src: string): boolean {
-  return /^\/(?:root|home|tmp|Users)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
+  return /^\/(?:root|home|tmp|Users|private|var)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
 }
 
 function isLocalFileSrc(src: string): boolean {
-  return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
+  return /^\/(?:root|home|tmp|Users|private|var)\/[^?#]+$/i.test(src);
 }
 
 // A path inside the session's own directories, as prose names them: the uploads scratch older

@@ -655,7 +655,14 @@ struct RunnerDetailContent: View {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_ENGINES,
                                 trailing: RunnerPageFormat.enginesNote(runner, now: now))
         } footer: {
-            Text(RunnerPageFormat.enginesFooter(runner, fleet: runners.runners, offline: offline))
+            // A machine blocked for the Claude region says why under its engines, and where Claude's
+            // connection came out (board 03's group footnote) — not that a session spends a
+            // subscription signed in here, which its Claude ones don't.
+            if let region = RunnerPageFormat.claudeRegionNote(runner, now: now) {
+                ClaudeRegionNoteView(region: region, offline: offline)
+            } else {
+                Text(RunnerPageFormat.enginesFooter(runner, fleet: runners.runners, offline: offline))
+            }
         }
     }
 
@@ -816,6 +823,9 @@ struct RunnerDetailContent: View {
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
         case .updateRunner:
             Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+        case .checkRegion:
+            Button(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) { checkRegion() }
+                .disabled(runners.regionChecking.contains(runner.id))
         }
     }
 
@@ -840,7 +850,26 @@ struct RunnerDetailContent: View {
     /// only a line.
     @ViewBuilder private func engineRow(_ health: RunnerEngineHealth, offline: Bool, now: Date) -> some View {
         let row = RunnerEngineRow(health: health, runner: runner, offline: offline, now: now)
-        if RunnerEngineRow.opensPage(health, runner: runner) {
+        if RunnerPageFormat.claudeRegionBlocked(runner, engine: health.engine) {
+            // Check Again stands where Sign In would (board 03), and is a press of its own: the row's
+            // push and the check are siblings, so neither takes the other's tap.
+            VStack(alignment: .leading, spacing: 0) {
+                if RunnerEngineRow.opensPage(health, runner: runner) {
+                    Button { model.push(.runnerEngine(runnerID: runner.id, engine: health.engine)) } label: {
+                        row.foregroundStyle(Color.primary)
+                            .contentShape(Rectangle())
+                    }
+                    .runnerRowButtonStyle()
+                } else {
+                    row
+                }
+                Button(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) { checkRegion() }
+                    .buttonStyle(RunnerCapsuleButtonStyle())
+                    .disabled(offline || runners.regionChecking.contains(runner.id))
+                    .padding(.leading, RunnerEngineRow.textInset)
+                    .padding(.bottom, 4)
+            }
+        } else if RunnerEngineRow.opensPage(health, runner: runner) {
             Button { model.push(.runnerEngine(runnerID: runner.id, engine: health.engine)) } label: {
                 row.foregroundStyle(Color.primary)
                     .contentShape(Rectangle())
@@ -911,6 +940,17 @@ struct RunnerDetailContent: View {
         let id = runner.id
         Task {
             show(await runners.updateRunner(id) ?? RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED)
+        }
+    }
+
+    /// Check again (docs/claude-region-check-contract.md §7): the press holds until the check it asked
+    /// for has come back (`RunnersModel.checkRegion`).
+    private func checkRegion() {
+        let id = runner.id
+        Task {
+            if let failure = await runners.checkRegion(id) {
+                show("\(ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED) — \(failure)")
+            }
         }
     }
 

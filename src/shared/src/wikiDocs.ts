@@ -119,13 +119,13 @@ export type WikiDocBlockKind = (typeof WIKI_DOC_BLOCK_KINDS)[number];
 
 /**
  * A section's diagram (contract `docs.diagram`): a Mermaid flowchart the writer is offered for the section kinds
- * below, kept only when every fact token of its labels is one the section's sourced sentences carry.
+ * below, kept only when every fact token of its labels is one the document's verified text carries.
  */
 export const WIKI_DOC_DIAGRAM_RULES = {
   /** The section kinds whose prompt offers a diagram, and whose fingerprint carries `version`. */
   kinds: ['overview', 'concepts', 'flow', 'data'],
   /** Raised when what a diagram is asked to be changes, so every section of those kinds is written once more. */
-  version: 2,
+  version: 3,
   /** The diagrams a section keeps: the first that passes the check. */
   perSection: 1,
   nodesMax: 30,
@@ -280,7 +280,7 @@ export interface WikiDocSectionStats {
   chars: number;
   /** Diagrams kept (contract `docs.diagram`). */
   diagrams: number;
-  /** Diagrams taken out: not the flowchart the rules read, past their sizes, naming what no sourced sentence says, or one too many. */
+  /** Diagrams taken out: not the flowchart the rules read, past their sizes, naming what the document does not verify, or one too many. */
   diagramsDropped: number;
 }
 

@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Claude 地区检查 · 方案与效果图（定稿）</title>
+<!-- Design board, not shipped code. Web frames are real pages (main d6f363a6c on vite with the
+     ui-migration fixtures; the proposal is prototype.patch plus DOM edits, see README.md).
+     iPhone frames are drawn with ../antigravity-accounts/kit.*; terminal frames are drawn. -->
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --ink:#17181c; --ink-2:#4d515a; --ink-3:#7c818c;
+    --page:#e9eaee; --paper:#ffffff; --line:#dcdee4;
+    --red:#d64545; --red-bg:#fdf1f1; --red-line:#f0c9c9;
+    --blue:#2f6bff; --blue-bg:#f2f6ff; --blue-line:#c9d8ff;
+    --green:#2c9a55; --green-bg:#effaf3; --amber:#b56a0a; --amber-bg:#fff6e8; --amber-line:#f3d7a6;
+    --term:#14161b; --term-bar:#1d2027;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+    /* for kit.css (the iPhone runner page) */
+    --warning-solid:#fa8c16; --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+  }
+  body { margin:0; width:1600px; background:var(--page); color:var(--ink);
+         font:14px/1.65 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing:antialiased; }
+  code, .b-mono { font-family:var(--mono); font-size:.88em; }
+  code { background:rgba(0,0,0,.06); border-radius:4px; padding:1px 4px; }
+  .b-part { padding:46px 52px 54px; }
+  .b-part + .b-part { border-top:1px solid #d3d5dc; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 10px; }
+  h2 { font-size:22px; letter-spacing:-.01em; margin:0 0 8px; }
+  h3 { font-size:16px; margin:0 0 10px; }
+  .b-lede { max-width:1490px; color:var(--ink-2); font-size:14.5px; line-height:1.8; margin:0 0 26px; }
+  .b-lede b { color:var(--ink); }
+  .b-tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em; padding:2px 8px;
+           border-radius:6px; margin-bottom:10px; }
+  .b-tag.was { background:#f0e5e5; color:#a53f3f; }
+  .b-tag.new { background:#e3ecff; color:#1f4fc4; }
+  .b-tag.var { background:#efe9ff; color:#5b3fc4; }
+  .b-row { display:flex; gap:40px; align-items:flex-start; }
+  .b-col { flex:1; min-width:0; }
+  .b-fig { position:relative; display:inline-block; border-radius:10px; overflow:visible;
+           box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 12px 32px rgba(20,22,27,.10); background:#fff; }
+  .b-fig img { display:block; border-radius:10px; }
+  .b-pin { position:absolute; width:24px; height:24px; border-radius:50%; color:#fff; text-align:center;
+           font:700 12px/24px var(--mono); transform:translate(-50%,-50%);
+           box-shadow:0 0 0 3px #fff, 0 2px 7px rgba(0,0,0,.28); z-index:3; }
+  .b-pin.blue { background:var(--blue); }
+  .b-pin.red { background:var(--red); }
+  .b-notes { list-style:none; margin:16px 0 0; padding:0; }
+  .b-notes li { display:flex; gap:10px; font-size:13.5px; line-height:1.72; color:#3b3f47; margin-bottom:8px; }
+  .b-notes .n { flex:none; width:21px; height:21px; border-radius:50%; color:#fff; background:var(--blue);
+                font:700 11px/21px var(--mono); text-align:center; margin-top:2px; }
+  .b-notes .n.red { background:var(--red); }
+  .b-notes b { color:var(--ink); }
+  .b-cap { font-size:13px; color:var(--ink-2); line-height:1.7; margin:10px 2px 0; }
+  .b-cap b { color:var(--ink); }
+  .b-sub { font-size:15px; font-weight:700; margin:34px 0 14px; display:flex; align-items:center; gap:10px; }
+  .b-sub .k { font:700 11px/1 var(--mono); color:#fff; background:var(--ink); border-radius:6px; padding:5px 7px; }
+
+  /* boxes and tables */
+  .b-box { background:var(--paper); border-radius:12px; padding:18px 22px; box-shadow:0 0 0 1px rgba(0,0,0,.05); }
+  .b-box h4 { font-size:14.5px; margin:0 0 8px; }
+  .b-box ul { margin:0; padding-left:18px; font-size:13.3px; line-height:1.8; color:var(--ink-2); }
+  .b-box li { margin-bottom:3px; }
+  .b-box li b { color:var(--ink); }
+  .b-box p { margin:0 0 6px; font-size:13.3px; line-height:1.75; color:var(--ink-2); }
+  .b-box a { color:#1f4fc4; text-decoration:none; }
+  table.b-t { width:100%; border-collapse:collapse; background:var(--paper); border-radius:12px; overflow:hidden;
+              box-shadow:0 0 0 1px rgba(0,0,0,.05); font-size:13px; }
+  .b-t th, .b-t td { text-align:left; vertical-align:top; padding:10px 14px; border-bottom:1px solid #eceef2; line-height:1.6; }
+  .b-t th { background:#f6f7f9; font-size:11.5px; letter-spacing:.05em; color:var(--ink-3); }
+  .b-t tr:last-child td { border-bottom:0; }
+  .b-t td code { font-size:11.5px; }
+  .b-yes { color:var(--green); font-weight:700; }
+  .b-no { color:var(--red); font-weight:700; }
+  .b-q { color:var(--amber); font-weight:700; }
+  .b-t td.en { font-family:Inter, sans-serif; color:#22406f; background:#f7faff; }
+
+  /* part 1 diagram */
+  .b-flow { display:grid; grid-template-columns:330px 70px 420px 70px 1fr; align-items:stretch; margin:6px 0 30px; }
+  .b-node { background:var(--paper); border-radius:14px; padding:16px 18px; box-shadow:0 0 0 1px rgba(0,0,0,.06), 0 8px 22px rgba(20,22,27,.06); }
+  .b-node h4 { margin:0 0 8px; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .b-node h4 .i { width:24px; height:24px; border-radius:7px; display:inline-grid; place-items:center; color:#fff; font:700 12px/1 var(--mono); }
+  .b-node ul { margin:0; padding-left:17px; font-size:13px; line-height:1.75; color:var(--ink-2); }
+  .b-node li b { color:var(--ink); }
+  .b-node .probe { margin-top:10px; border-radius:9px; padding:8px 11px; font-size:12.5px; line-height:1.6; }
+  .b-node .probe.p1 { background:#f2f6ff; border:1px solid var(--blue-line); }
+  .b-node .probe.p2 { background:#f3faf5; border:1px solid #cfe9d8; }
+  .b-node .probe b { font-weight:700; }
+  .b-arrow { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:6px;
+             color:var(--ink-3); font:700 11px/1.3 var(--mono); text-align:center; }
+  .b-arrow svg { width:62px; height:20px; }
+  .b-verdict { display:flex; flex-direction:column; gap:10px; }
+  .b-v { border-radius:12px; padding:11px 14px; font-size:12.8px; line-height:1.65; }
+  .b-v .h { font-weight:700; font-size:13.5px; margin-bottom:2px; }
+  .b-v.v-ok { background:var(--green-bg); border:1px solid #cfe9d8; }
+  .b-v.v-ok .h { color:var(--green); }
+  .b-v.v-no { background:var(--red-bg); border:1px solid var(--red-line); }
+  .b-v.v-no .h { color:var(--red); }
+  .b-v.v-unk { background:var(--amber-bg); border:1px solid var(--amber-line); }
+  .b-v.v-unk .h { color:var(--amber); }
+  .b-v b { color:var(--ink); }
+
+  /* terminal frames */
+  .b-term { background:var(--term); border-radius:12px; box-shadow:0 0 0 1px rgba(0,0,0,.18),0 18px 44px rgba(20,22,27,.22); }
+  .b-term-bar { height:34px; background:var(--term-bar); border-radius:12px 12px 0 0; display:flex; align-items:center; gap:7px; padding:0 14px; }
+  .b-term-bar i { width:10px; height:10px; border-radius:50%; background:#3a3e48; }
+  .b-term-bar .ttl { margin-left:10px; color:#7d838f; font:11.5px var(--mono); }
+  .b-term-body { position:relative; padding:14px 18px 18px; white-space:pre; font:11.5px/17px var(--mono); color:#c4c8d0; }
+  .b-term-body .t-dim { color:#7c8391; }
+  .b-term-body .t-g { color:#69c98c; }
+  .b-term-body .t-am { color:#dfb25a; }
+  .b-term-body .t-rd { color:#e07078; }
+  .b-term-body .t-bl { color:#7fa9ff; }
+  .b-term-body .t-wh { color:#f2f4f8; font-weight:700; }
+  .b-term-body .t-blk { display:block; position:relative; background:rgba(127,169,255,.11); margin:0 -8px; padding:3px 8px; border-radius:6px; }
+  .b-term-body .t-blk .b-pin { left:-24px; }
+  .b-term-body .b-pin { left:-14px; transform:translateY(-50%); }
+
+  /* the session page on an iPhone (drawn; SessionRunStartCardView over the composer) */
+  .sp { position:relative; width:393px; height:852px; overflow:hidden; border-radius:52px; background:#fff;
+        box-shadow:0 0 0 9px #1d1d1f, 0 0 0 10px #4a4a4e, 0 18px 40px rgba(15,23,42,.25); margin:10px;
+        font-family:Inter, "Noto Sans SC", sans-serif; color:#000; letter-spacing:-.01em; display:flex; flex-direction:column; }
+  .sp-sb { height:54px; flex:none; display:flex; align-items:center; padding:6px 34px 0 46px; font-weight:600; font-size:17px; }
+  .sp-sb .r2 { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .sp-nav { flex:none; display:flex; align-items:center; gap:10px; padding:4px 16px 10px; }
+  .sp-gb { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#f9f9fc;
+           box-shadow:0 0 0 .75px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.06); flex:none; }
+  .sp-tt { flex:1; min-width:0; text-align:center; line-height:1.2; }
+  .sp-tt .t { font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sp-tt .s { font-size:12px; color:#8a8a8e; white-space:nowrap; }
+  .sp-tt .s .held { color:#b35a00; font-weight:600; }
+  .sp-thread { flex:1; min-height:0; overflow:hidden; padding:6px 16px 0; display:flex; flex-direction:column; gap:12px; }
+  .sp-u { align-self:flex-end; max-width:82%; background:#eef3ff; border-radius:18px; padding:9px 13px; font-size:15px; line-height:1.4; }
+  .sp-a { font-size:15px; line-height:1.48; }
+  .sp-meta { font-size:12px; color:#8a8a8e; }
+  .sp-band { flex:none; margin:0 10px; padding:11px 12px 12px; border-radius:16px; background:rgba(255,149,0,.08); }
+  .sp-band .h { display:flex; align-items:center; gap:6px; color:#c96b00; font-weight:700; font-size:15px; }
+  .sp-band .why { margin-top:8px; font-size:14px; font-weight:600; line-height:1.38; }
+  .sp-band .bd { margin-top:4px; font-size:14px; line-height:1.4; color:#6c6c70; }
+  .sp-band .bd a { color:#3e69f6; text-decoration:none; }
+  .sp-band .ln { margin-top:7px; font:11.5px/1.5 var(--mono); color:#6c6c70; }
+  .sp-band .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .sp-band .btn { height:34px; padding:0 14px; border-radius:17px; display:inline-flex; align-items:center; font-size:15px; font-weight:500;
+                  background:rgba(120,120,128,.14); color:#3e69f6; }
+  .sp-band .btn.pri { background:#3e69f6; color:#fff; }
+  .sp-band .ft { margin-top:8px; font-size:12px; color:#8a8a8e; }
+  .sp-comp { flex:none; margin:10px 10px 30px; border-radius:24px; border:1px solid rgba(60,60,67,.18); padding:10px 14px;
+             display:flex; align-items:center; gap:10px; font-size:15px; color:#b0b0b5; }
+  .sp-comp .send { margin-left:auto; width:30px; height:30px; border-radius:50%; background:#d9d9de; color:#fff;
+                   display:grid; place-items:center; font-size:15px; }
+  .b-phl { font-size:13px; font-weight:600; color:var(--ink-2); margin:0 0 6px 10px; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── 1 · 方案 ───────────────────────── -->
+<section class="b-part" id="01-design">
+  <h1>Claude 地区检查 · 方案与效果图（定稿）</h1>
+  <p class="b-lede">
+    所有者 2026-10-31：「Claude 在执行前判断下网络环境，识别到网络在受限区域需要触发拦截，拒绝执行，避免违反 Claude 的用户协议」。
+    同日的决定：<b>① 只拦连 Anthropic 的回合　② 只看 Claude 的出口　③ 查不到时沿用 24 小时内的结论，没有就按支持　④ 翻转时停掉　⑤ 旧 runner 升级前不拦　⑥ 只做 Claude</b>。本板已按这些决定改过。<br>
+    <b>一句话方案：runner 在每个连 Anthropic 的 Claude 回合、每次 Claude 登录之前，看 Claude 连 Anthropic 的出口在哪个国家或地区；不在 Anthropic 支持的地区就不启动，并告诉用户为什么、能做什么。</b>
+    服务端据此不再把这类回合派给这台机器。界面文案全部英文，板上说明是中文。
+  </p>
+
+  <div class="b-row" style="gap:22px;margin-bottom:30px">
+    <div class="b-box" style="flex:1.25">
+      <h4>依据（2026-10-31 抄录）</h4>
+      <ul>
+        <li><b>Anthropic Supported Regions Policy</b>（<a>anthropic.com/supported-countries</a>）：所有产品共用一张白名单，<b>“Any country or region not listed is unsupported.”</b>
+          不在名单上的有：中国大陆、香港、澳门、俄罗斯、白俄罗斯、伊朗、朝鲜、叙利亚、古巴、委内瑞拉、阿富汗、缅甸等；台湾在名单上；乌克兰在名单上，但克里米亚、顿涅茨克、赫尔松、卢甘斯克、扎波罗热五地除外。</li>
+        <li><b>Commercial Terms D.2</b>：“Customer and its Users may only use the Services in compliance with … our policy on the countries and regions Anthropic currently supports”。</li>
+        <li><b>Claude Code Legal and compliance</b>（<a>code.claude.com/docs/en/legal-and-compliance</a>）：“Your use of Claude Code is subject to” Commercial / Consumer Terms。
+          按 ① 的决定，本方案只管<b>真正连到 Anthropic 的回合</b>；Claude Code 接 DeepSeek、vLLM 这类兼容接口的回合不查。</li>
+      </ul>
+    </div>
+    <div class="b-box" style="flex:1">
+      <h4>代码里现在的样子（三路代码调研的结论）</h4>
+      <ul>
+        <li>runner 没有任何地区、IP、地理查询；服务端也不读 <code>cf-ipcountry</code>。</li>
+        <li><code>orbit register --proxy</code> 把代理写进服务环境，并把 Orbit 的域名放进 <code>NO_PROXY</code>：<b>Claude 走代理，runner 连 Orbit 走直连</b>。所以检查请求要显式走 Claude 的代理，不能拿心跳的来源地址代替。</li>
+        <li>Claude Code 引擎能经 <code>ANTHROPIC_BASE_URL</code> 接别家（你的 DeepSeek、Local vLLM key），runner 要按环境判断这一回合连不连 Anthropic。</li>
+        <li>runner 每 5–10 分钟带着账号的 OAuth token 读 <code>api.anthropic.com/api/oauth/usage</code>，<b>这一路也要停</b>；常驻的 Claude 进程接下一回合不重新 spawn，<b>投递消息时也要拦</b>。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>怎么查、谁来拦</h3>
+  <div class="b-flow">
+    <div class="b-node">
+      <h4><span class="i" style="background:#17181c">R</span>runner（例：HPC）</h4>
+      <ul>
+        <li><b>每个连 Anthropic 的 Claude 回合开始前</b>（本机 Claude 登录、Anthropic key、Claude 池；新进程或给已在跑的进程投递消息）</li>
+        <li><b>Claude 登录 / 加账号之前</b></li>
+        <li>启动时、每 5 分钟（和引擎体检同一个循环）、用户点 <b>Check again</b></li>
+        <li>接 DeepSeek / vLLM 等的回合<b>不查</b></li>
+      </ul>
+      <div class="probe p1"><b>走 Claude 的路</b>：用 Claude 访问 <code>api.anthropic.com</code> 时会用的那个代理发一次请求（没配代理就是直连）。代表 Anthropic 看到的地址。</div>
+    </div>
+    <div class="b-arrow"><span>一次请求</span><svg viewBox="0 0 62 20"><path d="M2 10h52" stroke="#9aa0ab" stroke-width="2"/><path d="M50 4l9 6-9 6" fill="none" stroke="#9aa0ab" stroke-width="2"/></svg><span>HTTPS</span></div>
+    <div class="b-node">
+      <h4><span class="i" style="background:#2f6bff">S</span>Orbit 服务端 · <code style="font-size:12px">GET /api/runner/region-check</code></h4>
+      <ul>
+        <li>看<b>这次请求从哪个国家/地区来</b>：用 Cloudflare 加的 <code>CF-IPCountry</code>（乌克兰五地用 <code>cf-region-code</code> 查到州一级），只信经 Cloudflare 进来的请求。</li>
+        <li>没有 Cloudflare 的自建部署查不到，结论是“查不到”，按 ③ 当支持。</li>
+        <li>对照 <b>src/shared 里的支持名单</b>（带来源链接和抄录日期）。名单只在服务端用：Anthropic 改名单，发一次服务端就生效。</li>
+        <li>结论记在 runner 上、回给 runner。<b>只存国家/地区，不存 IP。</b></li>
+      </ul>
+    </div>
+    <div class="b-arrow"><span>结论</span><svg viewBox="0 0 62 20"><path d="M2 10h52" stroke="#9aa0ab" stroke-width="2"/><path d="M50 4l9 6-9 6" fill="none" stroke="#9aa0ab" stroke-width="2"/></svg><span>回给 runner</span></div>
+    <div class="b-verdict">
+      <div class="b-v v-ok"><div class="h">✓ 支持 · 在名单上</div>照常运行。</div>
+      <div class="b-v v-no"><div class="h">✗ 不支持 · 不在名单上</div>
+        <b>runner</b>：连 Anthropic 的回合不启动、不投递；不起 Claude 登录；不读 Anthropic 用量；连续两次判定后停掉正在跑的（④）。<br>
+        <b>服务端</b>：连 Anthropic 的 Claude 会话挂在队列里不派，原因写进 <code>session.error</code>；不下发 Claude 登录；建会话返回 409；推送一条。<br>
+        <b>客户端</b>：会话卡片、机器页徽标、Provider 菜单里这些凭据灰掉。</div>
+      <div class="b-v v-unk"><div class="h">? 查不到 · 请求失败或服务端定位不了</div>沿用 24 小时内最后一次结论；没有就按支持（③）。</div>
+    </div>
+  </div>
+
+  <div class="b-row" style="gap:22px">
+    <div style="flex:1.35">
+      <h3>判定举例</h3>
+      <table class="b-t">
+        <tr><th style="width:27%">Claude 的出口</th><th style="width:22%">这一回合连的是</th><th style="width:13%">结论</th><th>说明</th></tr>
+        <tr><td>Singapore</td><td>本机 Claude 登录</td><td class="b-yes">✓ 支持</td><td>新加坡的 VPS，最常见的情况。</td></tr>
+        <tr><td>mainland China（直连）</td><td>本机 Claude 登录</td><td class="b-no">✗ 不支持</td><td>今天是 Claude CLI 自己报 403，用户看不懂。</td></tr>
+        <tr><td>Singapore（经代理；机器在大陆）</td><td>本机 Claude 登录</td><td class="b-yes">✓ 支持</td><td>按 ② 只看 Claude 的出口。</td></tr>
+        <tr><td>mainland China</td><td>DeepSeek key</td><td class="b-yes">✓ 不查</td><td>按 ① 只管连 Anthropic 的回合。</td></tr>
+        <tr><td>Hong Kong</td><td>Anthropic key</td><td class="b-no">✗ 不支持</td><td>香港、澳门不在名单上。</td></tr>
+        <tr><td>Taiwan</td><td>本机 Claude 登录</td><td class="b-yes">✓ 支持</td><td>在名单上。</td></tr>
+        <tr><td>Ukraine · Crimea</td><td>本机 Claude 登录</td><td class="b-no">✗ 不支持</td><td>乌克兰五地除外，靠 <code>cf-region-code</code> 查到州一级。</td></tr>
+        <tr><td>查不到</td><td>本机 Claude 登录</td><td class="b-q">? → ✓</td><td>沿用 24 小时内的结论；没有就按支持（③）。</td></tr>
+      </table>
+    </div>
+    <div class="b-box" style="flex:1">
+      <h4>做不到的（写进帮助，不装作能做到）</h4>
+      <ul>
+        <li><b>只看 Claude 的出口（②）。</b>给 Claude 配了代理、出口在支持地区就放行，机器本身在哪里不看。</li>
+        <li><b>查不到按支持（③）。</b>没有 Cloudflare 的自建部署查不到地区，等于不拦；生产 orbitd.io 在 Cloudflare 后面，查得到。</li>
+        <li><b>旧 runner 不拦（⑤）。</b>要等它自更新到带这个检查的版本。</li>
+        <li><b>不管“谁控股”。</b>条款还限制受不支持地区实体控股的公司（2025-09-05 的更新），这不是网络属性。</li>
+        <li><b>名单靠人更新。</b>列表带抄录日期和来源链接；Anthropic 改了名单要跟着改。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 2 · Web ───────────────────────── -->
+<section class="b-part" id="02-web">
+  <h2>效果图 · Web（真实页面截图）</h2>
+  <p class="b-lede">
+    以下都是 main <code>d6f363a6c</code> 的 <code>src/web</code> 跑在 vite 上的真实页面，数据是之前机器页设计板的示例机群。
+    会话卡、Provider 菜单和新建会话的提示由原型补丁 <code>prototype.patch</code> 渲染；机器页、列表行和标题是在真实页面上改字和改 class，样式全是页面自己的。
+    示例：<b>HPC 的网络在中国大陆，Claude 没走代理；这台机器上有 3 个 Claude 账号，还有 DeepSeek 和 Local vLLM 两把能给 Claude Code 用的 key。</b>
+  </p>
+
+  <div class="b-sub"><span class="k">A</span>Machines &amp; models · HPC 这张卡</div>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag was">今天 · 什么都不说</span><br>
+      <div class="b-fig"><img src="shots/web-machine-today.png" width="720" alt=""></div>
+      <p class="b-cap">今天 Claude Code 写 <b>Available</b>，3 个账号照常排队拿活，用量也照常去 Anthropic 读。页面上看不出任何问题。</p>
+    </div>
+    <div class="b-col">
+      <span class="b-tag new">定稿</span><br>
+      <div class="b-fig"><img src="shots/web-machine-new.png" width="720" alt="">
+        <span class="b-pin blue" style="left:262px;top:72px">1</span>
+        <span class="b-pin blue" style="left:423px;top:95px">2</span>
+        <span class="b-pin blue" style="left:394px;top:130px">3</span>
+        <span class="b-pin blue" style="left:683px;top:133px">4</span>
+        <span class="b-pin blue" style="left:330px;top:221px">5</span>
+      </div>
+    </div>
+  </div>
+  <ul class="b-notes">
+    <li><span class="n">1</span><span><b>卡头的提醒行</b>：<code>Claude Code can’t use Anthropic here</code>，和“Claude signed out”同一种（<code>runnerAttention</code> 新增一种）。机器页的 Needs attention 和 iPhone 同一条。</span></li>
+    <li><span class="n">2</span><span><b>引擎小标签里没有 Claude Code</b>：这一排是“这台机器自己的登录能跑什么”，和掉登录的引擎一样处理。</span></li>
+    <li><span class="n">3</span><span><b>徽标 <code>Region not supported</code></b>（橙色，和 Signed out、Not supported here 同色）。3 个账号的登录不动，换到别的机器或重查通过，立刻能用。额度列写 —：受限时不读 Anthropic 的用量。</span></li>
+    <li><span class="n">4</span><span><b>Check again</b> 代替 Add account：受限时不能加 Claude 账号（登录也是连 Anthropic）。按下去让 runner 当场重查一次。</span></li>
+    <li><span class="n">5</span><span><b>行下说明</b>：一句为什么，一句“别家的 key 照样能跑 Claude Code”，加 <code>Supported regions</code> 链接；第二行是检查时间和 Claude 的出口，写明走没走代理。写法照 Antigravity 那一行的 Google 条款提示。</span></li>
+  </ul>
+
+  <div class="b-sub"><span class="k">B</span>会话 · 已有对话里发下一条消息</div>
+  <div class="b-row" style="gap:34px">
+    <div>
+      <span class="b-tag new">定稿 · 消息被挂起，不是失败</span><br>
+      <div class="b-fig"><img src="shots/web-session-held.png" width="940" alt="">
+        <span class="b-pin blue" style="left:406px;top:162px">1</span>
+        <span class="b-pin blue" style="left:687px;top:41px">1</span>
+        <span class="b-pin blue" style="left:681px;top:314px">2</span>
+        <span class="b-pin blue" style="left:925px;top:397px">3</span>
+        <span class="b-pin blue" style="left:814px;top:432px">4</span>
+        <span class="b-pin blue" style="left:664px;top:457px">5</span>
+      </div>
+    </div>
+    <div style="flex:1">
+      <ul class="b-notes" style="margin-top:34px">
+        <li><span class="n">1</span><span><b>列表行和标题的状态词</b>：<code>Anthropic unavailable on HPC</code>，不再是“Waiting for slot”（今天被挂起的会话都显示成在等空位），上方也不出现“Working for 1m”。</span></li>
+        <li><span class="n">2</span><span><b>沿用 “This run never started” 卡</b>（<code>RunNeverStartedCard</code>，新增原因 <code>REGION_UNSUPPORTED</code>）。why 是 <code>Claude Code can’t use Anthropic on HPC</code>；正文是服务端写进 <code>session.error</code> 的那句话，后面跟 <code>Supported regions</code>。</span></li>
+        <li><span class="n">3</span><span><b>机器的原话</b>：代码 <code>CLAUDE_REGION_UNSUPPORTED · CN</code>，下面是检查时间和 Claude 的出口。</span></li>
+        <li><span class="n">4</span><span><b>三个出路</b>：<code>Use another provider</code>（主按钮，打开输入框的 Provider 菜单，见 C 右）。<b>会话建好后引擎就固定了</b>，换不了引擎，但可以换成 DeepSeek / Local vLLM 这类 key，仍是 Claude Code。另外两个：<code>Move to another machine</code>（现成的 Move…）、<code>Check again</code>（重查，通过就自动开跑）。</span></li>
+        <li><span class="n">5</span><span><b>消息还在</b>：会话挂在队列里（和 DeepSeek Harness 不可用时同一个挂起机制），不是 Failed。三个出路走通任一个，这条消息就开跑，不用重发。</span></li>
+      </ul>
+      <div style="margin-top:22px">
+        <span class="b-tag var">同一张卡 · 新会话的第一条消息</span><br>
+        <div class="b-fig"><img src="shots/web-session-first.png" width="500" alt=""></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-sub"><span class="k">C</span>选凭据 · 新建会话和输入框的 Provider 菜单</div>
+  <div class="b-row" style="gap:34px">
+    <div>
+      <span class="b-tag new">定稿 · 新建会话，上次用的是本机登录</span><br>
+      <div class="b-fig"><img src="shots/web-picker-closed.png" width="560" alt="">
+        <span class="b-pin blue" style="left:458px;top:162px">1</span></div>
+    </div>
+    <div>
+      <span class="b-tag new">定稿 · Use another provider 打开的菜单</span><br>
+      <div class="b-fig"><img src="shots/web-provider-menu.png" width="580" alt="">
+        <span class="b-pin blue" style="left:110px;top:163px">2</span>
+        <span class="b-pin blue" style="left:352px;top:259px">3</span>
+        <span class="b-pin blue" style="left:152px;top:227px">4</span></div>
+    </div>
+    <div style="flex:1">
+      <ul class="b-notes" style="margin-top:34px">
+        <li><span class="n">1</span><span><b>新建会话</b>：选中的是本机 Claude 登录，卡下那行现成的提示写 <code>Claude Code · Region not supported on this runner · Details</code>，“Fix it”换成 “Details”。这台机器有 DeepSeek / vLLM key，所以引擎列表里 Claude Code <b>不灰</b>；一把别家的 key 都没有时，那一行才灰掉写 Region not supported。</span></li>
+        <li><span class="n">2</span><span>会话正在用的本机登录（Default）<b>不加括注</b>：现有规则，正在用的那一项不重复说，卡片已经说了。</span></li>
+        <li><span class="n">3</span><span>Anthropic 的 key（Personal Max、Work）变灰写 <code>— Region not supported</code>，<b>不带 “fix it →”</b>：这个问题在页面上修不了。</span></li>
+        <li><span class="n">4</span><span>DeepSeek、Local vLLM <b>照常可选</b>：选一个，会话就换过去，挂着的消息立刻开跑。硬用 Anthropic 凭据建会话（老客户端、API）时，服务端返回 409。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 3 · iPhone + terminal ───────────────────────── -->
+<section class="b-part" id="03-ios-terminal">
+  <h2>效果图 · iPhone 与终端</h2>
+  <p class="b-lede">
+    iPhone 是画的：会话页照 <code>SessionRunStartCardView</code>（输入框上方、橙色底的那张卡）的结构；机器页用 <code>../antigravity-accounts/kit.*</code>（照 <code>RunnerEngineRow</code> 量的）。
+    Mac 是同一套 SwiftUI 页面；Android 跟 iOS。终端复刻 <code>orbit doctor</code> 现在的输出格式。
+  </p>
+  <div class="b-row" style="gap:28px">
+    <div>
+      <div class="b-phl">会话页 · 消息被挂起</div>
+      <div class="sp">
+        <div class="sp-sb"><span>5:30</span><span class="r2"><svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5" y="5.5" width="3.2" height="6.5" rx="1"/><rect x="10" y="3" width="3.2" height="9" rx="1"/><rect x="15" y="0" width="3.2" height="12" rx="1"/></svg><span class="ph-batt">48</span></span></div>
+        <div class="sp-nav">
+          <span class="sp-gb"><svg width="13" height="21" viewBox="0 0 13 21"><path d="M10.5 2 2.5 10.5l8 8.5" fill="none" stroke="#000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="sp-tt"><div class="t">Fix the flaky login test</div><div class="s"><span class="held">Anthropic unavailable on HPC</span> · Open</div></span>
+          <span class="sp-gb" style="font-weight:700;font-size:18px">⋯</span>
+        </div>
+        <div class="sp-thread">
+          <div class="sp-u">The login test fails about one run in five. Find out why and fix it.</div>
+          <div class="sp-meta">Worked for 4m</div>
+          <div class="sp-a">The test waits a fixed <b>500 ms</b> for the session cookie, and the token refresh sometimes takes longer under load. I replaced the sleep with a wait on the cookie itself.</div>
+          <div class="sp-u">Now do the same for the sign-up test.</div>
+        </div>
+        <div class="sp-band" id="sp-card">
+          <div class="h"><svg width="16" height="15" viewBox="0 0 16 15"><path d="M8 .8 15.4 14H.6z" fill="#ff9500"/><path d="M8 5.2v4.3" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.7" r=".95" fill="#fff"/></svg>This run never started</div>
+          <div class="why">Claude Code can’t use Anthropic on HPC</div>
+          <div class="bd">HPC’s connection to Anthropic is in mainland China, where Anthropic doesn’t offer Claude. <a>Supported regions</a></div>
+          <div class="ln">CLAUDE_REGION_UNSUPPORTED · CN<br>Checked 19:58 · mainland China (no proxy)</div>
+          <div class="btns"><span class="btn pri">Use another provider</span><span class="btn">Check again</span><span class="btn">Move to another machine</span></div>
+          <div class="ft">No engine ran · your message is still here</div>
+        </div>
+        <div class="sp-comp">＋<span>Message…</span><span class="send">↑</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="b-phl">机器页 · HPC</div>
+      <div id="ios-runner"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:20px;margin-top:22px">
+      <div class="b-term">
+        <div class="b-term-bar"><i></i><i></i><i></i><span class="ttl">root@hpc: ~ — orbit doctor</span></div>
+<div class="b-term-body">runner:  HPC (01a19097-232f-7419-8050-2e76ce7a5ec3)
+server:  https://orbitd.io
+
+Coding engines:
+<span class="t-rd">  ✗ Claude Code (2.1.302) — Anthropic: region not supported</span>
+<span class="t-g">  ✓</span> Codex (0.164.0)
+<span class="t-g">  ✓</span> Kimi Code (2.1.4)
+<span class="t-g">  ✓</span> DeepSeek Harness (0.2.0) — request authentication unverified
+
+<span class="t-blk"><span class="t-wh">Claude region:</span><span class="b-pin blue" style="top:10px">1</span>
+  Claude's route   mainland China (CN)   direct
+<span class="t-rd">  ✗ Anthropic doesn't offer Claude in mainland China.</span>
+    Orbit won't use Anthropic accounts or keys here, or start a
+    Claude sign-in. Claude Code still runs with other providers' keys.
+<span class="t-dim">    https://www.anthropic.com/supported-countries</span></span>
+Runner link:
+<span class="t-g">  ✓</span> connected · RTT 38 ms</div>
+      </div>
+      <div class="b-term">
+        <div class="b-term-bar"><i></i><i></i><i></i><span class="ttl">root@hpc: ~ — journalctl -u orbit-runner-root -f</span></div>
+<div class="b-term-body"><span class="t-dim">19:58:02</span> region: claude route CN (direct) → <span class="t-rd">anthropic blocked</span><span class="b-pin blue" style="top:23px">2</span>
+<span class="t-dim">19:58:02</span> plan usage: not reading Anthropic usage while anthropic is blocked
+<span class="t-dim">19:59:41</span> session 2zwQZ2hd: <span class="t-rd">claude turn refused before start</span> — CLAUDE_REGION_UNSUPPORTED
+<span class="t-dim">20:00:22</span> session 34ce7Q2: claude on key DeepSeek — <span class="t-g">not checked</span>
+<span class="t-dim">20:03:17</span> login 34ccJ1: <span class="t-rd">claude sign-in refused</span> — CLAUDE_REGION_UNSUPPORTED
+<span class="t-dim">       </span>
+<span class="t-dim">── 结论翻转：代理断了，Claude 的出口从新加坡变成大陆 ──</span>
+<span class="t-dim">21:10:05</span> region: claude route CN (was SG) → anthropic blocked; recheck in 60s<span class="b-pin blue" style="top:142px">3</span>
+<span class="t-dim">21:11:05</span> region: CN twice → <span class="t-rd">stopping 2 claude turns on Anthropic</span>
+<span class="t-dim">21:11:06</span> session 34cdA9: claude turn stopped — CLAUDE_REGION_UNSUPPORTED</div>
+      </div>
+    </div>
+  </div>
+  <ul class="b-notes" style="margin-top:22px">
+    <li><span class="n">·</span><span><b>iPhone 会话页</b>：同一张卡，同一组词；三个按钮在手机上排两行（今天 <code>SessionRunStartCardView</code> 的按钮是一行 HStack，三个放不下，实现时改成能折行）。标题下的状态词和 web 一样。</span></li>
+    <li><span class="n">·</span><span><b>iPhone 机器页</b>：Needs Attention 里一条；Claude Code 行写 <code>Region not supported</code>（橙色），胶囊是 <code>Check Again</code>（代替 Sign In）；分组脚注写原因和 Claude 的出口。账号页里没有 Add Account。</span></li>
+    <li><span class="n">1</span><span><b><code>orbit doctor</code></b> 多一段 Claude region，Claude 那一行写 Anthropic: region not supported；交互模式下不再提议给 Claude 登录。<code>orbit status</code> 不动。</span></li>
+    <li><span class="n">2</span><span><b>runner 日志</b>：每次检查一行；拒绝回合、拒绝登录、停读用量各一行，都带 <code>CLAUDE_REGION_UNSUPPORTED</code>；接 DeepSeek 的回合写 not checked。</span></li>
+    <li><span class="n">3</span><span><b>翻转（④）</b>：支持 → 不支持时 60 秒后复查，连续两次才停掉正在跑的、连 Anthropic 的 Claude 回合，同时推送一条（和 engine-signed-out 同一条通道）。按 ②，只有 Claude 的出口变了才会翻转，比如代理断了。</span></li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 4 · 规则 · 已定 · 文案 · 范围 ───────────────────────── -->
+<section class="b-part" id="04-decisions">
+  <h2>规则、已定、文案、改动范围</h2>
+
+  <h3 style="margin-top:18px">规则</h3>
+  <table class="b-t">
+    <tr><th style="width:21%">什么时候</th><th style="width:38%">做什么</th><th>结果</th></tr>
+    <tr><td>runner 启动、每 5 分钟、点 Check again</td><td>走 Claude 的代理发一次检查，服务端判定</td><td>服务端把结论记在 <code>runner.region</code> 上并回给 runner，runner 自己也缓存一份；不走心跳</td></tr>
+    <tr><td>每个连 Anthropic 的 Claude 回合开始前</td><td>新进程：在 <code>runSessionProcess</code> 装引擎之前查；已在跑的进程：投递消息前查。用 60 秒内的结论，更旧就当场查（3 秒内）</td><td>支持 → 照常；不支持 → 不启动 / 不投递，回报 <code>CLAUDE_REGION_UNSUPPORTED: …</code>，服务端把这次运行放回队列挂起（不算失败）；查不到 → ③</td></tr>
+    <tr><td>怎么算“连 Anthropic”</td><td><code>ANTHROPIC_BASE_URL</code> 为空或是 <code>anthropic.com</code>（依次看会话 env、<code>CLAUDE_CONFIG_DIR/settings.json</code> 的 env、进程 env），且没开 Bedrock / Vertex</td><td>本机 Claude 登录、Anthropic key、Claude 池算；DeepSeek、Moonshot、vLLM 等不算，照常跑</td></tr>
+    <tr><td>Claude 登录、加 Claude 账号</td><td>runner 起 <code>claude auth login</code> 之前查；服务端看结论</td><td>不支持 → 服务端不下发登录请求，runner 也拒绝（<code>giveUp</code> 带同一句话）</td></tr>
+    <tr><td>读 Claude 用量</td><td>每次读之前看结论</td><td>不支持 → 不读；机器页额度写 —</td></tr>
+    <tr><td>支持 → 不支持（翻转）</td><td>60 秒后复查</td><td>连续两次 → 停掉这台机器上正在跑的、连 Anthropic 的 Claude 回合（④），推送一条</td></tr>
+    <tr><td>服务端派活</td><td>claim 时看 runner 的结论（和 DSH 不可用同一个挂起机制）</td><td>只挂起连 Anthropic 的 Claude 会话；换 provider、移机器、重查通过任一发生，自动继续</td></tr>
+    <tr><td>新建会话</td><td>和“引擎没登录”的预检同一处</td><td>Anthropic 凭据 + 不支持的机器 → 409；界面上这些凭据本来就灰了</td></tr>
+    <tr><td>没升级的旧 runner</td><td>它不上报结论</td><td>不拦（⑤），按支持</td></tr>
+  </table>
+
+  <h3 style="margin-top:30px">已定（所有者 2026-10-31）</h3>
+  <table class="b-t">
+    <tr><th style="width:20%">问题</th><th style="width:30%">定了</th><th>意味着</th></tr>
+    <tr><td><b>① 哪些回合要拦</b></td><td>B · 只拦连到 Anthropic 的回合</td><td>本机 Claude 登录、Anthropic key、Claude 池要查；Claude Code 接 DeepSeek / vLLM 的照常跑。所以会话卡的主按钮是 Use another provider，Provider 菜单只灰掉 Anthropic 的凭据</td></tr>
+    <tr><td><b>② 走代理怎么算</b></td><td>B · 只看 Claude 的出口</td><td>每次只发一个检查请求，走 Claude 的代理；配了代理、出口在支持地区就放行</td></tr>
+    <tr><td><b>③ 查不到</b></td><td>沿用 24 小时内的结论；没有就按支持</td><td>检查失败不会停工；没有 Cloudflare 的自建部署等于不拦；“Region unchecked”这类文案不需要了</td></tr>
+    <tr><td><b>④ 跑到一半翻转</b></td><td>A · 停掉</td><td>连续两次判定后停，推送一条</td></tr>
+    <tr><td><b>⑤ 没升级的旧 runner</b></td><td>B · 升级前不拦</td><td>服务端不按心跳来源地区兜底，link-gateway 也不用改</td></tr>
+    <tr><td><b>⑥ 其他引擎</b></td><td>A · 只做 Claude</td><td>—</td></tr>
+  </table>
+
+  <div class="b-row" style="gap:22px;margin-top:30px">
+    <div style="flex:1.1">
+      <h3>文案（英文，界面上就是这些字）</h3>
+      <table class="b-t">
+        <tr><th style="width:25%">位置</th><th>文案</th></tr>
+        <tr><td>会话卡 why</td><td class="en">Claude Code can’t use Anthropic on {machine}</td></tr>
+        <tr><td>会话卡正文</td><td class="en">{machine}’s connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude. <u>Supported regions</u></td></tr>
+        <tr><td>会话卡机器原话</td><td class="en">CLAUDE_REGION_UNSUPPORTED · {CC}<br>Checked {time} · Claude’s connection: {region} (no proxy | through a proxy)</td></tr>
+        <tr><td>会话卡按钮</td><td class="en">Use another provider · Move to another machine · Check again</td></tr>
+        <tr><td>列表行 / 标题</td><td class="en">Anthropic unavailable on {machine}</td></tr>
+        <tr><td>回合被停（④）</td><td class="en">Claude Code stopped on {machine}: its connection to Anthropic is now in {region}, where Anthropic doesn’t offer Claude.</td></tr>
+        <tr><td>机器页提醒行 / 徽标</td><td class="en">Claude Code can’t use Anthropic here · Region not supported</td></tr>
+        <tr><td>机器页说明</td><td class="en">Claude’s connection from this machine is in {region}, where Anthropic doesn’t offer Claude, so Orbit won’t use Anthropic accounts or keys here, or start a Claude sign-in. Claude Code still runs with other providers’ keys.</td></tr>
+        <tr><td>Provider 菜单 / 新建会话</td><td class="en">{credential} — Region not supported<br>Claude Code · Region not supported on this runner · Details</td></tr>
+        <tr><td>建会话 409</td><td class="en">Claude Code can’t use Anthropic on {machine}: its connection is in {region}, where Anthropic doesn’t offer Claude. Pick a key from another provider, or a workspace on another machine.</td></tr>
+        <tr><td>登录被拒</td><td class="en">Claude sign-in isn’t available on {machine}: its connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude.</td></tr>
+        <tr><td>推送（翻转）</td><td class="en">Claude Code can’t use Anthropic on {machine} — its connection is now in {region}. Sessions on Anthropic accounts or keys there wait until you switch provider or move them.</td></tr>
+      </table>
+    </div>
+    <div class="b-box" style="flex:1">
+      <h4>改动范围</h4>
+      <ul>
+        <li><b>shared</b>：支持名单（含乌克兰五地、显示名 mainland China / Hong Kong / Macau / Taiwan、来源与日期）、<code>RunnerRegion</code> DTO、能力串 <code>claude-region/v1</code>（<code>dto.ts</code>，Go 测试会对照）、“这个凭据连不连 Anthropic”的判断（服务端和 web 共用）。</li>
+        <li><b>runner-go</b>：新文件 <code>claude_region.go</code>（走 Claude 访问 api.anthropic.com 时的代理发一次检查；60 秒 / 24 小时两档缓存；挂在引擎体检的 5 分钟循环上）；“连不连 Anthropic”的判断（会话 env、<code>settings.json</code> 的 env、进程 env、Bedrock / Vertex）；四个闸口：<code>session.go</code> 的 <code>runSessionProcess</code>（装引擎之前）、收件箱投递（<code>failUndeliveredTurn</code>）、<code>login.go</code> 起登录前、<code>planusage.go</code> 读用量前；翻转时停回合；<code>doctor.go</code> 一段。</li>
+        <li><b>apiserver</b>：<code>GET /api/runner/region-check</code>（只走 HTTP，不受 runner-link-required 限制；只信经 Cloudflare 进来的 <code>CF-IPCountry</code> / <code>cf-region-code</code>，不内置 GeoIP）；<code>runner.region</code> 新列（迁移号先查撞号，进各项普查）；Check again（<code>POST /api/runners/:id/region-check</code>，经心跳响应下发给 runner）；claim 挂起（<code>queue.service.ts</code> 的 <code>pausedPendingSessions</code>）；建会话预检（<code>sessions.service.ts</code>）；登录下发（<code>runners.service.ts</code>）；推送（<code>push.service.ts</code>）。</li>
+        <li><b>web</b>：<code>RunNeverStartedCard</code> + <code>WorkspaceView</code>（新原因、三个按钮）、<code>sessionProviderChoices</code>（Anthropic 凭据带 Region not supported）、<code>NewSessionProviderHero</code>（Details）、Provider 菜单（不带 fix it）、<code>RunnerEngines</code>（徽标、说明、Check again）、<code>runnerAttention</code>（新一种，<code>cases.json</code> 和 Swift 共用）、列表与标题的状态词。</li>
+        <li><b>iOS / Mac</b>（OrbitKit）：<code>SessionRunStart</code>、<code>RunnerPageFormat</code> / <code>RunnerPageCopy</code>、<code>RunnerAttention</code>、Provider 菜单；<b>Android</b> 同步。</li>
+        <li><b>文档</b>：帮助里写清“看什么、看不到什么”（第 1 部分右下）。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="b-cap" style="margin-top:22px">来源：anthropic.com/supported-countries · anthropic.com/legal/commercial-terms（D.2、M.8）· code.claude.com/docs/en/legal-and-compliance · anthropic.com/news/updating-restrictions-of-sales-to-unsupported-regions（2025-09-05）。抄录于 2026-10-31。</p>
+</section>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+  // The HPC runner page (iOS): its own Claude sign-in can't use Anthropic from here.
+  const warnTile = '<span class="mk" style="width:28px;height:28px;background:rgba(255,149,0,.16)"><svg width="15" height="14" viewBox="0 0 16 15"><path d="M8 .8 15.4 14H.6z" fill="#ff9500"/><path d="M8 5.2v4.3" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.7" r=".95" fill="#fff"/></svg></span>';
+  const attention = section({ header: 'Needs Attention', rows: [
+    `<div class="r eng" id="att"><div class="e"><div class="e-l">${warnTile}<div class="e-m"><div class="e-n">Claude Code can’t use Anthropic here</div><div class="e-s">Anthropic doesn’t offer Claude in mainland China.</div></div></div>${ICON.chev}</div></div>`,
+  ] });
+  const rows = [
+    engineRow({ id: 'cl', engine: 'claude', name: 'Claude Code', version: '2.1.302', status: { text: 'Region not supported', tone: 'warn' }, capsule: 'Check Again' }),
+    engineRow({ engine: 'codex', name: 'Codex', version: '0.164.0', status: { text: 'Signed in', tone: 'ok' },
+      windows: [{ label: '5-hour limit', pct: 12, resets: 'Resets 11:20 PM' }] }),
+    engineRow({ engine: 'kimi', name: 'Kimi Code', version: '2.1.4', status: { text: 'Signed in', tone: 'ok' } }),
+    engineRow({ engine: 'antigravity', name: 'Antigravity CLI', version: '1.3.4', status: { text: 'Signed in', tone: 'ok' } }),
+  ];
+  const footer = '<p>Claude Code: the connection to Anthropic is in mainland China (no proxy). Other providers’ keys still run here.</p><p style="color:#3e69f6">Supported regions</p>';
+  const engines = section({ header: 'Engines', trailing: 'Checked 2m ago', rows, footer });
+  document.getElementById('ios-runner').outerHTML = phone({ title: 'HPC', body: attention + engines, scroll: 0 });
+</script>
+</body>
+</html>

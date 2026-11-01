@@ -125,6 +125,8 @@ import {
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
+import { useClaudeRegionCheckAgain } from '../lib/claudeRegion';
+import { CLAUDE_REGION_CHECK_AGAIN } from '../lib/claudeRegionCopy';
 import { ago } from '../lib/runnerEngines';
 import { useToast } from '../lib/toast';
 import { sessionEngineOf } from '../lib/workspaceDefaults';
@@ -228,6 +230,7 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
   offline: <DisconnectOutlined />,
   noCliSignedIn: <LoginOutlined />,
   engineSignedOut: <LoginOutlined />,
+  claudeRegionUnsupported: <WarningOutlined />,
   checkoutStuck: <BranchesOutlined />,
   quotaNearLimit: <DashboardOutlined />,
   diskLow: <HddOutlined />,
@@ -364,6 +367,8 @@ export function RunnerDetailPage() {
     },
     onError: (e: Error) => message.error("Couldn't start the runner update", e.message),
   });
+  // Check again (docs/claude-region-check-contract.md §7), for a machine blocked for the Claude region.
+  const regionCheck = useClaudeRegionCheckAgain({ id: runnerId ?? '', region: runner?.region });
   const rotation = useRunnerTokenRotation();
   // Repair a checkout stuck mid-merge — the same request and words as a session's merge bar.
   const repairMut = useMutation({
@@ -1373,6 +1378,12 @@ export function RunnerDetailPage() {
         return (
           <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
             {RUNNER_UPDATE_RUNNER_NOW}
+          </Button>
+        );
+      case 'checkRegion':
+        return (
+          <Button size="small" disabled={!runner.online} loading={regionCheck.checking} onClick={regionCheck.checkAgain}>
+            {CLAUDE_REGION_CHECK_AGAIN}
           </Button>
         );
       default:

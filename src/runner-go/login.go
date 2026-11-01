@@ -342,6 +342,17 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		report(LoginResultRequest{Status: loginFailed, Message: cursorAccountsUnsupportedMessage(), Attempt: attempt})
 		return
 	}
+	// A Claude sign-in talks to Anthropic, which this runner does not while Claude's connection comes out in a
+	// region Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12). Refused in the words the
+	// control plane refuses one with, before an account is added or anything runs: giveUp, below, would have to
+	// ask `claude auth status` whether the account it takes away again was signed in meanwhile.
+	if flow.engine == providerClaude {
+		if machine, region, blocked := claudeConnectionBlocked(context.Background()); blocked {
+			logln(strings.TrimSpace("login "+attempt) + ": claude sign-in refused — " + claudeRegionUnsupported)
+			report(LoginResultRequest{Status: loginFailed, Message: claudeSignInRefusedMessage(machine, region), Attempt: attempt})
+			return
+		}
+	}
 	createdSlot := ""
 	r.mu.Lock()
 	if name != "" {

@@ -46,6 +46,7 @@ const cases = [
     ['statement_timeout=300s', 'statement_timeout=0'],
     ['lock_timeout=30s', 'lock_timeout=0'],
     ['idle_in_transaction_session_timeout=300s', 'idle_in_transaction_session_timeout=0'],
+    ['jit=off', 'jit=on'],
     ['      - wal_compression=on', '      - wal_compression=on\n      - -c\n      - shared_buffers=1GB'],
   ].map(([before, after]) => [`postgres change: ${before}`, 'the postgres service definition',
     replace(before, after)]),

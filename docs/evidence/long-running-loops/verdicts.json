@@ -1,0 +1,273 @@
+[
+  {
+    "check": "A: every slot outside the outage became a turn of its own, handed to the engine within 60 s of its due time",
+    "ok": true,
+    "detail": "19 slots"
+  },
+  {
+    "check": "A: the slots while runner a was down were folded into one queued turn, handed over once it was back",
+    "ok": true,
+    "detail": [
+      {
+        "tick": 14,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 1351.4029998779297
+      },
+      {
+        "tick": 15,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 1051.4029998779297
+      },
+      {
+        "tick": 16,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 751.4029998779297
+      },
+      {
+        "tick": 17,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 451.4029998779297
+      },
+      {
+        "tick": 18,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 151.4029998779297
+      }
+    ]
+  },
+  {
+    "check": "A: the first slot after the restart fired on time, as a turn of its own",
+    "ok": true,
+    "detail": {
+      "tick": 19,
+      "state": "DELIVERED",
+      "turn": 17,
+      "late": 3.175999879837036
+    }
+  },
+  {
+    "check": "A: the loop ran two hours: due times and tick turns over it",
+    "ok": true,
+    "detail": {
+      "loopCreatedToStopSeconds": 7200,
+      "dueTimes": 24,
+      "tickTurns": 20,
+      "slotsInOutage": 5
+    }
+  },
+  {
+    "check": "A: stop: true twice, both answered without error: the first ends the loop, the second finds nothing",
+    "ok": true,
+    "detail": [
+      "Stopped: no one-shot wakeup was pending; the loop has ended, and no further tick of it is scheduled.",
+      "Nothing to stop: no wakeup was pending and no loop was running."
+    ]
+  },
+  {
+    "check": "A: the loop is ENDED with reason REQUESTED",
+    "ok": true,
+    "detail": {
+      "state": "ENDED",
+      "ended_reason": "REQUESTED",
+      "ended_at": "2026-10-31T23:07:30.36+00:00",
+      "ticks_fired": 20,
+      "ticks_missed": 4
+    }
+  },
+  {
+    "check": "A: no new turn and no waiting wakeup for at least 15 minutes after the stop",
+    "ok": true,
+    "detail": {
+      "watchedSeconds": 960,
+      "turnsAfterStop": [],
+      "pendingWakeups": []
+    }
+  },
+  {
+    "check": "A: the sleep job bgj_9ad4f310ca2d woke its session for its silence exactly once, about 1800 s in",
+    "ok": true,
+    "detail": [
+      {
+        "job": "bgj_9ad4f310ca2d",
+        "at": "2026-10-31T21:37:30.185+00:00",
+        "afterStartSeconds": 1800.2,
+        "elapsedMs": 1800000,
+        "idleMs": 1800000,
+        "status": "running"
+      }
+    ]
+  },
+  {
+    "check": "C: the sleep job bgj_4c86a2f98e3b woke its session for its silence exactly once, about 1800 s in",
+    "ok": true,
+    "detail": [
+      {
+        "job": "bgj_4c86a2f98e3b",
+        "at": "2026-10-31T21:37:59.95+00:00",
+        "afterStartSeconds": 1801.0,
+        "elapsedMs": 1800000,
+        "idleMs": 1800000,
+        "status": "running"
+      }
+    ]
+  },
+  {
+    "check": "A: session_get while runner a is down: lastFiredAt is the last run before the kill; of the slots since, the first filed the queued turn and every later one is counted missed",
+    "ok": true,
+    "detail": {
+      "status": "PENDING",
+      "wakeups": {
+        "next": {
+          "dueAt": "2026-10-31T22:35:00.038Z",
+          "kind": "LOOP_TICK",
+          "reason": "LRL drill loop A"
+        },
+        "lastFiredAt": "2026-10-31T22:10:01.541Z",
+        "loop": {
+          "state": "ACTIVE",
+          "everySeconds": 300,
+          "until": "2026-11-01T01:07:30.000Z",
+          "nextDueAt": "2026-10-31T22:35:00.038Z",
+          "lastFiredAt": "2026-10-31T22:10:01.541Z",
+          "ticksFired": 14,
+          "ticksMissed": 3,
+          "endedReason": null,
+          "endedAt": null
+        }
+      },
+      "dueWhileDownSoFar": 4,
+      "missedBeforeTheKill": 0,
+      "minutesDownSoFar": 21.0
+    }
+  },
+  {
+    "check": "A: the real PushService.notifyLoopMissed was called exactly once for its outage",
+    "ok": true,
+    "detail": [
+      {
+        "at": "2026-10-31T22:25:02.363Z",
+        "reason": "RUNNER_OFFLINE",
+        "ticks": 3,
+        "receiver": {
+          "instanceOfPushService": true,
+          "constructor": "PushService",
+          "enabled": false,
+          "apnsEnabled": false,
+          "fcmEnabled": false
+        }
+      }
+    ]
+  },
+  {
+    "check": "B: the real PushService.notifyLoopMissed was called exactly once for its outage",
+    "ok": true,
+    "detail": [
+      {
+        "at": "2026-10-31T21:33:30.069Z",
+        "reason": "RUNNER_OFFLINE",
+        "ticks": 16,
+        "receiver": {
+          "instanceOfPushService": true,
+          "constructor": "PushService",
+          "enabled": false,
+          "apnsEnabled": false,
+          "fcmEnabled": false
+        }
+      }
+    ]
+  },
+  {
+    "check": "no other call of notifyLoopMissed",
+    "ok": true,
+    "detail": []
+  },
+  {
+    "check": "B: runner b was killed while a tick turn was with the engine",
+    "ok": true,
+    "detail": {
+      "seq": 9,
+      "client_turn_id": "bg-wake:wakeup:01a193d2-443a-714c-bcae-da01d8f1a489",
+      "status": "IN_FLIGHT",
+      "delivered_at": "2026-10-31T21:17:33.381",
+      "running_s": 5.448592
+    }
+  },
+  {
+    "check": "B: runner b came back only after the auto-retry had disarmed, past 30 minutes, with ticks refused their revive",
+    "ok": true,
+    "detail": {
+      "why": "ready",
+      "disarmedAt": "2026-10-31T21:49:15.347Z",
+      "refusedRevivesBeforeRestart": 4,
+      "downSeconds": 2093
+    }
+  },
+  {
+    "check": "B: the first turn after runner b returned is the loop's own revive (a tick's bg-wake key), not the auto-retry",
+    "ok": true,
+    "detail": {
+      "seq": 11,
+      "client_turn_id": "bg-wake:wakeup:01a193f3-3417-71ef-811c-11e2f15822ce",
+      "kind": "message",
+      "status": "IN_FLIGHT",
+      "created_at": "2026-10-31T21:53:31.821",
+      "delivered_at": "2026-10-31T21:53:32.915",
+      "answered_at": null
+    }
+  },
+  {
+    "check": "B: every slot after the revive became a turn",
+    "ok": true,
+    "detail": [
+      {
+        "tick": 44,
+        "state": "DELIVERED",
+        "turn": 11,
+        "late": 2.996000051498413
+      },
+      {
+        "tick": 45,
+        "state": "DELIVERED",
+        "turn": 12,
+        "late": 2.138000011444092
+      },
+      {
+        "tick": 46,
+        "state": "DELIVERED",
+        "turn": 13,
+        "late": 3.308000087738037
+      },
+      {
+        "tick": 47,
+        "state": "DELIVERED",
+        "turn": 14,
+        "late": 3.3450000286102295
+      },
+      {
+        "tick": 48,
+        "state": "DELIVERED",
+        "turn": 15,
+        "late": 3.3990001678466797
+      },
+      {
+        "tick": 49,
+        "state": "DELIVERED",
+        "turn": 16,
+        "late": 0.7990000247955322
+      }
+    ]
+  },
+  {
+    "check": "B: stop: true twice, both answered",
+    "ok": true,
+    "detail": [
+      "Stopped: no one-shot wakeup was pending; the loop has ended, and no further tick of it is scheduled.",
+      "Nothing to stop: no wakeup was pending and no loop was running."
+    ]
+  }
+]

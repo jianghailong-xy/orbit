@@ -1,0 +1,62 @@
+[
+  {
+    "seq": 1,
+    "client_turn_id": "initial-01a193ca-6d7a-75ec-b8bc-79067e17a482",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:07:59.571",
+    "delivered_at": "2026-10-31T21:07:59.653",
+    "answered_at": "2026-10-31T21:07:59.996",
+    "content": "LRL-C-START FAKE-STALL 7200 1800 C"
+  },
+  {
+    "seq": 2,
+    "client_turn_id": "d78dd55c-0388-4b64-b5b6-69722dda9d88",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:37:39.588",
+    "delivered_at": "2026-10-31T21:37:39.638",
+    "answered_at": "2026-10-31T21:37:40.736",
+    "content": "LRL-C-GET-B1 FAKE-GET 34pfU00EV37woJRmatnMX B1"
+  },
+  {
+    "seq": 3,
+    "client_turn_id": "bg-wake:bgj_4c86a2f98e3b:stall:1",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:37:59.951",
+    "delivered_at": "2026-10-31T21:38:00.035",
+    "answered_at": "2026-10-31T21:38:00.22",
+    "content": ""
+  },
+  {
+    "seq": 4,
+    "client_turn_id": "1a95dfee-51cd-4666-b3ae-64548ceaecbc",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:55:32.259",
+    "delivered_at": "2026-10-31T21:55:32.366",
+    "answered_at": "2026-10-31T21:55:34.812",
+    "content": "LRL-C-GET-B2 FAKE-GET 34pfU00EV37woJRmatnMX B2"
+  },
+  {
+    "seq": 5,
+    "client_turn_id": "707325de-b582-46b6-8966-4b44bfbf3009",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:33:30.924",
+    "delivered_at": "2026-10-31T22:33:31.024",
+    "answered_at": "2026-10-31T22:33:33.627",
+    "content": "LRL-C-GET-A1 FAKE-GET 34pfQxF3vBPPfQ61NprQe A1"
+  },
+  {
+    "seq": 6,
+    "client_turn_id": "de32c96b-3bbb-47fe-aa87-6de11da6bc68",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:42:30.841",
+    "delivered_at": "2026-10-31T22:42:30.89",
+    "answered_at": "2026-10-31T22:42:31.055",
+    "content": "LRL-C-GET-A2 FAKE-GET 34pfQxF3vBPPfQ61NprQe A2"
+  }
+]

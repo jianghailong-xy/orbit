@@ -1,0 +1,36 @@
+[
+  {
+    "id": "01a193c9-fa78-75ee-aad5-7ef1e9e847e9",
+    "session_id": "01a193c9-f813-708a-8cfc-ce2f4f165e80",
+    "state": "ENDED",
+    "every_seconds": 300,
+    "prompt": "LRL-TICK-A: a tick of the drill loop A; answer in one line.",
+    "reason": "LRL drill loop A",
+    "first_due_at": "2026-10-31T21:10:00.038+00:00",
+    "until_at": "2026-11-01T01:07:30+00:00",
+    "ticks_fired": 20,
+    "ticks_missed": 4,
+    "revive_streak": 0,
+    "ended_reason": "REQUESTED",
+    "ended_at": "2026-10-31T23:07:30.36+00:00",
+    "alerted_at": null,
+    "created_at": "2026-10-31T21:07:30.04+00:00"
+  },
+  {
+    "id": "01a193cb-cec0-772c-a840-72a16c1e7ba8",
+    "session_id": "01a193cb-cd0c-740c-b949-f3a5c4243401",
+    "state": "ENDED",
+    "every_seconds": 60,
+    "prompt": "LRL-TICK-B: a tick of the drill loop B; answer in one line. FAKE-SLOW 30 holds this answer open.",
+    "reason": "LRL drill loop B",
+    "first_due_at": "2026-10-31T21:10:29.919+00:00",
+    "until_at": "2026-10-31T23:09:29+00:00",
+    "ticks_fired": 15,
+    "ticks_missed": 34,
+    "revive_streak": 0,
+    "ended_reason": "REQUESTED",
+    "ended_at": "2026-10-31T21:59:05.59+00:00",
+    "alerted_at": null,
+    "created_at": "2026-10-31T21:09:29.92+00:00"
+  }
+]

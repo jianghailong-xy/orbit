@@ -1,0 +1,6 @@
+web-machine-today	board 1440x1150	real 1440x1150	pixels differing by >40: 0	by any amount: 0
+web-machine-new	board 1440x1299	real 1440x1299	pixels differing by >40: 0	by any amount: 123
+web-session-held	board 1880x1322	real 1880x1322	pixels differing by >40: 459	by any amount: 1373
+web-session-first	board 1000x788	real 1000x788	pixels differing by >40: 0	by any amount: 0
+web-picker-closed	board 1120x850	real 1120x850	pixels differing by >40: 0	by any amount: 0
+web-provider-menu	board 1160x720	real 1160x720	pixels differing by >40: 0	by any amount: 0

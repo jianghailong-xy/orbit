@@ -238,7 +238,7 @@ struct ConsoleView: View {
             // two engine-repair cards below when it has something to say — one fact,
             // one card (an engine reason it does not claim is theirs, and the reverse).
             if let runStart = console.runStart {
-                SessionRunStartCardView(console: console, card: runStart)
+                SessionRunStartCardView(console: console, card: runStart, onMove: moveFromCard)
                     .padding(.bottom, .composerBandGap)
             } else if let repair = console.queuedDshRepair {
                 DshRepairCardView(console: console, repair: repair)
@@ -492,9 +492,31 @@ struct ConsoleView: View {
         }
     }
 
+    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
+    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    private var moveFromCard: (() -> Void)? {
+        #if os(iOS)
+        guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
+        return { openMove(session) }
+        #else
+        return nil
+        #endif
+    }
+
     #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
+    }
+
+    /// Move…, from the ⋯ menu or the region card: the sheet opens on the folder counts the app already
+    /// holds for the session's workspace, which its own read then replaces.
+    private func openMove(_ session: Session) {
+        let listed = session.effectiveLifecycleState == .completed
+            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
+        moveListed = listed.filter {
+            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
+        }
+        movingSession = session
     }
 
     private func sessionMenu(_ session: Session) -> some View {
@@ -533,14 +555,7 @@ struct ConsoleView: View {
                         Label(session.pinnedAt == nil ? "Pin" : "Unpin",
                               systemImage: session.pinnedAt == nil ? "pin" : "pin.slash")
                     }
-                    Button {
-                        let listed = session.effectiveLifecycleState == .completed
-                            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
-                        moveListed = listed.filter {
-                            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
-                        }
-                        movingSession = session
-                    } label: {
+                    Button { openMove(session) } label: {
                         Label("Move…", systemImage: "folder")
                     }
                     .disabled(sessionWorkspace(session) == nil)
@@ -1392,7 +1407,9 @@ struct TranscriptView: View {
 
     private var headerStatus: String {
         let watching = app.watches?.summary(for: console.sessionID)
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching) {
+        // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
+        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
+                                                 machine: console.runnerName) {
             return subtitle
         }
         return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
