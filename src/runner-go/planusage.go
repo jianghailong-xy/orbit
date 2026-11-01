@@ -500,6 +500,12 @@ var errClaudeRefreshRunning = errors.New("a refresh is already running for this 
 // that token return the same error the refusal did, so they log nothing new.
 var errClaudeTokenRefused = errors.New("usage endpoint -> 401; this token is not sent again")
 
+// errClaudeUsageRegionBlocked is a read not made because Claude's connection to Anthropic is in a region
+// Anthropic does not offer Claude in (docs/claude-region-check-contract.md): the runner sends Anthropic nothing
+// from there. Every pass while it lasts returns it, so the probe logs it once, and the first pass on an allowed
+// answer reads again.
+var errClaudeUsageRegionBlocked = errors.New("not reading Anthropic usage while anthropic is blocked — " + claudeRegionUnsupported)
+
 // claudeUsageRead is one Claude login's usage read, and what it keeps between passes.
 //
 // The token it sends is the CLI's, read from the login's credentials on every pass, and only Claude
@@ -532,6 +538,10 @@ type claudeUsageRead struct {
 
 // fetch reads the usage of the login kept in configDir ("" for the runner's own).
 func (r *claudeUsageRead) fetch(ctx context.Context, client *http.Client, configDir string) (*PlanUsage, error) {
+	// Asked first: login can have Claude Code refresh the token, which talks to Anthropic too.
+	if _, _, blocked := claudeConnectionBlocked(ctx); blocked {
+		return nil, errClaudeUsageRegionBlocked
+	}
 	login, err := r.login(ctx, configDir)
 	if err != nil {
 		return nil, err

@@ -479,6 +479,11 @@ Conversation:
 // and MCP config can't slow it down or pull in tools.
 func summarizeReplayHead(ctx context.Context, head []replayMessage) string {
 	digest := replayDigest(head, transcriptSummaryInputTokenBudget)
+	// No model call while Claude's connection is in a region Anthropic does not offer Claude in (claude_region.go).
+	if claudeStartBlocked(ctx, nil) {
+		logln("transcript rebuild: " + errClaudeStartRegionBlocked.Error() + "; replaying a mechanical digest")
+		return digest
+	}
 	tmp, err := os.MkdirTemp("", "orbit-tsum-")
 	if err != nil {
 		return digest
@@ -489,6 +494,7 @@ func summarizeReplayHead(ctx context.Context, head []replayMessage) string {
 	cmd := exec.CommandContext(cctx, "claude", "-p", transcriptSummaryPrompt+digest,
 		"--model", transcriptSummaryModel, "--output-format", "text")
 	cmd.Dir = tmp
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err == nil {
 		if s := strings.TrimSpace(string(out)); s != "" {
