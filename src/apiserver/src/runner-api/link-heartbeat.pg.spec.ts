@@ -63,7 +63,7 @@ const CAPABILITIES = [
   'session-orchestration-credential-v1', 'session-terminal-handoff-v1', 'session-worktree-ops-v1',
   'session-merge-recovery-v1', 'source-pin/v1', 'codex-rate-limit-reset-v1', 'integration-job/v1',
   'integration-progress/v2', 'codex-account-login/v1', 'codex-account-remove/v1', 'claude-account-login/v1',
-  'claude-account-remove/v1', 'wiki-repo-op/v1', 'wiki-repo-op-read/v1', 'cursor-key-check/v1',
+  'claude-account-remove/v1', 'wiki-repo-op/v1', 'wiki-repo-op-read/v1', 'cursor-key-check/v1', 'claude-region/v1',
 ].join(',');
 const FINGERPRINT = `cxa1_${'1'.repeat(32)}`;
 
@@ -413,6 +413,18 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       assert.equal(probing.answer.dirProbeRequest, undefined);
       await sql.query(`UPDATE "runner" SET dir_probe_status = 'done' WHERE id = $1`, [runnerId]);
       assert.equal((await settle()).filter((a) => a.dirProbeRequest).length, 0);
+    });
+    await t3.test('regionCheckRequest (RunnersService.requestRegionCheck): redelivered until a check answers it', async () => {
+      // Settled by the check route itself, from a hop nobody trusts: an unknown answer answers the request all the same.
+      const fromTheRunner = { headers: { 'x-real-ip': '203.0.113.24', 'cf-ipcountry': 'SG' }, socket: { remoteAddress: '172.18.0.5' } };
+      const ask = await untilSettled(
+        () => runners.requestRegionCheck(ownerId, runnerId),
+        (a) => a.regionCheckRequest,
+        () => door.regionCheck({ id: runnerId }, fromTheRunner as never, '1'),
+      );
+      assert.ok(ask && Number.isFinite(Date.parse(ask.requestedAt)), JSON.stringify(ask));
+      const row = await sql.query(`SELECT region, region_check_requested_at FROM "runner" WHERE id = $1`, [runnerId]);
+      assert.deepEqual(row.rows[0], { region: null, region_check_requested_at: null }, 'answered, and nothing decided is kept');
     });
     await t3.test('agentDirs (WorkspacesService.update)', async () => {
       const dirs = await deliveredAfter(

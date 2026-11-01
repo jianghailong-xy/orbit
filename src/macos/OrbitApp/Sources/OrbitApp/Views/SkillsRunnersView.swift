@@ -816,6 +816,10 @@ struct RunnerDetailContent: View {
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
         case .updateRunner:
             Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+        case .checkRegion:
+            // Check again (POST /runners/:id/region-check) is the iOS and macOS region task's to wire;
+            // until then the item says what is wrong and offers no press.
+            EmptyView()
         }
     }
 

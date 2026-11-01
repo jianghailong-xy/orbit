@@ -1379,6 +1379,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
     reads: ['body runnerId'],
     reading: 'the same body under the workspaces\' pre-rename name (runner-agents.controller.ts:127)',
   },
+  'GET /runner/region-check request': {
+    reads: [],
+    reading: 'the request\'s X-Real-IP, CF-IPCountry and cf-region-code headers and its socket\'s peer: where it came '
+      + 'from, no id; what it answers is written onto the calling runner\'s own row (runner-api.controller.ts:1720, '
+      + 'runners/runner-region.ts recordRegionCheck)',
+  },
 };
 
 // ── The share links' doors ────────────────────────────────────────────────────────────────────────

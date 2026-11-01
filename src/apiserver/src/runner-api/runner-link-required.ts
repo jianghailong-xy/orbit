@@ -31,7 +31,8 @@ import { PrismaService } from '../prisma/prisma.service';
  *     verbs share some of the daemon's routes (the approvals, the orchestration credential, `me`, a session's meta)
  *     and hold no link of their own. The daemon never sends the header, so a daemon too old to know the link is
  *     refused like any other;
- *   - the five routes marked StaysOnHttps: registration and the device flow, and the attachments (D14);
+ *   - the six routes marked StaysOnHttps: registration and the device flow, the attachments (D14), and the Claude region
+ *     check, which has to leave through Claude's proxy (docs/claude-region-check-contract.md §3);
  *   - every other controller under /runner: the agent tool API, the link token, the release check (D14).
  *
  * Off, or never switched (no row), every request is served exactly as it was before the switch existed.
@@ -57,7 +58,8 @@ const STAYS_ON_HTTPS = 'orbit:runner-link-stays-on-https';
 /**
  * Marks a RunnerApiController route that is not part of the daemon protocol and stays on HTTPS after the cut-over
  * (docs/runner-link-design.md D14): registration and the device flow, which come before the runner holds a credential
- * to open a link with, and the attachments, which travel as multipart and raw bytes. The switch never refuses it.
+ * to open a link with, the attachments, which travel as multipart and raw bytes, and the Claude region check, whose
+ * request is the measurement of Claude's own connection. The switch never refuses it.
  */
 export const StaysOnHttps = () => SetMetadata(STAYS_ON_HTTPS, true);
 

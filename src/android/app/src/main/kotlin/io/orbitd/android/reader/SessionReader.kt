@@ -37,6 +37,9 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
+import io.orbitd.android.composer.CreatedWorkspaceLine
+import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.SessionPendingTray
@@ -376,6 +379,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
+            var renamedWorkspaceName by remember(handle, route.id) { mutableStateOf<String?>(null) }
+            val createdWorkspaceLine = remember(detail, worktreeState.detail, data.effectiveRunnerRows, data.effectiveWorkspaceRows, renamedWorkspaceName) {
+                val source = worktreeState.detail ?: detail ?: return@remember null
+                CreatedWorkspaceLine.fromSession(source, data.effectiveRunnerRows, data.effectiveWorkspaceRows)?.let { line ->
+                    if (renamedWorkspaceName != null) line.copy(name = renamedWorkspaceName!!) else line
+                }
+            }
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
@@ -414,6 +424,36 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
+                    }
+                    if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
+                        item(key = "created-workspace") {
+                            CreatedWorkspaceLineView(
+                                line = createdWorkspaceLine,
+                                settingsEnabled = data.workspaces.any { ObjectId.same(it.id, createdWorkspaceLine.workspaceId) } ||
+                                    data.effectiveWorkspaceRows.any { ObjectId.same(it.string("id"), createdWorkspaceLine.workspaceId) },
+                                onRename = { newName ->
+                                    scope.launch {
+                                        try {
+                                            api.renameWorkspace(createdWorkspaceLine.workspaceId, newName)
+                                            renamedWorkspaceName = newName
+                                            app.realtime.refreshDirectory()
+                                            app.realtime.refreshSession()
+                                        } catch (cancel: CancellationException) {
+                                            throw cancel
+                                        } catch (e: Exception) {
+                                            OrbitToasts.show(
+                                                MachineSetupCopy.CREATED_RENAME_FAILED,
+                                                detail = io.orbitd.android.directory.directoryError(e),
+                                                tone = ToastTone.ERROR,
+                                            )
+                                        }
+                                    }
+                                },
+                                onOpenSettings = {
+                                    open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = createdWorkspaceLine.workspaceId))
+                                },
+                            )
+                        }
                     }
                     items(displayedRows, key = { it.key }, contentType = { it.event.type }) { row ->
                         TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))

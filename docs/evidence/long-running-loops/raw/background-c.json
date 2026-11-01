@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "background": [
+    {
+      "shellId": "bgj_4c86a2f98e3b",
+      "kind": "shell",
+      "toolUseId": "bgj_4c86a2f98e3b",
+      "command": "sleep 7200",
+      "outputPath": "/mnt/data/tmp/lrle/r/c/oh/runs/01a193ca-6d7a-75ec-b8bc-79067e17a482/bgj_4c86a2f98e3b.output",
+      "startedSeq": 12,
+      "startedTs": "2026-10-31T21:07:59.940Z",
+      "status": "done",
+      "terminal": "done"
+    }
+  ]
+}

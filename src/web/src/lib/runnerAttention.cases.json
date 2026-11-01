@@ -3707,5 +3707,236 @@
       "latestVersion": "0.1.197"
     },
     "expected": { "items": [], "listLine": null, "subtitle": "lab-host", "disk": null }
+  },
+  {
+    "name": "Claude region blocked: Claude Code can’t use Anthropic here, with Check again",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "yes" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "yes" }
+        ],
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "claudeRegionUnsupported", "tone": "warn", "short": "Claude Code can’t use Anthropic here", "title": "Claude Code can’t use Anthropic here", "actionKind": "checkRegion" }
+        ],
+      "listLine": "Claude Code can’t use Anthropic here",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region blocked with Claude signed out: the region in place of the sign-in",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "no" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "yes" }
+        ],
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "claudeRegionUnsupported", "tone": "warn", "short": "Claude Code can’t use Anthropic here", "title": "Claude Code can’t use Anthropic here", "actionKind": "checkRegion" }
+        ],
+      "listLine": "Claude Code can’t use Anthropic here",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region blocked, Claude the only CLI and signed out: the region, not no CLI signed in",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "no" }
+        ],
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "claudeRegionUnsupported", "tone": "warn", "short": "Claude Code can’t use Anthropic here", "title": "Claude Code can’t use Anthropic here", "actionKind": "checkRegion" }
+        ],
+      "listLine": "Claude Code can’t use Anthropic here",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region blocked with Claude weekly 98%: no quota warning for usage nobody reads",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "yes" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "yes" }
+        ],
+        "planUsage": { "provider": "claude", "fiveHour": { "utilization": 14, "resetsAt": "2026-09-29T02:59:59Z" }, "sevenDay": { "utilization": 98, "resetsAt": "2026-10-02T03:59:59Z" } },
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "claudeRegionUnsupported", "tone": "warn", "short": "Claude Code can’t use Anthropic here", "title": "Claude Code can’t use Anthropic here", "actionKind": "checkRegion" }
+        ],
+      "listLine": "Claude Code can’t use Anthropic here",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region blocked beside Codex signed out: Codex first, then the region",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "yes" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "no" }
+        ],
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" },
+        { "id": "ws-tools", "name": "tools", "lastProvider": "codex", "workDir": "~/tools" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "engineSignedOut", "tone": "bad", "short": "Codex signed out", "title": "Codex is signed out", "actionKind": "signIn" },
+          { "kind": "claudeRegionUnsupported", "tone": "warn", "short": "Claude Code can’t use Anthropic here", "title": "Claude Code can’t use Anthropic here", "actionKind": "checkRegion" }
+        ],
+      "listLine": "Codex signed out · Claude Code can’t use Anthropic here",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region allowed: nothing, and Claude signed out says so as before",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "no" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "yes" }
+        ],
+        "region": { "verdict": "allowed", "country": "SG", "regionCode": null, "name": "Singapore", "viaProxy": true, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "engineSignedOut", "tone": "bad", "short": "Claude signed out", "title": "Claude is signed out", "actionKind": "signIn" }
+        ],
+      "listLine": "Claude signed out",
+      "subtitle": "hpc-host · v0.1.235",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude region blocked on an offline runner: offline only",
+    "input": {
+      "runner": {
+        "name": "HPC",
+        "hostname": "hpc-host",
+        "version": "0.1.235",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-28T19:15:00Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": true, "version": "2.1.302 (Claude Code)", "auth": "yes" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.164.0", "auth": "yes" }
+        ],
+        "region": { "verdict": "blocked", "country": "CN", "regionCode": null, "name": "mainland China", "viaProxy": false, "checkedAt": "2026-09-29T00:12:00Z" }
+      },
+      "workspaces": [
+        { "id": "ws-develop", "name": "orbit-develop", "lastProvider": "claude", "workDir": "/root/orbit" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.235"
+    },
+    "expected": {
+      "items": [
+          { "kind": "offline", "tone": "idle", "short": "Offline", "title": "Offline for 5 hours", "actionKind": null }
+        ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 5h ago · v0.1.235",
+      "disk": null
+    }
   }
 ]

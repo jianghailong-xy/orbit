@@ -38,9 +38,16 @@ function markup(
     currentModelLabel?: string;
     projectIntent?: boolean;
     antigravity?: RunnerAntigravityState;
+    region?: ChoiceSources['region'];
   } = {},
 ) {
-  const sources: ChoiceSources = { configured, modelCatalog: catalog, engineHealth: opts.engines, antigravity: opts.antigravity };
+  const sources: ChoiceSources = {
+    configured,
+    modelCatalog: catalog,
+    engineHealth: opts.engines,
+    antigravity: opts.antigravity,
+    region: opts.region,
+  };
   // As WorkspaceView builds them: each engine lands on the pick when it is that engine's, and the
   // current one is the pick's own engine on the pick itself, listed there or not.
   const engine = defaultEngineOf(provider, configured) ?? AgentProvider.CLAUDE;
@@ -177,5 +184,23 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('aria-label="Engine: Claude Code"');
     expect(html).not.toContain('DeepSeek</small>');
     expect(html).not.toContain('via ');
+  });
+
+  // Board 02 C: the draft is on Claude Code's own sign-in on a runner blocked for the Claude region.
+  // Nothing on the page fixes that, so the link explains — it goes to the machine's Claude Code row.
+  it('says Details, not Fix it, where the runner’s Claude region is why the pick cannot run', () => {
+    const html = markup('claude', { region: { verdict: 'blocked' } });
+    expect(html).toContain('<b>Claude Code</b>');
+    expect(html).toContain('Region not supported on this runner');
+    expect(html).toMatch(
+      new RegExp(`<a href="/infrastructure\\?runner=${encodeId(RUNNER_ID)}&amp;engine=claude"[^>]*>Details</a>`),
+    );
+    expect(html).not.toContain('Fix it');
+  });
+
+  it('draws what it draws today for a runner that reads no region, or an allowed one', () => {
+    expect(markup('claude', { region: null })).toBe(markup('claude'));
+    expect(markup('claude', { region: { verdict: 'allowed' } })).toBe(markup('claude'));
+    expect(markup('claude')).not.toContain('Region not supported');
   });
 });

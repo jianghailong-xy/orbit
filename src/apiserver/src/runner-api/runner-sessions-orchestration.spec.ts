@@ -321,6 +321,8 @@ test('session orchestration detail scopes to one runner only when asked', async 
         return { id: TARGET_SESSION_ID, status: 'RUNNING' };
       },
     },
+    // The session's wakeups (readSessionWakeups): one row, of a session that has none.
+    $queryRaw: async () => [{}],
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
 
@@ -345,6 +347,8 @@ test('session orchestration detail uses an explicit allowlist and never returns 
         return { id: TARGET_SESSION_ID, status: 'RUNNING' };
       },
     },
+    // The session's wakeups (readSessionWakeups): one row, of a session that has none.
+    $queryRaw: async () => [{}],
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
   await service.getForOrchestration('owner-1', TARGET_SESSION_ID);

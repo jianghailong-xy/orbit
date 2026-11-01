@@ -25630,6 +25630,12 @@ button.agent-progress-agent:hover {
   grid-column: 1 / -1;
   min-width: 0;
 }
+/* The Claude region note's second line, under its first (board 02 A ⑤): when it was checked and where Claude's
+   connection came out, closer and quieter than the sentence above it. */
+.re-region-checked {
+  margin-top: 4px;
+  opacity: 0.8;
+}
 
 /* ---- Login: the Mac/iOS login page on the web — icon in faint orbits, standing-label fields,
    one full-width capsule that fades rather than greys while it can't be pressed. ---- */

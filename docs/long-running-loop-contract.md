@@ -13,6 +13,7 @@ places downstream tasks read it. A change to the semantics below changes this fi
 | Loops, ticks, the wake block | `src/apiserver/src/runner-api/scheduled-wakeup.ts` |
 | Tick delivery | `src/apiserver/src/runner-api/scheduled-wakeup.worker.ts` |
 | The dead-man signal (C2) | `scheduled-wakeup.worker.ts` `signalIfSilent`, `signalDropped`; `src/apiserver/src/push/push.service.ts` `notifyLoopMissed` |
+| Scheduling truth (C1) | `scheduled-wakeup.ts` `readSessionWakeups`, read by `sessions.service.ts` `getForOrchestration`; `src/apiserver/src/watches/watches.service.ts` `named` (`deadLetterCount`); `src/runner-go/watch_tools.go` `watchSummary` |
 | The owner's Stop | `src/apiserver/src/sessions/sessions.service.ts` `interrupt` |
 | Specs | `src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts`, `scheduled-wakeup.pg.spec.ts` |
 
@@ -235,6 +236,36 @@ Three things must be fixed with it:
 (state, everySeconds, until, nextDueAt, lastFiredAt, ticksFired, ticksMissed, endedReason, endedAt). `lastFiredAt` is
 derived by joining the tick rows to `conversation_turn.delivered_at`; it is not written to a column of its own.
 `watch_list` output gains `nextEvaluateAt`, `lastEvaluatedAt` and the dead-letter count.
+
+As built (task C1):
+
+```text
+wakeups: {
+  next:        { dueAt, kind: 'ONE_SHOT' | 'LOOP_TICK', reason } | null,
+  lastFiredAt: time | null,
+  loop:        { state: 'ACTIVE' | 'ENDED', everySeconds, until, nextDueAt, lastFiredAt,
+                 ticksFired, ticksMissed, endedReason, endedAt } | null,
+}
+```
+
+- `next` is the session's waiting wakeup that is due first: its one-shot wakeup or its loop's tick. `reason` is the
+  wakeup's own, and null for a tick of a loop that was given none. A wakeup still waiting past its due time, such as a
+  one-shot wakeup held for an armed retry (§1.6), is still `next`, with its due time in the past.
+- `lastFiredAt` is when a wakeup of the session last fired. Of its DELIVERED wakeups, one-shot or tick, whose turn has
+  a `delivered_at`, it takes the latest-due one and reports that turn's `delivered_at`. `loop.lastFiredAt` is the same
+  read over the loop's own ticks, which is §4's L (`lastLoopRun`). A wakeup filed onto a turn still queued has not
+  fired, and neither has one whose turn was put back in the queue, so while the runner is away both stay where the
+  last run left them.
+- `loop` is the session's ACTIVE loop, else the last one it started, so an ended loop still shows `endedReason` and
+  `endedAt`. It is null when the session never started a loop. `nextDueAt` is its waiting tick's due time, null once
+  it has ended. `ticksFired` and `ticksMissed` are the row's counts (§1.2): while a turn waits with nobody to take
+  it, the tick that filed it counts as fired and every tick folded into it after that as missed.
+- `readSessionWakeups` (`scheduled-wakeup.ts`) reads all of it in one statement and writes nothing.
+- Every watch view carries `deadLetterCount`: the list, the read of one watch, the needs-attention read, and what a
+  create, an edit, a pause, a resume and a cancel answer. It counts the DEAD_LETTER deliveries among its Matches' and
+  `expiryDeliveries`, whatever their code. `nextEvaluateAt` and `lastEvaluatedAt` were on the view already. The
+  runner-go summary that `watch_list` (and every other watch tool result) prints shows all three. A count that an
+  older server does not send is left out of it, not shown as 0.
 
 ## 4. Signal (task C2)
 

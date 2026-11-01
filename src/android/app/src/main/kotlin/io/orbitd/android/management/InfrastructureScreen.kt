@@ -167,7 +167,11 @@ internal fun InfrastructurePage(api: ManagementApi, revision: Long, open: (Orbit
                 } }) { Text(RunnerCopy.REMOVE, color = Ink.red) }
             }, dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
     }
-    if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id -> adding = false; runner(id) }
+    if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id ->
+        adding = false
+        val ws = machines.workspacesOf(id).firstOrNull()?.text("id")
+        open(OrbitRoute(Destination.DRAFT, workspaceId = ws, id = if (ws == null) id else null))
+    }
 }
 
 /** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page. */

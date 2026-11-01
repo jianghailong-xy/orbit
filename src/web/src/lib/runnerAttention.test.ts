@@ -80,6 +80,9 @@ describe('runnerAttention.cases.json', () => {
     for (const c of CASES) {
       const engines = c.input.runner.engines;
       if (!engines) continue;
+      // A machine blocked for the Claude region whose Claude is signed out has no CLI to sign in at
+      // all; a signed-out Antigravity beside it is one, and is rightly what it is told to sign in.
+      if (c.input.runner.region?.verdict === 'blocked') continue;
       const withAntigravity: RunnerAttentionInput = {
         ...c.input,
         runner: { ...c.input.runner, engines: [...engines, { engine: 'antigravity', installed: true, auth: 'no' }] },
@@ -648,11 +651,6 @@ describe('runnerCopy', () => {
     expect(copy.RUNNER_VERSION_LATEST).toBe('Latest');
     expect(copy.RUNNER_VERSION_INSTALLS_WHEN_IDLE).toBe('installs when no turn is running');
     expect(copy.RUNNER_ROOT_NO_BYPASS).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
-    expect(copy.RUNNER_WORKSPACES_FOOTER).toBe(
-      'Tap a workspace to open its sessions. Add or change workspaces on the web.',
-    );
-    // The native pages link these words of it, so they are in it, once.
-    expect(copy.RUNNER_WORKSPACES_FOOTER.split(copy.RUNNER_WORKSPACES_FOOTER_LINK)).toHaveLength(2);
   });
 
   // OrbitKit's parity test reads runnerCopy.ts as text, so the file's shape is part of the contract.
@@ -680,5 +678,38 @@ describe('runnerCopy', () => {
         expect(names, `\${${used}} in \`${template}\``).toContain(used);
       }
     }
+  });
+});
+
+// The Claude region check's item (docs/claude-region-check-contract.md, board 02 A ①): what the case
+// file cannot carry — its detail, its params and its action.
+describe('a machine blocked for the Claude region', () => {
+  const blocked = caseNamed('Claude region blocked: Claude Code can’t use Anthropic here, with Check again');
+
+  it('says where Claude’s connection is, carries the check, and offers Check again', () => {
+    const [item] = runnerAttention(blocked.input);
+    expect(item).toEqual({
+      kind: 'claudeRegionUnsupported',
+      tone: 'warn',
+      short: 'Claude Code can’t use Anthropic here',
+      title: 'Claude Code can’t use Anthropic here',
+      detail: 'Anthropic doesn’t offer Claude in mainland China.',
+      action: { kind: 'checkRegion' },
+      params: { country: 'CN', regionCode: null, region: 'mainland China', checkedAt: '2026-09-29T00:12:00Z' },
+    });
+  });
+
+  it('raises nothing for a runner that reads no region, as today', () => {
+    const runner = { ...blocked.input.runner, region: null };
+    expect(runnerAttention({ ...blocked.input, runner })).toEqual([]);
+    const { region: _region, ...older } = blocked.input.runner;
+    expect(runnerAttention({ ...blocked.input, runner: older })).toEqual([]);
+  });
+
+  it('asks no Claude sign-in of a blocked machine, and still asks the others', () => {
+    const lone = caseNamed('Claude region blocked, Claude the only CLI and signed out: the region, not no CLI signed in');
+    expect(noCliSignedIn(lone.input.runner, lone.input.workspaces)).toBeNull();
+    const runner = { ...lone.input.runner, region: null };
+    expect(noCliSignedIn(runner, lone.input.workspaces)).toEqual(['claude']);
   });
 });

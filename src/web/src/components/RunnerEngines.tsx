@@ -74,6 +74,16 @@ import {
 } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
+import { claudeRegionBlocked, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
+import {
+  CLAUDE_REGION_CHECK_AGAIN,
+  CLAUDE_REGION_NOT_SUPPORTED,
+  CLAUDE_REGION_SUPPORTED_REGIONS,
+  CLAUDE_REGION_SUPPORTED_REGIONS_URL,
+  claudeRegionAccounts,
+  claudeRegionChecked,
+  claudeRegionMachineNote,
+} from '../lib/claudeRegionCopy';
 import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import {
@@ -360,6 +370,9 @@ interface Quota {
  *  running, every 10 without, while the engine is signed in there) and is said to be as of then. */
 const STALE_QUOTA_MS = 30 * 60_000;
 
+/** A login with no reading: what an account on a machine blocked for its Claude region is judged on. */
+const NO_QUOTA: Quota = { windows: [], stale: null, noLimit: false };
+
 function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number, engine?: RowEngine): Quota {
   const cursor =
     engine === 'cursor'
@@ -614,6 +627,12 @@ function EngineRow({
   const cursorState = engine === 'cursor' ? cursorRunnerState(runner) : 'ready';
   const cursorBlocked = cursorState === 'updateRunner' || cursorState === 'unsupportedPlatform' || cursorState === 'unsupportedVersion';
   const cursorHint = cursorBlocked ? cursorStateHint(cursorState, health) : null;
+  // This machine's Claude connection comes out where Anthropic doesn't offer Claude (runner.region,
+  // docs/claude-region-check-contract.md): Orbit runs no Anthropic account here and starts no Claude
+  // sign-in, so the row says so in place of what its accounts could take, and Check again stands where
+  // Add account and Sign in would — the accounts stay as they are, and run again once a check passes.
+  const regionBlocked = engine === 'claude' && claudeRegionBlocked(runner);
+  const regionCheck = useClaudeRegionCheckAgain(runner);
   // Nothing here signs OpenCode in, so the row says what does. Only once there is a CLI on the
   // machine to run it against: an install that hasn't happened yet has no sign-in to point at.
   const openCodeHint = loginEngine === null && health?.installed
@@ -646,6 +665,8 @@ function EngineRow({
   // below it (AccountRow), with its own state — or, folded, the head says what they come to.
   const grouped = accounts.length > 0;
   const folded = grouped && !open;
+  // Blocked, the head speaks for the whole machine in the status and quota columns, open or folded.
+  const columns = folded || (grouped && regionBlocked);
   // The engine's one account, which this row is when it stands alone — not when it heads a group of
   // one, as it does while Default is removed from Orbit (accountRowsOf).
   const single = !grouped && engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
@@ -673,7 +694,7 @@ function EngineRow({
   // account only a runner that keeps them apart can; OpenCode keeps no accounts at all, and has no
   // sign-in to add one with.
   const addAccountTo: LoginEngine | null =
-    loginEngine !== null && engineKeepsAccounts(loginEngine) &&
+    !regionBlocked && loginEngine !== null && engineKeepsAccounts(loginEngine) &&
     (kind === 'in' || kind === 'out' || kind === 'unknown') &&
     (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
     (loginEngine !== 'kimi' || addsKimiAccounts(runner)) &&
@@ -689,6 +710,7 @@ function EngineRow({
 
   const action = () => {
     if (antigravity?.supported === false) return null;
+    if (regionBlocked) return null;
     // A build other than the pinned one is put back the way a missing one is put there; a runner too
     // old for Cursor CLI, or on a platform it doesn't run on, has nothing here to press.
     if (cursorState === 'unsupportedVersion') {
@@ -752,7 +774,10 @@ function EngineRow({
 
   const meta = cursorBlocked && !health?.installed ? null : (
     <>
-      {grouped ? (
+      {grouped && regionBlocked ? (
+        // None of them can take a session here; how many there are is all there is to count.
+        <>{versionOf(engine, health)} · {claudeRegionAccounts(kept.length)}</>
+      ) : grouped ? (
         <>
           {versionOf(engine, health)} ·{' '}
           <b>
@@ -773,7 +798,7 @@ function EngineRow({
         <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
           {/* Folded, the head shares its width with a status and a quota, so the note takes a line
               of its own (.re-grp.folded) rather than leave half of itself on the next. */}
-          {folded ? note.text : <>{' '}· {note.text}</>}
+          {columns ? note.text : <>{' '}· {note.text}</>}
         </span>
       )}
     </>
@@ -781,7 +806,7 @@ function EngineRow({
 
   return (
     <div
-      className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`}
+      className={`re-row${grouped ? ' re-grp' : ''}${columns ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`}
       ref={row}
       data-engine={engine}
       // The head's line folds its group from anywhere on it, as a card's head does — not a panel or
@@ -834,16 +859,38 @@ function EngineRow({
           </div>
         </>
       )}
-      {!grouped && !cursorBlocked && (
+      {/* No Anthropic usage is read on a machine blocked for its region: nothing to gauge. */}
+      {regionBlocked && (
+        <>
+          <div className="re-status">
+            <Badge tone="orange">{CLAUDE_REGION_NOT_SUPPORTED}</Badge>
+          </div>
+          <div className="re-quota">
+            <span className="re-quota-none">—</span>
+          </div>
+        </>
+      )}
+      {!grouped && !cursorBlocked && !regionBlocked && (
         <>
           <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
         </>
       )}
-      {folded && loginEngine !== null && (
+      {folded && !regionBlocked && loginEngine !== null && (
         <FoldedAccounts runner={runner} engine={loginEngine} health={health} accounts={kept} next={next} usage={usage} now={now} />
       )}
       <div className="re-act">
+        {regionBlocked && (
+          <Button
+            size="small"
+            className="re-action"
+            disabled={offline}
+            loading={regionCheck.checking}
+            onClick={regionCheck.checkAgain}
+          >
+            {CLAUDE_REGION_CHECK_AGAIN}
+          </Button>
+        )}
         {addAccountTo && (
           <Button
             size="small"
@@ -865,7 +912,7 @@ function EngineRow({
         {!grouped && (
           <RunnerAccountMenu
             offline={offline}
-            onSignIn={loginEngine !== null && kind === 'in' && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
+            onSignIn={!regionBlocked && loginEngine !== null && kind === 'in' && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
               ? () => onSignIn(signIn === engine ? null : engine)
               : undefined}
             // A Gemini key is not an account of the machine's to pause: Default on it is no Google
@@ -880,7 +927,7 @@ function EngineRow({
 
       {/* The engine's one account says what an account row says: a login about to lapse, and what
           being signed out costs — here, the engine on this machine. */}
-      {!grouped && single && !envKey && loginExpiresLine(single, now) && (
+      {!grouped && single && !envKey && !regionBlocked && loginExpiresLine(single, now) && (
         <div className="re-dup re-expiring">
           <span>{loginExpiresLine(single, now)}</span>
           <button className="re-link" type="button" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>
@@ -888,9 +935,23 @@ function EngineRow({
           </button>
         </div>
       )}
-      {!grouped && kind === 'out' && !loginHint && !cursorBlocked && (
+      {!grouped && kind === 'out' && !loginHint && !cursorBlocked && !regionBlocked && (
         <div className="re-dup">
           <span>{signedOutNote(engineNameOf(engine), true)}</span>
+        </div>
+      )}
+      {/* Why, and what still runs here; then when it was checked and where Claude's connection came out. */}
+      {regionBlocked && runner.region && (
+        <div className="re-login-note">
+          <div className="rsi-hint">
+            {claudeRegionMachineNote(runner.region.name)}{' '}
+            <a href={CLAUDE_REGION_SUPPORTED_REGIONS_URL} target="_blank" rel="noreferrer">
+              {CLAUDE_REGION_SUPPORTED_REGIONS}
+            </a>
+          </div>
+          <div className="rsi-hint re-region-checked">
+            {claudeRegionChecked(ago(runner.region.checkedAt, now), runner.region.name, runner.region.viaProxy)}
+          </div>
         </div>
       )}
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
@@ -1102,6 +1163,7 @@ function AccountRow({
   duplicateOf,
   lastOfGroup,
   envKey,
+  regionBlocked = false,
   signIn,
   onSignIn,
 }: {
@@ -1128,6 +1190,9 @@ function AccountRow({
   /** Antigravity's Default on a runner that runs it on its Gemini key (runsOnEnvKey): in, on the key,
    *  with nothing to sign in, pause or read quota for. */
   envKey?: boolean;
+  /** A Claude account on a machine blocked for its region (claudeRegionBlocked): kept as it is, with
+   *  no sign-in to offer and no usage read. */
+  regionBlocked?: boolean;
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
@@ -1200,7 +1265,7 @@ function AccountRow({
       removesInOrbit={isDefault}
       moreRef={more}
       onRename={() => setEditing(true)}
-      onSignIn={kind === 'in' && !envKey ? toggle : undefined}
+      onSignIn={kind === 'in' && !envKey && !regionBlocked ? toggle : undefined}
       onRemove={removable ? () => setConfirmingRemove(true) : undefined}
       pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
         name: accountNameOf(account), until: account.pausedUntil,
@@ -1232,12 +1297,22 @@ function AccountRow({
           <Badge tone="info" icon={<LoadingOutlined />}>Removing…</Badge>
         </div>
       ) : (
-        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+        // On a machine blocked for its region the account can take no session there: its sign-in is all
+        // there is to say, never Available.
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, regionBlocked ? NO_QUOTA : quota, now)} />
       )}
       {/* What the engine's own row says for the same key when it is the machine's one account. */}
-      {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
+      {envKey ? (
+        <div className="re-quota re-meta">env key · runs on your Gemini key</div>
+      ) : regionBlocked ? (
+        <div className="re-quota">
+          <span className="re-quota-none">—</span>
+        </div>
+      ) : (
+        <QuotaCell kind={kind} quota={quota} />
+      )}
       <div className="re-act">
-        {kind !== 'in' && (
+        {kind !== 'in' && !regionBlocked && (
           <Button size="small" className="re-action" variant={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>
@@ -1278,7 +1353,7 @@ function AccountRow({
       )}
       {/* A login about to lapse, said before it does the way Claude Code says it, with the way to
           renew it right there: the row's own sign-in, into the same account. */}
-      {expiring && !removing && (
+      {expiring && !removing && !regionBlocked && (
         <div className="re-dup re-expiring">
           <span>{expiring}</span>
           <button className="re-link" type="button" disabled={!runner.online} onClick={toggle}>
@@ -1287,7 +1362,7 @@ function AccountRow({
         </div>
       )}
       {/* What its being signed out costs, under its Sign in. */}
-      {kind === 'out' && !removing && (
+      {kind === 'out' && !removing && !regionBlocked && (
         <div className="re-dup">
           <span>{signedOutNote(engineNameOf(engine), false)}</span>
         </div>
@@ -1537,6 +1612,9 @@ export function machineChipsOf(runner: Runner): MachineChip[] {
   if (!runner.engines) return [];
   const chips: MachineChip[] = [];
   const add = (engine: RowEngine) => {
+    // Claude Code on a machine blocked for its region runs on no sign-in of its own there: no chip,
+    // as for one signed out — its row says why.
+    if (engine === 'claude' && claudeRegionBlocked(runner)) return;
     const logins = loginsOn(runner, engine);
     if (logins > 0) {
       const accounts = engineHealthOf(runner, engine)?.accounts?.length ?? 0;
@@ -1834,8 +1912,10 @@ export function MachineEngines({
         const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
         // The same question the server asks when a session starts with no account picked — which a
         // group of one, as a removed Default can leave, answers with that one.
+        // No session starts on any of them on a machine blocked for its Claude region.
+        const blockedForRegion = engine === 'claude' && claudeRegionBlocked(runner);
         const next =
-          accountEngine && accounts.length > 0
+          accountEngine && accounts.length > 0 && !blockedForRegion
             ? accounts.length === 1
               ? accounts[0].id
               : accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
@@ -1873,6 +1953,7 @@ export function MachineEngines({
                 duplicateOf={repeats.get(account.id)}
                 lastOfGroup={index === accounts.length - 1 && !removed}
                 envKey={runsOnEnvKey(health, account)}
+                regionBlocked={blockedForRegion}
                 signIn={signIn}
                 onSignIn={onSignIn}
               />

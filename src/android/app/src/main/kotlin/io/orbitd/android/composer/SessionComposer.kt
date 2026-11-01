@@ -237,8 +237,12 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     placeholder = {
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
                         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
-                        else Text(if (target == null && running && engine == CursorRuntime.ENGINE) CursorRuntime.RUNNING_PLACEHOLDER else "Message…",
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        else Text(when {
+                            target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
+                                detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
+                            target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
+                            else -> "Message…"
+                        }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     minLines = 1, maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))

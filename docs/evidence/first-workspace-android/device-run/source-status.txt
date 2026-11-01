@@ -1,0 +1,4 @@
+ M src/android/app/src/main/kotlin/io/orbitd/android/composer/MachineSetupCard.kt
+ M src/android/app/src/main/kotlin/io/orbitd/android/composer/NewSessionComposer.kt
+?? docs/evidence/first-workspace-android/device-run/
+?? docs/evidence/first-workspace-android/kit/

@@ -227,6 +227,9 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
+	// traffic off: that keeps a Claude login stored here from going to Anthropic with it (claude_region.go).
+	cmd.Env = claudeQuietEnv(cmd.Env, job.Agent.Env)
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {
