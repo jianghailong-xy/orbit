@@ -200,6 +200,23 @@ final class ClaudeRegionTests: XCTestCase {
         XCTAssertEqual(glyph.tone, .neutral)
     }
 
+    /// Use another provider on a held session: nothing is in flight, so the note under the composer says the
+    /// waiting message runs on the pick — never that a turn finishes on Claude Code. The console passes
+    /// `liveRun: isLive && !regionHeld` (`ClaudeRegionWiringTests`); this is that expression on the two rows.
+    func testAProviderPickOnAHeldSessionSaysTheWaitingMessageRunsOnIt() {
+        func note(_ s: Session) -> String? {
+            let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
+            return TaskRunHandoff.providerSwitchNote(
+                from: "Claude Code", to: "DeepSeek",
+                liveRun: live && !ClaudeRegion.held(status: s.effectiveRunStatus, error: s.error))
+        }
+        let held = session(error: refusal())
+        XCTAssertTrue(ComposerLogic.isLive(status: held.effectiveRunStatus), "a queued session is live")
+        XCTAssertEqual(note(held), "Your next message uses DeepSeek.")
+        // A session queued for anything else keeps the note it had.
+        XCTAssertEqual(note(session(error: nil)), "The turn in flight finishes on Claude Code. Your next one uses DeepSeek.")
+    }
+
     func testEverySessionElseKeepsItsWordsAndOneWithNoMachineToo() {
         let queued = session(error: nil)
         XCTAssertEqual(SessionLine.make(for: queued, live: true, machine: "HPC").text, "Queued")

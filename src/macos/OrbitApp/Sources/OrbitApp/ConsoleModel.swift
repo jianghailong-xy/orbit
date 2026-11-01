@@ -2494,7 +2494,9 @@ final class ConsoleModel {
                 choices.first { $0.slug == slug }
                     ?? SessionProviderChoices.current(engine: engine, provider: slug, in: choices, sources: choiceSources))
         }
-        providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive)
+        // A session held for the Claude region has no turn in flight: its waiting message is the next one, and
+        // it runs on the pick.
+        providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive && !regionHeld)
         // A held pick replaces `provider` before the resume carries it, so remember what the session
         // is actually on for as long as the pick stands: the key a card about a rejected key names is
         // the session's own (`sessionProvider`).

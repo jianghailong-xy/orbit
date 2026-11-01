@@ -31,7 +31,9 @@ struct SessionRunStartCardView: View {
             if !card.lines.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(card.lines, id: \.self) { line in
+                        // Wrapped, never cut: the band squeezes the card when more stands under the composer.
                         Text(line).font(.orbitMeta.monospaced()).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
