@@ -173,6 +173,24 @@ object MachineSetup {
         return state != "disabledByEnv" && state != "dirNotWritable"
     }
 
+    /**
+     * A machine approved a moment ago that has not connected yet: never heard from, so it reads offline and has declared nothing
+     * (contract §2). Not one too old to check folders, nor one that went away: it is waited for.
+     */
+    fun isConnecting(runner: JsonObject, nowMs: Long = System.currentTimeMillis()): Boolean =
+        RunnerPage.isOffline(runner, nowMs) && runner.text("lastHeartbeatAt").isNullOrEmpty()
+
+    /**
+     * How often a machine's new session page reads the machine again while its card is up, as iOS and the web do: a sign-in
+     * landing or the machine going away moves the card by itself. One still connecting is read more often, so the folder step
+     * opens within seconds of its first heartbeat.
+     */
+    const val POLL_MS = 5_000L
+    const val CONNECTING_POLL_MS = 2_000L
+
+    fun refreshMs(runner: JsonObject?, nowMs: Long = System.currentTimeMillis()): Long =
+        if (runner != null && isConnecting(runner, nowMs)) CONNECTING_POLL_MS else POLL_MS
+
     /** `newFolder`'s rule on the server (§3.1): one path segment, nothing a shell or a path could read anything into. */
     fun isValidNewFolder(name: String): Boolean {
         if (name.length !in 1..64 || name == "." || name == "..") return false
@@ -203,6 +221,38 @@ object MachineSetup {
             short = short,
             usable = true,
         )
+    }
+
+    /**
+     * What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a new folder
+     * starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a file can't become one.
+     */
+    fun newFolderVerdict(probe: DirProbe, machine: String): FolderVerdict {
+        fun refused(text: String) = FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false)
+        if (!probe.error.isNullOrEmpty()) return refused(MachineSetupCopy.setupCouldNotCheck(machine, probe.error))
+        if (!probe.exists) {
+            return FolderVerdict(
+                FolderVerdict.Tone.OK,
+                MachineSetupCopy.SETUP_NEW_FOLDER_META,
+                MachineSetupCopy.SETUP_NEW_FOLDER_DONE,
+                usable = true,
+            )
+        }
+        if (!probe.isDir) return refused(MachineSetupCopy.setupNewFolderIsFile(machine))
+        return FolderVerdict(
+            FolderVerdict.Tone.WARN,
+            MachineSetupCopy.setupNewFolderExists(machine),
+            folderVerdict(probe, machine).short,
+            usable = true,
+        )
+    }
+
+    /** What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
+    fun newFolderPick(probe: DirProbe, name: String, reposRoot: String, machine: String): PickedFolder? {
+        val verdict = newFolderVerdict(probe, machine)
+        if (!verdict.usable) return null
+        return if (probe.exists) PickedFolder.Existing(probe.path, verdict.short)
+        else PickedFolder.New(name, newFolderPath(reposRoot, name))
     }
 
     /** The login CLIs installed here, in the app's order. */
@@ -444,6 +494,14 @@ object DirProbeRelay {
         data object Replaced : Outcome
         data object Unanswered : Outcome
     }
+
+    /**
+     * Whether the register directory is asked about again. A path asked before the machine had answered about it took its question's
+     * place, and the suggestion would never come: it is asked again once nothing else on the card waits for an answer. Only while the
+     * machine can be asked: offline, a stored answer is all there is.
+     */
+    fun asksAgain(outcome: Outcome?, online: Boolean, otherWaiting: Boolean): Boolean =
+        outcome == Outcome.Replaced && online && !otherWaiting
 
     suspend fun probe(
         ask: (suspend () -> Unit)?,

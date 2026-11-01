@@ -12,11 +12,14 @@ import {
   folderName,
   folderVerdict,
   installedLogins,
+  isConnecting,
   isOfferedFolder,
   isValidNewFolder,
   makesNewFolders,
   machineName,
   newFolderPath,
+  newFolderPick,
+  newFolderVerdict,
   registerDirToProbe,
   updatesItself,
   type FolderChoice,
@@ -45,6 +48,7 @@ import {
   heldFailed,
   heldWaiting,
   setupChecking,
+  setupConnecting,
   setupFolderHelp,
   setupNeedsUpdate,
   setupNoAnswer,
@@ -98,6 +102,28 @@ export function setupCredentialOf(
 
 const engineName = (engine: string): string => ENGINE_NAME[engine as LoginEngine] ?? engine;
 
+/** A check the machine gave no answer to, and the way to ask it again. */
+function NoAnswer({ machine, onAgain }: { machine: string; onAgain: () => void }) {
+  return (
+    <span className="msc-verdict bad">
+      {setupNoAnswer(machine)}{' '}
+      <button className="msc-change" type="button" onClick={onAgain}>
+        {SETUP_CHECK_AGAIN}
+      </button>
+    </span>
+  );
+}
+
+/** What is typed, once the typing has stopped for a moment: what the machine is asked about. */
+function useSettled(value: string): string {
+  const [settled, setSettled] = useState('');
+  useEffect(() => {
+    const settle = setTimeout(() => setSettled(value), TYPED_PATH_SETTLE_MS);
+    return () => clearTimeout(settle);
+  }, [value]);
+  return settled;
+}
+
 /** Step one before it has an answer: the folder `orbit register` ran in when that is a fair suggestion,
  *  a new folder, or any other, which the machine itself checks as it is typed. */
 function FolderOptions({
@@ -112,10 +138,12 @@ function FolderOptions({
   const machine = machineName(runner);
   const online = runner.online === true;
   const probes = answersDirProbe(runner);
+  const registerDir = probes ? registerDirToProbe(runner.registerDir) : undefined;
   // Offline it can't be asked, and what it last answered is still worth showing.
-  const registered = useDirProbe(runner.id, probes ? registerDirToProbe(runner.registerDir) : undefined, online);
+  const registered = useDirProbe(runner.id, registerDir, online);
   const suggested = registered.state === 'answered' && isOfferedFolder(registered.probe) ? registered.probe : null;
   const offersNewFolder = makesNewFolders(runner);
+  const reposRoot = runner.reposRoot ?? '';
 
   // Untouched, the choice follows what the machine says: its answer about the register directory can
   // arrive a heartbeat after the card does.
@@ -123,22 +151,39 @@ function FolderOptions({
   const choice = touched ?? defaultFolderChoice(suggested, offersNewFolder);
   const [newName, setNewName] = useState('');
   const name = newName.trim();
+  const settledName = useSettled(name);
+  // A new folder's name is asked about where it would go: a folder, or a file, may be there already.
+  const newProbe = useDirProbe(
+    runner.id,
+    choice === 'new' && offersNewFolder && !disabled && isValidNewFolder(settledName)
+      ? newFolderPath(reposRoot, settledName)
+      : undefined,
+    true,
+  );
+  const found = settledName === name && newProbe.state === 'answered' ? newProbe.probe : null;
+  const newVerdict = found ? newFolderVerdict(found, machine) : null;
   const [typed, setTyped] = useState('');
   const path = typed.trim();
-  const [settled, setSettled] = useState('');
-  useEffect(() => {
-    const settle = setTimeout(() => setSettled(path), TYPED_PATH_SETTLE_MS);
-    return () => clearTimeout(settle);
-  }, [path]);
+  const settled = useSettled(path);
   const typedProbe = useDirProbe(runner.id, choice === 'other' && !disabled && settled ? settled : undefined, true);
   const checked = settled === path && typedProbe.state === 'answered' ? typedProbe.probe : null;
   const verdict = checked ? folderVerdict(checked, machine) : null;
 
+  // The machine holds one question at a time (contract §2): a path asked before it had answered about the
+  // register directory took that question's place, and the suggestion would never come. It is asked again
+  // once nothing else on this card is waiting for an answer.
+  const askRegisteredAgain =
+    registered.state === 'idle' && !!registerDir && online && typedProbe.state !== 'checking' && newProbe.state !== 'checking';
+  const registeredAgain = registered.again;
+  useEffect(() => {
+    if (askRegisteredAgain) registeredAgain();
+  }, [askRegisteredAgain, registeredAgain]);
+
   let candidate: PickedFolder | null = null;
   if (choice === 'suggested' && suggested) {
     candidate = { kind: 'existing', path: suggested.path, note: folderVerdict(suggested, machine).short };
-  } else if (choice === 'new' && offersNewFolder && isValidNewFolder(name)) {
-    candidate = { kind: 'new', name, path: newFolderPath(runner.reposRoot ?? '', name) };
+  } else if (choice === 'new' && offersNewFolder && isValidNewFolder(name) && found) {
+    candidate = newFolderPick(found, name, reposRoot, machine);
   } else if (choice === 'other' && checked && verdict?.usable) {
     candidate = { kind: 'existing', path: checked.path, note: verdict.short };
   }
@@ -183,10 +228,17 @@ function FolderOptions({
                 invalid={!!name && !isValidNewFolder(name)}
               />
             )}
-            {choice === 'new' && name && !isValidNewFolder(name) ? (
-              <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
-            ) : (
+            {choice !== 'new' || !name ? (
               <span className="msc-meta">{SETUP_NEW_FOLDER_META}</span>
+            ) : !isValidNewFolder(name) ? (
+              <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+            ) : newVerdict ? (
+              // Nothing there yet reads as the board draws a new folder; anything there says what it means.
+              <span className={newVerdict.tone === 'ok' ? 'msc-meta' : `msc-verdict ${newVerdict.tone}`}>{newVerdict.text}</span>
+            ) : settledName === name && (newProbe.state === 'unanswered' || newProbe.state === 'idle') ? (
+              <NoAnswer machine={machine} onAgain={newProbe.again} />
+            ) : (
+              <span className="msc-verdict wait">{setupChecking(machine)}</span>
             )}
           </Radio>
         )}
@@ -210,12 +262,7 @@ function FolderOptions({
               {path && (verdict ? (
                 <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
               ) : settled === path && (typedProbe.state === 'unanswered' || typedProbe.state === 'idle') ? (
-                <span className="msc-verdict bad">
-                  {setupNoAnswer(machine)}{' '}
-                  <button className="msc-change" type="button" onClick={typedProbe.again}>
-                    {SETUP_CHECK_AGAIN}
-                  </button>
-                </span>
+                <NoAnswer machine={machine} onAgain={typedProbe.again} />
               ) : (
                 <span className="msc-verdict wait">{setupChecking(machine)}</span>
               ))}
@@ -300,7 +347,9 @@ export function MachineSetupCard({
       </div>
 
       {offline ? (
-        <div className="msc-notice">{setupOffline(machine)}</div>
+        // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
+        // one too old to check folders either.
+        <div className="msc-notice">{isConnecting(runner) ? setupConnecting(machine) : setupOffline(machine)}</div>
       ) : (
         !probes && (
           <div className="msc-notice">
@@ -385,15 +434,24 @@ export function MachineSetupCard({
 }
 
 /** Brought into view as it appears: what lands under the card can land below the fold, and this pane
- *  has no tail to follow. */
+ *  has no tail to follow. Clear of the pane's fade (`.msc-revealed`), and again as a picture in it loads,
+ *  which pushes its end back down. */
 export function RevealedOnArrival({ className, children }: { className?: string; children: ReactNode }) {
   const arrived = useRef<HTMLDivElement>(null);
-  // Not an expression body: a browser may answer with a promise, which React would take for a cleanup.
   useEffect(() => {
-    arrived.current?.scrollIntoView({ block: 'nearest' });
+    const element = arrived.current;
+    if (!element) return;
+    // Not an expression body: a browser may answer with a promise, which React would take for a cleanup.
+    const reveal = () => {
+      element.scrollIntoView({ block: 'nearest' });
+    };
+    reveal();
+    // An image's `load` doesn't bubble, but it is seen on its way down to the image.
+    element.addEventListener('load', reveal, true);
+    return () => element.removeEventListener('load', reveal, true);
   }, []);
   return (
-    <div ref={arrived} className={className}>
+    <div ref={arrived} className={className ? `msc-revealed ${className}` : 'msc-revealed'}>
       {children}
     </div>
   );

@@ -106,9 +106,12 @@ final class MachineSetupCopyParityTests: XCTestCase {
     private static let templates: [(name: String, rendered: String)] = [
         ("setupTitle", MachineSetupCopy.setupTitle(machine: "${machine}")),
         ("setupOffline", MachineSetupCopy.setupOffline(machine: "${machine}")),
+        ("setupConnecting", MachineSetupCopy.setupConnecting(machine: "${machine}")),
         ("setupUpdating", MachineSetupCopy.setupUpdating(machine: "${machine}")),
         ("setupNeedsUpdate", MachineSetupCopy.setupNeedsUpdate(machine: "${machine}")),
         ("setupFolderHelp", MachineSetupCopy.setupFolderHelp(machine: "${machine}")),
+        ("setupNewFolderExists", MachineSetupCopy.setupNewFolderExists(machine: "${machine}")),
+        ("setupNewFolderIsFile", MachineSetupCopy.setupNewFolderIsFile(machine: "${machine}")),
         ("setupOtherFolder", MachineSetupCopy.setupOtherFolder(machine: "${machine}")),
         ("setupChecking", MachineSetupCopy.setupChecking(machine: "${machine}")),
         ("setupNoSuchDirectory", MachineSetupCopy.setupNoSuchDirectory(machine: "${machine}")),

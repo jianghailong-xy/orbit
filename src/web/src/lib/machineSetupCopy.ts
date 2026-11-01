@@ -8,6 +8,10 @@
 export const setupTitle = (machine: string) => `Set up ${machine}`;
 export const SETUP_LEAD = 'Pick where it works and sign in a coding CLI. Anything you send waits until both are done.';
 export const setupOffline = (machine: string) => `${machine} is offline. It can’t check folders or sign in until it’s back.`;
+// Not on a board: a machine approved a moment ago that has not connected yet. It has declared nothing because it has not
+// beaten yet, not because it is too old, and nothing is wrong with it: the card waits for it, as a message sent meanwhile does.
+export const setupConnecting = (machine: string) =>
+  `Waiting for ${machine} to connect. It can check folders and sign in as soon as it does.`;
 
 // The two sentences for a runner too old to answer the directory probe. Not on a board: the interface
 // agreement asks for one, and the second is for a machine whose updater is off, where the first would
@@ -28,6 +32,12 @@ export const SETUP_NEW_FOLDER_META = 'Starts empty. Ask for a clone or a new pro
 export const SETUP_NEW_FOLDER_DONE = 'new folder · created as the session starts';
 // Not on a board: what the server's newFolder rule refuses, said before it has to.
 export const SETUP_NEW_FOLDER_INVALID = 'Use letters, digits, dots, dashes and underscores, up to 64 characters.';
+// Not on a board: a new folder's name the machine already has at <reposRoot>/<name>. A directory is used with what is in it, so
+// it doesn't start empty; a file can't become one.
+export const setupNewFolderExists = (machine: string) =>
+  `This folder already exists on ${machine}. Sessions will use what’s in it.`;
+export const setupNewFolderIsFile = (machine: string) =>
+  `There’s already a file with this name on ${machine}. Pick another name.`;
 export const setupOtherFolder = (machine: string) => `Another folder on ${machine}`;
 export const SETUP_USE_FOLDER = 'Use this folder';
 export const SETUP_CHANGE = 'Change';

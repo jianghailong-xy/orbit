@@ -126,6 +126,22 @@ public enum MachineSetup {
         runner.selfUpdate?.state != "disabledByEnv" && runner.selfUpdate?.state != "dirNotWritable"
     }
 
+    /// A machine approved a moment ago that has not connected yet: never heard from, so it reads offline and has
+    /// declared nothing (contract §2). Not one too old to check folders, nor one that went away: it is waited for.
+    public static func isConnecting(_ runner: Runner) -> Bool {
+        !AgentListLogic.isOnline(runner) && (runner.lastHeartbeatAt ?? "").isEmpty
+    }
+
+    /// How often a machine's new session page reads the machine again while its card is up, as the web does
+    /// (`SETUP_POLL_MS`): a sign-in landing or the machine going away moves the card by itself. One still connecting
+    /// is read more often, so the folder step opens within seconds of its first heartbeat.
+    public static let pollSeconds: TimeInterval = 5
+    public static let connectingPollSeconds: TimeInterval = 2
+
+    public static func refreshSeconds(for runner: Runner?) -> TimeInterval {
+        runner.map(isConnecting) == true ? connectingPollSeconds : pollSeconds
+    }
+
     /// `newFolder`'s rule on the server (§3.1): one path segment, nothing a shell or a path could read
     /// anything into.
     public static func isValidNewFolder(_ name: String) -> Bool {
@@ -163,6 +179,35 @@ public enum MachineSetup {
         let short = probe.isGit ? MachineSetupCopy.setupGit(branch: probe.branch) : MachineSetupCopy.SETUP_NOT_GIT
         return FolderVerdict(tone: probe.isGit ? .ok : .warn, text: MachineSetupCopy.SETUP_FOUND_PREFIX + short,
                              short: short, usable: true)
+    }
+
+    /// What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a
+    /// new folder starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a
+    /// file can't become one.
+    public static func newFolderVerdict(_ probe: DirProbe, machine: String) -> FolderVerdict {
+        func refused(_ text: String) -> FolderVerdict {
+            FolderVerdict(tone: .bad, text: text, short: text, usable: false)
+        }
+        if let error = probe.error, !error.isEmpty {
+            return refused(MachineSetupCopy.setupCouldNotCheck(machine: machine, why: error))
+        }
+        if !probe.exists {
+            return FolderVerdict(tone: .ok, text: MachineSetupCopy.SETUP_NEW_FOLDER_META,
+                                 short: MachineSetupCopy.SETUP_NEW_FOLDER_DONE, usable: true)
+        }
+        if !probe.isDir { return refused(MachineSetupCopy.setupNewFolderIsFile(machine: machine)) }
+        return FolderVerdict(tone: .warn, text: MachineSetupCopy.setupNewFolderExists(machine: machine),
+                             short: folderVerdict(probe, machine: machine).short, usable: true)
+    }
+
+    /// What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is,
+    /// which is then a folder like any other and is sent by its path.
+    public static func newFolderPick(_ probe: DirProbe, name: String, reposRoot: String, machine: String) -> PickedFolder? {
+        let verdict = newFolderVerdict(probe, machine: machine)
+        guard verdict.usable else { return nil }
+        return probe.exists
+            ? .existing(path: probe.path, note: verdict.short)
+            : .new(name: name, path: newFolderPath(reposRoot: reposRoot, name: name))
     }
 
     /// The login CLIs installed here, in the app's order.
@@ -384,6 +429,13 @@ public enum DirProbeRelay {
         /// The question was replaced, or a stored answer was all there was to read.
         case replaced
         case unanswered
+    }
+
+    /// Whether the register directory is asked about again. A path asked before the machine had answered about it
+    /// took its question's place, and the suggestion would never come: it is asked again once nothing else on the
+    /// card waits for an answer. Only while the machine can be asked: offline, a stored answer is all there is.
+    public static func asksAgain(_ outcome: Outcome?, online: Bool, otherWaiting: Bool) -> Bool {
+        outcome == .replaced && online && !otherWaiting
     }
 
     /// `ask` is nil where only what is stored can be read, which is all an offline machine gives.

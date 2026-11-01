@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -21,7 +23,7 @@ vi.mock('../api', async (importOriginal) => ({
   readDirProbe: vi.fn(),
 }));
 const { api, askDirProbe, readDirProbe } = await import('../api');
-const { MachineSetupCard, setupCredentialOf } = await import('./MachineSetupCard');
+const { MachineSetupCard, RevealedOnArrival, setupCredentialOf } = await import('./MachineSetupCard');
 
 const RUNNER_ID = encodeId('0199f0a8-3c2e-7b51-9a6e-1f2d3c4b5a69');
 const REGISTER = '/home/orbit/code/app';
@@ -31,6 +33,9 @@ const AT: Record<string, Partial<DirProbe>> = {
   '/home/orbit/notes': { exists: true, isDir: true },
   '/home/orbit/code/api': { exists: true, isDir: true, isGit: true, branch: 'develop' },
   '/home/orbit/file.txt': { exists: true },
+  // In the Repos Folder already: a folder a deleted workspace left, and a file.
+  '/home/orbit/orbit-repos/payments': { exists: true, isDir: true, isGit: true, branch: 'main' },
+  '/home/orbit/orbit-repos/notes.txt': { exists: true },
 };
 /** What the runner answers about `path`, as DirProbe. `~` is its to expand. */
 function runnerSays(path: string): DirProbe {
@@ -56,6 +61,7 @@ const machine = (over: Record<string, unknown> = {}) =>
     registerDir: REGISTER,
     capabilities: ['dir-probe/v1', 'create-workdir/v1'],
     engines: engines(),
+    lastHeartbeatAt: '2026-10-31T09:00:00Z',
     ...over,
   }) as never;
 
@@ -140,6 +146,36 @@ async function open({
   return host;
 }
 
+/** The same page, told about its machine again: what a refetch of the runner list does. */
+async function machineReports(runner: never): Promise<void> {
+  await act(async () => {
+    root!.render(
+      <QueryClientProvider client={client!}>
+        <MemoryRouter>
+          <Page runner={runner} engine="claude" ready={false} fleet={null} start={null} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  await settle();
+}
+
+/** Until `assertion` holds: the relay's reads are 1.5 s apart. */
+async function waitFor(assertion: () => void, within = 6_000): Promise<void> {
+  const deadline = Date.now() + within;
+  for (;;) {
+    try {
+      assertion();
+      return;
+    } catch (failure) {
+      if (Date.now() > deadline) throw failure;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+}
+
 /** What a reader sees of an element, its pieces apart: most of them are laid out by gaps, not spaces. */
 function said(element: Element | null | undefined): string {
   const pieces: string[] = [];
@@ -172,6 +208,14 @@ const pathField = () => host!.querySelector<HTMLInputElement>('input.msc-path-in
 /** The path, typed and left long enough to be asked about. */
 async function checkPath(path: string): Promise<void> {
   await type(pathField(), path);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 450));
+  });
+  await settle();
+}
+/** A new folder's name, typed and left long enough to be asked about where it would go. */
+async function checkName(name: string): Promise<void> {
+  await type(nameField(), name);
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
   });
@@ -320,6 +364,53 @@ describe('rule 2: the folder orbit register ran in', () => {
     // The suggestion still arrived, for whoever wants it.
     expect(options()[0]).toContain('/home/orbit/code/app');
   });
+
+  it('a path asked before it was answered takes its question; it is asked again once that path has its answer', async () => {
+    // The relay as the server keeps it (contract §2): one question per machine, answered only for the path in it.
+    let slot: string | null = null;
+    const answered = new Set<string>();
+    vi.mocked(askDirProbe).mockImplementation(async (_runner, path) => {
+      slot = path;
+      return { path, status: 'pending' };
+    });
+    vi.mocked(readDirProbe).mockImplementation(async (_runner, path) =>
+      path !== slot
+        ? { path, status: 'idle', result: null }
+        : answered.has(path)
+          ? { path, status: 'done', result: runnerSays(path) }
+          : { path, status: 'pending', result: null },
+    );
+    await open();
+    expect(slot).toBe(REGISTER);
+    await choose('Another folder');
+    await checkPath('/home/orbit/notes');
+    expect(slot).toBe('/home/orbit/notes');
+    // The register directory's next read finds its question gone. It is not asked again while the path waits.
+    const asked = (path: string) => vi.mocked(askDirProbe).mock.calls.filter(([, asked]) => asked === path).length;
+    await waitFor(() =>
+      expect(vi.mocked(readDirProbe).mock.calls.filter(([, read]) => read === REGISTER).length).toBeGreaterThanOrEqual(2),
+    );
+    await settle();
+    expect(asked(REGISTER)).toBe(1);
+    answered.add('/home/orbit/notes');
+    await waitFor(() => expect(said(radio('Another folder'))).toContain('Found · not a git repository'));
+    await waitFor(() => expect(asked(REGISTER)).toBe(2));
+    answered.add(REGISTER);
+    await waitFor(() => expect(options()[0]).toBe('/home/orbit/code/app Found · git repository · main Where you ran orbit register'));
+    // What was typed and answered is still the choice.
+    expect(checked()).toContain('Another folder');
+    expect(useFolder().disabled).toBe(false);
+  }, 15_000);
+
+  it('offline, what is stored is all there is: nothing is asked again', async () => {
+    vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({ path, status: 'idle', result: null }));
+    await open({ runner: machine({ online: false, status: 'OFFLINE' }) });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(askDirProbe).not.toHaveBeenCalled();
+    expect(vi.mocked(readDirProbe).mock.calls.length).toBe(1);
+  });
 });
 
 describe('rule 3: a new folder', () => {
@@ -328,11 +419,70 @@ describe('rule 3: a new folder', () => {
     expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/orbit-repos/');
     expect(useFolder().disabled).toBe(true);
 
-    await type(nameField(), 'payments-api');
-    await settle();
+    await checkName('payments-api');
     expect(useFolder().disabled).toBe(false);
     await press(useFolder());
     expect(picked).toEqual({ kind: 'new', name: 'payments-api', path: '/home/orbit/orbit-repos/payments-api' });
+  });
+
+  it('is asked about on the machine where it would go, once the typing stops, before it can be used', async () => {
+    const page = await open({ runner: machine({ registerDir: null }) });
+    await type(nameField(), 'payments-ap');
+    await type(nameField(), 'payments-api');
+    expect(said(radio('A new folder')!.querySelector('.msc-verdict.wait'))).toBe('Checking on orbit@austin…');
+    expect(useFolder().disabled).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+    await settle();
+    expect(vi.mocked(askDirProbe).mock.calls).toEqual([[RUNNER_ID, '/home/orbit/orbit-repos/payments-api']]);
+    // Nothing there: what the board says a new folder is.
+    expect(said(radio('A new folder')!.querySelector('.msc-meta'))).toBe(
+      'Starts empty. Ask for a clone or a new project in your first message.',
+    );
+    expect(page.querySelector('.msc-verdict')).toBeNull();
+    expect(useFolder().disabled).toBe(false);
+  });
+
+  it('a folder there already is not called empty: it is used with what is in it, as that folder', async () => {
+    const page = await open({ runner: machine({ registerDir: null }) });
+    await checkName('payments');
+    expect(said(radio('A new folder')!.querySelector('.msc-verdict.warn'))).toBe(
+      'This folder already exists on orbit@austin. Sessions will use what’s in it.',
+    );
+    expect(said(radio('A new folder'))).not.toContain('Starts empty');
+    await press(useFolder());
+    expect(picked).toEqual({ kind: 'existing', path: '/home/orbit/orbit-repos/payments', note: 'git repository · main' });
+    // Its line says what is there, not that it is made as the session starts.
+    expect(said(page.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/orbit-repos/payments git repository · main Change');
+  });
+
+  it('a file there can’t be one, and it says why', async () => {
+    await open({ runner: machine({ registerDir: null }) });
+    await checkName('notes.txt');
+    expect(said(radio('A new folder')!.querySelector('.msc-verdict.bad'))).toBe(
+      'There’s already a file with this name on orbit@austin. Pick another name.',
+    );
+    expect(useFolder().disabled).toBe(true);
+  });
+
+  it('no answer: says so, and can be asked again', async () => {
+    await open({ runner: machine({ registerDir: null }) });
+    vi.mocked(readDirProbe).mockImplementationOnce(async (_runner, path) => ({ path, status: 'idle', result: null }));
+    await checkName('payments-api');
+    expect(said(radio('A new folder')!.querySelector('.msc-verdict.bad'))).toBe('orbit@austin didn’t answer. Check again');
+    expect(useFolder().disabled).toBe(true);
+    await press(button('Check again')!);
+    expect(useFolder().disabled).toBe(false);
+  });
+
+  it('an answer about a name typed a moment ago does not stand for the name typed now', async () => {
+    await open({ runner: machine({ registerDir: null }) });
+    await checkName('payments-api');
+    expect(useFolder().disabled).toBe(false);
+    await type(nameField(), 'payments');
+    expect(useFolder().disabled).toBe(true);
+    expect(said(radio('A new folder')!.querySelector('.msc-verdict.wait'))).toBe('Checking on orbit@austin…');
   });
 
   it('refuses what the server would, and says what it takes', async () => {
@@ -349,7 +499,7 @@ describe('rule 3: a new folder', () => {
 
   it('Enter in the field is the button beside it', async () => {
     await open({ runner: machine({ registerDir: null }) });
-    await type(nameField(), 'app');
+    await checkName('app');
     await act(async () => {
       nameField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
@@ -502,6 +652,48 @@ describe('rule 1: a machine that is offline', () => {
   });
 });
 
+describe('a machine approved a moment ago that has not connected yet', () => {
+  // What the server reads for it until its first heartbeat (contract §2): offline, never heard from, nothing declared.
+  const connecting = (over: Record<string, unknown> = {}) =>
+    machine({ online: false, status: 'OFFLINE', lastHeartbeatAt: null, capabilities: [], engines: null, ...over });
+
+  it('is waited for: not called offline, and not too old to check folders', async () => {
+    const page = await open({ runner: connecting() });
+    expect(said(page.querySelector('.msc-notice'))).toBe(
+      'Waiting for orbit@austin to connect. It can check folders and sign in as soon as it does.',
+    );
+    expect(page.textContent).not.toContain('updates itself first');
+    expect(page.textContent).not.toContain('is offline');
+    expect(page.querySelectorAll('.msc-notice')).toHaveLength(1);
+  });
+
+  it('can’t be asked or signed in on yet', async () => {
+    const page = await open({ runner: connecting() });
+    expect(askDirProbe).not.toHaveBeenCalled();
+    expect(readDirProbe).not.toHaveBeenCalled();
+    expect(useFolder().disabled).toBe(true);
+    expect(page.querySelector('.rsi')).toBeNull();
+  });
+
+  it('connected, both steps open and the register directory is asked about', async () => {
+    const page = await open({ runner: connecting() });
+    await machineReports(machine());
+    expect(page.querySelector('.msc-notice')).toBeNull();
+    expect(askDirProbe).toHaveBeenCalledWith(RUNNER_ID, REGISTER);
+    expect(checked()).toContain('/home/orbit/code/app');
+    expect(useFolder().disabled).toBe(false);
+    expect(page.querySelector('.rsi')).not.toBeNull();
+  });
+
+  it('connected on a version from before dir-probe/v1: only then is it said to update itself', async () => {
+    const page = await open({ runner: connecting() });
+    await machineReports(machine({ capabilities: [], version: '0.1.239' }));
+    expect(said(page.querySelector('.msc-notice'))).toBe(
+      'orbit@austin updates itself first: this version can’t check folders yet. You can sign in meanwhile.',
+    );
+  });
+});
+
 describe('a runner from before dir-probe/v1', () => {
   const old = (over: Record<string, unknown> = {}) => machine({ capabilities: [], version: '0.1.239', ...over });
 
@@ -533,6 +725,56 @@ describe('a runner from before dir-probe/v1', () => {
     const page = await open({ runner: old({ online: false }) });
     expect(said(page.querySelector('.msc-notice'))).toContain('is offline');
     expect(page.querySelectorAll('.msc-notice')).toHaveLength(1);
+  });
+});
+
+describe('what lands under the card', () => {
+  it('is brought into view as it arrives, and again as a picture in it loads', async () => {
+    const revealed: Element[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: HTMLElement) {
+        revealed.push(this);
+      },
+    });
+    try {
+      client = new QueryClient();
+      host = document.createElement('div');
+      document.body.append(host);
+      root = createRoot(host);
+      await act(async () => {
+        root!.render(
+          <RevealedOnArrival className="msc-held">
+            <img alt="screenshot" />
+            <div className="msc-held-state">Waiting</div>
+          </RevealedOnArrival>,
+        );
+      });
+      const arrived = host.querySelector('.msc-held')!;
+      expect(arrived.className).toBe('msc-revealed msc-held');
+      expect(revealed).toEqual([arrived]);
+      // The picture loading pushes the line under it back down: it is brought up again.
+      await act(async () => host!.querySelector('img')!.dispatchEvent(new Event('load')));
+      expect(revealed).toEqual([arrived, arrived]);
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it('stops clear of the pane’s 20px fade, not in it', () => {
+    const css = ['src/components/MachineSetupCard.css', 'src/web/src/components/MachineSetupCard.css']
+      .map((file) => join(process.cwd(), file))
+      .map((file) => {
+        try {
+          return readFileSync(file, 'utf8');
+        } catch {
+          return '';
+        }
+      })
+      .find(Boolean)!;
+    const rule = /\.msc-revealed \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const margin = Number(/scroll-margin-bottom: (\d+)px/.exec(rule)?.[1] ?? 0);
+    expect(margin).toBeGreaterThanOrEqual(20);
   });
 });
 

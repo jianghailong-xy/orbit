@@ -125,7 +125,8 @@ private fun MachineDraftComposer(
         if (!resumed) return@LaunchedEffect
         runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
         while (true) {
-            delay(5_000)
+            // More often while it is still connecting: its first heartbeat opens the folder step.
+            delay(MachineSetup.refreshMs(liveRunner))
             runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
             model.refreshCatalog()
         }
