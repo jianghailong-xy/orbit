@@ -1,0 +1,89 @@
+# src/shared/src/wikiContract.spec.ts (vitest, verbose)
+# Run 2026-11-01T14:59:14Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+
+ RUN  v5.0.3 /root/.orbit/worktrees/072724db-fc06-569d-af1f-68823dab1347/src/shared
+
+ ✓ src/wikiContract.spec.ts > wiki contract > is version 1 of orbit.wiki, and every file it points at exists 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > writes each key of an object once, so no sentence is lost to the one after it 4ms
+ ✓ src/wikiContract.spec.ts > wiki contract > stores the wiki in the nine tables the project names 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > holds the repository operations to the contract, number for number 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships every closed set exactly as the contract lists it 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > says what the spaces list adds to a row, and holds its plan count to the vectors the clients count by 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the limits the contract sets, and the design set the ones it names 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > gives each phase-1 kind the schema, authorship and push rule KIND_SPECS ships 2ms
+ ✓ src/wikiContract.spec.ts > wiki contract > gives each anchor type the keys and states WIKI_ANCHOR_SPECS ships 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the effect policy the contract states, and it keeps the design's promises 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the review modes the contract states, and none of them loosens a floor 3ms
+ ✓ src/wikiContract.spec.ts > wiki contract > names every run: the changeset on the timeline, one run's read, and where an entry's revision came from (criterion 8) 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > holds a verdict to what its verifier could read, and a tainted op to unreviewed (revision 4) 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > verifies before Automatic applies: four verdicts, a trail, a fallback, and no clock 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > hands what ended sessions left waiting to the next maintenance run, and to nobody else 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > leaves an op the verification got no verdict for to the next run, and fails nothing 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > has the local model name a duplicate by a number of its own, never by an id it would copy wrong 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > names what the plan gate refuses as a JSON string, and reads a closed-set value as what its wrapping holds 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > has a consistent entry state machine 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > has a consistent op state machine 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > has a consistent changeset state machine 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > has a consistent source state machine 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > pins the entry lifecycle the design draws, and how an op is decided 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the maintenance run the contract states: off by default, its rules, its facts and its cursor 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > says where each dossier line's words are in its record, and a run quotes the record there (criterion 2, revision 2) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the maintenance job the contract states: its trigger and its run 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships criterion 3 revision 4: the cursor moves once the ops are recorded, and a space behind catches up 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > reads a space's health the way the contract states it, and tells the owner once a streak 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > re-verifies the anchors git can check, by the rules the contract states 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the articles the contract states: six categories, three kinds, the rules, the default topics, and their doors 2ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the plan the contract states: its closed sets, rules and schema, its tables, its gate and its doors 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the plan's jobs the contract states: kinds, triggers, states, held reasons, rules and routes 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the documents of the version in force asked for again: the owner's route, the support route, and their rules 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > ships the documents the contract states: their closed sets, rules and schema, their tables, the withdrawal and their doors 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > declares every refusal once, with a status and a scope, and names no code it does not declare 2ms
+ ✓ src/wikiContract.spec.ts > wiki contract > gives agents three tools and two doors, and no way to decide 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > announces a change by the space's id alone 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > says what each source kind takes as its ref, and refuses a row's ref that is no id by its path 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > carries uniquely named vectors with reasons, a valid and an invalid one for every kind 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector principle-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector convention-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector decision-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector pitfall-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector recipe-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector concept-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector principle-missing-rationale: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector unknown-field-refused: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector blank-text-refused: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector decision-without-alternatives: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector decision-alternative-without-reason: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector pitfall-without-trigger: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector recipe-bad-verify: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector common-fields-over-limits: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector topic-not-a-slug: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector assumption-is-reserved: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector unknown-kind: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector anchor-shapes: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector sources-valid: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector sources-refused: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > vector sources-ref-not-an-id: the validators name exactly the fields it expects 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > imports a file as a note, and proposes from it as an agent would 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > reads an import on the server, under the same rules (server execution P5) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > builds the documents on the server, as the runner built them (server execution P7) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > drafts and revises the plan on the server, under the same rules (server execution P6) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > calls the System model from the wiki-worker alone, and reads back its name and state only (server execution P1a) 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > runs the maintenance pipeline on the server: the job, its numbers and its identity (server execution P8) 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > runs wiki jobs on the server: the table, the kinds, the lease, the retry and the executor (server execution P1b) 1ms
+ ✓ src/wikiContract.spec.ts > wiki contract > reports the whole job, its hand-backs and replays included: what a replay carries, kind by kind (2026-10-10) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > reads a space's server runs and their calls for Activity, their metadata alone (server execution P9) 0ms
+ ✓ src/wikiContract.spec.ts > wiki contract > queues every model call: the identity, the claim, the lease, the retry and the limits (server execution P1b) 1ms
+
+ Test Files  1 passed (1)
+      Tests  70 passed (70)
+   Start at  22:59:14
+   Duration  204ms (transform 58%, tests 27%, import 14%, worker 1%)
+
+
+exit=0
+
+## The whole shared suite
+ Test Files  37 passed (37)
+      Tests  666 passed (666)
+exit=0

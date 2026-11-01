@@ -53,7 +53,7 @@ note 'shared suite' "$(sed -n 's/^exit=//p' "$E/shared-specs.txt" | tail -1)"
   echo "exit=$code"
   echo; echo '## wiki-system-model.spec, wiki-model-client.spec and wiki-compose-env.spec'
   (cd src/apiserver && node --test --test-reporter=tap build/wiki-worker/wiki-system-model.spec.js \
-    build/wiki-worker/wiki-model-client.spec.js build/wiki/wiki-compose-env.spec.js 2>&1)
+    build/wiki-worker/wiki-model-client.spec.js build/wiki/wiki-compose-env.spec.js 2>&1 | strip; exit "${PIPESTATUS[0]}")
   echo "exit=$?"
 } > "$E/apiserver-specs.txt" 2>&1
 note 'apiserver unit suite' "$(sed -n 's/^exit=//p' "$E/apiserver-specs.txt" | head -1)"
@@ -88,8 +88,8 @@ note 'body capture' "$(grep -ac '^exit=0$' "$E/body-after.txt")/8 calls answered
 # 4. The request queue against a real PostgreSQL, with the System model a stub: case 8 is the thinking switch end to end.
 {
   header 'bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-model-queue.pg.spec.ts'
-  bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-model-queue.pg.spec.ts 2>&1
-  echo "exit=$?"
+  bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-model-queue.pg.spec.ts 2>&1 | strip
+  echo "exit=${PIPESTATUS[0]}"
 } > "$E/pg-wiki-model-queue.txt" 2>&1
 note 'queue pg spec' "$(sed -n 's/^exit=//p' "$E/pg-wiki-model-queue.txt" | tail -1)"
 
