@@ -15,7 +15,8 @@ places downstream tasks read it. A change to the semantics below changes this fi
 | The dead-man signal (C2) | `scheduled-wakeup.worker.ts` `signalIfSilent`, `signalDropped`; `src/apiserver/src/push/push.service.ts` `notifyLoopMissed` |
 | Scheduling truth (C1) | `scheduled-wakeup.ts` `readSessionWakeups`, read by `sessions.service.ts` `getForOrchestration`; `src/apiserver/src/watches/watches.service.ts` `named` (`deadLetterCount`); `src/runner-go/watch_tools.go` `watchSummary` |
 | The owner's Stop | `src/apiserver/src/sessions/sessions.service.ts` `interrupt` |
-| Specs | `src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts`, `scheduled-wakeup.pg.spec.ts` |
+| A queued wake turn taken away unrun (task F) | `src/apiserver/src/runner-api/wake-turn-withdraw.ts` `settleUnrunWakeTurns`, `signalDrainedWakeups`; called by `ReaperService.forceFinalize`, `runner-api.controller.ts` `turnComplete` and `finalize`, `SessionsService.transitionEnd`, `interrupt` and `cancelQueuedTurn` |
+| Specs | `src/apiserver/src/runner-api/scheduled-wakeup-loop.pg.spec.ts`, `scheduled-wakeup.pg.spec.ts`, `wake-turn-drain.pg.spec.ts`; `src/apiserver/src/realtime/reaper-push-wiring.spec.ts` |
 
 ## Why it is designed this way
 
@@ -95,12 +96,27 @@ That is why `WAKE_SOURCES`, `hasPendingWakeSource`, `DUE_WAKEUP`, `settleUnrunWa
 - A tick row carries `loop_id`, its `due_at` and `delay_seconds` (from when it was written to when it is due), and
   the loop's `reason` (or ''). Its `prompt` stays NULL: the block reads the prompt from the loop.
 - Tick states: PENDING; DELIVERED (filed onto the wake turn named by `client_turn_id`); DROPPED (its due time
-  passed without a run: a FAILED session, a refused revive, a late worker, or the session had ended); CANCELLED (a
-  stop, a replacement or the owner's Stop took the waiting tick, or a withdrawal or an interrupt took the queued
-  turn it was filed onto).
+  passed without a run: a FAILED session, a refused revive, a late worker, the session had ended, or the queued
+  turn it was filed onto was drained unrun as its session's run ended); CANCELLED (a stop, a replacement or the
+  owner's Stop took the waiting tick, or a withdrawal or an interrupt took the queued turn it was filed onto).
 - `ticks_fired` counts ticks that became a run of their own. `ticks_missed` counts due times that did not: skipped
   slots, dropped ticks, and ticks folded into a queued turn that already carried this loop's tick. Every due time
   is one or the other, except the tick that ends the loop with its session.
+- A tick counts as fired from the moment it is filed onto a turn of its own. When that turn is then taken off the
+  queue, or answered, without ever being handed to the engine, the tick did not run after all, and it moves from
+  fired to missed in the same transaction: one per loop and turn, however many of the loop's ticks the turn
+  carried, because only the first of them was counted fired. As built (task F, `wake-turn-withdraw.ts`
+  `settleUnrunWakeTurns`), that is a turn still PENDING when:
+  - a drain answers every queued turn as the session's run ends: the reaper's finalize (`ReaperService.forceFinalize`,
+    a runner that died mid-turn), a turn that fails its session (`turnComplete`), the runner's finalize (`finalize`)
+    and an end the owner asked for (`transitionEnd`, both branches). The tick is DROPPED;
+  - an interrupt or a withdrawal deletes it. The tick is CANCELLED, as before.
+
+  A turn already handed to the engine (IN_FLIGHT) ran: its ticks stay DELIVERED and counted, whatever ends it.
+  Each drain settles the wakeups before it answers the turns, inside its own transaction, under the session row it
+  holds. Measured by task E: loop B's tick 9 was filed behind the turn its runner was killed in, the reap answered
+  that turn with no `delivered_at`, and the tick stayed DELIVERED, so the loop ended at 15 fired and 34 missed when
+  14 ticks had run and 35 had not.
 - Lock order: every writer that takes a loop and its tick takes the session row first, then the loop row, then
   the tick. createTurn, interrupt and the revive already hold the session FOR UPDATE. The runner door
   (`scheduleWakeup`) and the worker's own drop (`settleLoopTick`) take it FOR KEY SHARE as their first statement:
@@ -201,6 +217,24 @@ As built:
   recovers, instead of being DROPPED (A1). As built, the worker's pass leaves such a wakeup out of its page, so a
   long-armed retry takes no batch slot; the wakeup is delivered on the first pass after the session is live again,
   and dropped if the retry is disarmed with the session still FAILED.
+- A one-shot wakeup already filed onto a queued wake turn when the session's run ends (the drains of §1.2: the
+  reaper's finalize, a turn that fails the session, the runner's finalize, the owner's End) is settled with that
+  drain, by the session as the drain has just left it (task F):
+  - FAILED with `retryAt` armed: it goes back to PENDING, and is held and delivered as above. As built, it waits as
+    a copy of itself, with its reason, prompt, delay, due time and the time it was asked for, and the row filed onto
+    the drained turn says SUPERSEDED. The row itself cannot wait again: a wakeup is filed under the turn key
+    `bg-wake:wakeup:<its id>`, which the drained turn keeps, and `createTurn` answers a key it has already seen
+    with that turn, so the worker would answer DELIVERED on every pass and file nothing.
+  - FAILED with `retryAt` armed, and a newer one-shot wakeup is already waiting (asked for while the turn was
+    queued): SUPERSEDED, because a newer request replaces a waiting one. The newer one is left as it is. Of
+    several one-shot wakeups on the drained turns, only the newest goes back to PENDING; the others are SUPERSEDED.
+  - FAILED with no retry armed: DROPPED, and its owner is told (§4).
+  - The session ended or is ending (Completed, Trash, SUCCEEDED, CANCELLED, or an end requested): DROPPED, and
+    nobody is told, for the reason the worker's own drop gives.
+
+  A background job's wake on the drained turn is deleted, as a withdrawal deletes it, so the next wake under the
+  same key does not find it. That the job's exit or stall wake is then lost with the turn is a residual this does
+  not change.
 - The `hook_bg_guard.go` and `claude_spawn.go` matchers add `CronCreate`, and its refusal points to
   `schedule_wakeup`'s `recurring`. The tool description says that the server schedules ticks, so they need not be
   renewed every turn (A2).
@@ -259,7 +293,11 @@ wakeups: {
 - `loop` is the session's ACTIVE loop, else the last one it started, so an ended loop still shows `endedReason` and
   `endedAt`. It is null when the session never started a loop. `nextDueAt` is its waiting tick's due time, null once
   it has ended. `ticksFired` and `ticksMissed` are the row's counts (§1.2): while a turn waits with nobody to take
-  it, the tick that filed it counts as fired and every tick folded into it after that as missed.
+  it, the tick that filed it counts as fired and every tick folded into it after that as missed. Once that turn is
+  answered or deleted without having run (a drain, an interrupt, a withdrawal), its tick counts as missed too, so
+  the two counts say what ran (task F).
+- A one-shot wakeup that a drain sends back to waiting for an armed retry (§1.6) is `next` again, with its due time
+  in the past.
 - `readSessionWakeups` (`scheduled-wakeup.ts`) reads all of it in one statement and writes nothing.
 - Every watch view carries `deadLetterCount`: the list, the read of one watch, the needs-attention read, and what a
   create, an edit, a pause, a resume and a cancel answer. It counts the DEAD_LETTER deliveries among its Matches' and
@@ -293,6 +331,14 @@ As built (task C2):
   kind `loop-missed` ("Wakeup loop missed 3 ticks: the runner is offline.") or, for a one-shot wakeup, kind
   `wakeup-dropped` ("Scheduled wakeup dropped: the session failed."). A one-shot dropped because its session ended
   or is gone, or held for an armed retry (§1.6), is not pushed.
+- A one-shot wakeup filed onto a queued turn that a drain answers unrun (§1.2) is pushed the same way when the drain
+  drops it with its FAILED session, no retry armed (§1.6): `wakeup-dropped`, reason SESSION_FAILED, after the
+  drain's transaction commits, once, because only the attempt that committed the drop returns it. A failure to push
+  is only logged. The reaper sends it through the PushService RealtimeModule injects
+  (`reaper-push-wiring.spec.ts` builds that module and checks); a turn that fails its session and the runner's
+  finalize send it through the runner door's.
+- The next run of a loop counts a tick dropped by a drain among the ticks missed since the last run, on its `loop:`
+  line (§1.5): the last run is read off the DELIVERED ticks only (task F).
 - The next turn the loop runs says how many due times were missed, on its `loop:` line (§1.5).
 
 ## 5. Watch (task D)

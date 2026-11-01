@@ -240,7 +240,14 @@ export const LOCK_ORDER = [
       + 'anyway, moved earlier, as I4 does. Taken at the insert instead, it came after the loop row (or the '
       + 'superseded wakeup), while createTurn and interrupt hold the session FOR UPDATE and then reach for '
       + 'that row: a deadlock cycle. A stop inserts nothing and takes no session lock: it ends the loop and '
-      + 'cancels its tick, and meets the others on the loop row.',
+      + 'cancels its tick, and meets the others on the loop row. The settlement of the wakeups filed onto '
+      + 'a queued `bg-wake:` turn taken away unrun (`runner-api/wake-turn-withdraw.ts` `settleUnrunWakeTurns`) '
+      + 'writes a loop\'s counts and then its ticks — loop rows sorted by id before any tick row — and takes no '
+      + 'session lock of its own: every caller already holds the session, FOR UPDATE (interrupt, the '
+      + 'withdrawal, turnComplete, finalize, transitionEnd) or FOR NO KEY UPDATE through the status UPDATE it '
+      + 'has just made (ReaperService.forceFinalize). Rank 30, then 60, so it meets the worker\'s drop and a '
+      + 'stop on the loop row, in their order. The one-shot wakeup it re-arms for an armed retry is an INSERT '
+      + 'whose foreign key takes the session FOR KEY SHARE, which the held lock covers.',
   },
   {
     rank: 70,

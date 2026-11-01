@@ -9,12 +9,6 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import {
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
-  SessionLifecycleState,
-  SessionRunState,
-} from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService, type WakeupMissedReason } from '../push/push.service';
@@ -32,8 +26,11 @@ import {
   markScheduledWakeupDelivered,
   ScheduledWakeupSettled,
   settleLoopTick,
+  TICK_SESSION,
+  tickStanding,
   turnCarriesLoopTick,
   type LoopTickSettlement,
+  type TickSession,
 } from './scheduled-wakeup';
 
 /**
@@ -121,21 +118,6 @@ function recoveringByRetry(now: Date): Prisma.SessionWhereInput {
   };
 }
 
-/** What a session a tick came due on reads as, for deciding what the tick does. */
-const TICK_SESSION = {
-  ownerId: true,
-  status: true,
-  endReason: true,
-  completedAt: true,
-  archivedAt: true,
-  deletedAt: true,
-  cancelRequestedAt: true,
-  retryAt: true,
-  retryClaimedAt: true,
-} as const satisfies Prisma.SessionSelect;
-
-type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION }>;
-
 /** What a silent loop's alert reads of its session: its title, and whether its runner is there. */
 const SILENT_SESSION = {
   title: true,
@@ -152,19 +134,6 @@ interface DueTick {
   everySeconds: number;
   reviveStreak: number;
   session: TickSession;
-}
-
-/** Where the session a tick came due on stands. FAILED is read before "being ended": a failed turn sets
- *  `cancel_requested_at` to reclaim its runner slot, and a FAILED session is not ending for it. */
-function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED_RECOVERING' | 'FAILED' | 'LIVE' {
-  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return 'ENDED';
-  const run = deriveSessionRunState(session);
-  if (run === SessionRunState.SUCCEEDED || run === SessionRunState.ENDED) return 'ENDED';
-  if (run === SessionRunState.FAILED) {
-    const claimed = session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
-    return session.retryAt != null || claimed ? 'FAILED_RECOVERING' : 'FAILED';
-  }
-  return session.cancelRequestedAt != null ? 'ENDED' : 'LIVE';
 }
 
 @Injectable()

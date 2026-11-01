@@ -1,7 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  deriveSessionLifecycleState,
+  deriveSessionRunState,
+  SessionLifecycleState,
+  SessionRunState,
+} from '@orbit/shared';
 import { IsBoolean, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
+import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { stripNul } from './strip-nul';
 
 /**
@@ -282,6 +289,38 @@ export async function markScheduledWakeupDelivered(
     data: { state: 'DELIVERED', clientTurnId, settledAt: new Date() },
   });
   if (count !== 1) throw new ScheduledWakeupSettled(`scheduled wakeup ${wakeupId} is no longer waiting`);
+}
+
+/** What a session a wakeup came due on reads as, for deciding what the wakeup does. */
+export const TICK_SESSION = {
+  ownerId: true,
+  status: true,
+  endReason: true,
+  completedAt: true,
+  archivedAt: true,
+  deletedAt: true,
+  cancelRequestedAt: true,
+  retryAt: true,
+  retryClaimedAt: true,
+} as const satisfies Prisma.SessionSelect;
+
+export type TickSession = Prisma.SessionGetPayload<{ select: typeof TICK_SESSION }>;
+
+/**
+ * Where the session a wakeup came due on stands: the scheduled-wakeup worker decides a due wakeup by it, and a
+ * drain that answers a wakeup's queued turn unrun settles the wakeup by it (wake-turn-withdraw.ts). FAILED is
+ * read before "being ended": a failed turn sets `cancel_requested_at` to reclaim its runner slot, and a FAILED
+ * session is not ending for it.
+ */
+export function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED_RECOVERING' | 'FAILED' | 'LIVE' {
+  if (deriveSessionLifecycleState(session) !== SessionLifecycleState.OPEN) return 'ENDED';
+  const run = deriveSessionRunState(session);
+  if (run === SessionRunState.SUCCEEDED || run === SessionRunState.ENDED) return 'ENDED';
+  if (run === SessionRunState.FAILED) {
+    const claimed = session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
+    return session.retryAt != null || claimed ? 'FAILED_RECOVERING' : 'FAILED';
+  }
+  return session.cancelRequestedAt != null ? 'ENDED' : 'LIVE';
 }
 
 /** A due wakeup whose session had ended: it wakes nobody. False when something else settled it first. */
