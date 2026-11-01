@@ -6141,6 +6141,7 @@ export class RunnerApiController {
           targetTurnId: true,
           leaseGeneration: true,
           coordinatorContextKey: true,
+          senderSessionId: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -6519,8 +6520,20 @@ export class RunnerApiController {
       // turn is answered by its exit code, and a control turn is acked on delivery.
       //
       // A turn the region check stopped is answered by the stop, as an interrupted one is: never requeued (§10).
+      //
+      // A message from another session owes nobody words (docs/session-request-reply-contract.md): a plain
+      // one asks for no reply — "no reply needed" is a common way to end one — and a request is answered
+      // through session_reply, or closed NO_REPLY below once its turn settles without one (§4.1). So its
+      // turn running to a normal end settles it, said or silent. Put back, it is the same words read again
+      // (2026-11-01: a Codex session told "no reply needed" was handed one note three times, and its run
+      // was then failed as swallowing it). One no engine turn ran (`noEngineTurnRan`, the retry below) is
+      // still owed its delivery, as anyone's is.
+      const noEngineTurnRan = dto.numTurns === 0 && (dto.costUsd ?? 0) === 0;
+      const settledByItsRun =
+        completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
       const unanswered =
         !regionStopped
+        && !settledByItsRun
         && completedTurn?.kind === 'message'
         && (await tx.runEvent.findFirst({
           where: {
@@ -6636,7 +6649,7 @@ export class RunnerApiController {
           // drop. Never over an arm already standing, for the reason that case gives.
           : swallowed && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
-            : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+            : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the

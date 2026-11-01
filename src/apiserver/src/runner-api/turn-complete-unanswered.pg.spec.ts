@@ -34,6 +34,11 @@
  *       three minutes). Up to a budget that is still the point (the turn is handed out again); at
  *       the budget the run settles FAILED with a sentence saying what happened, the turn is consumed
  *       rather than requeued, and the retry ladder — not the queue — carries the message from there.
+ *   (9) A message from another session, which owes nobody words. The engine ran it to its normal
+ *       end and said nothing — the note asked for no reply (2026-11-01: one such note handed to a
+ *       Codex session three times, then the run failed as swallowing it). It is ANSWERED at once.
+ *  (10) The same message that no engine turn ran — stopped as in (1), or a success with numTurns 0
+ *       and nothing billed: still handed out again.
  *
  * (2) is what makes (1) a fact about the absent answer rather than about the words in the report.
  *
@@ -104,6 +109,8 @@ async function fixture(
   db: PrismaClient,
   label: string,
   kind: 'message' | 'shell' = 'message',
+  /** The message is one another of the owner's sessions sent (`session_send`), not the person's own. */
+  fromAnotherSession = false,
 ): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -149,6 +156,24 @@ async function fixture(
       runtimeSessionId: randomUUID(),
     },
   });
+  const senderSessionId = fromAnotherSession ? randomUUID() : null;
+  if (senderSessionId) {
+    await db.session.create({
+      data: {
+        id: senderSessionId,
+        ownerId,
+        creatorId: ownerId,
+        workspaceId,
+        assignedRunnerId: runnerId,
+        title: `${label}: the sender`,
+        prompt: 'design the manual charge button',
+        provider: 'codex',
+        status: RunStatus.AWAITING_INPUT,
+        dispatchOrigin: SessionDispatchOrigin.USER,
+        startedAt: new Date(),
+      },
+    });
+  }
   const turn = await db.conversationTurn.create({
     data: {
       sessionId,
@@ -160,6 +185,7 @@ async function fixture(
       deliveredAt: new Date(),
       leaseDeadlineAt: new Date(Date.now() + 300_000),
       leaseGeneration: randomUUID(),
+      senderSessionId,
     },
     select: { id: true },
   });
@@ -461,5 +487,55 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
     const waitSeconds = Number(settled.wait_seconds);
     assert.ok(waitSeconds > 0 && waitSeconds <= 2 * 60 + 5,
       `the first ladder step is two minutes away, not a hot loop (got ${Math.round(waitSeconds)}s)`);
+  });
+
+  await t.test('(9) a message from another session that the engine ran in silence is not handed over again', async () => {
+    const f = await fixture(db, 'note', 'message', true);
+    // What the Codex runner reported for each of the incident's three deliveries: the note echoed,
+    // the engine's turn completed, and nothing said under it — the note had asked for no reply.
+    await say(api, f, 1, RunEventType.USER, { text: '把这两张图里的报错讲清楚' });
+    await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+      turnId: f.turnId,
+      status: SharedRunStatus.SUCCEEDED,
+      subtype: 'completed',
+      numTurns: 1,
+      costUsd: 0,
+    });
+
+    const after = await row(f.turnId);
+    assert.equal(after.status, 'ANSWERED',
+      'a message from another session asks for no words: the engine running it to its end settles it');
+    assert.ok(after.answered_at instanceof Date);
+    assert.equal(
+      await db.conversationTurn.count({ where: { sessionId: f.sessionId, status: 'PENDING' } }),
+      0,
+      'and it is not back in the queue for the engine to read a second time',
+    );
+    const settled = await db.session.findUniqueOrThrow({
+      where: { id: f.sessionId }, select: { status: true, error: true, retryAt: true },
+    });
+    assert.equal(settled.status, RunStatus.AWAITING_INPUT, 'the run parks, as after any answered turn');
+    assert.equal(settled.error, null, 'and no failure is reported for it');
+    assert.equal(settled.retryAt, null, 'and nothing re-sends it later');
+  });
+
+  await t.test('(10) a message from another session that no engine turn ran is handed over again', async () => {
+    // Stopped before it ran, or a success that ran no engine turn and billed none: either way no
+    // engine has read it yet.
+    const reports = [
+      ['stopped', ENGINE_STOPPED],
+      ['empty-success', { status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 0, costUsd: 0 }],
+    ] as const;
+    for (const [label, report] of reports) {
+      const f = await fixture(db, `note-${label}`, 'message', true);
+      await say(api, f, 1, RunEventType.USER, { text: '把这两张图里的报错讲清楚' });
+
+      await api.turnComplete({ id: f.runnerId }, f.sessionId, { turnId: f.turnId, ...report });
+
+      assert.notEqual((await row(f.turnId)).status, 'ANSWERED',
+        `${label}: no engine turn ran it, so the message has not reached anyone yet`);
+      assert.equal((await poll(api, f))?.turnId, f.turnId,
+        `${label}: and the inbox hands it out again, as anyone’s`);
+    }
   });
 });
