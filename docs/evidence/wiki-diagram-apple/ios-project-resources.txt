@@ -1,0 +1,4 @@
+				34BB23915E02A35507F5C00B /* mermaid-LICENSE.txt in Resources */,
+				5500A8A6967964ED16FBFC35 /* mermaid.min.js in Resources */,
+		34BB23915E02A35507F5C00B /* mermaid-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 52911CC7AFB26D25EF068602 /* mermaid-LICENSE.txt */; };
+		5500A8A6967964ED16FBFC35 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = 75188EE847A86241AA4232EA /* mermaid.min.js */; };

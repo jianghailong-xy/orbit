@@ -1,0 +1,14 @@
+	 Executed 4 tests, with 0 failures (0 unexpected) in 334.910 (334.916) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 334.910 (334.919) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 334.910 (334.921) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 366.484 (366.496) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 366.484 (366.499) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 366.484 (366.501) seconds
+Test Case '-[WdgMacProbeUITests.DiagramShotTests testBrokenShowsItsSourceAsCode]' passed (54.773 seconds).
+Test Case '-[WdgMacProbeUITests.DiagramShotTests testFitsDark]' passed (129.331 seconds).
+Test Case '-[WdgMacProbeUITests.DiagramShotTests testFitsLight]' passed (119.745 seconds).
+Test Case '-[WdgMacProbeUITests.DiagramShotTests testWideScrollsSideways]' passed (62.636 seconds).
+Test Case '-[WdgProbeUITests.DiagramShotTests testBrokenShowsItsSourceAsCode]' passed (143.633 seconds).
+Test Case '-[WdgProbeUITests.DiagramShotTests testFitsDark]' passed (65.474 seconds).
+Test Case '-[WdgProbeUITests.DiagramShotTests testFitsLight]' passed (66.095 seconds).
+Test Case '-[WdgProbeUITests.DiagramShotTests testWideScrollsSideways]' passed (59.709 seconds).
