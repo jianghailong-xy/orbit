@@ -10,6 +10,7 @@
 # account the runner service runs as (under sudo, the account that invoked it; root included),
 # where the runner can replace it when it updates itself, and that account's ~/.bashrc and
 # ~/.zshrc put ~/.orbit/bin first on PATH: no sudo, and /usr/local/bin/orbit is left as it is.
+# The account writes all of that itself, under sudo too, so root follows no link in its home.
 # Set ORBIT_BIN_DIR to install the binary straight into that directory instead; /usr/local/bin
 # itself is still written as on a set-up machine.
 set -euo pipefail
@@ -130,27 +131,38 @@ else
   fi
   bin_dir="${home}/.orbit/bin"
   target="${bin_dir}/${NAME}"
-  # ~/.orbit also holds the runner's credential, hence private.
-  [ -d "${home}/.orbit" ] || mkdir -m 700 "${home}/.orbit"
-  mkdir -p "$bin_dir"
-  mv "$tmp" "$target"
-  if [ "$(id -u)" = "0" ]; then
-    chown "${owner}:$(id -gn "$owner")" "${home}/.orbit" "$bin_dir" "$target"
+  # The account does everything in its home itself, through as_owner: under sudo, nothing running
+  # as root creates, moves, chmods, chowns or reads anything there, so a link the account put there
+  # leads root nowhere, and one leading where the account cannot write fails the install. ~/.orbit
+  # also holds the runner's credential, hence private. The binary comes in on stdin (the temp file
+  # is root's then) under a new name, which then replaces the old one rather than writing into it:
+  # a runner may be running it.
+  # shellcheck disable=SC2016
+  if ! as_owner sh -c 'set -e
+      [ -d "$1" ] || mkdir -m 700 "$1"
+      mkdir -p "$2"
+      new=$(mktemp "$2/.orbit.XXXXXX")
+      cat >"$new" && chmod 0755 "$new" && mv -f "$new" "$3" || { rm -f "$new"; exit 1; }' \
+      sh "${home}/.orbit" "$bin_dir" "$target" <"$tmp"; then
+    echo "orbit: ${owner} cannot write ${target} (see above); a link at ${home}/.orbit or ${bin_dir} has to lead to a directory ${owner} can write" >&2
+    exit 1
   fi
+  rm -f "$tmp"
   # The account's interactive shells find it first on PATH: one marked block in each rc file,
-  # left alone once it is there. $HOME and $PATH in it are for the rc file to expand.
+  # left alone once it is there, which the account looks for and adds itself, as above. $HOME and
+  # $PATH in it are for the rc file to expand.
   for rc in "${home}/.bashrc" "${home}/.zshrc"; do
-    if ! { [ -f "$rc" ] && grep -qxF "$PATH_BEGIN" "$rc"; }; then
-      # shellcheck disable=SC2016
-      { [ ! -s "$rc" ] || echo; printf '%s\n' "$PATH_BEGIN" 'export PATH="$HOME/.orbit/bin:$PATH"' "$PATH_END"; } |
-        as_owner tee -a "$rc" >/dev/null || { echo "note: could not add ${bin_dir} to PATH in ${rc}" >&2; continue; }
-    fi
+    # shellcheck disable=SC2016
+    as_owner sh -c '{ [ -f "$1" ] && grep -qxF "$2" "$1"; } || { [ ! -s "$1" ] || echo; printf "%s\n" "$2" "$3" "$4"; } >>"$1"' \
+      sh "$rc" "$PATH_BEGIN" 'export PATH="$HOME/.orbit/bin:$PATH"' "$PATH_END" </dev/null ||
+      { echo "note: could not add ${bin_dir} to PATH in ${rc}" >&2; continue; }
     rcs="${rcs:+${rcs}, }${rc}"
   done
 fi
 trap - EXIT
 
-ver="$("$target" version 2>/dev/null || echo '?')"
+# Asked as the account too: under sudo, the binary may be the one in the account's home.
+ver="$(as_owner "$target" version </dev/null 2>/dev/null || echo '?')"
 echo ""
 echo "✓ Orbit ${ver} installed to ${target}"
 if [ -n "$rcs" ]; then

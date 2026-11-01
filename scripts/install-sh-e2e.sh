@@ -39,6 +39,15 @@
 #       own copy; both runs print the closing hint and name the binary by its absolute path
 #   N7  alice installs with ORBIT_BIN_DIR=/usr/local/bin/: that is the machine's file all the same,
 #       written as on a set-up machine (as S1), with no PATH block
+#   N8  alice's ~/.orbit/bin/orbit is running (a copy of sleep); alice installs through sudo (curl … |
+#       sudo env … bash): it is replaced, not written into, by a file of hers with mode 0755
+# Not set up, with a link alice planted in her home; she installs through sudo, as in N8:
+#   L1  ~/.orbit/bin is a link to /etc/systemd/system, root's
+#   L2  ~/.orbit is a link to /etc/systemd/system
+#       /etc/systemd/system then keeps its own owner, group and mode, every entry under it keeps its
+#       type, owner, group, mode and sha256 (a link, its target), and nothing new appears there; the
+#       listing is printed before and after. install.sh either exits 0 with alice's binary in a
+#       directory she can write, or fails with a line of its own naming the binary it could not write
 #
 # Prints one PASS or FAIL line per assertion and carries on after a FAIL, then a summary. Exits 0 when
 # every assertion passed, 1 when one failed, and 2 on a harness problem (no docker, a failed build).
@@ -258,6 +267,69 @@ again() {
   closing N6 2 "$acct" "$OUT"
 }
 
+# listing DIR — DIR, then everything under it, links not followed, a line each: the path, type,
+# owner, group and mode, and a regular file's sha256 or a link's target.
+listing() {
+  cx sh -c 'find "$1" | LC_ALL=C sort | while IFS= read -r p; do
+      if [ -L "$p" ]; then what=", -> $(readlink "$p")"
+      elif [ -f "$p" ]; then what=", sha256 $(sha256sum <"$p" | cut -d" " -f1)"
+      else what=""; fi
+      echo "$(stat -c "%n: %F, %U:%G %a" "$p")$what"
+    done' sh "$1"
+}
+# entries LISTING — the lines of a listing below the directory's own; paths LISTING — their paths.
+entries() { tail -n +2 <<<"$1" | LC_ALL=C sort; }
+paths() { entries "$1" | sed 's/: .*//' | LC_ALL=C sort; }
+
+# kept ID DIR BEFORE — DIR's listing now, printed, is BEFORE: the directory's own owner, group and
+# mode, every entry under it as it was, and no entry that was not there.
+kept() {
+  local now lost gained
+  now=$(listing "$2")
+  sed 's/^/    after:  /' <<<"$now"
+  expect "$1" "$2 itself" "$(head -n 1 <<<"$now")" "$(head -n 1 <<<"$3")"
+  lost=$(LC_ALL=C comm -23 <(entries "$3") <(entries "$now"))
+  if [ -z "$lost" ]; then
+    pass "$1" "the $(paths "$3" | wc -l) entries under $2 are as they were: type, owner, group, mode, sha256 or link target"
+  else
+    fail "$1" "entries under $2 no longer as they were: $(tr '\n' ';' <<<"$lost" | sed 's/;$//; s/;/; /g')"
+  fi
+  gained=$(LC_ALL=C comm -13 <(paths "$3") <(paths "$now") | tr '\n' ' ' | sed 's/ $//')
+  expect "$1" "new entries under $2" "${gained:-none}" none
+}
+
+# planted ID REL SETUP — L1 and L2: on a machine not set up, with a unit of root's added to
+# /etc/systemd/system, alice runs SETUP, which makes ~/REL a link to that directory, and then pipes
+# install.sh into sudo. The directory is kept as it was, and install.sh either exits 0 with her
+# binary in a directory she can write, or fails with a line of its own naming the binary.
+planted() {
+  local dir=/etc/systemd/system own=/home/alice/.orbit/bin/orbit before where said
+  fresh "$1 not set up, alice's ~/$2 a link to $dir (root's); alice runs curl … | sudo env … bash"
+  cx sh -c "printf '[Service]\nExecStart=/usr/local/sbin/site-backup\n' >$dir/site-backup.service" ||
+    harness_fail "cannot add a unit of root's to $dir"
+  as alice "$3" || harness_fail "cannot make alice's ~/$2 a link to $dir"
+  echo "    alice planted: $(cx ls -ld "/home/alice/$2")"
+  before=$(listing "$dir")
+  sed 's/^/    before: /' <<<"$before"
+  install_as alice sudo-pipe
+  kept "$1" "$dir" "$before"
+  if [ "$RC" -eq 0 ]; then
+    where=$(cx readlink -e "$own")
+    if [ -n "$where" ] && as alice "test -w '$(dirname "$where")'"; then
+      pass "$1" "install.sh exit status 0, alice's binary $own is $where, in a directory she can write"
+    else
+      fail "$1" "install.sh exit status 0, but $own (${where:-absent}) is not in a directory alice can write"
+    fi
+  else
+    said=$(grep -m 1 "^orbit: .*$own" <<<"$OUT")
+    if [ -n "$said" ]; then
+      pass "$1" "install.sh exit status $RC, and it says why: $said"
+    else
+      fail "$1" "install.sh exit status $RC, with no line of its own naming $own"
+    fi
+  fi
+}
+
 # --- build ---------------------------------------------------------------------------------------
 
 [ -f "$INSTALL_SH" ] || harness_fail "no such file: $INSTALL_SH"
@@ -414,6 +486,34 @@ machine_binary N7
 for rc in .bashrc .zshrc; do
   expect N7 "/home/alice/$rc PATH blocks" "$(blocks alice "$rc")" 0
 done
+
+fresh "N8 not set up, alice's ~/.orbit/bin/orbit running (a copy of sleep); alice runs curl … | sudo env … bash"
+own=/home/alice/.orbit/bin/orbit
+{ cx install -d -o alice -g alice -m 0700 /home/alice/.orbit && cx install -d -o alice -g alice /home/alice/.orbit/bin &&
+  cx install -o alice -g alice -m 0755 /bin/sleep "$own" && docker exec -d -u alice "$CTR" "$own" 600; } ||
+  harness_fail "cannot start $own"
+pid=""
+for _ in $(seq 50); do
+  pid=$(docker exec -u alice "$CTR" sh -c 'for p in /proc/[0-9]*; do [ "$(readlink "$p/exe")" = "$1" ] && echo "${p#/proc/}"; done; true' sh "$own" | head -n 1)
+  [ -n "$pid" ] && break
+  sleep 0.1
+done
+[ -n "$pid" ] || harness_fail "$own did not start"
+if out=$(cx cp /opt/install-sh-e2e/orbit-stub "$own" 2>&1); then
+  fail N8 "control: writing into the running $own succeeded, so this run cannot tell replacing it from writing into it"
+else
+  pass N8 "control: writing into the running $own fails: $out"
+fi
+install_as alice sudo-pipe
+exited N8
+own_binary N8 alice
+expect N8 "$own mode" "$(st %a "$own")" 755
+expect N8 "the process that was running $own (pid $pid) runs" "$(docker exec -u alice "$CTR" readlink "/proc/$pid/exe" 2>/dev/null || echo nothing)" "$own (deleted)"
+
+# --- not set up: a link planted in alice's home -------------------------------------------------
+
+planted L1 .orbit/bin 'mkdir -m 700 ~/.orbit && ln -s /etc/systemd/system ~/.orbit/bin'
+planted L2 .orbit 'ln -s /etc/systemd/system ~/.orbit'
 
 drop
 echo ""
