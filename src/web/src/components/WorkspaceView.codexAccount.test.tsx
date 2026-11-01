@@ -499,7 +499,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
       el.textContent?.startsWith('Provider'),
     );
     if (!provider) return null;
-    await click(provider);
+    if (!document.querySelector('[role="menu"][data-nested]:not([data-closed])')) await click(provider);
     // Its items too: the submenu opens on a later frame than the title does.
     await render(() => document.querySelector('[role="menu"][data-nested] [role="menuitem"]'));
     return [...document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]')];
