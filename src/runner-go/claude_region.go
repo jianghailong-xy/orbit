@@ -8,12 +8,14 @@ package main
 // place off Cloudflare's headers on one request that leaves the same way (GET /runner/region-check, §3) and
 // answers allowed, blocked or unknown; the runner carries no list of its own. While the answer is blocked, a
 // Claude turn that would talk to Anthropic (§8) is not started, and a message is not delivered to a running
-// engine (§10).
+// engine (§10). An answer that cannot decide keeps the last decided verdict for 24 hours (owner decision ③), and
+// a flip to blocked that a second check a minute later confirms stops the turns already running (④).
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,6 +39,9 @@ const (
 	// claudeRegionRefusedSubtype marks the report of a turn refused for the region (§10), which a control plane
 	// that knows it puts back in the queue rather than fails: CLAUDE_REGION_REFUSED_SUBTYPE.
 	claudeRegionRefusedSubtype = "region_refused"
+	// claudeRegionStoppedSubtype marks the report of a running turn a confirmed flip stopped (§10), which a control
+	// plane that knows it answers without failing the session or replaying the turn: CLAUDE_REGION_STOPPED_SUBTYPE.
+	claudeRegionStoppedSubtype = "region_stopped"
 )
 
 // The route's verdicts (@orbit/shared ClaudeRegionVerdict).
@@ -48,6 +53,14 @@ const (
 
 // claudeRegionFreshFor is how old an answer a turn may go on; an older one is asked again first.
 const claudeRegionFreshFor = 60 * time.Second
+
+// claudeRegionCarryOver is how long a decided verdict outlives the answers after it that could not decide (owner
+// decision ③, contract §5): @orbit/shared's CLAUDE_REGION_CARRY_OVER_MS.
+const claudeRegionCarryOver = 24 * time.Hour
+
+// claudeRegionRecheckAfter is how long after a flip to blocked the check is made again (owner decision ④): a blocked
+// answer at least this long after the flip's first one confirms it.
+const claudeRegionRecheckAfter = 60 * time.Second
 
 // claudeRegionCheckBudget bounds one check, the connection through the proxy included (§3). A check that runs
 // out is unknown. A variable only so that tests can shorten it.
@@ -76,7 +89,12 @@ type claudeRegionCheck struct {
 	t *Transport
 	// machine is the runner's name: {machine} in the refusal.
 	machine string
-	now     func() time.Time
+	// clock tells the time and runs the recheck after a flip; a fake one in tests.
+	clock poolClock
+	// lifetime is what the recheck after a flip asks under: runLoop's loop context. Nil outside a runner's loop
+	// (orbit doctor, a test that needs none), where no turn runs for a confirmed flip to stop, and nothing is
+	// rechecked.
+	lifetime context.Context
 	// One check at a time. A turn that finds one in flight waits for its answer rather than asking again.
 	checking sync.Mutex
 
@@ -85,16 +103,39 @@ type claudeRegionCheck struct {
 	latest map[string]claudeRegionVerdict
 	// decided is the last decided (allowed or blocked) answer through each proxy, with its decidedAt.
 	decided map[string]claudeRegionVerdict
+	// flips is the flip to blocked through each proxy that no allowed answer has ended yet (noteFlipLocked).
+	flips map[string]*claudeRegionFlip
+	// engines is every Claude engine running now whose turns talk to Anthropic (register): what a confirmed
+	// flip stops.
+	engines map[*claudeRegionEngine]struct{}
 	// asked is the owner's last Check again this runner took up (its requestedAt).
 	asked string
 }
 
+// claudeRegionFlip is a flip to blocked through one proxy (owner decision ④): when its first blocked answer came,
+// the recheck a minute after it, and whether a second blocked answer has confirmed it.
+type claudeRegionFlip struct {
+	at        time.Time
+	recheck   poolTimer
+	confirmed bool
+}
+
+// claudeRegionEngine is one running Claude engine whose turns talk to Anthropic, as runClaudeSessionProcess
+// registers it: stop asks it to stop the turn it is running, with the stopped sentence. It must not block.
+type claudeRegionEngine struct {
+	stop func(sentence string)
+}
+
 func newClaudeRegionCheck(t *Transport, machine string) *claudeRegionCheck {
 	return &claudeRegionCheck{
-		t: t, machine: machine, now: time.Now,
+		t: t, machine: machine, clock: realPoolClock{},
 		latest: map[string]claudeRegionVerdict{}, decided: map[string]claudeRegionVerdict{},
+		flips: map[string]*claudeRegionFlip{}, engines: map[*claudeRegionEngine]struct{}{},
 	}
 }
+
+// now is the time on the check's clock: what an answer is stamped with, and what its age is measured against.
+func (c *claudeRegionCheck) now() time.Time { return c.clock.Now() }
 
 // check asks now, through the proxy `claude` would use, and records the answer: the check at the runner's
 // start, on the engine-health clock and on the owner's Check again.
@@ -104,20 +145,43 @@ func (c *claudeRegionCheck) check(ctx context.Context) claudeRegionVerdict {
 	return c.checkLocked(ctx, claudeAnthropicProxy())
 }
 
-// forTurn is the answer a turn goes on: the newest through the proxy `claude` would use while it is under
-// claudeRegionFreshFor old, else one asked for now.
+// forTurn is the answer a turn goes on, and every other request the runner would make of Anthropic: the newest
+// through the proxy `claude` would use while it is under claudeRegionFreshFor old, else one asked for now, read
+// with the carry-over (carriedOver).
 func (c *claudeRegionCheck) forTurn(ctx context.Context) claudeRegionVerdict {
 	proxy := claudeAnthropicProxy()
 	if v, ok := c.fresh(proxy); ok {
-		return v
+		return c.carriedOver(proxy, v)
 	}
 	c.checking.Lock()
 	defer c.checking.Unlock()
 	// A check that ended while this one waited for the lock is as fresh as one made now.
 	if v, ok := c.fresh(proxy); ok {
+		return c.carriedOver(proxy, v)
+	}
+	return c.carriedOver(proxy, c.checkLocked(ctx, proxy))
+}
+
+// carriedOver is what an answer through proxy means (owner decision ③, contract §5): a decided one is itself, and
+// an unknown one is the last decided verdict through proxy while that is blocked and under claudeRegionCarryOver
+// old, so a check that cannot decide never lets through what a decided one holds back. Otherwise it stays unknown,
+// which is allowed.
+func (c *claudeRegionCheck) carriedOver(proxy string, v claudeRegionVerdict) claudeRegionVerdict {
+	if v.Verdict != claudeRegionUnknown {
 		return v
 	}
-	return c.checkLocked(ctx, proxy)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if last, ok := c.decided[proxy]; ok && claudeRegionHolds(last, c.now()) {
+		return last
+	}
+	return v
+}
+
+// claudeRegionHolds reports whether decided answer v still holds turns back at now: blocked, and decided under
+// claudeRegionCarryOver ago (@orbit/shared's effectiveRegionVerdict).
+func claudeRegionHolds(v claudeRegionVerdict, now time.Time) bool {
+	return v.Verdict == claudeRegionBlocked && now.Sub(v.At) < claudeRegionCarryOver
 }
 
 func (c *claudeRegionCheck) fresh(proxy string) (claudeRegionVerdict, bool) {
@@ -154,17 +218,20 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	v.At = c.now()
 	c.mu.Lock()
 	previous, seen := c.latest[proxy]
-	c.latest[proxy] = v
-	if v.Verdict != claudeRegionUnknown {
-		c.decided[proxy] = v
+	stopping, confirmed := c.keepLocked(proxy, v)
+	var stops []func(string)
+	if stopping {
+		for e := range c.engines {
+			stops = append(stops, e.stop)
+		}
 	}
 	c.mu.Unlock()
+	how := "directly"
+	if proxy != "" {
+		how = "through a proxy"
+	}
 	// Said when it changes, not every five minutes: the log is where an operator reads why turns stopped.
 	if !seen || previous.Verdict != v.Verdict || previous.Name != v.Name {
-		how := "directly"
-		if proxy != "" {
-			how = "through a proxy"
-		}
 		line := "Claude region (" + how + "): " + v.Verdict
 		if v.Name != "" {
 			line += " — " + v.Name
@@ -174,7 +241,90 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 		}
 		logln(line)
 	}
+	if confirmed {
+		logln(fmt.Sprintf("Claude region (%s): still blocked a minute on — stopping the running Anthropic-bound Claude turns of %d engine(s)",
+			how, len(stops)))
+	}
+	if stopping {
+		sentence := claudeRegionStoppedError(c.machine, v.Name)
+		for _, stop := range stops {
+			stop(sentence)
+		}
+	}
 	return v
+}
+
+// keepLocked records answer v through proxy: the newest answer, the decided one, and the flip it moves
+// (noteFlipLocked), whose report it returns.
+func (c *claudeRegionCheck) keepLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
+	stopping, confirmed = c.noteFlipLocked(proxy, v)
+	c.latest[proxy] = v
+	if v.Verdict != claudeRegionUnknown {
+		c.decided[proxy] = v
+	}
+	return stopping, confirmed
+}
+
+// keep records an answer asked for outside check, as orbit doctor asks for its own (checkDoctorRegion), the way a
+// check records one, so what forTurn and the flip read afterwards is the same whoever made the request. It stops and
+// logs nothing: it serves a process that runs no turns.
+func (c *claudeRegionCheck) keep(proxy string, v claudeRegionVerdict) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.keepLocked(proxy, v)
+}
+
+// noteFlipLocked keeps the flip through proxy up to date with answer v, and reports whether v stops the running
+// turns, and whether v is the answer that confirms the flip (owner decision ④, contract §10). A blocked answer while
+// turns through proxy run — the last decided verdict allowed, none decided yet, or a blocked one past its
+// carry-over — starts a flip, and the check is made again claudeRegionRecheckAfter later. A blocked answer at least
+// that long after the flip's first confirms it, and it and every blocked answer after it stop what is running then:
+// a turn an engine starts on its own after the confirmation is stopped by the next one. An allowed answer ends the
+// flip. An unknown one leaves it standing, as it leaves the verdict: the next decided answer, the recheck's or a
+// later one, settles it.
+func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
+	flip := c.flips[proxy]
+	switch v.Verdict {
+	case claudeRegionAllowed:
+		if flip != nil {
+			if flip.recheck != nil {
+				flip.recheck.Stop()
+			}
+			delete(c.flips, proxy)
+		}
+	case claudeRegionBlocked:
+		if last, ok := c.decided[proxy]; flip == nil || !ok || !claudeRegionHolds(last, v.At) {
+			if flip != nil && flip.recheck != nil {
+				flip.recheck.Stop()
+			}
+			flip = &claudeRegionFlip{at: v.At}
+			if c.lifetime != nil {
+				flip.recheck = c.clock.AfterFunc(claudeRegionRecheckAfter, func() { c.check(c.lifetime) })
+			}
+			c.flips[proxy] = flip
+			return false, false
+		}
+		if v.At.Sub(flip.at) >= claudeRegionRecheckAfter {
+			confirmed = !flip.confirmed
+			flip.confirmed = true
+			return true, confirmed
+		}
+	}
+	return false, false
+}
+
+// register adds a running Claude engine whose turns talk to Anthropic to what a confirmed flip stops, until the
+// func it returns is called. stop must not block: it is called with the check's answer just in.
+func (c *claudeRegionCheck) register(stop func(sentence string)) func() {
+	e := &claudeRegionEngine{stop: stop}
+	c.mu.Lock()
+	c.engines[e] = struct{}{}
+	c.mu.Unlock()
+	return func() {
+		c.mu.Lock()
+		delete(c.engines, e)
+		c.mu.Unlock()
+	}
 }
 
 // ask makes the one request of a check (contract §3): GET /runner/region-check with the runner token, over
@@ -357,9 +507,18 @@ func claudeRegionRefusedError(machine, region string) string {
 		", where Anthropic doesn’t offer Claude."
 }
 
+// claudeRegionStoppedError is the error of a running turn a confirmed flip stopped (§10), @orbit/shared's
+// claudeRegionStoppedError: the code, then board 04's "stopped" sentence. machine is the runner's name, region the
+// decided name.
+func claudeRegionStoppedError(machine, region string) string {
+	return claudeRegionUnsupported + ": Claude Code stopped on " + machine + ": its connection to Anthropic is now in " +
+		region + ", where Anthropic doesn’t offer Claude."
+}
+
 // claudeRegionRefusal is what job's next turn is refused with while its connection to Anthropic is in a region
 // Anthropic does not offer Claude in, and "" when it may run: an engine other than Claude (owner decision ⑥), a
-// turn that does not talk to Anthropic (§8), an answer that is allowed or unknown, or a process with no check.
+// turn that does not talk to Anthropic (§8), an answer that is allowed or unknown with no blocked verdict to carry
+// over (forTurn), or a process with no check.
 func claudeRegionRefusal(ctx context.Context, job *ClaimedSession) string {
 	check := claudeRegion.Load()
 	if check == nil || runtimeProvider(job) != providerClaude || !claudeTurnIsAnthropicBound(job.Agent.Env) {
@@ -485,19 +644,17 @@ const claudeNonessentialTrafficVar = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
 
 // claudeStartsQuiet reports whether a claude started with agentEnv layered over this process's environment runs with
 // its nonessential traffic off: it is not Anthropic-bound, so it runs whatever the verdict (owner decision ①), while
-// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③).
-// Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to api.anthropic.com as it starts
-// (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set sends Anthropic nothing.
-// Read with no request and no wait (lastDecided), so a turn on another provider's key never waits on the route: no
-// check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
+// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③,
+// claudeRegionHolds). Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to
+// api.anthropic.com as it starts (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set
+// sends Anthropic nothing. Read with no request and no wait (lastDecided), so a turn on another provider's key never
+// waits on the route: no check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
 func claudeStartsQuiet(agentEnv map[string]string) bool {
-	const carryOver = 24 * time.Hour
 	check := claudeRegion.Load()
 	if check == nil {
 		return false
 	}
-	v, ok := check.lastDecided(claudeAnthropicProxy())
-	if !ok || v.Verdict != claudeRegionBlocked || check.now().Sub(v.At) >= carryOver {
+	if v, ok := check.lastDecided(claudeAnthropicProxy()); !ok || !claudeRegionHolds(v, check.now()) {
 		return false
 	}
 	return !claudeTurnIsAnthropicBound(agentEnv)

@@ -73,7 +73,7 @@ func TestClaudeUsageReadsNothingFromAnthropicWhileBlocked(t *testing.T) {
 	writeClaudeLogin(t, work.Dir, "expired-token", time.Now().Add(-time.Hour))
 	stub := newRegionStub(t, regionAnswerBlocked)
 	clock := newFakePoolClock()
-	installRegionCheck(t, stub, clock)
+	check := installRegionCheck(t, stub, clock)
 
 	var out syncBuffer
 	restore := streamRunnerStdout(t, &out)
@@ -92,10 +92,15 @@ func TestClaudeUsageReadsNothingFromAnthropicWhileBlocked(t *testing.T) {
 		t.Fatalf("the usage endpoint was asked while blocked, with %q", got)
 	}
 	// More passes while blocked. Each answer is fresh for a minute, so moving the clock past that makes the next
-	// pass ask the route again: a check the stub counts is a pass that happened.
+	// pass ask the route again: a check the stub counts is a pass that happened. The clock moves on only once that
+	// check's answer is kept, stamped with the time it came: the stub counts a check when its request arrives, and
+	// an answer kept after the clock moved would be stamped with the new time, be fresh, and no pass would ask again.
 	for want := 2; want <= 3; want++ {
 		clock.Advance(claudeRegionFreshFor)
-		waitFor(t, "another pass while blocked", func() bool { return len(stub.checksSoFar()) >= want })
+		waitFor(t, "another pass while blocked", func() bool {
+			v, ok := check.lastDecided("")
+			return len(stub.checksSoFar()) >= want && ok && v.At.Equal(clock.Now())
+		})
 	}
 	if got := tokens(); len(got) != 0 {
 		t.Fatalf("the usage endpoint was asked while blocked, with %q", got)
