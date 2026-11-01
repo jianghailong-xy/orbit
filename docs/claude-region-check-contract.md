@@ -223,7 +223,10 @@ The runner reports either on finalize (`RunFinalizeRequest`) or on turn-complete
 ends what it refused or stopped. `status` is `FAILED`, as for `delivery_failed` (`claude_delivery.go`), so that a
 control plane which predates the subtype records an ordinary failure with the sentence in view.
 
-Where runner-go refuses (`claude_region.go`), each time on an answer from the route under 60 seconds old:
+Where runner-go refuses (`claude_region.go`), each time on an answer from the route under 60 seconds old, read the
+way §5 reads a stored verdict: an unknown answer keeps the last decided verdict through the same proxy until 24 hours
+after its `decidedAt` (`claudeRegionCarryOver`), and is allowed from then on, or when nothing was decided. `forTurn`
+gives every gate that reading: the turn gates below and the runner's other requests to Anthropic alike.
 
 - **A cold start** refuses before anything is installed or spawned, and reports on finalize with the sentence in
   `error`.
@@ -232,12 +235,35 @@ Where runner-go refuses (`claude_region.go`), each time on an answer from the ro
 - **A message handed to a running engine** is not written to it. Its turn is reported on turn-complete, with the
   sentence in `error` and `result`, and that report stops the engine. A steer is not refused: it joins a turn that
   is already running, which only ④ stops.
-- **The turn-complete answer** ends the run whatever status it carries: a terminal one from a control plane that
-  predates the subtype, or the session's waiting status from one that holds it. Nothing is finalized after it, and
-  the run's inbox generation is released unless that status is terminal.
+- **The turn-complete answer** to `region_refused` or `region_stopped` ends the run when it is terminal, from a
+  control plane that predates the subtypes, or the session's waiting status, `PENDING` or `AWAITING_INPUT`, from one
+  that holds or rests the session. Nothing is finalized after it, and the run's inbox generation is released unless
+  that status is terminal. `RUNNING` answers a report for a session whose cancel won the lock first: the run is
+  finalized as after any non-terminal answer, as an ordinary `FAILED` end, so the cancel's reason stands.
 
-Because the runner refuses only on a fresh answer the route just gave it, `runner.region` reads blocked whenever
-the runner refuses, as long as nothing else checked for that runner since.
+Where runner-go stops (④, `claude_region.go`):
+
+- **A flip** is a blocked answer while turns through that proxy are allowed: the last decided verdict allowed, none
+  decided, or a blocked one past its carry-over. One blocked answer stops nothing; it refuses new turns, as above.
+  The runner checks again 60 seconds later (`claudeRegionRecheckAfter`), if the check runs in its loop (`orbit
+  doctor`'s does not).
+- **A blocked answer at least 60 seconds after the flip's first** confirms it: the recheck's, or, after an unknown
+  recheck, the next decided answer (the five-minute check, a turn's check, Check again). That answer, and every
+  blocked answer after it, stops what is running then, so a turn an engine starts on its own after the
+  confirmation is stopped by the next check. An allowed answer ends the flip and stops nothing. A blocked one sooner
+  than that, such as an early Check again, neither confirms nor ends it.
+- **A confirmed flip** stops every running Claude engine whose turns talk to Anthropic (§8); each one registered
+  with the check when it was spawned. The engine is killed. The turn Orbit gave it is reported on turn-complete:
+  `FAILED`, `region_stopped`, the stopped sentence in `error` and `result`, with what the turn left in the worktree.
+  The transcript gets the same sentence as an error event first. The answer ends the run as above. A turn the
+  engine was running on its own, woken by a background task or a Monitor, is not a turn of Orbit's: that run is
+  finalized `FAILED` under `region_stopped` with the sentence instead.
+- **Not stopped:** an idle engine (its next claim recycles it, above), a `!` shell or an acceptance command the
+  runner is running beside an idle engine, a Claude turn on another provider's key, and every other engine.
+
+Because the runner refuses only on an answer the route just gave it, or on a blocked verdict the route decided
+and later unknown answers kept (§4 keeps it the same way), `runner.region` reads blocked whenever the runner
+refuses, as long as nothing else checked for that runner since.
 
 A control plane that knows the subtypes does **not** fail the session:
 
@@ -336,7 +362,8 @@ On the server:
   polling process declares.
 
 **The runner's other requests to Anthropic** wait on the answer its turns go by (§10: under 60 seconds old, else
-asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_region.go`):
+asked now, an unknown one carrying a blocked verdict over for 24 hours), and a blocked one stops them
+(`claudeConnectionBlocked` in `claude_region.go`):
 
 - **Plan usage** (`planusage.go`, for Default and every added account): no read of `api.anthropic.com`, and no token
   refresh for one, since that talks to Anthropic too. Each account's probe logs
@@ -350,7 +377,7 @@ asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_r
   route records like any other. While it answers blocked, Claude Code's line reads `Anthropic: region not supported`,
   doctor offers and suggests no Claude sign-in, and a `Claude region` section follows the engines (board 03). The
   address under it is `CLAUDE_REGIONS_SOURCE_URL` (§2). Its answer is the process's own check, so the gates below
-  hold in doctor too.
+  hold in doctor too. It keeps that answer as a check keeps one of its own (`keep`), flip included (§10).
 - **The runner's own `claude` starts** go by the turns' rule (①): they wait only when the `claude` they would start is
   Anthropic-bound (§8, from that process's environment and `settings.json`) and the answer is blocked
   (`claudeStartBlocked`). A machine whose own Claude Code points at another provider keeps them. Any `claude` start
@@ -372,8 +399,9 @@ asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_r
 - **Quiet starts.** While blocked, every `claude` the runner starts that is not Anthropic-bound runs with
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (`claudeQuietEnv`). That covers a session on another provider's key
   (`spawnClaude`, first spawn and respawn) and each start above that runs. "Blocked" here means the last decided
-  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`). It is read with no
-  request and no wait, so such a turn is never checked and never waits on the route (①).
+  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`, by the carry-over's
+  own rule, `claudeRegionHolds`). It is read with no request and no wait, so such a turn is never checked and never
+  waits on the route (①).
   - Measured on Claude Code 2.1.316, such a `claude` with a Claude login stored sends that login to
     `api.anthropic.com` (`/api/claude_cli/bootstrap`, `/api/claude_code_penguin_mode`). With the variable it sends
     Anthropic nothing, while the turn, its reply and its prompt suggestion still go to the other provider.
