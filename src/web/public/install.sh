@@ -4,15 +4,22 @@
 # Extra args go to `orbit register`:  ... | bash -s -- --labels sg --max-concurrent 2
 # Set ORBIT_NO_REGISTER=1 to install the binary only.
 #
-# The binary goes to ~/.orbit/bin/orbit of the account the runner service runs as (under
-# sudo, the account that invoked it), where the runner can replace it when it updates
-# itself; /usr/local/bin/orbit becomes a symlink to it, the only step that needs sudo.
-# Set ORBIT_BIN_DIR to install the binary straight into that directory instead.
+# On a machine set up with `orbit host setup`, hostd and every account's runner run
+# /usr/local/bin/orbit, so the binary replaces that file as root, owned by uid 0 and gid 0 with
+# mode 0755, through sudo unless already root. Anywhere else it goes to ~/.orbit/bin/orbit of the
+# account the runner service runs as (under sudo, the account that invoked it; root included),
+# where the runner can replace it when it updates itself, and that account's ~/.bashrc and
+# ~/.zshrc put ~/.orbit/bin first on PATH: no sudo, and /usr/local/bin/orbit is left as it is.
+# Set ORBIT_BIN_DIR to install the binary straight into that directory instead; /usr/local/bin
+# itself is still written as on a set-up machine.
 set -euo pipefail
 
 BASE_URL="${ORBIT_BASE_URL:-https://orbitd.io}"
-LINK_DIR="/usr/local/bin"
+MACHINE_DIR="/usr/local/bin"
+TEMPLATE="/etc/systemd/system/orbit-runner@.service"
 NAME="orbit"
+PATH_BEGIN="# >>> orbit >>>"
+PATH_END="# <<< orbit <<<"
 
 case "$(uname -s)" in
   Linux)  os="linux" ;;
@@ -55,8 +62,8 @@ as_root() {
   if [ "$(id -u)" = "0" ]; then "$@"; else sudo "$@"; fi
 }
 
-# The account the runner service will run as: us, or under sudo the account that invoked it.
-# Root itself keeps the machine-wide /usr/local/bin, which a root service can update in place.
+# The account the runner service will run as: us, under sudo the account that invoked it, or
+# root itself, each with its own home.
 if [ "$(id -u)" != "0" ]; then
   owner="$(id -un)"
   home="${HOME:-}"
@@ -68,26 +75,46 @@ elif [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
   home="$(eval echo "~${owner}")"
 else
   owner="root"
-  home=""
+  home="$(eval echo "~root")"
 fi
 
-# Another account's runner unit that runs the shared /usr/local/bin/orbit (a host set up with
-# `orbit host setup`, or several users' runners) keeps the binary where it is: moving it into
-# one home would take it away from the others.
-shared=""
-for unit in /etc/systemd/system/orbit-*.service; do
-  if [ -f "$unit" ] && grep -q "^ExecStart=${LINK_DIR}/${NAME} " "$unit" && ! grep -qx "User=${owner}" "$unit"; then
-    shared="$unit"
-  fi
-done
+# as_owner runs one command as that account: directly when we are it, through sudo otherwise, so
+# that what it writes in its home is its own, wherever a link there leads.
+as_owner() {
+  if [ "$(id -un)" = "$owner" ]; then "$@"; else sudo -u "$owner" -- "$@"; fi
+}
 
-link=""
-if [ -n "${ORBIT_BIN_DIR:-}" ] || [ "$owner" = "root" ] || [ -n "$shared" ]; then
-  [ -z "$shared" ] || echo "note: another account on this machine uses ${LINK_DIR}/${NAME}, so the binary stays shared."
-  BIN_DIR="${ORBIT_BIN_DIR:-$LINK_DIR}"
+# A machine set up with `orbit host setup` has the runner template, and then hostd (as root) and
+# every account's orbit-runner@<uid> run /usr/local/bin/orbit: whatever is written there has to be
+# root's alone, and ORBIT_BIN_DIR naming /usr/local/bin writes that same file.
+machine=""
+if [ -n "${ORBIT_BIN_DIR:-}" ]; then
+  if [ "${ORBIT_BIN_DIR%/}" = "$MACHINE_DIR" ] || [ "$ORBIT_BIN_DIR" -ef "$MACHINE_DIR" ]; then
+    machine=1
+  fi
+elif [ -e "$TEMPLATE" ]; then
+  machine=1
+fi
+
+rcs=""
+if [ -n "$machine" ]; then
+  target="${MACHINE_DIR}/${NAME}"
+  [ ! -e "$TEMPLATE" ] || echo "note: hostd and every account's runner on this machine run ${target}, so it is installed there, as root."
+  [ "$(id -u)" = "0" ] || echo "Installing ${target} (needs sudo)..."
+  # install(1) sets owner, group (numeric: root's group is wheel on macOS) and mode, and puts a new
+  # file in place of the old one rather than writing into it: hostd and the runners may be running
+  # it, and a link there is replaced, not followed. The directory may not exist yet (e.g.
+  # /usr/local/bin on a fresh Apple Silicon Mac).
+  if ! { { [ -d "$MACHINE_DIR" ] || as_root mkdir -p "$MACHINE_DIR"; } && as_root install -o 0 -g 0 -m 0755 "$tmp" "$target"; }; then
+    echo "orbit: installing ${target} needs root; re-run as root or with sudo" >&2
+    exit 1
+  fi
+  rm -f "$tmp"
+elif [ -n "${ORBIT_BIN_DIR:-}" ]; then
+  BIN_DIR="$ORBIT_BIN_DIR"
   target="${BIN_DIR}/${NAME}"
-  # BIN_DIR may not exist yet (e.g. /usr/local/bin is absent on a fresh Apple Silicon Mac),
-  # so create it before moving. A missing dir isn't writable, hence falls to the sudo branch.
+  # BIN_DIR may not exist yet, so create it before moving. A missing dir isn't writable, hence
+  # falls to the sudo branch.
   if [ -w "$BIN_DIR" ] || [ "$(id -u)" = "0" ]; then
     mkdir -p "$BIN_DIR"
     mv "$tmp" "$target"
@@ -110,24 +137,27 @@ else
   if [ "$(id -u)" = "0" ]; then
     chown "${owner}:$(id -gn "$owner")" "${home}/.orbit" "$bin_dir" "$target"
   fi
-  link="${LINK_DIR}/${NAME}"
+  # The account's interactive shells find it first on PATH: one marked block in each rc file,
+  # left alone once it is there. $HOME and $PATH in it are for the rc file to expand.
+  for rc in "${home}/.bashrc" "${home}/.zshrc"; do
+    if ! { [ -f "$rc" ] && grep -qxF "$PATH_BEGIN" "$rc"; }; then
+      # shellcheck disable=SC2016
+      { [ ! -s "$rc" ] || echo; printf '%s\n' "$PATH_BEGIN" 'export PATH="$HOME/.orbit/bin:$PATH"' "$PATH_END"; } |
+        as_owner tee -a "$rc" >/dev/null || { echo "note: could not add ${bin_dir} to PATH in ${rc}" >&2; continue; }
+    fi
+    rcs="${rcs:+${rcs}, }${rc}"
+  done
 fi
 trap - EXIT
-
-cmd="$NAME"
-if [ -n "$link" ]; then
-  [ "$(id -u)" = "0" ] || echo "Linking ${link} -> ${target} (needs sudo)..."
-  if ! { as_root mkdir -p "$LINK_DIR" && as_root ln -sf "$target" "$link"; }; then
-    echo "orbit: could not link ${link}; run ${target} directly" >&2
-    link=""
-    cmd="$target"
-  fi
-fi
 
 ver="$("$target" version 2>/dev/null || echo '?')"
 echo ""
 echo "✓ Orbit ${ver} installed to ${target}"
-[ -z "$link" ] || echo "  ${link} -> ${target}"
+if [ -n "$rcs" ]; then
+  echo "  ${bin_dir} is first on PATH in new terminals (${rcs})."
+  echo "  In this terminal, log in again or run:  source ~/.bashrc   (zsh: source ~/.zshrc)"
+  echo "  Non-interactive use (ssh host cmd, cron) does not read these files: there, use ${target}."
+fi
 
 # Hand straight off to `orbit register` so install + connect is one command. `curl … | bash`
 # leaves stdin bound to the pipe, so reattach the terminal first — otherwise register's
@@ -136,4 +166,4 @@ echo "✓ Orbit ${ver} installed to ${target}"
 if [ -z "${ORBIT_NO_REGISTER:-}" ] && { : < /dev/tty; } 2>/dev/null; then
   ORBIT_INSTALL_PLAN=1 exec "$target" register ${1+"$@"} < /dev/tty
 fi
-echo "Next:  ${cmd} register"
+echo "Next:  ${target} register"

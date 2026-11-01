@@ -1,0 +1,5 @@
+#!/bin/sh
+# sudo as the accounts' PATH in scripts/install-sh-e2e.sh finds it: logs who ran it and with what,
+# then runs the real one. That is how a run shows whether install.sh asked for sudo at all.
+printf '%s: sudo %s\n' "$(id -un)" "$*" >>/var/log/install-sh-e2e-sudo.log
+exec /usr/bin/sudo "$@"

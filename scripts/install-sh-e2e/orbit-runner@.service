@@ -1,0 +1,31 @@
+# Fixture for scripts/install-sh-e2e.sh. From the [Unit] line on, this is byte for byte what
+# `orbit host setup` writes to /etc/systemd/system/orbit-runner@.service:
+# hostRunnerTemplate("/usr/local/bin/orbit") in src/runner-go/host_setup.go, its %%i rendered as %i
+# and its %s as /usr/local/bin/orbit. The harness installs it from that line on, without these
+# comments. install.sh only looks for the file, as the sign of a machine that is set up.
+[Unit]
+Description=Orbit runner (uid %i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+ExecStart=/usr/local/bin/orbit run
+Restart=always
+RestartSec=5
+# Send SIGTERM to the runner only (not the claude children), so on stop/restart the
+# runner can drain — finish in-flight turns and detach — before claude is torn down.
+# The runner's complete shutdown envelope stays below this legacy-compatible value:
+# provider drain + lease release + event flush + a racing finalization + margin.
+KillMode=mixed
+TimeoutStopSec=180
+# No Environment= lines here, deliberately. One template serves every instance, and the
+# home, the runner state dir and the login PATH each belong to the instance's own
+# account — while the specifiers that would fill them in (%h, %s) expand in a *system*
+# unit against the service manager, root, rather than against User=. Baking them in
+# would therefore point every user's runner at /root. The runner works out its own
+# environment at startup instead, where it knows which account it is.
+
+[Install]
+WantedBy=multi-user.target
