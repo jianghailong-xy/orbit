@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,30 @@ func testHostEnv(t *testing.T, euid int) (hostSetupEnv, *fakeHostRunner, string)
 		run:        cmds.run,
 		invokedAs:  "orbit",
 		out:        io.Discard,
+		// The files this test creates are its own; they stand for root's.
+		rootUID: uint32(os.Geteuid()),
 	}, cmds, root
+}
+
+// placeBinary puts a binary at path — a machine path, written under root — as the
+// machine's own: a regular file the uid standing for root owns, mode 0755, in directories
+// only that uid can write. The modes are set explicitly, so the umask the suite runs under
+// cannot make any of it group-writable.
+func placeBinary(t *testing.T, root, path string) string {
+	t.Helper()
+	full := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for p := full; p != root; p = filepath.Dir(p) {
+		if err := os.Chmod(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return full
 }
 
 // unitDirectives is what systemd actually reads: the file with comments and blank lines
@@ -85,6 +109,7 @@ func assertDirectives(t *testing.T, path, content string, want []string) {
 // quietly runs every user's runner as the wrong account, or not at all.
 func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 	env, cmds, root := testHostEnv(t, 0)
+	placeBinary(t, root, machineBinaryPath)
 
 	if err := hostSetup(env, "https://orbit.example.com"); err != nil {
 		t.Fatalf("setup as root failed: %v", err)
@@ -230,6 +255,7 @@ func TestHostSetupWithoutRootNamesTheSudoCommand(t *testing.T) {
 // every file converges on its intended content and mode no matter what it replaces.
 func TestHostSetupIsIdempotent(t *testing.T) {
 	env, cmds, root := testHostEnv(t, 0)
+	placeBinary(t, root, machineBinaryPath)
 
 	// A previous release's unit, and a config left readable only by root.
 	stale := filepath.Join(root, hostRunnerTemplatePath)
@@ -304,6 +330,211 @@ func TestHostSetupWithoutServerWritesNothing(t *testing.T) {
 	}
 	if len(cmds.calls) != 0 {
 		t.Errorf("setup must run nothing before it has a server, ran %v", cmds.calls)
+	}
+}
+
+// Every account's runner runs the binary setup names in ExecStart=, and the broker runs it
+// as root, so setup refuses one that any account could change — before it writes or runs
+// anything — saying which part of the rule it breaks and what to run instead.
+func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
+	notRoot := uint32(os.Geteuid()) + 1
+	for _, tc := range []struct {
+		name    string
+		arrange func(t *testing.T, env *hostSetupEnv, root string)
+		// What the error must say. {root} is the directory standing in for /, {uid} the
+		// uid that owns every file the test creates.
+		want []string
+	}{{
+		name: "owned by an account",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			// The test cannot chown its files to someone else, so it says root is someone else.
+			env.rootUID = notRoot
+		},
+		want: []string{
+			"refusing to set this host up with {root}/usr/local/bin/orbit: it belongs to uid {uid} rather than root.\n",
+			"\nMake it root's, then set the host up again:\n" +
+				"  sudo chown root:root {root}/usr/local/bin/orbit\n" +
+				"  sudo orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "a link into an account's ~/.orbit/bin, as the installer leaves it",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			own := placeBinary(t, root, "/home/alice/.orbit/bin/orbit")
+			link := filepath.Join(root, machineBinaryPath)
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(own, link); err != nil {
+				t.Fatal(err)
+			}
+			realRoot, err := filepath.EvalSymlinks(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// What resolvedExecutable reports when `sudo orbit` runs through the link: the
+			// file it leads to, which is what the units would run.
+			env.executable = func() (string, error) {
+				resolved, err := filepath.EvalSymlinks(link)
+				return strings.TrimPrefix(resolved, realRoot), err
+			}
+			env.rootUID = notRoot
+		},
+		want: []string{
+			"refusing to set this host up with {root}/home/alice/.orbit/bin/orbit: it belongs to uid {uid} rather than root.\n",
+			"\nPut a root-owned copy in place, then set the host up from it:\n" +
+				"  sudo install -o root -g root -m 0755 {root}/home/alice/.orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		// The binary that is running is always a regular file, so this is the rule holding
+		// where setup cannot meet anything else; hostd's update can.
+		name: "not a regular file",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			if err := os.MkdirAll(filepath.Join(root, "/opt/orbit"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			chmod(t, filepath.Join(root, "/opt"), 0o755)
+			env.executable = func() (string, error) { return "/opt/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/opt/orbit: it is not a regular file.\n",
+			"\nPut a root-owned copy in place, then set the host up from it:\n",
+			"\n  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "a directory its group can write",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			chmod(t, filepath.Join(root, "/usr/local/bin"), 0o775)
+		},
+		want: []string{
+			"refusing to set this host up with {root}/usr/local/bin/orbit: its directory {root}/usr/local/bin is not root's alone (owned by uid {uid}, mode 0775).\n",
+			"\nTake that write access back, then set the host up again:\n" +
+				"  sudo chmod g-w {root}/usr/local/bin\n" +
+				"  sudo orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "a directory others can write",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			chmod(t, filepath.Join(root, "/usr/local/bin"), 0o757)
+		},
+		want: []string{
+			": its directory {root}/usr/local/bin is not root's alone (owned by uid {uid}, mode 0757).\n",
+			"\n  sudo chmod go-w {root}/usr/local/bin\n",
+		},
+	}, {
+		name: "a directory further up its group can write",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			chmod(t, filepath.Join(root, "/usr/local"), 0o775)
+		},
+		want: []string{
+			": {root}/usr/local, a directory above it, is not root's alone (owned by uid {uid}, mode 0775).\n",
+			"\n  sudo chmod g-w {root}/usr/local\n",
+		},
+	}, {
+		name: "every such directory at once, as older Debian has /usr/local and /usr/local/bin",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			// root:staff 2775: the setgid bit is no write access, and the mode reported leaves it out.
+			chmod(t, filepath.Join(root, "/usr/local"), os.ModeSetgid|0o775)
+			chmod(t, filepath.Join(root, "/usr/local/bin"), os.ModeSetgid|0o775)
+		},
+		want: []string{
+			": its directory {root}/usr/local/bin is not root's alone (owned by uid {uid}, mode 0775); {root}/usr/local, a directory above it, is not root's alone (owned by uid {uid}, mode 0775).\n",
+			"\n  sudo chmod g-w {root}/usr/local/bin {root}/usr/local\n",
+		},
+	}, {
+		name: "a binary its group can write",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			chmod(t, placeBinary(t, root, machineBinaryPath), 0o775)
+		},
+		want: []string{
+			"refusing to set this host up with {root}/usr/local/bin/orbit: its group or others can write it (mode 0775).\n",
+			"\n  sudo chmod g-w {root}/usr/local/bin/orbit\n",
+		},
+	}, {
+		name: "a binary anyone can write",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			chmod(t, placeBinary(t, root, machineBinaryPath), 0o777)
+		},
+		want: []string{
+			": its group or others can write it (mode 0777).\n",
+			"\n  sudo chmod go-w {root}/usr/local/bin/orbit\n",
+		},
+	}, {
+		// Never `chmod go-w /tmp`: a directory every account may write is no place for it.
+		name: "in a sticky directory anyone may write, like /tmp",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, "/tmp/orbit")
+			chmod(t, filepath.Join(root, "/tmp"), os.ModeSticky|0o777)
+			env.executable = func() (string, error) { return "/tmp/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/tmp/orbit: its directory {root}/tmp is a shared directory anyone can write (mode 1777).\n",
+			"\n  sudo install -o root -g root -m 0755 {root}/tmp/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, cmds, root := testHostEnv(t, 0)
+			tc.arrange(t, &env, root)
+			before := installedFiles(t, root)
+
+			err := hostSetup(env, "https://orbit.example.com")
+			if err == nil {
+				t.Fatal("setup accepted a binary an account could change")
+			}
+			fill := strings.NewReplacer("{root}", root, "{uid}", strconv.Itoa(os.Geteuid()))
+			for _, want := range tc.want {
+				if want = fill.Replace(want); !strings.Contains(err.Error(), want) {
+					t.Errorf("the error must say %q, got:\n%v", want, err)
+				}
+			}
+			// Refused before it began: not one file written, not one command run.
+			if after := installedFiles(t, root); strings.Join(after, "\n") != strings.Join(before, "\n") {
+				t.Errorf("a refused setup wrote files:\nbefore: %v\nafter:  %v", before, after)
+			}
+			if len(cmds.calls) != 0 {
+				t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
+			}
+		})
+	}
+}
+
+// What `chmod g-w` leaves behind — older Debian's directories keep their setgid bit — is
+// root's alone, so the fix setup names for them is one it then accepts.
+func TestHostSetupAcceptsDirectoriesOnceTheirGroupCannotWrite(t *testing.T) {
+	env, cmds, root := testHostEnv(t, 0)
+	placeBinary(t, root, machineBinaryPath)
+	dirs := []string{filepath.Join(root, "/usr/local"), filepath.Join(root, "/usr/local/bin")}
+	for _, dir := range dirs {
+		chmod(t, dir, os.ModeSetgid|0o775)
+	}
+	if err := hostSetup(env, "https://orbit.example.com"); err == nil {
+		t.Fatal("setup accepted directories the staff group can write")
+	}
+
+	for _, dir := range dirs {
+		chmod(t, dir, os.ModeSetgid|0o755)
+	}
+	if err := hostSetup(env, "https://orbit.example.com"); err != nil {
+		t.Fatalf("setup refused directories only root can write: %v", err)
+	}
+	if template, _ := readInstalled(t, root, hostRunnerTemplatePath); !strings.Contains(template, "ExecStart=/usr/local/bin/orbit run\n") {
+		t.Errorf("the template does not run the machine's binary:\n%s", template)
+	}
+	if last := cmds.calls[len(cmds.calls)-1]; last != "systemctl enable --now orbit-hostd.socket" {
+		t.Errorf("setup must finish by starting the broker, ended with %q", last)
+	}
+}
+
+func chmod(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,8 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 		geteuid: func() int { return 0 },
 		// The files this test creates are its own; they stand for root's.
 		rootUID: uint32(os.Geteuid()),
+		// And its temporary root stands for /, where the walk up from the binary ends.
+		rootDir: h.root,
 		runProbe: func(cmd *exec.Cmd) ([]byte, error) {
 			h.mu.Lock()
 			h.probed = append(h.probed, cmd)
@@ -668,6 +671,24 @@ func TestHostdUpdateRefusesABinaryThatIsNotRootsAlone(t *testing.T) {
 		want: "is not root's alone",
 		arrange: func(h *hostdUpdateHarness) {
 			if err := os.Chmod(h.dir, 0o775); err != nil {
+				h.t.Fatal(err)
+			}
+		},
+	}, {
+		// Root's file, but anyone in its group could rewrite what every runner execs.
+		name: "writable by its group",
+		want: "its group or others can write it (mode 0775)",
+		arrange: func(h *hostdUpdateHarness) {
+			if err := os.Chmod(h.installed, 0o775); err != nil {
+				h.t.Fatal(err)
+			}
+		},
+	}, {
+		// Whoever can write a directory further up can swap out the whole directory below it.
+		name: "under a directory further up its group can write",
+		want: "/usr/local, a directory above it, is not root's alone (owned by uid " + strconv.Itoa(os.Geteuid()) + ", mode 0775)",
+		arrange: func(h *hostdUpdateHarness) {
+			if err := os.Chmod(filepath.Dir(h.dir), 0o775); err != nil {
 				h.t.Fatal(err)
 			}
 		},
