@@ -1228,8 +1228,8 @@ broker enables and starts the account's instance, nothing asks for a password, a
 The account reads its runner's state and log itself:
 
 ```bash
-systemctl status orbit-runner@$(id -u)
-journalctl -u orbit-runner@$(id -u)
+systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"
+journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
 ```
 
 `journalctl` shows an account what its own runner logged when the journal is persistent (`/var/log/journal`

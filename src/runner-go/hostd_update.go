@@ -18,12 +18,12 @@ import (
 
 // The update verb: one machine, one binary, one place that replaces it.
 //
-// Every user's runner on a host set up with `orbit host setup` execs the same machine-level
-// binary, which no unprivileged account can write. Until now each runner noticed a new release,
-// found it could not install it, and stayed on the old one forever with a single line in its log
-// (selfupdate.go's warnSelfUpdateBlocked). Here the broker — the one process on the machine that
-// *can* write that file — installs it once and rolls the instances, so a host with ten users
-// updates once rather than ten times or never.
+// The machine-level binary, /usr/local/bin/orbit, is one no unprivileged account can write: the
+// broker runs it as root, and on a host set up before instances were named after accounts every
+// user's runner execs it too. A runner that cannot install a release where it runs from (selfupdate.go's
+// warnSelfUpdateBlocked) asks the broker — the one process on the machine that *can* write that file
+// — to install it once and roll the instances, so a host with ten such users updates once rather
+// than ten times or never. A runner on its account's own ~/.orbit/bin/orbit updates itself.
 //
 // Four rules shape the whole file:
 //
@@ -39,7 +39,7 @@ import (
 //   - The download is never run as root. Reporting its version and its contract means executing
 //     it, so every one of those execs is dropped to the uid that asked (SysProcAttr.Credential).
 //
-// And only the machine's own binary is replaced: the file the runner template's ExecStart= names,
+// And only the machine's own binary is replaced: the file orbit-hostd.service's ExecStart= names,
 // when it is a regular file only root can write, in directories only root can write all the way up
 // to / (checkMachineBinary). A link into an account's ~/.orbit/bin (install_layout.go) is that
 // account's install, which its runner updates itself, and root writes nothing it downloaded into
@@ -72,12 +72,12 @@ var hostdUpdateMu sync.Mutex
 // so the tests drive this very logic against a fake systemctl, a temporary install directory and
 // an httptest release server. The zero value means production defaults.
 type hostdUpdate struct {
-	sys          hostdSystem
-	configPath   string // "" → hostConfigPath
-	templatePath string // "" → hostRunnerTemplatePath
-	stampPath    string // "" → hostdUpdateStampPath
-	now          func() time.Time
-	geteuid      func() int
+	sys             hostdSystem
+	configPath      string // "" → hostConfigPath
+	serviceUnitPath string // "" → hostdServiceUnitPath
+	stampPath       string // "" → hostdUpdateStampPath
+	now             func() time.Time
+	geteuid         func() int
 	// rootUID is who the binary and every directory above it must belong to: root. A field because a
 	// test cannot create files root owns, so it names the uid that stands for root's instead.
 	rootUID uint32
@@ -96,8 +96,8 @@ func (u hostdUpdate) withDefaults() hostdUpdate {
 	if u.configPath == "" {
 		u.configPath = hostConfigPath
 	}
-	if u.templatePath == "" {
-		u.templatePath = hostRunnerTemplatePath
+	if u.serviceUnitPath == "" {
+		u.serviceUnitPath = hostdServiceUnitPath
 	}
 	if u.stampPath == "" {
 		u.stampPath = hostdUpdateStampPath
@@ -315,25 +315,27 @@ func (u hostdUpdate) server() (string, error) {
 	return server, nil
 }
 
-// installTarget is the binary this verb replaces: the one the runner template's ExecStart= runs.
-// Not os.Executable() — hostd may be running from an image of a file that has already been
-// swapped, and what matters is the file every runner instance execs. It has to be the machine's
-// (checkMachineBinary, the rule `orbit host setup` held it to before naming it there). Anything
-// else — a symlink into an account's ~/.orbit/bin above all — is refused before anything is
-// downloaded, written or executed.
+// installTarget is the binary this verb replaces: the one orbit-hostd.service's ExecStart= runs,
+// which is the machine's and, on a host set up before instances were named after accounts, every
+// instance's too. Not the runner template's ExecStart=, which names /bin/sh on a host whose
+// instances run each account's own copy, and not os.Executable() — hostd may be running from an
+// image of a file that has already been swapped, and what matters is the file the next activation
+// execs. It has to be the machine's (checkMachineBinary, the rule `orbit host setup` held it to
+// before naming it there). Anything else — a symlink into an account's ~/.orbit/bin above all — is
+// refused before anything is downloaded, written or executed.
 func (u hostdUpdate) installTarget() (string, error) {
-	def, err := readSystemdServiceDef(u.templatePath)
+	def, err := readSystemdServiceDef(u.serviceUnitPath)
 	if err != nil {
-		return "", fmt.Errorf("cannot read %s: %v — has `orbit host setup --server <url>` been run on this machine?", u.templatePath, err)
+		return "", fmt.Errorf("cannot read %s: %v — has `orbit host setup --server <url>` been run on this machine?", u.serviceUnitPath, err)
 	}
 	path := def.program
 	if path == "" {
-		return "", fmt.Errorf("%s names no binary in ExecStart=", u.templatePath)
+		return "", fmt.Errorf("%s names no binary in ExecStart=", u.serviceUnitPath)
 	}
 	if err := checkMachineBinary(path, u.rootDir, u.rootUID); err != nil {
 		var fault *machineBinaryError
 		if !errors.As(err, &fault) {
-			return "", fmt.Errorf("cannot inspect %s, the binary %s runs: %v", path, u.templatePath, err)
+			return "", fmt.Errorf("cannot inspect %s, the binary %s runs: %v", path, u.serviceUnitPath, err)
 		}
 		return "", fmt.Errorf("refusing to update %s: %v, and root writes nothing it downloaded where another account can reach", path, fault)
 	}
@@ -356,12 +358,12 @@ type machineBinaryError struct {
 
 func (e *machineBinaryError) Error() string { return strings.Join(e.reasons, "; ") }
 
-// checkMachineBinary is the rule for the binary the runner template's ExecStart= names, which every
-// account's runner instance executes and hostd runs as root: `orbit host setup` holds the binary it
-// is about to name there to it, and the update verb the binary it is about to replace. No account
-// may be able to change that file, so it has to be a regular file root owns that neither its group
-// nor others can write — and so does every directory above it, from its own up to top ("/" on a
-// machine), since whoever can write one of them can swap out everything below it.
+// checkMachineBinary is the rule for the binary orbit-hostd.service's ExecStart= names, which hostd
+// runs as root: `orbit host setup` holds the binary it is about to name there to it, and the update
+// verb the binary it is about to replace. No account may be able to change that file, so it has to
+// be a regular file root owns that neither its group nor others can write — and so does every
+// directory above it, from its own up to top ("/" on a machine), since whoever can write one of
+// them can swap out everything below it.
 //
 // It returns nil when path keeps the rule, a *machineBinaryError saying how it does not, or the
 // error that kept a level from being inspected. rootUID is root's uid; a parameter, like top,
@@ -438,7 +440,7 @@ func fileOwnerUID(fi os.FileInfo) (uint32, bool) {
 
 // installedVersion asks the binary on disk what it is. Not this process's own `version`: hostd
 // is an image of a file that updates replace underneath it, and the version that matters is the
-// one the runners will exec. Executing it is safe in a way executing the download is not —
+// one the next activation will exec. Executing it is safe in a way executing the download is not —
 // installTarget has established it is the copy root installed and owns.
 func (u hostdUpdate) installedVersion(target string) (string, error) {
 	out, err := u.sys.query(target, "version")

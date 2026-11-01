@@ -20,8 +20,8 @@ import (
 )
 
 // The update verb, driven against a machine the test owns: a fake systemctl, an install directory
-// in a temp dir named by a runner template as `orbit host setup` writes it, and an httptest control
-// plane publishing real releases (fakeRelease: executables that answer `version` and
+// in a temp dir named by orbit-hostd.service as `orbit host setup` writes it, beside the runner
+// template, and an httptest control plane publishing real releases (fakeRelease: executables that answer `version` and
 // `capabilities --json`, with their sha256 in the manifest). Nothing here stands in for the logic
 // under test — the verb, the release checks, the swap and the roll are the real ones. The one
 // thing a test cannot do is become another user, so the probe runner records each command,
@@ -30,12 +30,13 @@ import (
 type hostdUpdateHarness struct {
 	t *testing.T
 
-	root         string
-	dir          string // the install directory
-	installed    string // the machine binary the runner template's ExecStart= names
-	configPath   string
-	templatePath string
-	stampPath    string
+	root            string
+	dir             string // the install directory
+	installed       string // the machine binary orbit-hostd.service's ExecStart= names
+	configPath      string
+	templatePath    string
+	serviceUnitPath string
+	stampPath       string
 
 	mu               sync.Mutex
 	runs             [][]string
@@ -58,14 +59,15 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 		t:                t,
 		root:             t.TempDir(),
 		installedVersion: installed,
-		units: "orbit-runner@1000.service   loaded active running Orbit runner (uid 1000)\n" +
-			"orbit-runner@1001.service   loaded active running Orbit runner (uid 1001)\n" +
-			"orbit-hostd.service         loaded active running Orbit host broker\n",
+		units: "orbit-runner@alice.service       loaded active running Orbit runner (alice)\n" +
+			"orbit-runner@test.user.service   loaded active running Orbit runner (test.user)\n" +
+			"orbit-hostd.service              loaded active running Orbit host broker\n",
 	}
 	h.dir = filepath.Join(h.root, "usr", "local", "bin")
 	h.installed = filepath.Join(h.dir, "orbit")
 	h.configPath = filepath.Join(h.root, "etc", "orbit", "config.json")
 	h.templatePath = filepath.Join(h.root, "etc", "systemd", "system", "orbit-runner@.service")
+	h.serviceUnitPath = filepath.Join(h.root, "etc", "systemd", "system", "orbit-hostd.service")
 	h.stampPath = filepath.Join(h.root, "run", "orbit", "last-update")
 	for _, dir := range []string{h.dir, filepath.Dir(h.configPath), filepath.Dir(h.templatePath)} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -73,7 +75,8 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 		}
 	}
 	h.write(h.installed, []byte("the binary installed right now"), 0o755)
-	h.write(h.templatePath, []byte(hostRunnerTemplate(h.installed)), 0o644)
+	h.write(h.templatePath, []byte(hostRunnerTemplate()), 0o644)
+	h.write(h.serviceUnitPath, []byte(hostdServiceUnitFile(h.installed)), 0o644)
 
 	// The control plane also publishes a previous release and assigns runners to it, so a test
 	// can tell "what /dl publishes to everybody" from "what one runner was assigned".
@@ -103,9 +106,9 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 				return &user.User{Uid: uid, Gid: uid, Username: "user" + uid}, nil
 			},
 		},
-		configPath:   h.configPath,
-		templatePath: h.templatePath,
-		stampPath:    h.stampPath,
+		configPath:      h.configPath,
+		serviceUnitPath: h.serviceUnitPath,
+		stampPath:       h.stampPath,
 		// Simulate the daemon as systemd runs it. Every privilege decision below is the one
 		// production makes, not a test-only branch.
 		geteuid: func() int { return 0 },
@@ -124,6 +127,17 @@ func newHostdUpdateHarness(t *testing.T, installed string, latest rolloutRelease
 		background: func(f func()) { f() },
 	}
 	return h
+}
+
+// onUidTemplate makes the harness a host set up before instances were named after accounts: its
+// template is the one setup wrote then, naming the machine's binary, and systemd reports uid
+// instances.
+func (h *hostdUpdateHarness) onUidTemplate() {
+	h.t.Helper()
+	h.write(h.templatePath, []byte(uidHostRunnerTemplate(h.installed)), 0o644)
+	h.units = "orbit-runner@1000.service   loaded active running Orbit runner (uid 1000)\n" +
+		"orbit-runner@1001.service   loaded active running Orbit runner (uid 1001)\n" +
+		"orbit-hostd.service         loaded active running Orbit host broker\n"
 }
 
 func (h *hostdUpdateHarness) write(path string, data []byte, mode os.FileMode) {
@@ -245,64 +259,129 @@ func gzipped(t *testing.T, payload []byte) []byte {
 // The whole path: a newer release is read from the public manifest, downloaded, checked against
 // its sha256, its version and its write contract — each asked of the download as the caller —
 // swapped in atomically, and only then are the machine's runner instances rolled: the ones
-// systemd actually reports, one at a time.
+// systemd actually reports, one at a time. The same on a host set up before instances were named
+// after accounts, whose instances all run the machine's binary: there the roll is what moves them
+// onto the release.
 func TestHostdUpdateInstallsAndRollsEveryRunnerInstance(t *testing.T) {
-	latest := newRolloutRelease(t, rolloutTestLatest)
-	h := newHostdUpdateHarness(t, rolloutTestPrevious, latest)
-	before, err := os.Stat(h.installed)
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, layout := range []struct {
+		name    string
+		arrange func(*hostdUpdateHarness)
+		want    []string
+	}{
+		{"name template", func(*hostdUpdateHarness) {}, []string{"orbit-runner@alice.service", "orbit-runner@test.user.service"}},
+		{"uid template", (*hostdUpdateHarness).onUidTemplate, []string{"orbit-runner@1000.service", "orbit-runner@1001.service"}},
+	} {
+		t.Run(layout.name, func(t *testing.T) {
+			latest := newRolloutRelease(t, rolloutTestLatest)
+			h := newHostdUpdateHarness(t, rolloutTestPrevious, latest)
+			layout.arrange(h)
+			before, err := os.Stat(h.installed)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	resp := h.ask(1000)
-	if !resp.OK {
-		t.Fatalf("update failed: %s", resp.Error)
-	}
-	if got := resp.Data["version"]; got != rolloutTestLatest {
-		t.Errorf("version = %v, want the accepted release %s", got, rolloutTestLatest)
-	}
-	if got := resp.Data["from"]; got != rolloutTestPrevious {
-		t.Errorf("from = %v, want the installed %s", got, rolloutTestPrevious)
-	}
-	if got := resp.Data["accepted"]; got != true {
-		t.Errorf("accepted = %v, want true", got)
-	}
-	// The public manifest, then this platform's asset beside it — and nothing else: no question
-	// about which release some runner is assigned.
-	asset := "/dl/orbit-" + platformKey() + ".gz"
-	if got := h.cp.seen("/"); !equalStrings(got, []string{"/dl/version.json", asset}) {
-		t.Errorf("requests = %v, want [/dl/version.json %s]", got, asset)
-	}
-	assertInstalled(t, h.installed, latest.binary)
-	// Swapped in by rename, not written over: a runner starting mid-update must exec one whole
-	// binary or the other, and an in-place write would hand it neither.
-	after, err := os.Stat(h.installed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if os.SameFile(before, after) {
-		t.Error("the installed binary was overwritten in place rather than renamed over")
-	}
-	want := []string{"orbit-runner@1000.service", "orbit-runner@1001.service"}
-	if got := h.restarts(); !equalStrings(got, want) {
-		t.Errorf("restarted %v, want exactly the enumerated instances %v, in order", got, want)
-	}
-	if got := h.runs; len(got) != len(want) {
-		t.Errorf("ran %d commands, want only the %d restarts: %v", len(got), len(want), got)
-	}
+			resp := h.ask(1000)
+			if !resp.OK {
+				t.Fatalf("update failed: %s", resp.Error)
+			}
+			if got := resp.Data["version"]; got != rolloutTestLatest {
+				t.Errorf("version = %v, want the accepted release %s", got, rolloutTestLatest)
+			}
+			if got := resp.Data["from"]; got != rolloutTestPrevious {
+				t.Errorf("from = %v, want the installed %s", got, rolloutTestPrevious)
+			}
+			if got := resp.Data["accepted"]; got != true {
+				t.Errorf("accepted = %v, want true", got)
+			}
+			// The public manifest, then this platform's asset beside it — and nothing else: no question
+			// about which release some runner is assigned.
+			asset := "/dl/orbit-" + platformKey() + ".gz"
+			if got := h.cp.seen("/"); !equalStrings(got, []string{"/dl/version.json", asset}) {
+				t.Errorf("requests = %v, want [/dl/version.json %s]", got, asset)
+			}
+			assertInstalled(t, h.installed, latest.binary)
+			// Swapped in by rename, not written over: a runner starting mid-update must exec one whole
+			// binary or the other, and an in-place write would hand it neither.
+			after, err := os.Stat(h.installed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if os.SameFile(before, after) {
+				t.Error("the installed binary was overwritten in place rather than renamed over")
+			}
+			if got := h.restarts(); !equalStrings(got, layout.want) {
+				t.Errorf("restarted %v, want exactly the enumerated instances %v, in order", got, layout.want)
+			}
+			if got := h.runs; len(got) != len(layout.want) {
+				t.Errorf("ran %d commands, want only the %d restarts: %v", len(got), len(layout.want), got)
+			}
 
-	// Both checks that execute the download ran against the download itself, before it took the
-	// installed binary's name: its version, and the write contract main's chain checks next.
-	var asked []string
-	for _, probe := range h.probed {
-		if !strings.HasPrefix(probe.Path, h.installed+".new-") {
-			t.Errorf("probe ran %q, want the freshly downloaded file, not the installed one", probe.Path)
+			// Both checks that execute the download ran against the download itself, before it took the
+			// installed binary's name: its version, and the write contract main's chain checks next.
+			var asked []string
+			for _, probe := range h.probed {
+				if !strings.HasPrefix(probe.Path, h.installed+".new-") {
+					t.Errorf("probe ran %q, want the freshly downloaded file, not the installed one", probe.Path)
+				}
+				asked = append(asked, strings.Join(probe.Args[1:], " "))
+			}
+			if !equalStrings(asked, []string{"version", "capabilities --json"}) {
+				t.Errorf("asked the download %q, want its version and then its write contract", asked)
+			}
+		})
+	}
+}
+
+// What the update replaces is the binary orbit-hostd.service names — hostd's own — never the one a
+// runner template names: this release's template names /bin/sh, and a template left from before
+// may name a binary that is no longer the machine's. A machine with no broker unit says so, and
+// nothing is fetched, written or executed.
+func TestHostdUpdateTargetIsTheBinaryOrbitHostdServiceNames(t *testing.T) {
+	t.Run("a template naming another binary", func(t *testing.T) {
+		latest := newRolloutRelease(t, rolloutTestLatest)
+		h := newHostdUpdateHarness(t, rolloutTestPrevious, latest)
+		elsewhere := filepath.Join(h.root, "opt", "orbit", "orbit")
+		if err := os.MkdirAll(filepath.Dir(elsewhere), 0o755); err != nil {
+			t.Fatal(err)
 		}
-		asked = append(asked, strings.Join(probe.Args[1:], " "))
-	}
-	if !equalStrings(asked, []string{"version", "capabilities --json"}) {
-		t.Errorf("asked the download %q, want its version and then its write contract", asked)
-	}
+		h.write(elsewhere, []byte("another root-owned orbit"), 0o755)
+		h.write(h.templatePath, []byte(uidHostRunnerTemplate(elsewhere)), 0o644)
+
+		if resp := h.ask(1000); !resp.OK || resp.Data["accepted"] != true {
+			t.Fatalf("update = %+v, want it accepted", resp)
+		}
+		assertInstalled(t, h.installed, latest.binary)
+		if got := fileBytes(t, elsewhere); string(got) != "another root-owned orbit" {
+			t.Errorf("the binary the template names was replaced: %q", got)
+		}
+	})
+	t.Run("no orbit-hostd.service", func(t *testing.T) {
+		h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+		if err := os.Remove(h.serviceUnitPath); err != nil {
+			t.Fatal(err)
+		}
+		before := h.sideEffects()
+
+		resp := h.ask(1000)
+		if resp.OK {
+			t.Fatalf("update succeeded without orbit-hostd.service: %+v", resp.Data)
+		}
+		if !strings.Contains(resp.Error, h.serviceUnitPath) || !strings.Contains(resp.Error, "orbit host setup") {
+			t.Errorf("error = %q, want it to name %s and the fix", resp.Error, h.serviceUnitPath)
+		}
+		h.assertNoSideEffects(before)
+	})
+	t.Run("a broker unit naming no binary", func(t *testing.T) {
+		h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
+		h.write(h.serviceUnitPath, []byte("[Service]\nType=simple\n"), 0o644)
+		before := h.sideEffects()
+
+		resp := h.ask(1000)
+		if resp.OK || !strings.Contains(resp.Error, "names no binary in ExecStart=") {
+			t.Fatalf("update = %+v, want it refused for naming no binary", resp)
+		}
+		h.assertNoSideEffects(before)
+	})
 }
 
 // The release a shared binary is updated to is the one /dl publishes to every runner — read with
@@ -614,7 +693,7 @@ func TestHostdUpdateTakesItsReleaseFromTheMachineConfigNotTheRequest(t *testing.
 	assertInstalled(t, h.installed, latest.binary)
 }
 
-// Only the machine's own binary is replaced. The runner template naming a symlink into an
+// Only the machine's own binary is replaced. orbit-hostd.service naming a symlink into an
 // account's ~/.orbit/bin — that account's install, which its runner updates itself — is refused
 // before anything is fetched, written or executed: root writes nothing it downloaded into a home.
 func TestHostdUpdateRefusesASymlinkIntoAUsersHome(t *testing.T) {

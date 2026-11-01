@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,8 +13,58 @@ import (
 	"time"
 )
 
-// The design decision this whole file rests on: instances are keyed by uid, because
-// unit-name escaping is not injective over the usernames Linux actually allows.
+// An instance is the user name as `systemd-escape` prints it — systemd's own escaping,
+// which is reversible, unlike systemdServiceFor's. The table is what systemd 252's
+// systemd-escape printed for each name; where the machine running the suite has
+// systemd-escape, it is asked as well.
+func TestUnitForAccountEscapesAsSystemdEscapeDoes(t *testing.T) {
+	cases := []struct{ name, escaped string }{
+		{"alice", "alice"},
+		{"alice.b", "alice.b"},
+		{"alice_b", "alice_b"},
+		{"test-user", `test\x2duser`},
+		{".hidden", `\x2ehidden`},
+		{"test.user", "test.user"},
+		{"a:b", "a:b"},
+		{`x\y`, `x\x5cy`},
+		{"caf\u00e9", `caf\xc3\xa9`},
+		{"UPPER9", "UPPER9"},
+		{"a..b", "a..b"},
+		{".a.b", `\x2ea.b`},
+		{"-lead", `\x2dlead`},
+		{"trail-", `trail\x2d`},
+		{"a b", `a\x20b`},
+	}
+	escape, _ := exec.LookPath("systemd-escape")
+	for _, c := range cases {
+		if got := systemdEscape(c.name); got != c.escaped {
+			t.Errorf("systemdEscape(%q) = %q, want %q", c.name, got, c.escaped)
+		}
+		if got, want := unitForAccount(c.name), "orbit-runner@"+c.escaped+".service"; got != want {
+			t.Errorf("unitForAccount(%q) = %q, want %q", c.name, got, want)
+		}
+		if escape == "" {
+			continue
+		}
+		out, err := exec.Command(escape, "--", c.name).Output()
+		if err != nil {
+			t.Fatalf("systemd-escape -- %q: %v", c.name, err)
+		}
+		if got := strings.TrimSuffix(string(out), "\n"); got != c.escaped {
+			t.Errorf("systemd-escape -- %q prints %q, the table says %q", c.name, got, c.escaped)
+		}
+	}
+	if escape == "" {
+		t.Log("no systemd-escape on this machine: the table alone was checked")
+	}
+	// Reversible, so the names systemdServiceFor folds together stay apart.
+	if unitForAccount("alice.b") == unitForAccount("alice_b") {
+		t.Fatal("alice.b and alice_b share an instance")
+	}
+}
+
+// On a host set up before instances were named after accounts, they are keyed by uid —
+// and stay so until setup is run again.
 func TestUnitForUidKeysOnUidNotUsername(t *testing.T) {
 	if got, want := unitForUid(1000), "orbit-runner@1000.service"; got != want {
 		t.Errorf("unitForUid(1000) = %q, want %q", got, want)

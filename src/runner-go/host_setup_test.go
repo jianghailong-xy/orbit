@@ -123,14 +123,16 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 	}
 	assertDirectives(t, hostRunnerTemplatePath, template, []string{
 		"[Unit]",
-		"Description=Orbit runner (uid %i)",
+		"Description=Orbit runner (%I)",
 		"After=network-online.target",
 		"Wants=network-online.target",
 		"[Service]",
 		"Type=simple",
-		// The instance key is the uid, so %i names the account itself.
-		"User=%i",
-		"ExecStart=/usr/local/bin/orbit run",
+		// The instance is the systemd-escaped user name, so %I, unescaped, is the account.
+		"User=%I",
+		// The account's own copy, through the $HOME systemd sets for User= and the shell
+		// expands; exec leaves that binary as the main process.
+		`ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'`,
 		"Restart=always",
 		"RestartSec=5",
 		// The drain envelope, identical to the unit installSystemd writes.
@@ -139,6 +141,10 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 		"[Install]",
 		"WantedBy=multi-user.target",
 	})
+	// No binary of the machine's in it: each instance runs its own account's.
+	if strings.Contains(template, machineBinaryPath) {
+		t.Errorf("%s names %s:\n%s", hostRunnerTemplatePath, machineBinaryPath, template)
+	}
 
 	socket, mode := readInstalled(t, root, hostdSocketUnitPath)
 	if mode != 0o644 {
@@ -212,7 +218,7 @@ func TestHostSetupInstallsTheUnitsSystemdWillRead(t *testing.T) {
 // an environment in here would therefore point every user's runner at /root; the runner
 // resolves its own at startup, where it knows which account it is.
 func TestHostRunnerTemplateBakesInNoEnvironment(t *testing.T) {
-	for _, directive := range unitDirectives(hostRunnerTemplate("/usr/local/bin/orbit")) {
+	for _, directive := range unitDirectives(hostRunnerTemplate()) {
 		if strings.HasPrefix(directive, "Environment") {
 			t.Errorf("the template must carry no baked environment, found %q", directive)
 		}
@@ -224,7 +230,7 @@ func TestHostRunnerTemplateBakesInNoEnvironment(t *testing.T) {
 	}
 	// The three the runner needs, named explicitly: this is the invariant T4 depends on.
 	for _, name := range []string{"HOME", "ORBIT_HOME", "PATH"} {
-		if strings.Contains(hostRunnerTemplate("/usr/local/bin/orbit"), "Environment="+name) {
+		if strings.Contains(hostRunnerTemplate(), "Environment="+name) {
 			t.Errorf("the template must not bake %s; the runner resolves it at startup", name)
 		}
 	}
@@ -293,8 +299,11 @@ func TestHostSetupIsIdempotent(t *testing.T) {
 	if strings.Contains(template, "/opt/old/orbit") {
 		t.Errorf("a re-run must replace the stale unit, got:\n%s", template)
 	}
-	if !strings.Contains(template, "ExecStart=/usr/local/bin/orbit run") {
-		t.Errorf("a re-run must name this binary, got:\n%s", template)
+	if template != hostRunnerTemplate() {
+		t.Errorf("a re-run must write the template whole, got:\n%s", template)
+	}
+	if service, _ := readInstalled(t, root, hostdServiceUnitPath); !strings.Contains(service, "ExecStart=/usr/local/bin/orbit hostd\n") {
+		t.Errorf("a re-run must name this binary for the broker, got:\n%s", service)
 	}
 	if mode != 0o644 {
 		t.Errorf("a re-run must fix the mode of %s, got %04o", hostRunnerTemplatePath, mode)
@@ -547,38 +556,25 @@ func TestHostSetupAcceptsDirectoriesOnceTheirGroupCannotWrite(t *testing.T) {
 	if err := hostSetup(env, "https://orbit.example.com"); err != nil {
 		t.Fatalf("setup refused directories only root can write: %v", err)
 	}
-	if template, _ := readInstalled(t, root, hostRunnerTemplatePath); !strings.Contains(template, "ExecStart=/usr/local/bin/orbit run\n") {
-		t.Errorf("the template does not run the machine's binary:\n%s", template)
+	if service, _ := readInstalled(t, root, hostdServiceUnitPath); !strings.Contains(service, "ExecStart=/usr/local/bin/orbit hostd\n") {
+		t.Errorf("the broker does not run the machine's binary:\n%s", service)
 	}
 	if last := cmds.calls[len(cmds.calls)-1]; last != "systemctl enable --now orbit-hostd.socket" {
 		t.Errorf("setup must finish by starting the broker, ended with %q", last)
 	}
 }
 
-// Every account's runner runs the binary setup names in ExecStart= as that account, so setup
-// also refuses one other accounts cannot execute — root's own copy above all, which install.sh
-// puts in root's 0700 home — before it writes or runs anything, naming every level closed to
-// others and what to run instead.
-func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
+// The broker runs only /usr/local/bin/orbit, so setup refuses any other binary — before it
+// writes or runs anything — even one checkMachineBinary finds clean: root's own copy above
+// all, which install.sh puts in root's home. It says why and gives the way out, a root-owned
+// copy at /usr/local/bin/orbit and setup run from there.
+func TestHostSetupRefusesAnyBinaryButTheMachines(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		arrange func(t *testing.T, env *hostSetupEnv, root string)
-		// What the error must say. {root} is the directory standing in for /.
-		want []string
+		// The binary setup is run from; {root} is the directory standing in for /.
+		exe string
 	}{{
-		name: "in /root, which others cannot enter",
-		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
-			placeBinary(t, root, "/root/.orbit/bin/orbit")
-			chmod(t, filepath.Join(root, "/root"), 0o700)
-			env.executable = func() (string, error) { return "/root/.orbit/bin/orbit", nil }
-		},
-		want: []string{
-			"refusing to set this host up with {root}/root/.orbit/bin/orbit: {root}/root, a directory above it, cannot be entered by others (mode 0700).\n",
-			"\nPut a root-owned copy in place, then set the host up from it:\n" +
-				"  sudo install -o 0 -g 0 -m 0755 {root}/root/.orbit/bin/orbit /usr/local/bin/orbit\n" +
-				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
-		},
-	}, {
 		name: "root's own copy, as install.sh leaves it",
 		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
 			// mktemp's 0600 made executable, in a ~/.orbit made 0700, in /root.
@@ -587,59 +583,48 @@ func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
 			chmod(t, filepath.Join(root, "/root"), 0o700)
 			env.executable = func() (string, error) { return "/root/.orbit/bin/orbit", nil }
 		},
-		want: []string{
-			"refusing to set this host up with {root}/root/.orbit/bin/orbit: {root}/root/.orbit, a directory above it, cannot be entered by others (mode 0700); " +
-				"{root}/root, a directory above it, cannot be entered by others (mode 0700).\n",
-			"\n  sudo install -o 0 -g 0 -m 0755 {root}/root/.orbit/bin/orbit /usr/local/bin/orbit\n" +
-				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
-		},
+		exe: "/root/.orbit/bin/orbit",
 	}, {
-		name: "a binary others cannot execute",
+		name: "root's own copy in a home others may enter",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, "/root/.orbit/bin/orbit")
+			env.executable = func() (string, error) { return "/root/.orbit/bin/orbit", nil }
+		},
+		exe: "/root/.orbit/bin/orbit",
+	}, {
+		name: "a root-owned binary somewhere else",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, "/opt/orbit/orbit")
+			env.executable = func() (string, error) { return "/opt/orbit/orbit", nil }
+		},
+		exe: "/opt/orbit/orbit",
+	}, {
+		name: "a root-owned binary somewhere else, which others cannot execute",
 		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
 			chmod(t, placeBinary(t, root, "/opt/orbit/orbit"), 0o750)
 			env.executable = func() (string, error) { return "/opt/orbit/orbit", nil }
 		},
-		want: []string{
-			"refusing to set this host up with {root}/opt/orbit/orbit: others cannot execute it (mode 0750).\n",
-			"\nPut a root-owned copy in place, then set the host up from it:\n" +
-				"  sudo install -o 0 -g 0 -m 0755 {root}/opt/orbit/orbit /usr/local/bin/orbit\n" +
-				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
-		},
-	}, {
-		// Already where the machine's binary belongs, where a copy would land on itself.
-		name: "the machine's binary, which others cannot execute",
-		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
-			chmod(t, placeBinary(t, root, machineBinaryPath), 0o700)
-		},
-		want: []string{
-			"refusing to set this host up with {root}/usr/local/bin/orbit: others cannot execute it (mode 0700).\n",
-			"\nLet every account run it, then set the host up again:\n" +
-				"  sudo chmod o+x {root}/usr/local/bin/orbit\n" +
-				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
-		},
-	}, {
-		name: "the machine's binary in a directory others cannot enter",
-		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
-			placeBinary(t, root, machineBinaryPath)
-			chmod(t, filepath.Join(root, "/usr/local/bin"), 0o750)
-		},
-		want: []string{
-			"refusing to set this host up with {root}/usr/local/bin/orbit: its directory {root}/usr/local/bin cannot be entered by others (mode 0750).\n",
-			"\n  sudo chmod o+x {root}/usr/local/bin\n" +
-				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
-		},
+		exe: "/opt/orbit/orbit",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			env, cmds, root := testHostEnv(t, 0)
 			tc.arrange(t, &env, root)
+			if err := checkMachineBinary(filepath.Join(root, tc.exe), root, env.rootUID); err != nil {
+				t.Fatalf("fixture: %s should be clean by checkMachineBinary's rule: %v", tc.exe, err)
+			}
 			before := installedFiles(t, root)
 
 			err := hostSetup(env, "https://orbit.example.com")
 			if err == nil {
-				t.Fatal("setup accepted a binary other accounts cannot execute")
+				t.Fatalf("setup accepted %s, which the broker would not run", tc.exe)
 			}
-			fill := strings.NewReplacer("{root}", root)
-			for _, want := range tc.want {
+			fill := strings.NewReplacer("{root}", root, "{exe}", tc.exe)
+			for _, want := range []string{
+				"refusing to set this host up with {root}{exe}: the host broker runs only /usr/local/bin/orbit.\n",
+				"\nPut a root-owned copy in place, then set the host up from it:\n" +
+					"  sudo install -o 0 -g 0 -m 0755 {root}{exe} /usr/local/bin/orbit\n" +
+					"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+			} {
 				if want = fill.Replace(want); !strings.Contains(err.Error(), want) {
 					t.Errorf("the error must say %q, got:\n%v", want, err)
 				}
@@ -652,6 +637,74 @@ func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
 				t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
 			}
 		})
+	}
+}
+
+// A binary outside /usr/local/bin/orbit that checkMachineBinary refuses too is told to put a
+// root-owned copy there, not to fix it where it is: setup would refuse it next for its place.
+func TestHostSetupSendsABinaryElsewhereToTheMachinesPlace(t *testing.T) {
+	env, cmds, root := testHostEnv(t, 0)
+	placeBinary(t, root, "/opt/orbit/bin/orbit")
+	chmod(t, filepath.Join(root, "/opt/orbit/bin"), 0o775)
+	env.executable = func() (string, error) { return "/opt/orbit/bin/orbit", nil }
+
+	err := hostSetup(env, "https://orbit.example.com")
+	if err == nil {
+		t.Fatal("setup accepted a binary in a directory its group can write")
+	}
+	for _, want := range []string{
+		"refusing to set this host up with " + root + "/opt/orbit/bin/orbit: its directory " + root + "/opt/orbit/bin is not root's alone",
+		"\n  sudo install -o 0 -g 0 -m 0755 " + root + "/opt/orbit/bin/orbit /usr/local/bin/orbit\n" +
+			"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error must say %q, got:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "chmod") {
+		t.Errorf("the error tells the operator to fix the binary where it is:\n%v", err)
+	}
+	if len(cmds.calls) != 0 {
+		t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
+	}
+}
+
+// No account executes the machine's binary any more — each runs its own copy — so setup no
+// longer asks that others can: a root-only /usr/local/bin/orbit is the broker's to run.
+func TestHostSetupAcceptsAMachineBinaryOnlyRootCanExecute(t *testing.T) {
+	env, cmds, root := testHostEnv(t, 0)
+	chmod(t, placeBinary(t, root, machineBinaryPath), 0o700)
+	chmod(t, filepath.Join(root, "/usr/local/bin"), 0o711)
+
+	if err := hostSetup(env, "https://orbit.example.com"); err != nil {
+		t.Fatalf("setup refused a root-owned /usr/local/bin/orbit only root can execute: %v", err)
+	}
+	if service, _ := readInstalled(t, root, hostdServiceUnitPath); !strings.Contains(service, "ExecStart=/usr/local/bin/orbit hostd\n") {
+		t.Errorf("the broker does not run the machine's binary:\n%s", service)
+	}
+	if last := cmds.calls[len(cmds.calls)-1]; last != "systemctl enable --now orbit-hostd.socket" {
+		t.Errorf("setup must finish by starting the broker, ended with %q", last)
+	}
+}
+
+// What setup says when it is done names the new instances and the binary each one runs.
+func TestHostSetupSaysWhatItSetUp(t *testing.T) {
+	env, _, root := testHostEnv(t, 0)
+	placeBinary(t, root, machineBinaryPath)
+	var out strings.Builder
+	env.out = &out
+
+	if err := hostSetup(env, "https://orbit.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	want := "\n✓ this host is set up for Orbit runners.\n" +
+		"  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock), running /usr/local/bin/orbit\n" +
+		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n" +
+		"           each running that user's own ~/.orbit/bin/orbit\n" +
+		"  Server:  https://orbit.example.com\n\n" +
+		"  Every user on this host can now run `orbit register` without root.\n"
+	if out.String() != want {
+		t.Errorf("setup said:\n%s\nwant:\n%s", out.String(), want)
 	}
 }
 
@@ -676,15 +729,20 @@ func chownToAnAccount(t *testing.T, path string) {
 }
 
 // `orbit host` with no action, and with --help, answers with its help rather than
-// installing anything.
+// installing anything — and the help names the instances setup installs.
 func TestHostCLIWithoutAnActionPrintsHelp(t *testing.T) {
 	for _, args := range [][]string{nil, {"--help"}, {"setup", "--help"}} {
 		var out strings.Builder
 		if err := cmdHostCLI(args, &out); err != nil {
 			t.Fatalf("orbit host %v: %v", args, err)
 		}
-		if !strings.Contains(out.String(), "orbit host setup --server") {
-			t.Errorf("orbit host %v printed %q, want the usage line", args, out.String())
+		for _, want := range []string{"orbit host setup --server", "orbit-runner@<user name>", "~/.orbit/bin/orbit", "/usr/local/bin/orbit"} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("orbit host %v printed %q, want it to say %q", args, out.String(), want)
+			}
+		}
+		if strings.Contains(out.String(), "<uid>") {
+			t.Errorf("orbit host %v still names uid instances: %q", args, out.String())
 		}
 	}
 	var out strings.Builder
