@@ -432,6 +432,12 @@ ID_A=$(cx sed -n 's/.*"runnerId": *"\([^"]*\)".*/\1/p' /home/alice/.orbit/config
 ID_T=$(cx sed -n 's/.*"runnerId": *"\([^"]*\)".*/\1/p' /home/test.user/.orbit/config.json)
 [ -n "$ID_A" ] && [ -n "$ID_T" ] && [ "$ID_A" != "$ID_T" ] ||
   fail 4 "the two accounts do not hold separate runner credentials ('$ID_A', '$ID_T')"
+# docs: "Register each account's runner" — the receipt's next step and, right under it, this
+# runner's new-session page. The id is the one test.user's config.json holds: the CLI writes a UUID
+# in base62, as the docs show, and leaves the stub's ids, which are not UUIDs, as they are.
+next_step="    Next     Start a session"$'\n'"             $SERVER/runners/$ID_T/new"
+[ "$(grep -xF -A1 -- "    Next     Start a session" <<<"$out")" = "$next_step" ] ||
+  fail 4 "the command did not end with the next step the docs show: '    Next     Start a session', then '             $SERVER/runners/$ID_T/new'"
 # Independent heartbeats: each runner beats the stub with its own credential (first beat at ~30s).
 wait_until 60 beats_since alice-e2e 0 && wait_until 60 beats_since test-user-e2e 0 ||
   fail 4 "the stub did not see both runners heartbeat" "$UNIT_A" "$UNIT_T"

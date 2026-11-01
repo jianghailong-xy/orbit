@@ -1158,8 +1158,8 @@ broker enables and starts the account's instance, nothing asks for a password, a
 ✓ Setup complete — build-01-alice is online.
 
     Machine  build-01-alice (build-01)
-    Next     set up a coding engine, then create a workspace on this machine.
-             https://orbit.example.com/infrastructure
+    Next     Start a session
+             https://orbit.example.com/runners/30tWePD4IYjCW1G8zmKpO/new
     orbit status · orbit doctor · orbit unregister
 ```
 
