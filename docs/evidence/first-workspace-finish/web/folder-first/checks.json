@@ -1,0 +1,551 @@
+[
+  {
+    "name": "a new account with no machine lands on Add a runner",
+    "ok": true,
+    "detail": "/runners/register"
+  },
+  {
+    "name": "orbit register ends on Start a session and this machine's new session page",
+    "ok": true
+  },
+  {
+    "name": "approved and not running: the machine is not online",
+    "ok": true,
+    "detail": {
+      "online": false,
+      "lastHeartbeatAt": null,
+      "capabilities": [],
+      "engines": null
+    }
+  },
+  {
+    "name": "the Add a runner tab left open still waits for it",
+    "ok": true,
+    "detail": "| bash | Copy | Waiting for your first runner to come online… | Keep this page open — it'll update automatically once the handshake completes. | Having trouble?"
+  },
+  {
+    "name": "Start a session on the enroll page opens the machine's new session page",
+    "ok": true,
+    "detail": "/runners/34po2vikFaKIGySGKlEd4/new"
+  },
+  {
+    "name": "register_dir is the directory orbit register ran in",
+    "ok": true,
+    "detail": "/var/tmp/first-ws-e2e/machine-home"
+  },
+  {
+    "name": "the card no longer calls a machine that has not started out of date",
+    "ok": true,
+    "detail": "Set up lab-mac | Pick where it works and sign in a coding CLI. Anything you send waits until both are done. | Waiting for lab-mac to connect. It can check folders and sign in as soon as it does. | 1 | Folder | Where on lab-mac should sessions work? They can read and change everything in it. | Another folder on lab-mac | Use this folder | 2 | Sign in Claude Code on lab-mac | Sessions run on the coding CLIs signed in on that machine, and spend its subscription. | Nothing is created until you send. You can rename the workspace or change these later."
+  },
+  {
+    "name": "it is waited for, in the card's own words, not called offline",
+    "ok": true,
+    "detail": "Set up lab-mac | Pick where it works and sign in a coding CLI. Anything you send waits until both are done. | Waiting for lab-mac to connect. It can check folders and sign in as soon as it does. | 1 | Folder | Where on lab-mac should sessions work? They can read and change everything in it. | Another folder on lab-mac | Use this folder | 2 | Sign in Claude Code on lab-mac | Sessions run on the coding CLIs signed in on that machine, and spend its subscription. | Nothing is created until you send. You can rename the workspace or change these later."
+  },
+  {
+    "name": "its folder step is closed meanwhile",
+    "ok": true
+  },
+  {
+    "name": "and the composer takes a first message to wait with it, rather than saying Runner offline",
+    "ok": true
+  },
+  {
+    "name": "the first heartbeat arrives within 5 s of the runner starting",
+    "ok": true,
+    "detail": "0.05 s (2026-11-01T02:58:36.525Z)"
+  },
+  {
+    "name": "the Add a runner tab left open says the next step by itself",
+    "ok": true,
+    "detail": "Orbit | Projects | Ctrl P | Tasks | Wiki | Workspaces | Set up lab-mac | Lab Owner | Add a runner | A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the machine you want to add — it installs the orbit CLI, then"
+  },
+  {
+    "name": "the folder step opens within 5 s of the first heartbeat, with no reload",
+    "ok": true,
+    "detail": "1.61 s after the first heartbeat (2026-11-01T02:58:36.525Z)"
+  },
+  {
+    "name": "a new account opening Orbit lands on the machine's new session page",
+    "ok": true,
+    "detail": "/runners/34po2vikFaKIGySGKlEd4/new"
+  },
+  {
+    "name": "the sidebar has the machine's Set up row",
+    "ok": true
+  },
+  {
+    "name": "registered from the home directory: the machine says so, and it is not offered",
+    "ok": true
+  },
+  {
+    "name": "a new folder leads when nothing is offered",
+    "ok": true
+  },
+  {
+    "name": "step 2 asks to sign in Claude Code",
+    "ok": true,
+    "detail": "Set up lab-mac | Pick where it works and sign in a coding CLI. Anything you send waits until both are done. | 1 | Folder | Where on lab-mac should sessions work? They can read and change everything in it. | A new folder | /var/tmp/first-ws-e2e/machine-home/orbit-repos/ | Starts empty. Ask for a clone or a new project in your first message. | Another folder on lab-mac | Use this folder | 2 | Sign in Claude Code on lab-mac | Sessions run on the coding CLIs signed in on that machine, and spend its subscription. | Sign in to Claude Code | Use an API key instead | Signing in fixes this runner. A key is account-wide — switch to its model to use it. | Nothing is created until you send. You can rename the workspace or change these later."
+  },
+  {
+    "name": "composer speaks to the machine",
+    "ok": true
+  },
+  {
+    "name": "no workspace and no session exist yet",
+    "ok": true
+  },
+  {
+    "name": "the message waits under the card",
+    "ok": true,
+    "detail": "Waiting for lab-mac — sends once both steps are done · Withdraw"
+  },
+  {
+    "name": "the composer is empty again",
+    "ok": true
+  },
+  {
+    "name": "the \"Waiting for lab-mac … Withdraw\" line is all in view, clear of the pane's 20px fade, with the picture loaded",
+    "ok": true,
+    "detail": {
+      "lineBottom": 777,
+      "paneBottom": 801,
+      "scrollTop": 131,
+      "maxScroll": 131,
+      "mask": "linear-gradient(rgb(0, 0, 0) calc(100% - 20px), rgba(0, 0, 0, 0)), linear-gradient(rgb(0, 0, 0), rgb(0, 0, 0))"
+    }
+  },
+  {
+    "name": "Withdraw gives the words back to the composer",
+    "ok": true,
+    "detail": "List the files in this project and say where you are running."
+  },
+  {
+    "name": "a second message is refused while one waits",
+    "ok": true
+  },
+  {
+    "name": "the waiting message survives a reload",
+    "ok": true
+  },
+  {
+    "name": "nothing was sent while it waits: no POST /sessions, no workspace",
+    "ok": true
+  },
+  {
+    "name": "typed with a ~, the machine answers with the repository and its branch",
+    "ok": true
+  },
+  {
+    "name": "still waiting: only the folder is done",
+    "ok": true,
+    "detail": "Waiting for lab-mac — sends once both steps are done · Withdraw"
+  },
+  {
+    "name": "the press parks a tab while the link is on its way",
+    "ok": true,
+    "detail": "about:blank"
+  },
+  {
+    "name": "Cancel ends the sign-in and offers the button again",
+    "ok": true
+  },
+  {
+    "name": "the press parks a tab while the link is on its way",
+    "ok": true,
+    "detail": "about:blank"
+  },
+  {
+    "name": "a wrong code is refused on the card, and the sign-in stays open",
+    "ok": true,
+    "detail": "2 | Sign in Claude Code on lab-mac | Sessions run on the coding CLIs signed in on that machine, and spend its subscription. | That code wasn't accepted — make sure you copied all of it, then try again. | Open the sign-in page | Copy sign-in link | Approve it there, then paste the code the page gives you: | Submit | Cancel"
+  },
+  {
+    "name": "exactly one POST /sessions, carrying the folder",
+    "ok": true,
+    "detail": [
+      {
+        "status": 201,
+        "newWorkspace": {
+          "workDir": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+        },
+        "assignedRunnerId": "34po2vikFaKIGySGKlEd4",
+        "prompt": "List the files in this project and say where you are running.",
+        "engine": "claude",
+        "provider": "claude",
+        "createdWorkspace": true
+      }
+    ]
+  },
+  {
+    "name": "the conversation opens with Created workspace",
+    "ok": true,
+    "detail": "Created workspace payments-api on lab-mac · /var/tmp/first-ws-e2e/machine-home/code/payments-api · Rename · Settings"
+  },
+  {
+    "name": "GET /sessions/:id says createdWorkspace",
+    "ok": true
+  },
+  {
+    "name": "the engine ran in the folder, on its branch",
+    "ok": true,
+    "detail": [
+      {
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/payments-api",
+        "branch": "main",
+        "isGit": true,
+        "prompt": "List the files in this project and say where you are running.",
+        "wrote": "E2E_SESSION_34po3yGV05NzMt8iFv7d4.md"
+      }
+    ]
+  },
+  {
+    "name": "the file the turn wrote is on the disk there",
+    "ok": true,
+    "detail": "/var/tmp/first-ws-e2e/machine-home/code/payments-api/E2E_SESSION_34po3yGV05NzMt8iFv7d4.md"
+  },
+  {
+    "name": "the kernel agrees where it runs",
+    "ok": true,
+    "detail": [
+      {
+        "pid": 2531871,
+        "session": "34po3yGV05NzMt8iFv7d4",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+      }
+    ]
+  },
+  {
+    "name": "the picture waited with the message and left with it",
+    "ok": true,
+    "detail": {
+      "attachmentIds": 1,
+      "blocks": [
+        "image",
+        "text"
+      ]
+    }
+  },
+  {
+    "name": "and the conversation shows it",
+    "ok": true
+  },
+  {
+    "name": "workspace row: no auto_create_work_dir, isolation off",
+    "ok": true,
+    "detail": " payments-api | /var/tmp/first-ws-e2e/machine-home/code/payments-api | f                    | f               |                 |                 |          | f       | lab-mac"
+  },
+  {
+    "name": "a second turn runs in the same folder",
+    "ok": true,
+    "detail": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+  },
+  {
+    "name": "a heartbeat later the workspace row knows its folder and its origin",
+    "ok": true,
+    "detail": "t               | t               | https://git.first-ws.invalid/lab/payments-api.git"
+  },
+  {
+    "name": "with a workspace, the machine's new session page moves on to that workspace",
+    "ok": true,
+    "detail": "/workspaces/34po3yG6j1VzXA5eeSaMf/new"
+  },
+  {
+    "name": "the setup card is gone once the machine has a workspace",
+    "ok": true
+  },
+  {
+    "name": "with the workspace deleted the machine is empty again: the Set up row is back",
+    "ok": true
+  },
+  {
+    "name": "step 2 is already done: the CLI stays signed in",
+    "ok": true
+  },
+  {
+    "name": "the repos root does not exist before the first new folder",
+    "ok": true,
+    "detail": "/var/tmp/first-ws-e2e/machine-home/orbit-repos"
+  },
+  {
+    "name": "a name the server would refuse is refused on the card",
+    "ok": true
+  },
+  {
+    "name": "a good name, with nothing there yet, enables the button once the machine has looked",
+    "ok": true,
+    "detail": "A new folder /var/tmp/first-ws-e2e/machine-home/orbit-repos/ Starts empty. Ask for a clone or a new project in your first message."
+  },
+  {
+    "name": "the card says what the next send makes",
+    "ok": true,
+    "detail": "Ready. Send a task — Orbit adds the workspace “scratch-notes” for /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes as it starts."
+  },
+  {
+    "name": "Change takes the folder back",
+    "ok": true
+  },
+  {
+    "name": "still nothing on the disk before the send",
+    "ok": true
+  },
+  {
+    "name": "one POST /sessions naming only the new folder",
+    "ok": true,
+    "detail": [
+      {
+        "status": 201,
+        "newWorkspace": {
+          "newFolder": "scratch-notes"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Created workspace names the new folder",
+    "ok": true,
+    "detail": "Created workspace scratch-notes on lab-mac · /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes · Rename · Settings"
+  },
+  {
+    "name": "the runner made the folder under the repos root",
+    "ok": true,
+    "detail": "drwxr-xr-x root /var/tmp/first-ws-e2e/machine-home/orbit-repos\ndrwxr-xr-x root /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes\ntotal 12\ndrwxr-xr-x 2 root root 4096 Nov  1 10:59 .\ndrwxr-xr-x 3 root root 4096 Nov  1 10:59 ..\n-rw-r--r-- 1 root root   78 Nov  1 10:59 E2E_SESSION_34po4y6CEfyezzkiWbzUu.md"
+  },
+  {
+    "name": "the engine ran in the new folder, which started empty and is no repository",
+    "ok": true,
+    "detail": [
+      {
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes",
+        "isGit": false,
+        "filesBefore": [],
+        "wrote": "E2E_SESSION_34po4y6CEfyezzkiWbzUu.md"
+      }
+    ]
+  },
+  {
+    "name": "the runner says it made it, for this session",
+    "ok": true
+  },
+  {
+    "name": "the kernel agrees where it runs",
+    "ok": true,
+    "detail": [
+      {
+        "pid": 2531871,
+        "session": "34po3yGV05NzMt8iFv7d4",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+      },
+      {
+        "pid": 2536892,
+        "session": "34po4y6CEfyezzkiWbzUu",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes"
+      }
+    ]
+  },
+  {
+    "name": "a heartbeat later the row says the folder exists and is no repository",
+    "ok": true,
+    "detail": "t               | f               |"
+  },
+  {
+    "name": "the machine page says what to do with no workspace",
+    "ok": true,
+    "detail": "No workspaces on lab-mac yet. Start a session and pick the folder it works in as you go — or add one here. Start a session"
+  },
+  {
+    "name": "a path that does not exist is refused where it was typed",
+    "ok": true,
+    "detail": {
+      "text": "No such directory on lab-mac.",
+      "tone": "bad",
+      "secs": 1.246,
+      "wasChecking": true
+    }
+  },
+  {
+    "name": "it cannot be used: the button stays off",
+    "ok": true
+  },
+  {
+    "name": "Enter does not pick it either",
+    "ok": true
+  },
+  {
+    "name": "a message sent now waits: no POST /sessions, no workspace row made for the bad path",
+    "ok": true
+  },
+  {
+    "name": "a file is not a folder",
+    "ok": true,
+    "detail": {
+      "text": "That isn’t a directory on lab-mac.",
+      "tone": "bad",
+      "secs": 2.257,
+      "wasChecking": true
+    }
+  },
+  {
+    "name": "a plain folder can be used, and says what that costs",
+    "ok": true,
+    "detail": {
+      "text": "Found · not a git repository — sessions will share it instead of isolating.",
+      "tone": "warn",
+      "secs": 2.267,
+      "wasChecking": true
+    }
+  },
+  {
+    "name": "a typed git folder says its branch, and ~ is the machine's to expand",
+    "ok": true,
+    "detail": {
+      "text": "Found · git repository · develop",
+      "tone": "ok",
+      "secs": 2.257,
+      "wasChecking": true
+    }
+  },
+  {
+    "name": "each folder check is answered within 3 s of being asked, typing settled",
+    "ok": true,
+    "detail": [
+      1.25,
+      2.26,
+      2.27,
+      2.26
+    ]
+  },
+  {
+    "name": "the waiting message left by itself once a good folder was picked, with the runner's resolved path",
+    "ok": true,
+    "detail": [
+      {
+        "status": 201,
+        "newWorkspace": {
+          "workDir": "/var/tmp/first-ws-e2e/machine-home/code/billing-api"
+        },
+        "prompt": "Which branch is this repository on?"
+      }
+    ]
+  },
+  {
+    "name": "the engine ran there, on develop",
+    "ok": true,
+    "detail": [
+      {
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/billing-api",
+        "branch": "develop"
+      }
+    ]
+  },
+  {
+    "name": "the kernel agrees where it runs",
+    "ok": true,
+    "detail": [
+      {
+        "pid": 2531871,
+        "session": "34po3yGV05NzMt8iFv7d4",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+      },
+      {
+        "pid": 2536892,
+        "session": "34po4y6CEfyezzkiWbzUu",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes"
+      },
+      {
+        "pid": 2558821,
+        "session": "34po5txr5VZEaHWXAmQGv",
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/code/billing-api"
+      }
+    ]
+  },
+  {
+    "name": "typed with a ~, the machine answers with the repository and its branch",
+    "ok": true
+  },
+  {
+    "name": "the folder of a deleted workspace can be chosen again",
+    "ok": true,
+    "detail": [
+      {
+        "status": 201,
+        "newWorkspace": {
+          "workDir": "/var/tmp/first-ws-e2e/machine-home/code/payments-api"
+        },
+        "shell": true,
+        "prompt": "pwd"
+      }
+    ]
+  },
+  {
+    "name": "a deleted workspace does not hold its name",
+    "ok": true,
+    "detail": "Created workspace payments-api on lab-mac · /var/tmp/first-ws-e2e/machine-home/code/payments-api · Rename · Settings"
+  },
+  {
+    "name": "a first message that is a shell command runs in the folder",
+    "ok": true
+  },
+  {
+    "name": "and the session settles: no longer Starting, waiting for a reply",
+    "ok": true,
+    "detail": "Orbit | Projects | Ctrl P | Tasks | Wiki | Workspaces | 1 | Edit | payments-api | · | lab-mac | Ctrl 1 | Lab Owner | payments-api | Open | New session | Search sessions | Ctrl K | Today | $ pwd | just"
+  },
+  {
+    "name": "a new folder named after one still on the disk is said to be used with what is in it, before anything is sent",
+    "ok": true,
+    "detail": "A new folder /var/tmp/first-ws-e2e/machine-home/orbit-repos/ This folder already exists on lab-mac. Sessions will use what’s in it."
+  },
+  {
+    "name": "it was asked about where it would go, and nothing was sent to find out",
+    "ok": true
+  },
+  {
+    "name": "picked, it is that folder: not one made as the session starts",
+    "ok": true,
+    "detail": "Folder /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes not a git repository — sessions will share it instead of isolating. Change"
+  },
+  {
+    "name": "it goes by its path, as any folder that is there does",
+    "ok": true,
+    "detail": [
+      {
+        "status": 201,
+        "newWorkspace": {
+          "workDir": "/var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes"
+        }
+      }
+    ]
+  },
+  {
+    "name": "and the session opened on the files the card said were there",
+    "ok": true,
+    "detail": [
+      {
+        "cwd": "/var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes",
+        "filesBefore": [
+          "E2E_SESSION_34po4y6CEfyezzkiWbzUu.md"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "a new folder named after a file is refused before anything is sent, and says why",
+    "ok": true,
+    "detail": "A new folder /var/tmp/first-ws-e2e/machine-home/orbit-repos/ There’s already a file with this name on lab-mac. Pick another name."
+  },
+  {
+    "name": "Use this folder stays off",
+    "ok": true
+  },
+  {
+    "name": "a message sent now waits: no POST /sessions, and no workspace for the file",
+    "ok": true
+  },
+  {
+    "name": "no page error or console error in the whole walk",
+    "ok": true,
+    "detail": []
+  }
+]

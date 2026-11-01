@@ -1,0 +1,2 @@
+f1: the folder step opened 2.8 s after the first heartbeat
+f1: the register directory's answer showed 5.2 s after it

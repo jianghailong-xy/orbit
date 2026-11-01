@@ -1,0 +1,28 @@
+03:16:44 "POST /__reset HTTP/1.1" 200 -
+03:16:44 "POST /__set HTTP/1.1" 200 -
+03:17:27 "POST /__set HTTP/1.1" 200 -
+03:17:27 BODY /api/runners/austin/dir-probe {"path": "~/code/app"}
+03:17:27 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:17:33 "POST /__reset HTTP/1.1" 200 -
+03:17:33 "POST /__set HTTP/1.1" 200 -
+03:17:41 BODY /api/runners/austin/dir-probe {"path": "~/code/app"}
+03:17:41 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:17:59 BODY /api/runners/austin/dir-probe {"path": "/home/orbit/orbit-repos/payments"}
+03:17:59 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:18:19 "POST /__set HTTP/1.1" 200 -
+03:18:31 BODY /api/sessions {"assignedRunnerId": "austin", "effort": "", "engine": "claude", "model": "claude-opus-5-5", "newWorkspace": {"workDir": "/home/orbit/orbit-repos/payments"}, "permissionMode": "auto", "prompt": "Fix the flaky login test in tests/auth — it fails about one run in five on CI.", "provider": "claude"}
+03:18:31 "POST /api/sessions HTTP/1.1" 201 -
+03:18:36 "POST /__reset HTTP/1.1" 200 -
+03:18:36 "POST /__set HTTP/1.1" 200 -
+03:18:47 BODY /api/runners/austin/dir-probe {"path": "~/code/app"}
+03:18:47 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:19:05 BODY /api/runners/austin/dir-probe {"path": "/srv/shared"}
+03:19:05 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:19:07 BODY /api/runners/austin/dir-probe {"path": "~/code/app"}
+03:19:07 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:19:14 "POST /__reset HTTP/1.1" 200 -
+03:19:14 "POST /__set HTTP/1.1" 200 -
+03:19:21 BODY /api/runners/austin/dir-probe {"path": "~/code/app"}
+03:19:21 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
+03:19:37 BODY /api/runners/austin/dir-probe {"path": "/home/orbit/orbit-repos/notes.txt"}
+03:19:37 "POST /api/runners/austin/dir-probe HTTP/1.1" 201 -
