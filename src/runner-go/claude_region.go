@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -436,11 +437,23 @@ func claudeSettingsEnv(dir string) map[string]string {
 // settings.json in the session's CLAUDE_CONFIG_DIR, then from this process's environment, and the first that
 // sets it wins: the base URL as claudeTalksToMeasuredEndpoint reads it, with the settings file between the two.
 func claudeTurnIsAnthropicBound(agentEnv map[string]string) bool {
+	lookup := claudeEnvLookup(agentEnv)
+	if claudeEnvTruthy(lookup("CLAUDE_CODE_USE_BEDROCK")) || claudeEnvTruthy(lookup("CLAUDE_CODE_USE_VERTEX")) {
+		return false
+	}
+	base := strings.TrimSpace(lookup("ANTHROPIC_BASE_URL"))
+	return base == "" || isAnthropicHost(base)
+}
+
+// claudeEnvLookup reads a variable as a `claude` spawned with agentEnv layered over this process's environment
+// sees it: the session's env, then the `env` of the settings.json in its CLAUDE_CONFIG_DIR, then this process's
+// environment, the first that sets it winning.
+func claudeEnvLookup(agentEnv map[string]string) func(key string) string {
 	var settings map[string]string
 	if dir, err := claudeSessionAccountDir(agentEnv, ""); err == nil {
 		settings = claudeSettingsEnv(dir)
 	}
-	lookup := func(key string) string {
+	return func(key string) string {
 		if v, set := agentEnv[key]; set {
 			return v
 		}
@@ -449,11 +462,6 @@ func claudeTurnIsAnthropicBound(agentEnv map[string]string) bool {
 		}
 		return os.Getenv(key)
 	}
-	if claudeEnvTruthy(lookup("CLAUDE_CODE_USE_BEDROCK")) || claudeEnvTruthy(lookup("CLAUDE_CODE_USE_VERTEX")) {
-		return false
-	}
-	base := strings.TrimSpace(lookup("ANTHROPIC_BASE_URL"))
-	return base == "" || isAnthropicHost(base)
 }
 
 // claudeEnvTruthy reads a Claude Code switch the way the CLI does: 1, true, yes or on, in any case.
@@ -504,4 +512,149 @@ func claudeRegionRefusal(ctx context.Context, job *ClaimedSession) string {
 		return claudeRegionRefusedError(check.machine, v.Name)
 	}
 	return ""
+}
+
+// claudeConnectionBlocked reports whether Claude's connection to Anthropic is in a region Anthropic does not offer
+// Claude in, on the answer a turn would go on (forTurn), with the runner's name and the decided place: what the
+// runner's other credentialed requests to Anthropic wait on — a plan-usage read and the token refresh it can ask
+// for (planusage.go), and a Claude sign-in (login.go). False on an allowed or unknown answer, and in a process
+// with no check, which gates nothing.
+func claudeConnectionBlocked(ctx context.Context) (machine, region string, blocked bool) {
+	check := claudeRegion.Load()
+	if check == nil {
+		return "", "", false
+	}
+	if v := check.forTurn(ctx); v.Verdict == claudeRegionBlocked {
+		return check.machine, v.Name, true
+	}
+	return "", "", false
+}
+
+// claudeStartBlocked reports whether a claude the runner starts for its own work, with agentEnv layered over this
+// process's environment, would talk to Anthropic (claudeTurnIsAnthropicBound) while Claude's connection is in a
+// region Anthropic does not offer Claude in (claudeConnectionBlocked): the rule turns go by (owner decision ①), for
+// a commit message, a transcript summary, the slash-command registry and the model catalog. A start talks to
+// Anthropic even when it asks no model anything, since the CLI refreshes a due token as it starts (planusage.go).
+// A machine whose own Claude Code talks to another provider keeps them, and a process with no check gates nothing.
+func claudeStartBlocked(ctx context.Context, agentEnv map[string]string) bool {
+	if claudeRegion.Load() == nil || !claudeTurnIsAnthropicBound(agentEnv) {
+		return false
+	}
+	_, _, blocked := claudeConnectionBlocked(ctx)
+	return blocked
+}
+
+// errClaudeStartRegionBlocked is a claude the runner did not start for itself (claudeStartBlocked).
+var errClaudeStartRegionBlocked = errors.New("not starting claude while anthropic is blocked — " + claudeRegionUnsupported)
+
+// claudeLoginBlocked is claudeStartBlocked for a claude that asks no model and talks to Anthropic only with a login
+// to send: `claude auth status` (probeAuthIn), `claude update` (updateEngine) and the installer's `claude install`
+// (installEngineNow, ensureEngine). Measured on Claude Code 2.1.316 behind a recording proxy, each sends a stored
+// login's token to api.anthropic.com (GET /api/oauth/profile; update and install also /api/eval and
+// /api/event_logging) and refreshes an expired one at platform.claude.com, while with no login stored they send
+// nothing credentialed. So they wait only where there is a login to send, and say where and why.
+func claudeLoginBlocked(ctx context.Context, agentEnv map[string]string) (machine, region string, blocked bool) {
+	if claudeRegion.Load() == nil || !claudeTurnIsAnthropicBound(agentEnv) {
+		return "", "", false
+	}
+	if machine, region, blocked = claudeConnectionBlocked(ctx); !blocked || !claudeLoginPresent(agentEnv) {
+		return "", "", false
+	}
+	return machine, region, true
+}
+
+// claudeLoginPresent reports whether a claude spawned with agentEnv layered over this process's environment holds a
+// login or key it would send to Anthropic: a key or token in its environment or settings.json env, or an OAuth login
+// with a token in it, kept in its config directory's credentials file or, on macOS, its Keychain item.
+func claudeLoginPresent(agentEnv map[string]string) bool {
+	lookup := claudeEnvLookup(agentEnv)
+	for _, key := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+		if strings.TrimSpace(lookup(key)) != "" {
+			return true
+		}
+	}
+	// The directory as the environment names it: "" is the runner's own login, whose Keychain item is named
+	// without one (claudeKeychainService).
+	dir, set := agentEnv["CLAUDE_CONFIG_DIR"]
+	if !set {
+		dir = os.Getenv("CLAUDE_CONFIG_DIR")
+	}
+	login, err := claudeStoredLoginIn(strings.TrimSpace(dir))
+	return err == nil && (login.accessToken != "" || login.refreshable)
+}
+
+// claudeInstallRefusedMessage is why Claude Code is not installed on this runner while claudeLoginBlocked: machine
+// is the runner's name, region the decided name.
+func claudeInstallRefusedMessage(machine, region string) string {
+	return "Claude Code isn’t installed on " + machine + " while its connection to Anthropic is in " + region +
+		", where Anthropic doesn’t offer Claude: its installer sends the Claude login stored there to Anthropic."
+}
+
+// claudeUpdateSkippedDetail is what the update record says while claudeLoginBlocked keeps `claude update` from running.
+func claudeUpdateSkippedDetail(region string) string {
+	return "Not updated while this machine’s connection to Anthropic is in " + region +
+		", where Anthropic doesn’t offer Claude: `claude update` sends the Claude login stored here to Anthropic."
+}
+
+// envAsAgent is a whole environment as the map claudeTurnIsAnthropicBound layers over this process's: nil for nil,
+// which is this process's own.
+func envAsAgent(env []string) map[string]string {
+	if env == nil {
+		return nil
+	}
+	m := make(map[string]string, len(env))
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+// claudeSignInRefusedMessage is why a Claude sign-in does not start on this runner (§12): board 04's sentence, the
+// one the control plane refuses a sign-in with. machine is the runner's name, region the decided name.
+func claudeSignInRefusedMessage(machine, region string) string {
+	return "Claude sign-in isn’t available on " + machine + ": its connection to Anthropic is in " + region +
+		", where Anthropic doesn’t offer Claude."
+}
+
+// claudeRegionsSourceURL is Anthropic's Supported Regions Policy, the page the list is copied from (§2):
+// @orbit/shared's CLAUDE_REGIONS_SOURCE_URL. The address board 03 prints, /supported-countries, redirects here.
+const claudeRegionsSourceURL = "https://www.anthropic.com/legal/supported-regions"
+
+// claudeNonessentialTrafficVar turns Claude Code's nonessential traffic off: its telemetry, error reports, feature
+// flags and updater, the requests a claude makes to api.anthropic.com however it is configured.
+const claudeNonessentialTrafficVar = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
+
+// claudeStartsQuiet reports whether a claude started with agentEnv layered over this process's environment runs with
+// its nonessential traffic off: it is not Anthropic-bound, so it runs whatever the verdict (owner decision ①), while
+// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③).
+// Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to api.anthropic.com as it starts
+// (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set sends Anthropic nothing.
+// Read with no request and no wait (lastDecided), so a turn on another provider's key never waits on the route: no
+// check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
+func claudeStartsQuiet(agentEnv map[string]string) bool {
+	const carryOver = 24 * time.Hour
+	check := claudeRegion.Load()
+	if check == nil {
+		return false
+	}
+	v, ok := check.lastDecided(claudeAnthropicProxy())
+	if !ok || v.Verdict != claudeRegionBlocked || check.now().Sub(v.At) >= carryOver {
+		return false
+	}
+	return !claudeTurnIsAnthropicBound(agentEnv)
+}
+
+// claudeQuietEnv is env, the whole environment a claude is started with (nil: this process's own, inherited), with
+// its nonessential traffic off when claudeStartsQuiet(agentEnv), and env as it was otherwise. Every claude the runner
+// starts that the region check lets run gets its environment through it.
+func claudeQuietEnv(env []string, agentEnv map[string]string) []string {
+	if !claudeStartsQuiet(agentEnv) {
+		return env
+	}
+	if env == nil {
+		env = os.Environ()
+	}
+	return envWithValue(env, claudeNonessentialTrafficVar, "1")
 }

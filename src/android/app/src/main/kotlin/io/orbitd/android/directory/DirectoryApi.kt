@@ -26,6 +26,7 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun mutate(path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null): ByteArray =
         api.request(handle, ApiRequest(path, method, body = body?.toString()?.encodeToByteArray())).body
     suspend fun rename(id: String, name: String) { mutate(listOf("sessions", id), HttpMethod.PATCH, buildJsonObject { put("title", name.trim()) }) }
+    suspend fun renameWorkspace(id: String, name: String) { mutate(listOf("workspaces", id), HttpMethod.PATCH, buildJsonObject { put("name", name.trim()) }) }
     suspend fun pin(id: String, pinned: Boolean) { mutate(listOf("sessions", id, "pin"), if (pinned) HttpMethod.POST else HttpMethod.DELETE) }
     suspend fun complete(id: String) { mutate(listOf("sessions", id, "complete")) }
     /** Write the session's recap again now, past the settle hooks' two-minute window: the conversation's Recap card's refresh.
@@ -71,4 +72,31 @@ data class DirectoryData(
     val error: String? = null, val waitingForConnection: Boolean = false,
     /** The rows are the copy this device's cache restored, not yet replaced by a read from the server. */
     val cached: Boolean = false,
-)
+    val runnerRows: List<JsonObject> = emptyList(),
+    val workspaceRows: List<JsonObject> = emptyList(),
+) {
+    val effectiveRunnerRows: List<JsonObject>
+        get() = runnerRows.ifEmpty {
+            runners.map { r ->
+                buildJsonObject {
+                    put("id", r.id)
+                    put("name", r.name)
+                    r.displayName?.let { put("displayName", it) }
+                    r.status?.let { put("status", it) }
+                    r.online?.let { put("online", it) }
+                    r.lastHeartbeatAt?.let { put("lastHeartbeatAt", it) }
+                }
+            }
+        }
+
+    val effectiveWorkspaceRows: List<JsonObject>
+        get() = workspaceRows.ifEmpty {
+            workspaces.map { w ->
+                buildJsonObject {
+                    put("id", w.id)
+                    put("name", w.name)
+                    w.runnerId?.let { put("runnerId", it) }
+                }
+            }
+        }
+}

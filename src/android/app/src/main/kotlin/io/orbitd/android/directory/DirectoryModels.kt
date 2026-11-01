@@ -17,7 +17,8 @@ import kotlinx.serialization.json.intOrNull
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
     val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null)
 @Serializable
-data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null)
+data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
+    val displayName: String? = null, val lastHeartbeatAt: String? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable

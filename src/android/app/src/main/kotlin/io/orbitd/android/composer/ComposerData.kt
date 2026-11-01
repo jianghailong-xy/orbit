@@ -37,8 +37,10 @@ data class ComposerDraft(val text: String = "", val selectionStart: Int = 0, val
     val attachments: List<StagedAttachment> = emptyList(), val pending: PendingSend? = null,
     val resumeConfig: JsonObject = JsonObject(emptyMap()), val createdSessionId: String? = null)
 
-data class DraftTarget(val workspaceId: String, val folderId: String? = null) {
-    val key get() = "new-session:${ObjectId.canonical(workspaceId) ?: workspaceId}:${folderId?.let(ObjectId::canonical) ?: folderId.orEmpty()}"
+data class DraftTarget(val workspaceId: String, val folderId: String? = null, val runnerId: String? = null) {
+    val isMachineDraft get() = runnerId != null && workspaceId.isEmpty()
+    val key get() = if (isMachineDraft) "new-session:runner:${ObjectId.canonical(runnerId!!) ?: runnerId}"
+        else "new-session:${ObjectId.canonical(workspaceId) ?: workspaceId}:${folderId?.let(ObjectId::canonical) ?: folderId.orEmpty()}"
 }
 
 data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded: Boolean = false,

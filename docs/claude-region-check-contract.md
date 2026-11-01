@@ -361,6 +361,53 @@ On the server:
   that would carry it fails it with the same sentence (`loginStatus: 'failed'`, `loginMessage`), judged on what the
   polling process declares.
 
+**The runner's other requests to Anthropic** wait on the answer its turns go by (§10: under 60 seconds old, else
+asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_region.go`):
+
+- **Plan usage** (`planusage.go`, for Default and every added account): no read of `api.anthropic.com`, and no token
+  refresh for one, since that talks to Anthropic too. Each account's probe logs
+  `not reading Anthropic usage while anthropic is blocked — CLAUDE_REGION_UNSUPPORTED` once and keeps its last
+  reading, as after any failed read. The first pass on an allowed answer reads again. No other engine's usage is
+  checked (⑥).
+- **Claude sign-in** (`login.go`): a login start fails at once with the sentence above, before an account is added
+  or any process starts (no `script`, no `claude auth login`). The log says
+  `login {attempt}: claude sign-in refused — CLAUDE_REGION_UNSUPPORTED`.
+- **`orbit doctor`** (`doctor.go`) makes a check of its own when it starts, as the runner makes one (§3), which the
+  route records like any other. While it answers blocked, Claude Code's line reads `Anthropic: region not supported`,
+  doctor offers and suggests no Claude sign-in, and a `Claude region` section follows the engines (board 03). The
+  address under it is `CLAUDE_REGIONS_SOURCE_URL` (§2). Its answer is the process's own check, so the gates below
+  hold in doctor too.
+- **The runner's own `claude` starts** go by the turns' rule (①): they wait only when the `claude` they would start is
+  Anthropic-bound (§8, from that process's environment and `settings.json`) and the answer is blocked
+  (`claudeStartBlocked`). A machine whose own Claude Code points at another provider keeps them. Any `claude` start
+  can talk to Anthropic, because the CLI refreshes a due token as it starts.
+  - Model calls fall back to what each already had: a commit message to the diffstat message (`worktree.go`) and a
+    transcript summary to the mechanical digest (`transcript_rebuild.go`).
+  - The slash-command registry probe (`slash_registry.go`) and the hourly model catalog (`claude_models.go`) start
+    nothing and keep what they have. The first pass on an allowed answer reads again.
+  - `claude auth status` (`probeAuthIn`, for Default and every account), `claude update` (`updateEngine`) and the
+    installer's `claude install` (`installEngineNow`, `ensureEngine`) wait only where a login or key is stored
+    (`claudeLoginBlocked`). Measured on Claude Code 2.1.316 through a recording proxy, each sends a stored login's
+    token to `api.anthropic.com`, and with no login stored they send nothing credentialed. While waiting:
+    - `auth status` answers unknown, which is never read as signed out;
+    - an update is recorded as skipped with ``Not updated while this machine’s connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude: `claude update` sends the Claude login stored here to Anthropic.``;
+    - an install fails with `Claude Code isn’t installed on {machine} while its connection to Anthropic is in {region}, where Anthropic doesn’t offer Claude: its installer sends the Claude login stored there to Anthropic.`
+  - Left as they are: `claude --version`, which connects nowhere; Anthropic-bound turns and deliveries, which have
+    their own gates (§10); and what a person runs in their own terminal (`orbit resume`, doctor's interactive
+    install).
+- **Quiet starts.** While blocked, every `claude` the runner starts that is not Anthropic-bound runs with
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (`claudeQuietEnv`). That covers a session on another provider's key
+  (`spawnClaude`, first spawn and respawn) and each start above that runs. "Blocked" here means the last decided
+  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`). It is read with no
+  request and no wait, so such a turn is never checked and never waits on the route (①).
+  - Measured on Claude Code 2.1.316, such a `claude` with a Claude login stored sends that login to
+    `api.anthropic.com` (`/api/claude_cli/bootstrap`, `/api/claude_code_penguin_mode`). With the variable it sends
+    Anthropic nothing, while the turn, its reply and its prompt suggestion still go to the other provider.
+  - The variable also turns off Claude Code's telemetry and product feedback, and its Design skills, commands and
+    tool.
+  - Nothing changes with no decided answer, an allowed one, or one a day old. A runner that has just started has no
+    decided answer until its first check answers, a few seconds in; a session it spawns before then is not quiet.
+
 ## Copy of record (board 04)
 
 Every sentence a person reads, word for word. `{machine}` is the runner's name, `{region}` is `region.name`.
