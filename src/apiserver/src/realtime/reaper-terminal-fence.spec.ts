@@ -39,6 +39,10 @@ test('reaper terminalization retires the generation then records leased CURRENT_
       updateMany: async () => ({ count: 0 }),
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
+    // What a queued wake turn the drain answers carried (runner-api/wake-turn-withdraw.ts). No fixture
+    // here files one, so it settles nothing and the order asserted below is unchanged.
+    backgroundJobWake: { deleteMany: async () => ({ count: 0 }) },
+    sessionScheduledWakeup: { findMany: async () => [] },
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),

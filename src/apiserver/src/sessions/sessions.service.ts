@@ -7750,6 +7750,9 @@ export class SessionsService {
         // a DONE task's identity was waiting for (§10.5 O-L4 3).
         await settleDeliveredIdentityAfterFinish(tx, session);
         await retireSessionInboxGeneration(tx, sessionId);
+        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: now },
@@ -7764,6 +7767,10 @@ export class SessionsService {
             endReason: reason,
           },
         });
+        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+        // dropped with the session that is ending, and taken out of their loop's runs
+        // (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         // Retire queued messages in place. This prevents replay while preserving target FKs,
         // attachments and clientTurnId receipts as durable audit evidence.
         await tx.conversationTurn.updateMany({

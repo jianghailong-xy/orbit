@@ -271,7 +271,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
-import { settleUnrunWakeTurns } from './wake-turn-withdraw';
+import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
   ScheduledWakeupDto,
@@ -7105,6 +7105,7 @@ export class RunnerApiController {
           },
         });
       }
+      let droppedWakeups: DrainedWakeupDrop[] = [];
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
           includeInFlight: true,
@@ -7133,6 +7134,10 @@ export class RunnerApiController {
           retryArmed: (retryArmAt ?? current.retryAt) != null,
           failedTurnKey: completedTurn?.clientTurnId,
         });
+        // And a wakeup filed onto a `bg-wake:` turn queued behind the failed one, which the drain below
+        // answers unrun: held for the retry armed above or dropped, and taken out of its loop's runs
+        // (wake-turn-withdraw.ts).
+        droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -7180,6 +7185,7 @@ export class RunnerApiController {
         reviewToDeliver,
         reviewsAbandoned,
         repairCheck: repairCheckAfter(current),
+        droppedWakeups,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -7319,6 +7325,9 @@ export class RunnerApiController {
       return { ok: true, status: finalized.status };
     }
     if (finalized.failSession) {
+      // The one-shot wakeups the failure dropped with its session, no retry armed: their owner is told,
+      // once, now that the drop has committed (contract §4).
+      signalDrainedWakeups(this.push, this.logger, finalized.droppedWakeups ?? []);
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {
@@ -8789,6 +8798,9 @@ export class RunnerApiController {
         closesRequests: true,
         retryArmed: retryAt != null,
       });
+      // And a wakeup filed onto a `bg-wake:` turn still queued, which the drain below answers unrun: held
+      // for an armed retry or dropped, and taken out of its loop's runs (wake-turn-withdraw.ts).
+      const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
@@ -8871,9 +8883,13 @@ export class RunnerApiController {
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
         repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        droppedWakeups,
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+    // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
+    // told, once, now that the drop has committed (contract §4).
+    signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);
 
     if (
       'taskReclaimed' in outcome

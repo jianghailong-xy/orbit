@@ -33,7 +33,9 @@ import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_BEATS,
@@ -275,6 +277,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * service; `@Optional()` for the specs that build the reaper by hand, which sweep whenever they ask.
      */
     @Optional() private readonly leader?: ControlPlaneLeader,
+    /**
+     * Tells an owner that a one-shot wakeup of theirs was dropped with its FAILED session when a reap
+     * drained the turn it was filed onto (runner-api/wake-turn-withdraw.ts, contract §4). RealtimeModule
+     * imports PushModule, so production always has it (`reaper-push-wiring.spec.ts` builds that module and
+     * checks); `@Optional()` for the specs that build the reaper by hand about something else.
+     */
+    @Optional() private readonly push?: PushService,
   ) {}
 
   onModuleInit(): void {
@@ -891,6 +900,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         closesRequests: true,
         retryArmed: retryAt != null,
       });
+      // And a wakeup filed onto a `bg-wake:` turn still queued — a tick due while the runner was already
+      // dead, before this reap — which the drain below answers unrun: settled by the status written above,
+      // held for the retry or dropped, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+      // Left DELIVERED, it would point at a turn no engine was ever handed.
+      const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
@@ -916,6 +930,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         taskReclaimed,
         currentWorkTerminalized,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        droppedWakeups,
       };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) {
@@ -924,6 +939,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       }
       return;
     }
+    // The one-shot wakeups this reap dropped with the session it FAILED, retry unarmed: their owner is told,
+    // once, now that the drop has committed (contract §4).
+    signalDrainedWakeups(this.push, this.log, outcome.droppedWakeups ?? []);
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.
