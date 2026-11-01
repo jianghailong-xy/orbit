@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>hostd per-account runners</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board-local classes carry the xh- prefix: index.css has bare short class names. */
+  .xh-part { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 12px; padding: 18px 20px 20px; }
+  .xh-part + .xh-part { margin-top: 22px; }
+  .xh-h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .xh-lead { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+  .xh-code { font-family: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; font-size: 11px; color: var(--text-1);
+    background: var(--fill-inset); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  .xh-mini { font-size: 12px; font-weight: 700; color: var(--text-2); margin: 14px 0 6px; }
+
+  /* part 1: today vs new */
+  .xh-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .xh-lane { border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .xh-lane.new { border: 1.5px solid var(--brand); background: var(--bg-raised); }
+  .xh-lane h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .xh-node { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 8px; padding: 7px 10px;
+    font-size: 12.5px; line-height: 1.5; color: var(--text-1); }
+  .xh-node small { display: block; font-size: 11.5px; color: var(--text-2); }
+  .xh-node.root { border-left: 4px solid var(--warning-solid); }
+  .xh-node.acct { border-left: 4px solid #8e6bd8; }
+  .xh-node.sys { border-left: 4px solid var(--brand); }
+  .xh-node.bad { background: var(--error-bg); border-color: var(--error-border); }
+  .xh-down { color: var(--text-4); text-align: center; font-size: 15px; line-height: 1; margin: 3px 0; }
+  .xh-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .xh-tag { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; line-height: 18px; }
+  .xh-tag.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .xh-tag.good { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+
+  /* part 2: one machine */
+  .xh-host { border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px 14px; background: var(--bg-subtle); }
+  .xh-host-h { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--text-3); margin: 0 0 10px; }
+  .xh-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .xh-box .xh-code { white-space: normal; overflow-wrap: break-word; }
+  .xh-new, .xh-same, .xh-gone { white-space: nowrap; }
+  .xh-zone { border-radius: 10px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .xh-zone.root { background: var(--warning-bg); border: 1.5px solid var(--warning-border); }
+  .xh-zone.acct { background: #f6f2ff; border: 1.5px solid #c7b5f2; }
+  .xh-zone.legacy { background: var(--bg-raised); border: 1.5px dashed var(--border); }
+  .xh-zone h4 { margin: 0; font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .xh-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 9px; }
+  .xh-box b { font-size: 12.5px; font-weight: 650; display: block; }
+  .xh-box p { margin: 1px 0 0; font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+  .xh-box.key { border: 1.5px solid var(--brand); }
+  .xh-new { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--brand); color: #fff; }
+  .xh-same { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--fill-muted); color: var(--text-2); }
+  .xh-gone { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--error-bg); color: var(--error); }
+  .xh-names { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+  .xh-names th, .xh-names td { border: 1px solid var(--border-subtle); padding: 5px 9px; text-align: left; }
+  .xh-names th { background: var(--bg-subtle); font-weight: 700; color: var(--text-2); font-size: 11.5px; }
+  .xh-names td.note { color: var(--text-2); font-size: 11.5px; }
+
+  /* part 3: swimlanes */
+  .xh-swim { display: grid; grid-template-columns: 34px repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .xh-swim > div { border-top: 1px solid var(--border-subtle); padding: 6px 8px; min-height: 30px; }
+  .xh-swim > .hd { border-top: 0; font-size: 12px; font-weight: 700; padding: 8px; }
+  .xh-swim > .hd.acct { background: #f6f2ff; } .xh-swim > .hd.cli { background: #efe9ff; }
+  .xh-swim > .hd.root { background: var(--warning-bg); } .xh-swim > .hd.sys { background: var(--brand-tint); }
+  .xh-swim > .no { font-size: 11px; font-weight: 700; color: var(--text-3); text-align: center; padding-top: 9px; }
+  .xh-swim > .sep { grid-column: 1 / -1; background: var(--bg-subtle); font-size: 11.5px; font-weight: 700; color: var(--text-2); min-height: 0; padding: 5px 10px; }
+  .xh-ev { display: block; border-radius: 7px; padding: 5px 8px; font-size: 11.8px; line-height: 1.45; color: var(--text-1); }
+  .xh-ev.acct { background: #f6f2ff; border: 1px solid #ddd0fa; }
+  .xh-ev.root { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .xh-ev.sys { background: var(--brand-tint); border: 1px solid var(--brand-border); }
+
+  /* part 4: migration */
+  .xh-mig { display: grid; grid-template-columns: 1fr 36px 1.25fr 36px 1fr; align-items: stretch; }
+  .xh-arrow { display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-3); }
+  .xh-step { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .xh-step h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .xh-step ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.6; color: var(--text-1); }
+  .xh-step.before { background: var(--bg-subtle); }
+  .xh-step.after { border: 1.5px solid var(--brand); }
+  .xh-hosts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+
+  /* part 5: decisions */
+  .xh-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .xh-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .xh-card h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .xh-card p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-1); }
+  .xh-card p + p { margin-top: 4px; }
+  .xh-rec { color: var(--brand-strong); font-weight: 700; }
+  .xh-crit { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.6; color: var(--text-1); }
+  .xh-cost { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+  .xh-cost li { font-size: 12px; line-height: 1.5; color: var(--text-1); display: flex; gap: 8px; }
+  .xh-cost .p { flex: none; font-weight: 700; color: var(--text-3); width: 28px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.title='H='+Math.ceil(s.getBoundingClientRect().height)})</script>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+  <h1 class="m-h1">已装机的机器：每个账号的 runner 用自己的名字、跑自己的 ~/.orbit/bin/orbit</h1>
+  <p class="m-sub">设计见 <span class="xh-code">docs/hostd-per-account-runners-design.md</span>。① 今天和新方案对照 · ② 一台机器上的文件和进程 · ③ 注册和升级的时序 · ④ 已装过机的机器怎么迁移 · ⑤ 待定、验收标准和落地</p>
+
+  <!-- ① today vs new -->
+  <section class="xh-part" id="part-1">
+    <h2 class="xh-h2">① 今天 vs 新方案（只说执行过 <span class="xh-code">orbit host setup</span> 的机器；没装机的机器不变）</h2>
+    <p class="xh-lead">今天，装机后所有账号的实例都按 uid 命名，跑同一份 root 的 <span class="xh-code">/usr/local/bin/orbit</span>，由 hostd 统一升级。新方案里，实例按用户名命名，跑账号自己的副本，自己升级自己；hostd 只负责免 sudo 的启停。</p>
+    <div class="xh-vs">
+      <div class="xh-lane">
+        <h3>今天</h3>
+        <div class="xh-node root">管理员执行一次 <span class="xh-code">sudo orbit host setup</span><small>装 hostd 和模板 <span class="xh-code">orbit-runner@.service</span>（<span class="xh-code">User=%i</span>）</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node sys bad">实例名是 uid：<span class="xh-code">orbit-runner@1000.service</span><small>看单元名认不出是谁的 runner</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node root bad">所有实例跑同一份 <span class="xh-code">/usr/local/bin/orbit</span><small>账号自己 <span class="xh-code">~/.orbit/bin</span> 里的副本用不上</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node acct">runner 写不了这个文件 → 请 hostd 升级<small>hostd 下载、校验、替换，再逐个重启所有实例</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node root bad">root 自己的 runner 先换了文件时<small>hostd 回 <span class="xh-code">updated:false</span>，账号的实例停在旧版本，直到有人手动重启</small></div>
+        <div class="xh-tags">
+          <span class="xh-tag bad">实例名是数字</span><span class="xh-tag bad">所有账号共用一份二进制</span><span class="xh-tag bad">升级要绕 hostd</span><span class="xh-tag bad">可能卡在旧版本</span>
+        </div>
+      </div>
+      <div class="xh-lane new">
+        <h3>新方案</h3>
+        <div class="xh-node root">管理员执行一次 <span class="xh-code">sudo orbit host setup</span>（不变）<small>模板改成 <span class="xh-code">User=%I</span>，ExecStart 指向账号自己的二进制</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node sys">实例名就是用户名：<span class="xh-code">orbit-runner@alice.service</span><small>用 systemd 自己的转义：<span class="xh-code">test-user</span> → <span class="xh-code">test\x2duser</span>，可还原，不会撞名</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node acct">每个实例跑账号自己的 <span class="xh-code">~/.orbit/bin/orbit</span><small><span class="xh-code">ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'</span></small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node acct">runner 自己升级自己的副本<small>和没装机的机器走同一条路：不经过 hostd，不需要 root</small></div>
+        <div class="xh-down">↓</div>
+        <div class="xh-node root">hostd 只管启停，外加它自己那份 <span class="xh-code">/usr/local/bin/orbit</span><small>root 仍然只执行 root 自己的文件</small></div>
+        <div class="xh-tags">
+          <span class="xh-tag good">一眼认出是谁的 runner</span><span class="xh-tag good">和没装机的机器同一种布局</span><span class="xh-tag good">升级不经过 root</span><span class="xh-tag good">不会卡在旧版本</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② one machine -->
+  <section class="xh-part" id="part-2">
+    <h2 class="xh-h2">② 一台机器上的文件和进程</h2>
+    <p class="xh-lead">root 的东西只剩 hostd 和它跑的那份二进制；每个账号的 runner、凭据和二进制都在自己的家目录里。<span class="xh-new">新</span> 改动，<span class="xh-same">不变</span> 保持，<span class="xh-gone">去掉</span> 删除。</p>
+    <div class="xh-host">
+      <p class="xh-host-h">一台执行过 orbit host setup 的 Linux 机器</p>
+      <div class="xh-cols">
+        <div class="xh-zone root">
+          <h4>root 的（setup 写一次）</h4>
+          <div class="xh-box"><b><span class="xh-code">/usr/local/bin/orbit</span> <span class="xh-same">不变</span></b><p>只给 hostd 用。root:root 0755，从它到 / 的每一级目录都只有 root 能写（<span class="xh-code">checkMachineBinary</span>）</p></div>
+          <div class="xh-box"><b><span class="xh-code">orbit-hostd.socket</span> / <span class="xh-code">.service</span> <span class="xh-same">不变</span></b><p><span class="xh-code">/run/orbit/host.sock</span>；身份只看 SO_PEERCRED</p></div>
+          <div class="xh-box key"><b><span class="xh-code">orbit-runner@.service</span> 模板 <span class="xh-new">新</span></b><p><span class="xh-code">User=%I</span><br><span class="xh-code">ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'</span><br>Restart=always · KillMode=mixed · TimeoutStopSec=180 不变</p></div>
+          <div class="xh-box"><b>其他账号能执行这份二进制的检查 <span class="xh-gone">去掉</span></b><p>没有实例再跑它（<span class="xh-code">checkRunnable</span>）</p></div>
+        </div>
+        <div class="xh-zone acct">
+          <h4>alice 的</h4>
+          <div class="xh-box key"><b><span class="xh-code">orbit-runner@alice.service</span> <span class="xh-new">新</span></b><p>以 alice 运行；进程是 <span class="xh-code">/home/alice/.orbit/bin/orbit run</span></p></div>
+          <div class="xh-box"><b><span class="xh-code">~/.orbit/bin/orbit</span> <span class="xh-same">不变</span></b><p>install.sh 或 register 放进来；runner 自己升级它</p></div>
+          <div class="xh-box"><b><span class="xh-code">~/.orbit/config.json</span> <span class="xh-same">不变</span></b><p>runner 的凭据，0600，只有 alice 能读</p></div>
+        </div>
+        <div class="xh-zone acct">
+          <h4>test-user 的</h4>
+          <div class="xh-box key"><b><span class="xh-code">orbit-runner@test\x2duser.service</span> <span class="xh-new">新</span></b><p>名字里的 <span class="xh-code">-</span> 按 systemd 的规则转义；<span class="xh-code">%I</span> 还原成 <span class="xh-code">test-user</span></p></div>
+          <div class="xh-box"><b><span class="xh-code">~/.orbit/bin/orbit</span>、<span class="xh-code">config.json</span> <span class="xh-same">不变</span></b><p>和 alice 一样，各管各的</p></div>
+        </div>
+        <div class="xh-zone legacy">
+          <h4>root 自己的 runner（如果有）</h4>
+          <div class="xh-box"><b><span class="xh-code">orbit-runner-root.service</span> <span class="xh-same">不变</span></b><p>hostd 仍然不给 uid 0 起实例；旧单元照旧（待定 4）</p></div>
+          <div class="xh-box"><b>它若跑 <span class="xh-code">/usr/local/bin/orbit</span></b><p>它自己升级时顺带把 hostd 那份也换新了；两边都是 root 的文件</p></div>
+        </div>
+      </div>
+    </div>
+    <table class="xh-names">
+      <tr><th>用户名</th><th>实例名（systemd-escape）</th><th>单元</th><th>说明</th></tr>
+      <tr><td><span class="xh-code">alice</span></td><td><span class="xh-code">alice</span></td><td><span class="xh-code">orbit-runner@alice.service</span></td><td class="note">绝大多数账号就是原名</td></tr>
+      <tr><td><span class="xh-code">alice.b</span> / <span class="xh-code">alice_b</span></td><td><span class="xh-code">alice.b</span> / <span class="xh-code">alice_b</span></td><td><span class="xh-code">orbit-runner@alice.b</span> / <span class="xh-code">@alice_b</span></td><td class="note">两个账号两个单元。当初选 uid，是因为 orbit 自己的转义把两者都变成 <span class="xh-code">orbit-runner-alice_b</span></td></tr>
+      <tr><td><span class="xh-code">test-user</span></td><td><span class="xh-code">test\x2duser</span></td><td><span class="xh-code">orbit-runner@test\x2duser.service</span></td><td class="note">不转义的话，<span class="xh-code">%I</span> 会把 <span class="xh-code">-</span> 还原成 <span class="xh-code">/</span>，变成 <span class="xh-code">test/user</span></td></tr>
+      <tr><td><span class="xh-code">.hidden</span></td><td><span class="xh-code">\x2ehidden</span></td><td><span class="xh-code">orbit-runner@\x2ehidden.service</span></td><td class="note">开头的点同样转义</td></tr>
+    </table>
+  </section>
+
+  <!-- ③ sequence -->
+  <section class="xh-part" id="part-3">
+    <h2 class="xh-h2">③ 注册和升级的时序</h2>
+    <p class="xh-lead">注册之后账号不再需要 root。hostd 只看文件在不在，从不执行、读取或写入账号家目录里的东西。</p>
+    <div class="xh-swim">
+      <div class="hd"></div><div class="hd acct">账号（终端）</div><div class="hd cli">orbit（以账号身份）</div><div class="hd root">hostd（root）</div><div class="hd sys">systemd</div>
+
+      <div class="sep">注册</div>
+      <div class="no">1</div><div><span class="xh-ev acct"><span class="xh-code">orbit register</span>，在浏览器里批准</span></div><div><span class="xh-ev acct">凭据存进 <span class="xh-code">~/.orbit/config.json</span>（不变）</span></div><div></div><div></div>
+      <div class="no">2</div><div></div><div><span class="xh-ev acct">确保 <span class="xh-code">~/.orbit/bin/orbit</span> 在：不在就把自己拷过去（写临时文件再改名）</span></div><div></div><div></div>
+      <div class="no">3</div><div></div><div><span class="xh-ev acct">经 <span class="xh-code">host.sock</span> 请求 <span class="xh-code">enable</span>，请求里不带任何目标</span></div><div><span class="xh-ev root">SO_PEERCRED → uid → passwd 里的用户名 → <span class="xh-code">orbit-runner@&lt;转义名&gt;</span></span></div><div></div>
+      <div class="no">4</div><div></div><div></div><div><span class="xh-ev root">检查账号有家目录、<span class="xh-code">~/.orbit/bin/orbit</span> 可执行；没有就拒绝，并给出要跑的命令</span></div><div></div>
+      <div class="no">5</div><div></div><div></div><div><span class="xh-ev root">停掉并删除这个账号的旧单元：<span class="xh-code">@&lt;uid&gt;</span>、<span class="xh-code">orbit-runner-&lt;用户&gt;</span>、<span class="xh-code">orbit-runner</span>（按单元里的 User= 认）</span></div><div></div>
+      <div class="no">6</div><div></div><div></div><div><span class="xh-ev root"><span class="xh-code">systemctl enable</span> + <span class="xh-code">restart</span></span></div><div><span class="xh-ev sys">以账号身份启动：<span class="xh-code">sh</span> → <span class="xh-code">exec $HOME/.orbit/bin/orbit run</span></span></div>
+
+      <div class="sep">发布新版本 N</div>
+      <div class="no">7</div><div></div><div><span class="xh-ev acct">runner 发现 N → 等空闲 → 换掉自己的 <span class="xh-code">~/.orbit/bin/orbit</span> → 原地重启（和没装机的机器一样）</span></div><div></div><div></div>
+      <div class="no">8</div><div></div><div><span class="xh-ev acct">通知 hostd 一次（待定 2 选 A 时）</span></div><div><span class="xh-ev root">校验后把 N 装进 <span class="xh-code">/usr/local/bin/orbit</span>；下载物只以调用者身份探测；不重启任何实例</span></div><div></div>
+      <div class="no">9</div><div></div><div></div><div><span class="xh-ev root">下次有连接时，hostd 从新文件启动</span></div><div><span class="xh-ev sys">socket 激活</span></div>
+    </div>
+  </section>
+
+  <!-- ④ migration -->
+  <section class="xh-part" id="part-4">
+    <h2 class="xh-h2">④ 已经装过机的机器怎么迁移</h2>
+    <p class="xh-lead">旧的 <span class="xh-code">orbit-runner@1000</span> 在新模板下也能跑：<span class="xh-code">User=1000</span> 被 systemd 当成 uid（已实测纯数字 User=）。所以迁移前后都不会断，迁移只是把名字和二进制换过来。</p>
+    <div class="xh-mig">
+      <div class="xh-step before"><h5>迁移前</h5><ul>
+        <li><span class="xh-code">orbit-runner@1000.service</span></li>
+        <li>跑 <span class="xh-code">/usr/local/bin/orbit run</span></li>
+        <li>升级靠 hostd</li></ul></div>
+      <div class="xh-arrow">→</div>
+      <div class="xh-step"><h5>管理员：换二进制，重跑一次 setup</h5><ul>
+        <li><span class="xh-code">sudo install -o 0 -g 0 -m 0755 &lt;新版&gt; /usr/local/bin/orbit</span></li>
+        <li><span class="xh-code">sudo /usr/local/bin/orbit host setup --server &lt;url&gt;</span></li>
+        <li>setup 重写模板；逐个处理 <span class="xh-code">orbit-runner@&lt;数字&gt;</span>（待定 3 选 A）：账号已有副本 → 先 drain 再迁到 <span class="xh-code">@&lt;用户名&gt;</span>；没有副本 → 列出来，附上该账号要跑的那一条命令</li></ul></div>
+      <div class="xh-arrow">→</div>
+      <div class="xh-step after"><h5>迁移后</h5><ul>
+        <li><span class="xh-code">orbit-runner@alice.service</span></li>
+        <li>跑 <span class="xh-code">/home/alice/.orbit/bin/orbit run</span></li>
+        <li>runner 自己升级</li></ul></div>
+    </div>
+    <div class="xh-hosts">
+      <div class="xh-box"><b>没装过机的机器</b><p>什么都不用做：本来就是 <span class="xh-code">orbit-runner-&lt;用户&gt;</span> 跑账号自己的副本。</p></div>
+      <div class="xh-box"><b>生产机（今晚刚装机）</b><p>它唯一一个账号的 <span class="xh-code">@&lt;uid&gt;</span> 迁到 <span class="xh-code">@&lt;用户名&gt;</span>，跑它 <span class="xh-code">~/.orbit/bin</span> 里已有的那份；root 的 runner 不动。这一步要你确认后才做。</p></div>
+      <div class="xh-box"><b>回滚</b><p>旧版 hostd 不认识 <span class="xh-code">@&lt;用户名&gt;</span>：管理员先 <span class="xh-code">systemctl disable --now</span> 这些实例，再用旧版本重跑 setup（写回旧模板），然后按旧方式启用 <span class="xh-code">@&lt;uid&gt;</span>。</p></div>
+    </div>
+  </section>
+
+  <!-- ⑤ decisions, criteria, phases -->
+  <section class="xh-part" id="part-5">
+    <h2 class="xh-h2">⑤ 待定 · 要你拍板，建议的验收标准，落地</h2>
+    <div class="xh-decide">
+      <div class="xh-card"><h5>待定 1：模板怎么指向各账号自己的二进制</h5>
+        <p><b>A</b>：模板里用 shell：<span class="xh-code">exec "$HOME/.orbit/bin/orbit" run</span>。systemd 按 passwd 设 <span class="xh-code">$HOME</span>；一份模板管所有账号，<span class="xh-code">exec</span> 之后主进程就是账号的二进制。</p>
+        <p><b>B</b>：hostd 给每个实例写一个 drop-in，写绝对路径。<span class="xh-code">systemctl cat</span> 一眼看到路径，但 hostd 要多管一批文件。</p>
+        <p><b>C</b>：机器级二进制当启动器，缺副本时先装再 exec。每次启动都要执行 root 的那份，它就得继续对所有账号可执行。</p>
+        <p class="xh-rec">推荐 A：最少的东西，最直接。</p></div>
+      <div class="xh-card"><h5>待定 2：hostd 的 update 动作留不留</h5>
+        <p><b>A</b>：留着，只管 hostd 自己那份。runner 升级完通知一次，hostd 校验后换掉 <span class="xh-code">/usr/local/bin/orbit</span>，不重启任何实例。</p>
+        <p><b>B</b>：删掉。机器级二进制由管理员 <span class="xh-code">sudo /usr/local/bin/orbit upgrade</span> 升级，或由跑它的 root runner 顺带升级。</p>
+        <p class="xh-rec">推荐 A：hostd 不用人管也保持最新。</p></div>
+      <div class="xh-card"><h5>待定 3：已装过机的机器怎么迁移</h5>
+        <p><b>A</b>：重跑 setup 时一起迁：有副本的账号逐个迁（先 drain），没副本的列出来并给出命令。</p>
+        <p><b>B</b>：setup 不碰实例，每个账号下次 <span class="xh-code">orbit register</span> 时自己迁；那之前，它的 uid 实例跑新模板，没副本就起不来。</p>
+        <p class="xh-rec">推荐 A：管理员一条命令迁完，不会有人掉线。</p></div>
+      <div class="xh-card"><h5>待定 4：root 自己的 runner</h5>
+        <p><b>A</b>：保持旧单元不动。它若跑 <span class="xh-code">/usr/local/bin/orbit</span>，自己升级时顺带把 hostd 那份也换新；两边都是 root 的文件。</p>
+        <p><b>B</b>：也改成跑 <span class="xh-code">/root/.orbit/bin/orbit</span>，和没装机的机器一致。要重启 root 的 runner，在留着 update（待定 2 选 A）时没有额外好处。</p>
+        <p class="xh-rec">推荐 A。</p></div>
+    </div>
+    <div class="xh-mini">建议的验收标准（你来改）</div>
+    <ol class="xh-crit">
+      <li>已装机的机器上，两个账号（一个名字带 <span class="xh-code">-</span>，一个带 <span class="xh-code">.</span>）免 root 注册；runner 是 <span class="xh-code">orbit-runner@&lt;转义名&gt;.service</span>，各以自己的身份跑自己 <span class="xh-code">~/.orbit/bin/orbit</span>。</li>
+      <li>已装过机的机器重跑 setup：有副本的 <span class="xh-code">orbit-runner@&lt;uid&gt;</span> 都迁到 <span class="xh-code">@&lt;用户名&gt;</span>，任何时候没有一个账号同时有两个 runner；没迁的账号连同要跑的命令被列出来。</li>
+      <li>发布新版本：每个 runner 免 root 升级自己的副本；hostd 升级自己那份、不重启实例；root 从不执行下载物，也不执行账号能改的文件。</li>
+      <li>已装机的机器上跑 install.sh：装进当前账号的 <span class="xh-code">~/.orbit/bin</span>，不需要 sudo，从不写 <span class="xh-code">/usr/local/bin/orbit</span>。</li>
+      <li><span class="xh-code">scripts/hostd-e2e.sh</span>、<span class="xh-code">scripts/install-sh-e2e.sh</span> 和 runner-go 全部测试通过。</li>
+      <li>生产机：账号的 runner 是 <span class="xh-code">orbit-runner@&lt;用户名&gt;</span>，跑它自己的副本；root 的 runner 不变。</li>
+    </ol>
+    <div class="xh-mini">落地（按依赖排）</div>
+    <ul class="xh-cost">
+      <li><span class="p">P1</span><span>runner-go：模板、转义实例名、hostd 各动作、缺副本时拒绝、迁走旧单元</span></li>
+      <li><span class="p">P2</span><span>runner-go：register 放好账号的副本；update 只管 hostd 那份；能写的安装不再委托 hostd</span></li>
+      <li><span class="p">P3</span><span>install.sh：已装机的机器也装进账号家目录，去掉机器级分支；e2e 场景</span></li>
+      <li><span class="p">P4</span><span>hostd-e2e（名字、各自的 exe、迁移、升级）和 self-hosting 文档</span></li>
+      <li><span class="p">P5</span><span>发版，然后迁生产机（你确认后）</span></li>
+    </ul>
+  </section>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>为什么当初选 uid</b>：orbit 自己的转义有损，<span class="xh-code">alice.b</span> 和 <span class="xh-code">alice_b</span> 都变成 <span class="xh-code">orbit-runner-alice_b</span>。systemd 自己的转义可逆，换成它就不会撞名，也就不需要 uid 了。</span></li>
+    <li><span class="m-n">2</span><span><b>为什么不能直接写用户名</b>：<span class="xh-code">%I</span> 还原时把 <span class="xh-code">-</span> 当成 <span class="xh-code">/</span>，<span class="xh-code">test-user</span> 会变成 <span class="xh-code">test/user</span>。实例名必须先经过 <span class="xh-code">systemd-escape</span>。</span></li>
+    <li><span class="m-n">3</span><span><b>为什么不用 <span class="xh-code">%h</span></b>：系统单元里的 <span class="xh-code">%h</span> 是 root 的家目录，不是 User= 那个账号的。<span class="xh-code">$HOME</span> 由 systemd 按 passwd 设置（实测 <span class="xh-code">User=daemon</span> 得到 <span class="xh-code">/usr/sbin</span>；家目录是 <span class="xh-code">/nonexistent</span> 的账号没有 <span class="xh-code">$HOME</span>，hostd 拒绝它）。</span></li>
+    <li><span class="m-n">4</span><span><b>为什么 hostd 还要一份 root 的二进制</b>：hostd 以 root 运行，root 不执行任何账号能改的文件，所以它跑的那份仍然要过 <span class="xh-code">checkMachineBinary</span>。</span></li>
+  </ul>
+</div>
+</body>
+</html>
