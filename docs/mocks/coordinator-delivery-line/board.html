@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-31). The coordinator's `From Orbit · project …` delivery, drawn as one line
+     instead of the owner's own bubble, and the sticky bar's source label made to truncate.
+     现状 frames are the production web build on fixture data, with the real message text from
+     buildCoordinatorDeliveryMessage. 建议 frames are the same page with the real OwnerAnswerLine, its
+     text swapped and a few lines of CSS injected: the sticky readings come from the real measure().
+     The coordinator's reply under the line is sample text. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>协调投递消息收成一行 — 设计图</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #e9e9ee; color: #16161a; width: 1776px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 22px; padding: 28px 30px 30px; }
+  .part + .part { margin-top: 28px; }
+  h1 { font-size: 26px; line-height: 1.3; margin: 0 0 6px; }
+  h2 { font-size: 20px; line-height: 1.35; margin: 0 0 18px; }
+  .lede { color: #4d4d56; margin: 0 0 20px; }
+  .row { display: flex; gap: 28px; align-items: flex-start; }
+  .col { flex: 1 1 0; min-width: 0; }
+  .fixed { flex: none; }
+  .tag { display: inline-block; font-weight: 600; font-size: 13px; line-height: 1; padding: 6px 10px; border-radius: 7px; margin-bottom: 10px; }
+  .tag.now { background: #fde8e8; color: #b42318; }
+  .tag.new { background: #dcfae6; color: #067647; }
+  .frame { display: block; width: 100%; border: 1px solid #d9d9e0; border-radius: 12px; background: #fff; }
+  .cap { color: #4d4d56; margin: 10px 2px 0; }
+  .cap b { color: #16161a; }
+  code { font: 12.5px "DejaVu Sans Mono", monospace; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .stack > * + * { margin-top: 22px; }
+  .state { margin-top: 18px; }
+  .state:first-of-type { margin-top: 0; }
+  .state .cap { margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { text-align: left; font-size: 13px; color: #4d4d56; font-weight: 600; padding: 0 12px 8px 0; border-bottom: 1px solid #d9d9e0; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid #ececf1; vertical-align: top; }
+  td.ui { font-family: "Inter", "Noto Sans SC", sans-serif; color: #16161a; }
+  td.ev { color: #4d4d56; width: 44%; }
+  .note { margin: 14px 2px 0; color: #4d4d56; }
+</style>
+
+<section class="part" id="part-1">
+  <h1>Orbit 发给协调者的通知，不再画成你自己发的消息</h1>
+  <p class="lede">消息文字一个字不改，协调者收到的内容也不变，只改这一轮在对话里怎么画。下面是你截图里的那条消息。</p>
+  <div class="row">
+    <div class="col">
+      <span class="tag now">现状</span>
+      <img class="frame" src="shots/today-desktop.png">
+      <p class="cap">蓝色气泡在右边，和你自己发的话一样，占满一屏，内容是写给 agent 的操作说明。</p>
+    </div>
+    <div class="col">
+      <span class="tag new">建议</span>
+      <img class="frame" src="shots/after-desktop.png">
+      <p class="cap"><b>收成一行灰色胶囊</b>：前面写发生了什么，后面沿用现有的 <code>Sent to the coordinator · 时间</code>。协调者的回复直接露出来。</p>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="part-2">
+  <h2>点开看原文；滚过去之后，顶部写对来源</h2>
+  <div class="row">
+    <div class="col">
+      <span class="tag new">建议 · 点开</span>
+      <img class="frame" src="shots/after-open.png">
+      <p class="cap">展开是 <code>What the coordinator was told</code> 和原文，和你答复协调者后的那一行同样的做法。末尾 <code>Its task ↗</code> 进任务。</p>
+    </div>
+    <div class="col stack">
+      <div>
+        <span class="tag now">现状 · 滚过这条之后</span>
+        <img class="frame" src="shots/today-past.png">
+        <p class="cap">顶部写 <code>↑ Your question</code>，但这句话不是你问的。</p>
+      </div>
+      <div>
+        <span class="tag new">建议 · 滚过这条之后</span>
+        <img class="frame" src="shots/after-past.png">
+        <p class="cap">写 <code>↑ From Orbit</code> 和这一行的内容。下面的回复答的就是它，所以顶部要显示它；“答复协调者”那一行不显示在顶部，这里不同。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="part-3">
+  <h2>手机：顶部来源不再撑出屏幕，这一行分两行</h2>
+  <div class="row">
+    <div class="fixed" style="width:390px">
+      <span class="tag now">现状</span>
+      <img class="frame" src="shots/today-phone.png">
+      <p class="cap">来源有 518px，撑出屏幕，消息内容的宽度是 0。气泡要滑好几屏。</p>
+    </div>
+    <div class="fixed" style="width:390px">
+      <span class="tag new">建议</span>
+      <img class="frame" src="shots/after-phone.png">
+      <p class="cap">来源最多占 45%，带省略号，消息内容露出来。这一行在手机上第二行放 <code>Sent to the coordinator</code>。</p>
+    </div>
+    <div class="fixed" style="width:390px">
+      <span class="tag new">建议 · 滚过这条之后</span>
+      <img class="frame" src="shots/after-phone-past.png">
+      <p class="cap">同样写 <code>↑ From Orbit</code>。</p>
+    </div>
+  </div>
+</section>
+
+<section class="part" id="part-4">
+  <h2>其他状态，以及每种通知写什么</h2>
+  <div class="row">
+    <div class="col">
+      <div class="state">
+        <span class="tag new">已送达</span>
+        <img class="frame" src="shots/state-sent.png">
+      </div>
+      <div class="state">
+        <span class="tag new">深色</span>
+        <img class="frame" src="shots/state-sent-dark.png">
+      </div>
+      <div class="state">
+        <span class="tag new">排队中</span>
+        <img class="frame" src="shots/state-queued.png">
+        <p class="cap">虚线，<code>Queued for next turn</code> 和 <code>Cancel</code> 都和今天一样，这次只改显示。</p>
+      </div>
+      <div class="state">
+        <span class="tag new">没确认送达</span>
+        <img class="frame" src="shots/state-undelivered.png">
+        <p class="cap">写明没确认收到，不再出现 <code>Put back in the composer</code>，平台的话不会进你的输入框。</p>
+      </div>
+    </div>
+    <div class="col">
+      <table>
+        <tr><th>通知</th><th>这一行写（英文原样）</th></tr>
+        <tr><td class="ev">任务交了证据</td><td class="ui">Evidence revision 1 submitted: &lt;task&gt;</td></tr>
+        <tr><td class="ev">证据随任务移入本项目</td><td class="ui">Evidence revision 1 moved in: &lt;task&gt;</td></tr>
+        <tr><td class="ev">下游任务可以开始</td><td class="ui">Can start now: &lt;task&gt;</td></tr>
+        <tr><td class="ev">任务启动被拒</td><td class="ui">Could not start: &lt;task&gt;</td></tr>
+        <tr><td class="ev">任务提出阻塞项</td><td class="ui">Blocker raised: &lt;task&gt;</td></tr>
+        <tr><td class="ev">做完了但没进 main</td><td class="ui">Work not on main yet: 3 tasks</td></tr>
+        <tr><td class="ev">判据全部落地，待你确认</td><td class="ui">All 9 criteria landed</td></tr>
+        <tr><td class="ev">判据全部落地，已确认但仍未 Done</td><td class="ui">All 9 criteria landed, Done held back</td></tr>
+        <tr><td class="ev">判据全部落地，已记为 Done</td><td class="ui">All 9 criteria landed, recorded Done</td></tr>
+        <tr><td class="ev">项目看起来做完了</td><td class="ui">Looks finished, not recorded Done</td></tr>
+        <tr><td class="ev">项目已结束，还有工作没进 main</td><td class="ui">Settled with work not on main: 2 commits</td></tr>
+        <tr><td class="ev">判据修改的裁决回执</td><td class="ui">Criteria proposal approved / rejected</td></tr>
+      </table>
+      <p class="note">后面都接 <code>Sent to the coordinator · 时间</code>；滚过去后顶部写 <code>↑ From Orbit</code> 加这句话。</p>
+    </div>
+  </div>
+</section>
+</html>
