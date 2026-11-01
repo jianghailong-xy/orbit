@@ -1,4 +1,4 @@
-import { AlignLeftOutlined, ReloadOutlined } from '@ant-design/icons';
+import { AlignLeftOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionRecap, type RecapOutcome } from '../api';
 import { sessionQuery } from '../lib/queries';
@@ -10,6 +10,7 @@ import { Glyph } from './ProjectPanoramaHeader';
 export const RECAP_CARD_COPY = {
   word: 'Recap',
   refresh: 'Refresh recap',
+  hide: 'Hide recap',
   upToDate: 'The recap is already up to date.',
   tooLittle: "There's too little to recap yet.",
   unavailable: "Recaps aren't available on this server.",
@@ -25,6 +26,32 @@ export function recapWhen(recapAt?: string | null, now: Date = new Date()): stri
   return at.toDateString() === now.toDateString()
     ? time
     : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+}
+
+/** What a recap this device hid is remembered by (the owner, 2026-11-01,
+ *  docs/mocks/session-recap-display/06-hide): when it was written, so the next one the server writes
+ *  shows again — or its words, for a recap that came with no time (an older control plane). */
+export const recapHideKey = (recapAt: string | null | undefined, text: string): string =>
+  recapAt || `text:${text}`;
+
+/** Where this device keeps the recap it hid in a conversation: one entry per session. */
+const recapHiddenStorageKey = (sessionId: string): string => `orbit.recap.hidden.${sessionId}`;
+
+/** The recap this device hid in the conversation (`recapHideKey`), or null. */
+export function readHiddenRecap(sessionId: string): string | null {
+  try {
+    return localStorage.getItem(recapHiddenStorageKey(sessionId));
+  } catch {
+    return null;
+  }
+}
+
+export function rememberHiddenRecap(sessionId: string, key: string): void {
+  try {
+    localStorage.setItem(recapHiddenStorageKey(sessionId), key);
+  } catch {
+    /* the memory is a convenience; losing it only brings the recap back */
+  }
 }
 
 /** What a refresh that wrote nothing says, by the pass's reason (sessions/recap.ts
@@ -55,16 +82,19 @@ export function recapRefreshNotice(reason: string): { text: string; failed: bool
  * Drawn as a footnote, not a panel (the owner, 2026-10-27, 05-quiet A): a filled box the composer's
  * shape, sitting on the composer, read as something floating over the conversation. So it is one
  * paragraph in the list line's own size and colour — the head runs into the recap — and Refresh
- * shows only under the pointer or keyboard focus (always, on a screen with no hover).
+ * shows only under the pointer or keyboard focus (always, on a screen with no hover). Beside it, ×
+ * hides this recap in this conversation on this device (06-hide); the conversation remembers that.
  */
 export function SessionRecapCard({
   sessionId,
   text,
   recapAt,
+  onHide,
 }: {
   sessionId: string;
   text: string;
   recapAt?: string | null;
+  onHide: () => void;
 }) {
   const qc = useQueryClient();
   const message = useToast();
@@ -100,16 +130,27 @@ export function SessionRecapCard({
         </span>
         <span className="chat-recap-text">{text}</span>
       </p>
-      <button
-        type="button"
-        className="chat-recap-refresh"
-        aria-label={RECAP_CARD_COPY.refresh}
-        title={RECAP_CARD_COPY.refresh}
-        disabled={refresh.isPending}
-        onClick={() => refresh.mutate()}
-      >
-        {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <ReloadOutlined />}
-      </button>
+      <span className="chat-recap-actions">
+        <button
+          type="button"
+          className="chat-recap-refresh"
+          aria-label={RECAP_CARD_COPY.refresh}
+          title={RECAP_CARD_COPY.refresh}
+          disabled={refresh.isPending}
+          onClick={() => refresh.mutate()}
+        >
+          {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <ReloadOutlined />}
+        </button>
+        <button
+          type="button"
+          className="chat-recap-hide"
+          aria-label={RECAP_CARD_COPY.hide}
+          title={RECAP_CARD_COPY.hide}
+          onClick={onHide}
+        >
+          <CloseOutlined />
+        </button>
+      </span>
     </div>
   );
 }

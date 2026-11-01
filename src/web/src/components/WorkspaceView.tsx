@@ -371,7 +371,7 @@ import { ProjectMergeStrip } from './ProjectMergeStrip';
 import { isMergeJob } from '../lib/projectMerge';
 import { LANDING_PAGE_COPY, isLandingSessionDetail } from '../lib/landingSession';
 import { Glyph, landingCard } from './ProjectPanoramaHeader';
-import { SessionRecapCard } from './SessionRecapCard';
+import { SessionRecapCard, readHiddenRecap, recapHideKey, rememberHiddenRecap } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
@@ -3259,11 +3259,23 @@ export function WorkspaceView({
   useEffect(() => {
     if (selectedId && !selectedRests) setRecapAsideFor(selectedId);
   }, [selectedId, selectedRests]);
+  // A recap this device hid with the card's × stays hidden in that conversation until the server
+  // writes a newer one (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide); the list
+  // row keeps it. Read from storage as the session opens; a hide in this view is held here too.
+  const storedHiddenRecap = useMemo(() => (selectedId ? readHiddenRecap(selectedId) : null), [selectedId]);
+  const [hiddenRecaps, setHiddenRecaps] = useState<Record<string, string>>({});
+  const selectedRecapText = typeof selectedSession?.recapText === 'string' ? selectedSession.recapText.trim() : '';
+  const selectedRecapKey = recapHideKey(selectedSession?.recapAt, selectedRecapText);
   const selectedRecap =
     selectedSession && recapsEnabled && !selectedTrashed && selectedRests && recapAsideFor !== selectedId
-      && typeof selectedSession.recapText === 'string'
-      ? selectedSession.recapText.trim()
+      && (selectedId ? hiddenRecaps[selectedId] ?? storedHiddenRecap : null) !== selectedRecapKey
+      ? selectedRecapText
       : '';
+  const hideSelectedRecap = () => {
+    if (!selectedId) return;
+    rememberHiddenRecap(selectedId, selectedRecapKey);
+    setHiddenRecaps((hidden) => ({ ...hidden, [selectedId]: selectedRecapKey }));
+  };
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
@@ -11346,6 +11358,7 @@ export function WorkspaceView({
                   sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
+                  onHide={hideSelectedRecap}
                 />
               )}
               {/* The delivered card, in the conversation it was delivered to and scrolling with
