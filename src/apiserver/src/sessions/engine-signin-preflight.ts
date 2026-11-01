@@ -3,6 +3,7 @@ import {
   AgentProvider,
   ENGINE_CLI_NAMES,
   ENGINE_SIGNED_OUT,
+  type ClaudeRegionRefusal,
   type EngineSignedOutRefusal,
   type LoginEngine,
   type RunnerEngineAccount,
@@ -197,6 +198,26 @@ export class EngineSignedOutConflict extends ConflictException {
 /** Recognise the refusal above without importing Nest's exception hierarchy or matching prose. */
 export function isEngineSignedOut(error: unknown): error is EngineSignedOutConflict {
   return error instanceof EngineSignedOutConflict;
+}
+
+/**
+ * A new Anthropic-bound Claude session refused because the runner it is bound for has its Claude connection to Anthropic
+ * in a region Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12), beside the signed-out
+ * refusal above and of the same kind: an AVAILABILITY condition of the machine, which an allowed check, another
+ * provider's key or another machine clears. The body is a ClaudeRegionRefusal (runners/runner-region.ts
+ * claudeRegionCreateRefusal), whose `code` is CLAUDE_REGION_UNSUPPORTED.
+ */
+export class ClaudeRegionConflict extends ConflictException {
+  readonly claudeRegionRefused = true;
+
+  constructor(readonly refusal: ClaudeRegionRefusal) {
+    super(refusal);
+  }
+}
+
+/** Recognise the refusal above without matching prose. */
+export function isClaudeRegionRefused(error: unknown): error is ClaudeRegionConflict {
+  return error instanceof ClaudeRegionConflict;
 }
 
 export function signedOutEngineRefusal(args: {

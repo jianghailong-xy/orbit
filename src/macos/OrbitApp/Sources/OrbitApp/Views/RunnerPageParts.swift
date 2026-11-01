@@ -211,6 +211,9 @@ private func runnerAttentionGlyph(_ kind: RunnerAttentionKind) -> String {
     switch kind {
     case .offline: return "power"
     case .noCliSignedIn, .engineSignedOut: return "person.crop.circle.badge.exclamationmark"
+    // The machine's Claude connection is where Anthropic doesn't offer Claude: a warning, as the web
+    // draws it (docs/claude-region-check-contract.md).
+    case .claudeRegionUnsupported: return "exclamationmark.triangle"
     case .checkoutStuck: return "arrow.triangle.branch"
     case .quotaNearLimit: return "gauge.with.dots.needle.67percent"
     case .diskLow: return "internaldrive"

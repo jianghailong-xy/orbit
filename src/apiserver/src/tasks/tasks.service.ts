@@ -99,7 +99,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -13992,6 +13992,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `the ${error.runtime} engine is signed out on this agent's runner`,
           true,
           `sign in to ${error.runtime} on that runner; the mention then delivers itself`,
+        );
+      }
+      // The same kind of condition (docs/claude-region-check-contract.md §12): the agent's runner cannot use Anthropic
+      // from where its Claude connection is, which an allowed check, another provider's key or another machine clears.
+      if (isClaudeRegionRefused(error)) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          error.refusal.message,
+          true,
+          "point this agent at a key from another provider, or at a workspace on another machine; the mention then delivers itself",
         );
       }
       throw error;

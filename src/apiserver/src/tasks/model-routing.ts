@@ -37,6 +37,9 @@ export const ENGINE_QUOTA_LIMIT = 90;
 /** What the target runner says of one engine, for the account a run there would use (§6). */
 export interface ModelRoutingEngineState {
   signedOut?: boolean;
+  /** Claude's own sign-in on a runner whose Claude connection to Anthropic is in a region Anthropic does not offer
+   *  Claude in (docs/claude-region-check-contract.md §12): ruled out as a signed-out engine is. */
+  regionBlocked?: boolean;
   /** The fullest of that account's windows that cap the whole engine, not one model family. */
   quota?: { utilization: number; window: string } | null;
 }
@@ -174,6 +177,7 @@ function chooseEngine(
     if (credentialOn(engine) !== engine) return null;
     const state = engines?.states?.[engine];
     if (state?.signedOut) return `${engine} is signed out on this runner`;
+    if (state?.regionBlocked) return `${engine} can’t use Anthropic on this runner`;
     if (state?.quota && state.quota.utilization >= ENGINE_QUOTA_LIMIT) {
       return `${engine} is at ${state.quota.utilization}% of its ${state.quota.window} quota`;
     }

@@ -3,10 +3,24 @@ import {
   dispatchRefusalNextStep,
   SOURCE_FIX_ACTIONS,
   SOURCE_REFUSAL_CODES,
+  type RunnerRegionView,
   type SourceFixAction,
   type SourceRefusalCode,
 } from '@orbit/shared';
+import { isClaudeRegionError } from '../lib/claudeRegion';
+import {
+  CLAUDE_REGION_CHECK_AGAIN,
+  CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE,
+  CLAUDE_REGION_SUPPORTED_REGIONS,
+  CLAUDE_REGION_SUPPORTED_REGIONS_URL,
+  CLAUDE_REGION_USE_ANOTHER_PROVIDER,
+  claudeRegionCantUseAnthropicOn,
+  claudeRegionChecked,
+  claudeRegionConnectionIsIn,
+  claudeRegionSubject,
+} from '../lib/claudeRegionCopy';
 import { dshRepair } from '../lib/dshRuntime';
+import { formatResetTime } from '../lib/providerPools';
 import { ENGINE_CLI_NAME } from '../lib/runnerEngines';
 import { sessionRetryPending, sessionRunStateOf, type SessionStateSource } from '../lib/sessionState';
 import { sourceRefusalWhy } from '../lib/sourceRefusal';
@@ -48,7 +62,8 @@ export type NeverStartedCause =
   | 'ENGINE_SIGNED_OUT'
   | 'RUNNER_OFFLINE'
   | 'WORK_DIR'
-  | 'ENGINE_DIED';
+  | 'ENGINE_DIED'
+  | 'REGION_UNSUPPORTED';
 
 /** The presses a card can offer. The host supplies the handler; an id it cannot perform is not drawn. */
 export type NeverStartedActionId =
@@ -57,7 +72,10 @@ export type NeverStartedActionId =
   | 'install'
   | 'open-providers'
   | 'open-runner'
-  | 'chat-about';
+  | 'chat-about'
+  | 'other-provider'
+  | 'move-session'
+  | 'check-again';
 
 /** The label each press wears — the repo's existing words, never a second spelling. */
 export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, string>> = {
@@ -70,6 +88,10 @@ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, s
   'open-providers': 'Open Machines & models',
   'open-runner': 'Open the runner',
   'chat-about': 'Chat about this',
+  // The region check's three ways out (claudeRegionCopy, board 02 B).
+  'other-provider': CLAUDE_REGION_USE_ANOTHER_PROVIDER,
+  'move-session': CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE,
+  'check-again': CLAUDE_REGION_CHECK_AGAIN,
 };
 
 export const NEVER_STARTED_TITLE = 'This run never started';
@@ -127,6 +149,8 @@ export interface NeverStartedFacts {
   /** The presses this cause wants, best first. The host draws the ones it can perform. */
   actions: NeverStartedActionId[];
   foot: string;
+  /** A link after the body, where the body cites a page (the region check's Supported regions). */
+  bodyLink?: { label: string; href: string };
 }
 
 export interface NeverStartedInput {
@@ -139,6 +163,9 @@ export interface NeverStartedInput {
   keyName?: string | null;
   /** The machine, as the user named it — the repair cards' `runnerName`. */
   runnerName?: string | null;
+  /** Where that machine's Claude connection last came out (`runner.region`): the place a region
+   *  refusal names, read here and never out of the sentence (docs/claude-region-check-contract.md §9). */
+  region?: RunnerRegionView | null;
 }
 
 /** The engine's product name, from the one table that keeps them (lib/runnerEngines). */
@@ -251,6 +278,35 @@ function sourceRefused(session: NeverStartedSession, error: string): NeverStarte
 }
 
 /**
+ * An Anthropic-bound Claude turn this machine's runner refused because its connection to Anthropic is
+ * in a region Anthropic doesn't offer Claude in (docs/claude-region-check-contract.md §9–§11): the
+ * control plane holds the session in the queue, with the refusal in `session.error`.
+ *
+ * The code says which cause this is; the place comes from `runner.region`, never from the sentence.
+ * Its ways out are the three the board gives: another provider for the same Claude Code (a key
+ * Anthropic isn't behind), another machine, or a check now. A runner whose region no longer reads
+ * blocked — a check passed, the hold is about to release — keeps the server's own words, without its
+ * code, rather than a place it no longer reports.
+ */
+function regionUnsupported(input: NeverStartedInput, error: string, machine: string): NeverStartedFacts {
+  const region = input.region?.verdict === 'blocked' ? input.region : null;
+  const failed = sessionRunStateOf(input.session) === 'FAILED';
+  return {
+    cause: 'REGION_UNSUPPORTED',
+    // Ukraine's excluded regions carry their own code (UA-43): the country alone is a listed one.
+    subject: claudeRegionSubject(region ? (region.regionCode ?? region.country) : null),
+    detail: region ? claudeRegionChecked(formatResetTime(region.checkedAt), region.name, region.viaProxy) : null,
+    why: claudeRegionCantUseAnthropicOn(machine),
+    body: region ? claudeRegionConnectionIsIn(machine, region.name) : error.slice(error.indexOf(':') + 1).trim(),
+    bodyLink: { label: CLAUDE_REGION_SUPPORTED_REGIONS, href: CLAUDE_REGION_SUPPORTED_REGIONS_URL },
+    next: null,
+    actions: ['other-provider', 'move-session', 'check-again'],
+    // Held, the message is still queued; a control plane that predates the hold failed the run.
+    foot: failed ? MACHINE_COPY.endedFoot : MACHINE_COPY.waitingFoot,
+  };
+}
+
+/**
  * The cause a session with no SOURCE refusal can still have, from `session.error`.
  *
  * The two engine-specific vocabularies are read by their own classifiers (`dshRepair`,
@@ -264,6 +320,9 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
   const dsh = runtime === 'dsh' ? dshRepair(error) : null;
   const antigravity = runtime === 'antigravity' ? antigravityRepair(error) : null;
 
+  // Before anything read by pattern: the region refusal is the only cause here with a code of its
+  // own, and the machine's name in its sentence could hold any of the words the tests below look for.
+  if (isClaudeRegionError(error)) return regionUnsupported(input, error, machine);
   // First: the sentence quotes a path, and the words the tests below look for can be in a folder's name.
   const workDir = WORK_DIR_SENTENCE.exec(error);
   if (workDir) {
@@ -407,6 +466,12 @@ export interface NeverStartedActions {
   openProviders?: () => void;
   openRunner?: () => void;
   chatAbout?: () => void;
+  /** Opens the composer's Provider menu: the same Claude Code on a credential Anthropic isn't behind. */
+  otherProvider?: () => void;
+  /** Opens Move, for a workspace on another machine. */
+  moveSession?: () => void;
+  /** Has the machine check its region again (POST /runners/:id/region-check). */
+  checkAgain?: () => void;
   /** A press is already in flight, so none of them is offered twice. */
   busy?: boolean;
 }
@@ -454,6 +519,9 @@ export function RunNeverStartedCard({
     'open-providers': actions.openProviders,
     'open-runner': actions.openRunner,
     'chat-about': actions.chatAbout,
+    'other-provider': actions.otherProvider,
+    'move-session': actions.moveSession,
+    'check-again': actions.checkAgain,
   };
   const drawable = never.actions.filter((id) => handlers[id]);
   const primary = drawable[0];
@@ -465,7 +533,19 @@ export function RunNeverStartedCard({
         <span className="criteria-provenance prov-neutral">{FROM_ORBIT}</span>
       </div>
       <div className="chat-authfix-desc run-never-started-why">{never.why}</div>
-      {never.body ? <div className="chat-authfix-desc">{never.body}</div> : null}
+      {never.body ? (
+        <div className="chat-authfix-desc">
+          {never.body}
+          {never.bodyLink ? (
+            <>
+              {' '}
+              <a href={never.bodyLink.href} target="_blank" rel="noreferrer">
+                {never.bodyLink.label}
+              </a>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {never.subject ? (
         <div className="chat-authfix-msg run-never-started-subject">{never.subject}</div>
       ) : null}

@@ -15,6 +15,7 @@ import { ownerItemAlert } from './owner-item-alert';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { fcmData } from './fcm-payload';
+import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -264,6 +265,46 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that Claude Code can no longer use Anthropic there: a confirmed flip put the machine's Claude
+   * connection to Anthropic in `region`, where Anthropic does not offer Claude (docs/claude-region-check-contract.md
+   * §10, board 04 "push (flip)"). Edge-triggered by the check route on the blocked check that takes blockedChecks to 2,
+   * so one flip is one alert, never one per check. From then on its Anthropic-bound Claude sessions wait in the queue
+   * and its running ones stop, and this is the only thing that says so before somebody finds one waiting.
+   *
+   * About the machine, as notifyEngineSignedOut is: no badge and no sessionID, and a tap opens the runner.
+   * Fire-and-forget: the check route `void`s it.
+   */
+  async notifyClaudeRegionBlocked(runnerId: string, region: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const runner = await this.prisma.runner.findUnique({
+        where: { id: runnerId },
+        select: { name: true, displayName: true, ownerId: true },
+      });
+      if (!runner) return;
+      const tokens = await this.targets(runner.ownerId);
+      if (tokens.length === 0) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: runner.displayName || runner.name || 'Orbit',
+            body: claudeRegionPushBody(regionMachineName(runner), region),
+          },
+          sound: 'default',
+          'thread-id': `runner-${runnerId}`,
+        },
+        runnerID: runnerId,
+        engine: AgentProvider.CLAUDE,
+        kind: 'claude-region-blocked',
+      });
+
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
     }
   }
 
