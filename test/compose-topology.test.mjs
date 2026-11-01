@@ -441,7 +441,8 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here.
+// model's variables: the four of 2026-10-07, and ORBIT_WIKI_MODEL_THINKING, the opt-in thinking switch the
+// owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep). Changing any of it is a new decision, made here.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -456,6 +457,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
+    // Approved by the owner on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep): the opt-in thinking switch, empty by default.
+    '      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',
@@ -465,7 +468,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
 test('(l) the System model\'s address and key are given to the wiki worker and to no other service', () => {
   for (const [name, block] of currentServices) {
     const given = directives(block).join('\n').match(/\bORBIT_WIKI_MODEL(?:_[A-Z]+)*\b/g) ?? [];
-    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 4, `${name} lacks a System model variable`);
+    // Five: the four of 2026-10-07, and the thinking switch the owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep).
+    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 5, `${name} lacks a System model variable`);
     else assert.deepEqual(given, [], `${name} is given the System model's ${given.join(', ')}`);
   }
   // None of them is a name an agent session carries: Compose prefers the shell's environment to .env.

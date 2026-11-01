@@ -94,6 +94,9 @@ const cases = [
       '    command: node src/apiserver/dist/wiki-worker/main.js\n    volumes:\n      - ./data:/data\n')],
   ['the System model key given to the apiserver', 'are given to the wiki worker and to no other service',
     replace('      PORT: "3000"', '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"\n      PORT: "3000"')],
+  // The thinking switch the owner approved on 2026-11-01 is the wiki worker's alone, like the other four.
+  ['the System model thinking switch given to the apiserver', 'are given to the wiki worker and to no other service',
+    replace('      PORT: "3000"', '      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"\n      PORT: "3000"')],
   // The Docker channel of 2026-10-17: off unless its profile is on, pinned whole, the only holder of the Docker
   // socket; and the apiserver's managed runner switch, off by default, with its directory read-only.
   ['the Docker channel outside its profile', 'the Docker channel is exactly the service the owner allowed',

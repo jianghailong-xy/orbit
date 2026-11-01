@@ -311,7 +311,12 @@ export class WikiModelRequestQueue implements OnApplicationBootstrap, OnModuleDe
   }
 
   private endpoint(): WikiModelEndpoint {
-    return { baseUrl: this.config.baseUrl as string, apiKey: this.config.apiKey as string, model: this.config.model as string };
+    return {
+      baseUrl: this.config.baseUrl as string,
+      apiKey: this.config.apiKey as string,
+      model: this.config.model as string,
+      thinking: this.config.thinking,
+    };
   }
 
   private callBudgetMs(step: string): number {

@@ -1,0 +1,186 @@
+# src/apiserver: npm test (every unit spec), then the touched specs as TAP
+# Run 2026-11-01T14:59:15Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+## npm test summary
+ℹ tests 5786
+ℹ pass 5786
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+exit=0
+
+## wiki-system-model.spec, wiki-model-client.spec and wiki-compose-env.spec
+TAP version 13
+# Subtest: a call is POST /v1/messages, streamed: one user message, the key as a Bearer, the version pinned, its own max_tokens, no tools and no thinking
+ok 1 - a call is POST /v1/messages, streamed: one user message, the key as a Bearer, the version pinned, its own max_tokens, no tools and no thinking
+  ---
+  duration_ms: 75.650018
+  type: 'test'
+  ...
+# Subtest: the thinking switch: with none set the body is byte for byte the one sent before it; disabled and enabled add thinking: {type}
+ok 2 - the thinking switch: with none set the body is byte for byte the one sent before it; disabled and enabled add thinking: {type}
+  ---
+  duration_ms: 155.561914
+  type: 'test'
+  ...
+# Subtest: the stream is read the same cut anywhere, with CRLF line ends, comments, a [DONE] and events nobody named
+ok 3 - the stream is read the same cut anywhere, with CRLF line ends, comments, a [DONE] and events nobody named
+  ---
+  duration_ms: 14.273256
+  type: 'test'
+  ...
+# Subtest: calls in a row reuse kept-alive connections: the stream is read to its end, not cut off at message_stop
+ok 4 - calls in a row reuse kept-alive connections: the stream is read to its end, not cut off at message_stop
+  ---
+  duration_ms: 107.074533
+  type: 'test'
+  ...
+# Subtest: a server that keeps the stream open after message_stop still answers, a moment later
+ok 5 - a server that keeps the stream open after message_stop still answers, a moment later
+  ---
+  duration_ms: 1010.038883
+  type: 'test'
+  ...
+# Subtest: a call that runs past its own budget ends as other/timeout, carrying what had arrived
+ok 6 - a call that runs past its own budget ends as other/timeout, carrying what had arrived
+  ---
+  duration_ms: 301.816541
+  type: 'test'
+  ...
+# Subtest: a call that hears nothing for the idle time is disconnected, and that is retryable
+ok 7 - a call that hears nothing for the idle time is disconnected, and that is retryable
+  ---
+  duration_ms: 308.044133
+  type: 'test'
+  ...
+# Subtest: the idle clock runs before the answer starts too: a server that never answers is disconnected
+ok 8 - the idle clock runs before the answer starts too: a server that never answers is disconnected
+  ---
+  duration_ms: 303.743281
+  type: 'test'
+  ...
+# Subtest: the caller's cancel ends a call as other/cancelled, carrying what had arrived; a call cancelled before it starts sends nothing
+ok 9 - the caller's cancel ends a call as other/cancelled, carrying what had arrived; a call cancelled before it starts sends nothing
+  ---
+  duration_ms: 4.425148
+  type: 'test'
+  ...
+# Subtest: statuses are classed — 5xx and 429 retryable, 401 unauthorized, any other other — in words that name neither the address nor the key
+ok 10 - statuses are classed — 5xx and 429 retryable, 401 unauthorized, any other other — in words that name neither the address nor the key
+  ---
+  duration_ms: 8.248583
+  type: 'test'
+  ...
+# Subtest: a connection that fails, or drops before message_stop, is retryable
+ok 11 - a connection that fails, or drops before message_stop, is retryable
+  ---
+  duration_ms: 22.324451
+  type: 'test'
+  ...
+# Subtest: an error event in the stream is classed by its type, and carries what had arrived
+ok 12 - an error event in the stream is classed by its type, and carries what had arrived
+  ---
+  duration_ms: 54.602434
+  type: 'test'
+  ...
+# Subtest: an answer that is not an event stream is other/protocol
+ok 13 - an answer that is not an event stream is other/protocol
+  ---
+  duration_ms: 3.002759
+  type: 'test'
+  ...
+# Subtest: the probe: GET /health with the key, 200 and 404 up, 401 auth_failed, anything else, no answer or no connection down
+ok 14 - the probe: GET /health with the key, 200 and 404 up, 401 auth_failed, anything else, no answer or no connection down
+  ---
+  duration_ms: 1010.544917
+  type: 'test'
+  ...
+# Subtest: the five variables are the contract's, and none is a name an agent session carries
+ok 15 - the five variables are the contract's, and none is a name an agent session carries
+  ---
+  duration_ms: 0.986823
+  type: 'test'
+  ...
+# Subtest: nothing set: unconfigured, with nothing to complain about — a deployment without a System model
+ok 16 - nothing set: unconfigured, with nothing to complain about — a deployment without a System model
+  ---
+  duration_ms: 0.202624
+  type: 'test'
+  ...
+# Subtest: all three set: configured, the address without its trailing slash, everything trimmed
+ok 17 - all three set: configured, the address without its trailing slash, everything trimmed
+  ---
+  duration_ms: 0.184618
+  type: 'test'
+  ...
+# Subtest: any of the three missing: unconfigured, saying which — and the values that were set are not repeated
+ok 18 - any of the three missing: unconfigured, saying which — and the values that were set are not repeated
+  ---
+  duration_ms: 0.18919
+  type: 'test'
+  ...
+# Subtest: an address that is not an http(s) URL without credentials is unusable, and is not quoted
+ok 19 - an address that is not an http(s) URL without credentials is unusable, and is not quoted
+  ---
+  duration_ms: 0.169686
+  type: 'test'
+  ...
+# Subtest: a concurrency that is not a positive whole number is said, and the default used
+ok 20 - a concurrency that is not a positive whole number is said, and the default used
+  ---
+  duration_ms: 0.13578
+  type: 'test'
+  ...
+# Subtest: the thinking switch: disabled and enabled are taken as written; unset, empty or blank is no setting, and says nothing
+ok 21 - the thinking switch: disabled and enabled are taken as written; unset, empty or blank is no setting, and says nothing
+  ---
+  duration_ms: 0.139824
+  type: 'test'
+  ...
+# Subtest: a thinking value that is neither is said, and no thinking is sent; it does not unconfigure the model
+ok 22 - a thinking value that is neither is said, and no thinking is sent; it does not unconfigure the model
+  ---
+  duration_ms: 0.111722
+  type: 'test'
+  ...
+# Subtest: the thinking switch decides nothing about whether there is a System model
+ok 23 - the thinking switch decides nothing about whether there is a System model
+  ---
+  duration_ms: 0.113513
+  type: 'test'
+  ...
+# Subtest: the worker's log names the thinking switch when it is set, says a value it cannot use once, and never the key
+ok 24 - the worker's log names the thinking switch when it is set, says a value it cannot use once, and never the key
+  ---
+  duration_ms: 0.881795
+  type: 'test'
+  ...
+# Subtest: the scan reads every form Compose interpolates, and not the literal dollar
+ok 25 - the scan reads every form Compose interpolates, and not the literal dollar
+  ---
+  duration_ms: 0.879404
+  type: 'test'
+  ...
+# Subtest: no interpolation in docker-compose.yml reads a variable the runner puts into every agent session
+ok 26 - no interpolation in docker-compose.yml reads a variable the runner puts into every agent session
+  ---
+  duration_ms: 4.451089
+  type: 'test'
+  ...
+# Subtest: the apiserver's ORBIT_WIKI comes from ORBIT_WIKI_MODE and its ORBIT_WATCHES from ORBIT_WATCHES_MODE
+ok 27 - the apiserver's ORBIT_WIKI comes from ORBIT_WIKI_MODE and its ORBIT_WATCHES from ORBIT_WATCHES_MODE
+  ---
+  duration_ms: 0.520976
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3434.759302
+exit=0

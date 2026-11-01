@@ -1,0 +1,28 @@
+# Bodies the client POSTs to {base}/v1/messages, captured at a 127.0.0.1 stub by capture-body.cjs.
+# Build: src/apiserver at 12117d15a548446e5acecbddfee2c0ce62433801 (before the switch), compiled with tsc -p tsconfig.test.json.
+# Captured 2026-11-01T14:44:56Z.
+
+## ORBIT_WIKI_MODEL_THINKING unset
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING=""
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="disabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="enabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="Disabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0

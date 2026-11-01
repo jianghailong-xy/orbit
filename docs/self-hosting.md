@@ -338,10 +338,10 @@ of the request:
 
 ## Wiki System model
 
-The `wiki-worker` service calls the wiki's System model: a model endpoint the deployment runs itself and that speaks
-the Anthropic Messages API, such as vLLM. It runs the apiserver image with another command, serves no port, and
-starts once the apiserver is healthy. It is the only service given the model's address and key; users' provider
-keys, subscriptions and account pools are not used for it.
+The `wiki-worker` service calls the wiki's System model: a model endpoint that speaks the Anthropic Messages API, such
+as vLLM run by the deployment itself, or DeepSeek's API. It runs the apiserver image with another command, serves no
+port, and starts once the apiserver is healthy. It is the only service given the model's address and key; users'
+provider keys, subscriptions and account pools are not used for it.
 
 To configure it, set all three in `.env` and recreate the worker:
 
@@ -350,6 +350,19 @@ ORBIT_WIKI_MODEL_BASE_URL="http://192.168.1.20:8000"
 ORBIT_WIKI_MODEL_API_KEY="the key the endpoint expects"
 ORBIT_WIKI_MODEL="the model name it serves"
 ```
+
+For DeepSeek, use its Anthropic-compatible endpoint, your DeepSeek API key, the model `deepseek-v4-pro` or
+`deepseek-flash`, and turn thinking off:
+
+```dotenv
+ORBIT_WIKI_MODEL_BASE_URL="https://api.deepseek.com/anthropic"
+ORBIT_WIKI_MODEL_API_KEY="your DeepSeek API key"
+ORBIT_WIKI_MODEL="deepseek-v4-pro"
+ORBIT_WIKI_MODEL_THINKING="disabled"
+```
+
+DeepSeek's V4 models think unless a request turns thinking off, which makes every wiki call slower, bills more output
+tokens, and can spend a small budget, such as a verification's 1,024 tokens, before any answer text arrives.
 
 ```bash
 docker compose up -d wiki-worker

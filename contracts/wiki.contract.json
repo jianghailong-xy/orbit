@@ -1834,13 +1834,16 @@
       "baseUrl": "ORBIT_WIKI_MODEL_BASE_URL",
       "apiKey": "ORBIT_WIKI_MODEL_API_KEY",
       "model": "ORBIT_WIKI_MODEL",
-      "concurrency": "ORBIT_WIKI_MODEL_CONCURRENCY"
+      "concurrency": "ORBIT_WIKI_MODEL_CONCURRENCY",
+      "thinking": "ORBIT_WIKI_MODEL_THINKING"
     },
     "envRules": {
       "configured": "baseUrl, apiKey and model all set: an http or https URL, a key, a model name. With any of them missing or unusable the state is unconfigured and nothing is probed or called.",
       "defaultConcurrency": 4,
       "concurrency": "Model requests in flight at once across every space, held by the request queue (modelQueue.concurrency). A value that is not a positive whole number is read as the default.",
-      "onlyOn": "wiki-worker. The apiserver's environment holds none of the four (docker-compose.yml, test/compose-topology.test.mjs).",
+      "thinkingValues": ["disabled", "enabled"],
+      "thinking": "Optional, opt-in (owner 2026-11-01), for an endpoint that thinks unless it is told not to, as DeepSeek's V4 models at https://api.deepseek.com/anthropic do. One of thinkingValues puts thinking: {type: <the value>} into every call's body (request.body). Unset or empty sends no thinking field, so an endpoint that thinks only when asked (vLLM) gets the body it always got. Any other value is a problem, logged once, and no thinking field is sent. The worker's log line names the setting when it is set. It does not decide whether the System model is configured, the probe does not send it, and it is the worker's, not the call's: the request queue's request and request_sha256 do not hold it.",
+      "onlyOn": "wiki-worker. The apiserver's environment holds none of the five (docker-compose.yml, test/compose-topology.test.mjs).",
       "names": "None is ANTHROPIC_*: Compose prefers the shell's environment to .env, and an agent session's environment carries those names (src/apiserver/src/wiki/wiki-compose-env.spec.ts).",
       "problems": "readWikiSystemModel(env) returns the configuration and the problems it found, and the worker logs them once. Neither the problems nor the log carry the key."
     },
@@ -1851,7 +1854,7 @@
         "anthropic-version": "2023-06-01",
         "content-type": "application/json"
       },
-      "body": "{model, max_tokens, system, messages: [one user message], stream: true}. Every call gives its max_tokens explicitly; no tools are sent and thinking is not turned on.",
+      "body": "{model, max_tokens, system, messages: [one user message], stream: true}, then thinking: {type: disabled or enabled} only while env.thinking sets it (envRules.thinking). Every call gives its max_tokens explicitly and no tools are sent. With env.thinking unset or empty the body has no thinking field, byte for byte the body sent before the switch: thinking is then whatever the endpoint does unasked.",
       "events": ["message_start", "content_block_delta", "message_delta", "message_stop", "error"],
       "eventRules": "The answer is the text of the text_delta deltas, in order. message_start carries the model and the first usage, message_delta the stop reason and the usage so far. A call has ended only at message_stop: a stream that closes before it is a dropped connection. ping, content_block_start, content_block_stop and any event not named here are read past.",
       "usage": "inputTokens and outputTokens are the last values the stream reported: message_delta's, else message_start's.",

@@ -86,6 +86,7 @@ state from the status row the worker writes.
 | `ORBIT_WIKI_MODEL_API_KEY` | Required with the base URL | Sent as `Authorization: Bearer`. | Yes | Recreate `wiki-worker` |
 | `ORBIT_WIKI_MODEL` | Required with the base URL | The model name sent with every call; the only part of the configuration clients see. | No | Recreate `wiki-worker` |
 | `ORBIT_WIKI_MODEL_CONCURRENCY` | Optional; `4` | The most model requests in flight at once, across every wiki space. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_THINKING` | Optional; empty | `disabled` or `enabled` is sent as `"thinking": {"type": "<value>"}` in the body of every call. Empty sends no `thinking` field, so the endpoint decides; vLLM does not think unless asked. Set `disabled` for an endpoint that thinks by default, such as DeepSeek's V4 models. Any other value is logged as a problem, and no `thinking` field is sent. | No | Recreate `wiki-worker` |
 
 The server runs every account's wiki work in `wiki-worker`; there is no runner path to fall back to, and no
 executor switch (`ORBIT_WIKI_EXECUTOR` and `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` are read by nothing since P11, so an

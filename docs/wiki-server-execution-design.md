@@ -75,6 +75,7 @@
 | `ORBIT_WIKI_MODEL_API_KEY` | wiki-worker | 启用时必填 | 以 Bearer 方式发送 |
 | `ORBIT_WIKI_MODEL` | wiki-worker | 启用时必填 | 模型名 |
 | `ORBIT_WIKI_MODEL_CONCURRENCY` | wiki-worker | 默认 4 | 所有空间合计同时在途的模型请求数，由队列在数据库层面保证 |
+| `ORBIT_WIKI_MODEL_THINKING` | wiki-worker | 默认不设 | owner 2026-11-01 加：`disabled` 或 `enabled` 时每次调用都带 `thinking: {type: <值>}`，不设时不带；DeepSeek 的 V4 模型不说不就思考，要设 `disabled`（§6） |
 
 - P1b 到 P10 还有执行器开关的两个变量：`ORBIT_WIKI_EXECUTOR`（给 apiserver 和 wiki-worker，默认 `runner`，可选 `runner`、`canary`、`server`）和
   `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS`（`canary` 模式下走服务端的账号，逗号分隔）。P11 删除了开关（§10）：两个变量没有代码再读，compose、
@@ -344,6 +345,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - `POST {base}/v1/messages`，带 `Authorization: Bearer` 和 `anthropic-version: 2023-06-01`，`stream: true`。
   - system 用各流水线现有的 system prompt，内容是一条 user 消息。
   - 不带 tools，不开 thinking。
+  - 上一条是按 vLLM 写的：不问就不思考。DeepSeek 的 V4 模型不问也思考，所以 owner 2026-11-01 加了可选的 `ORBIT_WIKI_MODEL_THINKING`（§2.1）：设成 `disabled` 或 `enabled`，每次调用都带 `thinking: {type: <值>}`；不设时体与原来逐字节相同。
 - **`max_tokens`**：plan 用 32,000（现值）。其余步骤现在用的是 Claude Code 对未知模型的默认值，P1 实测后定一个显式值，写进合同。
 - **健康检查**：`GET {base}/health`，返回 200 或 404 都算在线。由调度器统一探测（§5.3）。
 - **重试**：5xx、429 和连接错误按 0 / 10 / 30 秒退避，请求重新排队。现在其中一部分靠 Claude Code 隐式重试，这里要自己实现。

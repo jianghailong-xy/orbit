@@ -300,6 +300,9 @@ services:
       ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
       # Model requests in flight at once, across every space.
       ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
+      # Optional: disabled or enabled is sent as every call's thinking; unset sends none, as before. DeepSeek's V4 models
+      # think unless told not to, so set disabled for them (docs/self-hosting.md, "Wiki System model").
+      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"
     depends_on:
       apiserver:
         condition: service_healthy
