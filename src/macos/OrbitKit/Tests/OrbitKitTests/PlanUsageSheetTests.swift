@@ -32,7 +32,7 @@ final class PlanUsageSheetTests: XCTestCase {
 
     func testEveryBucketsIdLineIsInTheSheetsHeight() throws {
         let rows = try antigravity().rows
-        XCTAssertEqual(PlanUsageSheetLayout.rowsHeight(rows), 5 * (66 + 24))
+        XCTAssertEqual(PlanUsageSheetLayout.rowsHeight(rows), 5 * (66 + 21))
         // A row without an id line keeps the height it had.
         XCTAssertEqual(PlanUsageSheetLayout.rowsHeight([
             PlanUsageRow(key: "five_hour", label: "5h limit", groupLabel: nil, window: PlanUsageWindow(utilization: 6)),

@@ -968,11 +968,12 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
 }
 
 /// The compact iOS Plan usage sheet's height for its rows (the sheet fits a detent to them): 66 pt a
-/// row, and 24 more for a row that names its bucket on a line above (an Antigravity bucket's id).
-/// Five Antigravity buckets measured at 66 each ran ~85 pt short, pushing the title into the grabber.
+/// row, and 21 more for a row that names its bucket on a line above (an Antigravity bucket's id: a
+/// 17.3 pt line and 4 pt of spacing on an iPhone 17 Pro simulator, 2026-11-01). Five Antigravity
+/// buckets at 66 each ran ~85 pt short, pushing the title into the grabber.
 public enum PlanUsageSheetLayout {
     public static func rowsHeight(_ rows: [PlanUsageRow]) -> Int {
-        rows.reduce(0) { $0 + 66 + ($1.groupLabel == nil ? 0 : 24) }
+        rows.reduce(0) { $0 + 66 + ($1.groupLabel == nil ? 0 : 21) }
     }
 }
 
