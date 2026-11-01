@@ -1,20 +1,20 @@
 Test Case '-[RgnProbeUITests.RegionShotTests test01TheCardOverTheHeldMessage]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test01TheCardOverTheHeldMessage]' passed (57.590 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test01TheCardOverTheHeldMessage]' passed (61.995 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test02CheckAgainOnTheCard]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test02CheckAgainOnTheCard]' passed (33.874 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test02CheckAgainOnTheCard]' passed (50.082 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test03UseAnotherProvider]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test03UseAnotherProvider]' passed (33.219 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test03UseAnotherProvider]' passed (33.887 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test04MoveToAnotherMachine]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test04MoveToAnotherMachine]' passed (21.460 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test04MoveToAnotherMachine]' passed (26.077 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test05TheProviderMenu]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test05TheProviderMenu]' passed (28.457 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test05TheProviderMenu]' passed (34.859 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test06TheSessionList]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test06TheSessionList]' passed (10.239 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test06TheSessionList]' passed (13.518 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test07TheMachinePage]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test07TheMachinePage]' passed (53.351 seconds).
+Test Case '-[RgnProbeUITests.RegionShotTests test07TheMachinePage]' passed (62.398 seconds).
 Test Case '-[RgnProbeUITests.RegionShotTests test08TheClaudeCodePage]' started.
-Test Case '-[RgnProbeUITests.RegionShotTests test08TheClaudeCodePage]' passed (26.466 seconds).
-	 Executed 8 tests, with 0 failures (0 unexpected) in 264.656 (264.666) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 264.656 (264.667) seconds
-	 Executed 8 tests, with 0 failures (0 unexpected) in 264.656 (264.669) seconds
+Test Case '-[RgnProbeUITests.RegionShotTests test08TheClaudeCodePage]' passed (32.141 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 314.958 (314.967) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 314.958 (314.969) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 314.958 (314.971) seconds
 ** TEST SUCCEEDED **

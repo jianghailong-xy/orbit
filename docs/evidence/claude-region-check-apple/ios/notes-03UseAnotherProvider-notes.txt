@@ -1,1 +1,2 @@
 other-provider: alert 7 label="Use another provider" value="" frame=(41.0, 332.0, 320.0, 238.0) hittable=true
+other-provider: check line after the pick 48 label="Checked 13:40 · Claude’s connection: mainland China (no proxy)" value="" frame=(26.0, 580.6666666666666, 350.0, 26.33333333333337) hittable=true

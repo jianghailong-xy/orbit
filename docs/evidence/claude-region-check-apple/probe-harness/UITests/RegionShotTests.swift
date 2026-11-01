@@ -138,6 +138,17 @@ final class RegionShotTests: ProbeCase {
         if !requestsLog().contains("\"provider\":\"deepseek\"") && !requestsLog().contains("\"provider\": \"deepseek\"") {
             XCTFail("other-provider: the PATCH did not carry provider deepseek")
         }
+        // A held session has no turn in flight: the note says the waiting message runs on DeepSeek.
+        expectText(app, ["Your next message uses DeepSeek."], "other-provider-note")
+        expectNoText(app, ["The turn in flight finishes"], "other-provider-note")
+        // With the note under the composer, the card's check line keeps its whole text: wrapped, not cut.
+        let line = containing(app, checkLine)
+        note("other-provider: check line after the pick \(describe(line))")
+        if !line.exists {
+            XCTFail("other-provider: no check line after the pick")
+        } else if line.frame.height < 20 {
+            XCTFail("other-provider: the check line is cut to one line (\(line.frame.height) pt)")
+        }
         shot("ios-03b-after-deepseek")
     }
 

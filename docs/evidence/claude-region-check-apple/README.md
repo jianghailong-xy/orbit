@@ -7,7 +7,8 @@ the real iPhone app — its own `CompactShell` and Settings sheet built from thi
 simulator, fed `probe-harness/stub.py`.
 
 Code: 9639900f7 (the feature), d43f4cf24 (no Claude accounts under a blocked sign-in in the Provider menu), f26e3b6a2
-(the card's presses in the app's `FlowLayout`).
+(the card's presses in the app's `FlowLayout`), c17d87ee9 (revision 2: a held session's provider note, the card's lines
+wrap).
 
 ## What each surface does
 
@@ -30,14 +31,14 @@ New words live in OrbitKit's `ClaudeRegionCopy`, each held to the web declaratio
 
 `compare/` puts board 03's phone screens (cut from `03-ios-terminal.png` at (124, 404)–(909, 2107) and (1006, 404)–
 (1791, 2107)) beside the real ones; `ios/` holds every picture of the run. Shots run
-[41253857258](https://github.com/jianghailong-xy/orbit/actions/runs/41253857258), probe commit 706a0d690 = f26e3b6a2 +
-`.rgn-probe/`: 8 tests, 0 failures.
+[41256854381](https://github.com/jianghailong-xy/orbit/actions/runs/41256854381), probe commit 74a23ff4b = c17d87ee9 +
+`.rgn-probe/`: 8 tests, 0 failures. (Revision 1's pictures were run 41253857258 on f26e3b6a2.)
 
 | Picture | What it shows |
 | --- | --- |
 | `compare/ios-01-card.compare.png`, `ios/ios-01-card.png`, `ios/ios-01b-card-close.png` | The held conversation: the card word for word, two rows of presses, no coded line. |
 | `ios/ios-02-card-after-check-again.png` | After Check again: the stub logged the POST and the check line moved to the new check. |
-| `ios/ios-03-use-another-provider.png`, `ios/ios-03b-after-deepseek.png` | Use another provider offers DeepSeek and Local vLLM only; DeepSeek PATCHed `provider: deepseek` (`ios/writes.txt`). |
+| `ios/ios-03-use-another-provider.png`, `ios/ios-03b-after-deepseek.png` | Use another provider offers DeepSeek and Local vLLM only; DeepSeek PATCHed `provider: deepseek` (`ios/writes.txt`). After the pick the note under the composer reads `Your next message uses DeepSeek.` and the check line stays whole, on two lines (`ios/notes-03…`: 26.3 pt). |
 | `ios/ios-04-move.png` | Move to another machine opens the Move panel. |
 | `ios/ios-05-provider-menu.png` | The composer's Provider menu: On HPC Default (current), then DeepSeek, `Personal Max — Region not supported`, `Work — Region not supported`, Local vLLM — board 02 C's rows. |
 | `ios/ios-06-session-list.png` | The list row: `Anthropic unavailable on HPC`. |
@@ -54,8 +55,8 @@ Where the real screens differ from board 03, and why:
 - **Header.** The board drew a title with `Anthropic unavailable on HPC · Open` under it. The iPhone console has had no
   title or status line since 2026-10-15 (owner); the words show in the list row (06) and as the row's VoiceOver value.
   The Mac console's status bar says them (`SessionHeader.subtitle`, unit-tested).
-- **Check line.** `Checked 13:53 · Claude’s connection: mainland China (no proxy)` is the contract's copy of record and
-  the web's; the board's line left out `Claude’s connection:`. It takes two lines on a phone.
+- **Check line.** `Checked HH:mm · Claude’s connection: mainland China (no proxy)` is the contract's copy of record and
+  the web's; the board's line left out `Claude’s connection:`. It takes two lines on a phone, and keeps them.
 - **Machine page.** The attention item carries Check Again (the web runner page draws Check again for `checkRegion`;
   the board drew a chevron there). The footnote is the contract's machine note and check line, not the board's
   shorter sketch of it. Capacity, Update Engines Now and Refresh Model Lists are the page's own, which the board left out.
@@ -69,32 +70,43 @@ Where the real screens differ from board 03, and why:
 | OrbitKit `swift test`, swift:6.1 (ci.yml's Swift core), `kit/archsuite.sh` on git archives | main aaf0ab585 | 4274 tests, 5 skipped, 0 failures |
 | | main + this branch (trial merge 886d9af6c, clean) | 4315 tests, 5 skipped, 0 failures |
 | | branch d43f4cf24 / f26e3b6a2 | 4315 tests, 5 skipped, 0 failures |
-| client.yml, dispatched on `probe/region-check-apple-gates` = f26e3b6a2 | run [41253865283](https://github.com/jianghailong-xy/orbit/actions/runs/41253865283) | all jobs success (below) |
-| ci.yml, same commit | run [41253867132](https://github.com/jianghailong-xy/orbit/actions/runs/41253867132) | all jobs success; Swift core 4315 tests, 5 skipped, 0 failures |
-| android.yml, same commit | run [41253869632](https://github.com/jianghailong-xy/orbit/actions/runs/41253869632) | `:core:test` 310 and `:app:testDebugUnitTest` 1974 tests, 0 failures |
+| | **branch tip c17d87ee9** | **4318 tests, 5 skipped, 0 failures** |
+| | project tip cd124fe06 + c17d87ee9 (trial merge a452aeff4, clean) | 4318 tests, 5 skipped, 0 failures |
+| **client.yml, dispatched on `probe/region-check-apple-gates` = c17d87ee9** | run [41256862424](https://github.com/jianghailong-xy/orbit/actions/runs/41256862424) | all jobs success (below) |
+| ci.yml, same commit | run [41256864579](https://github.com/jianghailong-xy/orbit/actions/runs/41256864579) | all jobs success; Swift core 4318 tests, 5 skipped, 0 failures |
+| android.yml, same commit | run [41256866469](https://github.com/jianghailong-xy/orbit/actions/runs/41256866469) | `:core:test` 310 and `:app:testDebugUnitTest` 1974 tests, 0 failures |
+| client.yml / ci.yml / android.yml on f26e3b6a2 (revision 1) | runs [41253865283](https://github.com/jianghailong-xy/orbit/actions/runs/41253865283), [41253867132](https://github.com/jianghailong-xy/orbit/actions/runs/41253867132), [41253869632](https://github.com/jianghailong-xy/orbit/actions/runs/41253869632) | all jobs success |
 | client.yml on the feature commit 9639900f7 | run [41251746236](https://github.com/jianghailong-xy/orbit/actions/runs/41251746236) | all jobs success |
 
-client.yml 41253865283, from its job logs:
+client.yml 41256862424 on c17d87ee9, from its job logs (Navigation and Font tokens success too):
 
-- **macOS (build + test)**, job 124692794776: OrbitKit on macOS "Executed 4315 tests, with 5 tests skipped and 0
-  failures"; OrbitApp `swift build` compiled every file this task touched ("[424/488] Compiling OrbitApp
-  SessionRunStartCard.swift", "[412/465] Compiling OrbitApp SkillsRunnersView.swift", "[461/488] Compiling OrbitApp
-  RunnerEnginePage.swift", ConsoleModel, ConsoleView, ComposerView, AgentsView, AgentIdentity, AgentsModel,
-  RunnersModel, RunnerPageParts), "Build complete! (231.76s)".
-- **iOS (generate + build)**, job 124692794670: "SwiftCompile normal arm64 …/Views/Console/SessionRunStartCard.swift",
-  the same for SkillsRunnersView, RunnerEnginePage and RunnerPageParts, then "** BUILD SUCCEEDED **".
+- **macOS (build + test)**, job 124701765971, success: OrbitKit on macOS "Executed 4318 tests, with 5 tests skipped and
+  0 failures"; OrbitApp `swift build` "[353/419] Compiling OrbitApp ConsoleModel.swift", "[378/442] Compiling OrbitApp
+  SessionRunStartCard.swift", "Build complete! (152.31s)".
+- **iOS (generate + build)**, job 124701765927, success: "SwiftCompile normal arm64
+  src/macos/OrbitApp/Sources/OrbitApp/Views/Console/SessionRunStartCard.swift", the same for ConsoleModel.swift, then
+  "** BUILD SUCCEEDED **".
+
+Revision 1's client.yml 41253865283 on f26e3b6a2 compiled every file this task touched the same way (macOS job
+124692794776: "[424/488] Compiling OrbitApp SessionRunStartCard.swift", SkillsRunnersView, RunnerEnginePage,
+ConsoleModel, ConsoleView, ComposerView, AgentsView, AgentIdentity, AgentsModel, RunnersModel, RunnerPageParts; iOS job
+124692794670: "** BUILD SUCCEEDED **").
 
 New and changed OrbitKit tests:
 
-- `ClaudeRegionTests` (30): the rules (`claudeRegion.test.ts`), the card (`RunNeverStartedCard.region.test.tsx`: words,
+- `ClaudeRegionTests` (31): the rules (`claudeRegion.test.ts`), the card (`RunNeverStartedCard.region.test.tsx`: words,
   proxy, weekday, UA-43, the place never read from the sentence, the fallback, the cause before every pattern, the
   ended foot, the stopped turn), the held words in the list, header and glyph, the pickers
-  (`sessionProviderChoices.test.ts`'s region block), the machine page and its note, and the transcript's lines.
+  (`sessionProviderChoices.test.ts`'s region block), the machine page and its note, the transcript's lines, and the
+  provider note on a held session.
+- `ClaudeRegionWiringTests` (2): `ConsoleModel.selectProvider` passes `liveRun: isLive && !regionHeld`, and the card's
+  lines carry `.fixedSize(horizontal: false, vertical: true)` (OrbitApp compiles only in the macOS and iOS jobs).
 - `ClaudeRegionCopyParityTests` (11; 8 new): every `ClaudeRegionCopy` word against `claudeRegionCopy.ts`, the body
   against the shared refusal writer, the stopped shape against `claudeRegionStoppedError`, the code, the page and the
   Anthropic preset against shared, the card's feet against `RunNeverStartedCard.tsx`, and every web declaration either
   ported or named web-only (`claudeRegionAccounts`).
-- `WatchWiringTests.testTheHeaderRowAndGlyphAreHandedTheWatch` now also asserts the glyph is handed the machine.
+- `WatchWiringTests.testTheHeaderRowAndGlyphAreHandedTheWatch` now also asserts the glyph is handed the machine, and
+  `TaskRunHandoffWiringTests.testTheComposerSaysWhenAProviderPickTakesHold` pins the new `liveRun`.
 
 Android reads some of the Swift files this task changed (`SessionLineCopyParityTest`, `AccountCopyParityTest`,
 `InfrastructureCopyParityTest`, `PendingTrayCopyParityTest`, `DrawerCountTest`); android.yml above ran them green.
@@ -107,3 +119,20 @@ Android reads some of the Swift files this task changed (`SessionLineCopyParityT
   runs `probe-harness/client.probe.yml`, whose report job pushes the pictures to `probe/region-check-apple-results`.
   `kit/compose.py <shots> <out>` cuts the card close-up and writes the comparisons. `kit/stubcheck.sh` reads the stub
   locally.
+
+## Revision 2: the note on a held session, and the check line
+
+Revision 1 was sent back for two things on the card's main path, both visible in its ios-03b:
+
+1. **The note after Use another provider.** On a held session it read "The turn in flight finishes on Claude Code. Your
+   next one uses DeepSeek.", though nothing is in flight, and it stayed while the message ran on DeepSeek.
+   `ConsoleModel.selectProvider` now passes `liveRun: isLive && !regionHeld`, so it reads "Your next message uses
+   DeepSeek." (c17d87ee9). The web shows no note on a held session, so nothing changes there.
+2. **The check line was cut** ("Claude’s connection: mainland Chin…") once that note took room in the band: the card's
+   lines now carry the body's `.fixedSize(horizontal: false, vertical: true)`, so the line wraps in that state too. The
+   card's other texts are one line each, which a squeeze cannot cut.
+
+Shown by: `ClaudeRegionTests.testAProviderPickOnAHeldSessionSaysTheWaitingMessageRunsOnIt` and `ClaudeRegionWiringTests`
+above; the probe's test03 now fails unless the note says "Your next message uses DeepSeek." (and never "The turn in
+flight finishes") and the check line is two lines tall after the pick — run 41256854381 passed it, retaking ios-03b; the
+OrbitKit suite on c17d87ee9; client.yml 41256862424 green for macOS and iOS.
