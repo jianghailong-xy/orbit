@@ -25,7 +25,9 @@ claims they were.
 Every statement at `1031a2052` that writes `conversation_turn`, found by
 `git grep -n -E "conversationTurn\.(deleteMany|updateMany|delete|update)\b|UPDATE \"conversation_turn\"|DELETE FROM \"conversation_turn\""`
 over `src/apiserver/src` (specs and the inventory excluded). No migration writes `conversation_turn` from a trigger
-(`git grep` over `prisma/migrations/*/migration.sql`: 0 files). The two reads the task named are listed as well.
+(`git grep` over `prisma/migrations/*/migration.sql`: 0 files). The two reads the task named are listed as well. A
+line number is the statement's first line; the task named the line after it (`reaper.service.ts:895`,
+`runner-api.controller.ts:7081` and `8737`, `sessions.service.ts:7754`).
 
 "Reaches a queued `bg-wake:` turn" means it can answer or delete a PENDING turn whose `client_turn_id` starts with
 `bg-wake:` while a wakeup or a job's wake is filed onto it.
@@ -140,7 +142,81 @@ of that session is running to ask.
 
 ## Checks
 
-The job ids and results are below. Spec files:
+Every run below is a `bg_run` job on runner `workstation-gpu`; its output is stored under the job id. The fix is
+commit `f981f8e28`, and `4559a8367` adapts three unit doubles (below). Spec files:
 
-- `src/apiserver/src/runner-api/wake-turn-drain.pg.spec.ts`: the nine cases (header of the file).
-- `src/apiserver/src/realtime/reaper-push-wiring.spec.ts`: the production wiring.
+- `src/apiserver/src/runner-api/wake-turn-drain.pg.spec.ts`: nine cases, listed in the file's header. Every drain goes
+  through its real door: `ReaperService.tick` → `forceFinalize`, `RunnerApiController.turnComplete` and `finalize`,
+  `SessionsService.end` → `transitionEnd`, `interrupt`, `cancelQueuedTurn`. Rows are set up with SQL only where a
+  case needs a precondition, such as a runner that died or an end that was never honored.
+- `src/apiserver/src/realtime/reaper-push-wiring.spec.ts`: builds the production `RealtimeModule` with `NestFactory`
+  and asserts that the `ReaperService` it constructed holds the application's `PushService` instance.
+
+### The new specs: green on the fix, red on the baseline
+
+| Run | Job | Result |
+| --- | --- | --- |
+| `scripts/run-pg-spec.sh` on commit `f981f8e28` (fresh container; a skip counts as red): `wake-turn-drain`, `scheduled-wakeup-loop`, `scheduled-wakeup` | `bgj_f121dddba2ca` | exit 0. `wake-turn-drain` 10/10 (9 cases and their parent), `scheduled-wakeup-loop` 19/19, `scheduled-wakeup` 8/8, 0 skipped |
+| `wake-turn-drain` on the fix, final spec text (dev PostgreSQL) | `bgj_1419ea49f679` | 10/10 |
+| The same spec against `1031a2052`'s production code: `baseline.sh` puts the six changed runtime files back with `git show` and keeps the new specs | `bgj_1419ea49f679` | `wake-turn-drain` 0/10, `reaper-push-wiring` 0/1. Afterwards the working tree's diff was byte-identical to the fix again. The baseline build exits 4 on one type error only: the spec passes `ReaperService` a sixth argument, `push`, which the baseline constructor does not take, and tsc emits anyway. |
+
+The first assertion each case fails on the baseline (`baseline-result.txt`):
+
+| Case | Baseline failure |
+| --- | --- |
+| 1 reap, retry armed | the wakeup filed onto the drained turn was not replaced (`DELIVERED`, expected `SUPERSEDED` plus its PENDING copy) |
+| 2 reap, no retry | the wakeup on the drained turn was not dropped (`DELIVERED`); no `wakeup-dropped` push; the job wake survives |
+| 3 newer one waiting | the drained wakeup was not superseded (`DELIVERED`) |
+| 4 session ended (4 ways) | all four `DELIVERED`, expected `DROPPED` |
+| 5 task E's loop B | tick 9 `DELIVERED`, expected `DROPPED` |
+| 6 tick handed to the engine | the two queued ticks `DELIVERED`, expected `DROPPED` (the in-flight tick's own assertion holds on both trees; mutant M6 shows it is checked) |
+| 7 turn-complete drain | the one-shot `DELIVERED`, expected `DROPPED` |
+| 8 finalize FAILED | `DELIVERED`, expected `DROPPED` |
+| 9 interrupt, withdrawal | counts `[2, 0]`, expected `[1, 1]` |
+
+What case 5 shows on the fix: tick 9 is filed behind the turn the runner died in (turn seq 10, PENDING, behind seq 9
+IN_FLIGHT), and the reap answers seq 10 with `delivered_at` null. Tick 9 is DROPPED, tick 8 stays DELIVERED, and the
+counts drop from 9/0 to 8/1. Ticks 10–38 are missed while the retry waits for the runner. The auto-retry then gives up
+after MAX_OFFLINE_WAIT_MS, and ticks 39–43 are missed because their revives are refused with the runner away. This
+follows task E's log: `reaped … (runner offline)` at 21:19:07, then `could not revive … the runner is offline` from
+21:49:31. Tick 44 then revives the session, and its block says `loop: tick 44, every 60 seconds until …; 35 ticks
+missed since the last run`. The loop row and session_get both read 9 fired and 35 missed, which is ticks 1–8 and 44
+run and 9–43 not. `loop.lastFiredAt` is tick 44's `delivered_at`, as `lastLoopRun` reads it.
+
+### Mutation check
+
+`mutants.mjs` makes 22 mutants by editing the compiled `build/` tree. For each it runs `wake-turn-drain.pg.spec` and
+`reaper-push-wiring.spec`, then restores the bytes. Job `bgj_fb7b2ffe094e`, on the final spec text: all 22 killed,
+and the compiled files were restored byte for byte. The killers of each mutant are in `mutants-result.txt`. Among
+them:
+
+- M1–M5: each drain without the settlement (reap, failed turn, finalize, End of a queued session, End of a running
+  session).
+- M6: settling IN_FLIGHT turns too. Killed by cases 5, 6 and 9.
+- M7–M9: counts never corrected; one run fewer per tick instead of per turn (case 6); only drains correcting counts
+  (case 9).
+- M12: the task's literal semantics, the drained row itself back to PENDING. Killed by case 1: it is never filed again.
+- M14: a copy made although a newer wakeup waits. The unique index refuses it and the reap fails (case 3).
+- M15–M20: a drop with a FAILED session not told; a drop with an ended session told; each of the three doors not
+  pushing; a drop pushed twice.
+- M21: a job's wake kept on the drained turn (case 2).
+- M22: the reaper discarding the PushService it is given. Killed by case 2 and by the wiring spec.
+
+### Regressions, the unit suite and the censuses
+
+| Run | Job | Result |
+| --- | --- | --- |
+| 26 pg specs around wake turns, the reaper, completion and finalize (`pgset.sh`) | `bgj_81f208641ed8` | all green, 0 skipped: `related-specs-result.txt`. Includes `scheduled-wakeup-loop` (A1/C1/C2), `scheduled-wakeup`, the five `background-wake-*`, `background-job-wake`, `session-request`, `control-plane-leader`, `runner-presence`, the four watch specs that build a reaper, `turn-complete-unanswered`, `auto-retry-startup-failure`, `kept-turn-completion`, `deadlock/lock-order` (16/16) and `managed-runner-wake`. |
+| apiserver unit suite (`npm test`) on `f981f8e28` | `bgj_12d279480dd9` | 5749/5753. The four failures were three hand-made transaction doubles whose `conversationTurn.findMany` ignores its filter, so the settlement found "queued wake turns" there and called a method the double lacked (`backgroundJobWake.deleteMany`, `sessionScheduledWakeup.findMany`). |
+| The same after `4559a8367`, whose doubles answer those reads with nothing filed | `bgj_fb7b2ffe094e` | 5753/5753. This includes `db-write-inventory.spec`, `lock-order.spec` and `reaper-push-wiring.spec`. |
+| `db-write-inventory.spec`, `lock-order.spec`, `reaper-push-wiring.spec` on their own | `bgj_84ea0c014fa7` | 18/18 |
+| `npm run build -w @orbit/apiserver` (production tsc) | `bgj_12d279480dd9` | exit 0 |
+
+## Limits
+
+- One process and one PostgreSQL per run. No isolated stack with a real runner and a real engine was run for this
+  task; case 5 replays task E's sequence through the production code instead.
+- The race between a re-armed copy and a concurrent runner-door request is argued, not forced in a spec.
+- A fold of two queued turns that each carry a tick of one loop (`foldQueuedWakeTurnsInto`, rare) already counted two
+  runs before this change. A drain of the merged turn takes one of them back, not two.
+- The two production wakeups that never arrived were not checked one by one against this cause.
