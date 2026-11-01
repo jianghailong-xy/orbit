@@ -894,6 +894,8 @@ func doctorProxyVars(server string) []envVar {
 // (claude_region.go) — through the proxy `claude` would use for Anthropic, or directly — and recorded by the
 // control plane like any other check.
 type doctorRegion struct {
+	// verdict is the answer as this process's gates read it: the check's own, or the blocked verdict an unknown one
+	// carries over.
 	verdict claudeRegionVerdict
 	// proxy is the proxy the check went through, "" for none.
 	proxy string
@@ -906,13 +908,15 @@ type doctorRegion struct {
 // checkDoctorRegion asks where Claude's connection to Anthropic comes out, for the runner cfg describes.
 func checkDoctorRegion(cfg *RunnerConfig) doctorRegion {
 	proxy := claudeAnthropicProxy()
-	check := newClaudeRegionCheck(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), cfg.Name)
+	check := newClaudeRegionCheck(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), cfg.Name,
+		claudeRegionStorePath())
 	v, err := check.ask(context.Background(), proxy)
 	v.At = check.now()
-	// Kept as a check keeps its own answers, flip and all (claude_region.go), so the gates in this process read it
-	// the way the runner's read theirs.
+	// Kept as a check keeps its own answers, flip and all (claude_region.go), on disk too, so the gates in this
+	// process read it the way the runner's read theirs, and the runner's next start reads a decided one. Shown as they
+	// read it: an unknown answer carries over a blocked verdict the runner kept, which holds Claude Code back.
 	check.keep(proxy, v)
-	return doctorRegion{verdict: v, proxy: proxy, err: err, check: check}
+	return doctorRegion{verdict: check.carriedOver(proxy, v), proxy: proxy, err: err, check: check}
 }
 
 // formatDoctorRegion is the lines of doctor's Claude region section (board 03): where Claude's connection to
