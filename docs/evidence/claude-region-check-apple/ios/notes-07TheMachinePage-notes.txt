@@ -1,0 +1,4 @@
+machine: Check Again buttons 9 label="Check Again" value="" frame=(72.0, 396.6666666666667, 117.66666666666666, 32.0) hittable=true | 9 label="Check Again" value="" frame=(72.0, 784.3333333333334, 117.66666666666666, 32.0) hittable=true
+machine-note: in view after 5 drag(s) at (32.0, 588.9999999999999, 328.3333333333333, 79.66666666666663)
+machine: footnote 48 label="Claude’s connection from this machine is in mainland China, where Anthropic doesn’t offer Claude, so Orbit won’t use Anthropic accounts or keys here, or start a Claude sign-in. Claude Code still runs with other providers’ keys. Supported regions" value="" frame=(32.0, 588.9999999999999, 328.3333333333333, 79.66666666666663) hittable=true
+machine: pressing 9 label="Check Again" value="" frame=(72.0, 150.99999999999994, 117.66666666666666, 31.99999999999997) hittable=true

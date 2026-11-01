@@ -1,0 +1,1 @@
+other-provider: alert 7 label="Use another provider" value="" frame=(41.0, 332.0, 320.0, 238.0) hittable=true
