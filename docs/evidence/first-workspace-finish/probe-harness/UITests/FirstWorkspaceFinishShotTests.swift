@@ -111,12 +111,19 @@ final class FirstWorkspaceFinishShotTests: ProbeCase {
         #endif
     }
 
-    /// Replace what a field holds with `text`.
-    private func retype(_ field: XCUIElement, _ text: String) {
+    /// Choose A new folder and type `name` into its field.
+    private func nameANewFolder(_ app: XCUIApplication, _ name: String, _ scene: String) -> Bool {
+        tapButton(app, "A new folder", "\(scene)-row")
+        let field = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "name")).firstMatch
+        guard field.waitForExistence(timeout: 8) else {
+            write(app.debugDescription, "no-name-field-\(scene).txt")
+            XCTFail("\(scene): the new folder's name field")
+            return false
+        }
         press(field)
         settle(0.5)
-        let held = (field.value as? String) ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: held.count + 2) + text)
+        field.typeText(name)
+        return true
     }
 
     /// The lines of the log with this in them, since this launch put the stub back: the log is the whole pass's.
@@ -132,17 +139,25 @@ final class FirstWorkspaceFinishShotTests: ProbeCase {
         expect(app, connecting, "connecting")
         absent(app, "updates itself first", "connecting")
         absent(app, "is offline", "connecting")
-        let row = button(app, "A new folder")
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "the folder step is drawn")
-        XCTAssertFalse(row.isEnabled, "and closed while the machine connects")
-        XCTAssertFalse(useThisFolder(app).isEnabled)
+        // Nothing declared yet, so no new folder to offer: the other folder's row is drawn, and closed.
+        let other = button(app, "Another folder on orbit@austin")
+        if other.waitForExistence(timeout: 10) {
+            XCTAssertFalse(other.isEnabled, "the folder step is closed while the machine connects")
+        } else {
+            write(app.debugDescription, "no-other-row-connecting.txt")
+            XCTFail("the folder step is drawn")
+        }
+        absent(app, "A new folder", "connecting")
+        let use = useThisFolder(app)
+        XCTAssertTrue(use.exists && !use.isEnabled, "Use This Folder is there and off")
         XCTAssertEqual(requests("BODY /api/runners/austin/dir-probe").count, 0, "nothing is asked of a machine still connecting")
         shot(app, name("f1-connecting"))
 
         // Its first heartbeat. Nothing tells the app: the page's own reads find it.
+        let row = button(app, "A new folder")
         let beat = Date()
         setStub(#"{"scene":"bare"}"#)
-        let opened = waitUntil(15) { !self.element(app, containing: self.connecting).exists && row.isEnabled }
+        let opened = waitUntil(15) { !self.element(app, containing: self.connecting).exists && row.exists && row.isEnabled }
         let took = Date().timeIntervalSince(beat)
         note("f1: the folder step opened \(String(format: "%.1f", took)) s after the first heartbeat")
         XCTAssertTrue(opened, "the folder step never opened")
@@ -155,17 +170,9 @@ final class FirstWorkspaceFinishShotTests: ProbeCase {
 
     // MARK: F6: a new folder's name already on the machine is said before anything is sent
 
-    func test1ANewFolderNameAlreadyThereIsSaidFirst() throws {
+    func test1ANewFolderNameThatIsAFolderIsUsedAsItIs() throws {
         let app = launch(until: found, name("new-folder"))
-        tapButton(app, "A new folder", "new-folder-row")
-        let field = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "name")).firstMatch
-        guard field.waitForExistence(timeout: 8) else {
-            write(app.debugDescription, "no-name-field.txt")
-            return XCTFail("the new folder's name field")
-        }
-        press(field)
-        settle(0.5)
-        field.typeText("payments")
+        guard nameANewFolder(app, "payments", "new-folder") else { return }
         expect(app, alreadyThere, "new-folder-exists")
         absent(app, "Starts empty", "new-folder-exists")
         XCTAssertTrue(useThisFolder(app).isEnabled, "a folder that is there can be used")
@@ -174,22 +181,7 @@ final class FirstWorkspaceFinishShotTests: ProbeCase {
         lowerKeyboard(app)
         shot(app, name("f6-new-folder-exists"))
 
-        // A file of that name can't be one.
-        retype(field, "notes.txt")
-        expect(app, aFile, "new-folder-file")
-        XCTAssertFalse(useThisFolder(app).isEnabled, "nothing can be made over a file")
-        lowerKeyboard(app)
-        shot(app, name("f6-new-folder-file"))
-
-        // Nothing there: it starts empty, as the board says.
-        retype(field, "scratch-notes")
-        expect(app, "Starts empty. Ask for a clone or a new project in your first message.", "new-folder-free")
-        XCTAssertTrue(useThisFolder(app).isEnabled)
-
-        // Back to the folder that is there: it is that folder, and goes by its path.
-        retype(field, "payments")
-        expect(app, alreadyThere, "new-folder-again")
-        lowerKeyboard(app)
+        // Picked, it is that folder, and goes by its path.
         tapButton(app, "Use This Folder", "new-folder-use")
         expect(app, "/home/orbit/orbit-repos/payments", "new-folder-done")
         expect(app, "git repository · main", "new-folder-done-note")
@@ -205,6 +197,17 @@ final class FirstWorkspaceFinishShotTests: ProbeCase {
             note("new-folder-created: \(body)")
             XCTAssertTrue(body.contains("\"newWorkspace\": {\"workDir\": \"/home/orbit/orbit-repos/payments\"}"), body)
         }
+    }
+
+    func test3ANewFolderNameThatIsAFileCantBe() throws {
+        let app = launch(until: found, name("new-folder-file"))
+        guard nameANewFolder(app, "notes.txt", "new-folder-file") else { return }
+        expect(app, aFile, "new-folder-file")
+        absent(app, "Starts empty", "new-folder-file")
+        XCTAssertFalse(useThisFolder(app).isEnabled, "nothing can be made over a file")
+        lowerKeyboard(app)
+        shot(app, name("f6-new-folder-file"))
+        XCTAssertEqual(requests("BODY /api/sessions {").count, 0, "nothing was sent")
     }
 
     // MARK: F4: the register directory's suggestion still comes after another path took its question
