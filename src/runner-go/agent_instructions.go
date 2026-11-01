@@ -95,6 +95,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
 		"Cite a wiki entry the same way, as `[title](orbit-wiki:<id>)`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
+		orbitReplyFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
@@ -104,6 +105,22 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"`" + command + " capabilities --json` first to discover its commands, then run the returned argv with that exact " +
 		"absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
 }
+
+// orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
+// file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
+// screenshot in /tmp and links it there has given the user a label nothing can open: a session on
+// 2026-10-29 did that with a copy of the same file already in its checkout. The last sentence is the
+// price of the copy this asks for: commitWorktree and finalizeWorktree stage with `git add -A`, so a
+// file dropped into the checkout ships with the work unless git ignores it, which is why uploads lives
+// outside the checkout (writeUpload). It says "can end up in a commit" rather than "gets committed"
+// because an agent must not read it as the runner committing for it. The uploads path is not spelled
+// out because this text is the same for every session, and "a git-ignored path" is there for the
+// engines that do not show it to the agent. ASCII like the rest of the paragraph.
+const orbitReplyFileInstructions = "To hand the user a file, link it in your reply as `[name](path)`, or `![name](path)` " +
+	"to show an image. Orbit attaches a linked file only if it is inside your working directory or this session's " +
+	"uploads directory; from anywhere else, /tmp included, the user cannot open it, so copy the file there first and " +
+	"link the copy. Whatever git does not ignore in your working directory can end up in a commit, so a file that " +
+	"does not belong in the repository goes in the uploads directory or a git-ignored path.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn

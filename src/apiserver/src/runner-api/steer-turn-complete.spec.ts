@@ -56,7 +56,7 @@ function harness(
     },
     // What a wake steer a Stop wrote off carried (wake-turn-withdraw.ts). No fixture here files one.
     backgroundJobWake: { deleteMany: async () => ({ count: 0 }) },
-    sessionScheduledWakeup: { updateMany: async () => ({ count: 0 }) },
+    sessionScheduledWakeup: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
     taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {

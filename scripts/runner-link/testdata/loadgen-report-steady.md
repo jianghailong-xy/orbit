@@ -5,6 +5,8 @@ Steady window 2026-10-28T02:01:00.000Z → 2026-10-28T02:11:00.000Z (10 min), af
 
 **Verdict: FAIL**
 
+**Verdict, counting only the errors a caller saw: FAIL**
+
 | Criterion | Target | Measured | Pass |
 | --- | --- | --- | --- |
 | connections | 1000 | 1000 (lowest in the window) | yes |
@@ -29,6 +31,14 @@ Steady window 2026-10-28T02:01:00.000Z → 2026-10-28T02:11:00.000Z (10 min), af
 | postgresErrorLines | 0 |
 | deadlocks | 0 |
 | natsErrorLines | 0 |
+
+Errors a caller saw, each once: 0 (the report's own count: 7).
+
+| Caller | Count |
+| --- | --- |
+| runners | 0 |
+| http5xx | 0 |
+| welcomesUnanswered | 0 |
 
 Gateway counters that moved:
 

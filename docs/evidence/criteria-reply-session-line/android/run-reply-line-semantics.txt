@@ -1,0 +1,19 @@
+Printing with useUnmergedTree = 'true'
+Node #121 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+ |-Node #174 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+   IsContainer = 'true'
+    |-Node #176 at (l=16.0, t=16.0, r=395.0, b=58.0)px, Tag: 'record:11:coordinatorDelivery'
+       |-Node #177 at (l=16.0, t=16.0, r=395.0, b=58.0)px
+         Focused = 'false'
+         Actions = [OnClick, RequestFocus]
+         MergeDescendants = 'true'
+          |-Node #178 at (l=28.0, t=28.0, r=41.0, b=46.0)px
+          | ClearAndSetSemantics = 'true'
+          |-Node #180 at (l=47.0, t=22.0, r=192.0, b=37.0)px, Tag: 'record:11:coordinatorDelivery:sentence'
+          | Text = '[Criteria proposal rejected]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #181 at (l=47.0, t=39.0, r=183.0, b=52.0)px, Tag: 'record:11:coordinatorDelivery:sent'
+          | Text = '[Sent to this session · 01:03]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #182 at (l=379.0, t=30.0, r=383.0, b=45.0)px
+            ClearAndSetSemantics = 'true'

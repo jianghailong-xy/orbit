@@ -24,6 +24,13 @@ import { isDerivedUuid } from './project-dispatch-identity';
  *   * a reply is the turn whose key is derived from the proposal its words name, answering a
  *     decision on a proposal THIS conversation filed. The moment is the turn's own.
  *
+ * Who the conversation was to the project is the project's own pointer, not the session's kind: a
+ * delivery's wake is DELIVERED only to the conversation coordinating its project, so its card says
+ * so; a reply goes to whichever session filed the proposal, and its card says the coordinator only
+ * where that project's `coordinator_session_id` names THIS conversation (`toCoordinator`). A task's
+ * run that filed one, a conversation of the owner's, the coordinator of another project, one rotated
+ * out of coordinating: each is told the answer, and none of them is the coordinator.
+ *
  * A turn under one of those keys with no such row behind it — a caller's own message that took the
  * key, a delivery whose wake has since moved to the turn re-sending it — has no card, and is drawn as
  * the words, as every delivery was before this.
@@ -31,7 +38,7 @@ import { isDerivedUuid } from './project-dispatch-identity';
 export async function readCoordinatorDeliveryCards(
   db: Pick<
     Prisma.TransactionClient,
-    'projectCoordinatorWake' | 'projectRatifiedActionIntent' | 'projectCriteriaDecision' | 'conversationTurn'
+    'projectCoordinatorWake' | 'projectRatifiedActionIntent' | 'projectCriteriaDecision' | 'conversationTurn' | 'project'
   >,
   sessionId: string,
   turns: ReadonlyArray<{ id: string; clientTurnId: string; content: string | null }>,
@@ -66,15 +73,22 @@ export async function readCoordinatorDeliveryCards(
   });
   if (replies.length === 0) return cards;
   const intentIds = replies.map((reply) => reply.intentId);
-  const filedHere = new Set((await db.projectRatifiedActionIntent.findMany({
+  // Each proposal this conversation filed, by the project it was filed on.
+  const filedHere = new Map((await db.projectRatifiedActionIntent.findMany({
     where: {
       id: { in: intentIds },
       principalType: 'AGENT',
       principalId: sessionId,
       effectClass: CRITERIA_WEAKENING_EFFECT_CLASS,
     },
+    select: { id: true, projectId: true },
+  })).map((intent) => [intent.id, intent.projectId]));
+  // And the project this conversation coordinates, if any: `coordinator_session_id` is unique, so the
+  // pointer names it for one project at most.
+  const coordinated = (await db.project.findUnique({
+    where: { coordinatorSessionId: sessionId },
     select: { id: true },
-  })).map((intent) => intent.id));
+  }))?.id;
   const decisions = new Map((await db.projectCriteriaDecision.findMany({
     where: { intentId: { in: intentIds } },
     select: { intentId: true, decision: true },
@@ -86,13 +100,15 @@ export async function readCoordinatorDeliveryCards(
   for (const { turn, intentId } of replies) {
     const decision = decisions.get(intentId);
     const at = sentAt.get(turn.id);
-    if (!filedHere.has(intentId) || !at || (decision !== 'APPROVE' && decision !== 'REJECT')) continue;
+    const projectId = filedHere.get(intentId);
+    if (projectId === undefined || !at || (decision !== 'APPROVE' && decision !== 'REJECT')) continue;
     cards.set(turn.id, {
       kind: decision === 'APPROVE' ? 'CRITERIA_APPROVED' : 'CRITERIA_REJECTED',
       task: null,
       revision: null,
       count: null,
       deliveredAt: at.toISOString(),
+      toCoordinator: projectId === coordinated,
     });
   }
   return cards;
@@ -100,7 +116,9 @@ export async function readCoordinatorDeliveryCards(
 
 /**
  * One delivered wake as the card its turn is drawn as, or null for a fact this carrier does not
- * write (none reaches a conversation today) or a row missing what its sentence needs.
+ * write (none reaches a conversation today) or a row missing what its sentence needs. A wake is
+ * delivered to the conversation coordinating its project and to no other, so every card here is the
+ * coordinator's (`toCoordinator`).
  *
  * `content` is the turn's words, read for the one thing no row keeps: which reading a project whose
  * criteria have all landed was told in (`acceptanceLandedReadingOf`).
@@ -121,10 +139,10 @@ export function coordinatorDeliveryCardOf(
   );
   const named = (kind: CoordinatorDeliveryCard['kind'], title: unknown): CoordinatorDeliveryCard | null => {
     const about = task(title);
-    return about ? { kind, task: about, revision: null, count: null, deliveredAt } : null;
+    return about ? { kind, task: about, revision: null, count: null, deliveredAt, toCoordinator: true } : null;
   };
   const counting = (kind: CoordinatorDeliveryCard['kind'], count: number | null): CoordinatorDeliveryCard | null => (
-    count === null ? null : { kind, task: null, revision: null, count, deliveredAt }
+    count === null ? null : { kind, task: null, revision: null, count, deliveredAt, toCoordinator: true }
   );
   switch (wake.event) {
     case 'COMPLETION_EVIDENCE_REVISED': {
@@ -137,6 +155,7 @@ export function coordinatorDeliveryCardOf(
         revision,
         count: null,
         deliveredAt,
+        toCoordinator: true,
       };
     }
     case 'DEPENDENT_READY':
@@ -155,7 +174,7 @@ export function coordinatorDeliveryCardOf(
       );
     }
     case 'PROJECT_TASKS_SETTLED':
-      return { kind: 'LOOKS_FINISHED', task: null, revision: null, count: null, deliveredAt };
+      return { kind: 'LOOKS_FINISHED', task: null, revision: null, count: null, deliveredAt, toCoordinator: true };
     case 'PROJECT_SETTLED_UNMERGED':
       return counting('SETTLED_UNMERGED', counted(Array.isArray(detail.commits) ? detail.commits.length : null));
     default:

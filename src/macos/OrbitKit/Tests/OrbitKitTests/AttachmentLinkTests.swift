@@ -18,6 +18,11 @@ final class AttachmentLinkTests: XCTestCase {
         XCTAssertTrue(AttachmentLink.isRunnerLocalPath(URL(string: "/home/agent/out.svg")!))
         XCTAssertTrue(AttachmentLink.isRunnerLocalPath(URL(fileURLWithPath: "/tmp/x.pdf")))
         XCTAssertTrue(AttachmentLink.isRunnerLocalPath(URL(string: "/Users/me/Desktop/a%20b.png")!))
+        // A Mac runner's temp files: `/tmp` resolved, and `$TMPDIR`. Both were tinted links.
+        XCTAssertTrue(AttachmentLink.isRunnerLocalPath(
+            URL(string: "/private/tmp/ppt-nev-eight-20261029/renderer/contact-sheet.png")!))
+        XCTAssertTrue(AttachmentLink.isRunnerLocalPath(URL(string: "/var/folders/x1/abc123/T/tmp.q8/out.png")!))
+        XCTAssertTrue(AttachmentLink.isFileReference(URL(string: "/private/tmp/report.md")!))
     }
 
     func testReachableLinksAreNotChipped() {

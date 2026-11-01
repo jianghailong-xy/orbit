@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 import { ArrowRightOutlined } from '@ant-design/icons';
 import type { CoordinatorDeliveryCard } from '@orbit/shared';
 import { AppLink } from './AppLink';
-import { sentToCoordinatorLine } from './EvidenceDecisionCard';
+import { decisionReceiptTime, sentToCoordinatorLine } from './EvidenceDecisionCard';
 import { OWNER_ANSWER_TOLD } from './OwnerAnswerLine';
 import {
   COORDINATOR_DELIVERY_ITS_TASK,
+  COORDINATOR_DELIVERY_SENT_TO_SESSION,
+  COORDINATOR_DELIVERY_SESSION_TOLD,
   COORDINATOR_DELIVERY_STICKY_LABEL,
   coordinatorDeliverySentence,
 } from '../lib/coordinatorDelivery';
@@ -34,6 +36,11 @@ import { routeId } from '../lib/idCodec';
  *
  * Undelivered, it says so in the words every Orbit card uses and offers nothing to put back in the
  * composer: the words are the platform's, not the reader's.
+ *
+ * Where this conversation is not the project's coordinator (`toCoordinator: false`) — the owner's
+ * answer to a criteria proposal a task's run filed — the line says `Sent to this session · 07:30 PM`
+ * and opens to `What this session was told`, on the same clock: it went to the conversation the
+ * reader is looking at, and saying the coordinator would be false.
  */
 export function CoordinatorDeliveryLine({
   card,
@@ -69,12 +76,14 @@ export function CoordinatorDeliveryLine({
           <span className="coordinator-delivery-words">
             <span className="owner-answer-text coordinator-delivery-sentence">{sentence}</span>
             <span className="coordinator-delivery-sep" aria-hidden="true">·</span>
-            <span className="coordinator-delivery-sent">{sentToCoordinatorLine(card.deliveredAt)}</span>
+            <span className="coordinator-delivery-sent">{sentLine(card)}</span>
           </span>
           <span className="owner-answer-chev" aria-hidden="true">›</span>
         </summary>
         <div className="owner-answer-told">
-          <div className="owner-answer-told-head">{OWNER_ANSWER_TOLD}</div>
+          <div className="owner-answer-told-head">
+            {card.toCoordinator ? OWNER_ANSWER_TOLD : COORDINATOR_DELIVERY_SESSION_TOLD}
+          </div>
           <pre>{text}</pre>
           {attached}
           {taskPublic && (
@@ -90,4 +99,11 @@ export function CoordinatorDeliveryLine({
       {queued && <div className="owner-answer-queued">{queued}</div>}
     </div>
   );
+}
+
+/** Where it was sent, then when: the coordinator, or this session where the conversation is not one. */
+function sentLine(card: CoordinatorDeliveryCard): string {
+  return card.toCoordinator
+    ? sentToCoordinatorLine(card.deliveredAt)
+    : `${COORDINATOR_DELIVERY_SENT_TO_SESSION} · ${decisionReceiptTime(card.deliveredAt)}`;
 }

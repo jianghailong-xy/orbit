@@ -3243,12 +3243,15 @@ function transcriptUrlTransform(url: string): string {
   return referenceUrlTransform(url);
 }
 
+// A path on the runner's disk. `private` and `var` are a Mac runner's temp files: `/tmp` resolves to
+// `/private/tmp` and `$TMPDIR` sits under `/var/folders`. A path that misses this list is a
+// site-relative link, and a click on it opens a console page that does not exist.
 function isLocalImageSrc(src: string): boolean {
-  return /^\/(?:root|home|tmp|Users)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
+  return /^\/(?:root|home|tmp|Users|private|var)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
 }
 
 function isLocalFileSrc(src: string): boolean {
-  return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
+  return /^\/(?:root|home|tmp|Users|private|var)\/[^?#]+$/i.test(src);
 }
 
 // A path inside the session's own directories, as prose names them: the uploads scratch older

@@ -1,0 +1,101 @@
+{
+  "run": "full-1h-r2",
+  "sha": "f6a150f07f29b8518d28bc8ce0bb5f9dd14ddc74",
+  "verdict": false,
+  "criteria": [
+    {
+      "name": "connections",
+      "target": "15000",
+      "measured": "15000 (lowest in the window)",
+      "pass": true
+    },
+    {
+      "name": "heartbeats per second",
+      "target": "≈ 500",
+      "measured": "501.9",
+      "pass": true
+    },
+    {
+      "name": "durable events per second",
+      "target": "≈ 2000",
+      "measured": "2000.3",
+      "pass": true
+    },
+    {
+      "name": "steady window",
+      "target": "1 h",
+      "measured": "60 min",
+      "pass": true
+    },
+    {
+      "name": "errors",
+      "target": "0",
+      "measured": "28",
+      "pass": false
+    },
+    {
+      "name": "EventAck p99 (runner side, per batch)",
+      "target": "< 1000 ms",
+      "measured": "390.713 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck p99 (runner side, per event)",
+      "target": "< 1000 ms",
+      "measured": "390.713 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck within 1 s (gateway histogram)",
+      "target": "≥ 99%",
+      "measured": "99.895%",
+      "pass": true
+    },
+    {
+      "name": "database CPU peak (10 s)",
+      "target": "< 60%",
+      "measured": "53.2% of 11 CPUs (5.85 cores)",
+      "pass": true
+    }
+  ],
+  "errorCounts": {
+    "loadgen": 0,
+    "gateway": 5,
+    "gatewayLogWarnError": 0,
+    "apiserverErrorLines": 0,
+    "http5xx": 0,
+    "postgresErrorLines": 23,
+    "deadlocks": 0,
+    "natsErrorLines": 0
+  },
+  "gatewayErrors": {
+    "backend_calls{kind=\"heartbeat\",result=\"cancelled\"}": 5
+  },
+  "loadgen": {
+    "steady": {
+      "errorTotal": 0,
+      "errors": {}
+    }
+  },
+  "nginx": {
+    "byStatus": {
+      "200": 16358
+    },
+    "linkToken": {
+      "count": 16358,
+      "byStatus": {
+        "200": 16358
+      }
+    }
+  },
+  "gateway": {
+    "link_backend_calls_total": {
+      "{kind=\"events_merged\",result=\"answered\"}": 72375,
+      "{kind=\"events\",result=\"answered\"}": 1837,
+      "{kind=\"heartbeat\",result=\"answered\"}": 1804167,
+      "{kind=\"heartbeat\",result=\"cancelled\"}": 5,
+      "{kind=\"welcome\",result=\"answered\"}": 16343
+    },
+    "link_backend_retries_total": {}
+  }
+}

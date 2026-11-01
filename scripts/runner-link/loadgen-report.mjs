@@ -14,12 +14,69 @@
 //   - the apiserver: ERROR log lines, and any 5xx the web gateway served (the link tokens come through it);
 //   - the database: ERROR, FATAL and PANIC log lines, and deadlocks;
 //   - NATS: [ERR] log lines.
+// A second verdict judges the same criteria with `errors` counted by what a caller saw, each error once (the
+// coordinator's rule for task C2b, 2026-10-31; "The errors a caller saw" below). report.json keeps every field it had
+// and adds callerVerdict and callerErrorCounts. A run whose records are gone gets it from its report.json alone:
+//
+//   node scripts/runner-link/loadgen-report.mjs --from-report <report.json>
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+// --- The errors a caller saw. ------------------------------------------------------------------------------------------
+// The report's own count (`errorCounts`) takes everything that could be an error, and counts a 502 twice: as the
+// runner's link token it could not mint, and as the web gateway's 5xx. This counts what a caller saw, each error once:
+//   - runners: every error a runner saw (loadgen): a refused or failed connect, a link token it could not mint, a
+//     Failure for a batch, a HeartbeatAck without its reconcile, a late acknowledgement, a lost connection. A call the
+//     link gateway got no answer to reaches its runner as one of these, a Welcome's lookup apart (welcomesUnanswered).
+//   - watchers: each stream a watcher could not open, or that ended while the run lasted (a run with --watch).
+//   - http5xx: the web gateway's 5xx that no runner or watcher counted. A link token's 5xx is a runner's
+//     token_mint_failed, and one elsewhere (a session stream) a watcher's http_5xx: only the 5xx past those count.
+//   - welcomesUnanswered: a Welcome's lookup that got no answer (timeout, unavailable, cut off, too large), which its
+//     runner is not told of: its Welcome goes without its sessions' state.
+// Not counted: a call the link gateway sent again and got its answer to (link_backend_retries_total); a call whose
+// runner had gone (`cancelled`: its own connection closed first); and every part's log lines, the database's ERROR
+// lines among them. A merged call that a lock or statement timeout cut short is sent again batch by batch, and each
+// batch's runner is told it was stored; a failure a caller did see is in the rows above.
+const sumOf = (counts, keep = () => true) => Object.entries(counts ?? {}).filter(([k]) => keep(k)).reduce((n, [, v]) => n + v, 0);
+function callerErrors({ steady, nginx, gateway, live }) {
+  const is5xx = (status) => status.startsWith('5');
+  const watcherErrors = live?.watchers.errors ?? {};
+  const tokens5xx = sumOf(nginx.linkToken.byStatus, is5xx);
+  const other5xx = sumOf(nginx.byStatus, is5xx) - tokens5xx;
+  return {
+    runners: steady.errorTotal,
+    ...(live ? { watchers: sumOf(watcherErrors) } : {}),
+    http5xx: Math.max(0, tokens5xx - (steady.errors?.token_mint_failed ?? 0)) +
+      Math.max(0, other5xx - sumOf(watcherErrors, (k) => /^http_5\d\d$/.test(k))),
+    welcomesUnanswered: sumOf(gateway.link_backend_calls_total, (k) => k.includes('kind="welcome"') && !/result="(answered|cancelled)"/.test(k)),
+  };
+}
+// The second verdict: every criterion as the report judged it, but `errors`, judged by the errors a caller saw.
+const callerVerdictOf = (criteria, counts) => criteria.every((c) => (c.name === 'errors' ? sumOf(counts) === 0 : c.pass === true));
+const callerVerdictLine = (pass) => `**Verdict, counting only the errors a caller saw: ${pass ? 'PASS' : 'FAIL'}**`;
+const callerTable = (counts, reportErrors) => ['', `Errors a caller saw, each once: ${sumOf(counts)} (the report's own count: ${reportErrors}).`, '',
+  '| Caller | Count |', '| --- | --- |', ...Object.entries(counts).map(([k, v]) => `| ${k} | ${v} |`)];
+
+// A report.json of a run whose records are gone: its own verdict and count as written, and the second verdict from the
+// figures it kept.
+if (process.argv[2] === '--from-report') {
+  const file = process.argv[3];
+  if (!file) {
+    console.error('usage: loadgen-report.mjs --from-report <report.json>');
+    process.exit(2);
+  }
+  const r = JSON.parse(readFileSync(file, 'utf8'));
+  const counts = callerErrors({ steady: r.loadgen.steady, nginx: r.nginx, gateway: r.gateway, live: r.live });
+  const reportErrors = sumOf(r.errorCounts);
+  console.log([`# Load test ${r.run}: the errors a caller saw`, '', `From ${file}, as the report wrote it:`, '',
+    `**Verdict: ${r.verdict ? 'PASS' : 'FAIL'}** (errors ${reportErrors})`, '', callerVerdictLine(callerVerdictOf(r.criteria, counts)),
+    ...callerTable(counts, reportErrors)].join('\n'));
+  process.exit(0);
+}
+
 const dir = process.argv[2];
 if (!dir) {
-  console.error('usage: loadgen-report.mjs <run directory>');
+  console.error('usage: loadgen-report.mjs <run directory> | --from-report <report.json>');
   process.exit(2);
 }
 const read = (name) => readFileSync(join(dir, name), 'utf8');
@@ -522,9 +579,12 @@ const criteria = [
   { name: 'database CPU peak (10 s)', target: '< 60%', measured: allocation ? `${dbPeakPct}% of ${allocation} CPUs (${pgc.peak10sCores} cores)` : `${pgc.peak10sCores} cores, no allocation set`, pass: allocation ? dbPeakPct < 60 : null },
 ];
 const verdict = criteria.every((c) => c.pass === true);
+const callerErrorCounts = callerErrors({ steady, nginx, gateway: gw, live });
+const callerVerdict = callerVerdictOf(criteria, callerErrorCounts);
 
 const report = {
-  run: run.name, sha: run.sha, dirty: run.dirty, loadTestLock: run.loadTestLock ?? null, verdict, criteria, errorCounts, gatewayErrors, steadyFrom: summary.steadyStartedAt,
+  run: run.name, sha: run.sha, dirty: run.dirty, loadTestLock: run.loadTestLock ?? null, verdict, callerVerdict, criteria, errorCounts,
+  callerErrorCounts, gatewayErrors, steadyFrom: summary.steadyStartedAt,
   steadyTo: summary.steadyEndedAt, loadgen: { steady, whole: summary.whole, notes: summary.notes, unacknowledgedEvents: summary.unacknowledgedEvents,
     errorSamples: summary.errorSamples, config: summary.config }, components, host, others: others.slice(0, 15), gateway: gw, nginx, logs, db,
   dbAllocation: allocation, dbPeak10sPct: dbPeakPct, dbPeak60sPct: dbPeak60Pct, backends: run.backends, memory,
@@ -547,6 +607,7 @@ md.push(summary.steady
   : `No steady window: the run ended after ${summary.rampSeconds} s of ramp, before every runner was connected. Every figure is over the whole run (${summary.startedAt} → ${summary.endedAt}).`, '');
 if (run.stoppedForMemory) md.push(`**Stopped early at ${run.stoppedForMemory}: the host ran short of memory.**`, '');
 md.push(`**Verdict: ${verdict ? 'PASS' : 'FAIL'}**`, '');
+md.push(callerVerdictLine(callerVerdict), '');
 row('Criterion', 'Target', 'Measured', 'Pass');
 row('---', '---', '---', '---');
 for (const c of criteria) row(c.name, c.target, c.measured, c.pass === null ? 'n/a' : c.pass ? 'yes' : '**no**');
@@ -554,6 +615,7 @@ md.push('', '## Errors', '');
 row('Source', 'Count');
 row('---', '---');
 for (const [k, v] of Object.entries(errorCounts)) row(k, v);
+md.push(...callerTable(callerErrorCounts, totalErrors));
 if (Object.keys(gatewayErrors).length) {
   md.push('', 'Gateway counters that moved:', '');
   for (const [k, v] of Object.entries(gatewayErrors)) md.push(`- \`${k}\`: ${v}`);

@@ -1,0 +1,108 @@
+{
+  "run": "full-1h",
+  "sha": "736f80245c757a5246ec6362f74b87395e0d68da",
+  "verdict": false,
+  "criteria": [
+    {
+      "name": "connections",
+      "target": "15000",
+      "measured": "15000 (lowest in the window)",
+      "pass": true
+    },
+    {
+      "name": "heartbeats per second",
+      "target": "≈ 500",
+      "measured": "501.9",
+      "pass": true
+    },
+    {
+      "name": "durable events per second",
+      "target": "≈ 2000",
+      "measured": "1999",
+      "pass": true
+    },
+    {
+      "name": "steady window",
+      "target": "1 h",
+      "measured": "60 min",
+      "pass": true
+    },
+    {
+      "name": "errors",
+      "target": "0",
+      "measured": "43",
+      "pass": false
+    },
+    {
+      "name": "EventAck p99 (runner side, per batch)",
+      "target": "< 1000 ms",
+      "measured": "357.244 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck p99 (runner side, per event)",
+      "target": "< 1000 ms",
+      "measured": "357.244 ms",
+      "pass": true
+    },
+    {
+      "name": "EventAck within 1 s (gateway histogram)",
+      "target": "≥ 99%",
+      "measured": "99.996%",
+      "pass": true
+    },
+    {
+      "name": "database CPU peak (10 s)",
+      "target": "< 60%",
+      "measured": "57.4% of 8 CPUs (4.59 cores)",
+      "pass": true
+    }
+  ],
+  "errorCounts": {
+    "loadgen": 6,
+    "gateway": 31,
+    "gatewayLogWarnError": 0,
+    "apiserverErrorLines": 0,
+    "http5xx": 6,
+    "postgresErrorLines": 0,
+    "deadlocks": 0,
+    "natsErrorLines": 0
+  },
+  "gatewayErrors": {
+    "backend_calls{kind=\"heartbeat\",result=\"cancelled\"}": 3,
+    "backend_retries{kind=\"heartbeat\",reason=\"lost\"}": 28
+  },
+  "loadgen": {
+    "steady": {
+      "errorTotal": 6,
+      "errors": {
+        "token_mint_failed": 6
+      }
+    }
+  },
+  "nginx": {
+    "byStatus": {
+      "200": 16380,
+      "502": 6
+    },
+    "linkToken": {
+      "count": 16386,
+      "byStatus": {
+        "200": 16380,
+        "502": 6
+      }
+    }
+  },
+  "gateway": {
+    "link_backend_calls_total": {
+      "{kind=\"events_merged\",result=\"answered\"}": 72347,
+      "{kind=\"events\",result=\"answered\"}": 307,
+      "{kind=\"heartbeat\",result=\"answered\"}": 1804213,
+      "{kind=\"heartbeat\",result=\"cancelled\"}": 3,
+      "{kind=\"welcome\",result=\"answered\"}": 16355
+    },
+    "link_backend_retries_total": {
+      "{kind=\"heartbeat\",reason=\"lost\"}": 28
+    }
+  }
+}

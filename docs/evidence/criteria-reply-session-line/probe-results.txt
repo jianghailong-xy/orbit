@@ -1,0 +1,49 @@
+Task 34pWyIeaPCCHGAznSK97W: the criteria reply line, its gates and its pictures. Every run is on
+github.com/jianghailong-xy/orbit (Actions).
+
+Commits
+  0e2737523  fix: a criteria reply told to a task's run says it went to this session (the change)
+  42dc74124  that commit with origin/main 4192bd06f merged in: the tree every gate ran on
+  354d6648d  42dc74124 plus the Android picture test (CoordinatorDeliveryShotsTest.kt, the one file that differs)
+  48480bca5  42dc74124 plus .crs-probe/ and probe-harness/client.probe.yml as .github/workflows/client.yml (round 1)
+  301749a8b  354d6648d plus the same, with the fixture fix below (round 2)
+
+Gates on 42dc74124, dispatched (workflow_dispatch) on probe/criteria-reply-session-gates, workflows unchanged
+  client.yml   run 41226063529  success
+    macOS (build + test)    success  Xcode 26.3, Swift 6.2.4. OrbitKit swift test: "Executed 4159 tests, with 5 tests
+                                     skipped and 0 failures"; every CoordinatorDeliveryTests and
+                                     CoordinatorDeliveryCopyParityTests case passed, the new ones included. OrbitApp
+                                     swift build: "[420/481] Compiling OrbitApp CoordinatorDeliveryLineView.swift",
+                                     "Build complete!"
+    iOS (generate + build)  success  Xcode 26.3. "SwiftCompile normal arm64 src/macos/OrbitApp/Sources/OrbitApp/Views/
+                                     CoordinatorDeliveryLineView.swift (in target 'Orbit' from project 'Orbit')",
+                                     "** BUILD SUCCEEDED **"
+    Font tokens, Navigation success
+  ci.yml       run 41226066711  success  JavaScript, Go runner, Swift core, Container images, Dependency audit,
+                                         Go link gateway, PostgreSQL specs 1/3, 2/3, 3/3, PostgreSQL specs
+  android.yml  run 41226089570  success  Android (test + lint + debug APK)
+  Also: android.yml run 41228713481 (push of 301749a8b, the Android picture test included): success
+
+Pictures: macos-26 runner, Xcode 26.6, Swift 6.3.3, macOS 26.6.2, iPhone 17 Pro simulator
+  round 1  run 41226317847 on 48480bca5: shots success, the four tests passed. Its fixture gave the task's run a
+           session-row projectId, which the server sends only for the project a session coordinates
+           (project.coordinator_session_id), so the Mac drew a "Coordinator" badge on the run's row and header.
+           Pictures not kept.
+  round 2  run 41228713466 on 301749a8b: shots success, report success. The run's row is shaped as the server
+           shapes it (no projectId; membership role TASK; its task). The pictures in ios/ and mac/ are this round's.
+    iOS  test1TheTaskRunsLineAndSheetOnAPhone passed, test2TheCoordinatorsLineAndSheetOnAPhone passed,
+         ** TEST SUCCEEDED **
+    Mac  test3TheTaskRunsLineAndSheetOnTheMac passed, test4TheCoordinatorsLineAndSheetOnTheMac passed,
+         ** TEST SUCCEEDED **
+    The line's label, as XCUITest read it:
+      iPhone, task's run     "Criteria proposal rejected · Sent to this session · 2:00 AM"
+      iPhone, coordinator    "Criteria proposal approved · Sent to the coordinator · 1:50 AM"
+      Mac, task's run        "Criteria proposal rejected · Sent to this session · 2:10 AM"
+      Mac, coordinator       "Criteria proposal approved · Sent to the coordinator · 2:00 AM"
+    Each test also failed on: the task's run's line or sheet holding "Sent to the coordinator" or "What the
+    coordinator was told", its sheet missing "What this session was told" or the words, and the coordinator's
+    sheet holding "What this session was told".
+    Compiled into both probe apps: src/macos/OrbitApp/Sources/OrbitApp/Views/CoordinatorDeliveryLineView.swift
+    (targets 'CrsProbe' and 'CrsMacProbe').
+    The apps wrote nothing: writes.txt holds only the stub's own resets on both platforms.
+    Accessibility hints: the element tree the probe wrote spells none, on either platform.

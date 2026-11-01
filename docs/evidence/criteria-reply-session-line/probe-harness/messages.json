@@ -1,0 +1,4 @@
+{
+ "rejected": "From Orbit · criteria decision\n\nYour criteria proposal 34pX0YF3mJmoTBvNxc8Kt on project “Runner link v1: runner ↔ control plane over WebSocket” (34nmPkyh9pd8tVm1fCv2Q) was refused by the account owner at 2026-10-31T11:30:00.000Z. Nothing was applied: criterion 2 stays at revision 1.\n\nThe owner’s note: Keep criterion 2: the link test is what proves the switch.\n\nRead the criteria back with project_get (projectId: 34nmPkyh9pd8tVm1fCv2Q) and keep working against the criteria in force.",
+ "approved": "From Orbit · criteria decision\n\nYour criteria proposal 34pX0YF3mJmoTBvNxc8Ku on project “Runner link v1: runner ↔ control plane over WebSocket” (34nmPkyh9pd8tVm1fCv2Q) was approved by the account owner at 2026-10-31T11:20:00.000Z. It is in force now: criterion 3 is now revision 2.\n\nRead the criteria back with project_get (projectId: 34nmPkyh9pd8tVm1fCv2Q) and continue against them."
+}
