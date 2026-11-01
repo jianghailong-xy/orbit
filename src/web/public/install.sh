@@ -10,7 +10,8 @@
 # account the runner service runs as (under sudo, the account that invoked it; root included),
 # where the runner can replace it when it updates itself, and that account's ~/.bashrc and
 # ~/.zshrc put ~/.orbit/bin first on PATH: no sudo, and /usr/local/bin/orbit is left as it is.
-# The account writes all of that itself, under sudo too, so root follows no link in its home.
+# The account writes all of that itself, under sudo too, so root follows no link in its home, and
+# it runs `orbit register` itself, so root never executes a file the account can replace.
 # Set ORBIT_BIN_DIR to install the binary straight into that directory instead; /usr/local/bin
 # itself is still written as on a set-up machine.
 set -euo pipefail
@@ -174,8 +175,15 @@ fi
 # Hand straight off to `orbit register` so install + connect is one command. `curl … | bash`
 # leaves stdin bound to the pipe, so reattach the terminal first — otherwise register's
 # prompts (runner name, sudo for the background service) read EOF and silently take defaults.
+# Under sudo, register runs as the account, never as root: the binary may be the one in the
+# account's home, which the account can replace at any moment. It asks for sudo itself for the
+# background service, as when the account runs install.sh, and -H gives it the account's home,
+# where its credential goes.
 # Without a terminal (CI, image build) just print the next step.
 if [ -z "${ORBIT_NO_REGISTER:-}" ] && { : < /dev/tty; } 2>/dev/null; then
-  ORBIT_INSTALL_PLAN=1 exec "$target" register ${1+"$@"} < /dev/tty
+  if [ "$(id -un)" = "$owner" ]; then
+    ORBIT_INSTALL_PLAN=1 exec "$target" register ${1+"$@"} < /dev/tty
+  fi
+  exec sudo -H -u "$owner" -- env ORBIT_INSTALL_PLAN=1 "$target" register ${1+"$@"} < /dev/tty
 fi
 echo "Next:  ${target} register"

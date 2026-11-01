@@ -6,12 +6,12 @@
 #   scripts/install-sh-e2e.sh [path/to/install.sh]
 #
 # Runs the given install.sh (by default this tree's src/web/public/install.sh) the way people run it,
-# piped from curl into bash, always with ORBIT_NO_REGISTER=1. Every scenario gets a fresh container
-# of scripts/install-sh-e2e/Dockerfile: Debian 12 with sudo and zsh, alice (passwordless sudo), bob
-# (no sudo right), and a stub on 127.0.0.1:8000, reached through ORBIT_BASE_URL, that serves
-# install.sh and the release (scripts/install-sh-e2e/orbit-stub, gzipped as
-# /dl/orbit-linux-<arch>.gz). The accounts' sudo logs every call, so a run shows whether install.sh
-# asked for it.
+# piped from curl into bash, with ORBIT_NO_REGISTER=1 in every scenario but R1. Every scenario gets
+# a fresh container of scripts/install-sh-e2e/Dockerfile: Debian 12 with sudo and zsh, alice
+# (passwordless sudo), bob (no sudo right), and a stub on 127.0.0.1:8000, reached through
+# ORBIT_BASE_URL, that serves install.sh and the release (scripts/install-sh-e2e/orbit-stub, gzipped
+# as /dl/orbit-linux-<arch>.gz). The accounts' sudo logs every call, so a run shows whether
+# install.sh asked for it.
 #
 # Set up (the template `orbit host setup` writes, scripts/install-sh-e2e/orbit-runner@.service):
 #   S1  alice installs: /usr/local/bin/orbit is a regular file, uid 0, gid 0, mode 0755, the release,
@@ -48,6 +48,14 @@
 #       type, owner, group, mode and sha256 (a link, its target), and nothing new appears there; the
 #       listing is printed before and after. install.sh either exits 0 with alice's binary in a
 #       directory she can write, or fails with a line of its own naming the binary it could not write
+# Not set up, at a terminal (script(1)) and without ORBIT_NO_REGISTER, so install.sh ends by handing
+# off to `orbit register`:
+#   R1  alice planted a file of hers at ~/.orbit/bin/orbit (scripts/install-sh-e2e/planted-orbit,
+#       which logs every run and, run as root, leaves /etc/install-sh-e2e-planted), and an agent of
+#       hers (keep-planted) puts it back within milliseconds whenever install.sh writes the release
+#       over it; she runs curl … | sudo env … bash -s -- --labels sg --max-concurrent 2: root never
+#       runs that file, and register is handed off to it as alice, with those arguments,
+#       ORBIT_INSTALL_PLAN=1, her HOME and the terminal on stdin
 #
 # Prints one PASS or FAIL line per assertion and carries on after a FAIL, then a summary. Exits 0 when
 # every assertion passed, 1 when one failed, and 2 on a harness problem (no docker, a failed build).
@@ -151,6 +159,21 @@ install_as() {
   echo "    $1\$ $line"
   OUT=$(as "$1" "set -o pipefail; $line" 2>&1)
   RC=$?
+  SUDO_CALLS=$(cx cat "$SUDO_LOG")
+  sed 's/^/    | /' <<<"$OUT"
+  echo "    (exit $RC)"
+  [ -z "$SUDO_CALLS" ] || sed 's/^/    sudo log: /' <<<"$SUDO_CALLS"
+}
+
+# install_at_terminal ACCOUNT LINE — LINE run as install_as runs it, but at a terminal of its own:
+# script(1) gives it one, so install.sh finds /dev/tty and ends by handing off to `orbit register`.
+# The terminal ends each line with CR LF; OUT has the CRs taken out. Sets OUT, RC and SUDO_CALLS.
+install_at_terminal() {
+  cx truncate -s 0 "$SUDO_LOG"
+  echo "    $1\$ $2    (at a terminal: script -qec … /dev/null)"
+  OUT=$(as "$1" "SHELL=/bin/bash script -qec $(printf '%q' "set -o pipefail; $2") /dev/null" 2>&1)
+  RC=$?
+  OUT=$(tr -d '\r' <<<"$OUT")
   SUDO_CALLS=$(cx cat "$SUDO_LOG")
   sed 's/^/    | /' <<<"$OUT"
   echo "    (exit $RC)"
@@ -514,6 +537,39 @@ expect N8 "the process that was running $own (pid $pid) runs" "$(docker exec -u 
 
 planted L1 .orbit/bin 'mkdir -m 700 ~/.orbit && ln -s /etc/systemd/system ~/.orbit/bin'
 planted L2 .orbit 'ln -s /etc/systemd/system ~/.orbit'
+
+# --- not set up, at a terminal: install.sh hands off to orbit register --------------------------
+
+fresh "R1 not set up, alice's ~/.orbit/bin/orbit a file she planted, put back by an agent of hers whenever it is replaced; alice runs curl … | sudo env … bash -s -- --labels sg --max-concurrent 2 at a terminal"
+own=/home/alice/.orbit/bin/orbit
+# Every run of the planted file, and every time the agent put it back; and what the planted file
+# leaves behind when root runs it.
+ran_log=/var/log/install-sh-e2e-planted.log
+mark=/etc/install-sh-e2e-planted
+as alice 'mkdir -m 700 ~/.orbit && mkdir ~/.orbit/bin && cp /opt/install-sh-e2e/planted-orbit ~/planted-orbit' ||
+  harness_fail "cannot give alice the file she plants"
+docker exec -d -u alice "$CTR" /opt/install-sh-e2e/keep-planted /home/alice/planted-orbit "$own" "$ran_log" ||
+  harness_fail "cannot start alice's agent"
+planted_sha=$(sha_of /home/alice/planted-orbit)
+for _ in $(seq 50); do
+  [ "$(sha_of "$own")" = "$planted_sha" ] && break
+  sleep 0.1
+done
+[ "$(sha_of "$own")" = "$planted_sha" ] || harness_fail "alice's agent did not put her file at $own"
+echo "    alice planted: $(st '%n: %F, %U:%G %a' "$own"), sha256 $planted_sha"
+install_at_terminal alice "curl -fsSL $BASE/install.sh | sudo env ORBIT_BASE_URL=$BASE bash -s -- --labels sg --max-concurrent 2"
+log=$(cx cat "$ran_log")
+sed 's/^/    planted log: /' <<<"$log"
+exited R1
+# The planted file was in place at the hand-off when its log holds a run for register, and that run
+# says who ran it, and how; none means install.sh handed off to something else, or not at all.
+handed=$(grep -m 1 -F 'args=[register]' <<<"$log" | sed 's/^ran: //')
+expect R1 "the run of the planted file install.sh handed off to register" "${handed:-none}" \
+  "uid=$(uid_of alice) user=alice args=[register][--labels][sg][--max-concurrent][2] ORBIT_INSTALL_PLAN=1 HOME=/home/alice stdin-tty=yes"
+as_root=$(grep '^ran: uid=0 ' <<<"$log" | sed 's/^ran: //' | tr '\n' ';' | sed 's/;$//; s/;/; /g')
+expect R1 "runs of the planted file as root" "${as_root:-none}" none
+expect R1 "$mark, which the planted file leaves behind when root runs it" "$(st %F "$mark")" absent
+expect R1 "$own" "$(st '%F, %U' "$own"), sha256 $(sha_of "$own")" "regular file, alice, sha256 $planted_sha"
 
 drop
 echo ""

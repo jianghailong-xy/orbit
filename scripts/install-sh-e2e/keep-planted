@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# An agent of alice's in scripts/install-sh-e2e.sh R1: keep-planted PLANTED TARGET LOG puts a copy
+# of PLANTED, alice's file, at TARGET, and puts it back within milliseconds whenever another file
+# replaces it there, as install.sh's own write of the release does. Each copy is a new file renamed
+# over TARGET, as install.sh writes it, and is logged to LOG. Runs until it is killed.
+import os
+import sys
+import time
+
+planted, target, log = sys.argv[1:4]
+data = open(planted, "rb").read()
+
+
+def inode():
+    try:
+        return os.lstat(target).st_ino
+    except FileNotFoundError:
+        return None
+
+
+def put(over):
+    tmp = target + ".planting"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.chmod(tmp, 0o755)
+    os.rename(tmp, target)
+    with open(log, "a") as f:
+        f.write("put: %s at %s, over %s\n" % (planted, target, over))
+    return inode()
+
+
+mine = put("nothing" if inode() is None else "another file")
+while True:
+    now = inode()
+    if now != mine:
+        mine = put("nothing" if now is None else "another file")
+    time.sleep(0.002)

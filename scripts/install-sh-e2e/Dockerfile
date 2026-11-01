@@ -15,10 +15,15 @@ RUN useradd -m -s /bin/bash alice \
  && mkdir -p /etc/systemd/system
 COPY orbit-stub /opt/install-sh-e2e/orbit-stub
 COPY shim/sudo /opt/install-sh-e2e/shim/sudo
+# R1: the file alice plants at ~/.orbit/bin/orbit, the agent of hers that keeps it there, and the
+# log both write to, whoever runs them.
+COPY planted-orbit keep-planted /opt/install-sh-e2e/
 # The release the stub serves: orbit-stub gzipped under the name install.sh asks for on this
 # machine's architecture, and no other, so a wrong name fails the download.
 RUN chmod 0755 /opt/install-sh-e2e/orbit-stub /opt/install-sh-e2e/shim/sudo \
+      /opt/install-sh-e2e/planted-orbit /opt/install-sh-e2e/keep-planted \
  && install -m 0666 /dev/null /var/log/install-sh-e2e-sudo.log \
+ && install -m 0666 /dev/null /var/log/install-sh-e2e-planted.log \
  && case "$(uname -m)" in x86_64) arch=x64 ;; aarch64) arch=arm64 ;; *) exit 1 ;; esac \
  && mkdir -p /srv/stub/dl \
  && gzip -n -c /opt/install-sh-e2e/orbit-stub >"/srv/stub/dl/orbit-linux-$arch.gz"
