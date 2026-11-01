@@ -1,0 +1,232 @@
+[
+  {
+    "seq": 1,
+    "client_turn_id": "initial-01a193c9-f813-708a-8cfc-ce2f4f165e80",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:07:29.512",
+    "delivered_at": "2026-10-31T21:07:29.603",
+    "answered_at": "2026-10-31T21:07:30.173",
+    "content": "LRL-A-START FAKE-RECUR 300 14400 A 0 150 FAKE-STALL 7200 1800 A"
+  },
+  {
+    "seq": 2,
+    "client_turn_id": "bg-wake:wakeup:01a193c9-fa79-764a-a6f7-1a4132529dc1",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:10:02.762",
+    "delivered_at": "2026-10-31T21:10:02.841",
+    "answered_at": "2026-10-31T21:10:02.979",
+    "content": ""
+  },
+  {
+    "seq": 3,
+    "client_turn_id": "bg-wake:wakeup:01a193cc-4f07-726f-9ad2-c6246aebad49",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:15:03.1",
+    "delivered_at": "2026-10-31T21:15:03.165",
+    "answered_at": "2026-10-31T21:15:04.081",
+    "content": ""
+  },
+  {
+    "seq": 4,
+    "client_turn_id": "bg-wake:wakeup:01a193d0-e43a-732b-99d4-420d7f02bcca",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:20:03.514",
+    "delivered_at": "2026-10-31T21:20:03.587",
+    "answered_at": "2026-10-31T21:20:05.501",
+    "content": ""
+  },
+  {
+    "seq": 5,
+    "client_turn_id": "bg-wake:wakeup:01a193d5-79b8-725f-bbd9-c50610fd8c74",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:25:03.874",
+    "delivered_at": "2026-10-31T21:25:03.951",
+    "answered_at": "2026-10-31T21:25:04.583",
+    "content": ""
+  },
+  {
+    "seq": 6,
+    "client_turn_id": "bg-wake:wakeup:01a193da-0f01-76a8-9513-865f134ea724",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:30:04.844",
+    "delivered_at": "2026-10-31T21:30:04.938",
+    "answered_at": "2026-10-31T21:30:11.474",
+    "content": ""
+  },
+  {
+    "seq": 7,
+    "client_turn_id": "bg-wake:wakeup:01a193de-a6ab-77d4-b7a4-95d5a728638e",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:35:00.182",
+    "delivered_at": "2026-10-31T21:35:00.235",
+    "answered_at": "2026-10-31T21:35:02.246",
+    "content": ""
+  },
+  {
+    "seq": 8,
+    "client_turn_id": "bg-wake:bgj_9ad4f310ca2d:stall:1",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:37:30.215",
+    "delivered_at": "2026-10-31T21:37:30.286",
+    "answered_at": "2026-10-31T21:37:30.62",
+    "content": ""
+  },
+  {
+    "seq": 9,
+    "client_turn_id": "bg-wake:wakeup:01a193e3-2855-773e-9a53-61f995877b4c",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:40:00.441",
+    "delivered_at": "2026-10-31T21:40:00.479",
+    "answered_at": "2026-10-31T21:40:00.705",
+    "content": ""
+  },
+  {
+    "seq": 10,
+    "client_turn_id": "bg-wake:wakeup:01a193e7-bd38-72fb-81b5-e0d50aa71c20",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:45:00.759",
+    "delivered_at": "2026-10-31T21:45:01.05",
+    "answered_at": "2026-10-31T21:45:11.138",
+    "content": ""
+  },
+  {
+    "seq": 11,
+    "client_turn_id": "bg-wake:wakeup:01a193ec-5244-70d5-872a-b3466b822b3a",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:50:01.603",
+    "delivered_at": "2026-10-31T21:50:01.713",
+    "answered_at": "2026-10-31T21:50:03.745",
+    "content": ""
+  },
+  {
+    "seq": 12,
+    "client_turn_id": "bg-wake:wakeup:01a193f0-e981-741f-92c0-3e11e64e2049",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T21:55:01.996",
+    "delivered_at": "2026-10-31T21:55:04.595",
+    "answered_at": "2026-10-31T21:55:05.534",
+    "content": ""
+  },
+  {
+    "seq": 13,
+    "client_turn_id": "bg-wake:wakeup:01a193f5-7ee9-76fc-bd2f-b31e8b9da1c4",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:00:00.582",
+    "delivered_at": "2026-10-31T22:00:00.659",
+    "answered_at": "2026-10-31T22:00:01.529",
+    "content": ""
+  },
+  {
+    "seq": 14,
+    "client_turn_id": "bg-wake:wakeup:01a193fa-0d44-706d-9ca1-b0487a269811",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:05:01.239",
+    "delivered_at": "2026-10-31T22:05:01.328",
+    "answered_at": "2026-10-31T22:05:07.714",
+    "content": ""
+  },
+  {
+    "seq": 15,
+    "client_turn_id": "bg-wake:wakeup:01a193fe-a3b5-717e-8560-823a7fb160f1",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:10:01.493",
+    "delivered_at": "2026-10-31T22:10:01.541",
+    "answered_at": "2026-10-31T22:10:01.656",
+    "content": ""
+  },
+  {
+    "seq": 16,
+    "client_turn_id": "bg-wake:wakeup:01a19403-3894-775d-9414-22bb32f49cf0",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:15:01.772",
+    "delivered_at": "2026-10-31T22:37:31.441",
+    "answered_at": "2026-10-31T22:37:32.851",
+    "content": ""
+  },
+  {
+    "seq": 17,
+    "client_turn_id": "bg-wake:wakeup:01a1941a-215f-7621-8a8d-21f6be553498",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:40:03.149",
+    "delivered_at": "2026-10-31T22:40:03.214",
+    "answered_at": "2026-10-31T22:40:03.31",
+    "content": ""
+  },
+  {
+    "seq": 18,
+    "client_turn_id": "bg-wake:wakeup:01a1941e-b64c-72ea-a884-317bd74ea8d1",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:45:03.367",
+    "delivered_at": "2026-10-31T22:45:03.413",
+    "answered_at": "2026-10-31T22:45:03.568",
+    "content": ""
+  },
+  {
+    "seq": 19,
+    "client_turn_id": "bg-wake:wakeup:01a19423-4b06-769b-b80e-01532c0db436",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:50:03.539",
+    "delivered_at": "2026-10-31T22:50:03.586",
+    "answered_at": "2026-10-31T22:50:04.186",
+    "content": ""
+  },
+  {
+    "seq": 20,
+    "client_turn_id": "bg-wake:wakeup:01a19427-df92-779a-94c2-a9f0cfb2eea9",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T22:55:03.721",
+    "delivered_at": "2026-10-31T22:55:03.843",
+    "answered_at": "2026-10-31T22:55:04.849",
+    "content": ""
+  },
+  {
+    "seq": 21,
+    "client_turn_id": "bg-wake:wakeup:01a1942c-7427-735b-9ba9-03c913c70158",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T23:00:03.983",
+    "delivered_at": "2026-10-31T23:00:04.026",
+    "answered_at": "2026-10-31T23:00:04.225",
+    "content": ""
+  },
+  {
+    "seq": 22,
+    "client_turn_id": "bg-wake:wakeup:01a19431-090d-71c5-92ac-46b381f11c55",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T23:05:04.758",
+    "delivered_at": "2026-10-31T23:05:04.831",
+    "answered_at": "2026-10-31T23:05:07.119",
+    "content": ""
+  },
+  {
+    "seq": 23,
+    "client_turn_id": "0885f84b-c571-42a7-966b-a336906b8ef0",
+    "kind": "message",
+    "status": "ANSWERED",
+    "created_at": "2026-10-31T23:07:30.145",
+    "delivered_at": "2026-10-31T23:07:30.214",
+    "answered_at": "2026-10-31T23:07:30.479",
+    "content": "LRL-A-STOP FAKE-STOP 2 A"
+  }
+]
