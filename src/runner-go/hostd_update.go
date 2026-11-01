@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -39,9 +40,10 @@ import (
 //     it, so every one of those execs is dropped to the uid that asked (SysProcAttr.Credential).
 //
 // And only the machine's own binary is replaced: the file the runner template's ExecStart= names,
-// when it is a regular file root owns in a directory only root can write. A link into an
-// account's ~/.orbit/bin (install_layout.go) is that account's install, which its runner updates
-// itself, and root writes nothing it downloaded into somebody's home.
+// when it is a regular file only root can write, in directories only root can write all the way up
+// to / (checkMachineBinary). A link into an account's ~/.orbit/bin (install_layout.go) is that
+// account's install, which its runner updates itself, and root writes nothing it downloaded into
+// somebody's home.
 //
 // hostd does not restart itself afterwards and does not need to: the socket unit owns the
 // listening socket, hostd exits once the machine goes quiet (hostdIdleTimeout), and the next
@@ -76,9 +78,12 @@ type hostdUpdate struct {
 	stampPath    string // "" → hostdUpdateStampPath
 	now          func() time.Time
 	geteuid      func() int
-	// rootUID is who the binary and its directory must belong to: root. A field because a test
-	// cannot create files root owns, so it names the uid that stands for root's instead.
+	// rootUID is who the binary and every directory above it must belong to: root. A field because a
+	// test cannot create files root owns, so it names the uid that stands for root's instead.
 	rootUID uint32
+	// rootDir is where that walk up from the binary ends: "/". A field for the same reason: a test's
+	// binary sits in a temporary directory, above which nothing is the test's.
+	rootDir string // "" → "/"
 	// runProbe executes the downloaded binary — a command probeCmd already built, already
 	// dropped to the caller's uid — and returns its standard output.
 	runProbe func(*exec.Cmd) ([]byte, error)
@@ -96,6 +101,9 @@ func (u hostdUpdate) withDefaults() hostdUpdate {
 	}
 	if u.stampPath == "" {
 		u.stampPath = hostdUpdateStampPath
+	}
+	if u.rootDir == "" {
+		u.rootDir = "/"
 	}
 	if u.now == nil {
 		u.now = time.Now
@@ -309,10 +317,10 @@ func (u hostdUpdate) server() (string, error) {
 
 // installTarget is the binary this verb replaces: the one the runner template's ExecStart= runs.
 // Not os.Executable() — hostd may be running from an image of a file that has already been
-// swapped, and what matters is the file every runner instance execs. It has to be the machine's:
-// a regular file root owns, in a directory no other account can write. Anything else — a symlink
-// into an account's ~/.orbit/bin above all — is refused before anything is downloaded, written or
-// executed.
+// swapped, and what matters is the file every runner instance execs. It has to be the machine's
+// (checkMachineBinary, the rule `orbit host setup` held it to before naming it there). Anything
+// else — a symlink into an account's ~/.orbit/bin above all — is refused before anything is
+// downloaded, written or executed.
 func (u hostdUpdate) installTarget() (string, error) {
 	def, err := readSystemdServiceDef(u.templatePath)
 	if err != nil {
@@ -322,29 +330,101 @@ func (u hostdUpdate) installTarget() (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("%s names no binary in ExecStart=", u.templatePath)
 	}
-	fi, err := os.Lstat(path)
-	if err != nil {
-		return "", fmt.Errorf("cannot inspect %s, the binary %s runs: %v", path, u.templatePath, err)
-	}
-	if fi.Mode()&os.ModeSymlink != 0 {
-		dest, _ := os.Readlink(path)
-		return "", fmt.Errorf("refusing to update %s: it is a symlink to %s, and hostd replaces only a machine-level binary root owns — a link into an account's ~/.orbit/bin is that account's own install, which its runner updates itself", path, dest)
-	}
-	if !fi.Mode().IsRegular() {
-		return "", fmt.Errorf("refusing to update %s: it is not a regular file", path)
-	}
-	if owner, ok := fileOwnerUID(fi); !ok || owner != u.rootUID {
-		return "", fmt.Errorf("refusing to update %s: it belongs to uid %d rather than root, so it is not the machine's binary to replace", path, owner)
-	}
-	dir := filepath.Dir(path)
-	di, err := os.Stat(dir)
-	if err != nil {
-		return "", fmt.Errorf("cannot inspect %s: %v", dir, err)
-	}
-	if owner, ok := fileOwnerUID(di); !ok || owner != u.rootUID || di.Mode().Perm()&0o022 != 0 {
-		return "", fmt.Errorf("refusing to update %s: its directory %s is not root's alone (owned by uid %d, mode %04o), and root writes nothing it downloaded where another account can reach", path, dir, owner, di.Mode().Perm())
+	if err := checkMachineBinary(path, u.rootDir, u.rootUID); err != nil {
+		var fault *machineBinaryError
+		if !errors.As(err, &fault) {
+			return "", fmt.Errorf("cannot inspect %s, the binary %s runs: %v", path, u.templatePath, err)
+		}
+		return "", fmt.Errorf("refusing to update %s: %v, and root writes nothing it downloaded where another account can reach", path, fault)
 	}
 	return path, nil
+}
+
+// machineBinaryError is what makes a file unfit to be the machine's binary: every part of
+// checkMachineBinary's rule it breaks, nearest the file first.
+type machineBinaryError struct {
+	reasons []string
+	// foreign is the file or directory that is not root's at all — another account's, a symlink, or
+	// a sticky directory anyone may write, like /tmp — where the walk stopped. Taking write access
+	// back cannot fix that; a copy somewhere else can.
+	foreign string
+	// writable is every level root owns but its group or others can write, nearest the file first:
+	// what chmod has to take back. othersWrite says one of them is writable by others too.
+	writable    []string
+	othersWrite bool
+}
+
+func (e *machineBinaryError) Error() string { return strings.Join(e.reasons, "; ") }
+
+// checkMachineBinary is the rule for the binary the runner template's ExecStart= names, which every
+// account's runner instance executes and hostd runs as root: `orbit host setup` holds the binary it
+// is about to name there to it, and the update verb the binary it is about to replace. No account
+// may be able to change that file, so it has to be a regular file root owns that neither its group
+// nor others can write — and so does every directory above it, from its own up to top ("/" on a
+// machine), since whoever can write one of them can swap out everything below it.
+//
+// It returns nil when path keeps the rule, a *machineBinaryError saying how it does not, or the
+// error that kept a level from being inspected. rootUID is root's uid; a parameter, like top,
+// because a test can create neither files root owns nor ones under the machine's real directories.
+func checkMachineBinary(path, top string, rootUID uint32) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	e := &machineBinaryError{}
+	refuse := func(at, reason string) error {
+		e.foreign = at
+		e.reasons = append(e.reasons, reason)
+		return e
+	}
+	writable := func(at string, perm os.FileMode, reason string) {
+		e.writable = append(e.writable, at)
+		e.othersWrite = e.othersWrite || perm&0o002 != 0
+		e.reasons = append(e.reasons, reason)
+	}
+
+	owner, ok := fileOwnerUID(fi)
+	switch perm := fi.Mode().Perm(); {
+	case fi.Mode()&os.ModeSymlink != 0:
+		dest, _ := os.Readlink(path)
+		return refuse(path, fmt.Sprintf("it is a symlink to %s", dest))
+	case !fi.Mode().IsRegular():
+		return refuse(path, "it is not a regular file")
+	case !ok || owner != rootUID:
+		return refuse(path, fmt.Sprintf("it belongs to uid %d rather than root", owner))
+	case perm&0o022 != 0:
+		writable(path, perm, fmt.Sprintf("its group or others can write it (mode %04o)", perm))
+	}
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		which := dir + ", a directory above it,"
+		if dir == filepath.Dir(path) {
+			which = "its directory " + dir
+		}
+		di, err := os.Lstat(dir)
+		if err != nil {
+			return err
+		}
+		owner, ok := fileOwnerUID(di)
+		switch perm := di.Mode().Perm(); {
+		case !di.IsDir():
+			// Only a symlink can stand above a file and not be a directory.
+			dest, _ := os.Readlink(dir)
+			return refuse(dir, fmt.Sprintf("%s is a symlink to %s", which, dest))
+		case di.Mode()&os.ModeSticky != 0 && perm&0o002 != 0:
+			return refuse(dir, fmt.Sprintf("%s is a shared directory anyone can write (mode 1%03o)", which, perm))
+		case !ok || owner != rootUID:
+			return refuse(dir, fmt.Sprintf("%s is not root's alone (owned by uid %d, mode %04o)", which, owner, perm))
+		case perm&0o022 != 0:
+			writable(dir, perm, fmt.Sprintf("%s is not root's alone (owned by uid %d, mode %04o)", which, owner, perm))
+		}
+		if dir == top || dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	if len(e.reasons) > 0 {
+		return e
+	}
+	return nil
 }
 
 // fileOwnerUID is the uid that owns fi's file.

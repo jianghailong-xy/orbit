@@ -8,10 +8,11 @@
 #   bash scripts/hostd-e2e.sh
 #
 # Prints one PASS or FAIL line per assertion (numbered as in the task: 1 setup · 2 accounts and a
-# legacy unit · 3 alice registers · 4 test.user registers · 5 kill -9 · 6 update · 6b a binary
-# directory the staff group can write · 7 alice unregisters · 8 test.user unregisters past a legacy
-# unit · 9 no sudo throughout). The first FAIL prints systemctl status and the journal of the units
-# involved and exits 1; a harness problem (no docker, a failed build) exits 2.
+# legacy unit · 2b setup refusing a binary an account could change · 3 alice registers · 4 test.user
+# registers · 5 kill -9 · 6 update · 6b a binary directory the staff group can write · 7 alice
+# unregisters · 8 test.user unregisters past a legacy unit · 9 no sudo throughout). The first FAIL
+# prints systemctl status and the journal of the units involved and exits 1; a harness problem (no
+# docker, a failed build) exits 2.
 #
 # It is also what keeps docs/self-hosting.md "Multi-user Linux machines" true: every command that
 # section shows is run here, under a "# docs:" comment naming the heading it comes from, with the
@@ -289,8 +290,8 @@ wait_until 90 system_up || harness_fail "systemd in the container did not come u
 echo "    $(cx systemctl --version | head -1), $(cx sh -c '. /etc/os-release; echo "$PRETTY_NAME"'), docker $(docker version --format '{{.Server.Version}}')"
 
 cx mkdir -p /opt/orbit-e2e /srv/orbit-dl || harness_fail "mkdir in the container failed"
-# docs: "Set up the machine once" — the machine's own binary, a regular file root owns in a directory
-# only root can write.
+# docs: "Set up the machine once" — the machine's own binary, a regular file root owns and only root
+# can write, in directories only root can write all the way up to / (as this image has them already).
 docker cp -q "$WORK/orbit-$V1" "$CTR:$BIN" &&
   docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
   docker cp -q "$HERE/in-container.sh" "$CTR:/opt/orbit-e2e/in-container.sh" &&
@@ -380,6 +381,73 @@ grep -qxF "orbit host: setup writes machine-wide systemd units and must run as r
 [ "$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)" = "$TEMPLATE_SHA" ] || fail 2 "orbit host setup run by alice rewrote $TEMPLATE"
 check_no_sudo "after creating the accounts"
 pass 2 "accounts alice (uid $UID_A) and test.user (uid $UID_T) created; legacy /etc/systemd/system/orbit-runner-alice.service (User=alice) enabled and running (pid $legacy_pid, euid $UID_A); alice's own orbit host setup refused (exit $setup_rc, re-run with sudo) and $TEMPLATE unchanged"
+
+# --- 2b. setup refuses a binary an account could change -------------------------------------------
+
+echo "==> 2b. root: orbit host setup through a link into alice's ~/.orbit/bin, then under /usr/local root:staff 2775"
+# What setup installs, as step 1 left it: a refused setup must not change a byte of it.
+SETUP_FILES=("$TEMPLATE" /etc/systemd/system/orbit-hostd.socket /etc/systemd/system/orbit-hostd.service
+  /usr/lib/tmpfiles.d/orbit-hostd.conf /etc/orbit/config.json)
+setup_sums() { cx sha256sum "${SETUP_FILES[@]}"; }
+sums=$(setup_sums) || harness_fail "cannot read the files setup installed"
+# The layout install.sh leaves for an account that runs it: the account's own copy in its
+# ~/.orbit/bin, and $BIN a link to that copy.
+cx install -d -o alice -g alice /home/alice/.orbit/bin &&
+  cx install -o alice -g alice -m 0755 "$BIN" /home/alice/.orbit/bin/orbit &&
+  cx ln -sf /home/alice/.orbit/bin/orbit "$BIN" || harness_fail "cannot give alice the installer's layout"
+# docs: "Set up the machine once" — setup refuses the file that link leads to, which alice can
+# replace, and says how to put a root-owned copy in place.
+out=$(cx orbit host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 2b "orbit host setup through the link into alice's home exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid $UID_A rather than root." <<<"$out" ||
+  fail 2b "orbit host setup did not refuse the binary the link leads to as alice's"
+grep -qxF "  sudo install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit $BIN" <<<"$out" &&
+  grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 2b "orbit host setup did not say how to put a root-owned copy in place and set the host up from it"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
+cx grep -qx "ExecStart=$BIN run" "$TEMPLATE" && cx grep -qx "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service ||
+  fail 2b "the runner template and the hostd unit no longer run $BIN"
+# docs: "Set up the machine once" — the root-owned copy in place of the link, then setup from it.
+cx install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit "$BIN" || fail 2b "installing the root-owned copy failed"
+[ "$(cx stat -c '%F %U %a' "$BIN")" = "regular file root 755" ] && [ "$(cx sha256sum "$BIN" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 2b "$BIN is not a root-owned 0755 copy of the $V1 build after install"
+[ "$(cx stat -c '%F %U %a' /home/alice/.orbit/bin/orbit)" = "regular file alice 755" ] || fail 2b "install changed alice's own copy"
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 2b "orbit host setup from the root-owned copy exited $rc"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "orbit host setup from the root-owned copy did not install what step 1 did"
+# Older Debian installs have /usr/local and /usr/local/bin root:staff 2775.
+cx chgrp staff /usr/local /usr/local/bin && cx chmod 2775 /usr/local /usr/local/bin ||
+  harness_fail "cannot make /usr/local and /usr/local/bin root:staff 2775"
+# docs: "Set up the machine once" — refused too, naming every directory the staff group can write.
+out=$(cx orbit host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 2b "orbit host setup under /usr/local and /usr/local/bin root:staff 2775 exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with $BIN: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775)." <<<"$out" ||
+  fail 2b "orbit host setup did not name both directories the staff group can write"
+grep -qxF "  sudo chmod g-w /usr/local/bin /usr/local" <<<"$out" && grep -qxF "  sudo orbit host setup --server $SERVER" <<<"$out" ||
+  fail 2b "orbit host setup did not say how to take the group's write access back"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
+# docs: "Set up the machine once" — `sudo chmod g-w /usr/local/bin /usr/local`, then setup again.
+cx chmod g-w /usr/local/bin /usr/local || fail 2b "chmod g-w /usr/local/bin /usr/local failed"
+dirs=$(cx stat -c '%n %U:%G %a' /usr/local/bin /usr/local | paste -sd, -)
+out=$(cx orbit host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 2b "orbit host setup with $dirs exited $rc"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "orbit host setup after chmod g-w did not install what step 1 did"
+# Back to the image's root:root 0755, so that 6b starts from the /usr/local/bin it always had; and
+# alice's own copy goes, which check_machine_binary's "no account holds the shared binary" relies on.
+cx chgrp root /usr/local /usr/local/bin && cx chmod g-s /usr/local /usr/local/bin &&
+  cx rm /home/alice/.orbit/bin/orbit && cx rmdir /home/alice/.orbit/bin ||
+  harness_fail "cannot put /usr/local and alice's home back as they were"
+check_machine_binary 2b "$SHA_V1"
+check_no_sudo "after setup's refusals"
+pass 2b "orbit host setup run through $BIN, a link to alice's ~/.orbit/bin/orbit, refused (exit 1: it belongs to uid $UID_A rather than root) with the five files it installs unchanged; install -o root -g root -m 0755 replaced the link with a root-owned copy and setup from it exited 0; under /usr/local and /usr/local/bin root:staff 2775 refused (exit 1, both directories named), then chmod g-w /usr/local/bin /usr/local ($dirs) and setup exited 0; the runner template and hostd unit ran $BIN throughout"
 
 # --- 3. alice registers, without root ------------------------------------------------------------
 
@@ -619,4 +687,4 @@ pass 8 "test.user: orbit unregister exit 0 without root; $UNIT_T disabled and in
 # --- 9. no sudo, throughout ----------------------------------------------------------------------
 
 pass 9 "no sudo anywhere: absent from the image and from root's, alice's and test.user's PATH at all $SUDO_CHECKS checkpoints from before setup to the last unregister, and no register or unregister by alice or test.user fell back to the sudo path"
-echo "==> all 10 assertions passed"
+echo "==> all 11 assertions passed"

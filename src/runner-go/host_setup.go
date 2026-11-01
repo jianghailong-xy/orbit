@@ -56,6 +56,10 @@ type hostSetupEnv struct {
 	// the line they are told to re-run is the line they just typed.
 	invokedAs string
 	out       io.Writer
+	// rootUID is who the binary the units will run, and every directory above it, must
+	// belong to: root, the zero value. A field because a test cannot create files root
+	// owns, so it names the uid that stands for root's instead.
+	rootUID uint32
 }
 
 func (env hostSetupEnv) withDefaults() hostSetupEnv {
@@ -107,6 +111,9 @@ func hostSetup(env hostSetupEnv, server string) error {
 	if err != nil {
 		return fmt.Errorf("cannot locate the orbit binary the units must run: %w", err)
 	}
+	if err := env.checkBinary(exe, server); err != nil {
+		return err
+	}
 	files, err := hostSetupFiles(exe, server)
 	if err != nil {
 		return err
@@ -138,6 +145,51 @@ func hostSetup(env hostSetupEnv, server string) error {
 	return nil
 }
 
+// machineBinaryPath is where a machine keeps the one binary all its accounts run, and where
+// setup tells an operator to put a root-owned copy of one that cannot be it.
+const machineBinaryPath = "/usr/local/bin/orbit"
+
+// checkBinary refuses exe — before anything is written or run — unless it is fit to be
+// named in ExecStart= (checkMachineBinary, the rule hostd's update holds it to as well),
+// saying which part of the rule it breaks and what to run instead.
+func (env hostSetupEnv) checkBinary(exe, server string) error {
+	path := env.path(exe)
+	err := checkMachineBinary(path, env.path("/"), env.rootUID)
+	if err == nil {
+		return nil
+	}
+	var fault *machineBinaryError
+	if !errors.As(err, &fault) {
+		return fmt.Errorf("cannot inspect %s, the binary the units would run: %w", path, err)
+	}
+	rerun := fmt.Sprintf("sudo %s host setup --server %s", env.invokedAs, server)
+	var how, fix string
+	switch {
+	case fault.foreign == "":
+		bits := "g-w"
+		if fault.othersWrite {
+			bits = "go-w"
+		}
+		how = "Take that write access back, then set the host up again:"
+		fix = fmt.Sprintf("sudo chmod %s %s", bits, strings.Join(fault.writable, " "))
+	case exe != machineBinaryPath:
+		// Another account's copy, or one in its directories: what the units can run is a
+		// copy root owns where the machine's binary belongs, and setup is run from that
+		// copy so that it is the one they name.
+		how = "Put a root-owned copy in place, then set the host up from it:"
+		fix = fmt.Sprintf("sudo install -o root -g root -m 0755 %s %s", path, machineBinaryPath)
+		rerun = fmt.Sprintf("sudo %s host setup --server %s", machineBinaryPath, server)
+	default:
+		// Already where the machine's binary belongs, only not root's.
+		how = "Make it root's, then set the host up again:"
+		fix = "sudo chown root:root " + fault.foreign
+	}
+	return fmt.Errorf("refusing to set this host up with %s: %v.\n"+
+		"Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: "+
+		"it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.\n"+
+		"%s\n  %s\n  %s", path, fault, how, fix, rerun)
+}
+
 // hostSetupFiles is the whole installation as data: the unit files, the tmpfiles.d
 // entry and the machine config, with the modes they must end up with.
 func hostSetupFiles(exe, server string) ([]hostFile, error) {
@@ -152,8 +204,9 @@ func hostSetupFiles(exe, server string) ([]hostFile, error) {
 		{path: hostdSocketUnitPath, mode: 0o644, content: hostdSocketUnitFile()},
 		{path: hostdServiceUnitPath, mode: 0o644, content: hostdServiceUnitFile(exe)},
 		{path: hostdTmpfilesPath, mode: 0o644, content: hostdTmpfilesEntry()},
-		// 0644: hostd is root, but a user's `orbit register` reads this to learn which
-		// control plane the machine belongs to.
+		// Read only by hostd's update, as root, for the server it installs releases from.
+		// 0644 all the same: it holds nothing secret, only which control plane the machine
+		// belongs to.
 		{path: hostConfigPath, mode: 0o644, content: string(config) + "\n"},
 	}, nil
 }

@@ -1086,12 +1086,11 @@ heading it comes from.
 
 ### Set up the machine once
 
-Every account's runner runs one binary, so it has to be the machine's own: a regular file root owns, in a directory
-only root can write, such as `/usr/local/bin/orbit`. A copy installed for one account's runner will not do: the
-installer keeps that in the account's `~/.orbit/bin`, with `/usr/local/bin/orbit` only a link to it. Setup writes the
-binary it runs from, links resolved, into the runners' unit, so with such a link every account's runner would run a
-file that one account can replace, and that the broker refuses to update. Install the machine's copy as root before
-setup ([install.sh](../src/web/public/install.sh) can put it in a directory of your choosing).
+Every account's runner runs one binary, and the host broker runs it as root, so it has to be the machine's own: a
+regular file root owns and only root can write, in directories only root can write all the way up to `/`, such as
+`/usr/local/bin/orbit`. Setup writes the binary it runs from, links resolved, into the units, and refuses any other
+before it writes or runs anything (see below). Install the machine's copy as root before setup
+([install.sh](../src/web/public/install.sh) can put it in a directory of your choosing).
 
 Then, once, as root:
 
@@ -1133,6 +1132,35 @@ Run without root, it changes nothing and says what to run instead:
 ```text
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo orbit host setup --server https://orbit.example.com
 ```
+
+In the same way, it refuses a binary that an account could change: every account's runner would run what that account
+put there, and the broker would run it as root. The installer's own layout is one: it keeps the copy an account
+installed in that account's `~/.orbit/bin`, with `/usr/local/bin/orbit` only a link to it, and the account, or any
+agent it runs, can replace that copy:
+
+```text
+orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid 1000 rather than root.
+Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o root -g root -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+The first command replaces the link with a copy root owns, and leaves the account's own copy as it was, run by
+nothing now. A directory its group can write is refused too. Older Debian installs have `/usr/local` and
+`/usr/local/bin` owned by `root:staff` with mode 2775, which would let any member of `staff` put another binary in
+place, so setup names every such directory (the mode it reports leaves out the setgid bit):
+
+```text
+orbit host: refusing to set this host up with /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775).
+Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+Take that write access back, then set the host up again:
+  sudo chmod g-w /usr/local/bin /usr/local
+  sudo orbit host setup --server https://orbit.example.com
+```
+
+Members of `staff` then need root to install there too. Whatever setup refuses, it names what is wrong and the
+commands that put it right.
 
 ### Register each account's runner
 
@@ -1269,11 +1297,13 @@ through the proxy, they cannot reach them. Until a later release carries the pro
 runners need one. Register its accounts the single-account way instead, whose sudo step writes the proxy into each
 account's own unit ([Register a runner](#4-register-a-runner)).
 
-**The binary's directory must be root's alone.** The broker replaces the machine's binary only as a regular file root
-owns, in a directory neither its group nor others can write. Older Debian installs have `/usr/local/bin` owned by
-`root:staff` with mode 2775, and the broker refuses it: every account's runner executes that binary, so a directory
-the `staff` group can write would let any member of the group replace what every account runs. It fails closed: the
-binary stays as it is, and each runner logs once why (the mode it reports leaves out the setgid bit):
+**The binary and its directories must stay root's alone.** Setup refuses a binary that is not
+([Set up the machine once](#set-up-the-machine-once)), and the broker holds the binary to the same rule every time it
+replaces it: a regular file root owns and only root can write, in directories only root can write all the way up to
+`/`. A directory that its group can write after setup, such as `/usr/local/bin` changed to `root:staff` with mode 2775
+as older Debian installs have it, would let any member of the group replace what every account runs, so the broker
+refuses to update the binary there. It fails closed: the binary stays as it is, and each runner logs once why (the mode
+it reports leaves out the setgid bit):
 
 ```text
 [orbit-runner 2026-11-01T02:54:42.491Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
