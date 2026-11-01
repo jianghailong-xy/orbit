@@ -93,6 +93,9 @@ services:
       # read was fixed where it lives (9cad03c7d) instead of raising this for every connection:
       # work_mem multiplies hardest (per connection, per sort/hash node) on a host that is
       # already out of swap.
+      # JIT off, as production already runs it for its role and database: docs/postgres-runtime-settings.md §10.
+      - -c
+      - jit=off
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
