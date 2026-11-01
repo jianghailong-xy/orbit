@@ -40,6 +40,16 @@ export function titleFromPrompt(prompt: string): string {
 }
 
 /**
+ * The title an imported Claude transcript holds until something better is known: the transcript's
+ * own `ai-title` (read by the runner at import) or, when Claude never wrote one, its first prompt
+ * (SessionsService.nameUntitledImport). Spelled once, because the second of those swaps it only
+ * while the row still reads exactly this.
+ */
+export function importPlaceholderTitle(claudeSessionId: string): string {
+  return `Imported session ${claudeSessionId.slice(0, 8)}`;
+}
+
+/**
  * The same fallback for a session opened with attachments and no words: what was sent, by file
  * name. An upload without one (a legacy row) leaves only the generic word. Capped like the above.
  */
