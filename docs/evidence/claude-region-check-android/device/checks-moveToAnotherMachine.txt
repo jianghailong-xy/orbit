@@ -1,0 +1,5 @@
+2026-11-01T02:15:52.640861Z fixture at http://localhost:40999/
+2026-11-01T02:15:52.932887Z signed in to the fixture
+2026-11-01T02:15:53.432727Z PASS the held session's card
+2026-11-01T02:15:54.118080Z PASS text "Move session"
+2026-11-01T02:15:54.135965Z PASS text "orbit-prod · wikova"

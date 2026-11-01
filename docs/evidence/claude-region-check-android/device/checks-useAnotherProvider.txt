@@ -1,0 +1,8 @@
+2026-11-01T02:15:02.505444Z fixture at http://localhost:40707/
+2026-11-01T02:15:02.725120Z signed in to the fixture
+2026-11-01T02:15:03.247277Z PASS the held session's card
+2026-11-01T02:15:03.473844Z PASS the credentials
+2026-11-01T02:15:03.548876Z PASS DeepSeek and Local vLLM, and no Anthropic credential
+2026-11-01T02:15:04.550566Z PASS the pick's PATCH
+2026-11-01T02:15:04.913968Z PASS text "Your next message uses DeepSeek."
+2026-11-01T02:15:04.930729Z PASS nothing in flight

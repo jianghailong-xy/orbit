@@ -133,7 +133,7 @@ blocked results: an allowed one resets it and an unknown one leaves it.
 
 `effectiveRegionVerdict(region, now)`: **blocked only when the stored verdict is blocked and `decidedAt` is under
 24 hours old** (`CLAUDE_REGION_CARRY_OVER_MS`); everything else is allowed. runner-go carries its own last decided
-verdict over for the same 24 hours.
+verdict over for the same 24 hours, across a restart too (§10).
 
 | `runner.region` | Effective verdict |
 | --- | --- |
@@ -227,6 +227,22 @@ Where runner-go refuses (`claude_region.go`), each time on an answer from the ro
 way §5 reads a stored verdict: an unknown answer keeps the last decided verdict through the same proxy until 24 hours
 after its `decidedAt` (`claudeRegionCarryOver`), and is allowed from then on, or when nothing was decided. `forTurn`
 gives every gate that reading: the turn gates below and the runner's other requests to Anthropic alike.
+
+**Across a restart.** Every decided answer is also kept on disk, one per proxy, in `claude-region.json` under the
+runner's home (`ORBIT_HOME`, `claudeRegionStorePath`). A runner that starts reads it back before its first check
+(`newClaudeRegionCheck`), so after a restart, a self-update or a reboot an unknown answer carries a blocked verdict
+over exactly as it would have without one. The 24 hours still run from `decidedAt`: a restart extends nothing.
+`orbit doctor`'s check keeps its answers there too, by the same path (`keepLocked`, §12).
+
+- An entry holds the six fields a decided answer replaces in `runner.region` (§4): `verdict`, `country`,
+  `regionCode`, `name`, `viaProxy` and `decidedAt`. It is keyed by the SHA-256 of the proxy, never the proxy itself,
+  whose URL can hold credentials and is an address (§4); the direct connection's key is that of the empty string.
+- The file is private (0600, in the runner's 0700 home), written whole through a temporary file and a rename, and
+  keeps every other proxy's entry.
+- A missing or unreadable file carries nothing over, and neither does an entry that is not a decided answer or is
+  stamped later than the start, which cannot say how old it is: the runner starts as one that has decided nothing,
+  which holds nothing back (③). It logs once, at its start, what it found (`Claude region: kept from before this
+  start — …`) or why nothing was carried over. A write that fails is logged once, and stops nothing.
 
 - **A cold start** refuses before anything is installed or spawned, and reports on finalize with the sentence in
   `error`.
@@ -377,7 +393,9 @@ asked now, an unknown one carrying a blocked verdict over for 24 hours), and a b
   route records like any other. While it answers blocked, Claude Code's line reads `Anthropic: region not supported`,
   doctor offers and suggests no Claude sign-in, and a `Claude region` section follows the engines (board 03). The
   address under it is `CLAUDE_REGIONS_SOURCE_URL` (§2). Its answer is the process's own check, so the gates below
-  hold in doctor too. It keeps that answer as a check keeps one of its own (`keep`), flip included (§10).
+  hold in doctor too. It keeps that answer as a check keeps one of its own (`keep`), flip included and on disk too
+  (§10), and reads the answers kept there as a runner does when it starts: an unknown answer under a blocked verdict
+  kept for less than 24 hours reads blocked, in doctor's gates and in its section alike.
 - **The runner's own `claude` starts** go by the turns' rule (①): they wait only when the `claude` they would start is
   Anthropic-bound (§8, from that process's environment and `settings.json`) and the answer is blocked
   (`claudeStartBlocked`). A machine whose own Claude Code points at another provider keeps them. Any `claude` start
@@ -407,8 +425,10 @@ asked now, an unknown one carrying a blocked verdict over for 24 hours), and a b
     Anthropic nothing, while the turn, its reply and its prompt suggestion still go to the other provider.
   - The variable also turns off Claude Code's telemetry and product feedback, and its Design skills, commands and
     tool.
-  - Nothing changes with no decided answer, an allowed one, or one a day old. A runner that has just started has no
-    decided answer until its first check answers, a few seconds in; a session it spawns before then is not quiet.
+  - Nothing changes with no decided answer, an allowed one, or one a day old. A runner that has just started goes by
+    the answers it kept from before the start (§10) until its first check answers, a few seconds in: a session it
+    spawns before then is quiet when the kept answer is blocked and under a day old. With nothing kept, it has no
+    decided answer until then, and such a session is not quiet.
 
 ## Copy of record (board 04)
 
@@ -484,3 +504,5 @@ The project's twelve items leave these open. They are settled here so the parall
 12. A session the region check holds moves to another workspace without being ended, its queued message with it (§11).
 13. The push is `kind: 'claude-region-blocked'`, about the runner (§10); Android parses it, opens the runner and checks
     it against `region.verdict`.
+14. runner-go keeps each proxy's last decided answer under its home across restarts, keyed by a SHA-256 of the proxy,
+    and reads it back when it starts, so a restart neither lets a blocked verdict lapse early nor extends it (§10).
