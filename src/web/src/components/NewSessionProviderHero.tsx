@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
+import { CLAUDE_REGION_DETAILS } from '../lib/claudeRegionCopy';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
@@ -108,7 +109,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         to={fixLink(engine)}
         className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)} — fix it on the Machines & models page`}
+        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
         onClick={() => setOpen(false)}
       >
         <BrandMark choice={engine} size={20} />
@@ -160,7 +161,8 @@ export function NewSessionProviderHero({
   );
 
   // The pick is sticky, so the current one can be a credential that machine can no longer run — and
-  // a session started on it fails minutes later, at the runner. Say so here instead.
+  // a session started on it fails minutes later, at the runner. Say so here instead. A reason nothing
+  // on the page fixes — the runner's Claude region — links to its explanation rather than a fix.
   const blocked = current.provider?.unavailable ? current.provider : null;
   const fixSummary = blocked && (
     <div className="np-summary">
@@ -169,7 +171,9 @@ export function NewSessionProviderHero({
       {blocked.unavailable}
       {onRunner(blocked)}
       <span className="np-dot">·</span>
-      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>Fix it</Link>
+      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>
+        {blocked.regionBlocked ? CLAUDE_REGION_DETAILS : 'Fix it'}
+      </Link>
     </div>
   );
 

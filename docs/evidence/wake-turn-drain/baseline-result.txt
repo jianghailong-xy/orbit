@@ -1,0 +1,40 @@
+baseline/drain.txt:  ✖ reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back (247.695214ms)
+baseline/drain.txt:  ✖ reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted (85.905701ms)
+baseline/drain.txt:  ✖ reap with the retry armed and a newer one-shot wakeup already waiting: the drained one is SUPERSEDED, the newer one left as it was (32.036703ms)
+baseline/drain.txt:  ✖ a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize (101.42936ms)
+baseline/drain.txt:  ✖ task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed (412.358881ms)
+baseline/drain.txt:  ✖ a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed (62.164846ms)
+baseline/drain.txt:  ✖ a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted (73.09709ms)
+baseline/drain.txt:  ✖ the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told (42.291674ms)
+baseline/drain.txt:  ✖ an interrupt and a withdrawal leave the tick they take CANCELLED, as before, and take it out of its loop's runs (74.129404ms)
+baseline/drain.txt:✖ a wakeup filed onto a queued turn that its session's end drains is settled with it, never left DELIVERED (1188.679816ms)
+baseline/drain.txt:ℹ tests 10
+baseline/drain.txt:ℹ pass 0
+baseline/drain.txt:ℹ fail 10
+baseline/drain.txt:ℹ skipped 0
+baseline/drain.txt:✖ failing tests:
+baseline/drain.txt:✖ reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back (247.695214ms)
+baseline/drain.txt:✖ reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted (85.905701ms)
+baseline/drain.txt:✖ reap with the retry armed and a newer one-shot wakeup already waiting: the drained one is SUPERSEDED, the newer one left as it was (32.036703ms)
+baseline/drain.txt:✖ a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize (101.42936ms)
+baseline/drain.txt:✖ task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed (412.358881ms)
+baseline/drain.txt:✖ a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed (62.164846ms)
+baseline/drain.txt:✖ a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted (73.09709ms)
+baseline/drain.txt:✖ the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told (42.291674ms)
+baseline/drain.txt:✖ an interrupt and a withdrawal leave the tick they take CANCELLED, as before, and take it out of its loop's runs (74.129404ms)
+baseline/wiring.txt:✖ the reaper RealtimeModule builds holds the one PushService of the application (20.610857ms)
+baseline/wiring.txt:ℹ tests 1
+baseline/wiring.txt:ℹ pass 0
+baseline/wiring.txt:ℹ fail 1
+baseline/wiring.txt:ℹ skipped 0
+baseline/wiring.txt:✖ failing tests:
+baseline/wiring.txt:✖ the reaper RealtimeModule builds holds the one PushService of the application (20.610857ms)
+  AssertionError [ERR_ASSERTION]: the wakeup filed onto the drained turn was not replaced
+  AssertionError [ERR_ASSERTION]: the wakeup on the drained turn was not dropped
+  AssertionError [ERR_ASSERTION]: the drained wakeup was not superseded by the newer one waiting
+  AssertionError [ERR_ASSERTION]: a wakeup on a turn drained with a session that ended was not dropped
+  AssertionError [ERR_ASSERTION]: tick 9 is not dropped, or tick 8 was touched
+  AssertionError [ERR_ASSERTION]: the ticks queued behind it were not dropped
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  AssertionError [ERR_ASSERTION]: the interrupted tick still counts as a run

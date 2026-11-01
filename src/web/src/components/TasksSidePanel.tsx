@@ -44,6 +44,7 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerRegionView,
   RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
@@ -266,6 +267,10 @@ export interface Runner {
   /** The account removal in flight on this runner: which engine's store, which slot, and — when the
    *  machine refused — what it said. */
   accountRemove?: RunnerAccountRemoveState | null;
+  /** Where Claude's connection to Anthropic last came out, with the effective verdict
+   *  (docs/claude-region-check-contract.md §6). null/undefined for a runner that does not check, one
+   *  no check has decided yet, or an older control plane: never gated, drawn as before. */
+  region?: RunnerRegionView | null;
 }
 
 interface Workspace {

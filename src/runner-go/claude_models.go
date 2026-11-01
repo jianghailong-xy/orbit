@@ -35,6 +35,12 @@ func claudeCLIAvailable() bool {
 // list command, but `claude -p "/model <alias>"` resolves an alias to its friendly name (e.g.
 // "Set model to Opus 5 for this session only"); we derive the api id from that name.
 func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+	// None of those starts while Claude's connection is in a region Anthropic does not offer Claude in
+	// (claude_region.go): the round fails, which leaves the catalog as it was (mergeModelCatalog), and the first
+	// round on an allowed answer reads again.
+	if claudeStartBlocked(ctx, nil) {
+		return nil, errClaudeStartRegionBlocked
+	}
 	// Up to twelve CLI starts a round, hourly: never in the directory the runner inherited.
 	cwd, err := privateProbeDir(claudeProbeDirName)
 	if err != nil {
@@ -132,6 +138,7 @@ func fetchClaudeModelCapabilities(ctx context.Context, dir, model, settings stri
 		"/fast",
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.Output()
 	if err != nil {
 		return claudeModelCapabilities{}
@@ -236,6 +243,7 @@ func fetchClaudeContextWindow(ctx context.Context, dir, model string) int {
 		"/context",
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0
@@ -286,6 +294,7 @@ func resolveClaudeModelName(ctx context.Context, dir, alias string) (string, err
 		"/model "+alias,
 	)
 	cmd.Dir = dir
+	cmd.Env = claudeQuietEnv(nil, nil)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err

@@ -8,8 +8,10 @@ import {
   ClaimedSession,
   PermissionMode,
   credentialEngines,
+  credentialIsAnthropicBound,
   fastModeAvailable,
   openCodeKeyOf,
+  type AnthropicBoundCredential,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
@@ -105,6 +107,7 @@ import { branchName } from '../projects/project-criterion-landing';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
+import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
@@ -208,7 +211,14 @@ export class QueueService {
    * credential that engine cannot run — a key whose protocol was changed under it, a key that is not a
    * DeepSeek key under a DeepSeek Harness session, a Claude subscription token under OpenCode — holds
    * it here with PROVIDER_ENGINE_INCOMPATIBLE's message rather than letting the claim hand the runner
-   * another CLI's job (docs/provider-engine-contract.md §4.1). The claim clears it like every hold. */
+   * another CLI's job (docs/provider-engine-contract.md §4.1). The claim clears it like every hold.
+   *
+   * An Anthropic-bound Claude session — Claude Code on its own sign-in, an Anthropic key or a Claude pool — on a runner
+   * whose Claude connection is in a region Anthropic does not offer Claude in is held too, with the refusal sentence
+   * (claudeRegionHold, docs/claude-region-check-contract.md §8, §11). Nobody has to release it: it is asked again at
+   * every claim, so an allowed check, a blocked verdict 24 hours old, a non-Anthropic key or another machine lets the
+   * next claim take it. The runner's row is read through each session's, so a runner with nothing pending is never
+   * read, and one that does not declare claude-region/v1 never holds anything. */
   private async pausedPendingSessions(runnerId: string, dshUnavailable?: string | null): Promise<string[]> {
     const now = new Date();
     const pending = await this.prisma.session.findMany({
@@ -224,10 +234,16 @@ export class QueueService {
             : []),
           // An OpenCode session on one of the owner's configured keys (shared `openCodeKeys`).
           { provider: AgentProvider.OPENCODE, model: { startsWith: 'orbit-' } },
+          // Claude Code on its own sign-in, where the region check may hold it: on a runner whose stored verdict is
+          // blocked, or waiting with a region sentence already (claudeRegionHold). Keys and pools are read above.
+          { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { region: { path: ['verdict'], equals: 'blocked' } } },
+          { provider: AgentProvider.CLAUDE, providerBuiltin: true, error: { startsWith: CLAUDE_REGION_ERROR_PREFIX } },
         ],
       },
       select: {
         id: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, error: true, model: true,
+        // The claim the runner last refused, if it refused one (claudeRegionHold).
+        runClaimedAt: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
         cursorAccount: true, cursorAccountPinned: true,
@@ -235,7 +251,11 @@ export class QueueService {
           select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true },
         },
         assignedRunner: {
-          select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+          select: {
+            engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+            // What the region check holds a session on, and the name its sentence gives the machine.
+            name: true, displayName: true, region: true,
+          },
         },
       },
     });
@@ -253,6 +273,8 @@ export class QueueService {
       // What an unavailable session waits with: a member's session on a shared provider is told who can
       // run it (ADMIN_ONLY_PROVIDER_ERROR) rather than to check a configuration that is not theirs.
       let unavailableError = PROVIDER_UNAVAILABLE_ERROR;
+      // The credential it spends, as far as the region check asks (credentialIsAnthropicBound).
+      let credential: AnthropicBoundCredential | null = null;
       if (until && runner && isAccountEngine(slug)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
         const move = canMove && accountBeforeDispatch(slug, {
@@ -269,6 +291,9 @@ export class QueueService {
         const poolEngine = provider ? null : await accountPoolRuntime(this.prisma, session.ownerId, slug);
         engine ??= provider ? keyRowEngine(provider.runtime) : poolEngine;
         unavailable = provider ? !provider.enabled || !keyRowEngine(provider.runtime) : !poolEngine;
+        credential = provider
+          ? { kind: 'key', presetSlug: provider.presetSlug ?? null, baseUrl: provider.baseUrl }
+          : poolEngine ? { kind: 'pool', engine: poolEngine } : null;
         if (unavailable && !provider && await adminOnlyProviderRefusal(this.prisma, session.ownerId, slug)) {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
@@ -284,7 +309,13 @@ export class QueueService {
         const builtin = builtinSessionEngine(slug, session.providerBuiltin);
         engine ??= builtin;
         if (engine && builtin && engine !== builtin) incompatible = engineIncompatibleMessage(slug, engine, [builtin]);
+        // Claude Code's own sign-in talks to Anthropic; every other built-in credential runs another engine.
+        if (builtin === AgentProvider.CLAUDE) credential = { kind: 'login', engine: AgentProvider.CLAUDE };
       }
+      // Only Claude Code (⑥), only on a credential that talks to Anthropic (①), only on a runner that checks (⑤).
+      const regionHeld = runner && engine === AgentProvider.CLAUDE && credential && credentialIsAnthropicBound(credential)
+        ? claudeRegionHold(runner, session, now)
+        : null;
       const dshHeld = !!dshUnavailable && engine === AgentProvider.DSH;
       // The key an OpenCode model names has to be there to run it on: gone, disabled or not one
       // OpenCode may spend, the session waits with the same reason a configured provider's does,
@@ -300,13 +331,16 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
       }
-      if (!until && !unavailable && !incompatible && !dshHeld) continue;
+      if (!until && !unavailable && !incompatible && !regionHeld && !dshHeld) continue;
       blocked.push(session.id);
+      // A credential that cannot run says so first; the region before a pause, which only waits out a time.
       const error = unavailable
         ? unavailableError
         : incompatible
           ? incompatible
-          : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
+          : regionHeld
+            ? regionHeld
+            : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
           where: { id: session.id, status: 'PENDING' }, data: { error },
@@ -430,7 +464,10 @@ export class QueueService {
               ${PROVIDER_UNAVAILABLE_ERROR},
               ${ADMIN_ONLY_PROVIDER_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE} THEN NULL
+            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
+              -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
+              -- stopped ended with: both begin with the code.
+              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
