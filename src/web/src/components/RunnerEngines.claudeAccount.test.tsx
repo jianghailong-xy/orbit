@@ -363,9 +363,10 @@ describe("three Claude accounts, one of them out for the week (wikova, 2026-10-0
       ['5-hour limit', '100%', `resets ${formatResetTime(orbitFiveHour)}`],
       ['Weekly · all models', '59%', `resets ${formatResetTime(at(101))}`],
     ]);
-    // Spent windows are drawn amber, as nearly spent ones are.
-    expect(rows(rdRow, '.runner-util.full')).toHaveLength(1);
-    expect(rows(orbitRow, '.runner-util.full')).toHaveLength(1);
+    // Spent windows are drawn full and red (owner, 2026-11-01), apart from the amber of nearly spent ones.
+    expect(rows(rdRow, '.runner-util.spent')).toHaveLength(1);
+    expect(rows(orbitRow, '.runner-util.spent')).toHaveLength(1);
+    expect(rows(page, '.runner-util.full')).toHaveLength(0);
   });
 
   it('says when a reading stopped keeping up, and only on that row', () => {

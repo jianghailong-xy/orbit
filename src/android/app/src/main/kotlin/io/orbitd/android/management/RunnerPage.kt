@@ -367,6 +367,11 @@ internal data class UsageRow(val key: String, val label: String, val groupLabel:
     val percent get() = Math.round(if (remaining) 100 - utilization else utilization).toInt().coerceIn(0, 100)
     /** At or past 90% used, judged on the reading rather than its rounding. */
     val nearLimit get() = utilization >= 90
+    /** Nothing left of the window. Its gauge is drawn full and red whichever way the row counts: an Antigravity bucket at 0%
+     * remaining would otherwise be an empty track that reads as no data (iOS `PlanUsageRow.spent`). */
+    val spent get() = utilization >= 100
+    /** How much of the gauge is filled: all of it once spent. */
+    val gaugeFraction get() = if (spent) 1f else percent / 100f
 }
 
 internal fun JsonObject.str(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull

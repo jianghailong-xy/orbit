@@ -1957,6 +1957,10 @@ button.toast--pill:focus-visible {
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
 }
+/* A spent quota window: the whole track red, even where its percent counts what is left and is 0. */
+.runner-util.spent .runner-util-fill {
+  background: var(--error-solid);
+}
 /* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
    triangle stays with its first line. */
 .runner-attention {
@@ -7472,6 +7476,9 @@ button.toast--pill:focus-visible {
 }
 .composer-usage.full .composer-usage-fill {
   background: var(--warning-solid);
+}
+.composer-usage.spent .composer-usage-fill {
+  background: var(--error-solid);
 }
 .composer-usage-pct {
   font-size: 12px;

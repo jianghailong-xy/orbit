@@ -390,7 +390,51 @@ describe("the pill's one number", () => {
     // 6% of the 5-hour window says nothing of a week that is spent.
     await mount(usage(new Date(), { utilization: 6, hours: 2 }, { utilization: 100, hours: 66 }), false);
     expect(pill().getAttribute('aria-label')).toBe('Plan usage 100%');
-    expect(pill().classList.contains('full')).toBe(true);
+    expect(pill().classList.contains('spent')).toBe(true);
+  });
+
+  it("draws a spent Antigravity bucket's bar full and red, not as an empty track", async () => {
+    // agy 1.4.12 on 2026-11-01: four buckets with all left, and Gemini 4 Argon's own weekly one spent.
+    const later = new Date(Date.now() + 6 * 24 * 3600_000).toISOString();
+    const bucket = (id: string, remainingFraction: number) => ({
+      id,
+      window: id.endsWith('5h') ? '5h' : 'weekly',
+      remainingFraction,
+      resetTime: later,
+    });
+    const runner = resetRunner(new Date());
+    await mount(
+      {
+        ...runner,
+        planUsage: {
+          codex: {
+            provider: 'antigravity',
+            buckets: [
+              bucket('gemini-weekly', 1),
+              bucket('gemini-5h', 1),
+              bucket('3p-weekly', 1),
+              bucket('3p-5h', 1),
+              bucket('gemini-argon-wtu-weekly', 0),
+            ],
+          },
+        },
+      } as CodexResetRunner,
+      false,
+    );
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 0% left');
+    expect(pill().classList.contains('spent')).toBe(true);
+    expect(pill().querySelector<HTMLElement>('.composer-usage-fill')!.style.width).toBe('100%');
+    await openUsage();
+    const bars = [...usagePanel()!.querySelectorAll<HTMLElement>('.runner-util')];
+    expect(bars.map((bar) => bar.classList.contains('spent'))).toEqual([false, false, false, false, true]);
+    expect(bars.map((bar) => bar.querySelector<HTMLElement>('.runner-util-fill')!.style.width)).toEqual([
+      '100%',
+      '100%',
+      '100%',
+      '100%',
+      '100%',
+    ]);
+    expect(usagePanel()!.querySelectorAll('.cu-row')[4].textContent).toMatch(/^gemini-argon-wtu-weeklyWeekly0% remaining/);
   });
 
   it('reads a window past its reset as the fresh one it now is, on the pill and in the popover', async () => {

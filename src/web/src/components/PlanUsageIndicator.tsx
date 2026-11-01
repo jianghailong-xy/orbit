@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, planUsageRowSpent } from '../lib/planUsage';
 import {
   CodexResetConfirm,
   CodexResetCreditCard,
@@ -82,7 +82,9 @@ export function PlanUsageIndicator({
           {account.note && <div className="cu-reset">{account.note}</div>}
         </div>
       )}
-      {rows.map(({ key, label, groupLabel, window, percent, nearLimit, remaining }) => {
+      {rows.map((row) => {
+        const { key, label, groupLabel, window, percent, nearLimit, remaining } = row;
+        const spent = planUsageRowSpent(row);
         return (
           <div className="cu-row" key={key}>
             {groupLabel && <div className="cu-label">{groupLabel}</div>}
@@ -91,8 +93,8 @@ export function PlanUsageIndicator({
               {/* An Antigravity bucket counts what is left, as agy does: said so, or 100% reads spent. */}
               <span className="cu-pct">{percent}%{remaining ? ' remaining' : ''}</span>
             </div>
-            <div className={`runner-util ${nearLimit ? 'full' : ''}`}>
-              <span className="runner-util-fill" style={{ width: `${percent}%` }} />
+            <div className={`runner-util ${spent ? 'spent' : nearLimit ? 'full' : ''}`}>
+              <span className="runner-util-fill" style={{ width: `${spent ? 100 : percent}%` }} />
             </div>
             {window.resetsAt && (
               <div className="cu-reset">Resets {fmtReset(window.resetsAt)}</div>
@@ -126,11 +128,14 @@ export function PlanUsageIndicator({
           <button
             ref={trigger}
             type="button"
-            className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
+            className={`composer-pill composer-usage ${planUsageRowSpent(primary) ? 'spent' : primary.nearLimit ? 'full' : ''}`}
             aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
           >
             <span className="composer-usage-bar">
-              <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
+              <span
+                className="composer-usage-fill"
+                style={{ width: `${planUsageRowSpent(primary) ? 100 : primary.percent}%` }}
+              />
             </span>
             <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
             {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}

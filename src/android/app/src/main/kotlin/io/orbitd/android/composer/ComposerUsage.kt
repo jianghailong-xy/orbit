@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.CursorCopy
+import io.orbitd.android.management.Ink
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.usageRows
 import kotlinx.serialization.json.*
@@ -77,7 +78,9 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                 if (provider == "antigravity" || provider == "kimi" || provider == ProviderEngines.CURSOR) usageRows(snapshot).forEach { row ->
                     row.groupLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     Text("${row.label}: ${row.percent}%${if (row.remaining) " remaining" else ""}")
-                    LinearProgressIndicator(progress = { row.percent / 100f })
+                    // A spent window's bar is full and red: at 0% remaining it would otherwise be an empty track.
+                    LinearProgressIndicator(progress = { row.gaugeFraction }, Modifier.testTag("composer-usage-bar-${row.key}"),
+                        color = if (row.spent) Ink.red else ProgressIndicatorDefaults.linearColor)
                     row.window.text("resetsAt")?.let { Text("Resets $it", style = MaterialTheme.typography.bodySmall) }
                 }
                 if (provider == ProviderEngines.CURSOR && usageRows(snapshot).isEmpty())
@@ -91,7 +94,8 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                             val percent = (row["utilization"] as? JsonPrimitive)?.doubleOrNull
                             if (percent != null) {
                                 Text("${row.text("label") ?: label}: ${percent.toInt()}%")
-                                LinearProgressIndicator(progress = { (percent.toFloat() / 100).coerceIn(0f, 1f) })
+                                LinearProgressIndicator(progress = { (percent.toFloat() / 100).coerceIn(0f, 1f) },
+                                    color = if (percent >= 100) Ink.red else ProgressIndicatorDefaults.linearColor)
                                 row.text("resetsAt")?.let { Text("Resets $it", style = MaterialTheme.typography.bodySmall) }
                             }
                         }
