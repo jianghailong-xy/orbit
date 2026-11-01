@@ -10,7 +10,7 @@
 | | |
 |---|---|
 | 参数落点 | `docker-compose.yml` → `services.postgres.command`（为什么是这里，见 §0.1） |
-| 核对生效值 | `docker exec orbit-postgres psql -U orbit -d orbit -c "select name,setting,unit,source from pg_settings where name in ('statement_timeout','lock_timeout','idle_in_transaction_session_timeout','work_mem','shared_buffers')"` |
+| 核对生效值 | `docker exec orbit-postgres psql -U orbit -d orbit -c "select name,setting,unit,source from pg_settings where name in ('statement_timeout','lock_timeout','idle_in_transaction_session_timeout','work_mem','shared_buffers','jit')"` |
 | 相关 | `docs/postgres-lock-order.md`（锁序）· `docs/postgres-conflict-runbook.md`（冲突）· `docs/postgres-backup-restore.md`（归档） |
 
 ## 0. 一览
@@ -22,6 +22,7 @@
 | `idle_in_transaction_session_timeout` | `0`（无限） | `300s` | `300s` | 同上 |
 | `work_mem` | `4MB` | `4MB`（不改） | `4MB` | 结论是不改，见 §4 |
 | `shared_buffers` | `128MB` | `1GB` | **`128MB`** | **未获批准，未落地**，等所有者单独决定，见 §5 |
+| `jit` | `on`（默认） | `off` | `off`（角色和数据库级设置，不在 compose 里；本次未登生产核对） | 2026-11-01 账号所有者批准，已写进 compose，见 §10 |
 
 三个 `0` 是这次复核的主因：**任何一条失控语句、或任何一个忘关事务的客户端，都能无限期持有锁。**
 这已经发生过两次：
@@ -357,3 +358,25 @@ autovacuum 的清理触发线（50 + 0.2×行数 ≈ 113 万）永远够不到�
 autoanalyze 的触发线是 50 + 0.1×行数 ≈ 56.5 万次变更，所以 2026-09-22 → 2026-10-09 一次都没跑，
 规划器拿 17 天前的 n_distinct/MCV 做高水位（`max(seq)`）读与事件扇出的计划。0.01 把触发线降到约 5.7 万行，
 统计重新跟上实际分布；vacuum 侧维持默认——死元组不积累的表不需要更激进的清理。
+
+## 10. `jit`：`on` → `off`
+
+**结论**：compose 的 `command` 加 `-c jit=off`。2026-11-01 账号所有者批准。
+
+**生产本来就是 `off`，只是没写在本文件管的地方。** migration 0395 的注释和
+`project-rollup-covering-plan.pg.spec.ts` 都记着：生产在 orbit 的角色和数据库级设了 `jit = off`。这类设置存在
+系统目录里，不在 compose 里，也不在 `postgresql.auto.conf` 里。这次没有登生产核对。照 compose 新起的库（自托管、演练栈）
+用的是 PostgreSQL 默认的 `jit = on`：`postgres:16-alpine`（16.15）自带 LLVM JIT，`pg_jit_available()` 为 true。
+
+**为什么关。** 一条语句的计划估算一旦超过 `jit_above_cost`（默认 100k），**每次执行**都要重新编译。这里跑的都是
+短 OLTP 语句，编译常常比执行本身还贵。2026-11-01（任务 34pZdcbyGWmKvr676PWdu）用一个合成库实测，库里有
+11.2 万个 task、2.5 万个停驻的任务会话。派发 sweep 的就绪扫描在 JIT 开时要 946 ms，关掉后 183 ms。那次改动让
+项目预算改用 `sessionCarriesTaskSql` 计数：它的两个唤醒源 EXISTS 按行计价，实际执行时只建一次 hash，所以估算随
+停驻会话数增长，更容易超过阈值。main 原来的写法在参数是字面量时同样会超过，JIT 后要 1,979 ms。
+
+**代价。** postgres 的 `command` 变了，下一次部署会把 postgres 当作依赖重建，约 20 秒不可用（见 §0.1 第 3 条）。
+生产的有效值不变。照 §0.1 的做法，自己挑窗口执行 `docker compose up -d --no-deps --wait postgres`，做完用文首的
+命令核对。
+
+**核对。** 用 superuser 连接时，`select setting, source from pg_settings where name = 'jit'` 应为
+`off` / `command line`。用 orbit 角色连接时 `SHOW jit` 为 `off`：角色和数据库级设置优先于命令行。

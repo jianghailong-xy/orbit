@@ -119,10 +119,12 @@ const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 
 // e223d8ee adds exactly one postgres directive after CONFIGURATION_SHA, shm_size: "256m", and the six
 // comment lines that explain it: Docker's default 64MB /dev/shm made a manual VACUUM die with ENOSPC on
-// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. Postgres alone
-// is compared with this pin; every other service keeps the pin it had. New settings still require an
-// explicit review.
-const POSTGRES_CONFIGURATION_SHA = 'e223d8eede64cb71bb6efa5cf712b96f3b3af79b';
+// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. a2adab1d then
+// adds `-c jit=off` and the one comment line that explains it: production already ran jit = off for its
+// role and database, and the bundled Postgres JIT-compiled the dispatch sweep's scan.
+// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). Postgres alone is compared
+// with this pin; every other service keeps the pin it had. New settings still require an explicit review.
+const POSTGRES_CONFIGURATION_SHA = 'a2adab1d49ab991d4fcebe2b305ddc12d7c98f8e';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
