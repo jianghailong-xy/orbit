@@ -20,6 +20,7 @@ final class WikiDocsCopyParityTests: XCTestCase {
     private static let directory = "src/web/src/components/WikiDirectory.tsx"
     private static let browsePage = "src/web/src/components/WikiBrowsePage.tsx"
     private static let indexPage = "src/web/src/components/WikiIndexPage.tsx"
+    private static let diagram = "src/web/src/components/WikiDiagram.tsx"
     private static let fixturePath = "src/shared/src/wiki-docs.fixture.json"
     private static let app = "src/macos/OrbitApp/Sources/OrbitApp/"
 
@@ -395,7 +396,7 @@ final class WikiDocsCopyParityTests: XCTestCase {
                               ("WIKI_DOC_SECTION_NOT_WRITTEN", WikiDocCopy.sectionNotWritten),
                               ("WIKI_DOC_FOOTNOTES", WikiDocCopy.footnotes), ("WIKI_VIA_ENTRY", WikiDocCopy.viaEntry),
                               ("WIKI_NO_QUOTE_GIVEN", WikiDocCopy.noQuoteGiven), ("WIKI_DOC_ENTRIES", WikiDocCopy.entries),
-                              ("WIKI_OPEN_THE_ENTRY", WikiDocCopy.openTheEntry)] {
+                              ("WIKI_OPEN_THE_ENTRY", WikiDocCopy.openTheEntry), ("WIKI_DOC_DIAGRAM", WikiDocCopy.diagram)] {
             assertDeclares(lib, name, value, in: Self.lib)
         }
         assertSays(lib, "WIKI_DOC_SCOPE_FOLDED = `${WIKI_DOC_WRITTEN_FOR} · ${WIKI_DOC_COVERS} · ${WIKI_DOC_NOT_COVERED}`", in: Self.lib)
@@ -695,6 +696,37 @@ final class WikiDocsCopyParityTests: XCTestCase {
         // A footnote on a phone is a sheet from the bottom, at both ends.
         assertSays(page, "<Drawer placement=\"bottom\"", in: Self.docPage)
         assertSays(nativePage, ".presentationDetents([.medium, .large])", in: "WikiDocView.swift")
+    }
+
+    /// A section's diagram (contract `docs.diagram`): drawn where the web draws it, with the web's Mermaid options and its
+    /// accessible name, by the Mermaid build the web's lockfile resolves — which the app carries, and both packagings ship.
+    func testADiagramIsDrawnAsTheWebDrawsIt() throws {
+        let webDiagram = try web(Self.diagram)
+        let nativeDiagram = try native("Views/WikiDiagram.swift")
+        for option in ["startOnLoad: false", "securityLevel: 'strict'", "fontFamily: getComputedStyle(document.body).fontFamily",
+                       "flowchart: { useMaxWidth: false }"] {
+            assertSays(webDiagram, option, in: Self.diagram)
+            assertSays(nativeDiagram, option, in: "WikiDiagram.swift")
+        }
+        assertSays(webDiagram, "theme: theme === 'dark' ? 'dark' : 'neutral'", in: Self.diagram)
+        assertSays(nativeDiagram, "theme: dark ? 'dark' : 'neutral'", in: "WikiDiagram.swift")
+        assertSays(webDiagram, "aria-label={WIKI_DOC_DIAGRAM}", in: Self.diagram)
+        assertSays(nativeDiagram, ".accessibilityLabel(WikiDocCopy.diagram)", in: "WikiDiagram.swift")
+        let block = try slice(try native("Views/WikiDocView.swift"), from: "case .diagram:", to: "case .item:")
+        assertSays(block, "WikiDiagram(source: block.text ?? \"\")", in: "WikiDocView.swift")
+
+        let lock = try String(contentsOf: find("package-lock.json"), encoding: .utf8)
+        let pinned = try XCTUnwrap(lock.range(of: #""node_modules/mermaid": \{\s*"version": "[^"]+""#, options: .regularExpression),
+                                   "package-lock.json resolves no mermaid")
+        let version = String(lock[pinned].split(separator: "\"").last ?? "")
+        let bundled = try Data(contentsOf: find(Self.app + "Resources/mermaid.min.js"))
+        XCTAssertNotNil(bundled.range(of: Data("{version:\"\(version)\"}".utf8)),
+                        "Resources/mermaid.min.js is not mermaid \(version), which package-lock.json resolves: "
+                            + "copy node_modules/mermaid/dist/mermaid.min.js over it")
+        assertSays(try String(contentsOf: find("src/macos/OrbitApp/Package.swift"), encoding: .utf8),
+                   ".copy(\"Resources/mermaid.min.js\")", in: "Package.swift")
+        assertSays(try String(contentsOf: find("src/macos/scripts/build-dmg.sh"), encoding: .utf8),
+                   "Resources/mermaid.min.js", in: "build-dmg.sh")
     }
 
     /// A footnote's card: its head, the words or the lines, what went wrong, where, the entry it came

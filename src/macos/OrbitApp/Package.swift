@@ -19,7 +19,10 @@ let package = Package(
             dependencies: [
                 .product(name: "OrbitKit", package: "OrbitKit"),
                 .product(name: "Sparkle", package: "Sparkle"),
-            ]
+            ],
+            // The Mermaid build src/web/package.json pins, which draws a wiki document's diagrams (Views/WikiDiagram.swift),
+            // and its license. build-dmg.sh copies both into the app; the iOS project takes them in with the shared sources.
+            resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),
     ]
 )
