@@ -1,0 +1,2 @@
+/Users/runner/work/orbit/orbit/.wdg-probe/UITests/DiagramShotTests.swift:163: error: -[WdgMacProbeUITests.DiagramShotTests testFitsLight] : XCTAssertLessThan failed: ("323.0") is not less than ("303.0") - mac-diagram-light: the page did not move under a drag or wheel started on the diagram
+Test Case '-[WdgMacProbeUITests.DiagramShotTests testFitsLight]' failed (109.857 seconds).

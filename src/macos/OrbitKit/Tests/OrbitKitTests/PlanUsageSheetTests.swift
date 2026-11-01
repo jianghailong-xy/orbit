@@ -53,6 +53,39 @@ final class PlanUsageSheetTests: XCTestCase {
                       userInfo: [NSLocalizedDescriptionKey: "\(relative) not found"])
     }
 
+    /// The owner's composer on 2026-11-01: Gemini 3.8 Flash read "0% left" off Gemini 4 Argon's spent
+    /// week. The pill's number is the bucket the session's model spends (web `modelPlanUsage`).
+    func testThePillReadsTheBucketTheSessionsModelSpends() throws {
+        let json = """
+        {"provider": "antigravity", "buckets": [
+          {"id": "gemini-weekly", "window": "weekly", "remainingFraction": 0.97, "resetTime": "2026-11-08T12:28:16Z"},
+          {"id": "gemini-5h", "window": "5h", "remainingFraction": 0.93, "resetTime": "2026-11-01T17:28:16Z"},
+          {"id": "3p-weekly", "window": "weekly", "remainingFraction": 1, "resetTime": "2026-11-08T12:40:00Z"},
+          {"id": "3p-5h", "window": "5h", "remainingFraction": 1, "resetTime": "2026-11-01T17:40:00Z"},
+          {"id": "gemini-argon-wtu-weekly", "window": "weekly", "remainingFraction": 0,
+           "resetTime": "2026-11-07T17:41:35Z"}]}
+        """
+        let usage = try JSONDecoder().decode(PlanUsageSnapshot.self, from: Data(json.utf8))
+        let flash = try XCTUnwrap(usage.bindingRow(model: "gemini-3.8-flash"))
+        XCTAssertEqual(flash.key, "gemini-5h")
+        XCTAssertEqual(flash.percent, 93)
+        XCTAssertFalse(flash.spent)
+        XCTAssertEqual(usage.bindingRow(model: "claude-opus-5-5")?.key, "3p-weekly")
+        XCTAssertEqual(usage.bindingRow(model: "gemini-4-argon")?.key, "gemini-argon-wtu-weekly")
+        // agy's own default model, which the session does not name: every bucket, as before.
+        XCTAssertEqual(usage.bindingRow(model: "")?.key, "gemini-argon-wtu-weekly")
+        XCTAssertEqual(usage.bindingRow()?.key, "gemini-argon-wtu-weekly")
+        // An Ultra plan's Argon has no group of its own, and spends the Gemini group's.
+        XCTAssertEqual(PlanUsageBucket.spent(by: "gemini-4-argon", of: Array(try XCTUnwrap(usage.buckets).prefix(4))).map(\.id),
+                       ["gemini-weekly", "gemini-5h"])
+        // The composer's pill and /status ask with the session's model.
+        let app = "src/macos/OrbitApp/Sources/OrbitApp/"
+        let composer = try source(app + "Views/ComposerView.swift")
+        XCTAssertTrue(composer.contains("PlanUsageIndicator(usage: usage, model: console.modelID,"))
+        XCTAssertTrue(composer.contains("if let row = usage.bindingRow(model: model) {"))
+        XCTAssertTrue(try source(app + "ConsoleModel.swift").contains("let primary = planUsage?.bindingRow(model: modelID)"))
+    }
+
     func testTheViewsDrawTheSheetAndTheBarsThisWay() throws {
         let views = "src/macos/OrbitApp/Sources/OrbitApp/Views/"
         let composer = try source(views + "ComposerView.swift")

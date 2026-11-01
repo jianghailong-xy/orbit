@@ -86,6 +86,41 @@ function bucketWindow(bucket: PlanUsageBucket): PlanUsageWindow {
   };
 }
 
+/** The group an Antigravity bucket belongs to, from its id, which agy spells `<group>-<window>`:
+ *  `gemini` for `gemini-5h`, `gemini-argon-wtu` for `gemini-argon-wtu-weekly`. */
+function bucketGroup(bucket: PlanUsageBucket): string {
+  const id = bucket.id.toLowerCase();
+  const suffix = `-${bucket.window.toLowerCase()}`;
+  return id.endsWith(suffix) ? id.slice(0, -suffix.length) : id;
+}
+
+/**
+ * The buckets of an Antigravity account that a run on `model` spends. agy's `/usage` groups buckets
+ * by the models that share them, and the runner reports them flattened, by id alone (contract
+ * §16.6). On agy 1.4.12 (2026-11-01, a Pro plan): Gemini Flash and Pro share `gemini-weekly` and
+ * `gemini-5h`; Claude and GPT-OSS share `3p-weekly` and `3p-5h`; Gemini 4 Argon has its own
+ * `gemini-argon-wtu-weekly` (on Ultra, agy says, Argon shares the Gemini group's). So a `gemini-` model
+ * spends the `gemini` group and any other model the `3p` group, unless a group of their own names the
+ * model: `argon`, of `gemini-4-argon`. Every bucket when no model is named (agy runs its own default)
+ * or no group is the model's.
+ */
+export function antigravityModelBuckets(
+  buckets: readonly PlanUsageBucket[],
+  model: string | null | undefined,
+): PlanUsageBucket[] {
+  const name = model?.trim().toLowerCase() ?? '';
+  if (!name) return [...buckets];
+  const family = name.startsWith('gemini-') ? 'gemini' : '3p';
+  const words = new Set(name.split('-'));
+  const own = buckets.filter((bucket) => {
+    const group = bucketGroup(bucket);
+    return group.startsWith(`${family}-`) && group.slice(family.length + 1).split('-').some((word) => words.has(word));
+  });
+  if (own.length > 0) return own;
+  const shared = buckets.filter((bucket) => bucketGroup(bucket) === family);
+  return shared.length > 0 ? shared : [...buckets];
+}
+
 /** At or over this share consumed, a window is nearly spent: an account there is used last, since a
  *  run started on it would soon meet its limit and have to move. The composer's gauge turns amber here. */
 const NEAR_LIMIT_UTILIZATION = 90;

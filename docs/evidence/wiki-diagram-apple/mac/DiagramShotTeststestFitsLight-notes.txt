@@ -1,0 +1,5 @@
+mac-diagram-light: no window after launch; File > New Window
+mac-diagram-light-figure: never in the band 101.0–673.0; last frame (637.0, 203.0, 337.0, 498.0)
+mac-diagram-light-drawn: never in the band 101.0–673.0; last frame (637.0, 203.0, 337.0, 498.0)
+mac-diagram-light: drawn figure: 43 label="Diagram" value="" frame=(637.0, 203.0, 337.0, 498.0) hittable=true
+mac-diagram-light: a vertical move started on the diagram took its top from 203.0 to 143.0

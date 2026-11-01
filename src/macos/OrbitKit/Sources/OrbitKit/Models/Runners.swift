@@ -781,6 +781,31 @@ public struct PlanUsageBucket: Codable, Equatable, Sendable {
         self.remainingFraction = remainingFraction
         self.resetTime = resetTime
     }
+
+    /// The buckets of an Antigravity account that a run on `model` spends (shared
+    /// `antigravityModelBuckets`). agy spells a bucket's id `<group>-<window>`: a `gemini-` model spends
+    /// the `gemini` group, any other model (Claude, GPT-OSS) the `3p` group, unless a group of their own
+    /// names the model (`gemini-argon-wtu`, of `gemini-4-argon`). Every bucket when no model is named
+    /// (agy runs its own default) or no group is the model's.
+    public static func spent(by model: String?, of buckets: [PlanUsageBucket]) -> [PlanUsageBucket] {
+        let name = (model ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !name.isEmpty else { return buckets }
+        let family = name.hasPrefix("gemini-") ? "gemini" : "3p"
+        let words = Set(name.split(separator: "-").map(String.init))
+        let own = buckets.filter { bucket in
+            bucket.group.hasPrefix(family + "-")
+                && bucket.group.dropFirst(family.count + 1).split(separator: "-").contains { words.contains(String($0)) }
+        }
+        if !own.isEmpty { return own }
+        let shared = buckets.filter { $0.group == family }
+        return shared.isEmpty ? buckets : shared
+    }
+
+    /// The group this bucket belongs to, from its id: `gemini` for `gemini-5h`.
+    private var group: String {
+        let id = self.id.lowercased(), suffix = "-" + window.lowercased()
+        return id.hasSuffix(suffix) ? String(id.dropLast(suffix.count)) : id
+    }
 }
 
 /// One Cursor CLI account's included usage this period, as Cursor's dashboard reports it to that
@@ -1077,9 +1102,11 @@ public extension PlanUsageSnapshot {
     /// one before any other — of several, the one that resets last, since the login is back only once
     /// every spent one has — else the one closest to its limit, a tie going to the first. Whatever
     /// shows one number for a login shows this one: a Claude login's 5-hour window can read 6% while
-    /// its weekly one is spent.
-    func bindingRow(at now: Date = Date()) -> PlanUsageRow? {
-        let current = currentRows(at: now)
+    /// its weekly one is spent. Of an Antigravity account, only the buckets a run on `model` spends
+    /// (`PlanUsageBucket.spent(by:of:)`, web `modelPlanUsage`): another group's stops nothing it does.
+    func bindingRow(at now: Date = Date(), model: String? = nil) -> PlanUsageRow? {
+        let spends = provider == "antigravity" ? Set(PlanUsageBucket.spent(by: model, of: buckets ?? []).map(\.id)) : nil
+        let current = currentRows(at: now).filter { spends?.contains($0.key) ?? true }
         let spent = current.filter { $0.window.utilization >= 100 }
         if let first = spent.first {
             // A spent window with no reset named holds the login for as long as anyone can tell.

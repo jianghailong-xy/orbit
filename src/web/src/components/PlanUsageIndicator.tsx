@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { bindingPlanUsageRow, currentPlanUsageRows, planUsageRowSpent } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage, planUsageRowSpent } from '../lib/planUsage';
 import {
   CodexResetConfirm,
   CodexResetCreditCard,
@@ -23,14 +23,17 @@ export interface PlanUsageAccount {
 }
 
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
-// The pill shows the binding/primary window; hover or press reveals every reported window, the account
-// they belong to and, for a session on the runner's own Codex sign-in, its earned reset credits.
+// The pill shows the binding/primary window of what `model` spends; hover or press reveals every
+// reported window, the account they belong to and, for a session on the runner's own Codex sign-in,
+// its earned reset credits.
 export function PlanUsageIndicator({
   usage,
+  model,
   reset,
   account,
 }: {
   usage: PlanUsageSnapshot;
+  model?: string;
   reset?: CodexResetContext;
   account?: PlanUsageAccount;
 }) {
@@ -39,8 +42,9 @@ export function PlanUsageIndicator({
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const credit = useCodexResetCredit(reset, open, () => panel.current);
-  // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first.
-  const primary = bindingPlanUsageRow(rows);
+  // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first —
+  // of the windows the model spends: an Antigravity Gemini Flash run is not stopped by Argon's bucket.
+  const primary = bindingPlanUsageRow(currentPlanUsageRows(modelPlanUsage(usage, model)));
   if (!primary) return null;
 
   const close = () => {

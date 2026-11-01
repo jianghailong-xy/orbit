@@ -358,7 +358,7 @@ private fun DocSectionHeading(section: WikiDocSection) {
     }
 }
 
-/** A block of a section: a heading, code, a diagram (drawn on the web), a list item, or a paragraph of sentences. */
+/** A block of a section: a heading, code, a diagram (`WikiDiagram`), a list item, or a paragraph of sentences. */
 @Composable
 private fun DocBlockView(row: DocRow.Block, notes: Map<Int, WikiDocFootnote>, openNote: Int?, onNote: (Int) -> Unit, onMark: (WikiDocOpenMark) -> Unit) {
     val block = row.block
@@ -371,10 +371,7 @@ private fun DocBlockView(row: DocRow.Block, notes: Map<Int, WikiDocFootnote>, op
             .testTag(tag)) {
             Text(block.text ?: "", Modifier.padding(10.dp), style = WikiType.mono, softWrap = false)
         }
-        "diagram" -> Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(8.dp)).testTag(tag)) {
-            Text(WikiDocCopy.diagramOnWeb, Modifier.padding(10.dp), style = WikiType.meta, color = WikiPalette.secondary)
-        }
+        "diagram" -> WikiDiagram(block.text ?: "", tag)
         "item" -> Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("•", Modifier.alignByBaseline().clearAndSetSemantics {}, style = WikiType.prose)
             DocParagraph(row, notes, openNote, onNote, onMark, 5, Modifier.weight(1f).alignByBaseline().testTag(tag))

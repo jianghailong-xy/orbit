@@ -1,0 +1,18 @@
+{
+  "probe": "signedin-models",
+  "agy_version": "1.4.12",
+  "date": "2026-11-01",
+  "runner": "workstation-gpu",
+  "authentication": "copy of the runner's Default Google sign-in token file (a Google AI Pro account) in a private temp root; same account",
+  "stdin": "empty pipe (EOF), as the runner's probe sends",
+  "environment": "env -i; HOME and XDG dirs in the temp root; D-Bus pointed at a missing socket; no API-key variables",
+  "argv": [
+    "/root/.local/bin/agy",
+    "--gemini_dir=<TMP>/gemini",
+    "--log-file=/dev/null",
+    "models"
+  ],
+  "exit_code": 0,
+  "stdout": "gemini-4-argon-medium\tGemini 4 Argon (Medium)\ngemini-4-argon-high\tGemini 4 Argon (High)\ngemini-4-argon-low\tGemini 4 Argon (Low)\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\nclaude-opus-5-5-medium\tClaude Opus 5.5 (Medium)\nclaude-opus-5-5-high\tClaude Opus 5.5 (High)\nclaude-sonnet-5-5-low\tClaude Sonnet 5.5 (Low)\nclaude-sonnet-5-5-medium\tClaude Sonnet 5.5 (Medium)\nclaude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)\ngpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n",
+  "stderr": "Fetching available models...\n"
+}

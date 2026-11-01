@@ -3313,7 +3313,7 @@ final class ConsoleModel {
             : state.contextWindow ?? AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
                                                                  configured: configuredProviders,
                                                                  provider: provider)
-        let primary = planUsage?.bindingRow()
+        let primary = planUsage?.bindingRow(model: modelID)
         let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App",
             sessionTitle: isDraft ? nil : "Current session",
