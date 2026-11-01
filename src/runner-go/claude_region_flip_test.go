@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -104,6 +105,87 @@ func TestClaudeRegionUnknownKeepsABlockedVerdictFor24Hours(t *testing.T) {
 	// The stored verdict is still the decided one; only what it means has run out.
 	if v, ok := check.lastDecided(""); !ok || v.Verdict != claudeRegionBlocked || !v.At.Equal(decidedAt) {
 		t.Fatalf("last decided = %+v (%v), want the blocked verdict decided at %v", v, ok, decidedAt)
+	}
+}
+
+// The runner's gates besides its turns read the carry-over where its turns do, in forTurn's answer
+// (claudeConnectionBlocked): after a blocked answer, unknown ones keep a plan-usage read and a claude the runner would
+// start for its own work (claudeStartBlocked) held back, with no request to the usage endpoint, until 24 hours after
+// the blocked answer was decided. From then on both go ahead.
+func TestNonTurnGatesCarryABlockedVerdictFor24Hours(t *testing.T) {
+	isolateClaudeRegionEnv(t)
+	home, _ := claudeAccountSlotTestHomes(t)
+	previousURL := planUsageURL
+	t.Cleanup(func() { planUsageURL = previousURL })
+	srv, tokens := claudeUsageServer(t, 12)
+	planUsageURL = srv.URL
+	writeClaudeCredentials(t, filepath.Join(home, ".claude"), "default-token")
+	stub := newRegionStub(t, regionAnswerBlocked)
+	clock := newFakePoolClock()
+	check := installRegionCheck(t, stub, clock)
+	ctx := context.Background()
+
+	decidedAt := clock.Now()
+	check.check(ctx)
+	stub.setAnswer(regionAnswerUnknown)
+	// The contract's 24 hours, written out: claudeRegionCarryOver is asserted against @orbit/shared apart.
+	for _, since := range []time.Duration{time.Minute, time.Hour, 23 * time.Hour, 24*time.Hour - time.Second} {
+		advanceTo(clock, decidedAt.Add(since))
+		checks := len(stub.checksSoFar())
+		if machine, region, blocked := claudeConnectionBlocked(ctx); !blocked || machine != "atlas" || region != "Russia" {
+			t.Fatalf("%s after the blocked answer, an unknown one reads %q, %q, %v; want atlas, Russia, blocked",
+				since, machine, region, blocked)
+		}
+		if len(stub.checksSoFar()) != checks+1 {
+			t.Fatalf("%s after the blocked answer: no new check; the last answer was stale", since)
+		}
+		if !claudeStartBlocked(ctx, nil) {
+			t.Fatalf("%s after the blocked answer, a claude the runner starts for itself was let through", since)
+		}
+		probe := newClaudeAccountUsage().def
+		if _, err := probe.fetch(ctx, probe.client); !errors.Is(err, errClaudeUsageRegionBlocked) {
+			t.Fatalf("%s after the blocked answer, the usage read returned %v, want %v", since, err, errClaudeUsageRegionBlocked)
+		}
+		if got := tokens(); len(got) != 0 {
+			t.Fatalf("%s after the blocked answer, the usage endpoint was asked, with %q", since, got)
+		}
+	}
+
+	advanceTo(clock, decidedAt.Add(24*time.Hour))
+	if _, _, blocked := claudeConnectionBlocked(ctx); blocked {
+		t.Fatal("24 hours after the blocked answer, an unknown one still reads blocked")
+	}
+	if claudeStartBlocked(ctx, nil) {
+		t.Fatal("24 hours after the blocked answer, a claude the runner starts for itself is still held back")
+	}
+	if usage := read(t, newClaudeAccountUsage().def); usage == nil || usage.FiveHour == nil {
+		t.Fatalf("24 hours after the blocked answer, the usage read gave %#v", usage)
+	}
+	if got := tokens(); !slices.Equal(got, []string{"Bearer default-token"}) {
+		t.Fatalf("tokens seen = %q, want the one read after the carry-over ran out", got)
+	}
+}
+
+// orbit doctor keeps the answer it asks for itself the way a check keeps one (keep), flip and all: a blocked answer
+// checkDoctorRegion got starts a flip, which a blocked check a minute later through that check confirms, stopping
+// what is registered with it, as it would had the check asked first.
+func TestDoctorKeepsItsAnswerAsACheckDoes(t *testing.T) {
+	isolateClaudeRegionEnv(t)
+	stub := newRegionStub(t, regionAnswerBlocked)
+	region := checkDoctorRegion(&RunnerConfig{ServerURL: stub.server.URL, RunnerToken: "runner-token", Name: "atlas"})
+	if region.verdict.Verdict != claudeRegionBlocked {
+		t.Fatalf("doctor's answer = %+v, want blocked", region.verdict)
+	}
+	check := region.check
+	clock := &fakePoolClock{now: region.verdict.At}
+	check.clock = clock
+	engine := &stopRecorder{}
+	t.Cleanup(check.register(engine.stop))
+
+	clock.Advance(claudeRegionRecheckAfter)
+	check.check(context.Background())
+	if got := engine.stops(); !slices.Equal(got, []string{atlasRussiaStopped}) {
+		t.Fatalf("stops = %q: a blocked check a minute after doctor's blocked answer did not confirm the flip it started", got)
 	}
 }
 

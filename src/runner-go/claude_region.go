@@ -218,11 +218,7 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	v.At = c.now()
 	c.mu.Lock()
 	previous, seen := c.latest[proxy]
-	stopping, confirmed := c.noteFlipLocked(proxy, v)
-	c.latest[proxy] = v
-	if v.Verdict != claudeRegionUnknown {
-		c.decided[proxy] = v
-	}
+	stopping, confirmed := c.keepLocked(proxy, v)
 	var stops []func(string)
 	if stopping {
 		for e := range c.engines {
@@ -256,6 +252,26 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 		}
 	}
 	return v
+}
+
+// keepLocked records answer v through proxy: the newest answer, the decided one, and the flip it moves
+// (noteFlipLocked), whose report it returns.
+func (c *claudeRegionCheck) keepLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
+	stopping, confirmed = c.noteFlipLocked(proxy, v)
+	c.latest[proxy] = v
+	if v.Verdict != claudeRegionUnknown {
+		c.decided[proxy] = v
+	}
+	return stopping, confirmed
+}
+
+// keep records an answer asked for outside check, as orbit doctor asks for its own (checkDoctorRegion), the way a
+// check records one, so what forTurn and the flip read afterwards is the same whoever made the request. It stops and
+// logs nothing: it serves a process that runs no turns.
+func (c *claudeRegionCheck) keep(proxy string, v claudeRegionVerdict) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.keepLocked(proxy, v)
 }
 
 // noteFlipLocked keeps the flip through proxy up to date with answer v, and reports whether v stops the running
@@ -628,19 +644,17 @@ const claudeNonessentialTrafficVar = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"
 
 // claudeStartsQuiet reports whether a claude started with agentEnv layered over this process's environment runs with
 // its nonessential traffic off: it is not Anthropic-bound, so it runs whatever the verdict (owner decision ①), while
-// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③).
-// Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to api.anthropic.com as it starts
-// (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set sends Anthropic nothing.
-// Read with no request and no wait (lastDecided), so a turn on another provider's key never waits on the route: no
-// check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
+// the last decided answer this runner's check holds for the proxy claude uses is blocked, and under a day old (③,
+// claudeRegionHolds). Measured on Claude Code 2.1.316, such a claude still sends a stored Claude login to
+// api.anthropic.com as it starts (/api/claude_cli/bootstrap, /api/claude_code_penguin_mode), and with the variable set
+// sends Anthropic nothing. Read with no request and no wait (lastDecided), so a turn on another provider's key never
+// waits on the route: no check, no decided answer, an allowed one or an Anthropic-bound claude change nothing.
 func claudeStartsQuiet(agentEnv map[string]string) bool {
-	const carryOver = 24 * time.Hour
 	check := claudeRegion.Load()
 	if check == nil {
 		return false
 	}
-	v, ok := check.lastDecided(claudeAnthropicProxy())
-	if !ok || v.Verdict != claudeRegionBlocked || check.now().Sub(v.At) >= carryOver {
+	if v, ok := check.lastDecided(claudeAnthropicProxy()); !ok || !claudeRegionHolds(v, check.now()) {
 		return false
 	}
 	return !claudeTurnIsAnthropicBound(agentEnv)

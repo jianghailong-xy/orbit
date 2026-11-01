@@ -909,12 +909,9 @@ func checkDoctorRegion(cfg *RunnerConfig) doctorRegion {
 	check := newClaudeRegionCheck(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), cfg.Name)
 	v, err := check.ask(context.Background(), proxy)
 	v.At = check.now()
-	check.mu.Lock()
-	check.latest[proxy] = v
-	if v.Verdict != claudeRegionUnknown {
-		check.decided[proxy] = v
-	}
-	check.mu.Unlock()
+	// Kept as a check keeps its own answers, flip and all (claude_region.go), so the gates in this process read it
+	// the way the runner's read theirs.
+	check.keep(proxy, v)
 	return doctorRegion{verdict: v, proxy: proxy, err: err, check: check}
 }
 
