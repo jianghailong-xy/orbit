@@ -9198,6 +9198,9 @@ export class RunnerApiController {
     }, loggedRetry(this.logger, 'runnerApi.importResult'));
     // Wake live clients: the imported session just got its real title (or went to Trash).
     if (outcome.announced) this.realtime.publishSessionUpdated(sessionId);
+    // A transcript Claude never titled still reads as its placeholder: name it from its first
+    // prompt, which the events this import just stored hold (SessionsService.nameUntitledImport).
+    if (outcome.applied && !dto.title) void this.sessions?.nameUntitledImport(sessionId);
     return { ok: true, ...outcome };
   }
 

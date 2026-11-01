@@ -1,0 +1,175 @@
+--- kit.a8832bb05/journey.mjs	2026-10-31 20:57:29.332430466 +0800
++++ kit/journey.mjs	2026-11-01 10:53:38.514525892 +0800
+@@ -167,11 +167,21 @@
+   check('register_dir is the directory orbit register ran in', runnerRow.registerDir === REGISTER_DIR, runnerRow.registerDir);
+   const early = await cardText();
+   check('the card no longer calls a machine that has not started out of date', !/updates itself first/.test(early), early);
++  check('it is waited for, in the card\'s own words, not called offline', early.includes(`Waiting for ${M} to connect. It can check folders and sign in as soon as it does.`) && !/is offline/.test(early), early);
++  check('its folder step is closed meanwhile', (await page.locator('.msc [role="radio"][aria-disabled="true"]').count()) > 0 && (await useFolder().isDisabled()));
++  check('and the composer takes a first message to wait with it, rather than saying Runner offline', await has(composerOf()) && !(await has(page.getByPlaceholder('Runner offline'))));
+   await shot(page, 'a-card-before-first-heartbeat');
+ 
+   // The service starts: the open page has to get there by itself.
+   const upAt = Date.now();
+   note(stack('start-runner').trim());
++  // Watched from now, beside everything else: when the card's folder step opens, with no reload.
++  const folderStepOpen = async () => {
++    const text = await cardText();
++    return /A new folder/.test(text) && !/updates itself first|is offline|to connect/.test(text) &&
++      (await page.locator('.msc [role="radio"][aria-disabled="true"]').count()) === 0;
++  };
++  const cardOpened = until('the card\'s folder step to open with no reload', async () => ((await folderStepOpen()) ? Date.now() : 0), { timeoutMs: 120_000, everyMs: 200 });
+   const firstBeat = await until('the first heartbeat', () => logSince('beats.jsonl', 0).split('\n').filter(Boolean).map((l) => JSON.parse(l)).find((b) => b.call.includes('heartbeat')), { timeoutMs: 40_000, everyMs: 100 });
+   const beatAfter = (Date.parse(firstBeat.at) - upAt) / 1000;
+   check('the first heartbeat arrives within 5 s of the runner starting', beatAfter <= 5, `${beatAfter.toFixed(2)} s (${firstBeat.at})`);
+@@ -179,8 +189,10 @@
+   check('the Add a runner tab left open says the next step by itself', (await addRunnerTab.locator('body').innerText()).includes('start a session on it'), (await addRunnerTab.locator('body').innerText()).replace(/\n+/g, ' | ').slice(0, 260));
+   await shot(addRunnerTab, 'a-add-a-runner-after-approval');
+   await addRunnerTab.close();
+-  await until('the card to offer folders with no reload', async () => /A new folder/.test(await cardText()) && !/updates itself first|is offline/.test(await cardText()), { timeoutMs: 120_000 });
+-  note(`the card offered folders ${((Date.now() - upAt) / 1000).toFixed(1)}s after the runner started`);
++  const openedAt = await cardOpened;
++  note(`the card offered folders ${((openedAt - upAt) / 1000).toFixed(1)}s after the runner started`);
++  const afterBeat = (openedAt - Date.parse(firstBeat.at)) / 1000;
++  check('the folder step opens within 5 s of the first heartbeat, with no reload', afterBeat <= 5, `${afterBeat.toFixed(2)} s after the first heartbeat (${firstBeat.at})`);
+   keepLogs('a-first-run', mA);
+ 
+   // ── B. Opening Orbit ────────────────────────────────────────────────────────────────────────────────────────
+@@ -226,6 +238,14 @@
+   await page.locator('.msc-held').waitFor();
+   check('the message waits under the card', (await heldState()).includes(`Waiting for ${M} — sends once both steps are done`), await heldState());
+   check('the composer is empty again', (await composerOf().inputValue()) === '');
++  if (FROM_HOME) {
++    // Its picture loads after the message lands: the line under it is measured once it has.
++    await page.waitForFunction(() => {
++      const images = [...document.querySelectorAll('.msc-held img')];
++      return images.length > 0 && images.every((img) => img.complete && img.naturalHeight > 0);
++    }, null, { timeout: 20_000 });
++    await page.waitForTimeout(300);
++  }
+   await shot(page, 'c-message-waiting');
+   const held = await page.evaluate(() => {
+     const line = document.querySelector('.msc-held-state').getBoundingClientRect();
+@@ -234,9 +254,8 @@
+     return { lineBottom: Math.round(line.bottom), paneBottom: Math.round(box.bottom), scrollTop: Math.round(pane.scrollTop), maxScroll: pane.scrollHeight - pane.clientHeight, mask: getComputedStyle(pane).maskImage };
+   });
+   note('the waiting line against the pane:', held);
+-  if (held.paneBottom - held.lineBottom < 20 && /gradient/.test(held.mask)) {
+-    finding('F5', `the "Waiting for ${M} …  Withdraw" line lands in the pane's 20px fade (${held.paneBottom - held.lineBottom}px above the pane's bottom edge, already scrolled ${held.scrollTop} of ${held.maxScroll}) at 1280x900, so Withdraw reads as disabled; it still works`);
+-  }
++  check(`the "Waiting for ${M} … Withdraw" line is all in view, clear of the pane's 20px fade${FROM_HOME ? ', with the picture loaded' : ''}`,
++    held.paneBottom - held.lineBottom >= 20 && held.lineBottom > 0, held);
+ 
+   await page.locator('.msc-held-state').getByRole('button', { name: 'Withdraw' }).click();
+   await page.waitForTimeout(400);
+@@ -382,8 +401,12 @@
+   check('a name the server would refuse is refused on the card', (await page.locator('.msc-verdict.bad').innerText()).includes('Use letters, digits') && await useFolder().isDisabled());
+   await shot(page, 'f-new-folder-bad-name');
+   await nameBox.fill(NEW_NAME);
+-  await page.waitForTimeout(300);
+-  check('a good name enables the button', !(await useFolder().isDisabled()));
++  // The name is asked about where it would go before it can be used (F6): nothing there yet, so it starts empty.
++  const freeName = await until('the card to say what is at the new folder\'s name', async () => {
++    const text = (await folderOption('A new folder').innerText()).replace(/\n+/g, ' ');
++    return !(await useFolder().isDisabled()) && !/Checking/.test(text) ? text : '';
++  }, { timeoutMs: 20_000 }).catch(() => '');
++  check('a good name, with nothing there yet, enables the button once the machine has looked', freeName.includes('Starts empty. Ask for a clone or a new project in your first message.'), freeName);
+   await shot(page, 'f-new-folder-named');
+   await useFolder().click();
+   await page.locator('.msc-foot.ready').waitFor();
+@@ -438,9 +461,11 @@
+     const t0 = Date.now();
+     await pathBox.fill(path);
+     await page.waitForTimeout(450);
+-    const wasChecking = (await page.locator('.msc-verdict').first().innerText().catch(() => '')).includes('Checking');
+-    await page.locator('.msc-verdict:not(.wait)').first().waitFor({ timeout: 80_000 });
+-    const el = page.locator('.msc-verdict:not(.wait)').first();
++    // This option's own line: the register directory's suggestion, offered again (F4), has a verdict of its own.
++    const other = folderOption(`Another folder on ${M}`);
++    const wasChecking = (await other.locator('.msc-verdict').first().innerText().catch(() => '')).includes('Checking');
++    await other.locator('.msc-verdict:not(.wait)').first().waitFor({ timeout: 80_000 });
++    const el = other.locator('.msc-verdict:not(.wait)').first();
+     const text = await el.innerText();
+     const secs = (Date.now() - t0) / 1000;
+     note(`typed ${path} → "${text}" after ${secs.toFixed(1)}s (a check was shown: ${wasChecking})`);
+@@ -480,9 +505,10 @@
+   await shot(page, 'g-typed-git-folder');
+   note('seconds per check:', times.map((t) => +t.toFixed(1)));
+   if (!FROM_HOME) {
+-    const lost = !(await has(folderOption('Where you ran orbit register')));
+-    note(`the register directory is ${lost ? 'no longer offered' : 'still offered'}, though it is still there on the machine`);
+-    if (lost) finding('F4', 'the machine has one probe slot, so typing a path before the register directory has been answered replaces that question: the suggestion never appears on this card, and nothing asks again until the page is reloaded');
++    const offered = await until('the register directory to be offered', () => has(folderOption('Where you ran orbit register')), { timeoutMs: 15_000 }).then(() => true, () => false);
++    const askedAgain = wireSince(mG['wire.jsonl']).filter((e) => e.call?.startsWith('POST /api/runners/') && e.call.endsWith('/dir-probe') && e.body?.path === REGISTER_DIR).length;
++    note(`the register directory was asked about ${askedAgain} time(s) on this card, and is ${offered ? 'offered' : 'not offered'}`);
++    check('the register directory is still offered after other paths took the machine\'s one question', offered, { askedOnThisCard: askedAgain });
+   }
+   check('each folder check is answered within 3 s of being asked, typing settled', times.every((t) => t <= 3.4), times.map((t) => +t.toFixed(2)));
+   const mG2 = marks();
+@@ -547,41 +573,52 @@
+     await page.waitForURL(/\/runners\/[^/]+\/new$/);
+     await page.locator('.msc').waitFor();
+     const mJ = marks();
++    const newFolderSays = async () => {
++      const text = (await folderOption('A new folder').innerText()).replace(/\n+/g, ' ');
++      return /already exists|already a file|Starts empty/.test(text) && !/Checking/.test(text) ? text : '';
++    };
+     await folderOption('A new folder').click();
+     await page.getByRole('textbox', { name: 'A new folder' }).fill(NEW_NAME);
++    const saidThere = await until('the card to say what is at the new folder\'s name', newFolderSays, { timeoutMs: 20_000 });
++    check('a new folder named after one still on the disk is said to be used with what is in it, before anything is sent',
++      saidThere.includes(`This folder already exists on ${M}. Sessions will use what’s in it.`) && !saidThere.includes('Starts empty'), saidThere);
++    check('it was asked about where it would go, and nothing was sent to find out',
++      wireSince(mJ['wire.jsonl']).some((e) => e.call?.endsWith('/dir-probe') && e.body?.path === `${REPOS_ROOT}/${NEW_NAME}`) && sessionsPosted(mJ['wire.jsonl']).length === 0);
++    await shot(page, 'j-new-folder-name-already-a-folder');
+     await useFolder().click();
+     await page.locator('.msc-foot.ready').waitFor();
++    const doneLine = (await page.locator('[data-step="folder"] .msc-done-line').innerText()).replace(/\n+/g, ' ');
++    check('picked, it is that folder: not one made as the session starts', doneLine.includes(`${REPOS_ROOT}/${NEW_NAME}`) && !doneLine.includes('created as the session starts'), doneLine);
+     await composerOf().fill('Is this folder empty?');
+     await composerOf().press('Enter');
+     await page.waitForURL(/\/sessions\/[^/]+$/, { timeout: 30_000 });
+     await page.getByText('fake-claude: no model was called').first().waitFor({ timeout: 60_000 });
+-    await shot(page, 'j-new-folder-name-already-a-folder');
++    await shot(page, 'j-new-folder-name-already-a-folder-session');
++    const posted5 = sessionsPosted(mJ['wire.jsonl']);
++    check('it goes by its path, as any folder that is there does', posted5.length === 1 && posted5[0].body?.newWorkspace?.workDir === `${REPOS_ROOT}/${NEW_NAME}`, posted5.map((p) => ({ status: p.status, newWorkspace: p.body?.newWorkspace })));
+     const again = fakeSince(mJ['fake-claude.jsonl']).filter((e) => e.kind === 'turn');
+     note('a new folder named after one that exists: the session saw', again.map((t) => ({ cwd: t.cwd, filesBefore: t.filesBefore })));
+-    if (again[0]?.filesBefore?.length) finding('F6', `the card promises "Starts empty" and never looks: a new folder named "${NEW_NAME}", which is still on the disk from the deleted workspace, opened on its old files (${again[0].filesBefore.join(', ')})`);
++    check('and the session opened on the files the card said were there', again[0]?.cwd === `${REPOS_ROOT}/${NEW_NAME}` && again[0]?.filesBefore?.length > 0, again.map((t) => ({ cwd: t.cwd, filesBefore: t.filesBefore })));
+ 
+     await deleteWorkspace(NEW_NAME);
+     await page.getByRole('button', { name: 'Start a session' }).or(page.getByRole('link', { name: 'Start a session' })).first().click();
+     await page.waitForURL(/\/runners\/[^/]+\/new$/);
+     await page.locator('.msc').waitFor();
+     writeFileSync(`${REPOS_ROOT}/taken`, 'a file a person left here\n');
++    const mJ2 = marks();
+     await folderOption('A new folder').click();
+     await page.getByRole('textbox', { name: 'A new folder' }).fill('taken');
+-    await useFolder().click();
+-    await page.locator('.msc-foot.ready').waitFor();
++    const saidFile = await until('the card to say what is at the new folder\'s name', newFolderSays, { timeoutMs: 20_000 });
++    check('a new folder named after a file is refused before anything is sent, and says why',
++      saidFile.includes(`There’s already a file with this name on ${M}. Pick another name.`), saidFile);
++    check('Use this folder stays off', await useFolder().isDisabled());
+     await composerOf().fill('Start here.');
+     await composerOf().press('Enter');
+-    await page.waitForURL(/\/sessions\/[^/]+$/, { timeout: 30_000 });
+-    await sleep(6000);
++    await page.locator('.msc-held').waitFor();
++    await sleep(4000);
+     await shot(page, 'j-new-folder-name-is-a-file');
+-    const collided = psql(`select s.status, s.error from session s order by s.created_at desc limit 1`);
+-    note('a new folder named after a file: the session row\n' + collided);
+-    const said = (await page.locator('body').innerText()).replace(/\n+/g, ' | ');
+-    note('what the page says:', said.slice(0, 700));
+-    check('the session row says the working directory is not a directory', collided.includes(`working directory ${REPOS_ROOT}/taken is not a directory`), collided);
+-    check('the page says so too, and does not blame the engine', said.includes(`working directory ${REPOS_ROOT}/taken is not a directory`) && said.includes('can’t be used') && !said.includes('The engine died') && !said.includes('fork/exec'), said.slice(0, 400));
+-    // The runner logs a run's end and leaves its reason to the session's error, so the log says FAILED and nothing else.
+-    check('the runner log ends the run as FAILED, with no fork/exec about the engine', /→ FAILED/.test(logSince('runner.log', mJ['runner.log'])) && !/fork\/exec/.test(logSince('runner.log', mJ['runner.log'])));
++    check('a message sent now waits: no POST /sessions, and no workspace for the file', sessionsPosted(mJ2['wire.jsonl']).length === 0 && !psql('select work_dir from workspace where deleted_at is null').includes(`${REPOS_ROOT}/taken`));
++    await page.locator('.msc-held-state').getByRole('button', { name: 'Withdraw' }).click();
+     query('round 5: workspace rows', WS_SQL);
+     query('round 5: session rows', `select w.name as workspace, s.created_workspace, w.auto_create_work_dir, w.work_dir, s.status, left(s.error, 120) as error from session s left join workspace w on w.id = s.workspace_id order by s.created_at`);
+     keepLogs('j-round5', mJ);

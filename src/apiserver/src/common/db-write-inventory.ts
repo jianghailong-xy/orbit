@@ -2667,6 +2667,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#decideApproval", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#getWorktreeFileForOwner", class: "ONE_ROW_CAS", statements: 2 },
+  { at: "sessions/sessions.service.ts#nameUntitledImport", class: "ONE_ROW_CAS", statements: 1, note: "An imported session whose transcript carried no title, named from its first prompt: the title moves only while the row still reads the import's placeholder and no project owns it, so a rename made since stands and a second call matches nothing." },
   { at: "sessions/sessions.service.ts#persistLegacyArtifactAttachment", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#pin", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#rememberForWorkspace", class: "INSERT", statements: 1 },

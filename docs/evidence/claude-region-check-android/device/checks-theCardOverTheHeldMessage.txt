@@ -1,0 +1,11 @@
+2026-11-01T02:15:44.054570Z fixture at http://localhost:49203/
+2026-11-01T02:15:44.257300Z signed in to the fixture
+2026-11-01T02:15:44.746958Z PASS the held session's card
+2026-11-01T02:15:44.763525Z PASS the why
+2026-11-01T02:15:44.780035Z PASS the body and its link
+2026-11-01T02:15:44.796752Z PASS the subject
+2026-11-01T02:15:44.814806Z PASS the check line: Checked 10:13 · Claude’s connection: mainland China (no proxy)
+2026-11-01T02:15:44.846896Z PASS the check line wraps, never cut
+2026-11-01T02:15:44.881010Z PASS the foot
+2026-11-01T02:15:44.897043Z PASS no coded sentence anywhere
+2026-11-01T02:15:44.913583Z PASS the waiting message stays

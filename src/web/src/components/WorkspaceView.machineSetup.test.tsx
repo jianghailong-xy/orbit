@@ -80,6 +80,7 @@ interface Machine {
   capabilities: string[];
   registerDir: string | null;
   reposRoot: string | null;
+  lastHeartbeatAt: string | null;
 }
 const austin = (over: Partial<Machine> = {}): Machine => ({
   id: AUSTIN,
@@ -89,6 +90,7 @@ const austin = (over: Partial<Machine> = {}): Machine => ({
   capabilities: ['dir-probe/v1', 'create-workdir/v1'],
   registerDir: REGISTER,
   reposRoot: '/home/orbit/orbit-repos',
+  lastHeartbeatAt: '2026-10-31T09:00:00Z',
   ...over,
 });
 
@@ -376,6 +378,35 @@ describe('rule 1: the page itself', () => {
     expect(said(card()!.querySelector('.msc-notice'))).toContain('orbit@austin is offline');
     await type('Hello');
     expect(sendButton().disabled).toBe(true);
+  });
+
+  it('approved a moment ago and not connected yet: the card waits for it, and a message can wait with it', async () => {
+    runners = [austin({ online: false, lastHeartbeatAt: null, capabilities: [], engines: null })];
+    await open(`/runners/${AUSTIN}/new`);
+    await waitForUi(() => expect(card()).toBeTruthy());
+    expect(said(card()!.querySelector('.msc-notice'))).toBe(
+      'Waiting for orbit@austin to connect. It can check folders and sign in as soon as it does.',
+    );
+    expect(mounted().textContent).not.toContain('updates itself first');
+    expect(composer().placeholder).toBe('Send orbit@austin a task…');
+    await send('Fix the flaky login test');
+    expect(said(held()!.querySelector('.msc-held-state'))).toBe(
+      'Waiting for orbit@austin — sends once both steps are done · Withdraw',
+    );
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('connected, the page sees it within seconds by itself, and the folder step opens', async () => {
+    runners = [austin({ online: false, lastHeartbeatAt: null, capabilities: [], engines: null })];
+    await open(`/runners/${AUSTIN}/new`);
+    await waitForUi(() => expect(card()?.querySelector('.msc-notice')).toBeTruthy());
+    // Its first heartbeat: nothing invalidates the list here, the page's own reads have to find it.
+    runners = [austin()];
+    const beat = Date.now();
+    await waitForUi(() => expect(card()!.querySelector('.msc-notice')).toBeNull());
+    await waitForUi(() => expect(button('Use this folder')!.disabled).toBe(false));
+    expect(Date.now() - beat).toBeLessThan(5_000);
+    expect(mounted().textContent).toContain('Where you ran orbit register');
   });
 
   it('a machine with a workspace has no card: its page goes on to that workspace’s draft', async () => {
@@ -707,10 +738,13 @@ describe('rule 7: what a send makes, once both steps are done', () => {
 
   it('a new folder by its name', async () => {
     runners = [{ ...signedIn(), registerDir: '/home/orbit' }];
+    // Home is where it was registered; nothing is in the Repos Folder yet.
     vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({
       path,
       status: 'done',
-      result: { ...FOUND, path, isGit: false, branch: null, isHome: true },
+      result: path.startsWith('/home/orbit/orbit-repos/')
+        ? { ...FOUND, path, exists: false, isDir: false, isGit: false, branch: null }
+        : { ...FOUND, path, isGit: false, branch: null, isHome: true },
     }));
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(card()?.querySelector('.msc-input input')).toBeTruthy());
@@ -719,6 +753,9 @@ describe('rule 7: what a send makes, once both steps are done', () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'payments-api');
       name.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    // Asked about where it would go before it can be used.
+    await waitForUi(() => expect(button('Use this folder')!.disabled).toBe(false));
+    expect(askDirProbe).toHaveBeenCalledWith(AUSTIN, '/home/orbit/orbit-repos/payments-api');
     await useFolder();
     await send('Clone it first');
     expect(createMock.mock.calls[0][0]).toMatchObject({ newWorkspace: { newFolder: 'payments-api' } });

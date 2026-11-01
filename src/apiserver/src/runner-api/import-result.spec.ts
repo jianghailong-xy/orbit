@@ -46,11 +46,27 @@ function makeController(opts: {
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = { publishSessionUpdated: (id: string) => published.push(id) } as never;
+  const namedImports: string[] = [];
+  const sessions = { nameUntitledImport: async (id: string) => void namedImports.push(id) } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
+    controller: new RunnerApiController(
+      prisma,
+      {} as never,
+      realtime,
+      {} as never,
+      {} as never,
+      {} as never,
+      { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sessions,
+    ),
     updateManyCalls,
     updateCalls,
     published,
+    namedImports,
   };
 }
 
@@ -108,6 +124,30 @@ test('ok may carry the real transcript title, which wins and is announced', asyn
   assert.equal(response.announced, true);
   assert.equal(h.updateManyCalls[0].data.title, '基于第一性原理的设计');
   assert.deepEqual(h.published, [SESSION_ID]);
+});
+
+test('an ok with no transcript title asks for the session to be named from its first prompt', async () => {
+  // Claude writes no ai-title for a `claude -p` or Agent SDK conversation, and the placeholder
+  // would otherwise stand for good: an imported session has no prompt for any naming path to read.
+  const h = makeController();
+
+  await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true });
+
+  assert.deepEqual(h.namedImports, [SESSION_ID]);
+});
+
+test('an ok that carries the transcript title, or applies nothing, names nothing', async () => {
+  const titled = makeController();
+  await importResult(titled.controller, { leaseOwner: LEASE_OWNER, ok: true, title: 'Fix the runner' });
+  assert.deepEqual(titled.namedImports, [], 'the transcript already named it');
+
+  const replayed = makeController({ updateManyCount: 0 });
+  await importResult(replayed.controller, { leaseOwner: LEASE_OWNER, ok: true });
+  assert.deepEqual(replayed.namedImports, [], 'a replayed ok settled nothing, so it names nothing');
+
+  const failed = makeController();
+  await importResult(failed.controller, { leaseOwner: LEASE_OWNER, ok: false, error: 'no conversation' });
+  assert.deepEqual(failed.namedImports, [], 'a failed import is in Trash');
 });
 
 test('a retried ok after a lost reply applies nothing (the CAS matches no row)', async () => {

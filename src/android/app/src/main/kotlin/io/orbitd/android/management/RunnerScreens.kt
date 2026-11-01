@@ -43,13 +43,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -60,6 +63,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.ClaudeRegionCopy
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
@@ -80,6 +85,7 @@ import kotlinx.serialization.json.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /** RunnersModel: the account's runners and workspaces as GET /runners and /workspaces answer them. */
@@ -116,6 +122,27 @@ internal class RunnersModel(private val api: ManagementApi) {
     /** Each press answers null once it went through (then reads again), else why not. */
     suspend fun press(op: suspend () -> Unit): String? = try { op(); load(); null }
         catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+    /** The runners whose Check again is on its way ([checkRegion]): their presses hold until the check they asked for is answered. */
+    var regionChecking by mutableStateOf<Set<String>>(emptySet()); private set
+    /** Check again (docs/claude-region-check-contract.md §7; OrbitKit RunnersModel.checkRegion): the runner checks its Claude region at
+     * once, and the answer lands in its `region` like any other check's — so the runners are read again every two seconds until that
+     * one's `checkedAt` reaches the request, for up to 30 seconds. Null once asked; else why not (offline, too old to check), in the
+     * server's words. */
+    suspend fun checkRegion(id: String): String? {
+        if (id in regionChecking) return null
+        regionChecking = regionChecking + id
+        try {
+            val asked = try { api.post("runners/$id/region-check") as? JsonObject }
+                catch (e: CancellationException) { throw e } catch (e: Exception) { return personalFailure(e) }
+            val askedAt = asked?.str("requestedAt") ?: Instant.now().toString()
+            repeat((ClaudeRegion.CHECK_WAIT_MS / ClaudeRegion.CHECK_POLL_MS).toInt()) {
+                delay(ClaudeRegion.CHECK_POLL_MS)
+                load()
+                if (ClaudeRegion.checkAnswered(runner(id)?.obj("region")?.str("checkedAt"), askedAt)) return null
+            }
+            return null
+        } finally { regionChecking = regionChecking - id }
+    }
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners
@@ -358,6 +385,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     // Checks for its own release now rather than at its next 10-minute check, by the same rules: a turn in flight still holds it.
     fun updateRunner() = scope.launch { notice.show(model.press { api.post("runners/$id/self-update") } ?: RunnerCopy.UPDATE_RUNNER_REQUESTED) }
     fun copy(text: String) { copyText(context, "Orbit", text); notice.show("Copied") }
+    // Check again (docs/claude-region-check-contract.md §7): the press holds until the check it asked for has come back.
+    fun checkRegion() = scope.launch { model.checkRegion(id)?.let { notice.show("${ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED} — $it") } }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now)
@@ -378,6 +407,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }
                             "updateEngines" -> AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
                             "updateRunner" -> AttentionButton(RunnerCopy.UPDATE_RUNNER_NOW) { updateRunner() }
+                            "checkRegion" -> AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = id !in model.regionChecking) { checkRegion() }
                         }
                     }
                 }
@@ -386,15 +416,21 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
             val engineRows = RunnerPage.engines(runner, model.runners)
+            // A machine blocked for the Claude region says why under its engines, and where Claude's connection came out (board 03's
+            // group footnote) — not that a session spends a subscription signed in here, which its Claude ones don't.
+            val regionNote = RunnerPage.claudeRegionNote(runner, now)
             FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
+                regionNote != null -> null
                 offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
                 engineRows.any { it.str("engine") == ProviderEngines.CURSOR } -> CursorCopy.ENGINES_FOOTER
                 else -> RunnerCopy.ENGINES_FOOTER
-            }) {
+            }, footerContent = regionNote?.let { note -> { ClaudeRegionNote(note, offline) } }) {
                 if (runner["engines"] == null || runner["engines"] is JsonNull) Text("This runner hasn’t reported its engines yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
                 engineRows.forEachIndexed { index, health ->
                     if (index > 0) HorizontalDivider()
-                    EngineRow(runner, health, offline, now) { open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${health.text("engine")}")) }
+                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion) {
+                        open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${health.text("engine")}"))
+                    }
                 }
                 if (!offline) {
                     HorizontalDivider()
@@ -582,9 +618,11 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
 
 /** RunnerEngineRow: its version and where its sign-ins stand, a failed update that has become its problem, Sign In when a
  * login it needs is out (or, for an Antigravity that can't sign in with Google here, why not), and one quota window — with
- * several accounts, that of the account a new session starts on, named. */
+ * several accounts, that of the account a new session starts on, named. Claude Code on a machine blocked for the Claude region says
+ * Region not supported, reads no usage and names no next account, and offers Check Again in Sign In's place: a press of its own. */
 @Composable
-private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, open: () -> Unit) {
+private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, checking: Boolean, checkAgain: () -> Unit,
+                      open: () -> Unit) {
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
@@ -612,7 +650,10 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             RunnerPage.updateFailedLine(health, now)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
             cursorHint?.let { Text(it, Modifier.testTag("cursor-state-hint"), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
-            if (hint != null) Text(hint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            if (RunnerPage.claudeRegionBlocked(runner, engine)) Box(Modifier.testTag("engine-row:$engine:check-again")) {
+                AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = !offline && !checking, onClick = checkAgain)
+            }
+            else if (hint != null) Text(hint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
             else if (RunnerPage.needsSignIn(health, runner)) Text(RunnerCopy.SIGN_IN, Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50))
                 .background(if (offline) Ink.muted.copy(alpha = .1f) else MaterialTheme.colorScheme.primary.copy(alpha = .12f)).padding(horizontal = 14.dp, vertical = 6.dp),
                 color = if (offline) Ink.muted else MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
@@ -714,6 +755,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
         restoring = false
     }
     fun install() = scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", engine) }) }) }
+    // A machine blocked for the Claude region keeps Claude Code's accounts as they are, each saying its sign-in alone, and offers Check
+    // Again in Add Account's place (board 03): no Claude sign-in starts there.
+    val regionBlocked = RunnerPage.claudeRegionBlocked(runner, engine)
+    fun checkRegion() = scope.launch { model.checkRegion(id)?.let { notice.show("${ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED} — $it") } }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -729,6 +774,11 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             if (tone == "warn") withStyle(SpanStyle(color = Ink.amber)) { append(text) } else append(text)
                         }
                     }
+                    // The head says so in the machine page's own words for the row.
+                    if (regionBlocked) {
+                        if (length > 0) append(RunnerCopy.SEP)
+                        withStyle(SpanStyle(color = Ink.amber)) { append(ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED) }
+                    }
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
                 // DeepSeek Harness signs nothing in here: each session runs on the DeepSeek key it was started with (board 1 ⑥).
@@ -743,13 +793,19 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             else if (health != null && health.bool("installed") == true && RunnerPage.isLoginEngine(engine)) {
                 // Every Google sign-in on the page starts above this footer, so Google's terms are said here, once.
                 val terms = engine == "antigravity" && RunnerPage.antigravityCanSignIn(runner)
-                FormSection(RunnerPage.accountsTitle(runner, engine), footer = if (offline && !terms) RunnerCopy.ENGINES_OFFLINE_FOOTER else null,
-                    footerContent = if (terms) { { GoogleSignInTerms(); if (offline) FooterText(RunnerCopy.ENGINES_OFFLINE_FOOTER) } } else null) {
+                val regionNote = if (regionBlocked) RunnerPage.claudeRegionNote(runner, now) else null
+                FormSection(RunnerPage.accountsTitle(runner, engine), footer = if (offline && !terms && regionNote == null) RunnerCopy.ENGINES_OFFLINE_FOOTER else null,
+                    footerContent = when {
+                        regionNote != null -> { { ClaudeRegionNote(regionNote, offline) } }
+                        terms -> { { GoogleSignInTerms(); if (offline) FooterText(RunnerCopy.ENGINES_OFFLINE_FOOTER) } }
+                        else -> null
+                    }) {
                     val alone = health.list("accounts").size < 2
                     RunnerPage.accountLines(health, EngineAccounts.usage(engine, runner)).forEachIndexed { index, line ->
                         if (index > 0) HorizontalDivider()
                         AccountRow(api, runner, engine, line, offline, now, signingIn == line.id, next = RunnerPage.marksNext(runner, engine, line.id, now),
                             canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id }, alone = alone,
+                            regionBlocked = regionBlocked,
                             removable = RunnerPage.offersRemove(runner, health, line),
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
@@ -761,7 +817,11 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         HorizontalDivider()
                         RemovedDefaultRow(RunnerPage.removedDefaultLine(removed), busy = restoring) { useAgain(RunnerPage.removedDefaultName(removed)) }
                     }
-                    if (RunnerPage.canAddAccount(runner, engine)) {
+                    if (regionBlocked) {
+                        HorizontalDivider()
+                        TextButton(onClick = { checkRegion() }, enabled = !offline && id !in model.regionChecking,
+                            modifier = Modifier.testTag("engine-page:check-again")) { Text(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) }
+                    } else if (RunnerPage.canAddAccount(runner, engine)) {
                         HorizontalDivider()
                         AddAccountRow(api, model, runner, engine, health, offline, adding = signingIn == "+", start = { signingIn = "+" },
                             close = ::closeSignIn, show = ::show)
@@ -874,7 +934,8 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
-                       close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit) {
+                       close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
+                       regionBlocked: Boolean = false) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -929,11 +990,13 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             line.plan?.let { withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(CursorCopy.plan(it)) }; append(RunnerCopy.SEP) }
             append(CursorCopy.USAGE_UNAVAILABLE + " — " + CursorCopy.usageUnavailable(line.plan))
         }, Modifier.testTag("cursor-usage-unavailable"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(
+        // On a machine blocked for the Claude region an account says its sign-in alone: no quota is read there (web parity).
+        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine) && !regionBlocked) Text(
             if (RunnerPage.accountNoQuotaLimit(runner, engine, line.id)) RunnerCopy.NO_QUOTA_LIMIT else RunnerCopy.NO_QUOTA,
             style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-        // A login about to lapse, said before it does the way Claude Code says it, with the way to renew it beside it.
-        if (!signingIn) RunnerPage.loginExpiresLine(line, now)?.let { expiring ->
+        // A login about to lapse, said before it does the way Claude Code says it, with the way to renew it beside it — but not where
+        // nothing signs it in again.
+        if (!signingIn && !regionBlocked) RunnerPage.loginExpiresLine(line, now)?.let { expiring ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("⚠ $expiring", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink.amber)
                 OutlinedButton(onClick = signIn, enabled = !signInBlocked) { Text(AccountCopy.RENEW) }
@@ -944,7 +1007,7 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.
             AccountPauseLine(line.pausedUntil)
-            RunnerPage.signedOutNote(line, alone, engine)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+            if (!regionBlocked) RunnerPage.signedOutNote(line, alone, engine)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
             // A Default on the machine's Gemini key is not signed in to Google: alone, it offers that sign-in; beside Google
             // accounts, Add Account is where another joins. An account signed in is signed in again from its menu.
             if (canSignIn && (!line.envKey || alone) && line.auth != "yes") OutlinedButton(onClick = signIn, enabled = !signInBlocked) {
@@ -976,6 +1039,21 @@ private fun GoogleSignInTerms() {
 
 @Composable
 private fun FooterText(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+/** What a machine blocked for the Claude region says under its engines, on its page and on Claude Code's (OrbitKit ClaudeRegionNoteView,
+ * board 03's group footnote, the web's note): why, and what still runs there, with Anthropic's Supported regions after it; then when it
+ * was checked and where Claude's connection came out — and, offline, that nothing here can be pressed until it is back. */
+@Composable
+private fun ClaudeRegionNote(region: RunnerPage.RegionNote, offline: Boolean) {
+    val link = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary))
+    Text(buildAnnotatedString {
+        append(region.note + " ")
+        withLink(LinkAnnotation.Url(ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS_URL, link)) { append(ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS) }
+    }, Modifier.testTag("claude-region-note"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    region.checked?.let { Text(it, Modifier.testTag("claude-region-checked"), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    if (offline) FooterText(RunnerCopy.ENGINES_OFFLINE_FOOTER)
+}
 
 /**
  * Add Account: the same sign-in, started by the press under a name the page picks; the name stays editable and is

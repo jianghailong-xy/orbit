@@ -124,6 +124,7 @@ import {
   projectDetailsQuery,
   projectSessionsQuery,
   PROJECT_SESSION_REFRESH_MS,
+  runnersQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectIntegrationQuery,
@@ -481,7 +482,15 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { failureFollowsAnsweredMessage, lastTypedUserMessage } from '../lib/deliveredMessage';
-import { firstEngineOn, machineDraftPath, machineName, newWorkspaceOf } from '../lib/machineSetup';
+import {
+  firstEngineOn,
+  isConnecting,
+  machineDraftPath,
+  machineName,
+  newWorkspaceOf,
+  SETUP_CONNECTING_POLL_MS,
+  SETUP_POLL_MS,
+} from '../lib/machineSetup';
 import {
   composerPlaceholderFor,
   HELD_ALREADY_WAITING,
@@ -3691,6 +3700,17 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  // While the card is up its machine is read every few seconds, and more often while it is still connecting:
+  // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
+  const machineConnecting = bareMachine && isConnecting(runner);
+  useQuery({
+    ...runnersQuery(),
+    enabled: bareMachine,
+    refetchInterval: machineConnecting ? SETUP_CONNECTING_POLL_MS : SETUP_POLL_MS,
+  });
+  // A machine still connecting takes no work, but a message sent on its setup page only waits under the card
+  // (board rule 6), as both steps do: the composer stays open for it. An offline one says so (board 02).
+  const composerTakesWork = runnerTakesWork || machineConnecting;
   const lockedWorkspace = useMemo(
     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
     [workspacesForRunner, lockedWorkspaceId],
@@ -7740,7 +7760,7 @@ export function WorkspaceView({
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      runnerTakesWork &&
+      composerTakesWork &&
       !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
@@ -10148,7 +10168,7 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedDraftBlocked || !runnerTakesWork
+        : managedDraftBlocked || !composerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder

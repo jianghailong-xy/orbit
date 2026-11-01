@@ -1,6 +1,7 @@
 package io.orbitd.android.directory
 
 import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
@@ -171,6 +172,10 @@ internal val DirectorySession.effectiveRunState: RunState get() {
         else -> RunState.UNKNOWN
     }
 }
+
+/** Held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11; web `claudeRegionHeld`): queued, with a region
+ * refusal as its error. Its message waits, and nothing is working on it. */
+internal val DirectorySession.regionHeld: Boolean get() = effectiveRunState == RunState.QUEUED && ClaudeRegion.isRegionError(error)
 
 /** Whether to draw it as working: dispatched, or a turn the runtime started for itself while parked (`isGenerating`). */
 internal val DirectorySession.isGenerating: Boolean get() = effectiveRunState.let { it == RunState.RUNNING || (it == RunState.AWAITING_INPUT && engineTurnActive == true) }

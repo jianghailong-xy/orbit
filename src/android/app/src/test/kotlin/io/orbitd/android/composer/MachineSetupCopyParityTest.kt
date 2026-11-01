@@ -84,9 +84,12 @@ class MachineSetupCopyParityTest {
     private val templates = listOf(
         "setupTitle" to MachineSetupCopy.setupTitle("\\(machine)"),
         "setupOffline" to MachineSetupCopy.setupOffline("\\(machine)"),
+        "setupConnecting" to MachineSetupCopy.setupConnecting("\\(machine)"),
         "setupUpdating" to MachineSetupCopy.setupUpdating("\\(machine)"),
         "setupNeedsUpdate" to MachineSetupCopy.setupNeedsUpdate("\\(machine)"),
         "setupFolderHelp" to MachineSetupCopy.setupFolderHelp("\\(machine)"),
+        "setupNewFolderExists" to MachineSetupCopy.setupNewFolderExists("\\(machine)"),
+        "setupNewFolderIsFile" to MachineSetupCopy.setupNewFolderIsFile("\\(machine)"),
         "setupOtherFolder" to MachineSetupCopy.setupOtherFolder("\\(machine)"),
         "setupChecking" to MachineSetupCopy.setupChecking("\\(machine)"),
         "setupNoSuchDirectory" to MachineSetupCopy.setupNoSuchDirectory("\\(machine)"),
