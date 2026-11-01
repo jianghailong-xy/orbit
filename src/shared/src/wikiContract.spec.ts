@@ -128,6 +128,7 @@ import {
   WIKI_SYSTEM_MODEL_ERROR_KINDS,
   WIKI_SYSTEM_MODEL_READ_STATES,
   WIKI_SYSTEM_MODEL_STATES,
+  WIKI_SYSTEM_MODEL_THINKING,
   wikiWorkerRunning,
   type WikiSystemModelRead,
 } from './wikiSystemModel';
@@ -1705,10 +1706,17 @@ describe('wiki contract', () => {
     for (const file of [model.service.entry, model.status.migration]) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
-    // The worker's four variables, and none of them a name an agent session's environment carries.
+    // The worker's five variables, and none of them a name an agent session's environment carries.
     expect(model.env).toEqual({ ...WIKI_SYSTEM_MODEL_ENV });
     for (const name of Object.values(WIKI_SYSTEM_MODEL_ENV)) expect(name).toMatch(/^ORBIT_WIKI_MODEL(_[A-Z]+)*$/u);
+    expect(model.envRules.onlyOn).toMatch(/holds none of the five/u);
     expect(model.envRules.defaultConcurrency).toBe(WIKI_SYSTEM_MODEL.defaultConcurrency);
+    // The opt-in thinking switch (owner 2026-11-01): its two values, and nothing sent while it is unset, empty or anything else.
+    expect(model.envRules.thinkingValues).toEqual([...WIKI_SYSTEM_MODEL_THINKING]);
+    expect(model.envRules.thinking).toContain('puts thinking: {type: <the value>} into every call\'s body');
+    expect(model.envRules.thinking).toContain('Unset or empty sends no thinking field');
+    expect(model.envRules.thinking).toContain('Any other value is a problem, logged once, and no thinking field is sent');
+    expect(model.envRules.thinking).toContain('request_sha256 do not hold it');
     // A call: the Messages API, streamed, the version pinned, the key as a Bearer, five events read.
     expect(model.request.route).toBe(`POST {baseUrl}${WIKI_SYSTEM_MODEL.messagesPath}`);
     expect(model.request.headers).toEqual({
@@ -1718,6 +1726,8 @@ describe('wiki contract', () => {
     });
     expect(model.request.body).toMatch(/stream: true/u);
     expect(model.request.body).toMatch(/no tools/u);
+    expect(model.request.body).toContain(`thinking: {type: ${WIKI_SYSTEM_MODEL_THINKING.join(' or ')}} only while env.thinking sets it`);
+    expect(model.request.body).toContain('unset or empty the body has no thinking field, byte for byte the body sent before the switch');
     expect(model.request.events).toEqual(['message_start', 'content_block_delta', 'message_delta', 'message_stop', 'error']);
     expect(model.request.idleTimeoutSeconds).toBe(WIKI_SYSTEM_MODEL.idleTimeoutSeconds);
     expect(keysOf(model.request.errors)).toEqual([...WIKI_SYSTEM_MODEL_ERROR_KINDS]);

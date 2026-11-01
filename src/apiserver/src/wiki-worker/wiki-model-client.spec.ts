@@ -156,6 +156,37 @@ test('a call is POST /v1/messages, streamed: one user message, the key as a Bear
   });
 });
 
+test('the thinking switch: with none set the body is byte for byte the one sent before it; disabled and enabled add thinking: {type}', async (t) => {
+  const model = await fakeModel(async (_request, response) => {
+    streamHead(response);
+    await writeSlowly(response, answer(['ok']));
+    response.end();
+  });
+  t.after(() => model.close());
+  // The bytes the client sent before ORBIT_WIKI_MODEL_THINKING existed: these keys, in this order, nothing after stream
+  // (docs/evidence/wiki-model-thinking/body-before.txt has the same shape, captured from the build of 12117d15a).
+  const before = '{"model":"spec-model","max_tokens":1234,"system":"You extract wiki entries.",'
+    + '"messages":[{"role":"user","content":"The dossier."}],"stream":true}';
+  for (const [thinking, body] of [
+    // No setting at all, and the null readWikiSystemModel gives for an unset, empty or unusable variable.
+    [undefined, before],
+    [null, before],
+    ['disabled', `${before.slice(0, -1)},"thinking":{"type":"disabled"}}`],
+    ['enabled', `${before.slice(0, -1)},"thinking":{"type":"enabled"}}`],
+  ] as const) {
+    const sent = model.received.length;
+    const endpoint: WikiModelEndpoint = thinking === undefined ? model.endpoint : { ...model.endpoint, thinking };
+    assert.equal('thinking' in endpoint, thinking !== undefined);
+    assert.equal((await askWikiSystemModel(endpoint, CALL)).text, 'ok');
+    assert.equal(model.received.length, sent + 1);
+    assert.equal(model.received[sent].body, body, `thinking ${String(thinking)}`);
+    // The rest of the call is what it was: the same route and headers, whatever the switch says.
+    assert.equal(model.received[sent].url, '/v1/messages');
+    assert.equal(model.received[sent].headers.authorization, `Bearer ${KEY}`);
+    assert.equal(model.received[sent].headers['content-length'], String(Buffer.byteLength(body)));
+  }
+});
+
 test('the stream is read the same cut anywhere, with CRLF line ends, comments, a [DONE] and events nobody named', async (t) => {
   const stream = [
     ': a comment the server keeps the line open with\n\n',

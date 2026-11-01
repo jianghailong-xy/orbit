@@ -12,7 +12,9 @@
  *      at all until it is up again;
  *   4. a request that waited past its step's limit fails with the wait limit's words, which is the job's cue to fail
  *      as infra;
- *   5. the metrics read the queue's rows: depth, in flight, wait and run quantiles, tokens and errors by status.
+ *   5. the metrics read the queue's rows: depth, in flight, wait and run quantiles, tokens and errors by status;
+ *   6. the worker's thinking switch (ORBIT_WIKI_MODEL_THINKING) rides every call the queue makes, and unset, empty or
+ *      unusable it leaves the body byte for byte as it was.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-model-queue.pg.spec.ts
  *
@@ -49,6 +51,8 @@ type Behaviour = { kind: 'stream'; chunks: string[]; holdAfter?: number } | { ki
 
 interface Hit {
   prompt: string;
+  /** The request's body, as it arrived. */
+  body: string;
 }
 
 interface FakeModel {
@@ -127,13 +131,13 @@ async function fakeModel(): Promise<FakeModel> {
       } catch {
         prompt = '';
       }
-      hits.push({ prompt });
+      hits.push({ prompt, body });
       state.inFlight += 1;
       state.peak = Math.max(state.peak, state.inFlight);
       response.on('close', () => {
         state.inFlight -= 1;
       });
-      const behaviour = state.behaviour.answer({ prompt }, hits.length - 1);
+      const behaviour = state.behaviour.answer({ prompt, body }, hits.length - 1);
       if (behaviour.kind === 'status') {
         response.writeHead(behaviour.status, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
@@ -233,10 +237,10 @@ afterEach(async () => {
  * case waits for a lease to run out, and a loaded machine can stall a process for longer than a short one, which
  * would make a running row read as abandoned; and a lease let out to now must be told from one that was not.
  */
-function scheduler(h: Harness, probe: WikiModelStatusProbe, concurrency = 2): WikiModelRequestQueue {
+function scheduler(h: Harness, probe: WikiModelStatusProbe, concurrency = 2, env: Record<string, string> = {}): WikiModelRequestQueue {
   const queue = new WikiModelRequestQueue(
     h.prisma as unknown as PrismaService,
-    config(h, { ORBIT_WIKI_MODEL_CONCURRENCY: String(concurrency) }),
+    config(h, { ORBIT_WIKI_MODEL_CONCURRENCY: String(concurrency), ...env }),
     probe,
     undefined,
     { leaseMs: WIKI_MODEL_QUEUE.leaseSeconds * 1000, renewMs: 100, partialMs: 40, pollMs: 30 },
@@ -608,4 +612,33 @@ test('the metrics read the queue\'s rows: depth, in flight, wait and run, tokens
   assert.equal((await request(h, waiting)).state, 'queued');
   assert.equal((await request(h, ok)).state, 'succeeded');
   assert.equal((await request(h, other)).state, 'failed');
+});
+
+test('the worker\'s thinking switch rides every call the queue makes; unset, empty or unusable, the body is as it was', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const probe = await modelUp(h);
+  // The body a call made before the switch existed: these keys, in this order (wiki-model-client.spec.ts pins the same).
+  const before = (prompt: string) => JSON.stringify({
+    model: MODEL, max_tokens: 32, system: 's', messages: [{ role: 'user', content: prompt }], stream: true,
+  });
+  for (const [setting, thinking] of [
+    [undefined, null],
+    ['', null],
+    ['disabled', 'disabled'],
+    ['enabled', 'enabled'],
+    ['off', null],
+  ] as const) {
+    const prompt = `thinking ${setting === undefined ? 'unset' : JSON.stringify(setting)}`;
+    const queue = scheduler(h, probe, 2, setting === undefined ? {} : { ORBIT_WIKI_MODEL_THINKING: setting });
+    const id = await enqueue(h, 'extract', prompt, { prompt });
+    assert.equal(await queue.runOnce(), 1, prompt);
+    await queue.whenIdle();
+    await queue.onModuleDestroy();
+    assert.equal((await request(h, id)).state, 'succeeded', prompt);
+    const sent = h.model.hits.filter((hit) => hit.prompt === prompt);
+    assert.equal(sent.length, 1, prompt);
+    const body = before(prompt);
+    assert.equal(sent[0].body, thinking === null ? body : `${body.slice(0, -1)},"thinking":{"type":"${thinking}"}}`, prompt);
+  }
 });
