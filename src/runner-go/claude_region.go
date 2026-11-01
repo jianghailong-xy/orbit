@@ -8,19 +8,24 @@ package main
 // place off Cloudflare's headers on one request that leaves the same way (GET /runner/region-check, §3) and
 // answers allowed, blocked or unknown; the runner carries no list of its own. While the answer is blocked, a
 // Claude turn that would talk to Anthropic (§8) is not started, and a message is not delivered to a running
-// engine (§10). An answer that cannot decide keeps the last decided verdict for 24 hours (owner decision ③), and
-// a flip to blocked that a second check a minute later confirms stops the turns already running (④).
+// engine (§10). An answer that cannot decide keeps the last decided verdict for 24 hours (owner decision ③), across
+// a restart too (claudeRegionStorePath), and a flip to blocked that a second check a minute later confirms stops the
+// turns already running (④).
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,11 +103,20 @@ type claudeRegionCheck struct {
 	// One check at a time. A turn that finds one in flight waits for its answer rather than asking again.
 	checking sync.Mutex
 
+	// store is the file that keeps each proxy's last decided answer for the next start (claudeRegionStorePath), ""
+	// for a check that keeps nothing on disk.
+	store string
+	// kept says what the store held when the check was made, for the runner's log.
+	kept string
+
 	mu sync.Mutex
 	// latest is the newest answer through each proxy, unknown included: what a turn goes on while it is fresh.
 	latest map[string]claudeRegionVerdict
-	// decided is the last decided (allowed or blocked) answer through each proxy, with its decidedAt.
+	// decided is the last decided (allowed or blocked) answer through each proxy, with its decidedAt, by the proxy's
+	// key (claudeRegionProxyKey): those the store kept from before this start, then this process's own.
 	decided map[string]claudeRegionVerdict
+	// storeFailed is set once a write to the store has failed and been logged.
+	storeFailed bool
 	// flips is the flip to blocked through each proxy that no allowed answer has ended yet (noteFlipLocked).
 	flips map[string]*claudeRegionFlip
 	// engines is every Claude engine running now whose turns talk to Anthropic (register): what a confirmed
@@ -126,11 +140,107 @@ type claudeRegionEngine struct {
 	stop func(sentence string)
 }
 
-func newClaudeRegionCheck(t *Transport, machine string) *claudeRegionCheck {
+// newClaudeRegionCheck is a check for the runner named machine that asks through t, starting from the decided
+// answers store kept (loadClaudeRegionKept), and keeping its own there; "" keeps nothing on disk.
+func newClaudeRegionCheck(t *Transport, machine, store string) *claudeRegionCheck {
+	decided, kept := loadClaudeRegionKept(store, time.Now())
 	return &claudeRegionCheck{
-		t: t, machine: machine, clock: realPoolClock{},
-		latest: map[string]claudeRegionVerdict{}, decided: map[string]claudeRegionVerdict{},
+		t: t, machine: machine, clock: realPoolClock{}, store: store, kept: kept,
+		latest: map[string]claudeRegionVerdict{}, decided: decided,
 		flips: map[string]*claudeRegionFlip{}, engines: map[*claudeRegionEngine]struct{}{},
+	}
+}
+
+// claudeRegionStorePath is where the runner keeps each proxy's last decided answer, beside its config, so that a
+// runner that starts again carries a blocked verdict over until 24 hours after its decidedAt, as one that kept
+// running would: a restart extends nothing. orbit doctor keeps its answers there too.
+func claudeRegionStorePath() string { return filepath.Join(machineHome(), "claude-region.json") }
+
+// claudeRegionKept is a decided answer as the store keeps it: the six fields a decided answer replaces in
+// runner.region (§4), and nothing else.
+type claudeRegionKept struct {
+	Verdict    string    `json:"verdict"`
+	Country    string    `json:"country"`
+	RegionCode string    `json:"regionCode"`
+	Name       string    `json:"name"`
+	ViaProxy   bool      `json:"viaProxy"`
+	DecidedAt  time.Time `json:"decidedAt"`
+}
+
+// claudeRegionProxyKey is what the answers through proxy are kept under: a SHA-256 of it, never the proxy itself,
+// whose URL can hold credentials, and which is an address (§4 keeps addresses out of what is stored).
+func claudeRegionProxyKey(proxy string) string {
+	sum := sha256.Sum256([]byte(proxy))
+	return hex.EncodeToString(sum[:])
+}
+
+// loadClaudeRegionKept reads the decided answers kept at path, by proxy key, with a line for the runner's log that
+// says what it found. A missing or unreadable file carries nothing over, nor does an entry that is not a decided
+// answer or is stamped after now, which cannot say how old it is: the check then starts as one that has decided
+// nothing, which holds no turn back (owner decision ③).
+func loadClaudeRegionKept(path string, now time.Time) (map[string]claudeRegionVerdict, string) {
+	decided := map[string]claudeRegionVerdict{}
+	if path == "" {
+		return decided, ""
+	}
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return decided, "Claude region: no decided answer kept from before this start"
+	}
+	var kept map[string]claudeRegionKept
+	if err == nil {
+		err = json.Unmarshal(b, &kept)
+	}
+	if err != nil {
+		return decided, "Claude region: the answers kept from before this start can't be read, so none is carried over (" +
+			err.Error() + ")"
+	}
+	var found []string
+	skipped := 0
+	for key, k := range kept {
+		if (k.Verdict != claudeRegionAllowed && k.Verdict != claudeRegionBlocked) || k.DecidedAt.IsZero() || k.DecidedAt.After(now) {
+			skipped++
+			continue
+		}
+		decided[key] = claudeRegionVerdict{Verdict: k.Verdict, Country: k.Country, RegionCode: k.RegionCode, Name: k.Name,
+			ViaProxy: k.ViaProxy, At: k.DecidedAt}
+		how := "directly"
+		if k.ViaProxy {
+			how = "through a proxy"
+		}
+		found = append(found, how+": "+k.Verdict+" — "+k.Name+", decided "+k.DecidedAt.UTC().Format(time.RFC3339))
+	}
+	slices.Sort(found)
+	line := "Claude region: kept from before this start — " + strings.Join(found, "; ")
+	if len(found) == 0 {
+		line = "Claude region: no decided answer kept from before this start"
+	}
+	if skipped > 0 {
+		line += fmt.Sprintf(" (%d kept answer(s) skipped: not decided, or stamped later than now)", skipped)
+	}
+	return decided, line
+}
+
+// storeLocked keeps v, a decided answer through the proxy keyed key, in the store for the runner's next start, beside
+// what the store holds for every other proxy; a store it cannot read is written anew. Best effort, as the update
+// records are: a store that cannot be written changes nothing else, and is logged once.
+func (c *claudeRegionCheck) storeLocked(key string, v claudeRegionVerdict) {
+	if c.store == "" {
+		return
+	}
+	var kept map[string]claudeRegionKept
+	if b, err := os.ReadFile(c.store); err != nil || json.Unmarshal(b, &kept) != nil || kept == nil {
+		kept = map[string]claudeRegionKept{}
+	}
+	kept[key] = claudeRegionKept{Verdict: v.Verdict, Country: v.Country, RegionCode: v.RegionCode, Name: v.Name,
+		ViaProxy: v.ViaProxy, DecidedAt: v.At.UTC()}
+	b, err := json.Marshal(kept)
+	if err == nil {
+		err = writeFileAtomically(c.store, b, configFilePerm)
+	}
+	if err != nil && !c.storeFailed {
+		c.storeFailed = true
+		logln("Claude region: can't keep the answer for the next start:", err)
 	}
 }
 
@@ -164,15 +274,15 @@ func (c *claudeRegionCheck) forTurn(ctx context.Context) claudeRegionVerdict {
 
 // carriedOver is what an answer through proxy means (owner decision ③, contract §5): a decided one is itself, and
 // an unknown one is the last decided verdict through proxy while that is blocked and under claudeRegionCarryOver
-// old, so a check that cannot decide never lets through what a decided one holds back. Otherwise it stays unknown,
-// which is allowed.
+// old, so a check that cannot decide never lets through what a decided one holds back, whether this process or one
+// before it decided it. Otherwise it stays unknown, which is allowed.
 func (c *claudeRegionCheck) carriedOver(proxy string, v claudeRegionVerdict) claudeRegionVerdict {
 	if v.Verdict != claudeRegionUnknown {
 		return v
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if last, ok := c.decided[proxy]; ok && claudeRegionHolds(last, c.now()) {
+	if last, ok := c.decided[claudeRegionProxyKey(proxy)]; ok && claudeRegionHolds(last, c.now()) {
 		return last
 	}
 	return v
@@ -191,11 +301,12 @@ func (c *claudeRegionCheck) fresh(proxy string) (claudeRegionVerdict, bool) {
 	return v, ok && c.now().Sub(v.At) < claudeRegionFreshFor
 }
 
-// lastDecided is the last decided answer through proxy, if any check through it has decided.
+// lastDecided is the last decided answer through proxy, if any check through it has decided: this process's, or
+// one the store kept from before it started.
 func (c *claudeRegionCheck) lastDecided(proxy string) (claudeRegionVerdict, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v, ok := c.decided[proxy]
+	v, ok := c.decided[claudeRegionProxyKey(proxy)]
 	return v, ok
 }
 
@@ -254,13 +365,15 @@ func (c *claudeRegionCheck) checkLocked(ctx context.Context, proxy string) claud
 	return v
 }
 
-// keepLocked records answer v through proxy: the newest answer, the decided one, and the flip it moves
-// (noteFlipLocked), whose report it returns.
+// keepLocked records answer v through proxy: the newest answer, the decided one, which the store keeps for the next
+// start (storeLocked), and the flip it moves (noteFlipLocked), whose report it returns.
 func (c *claudeRegionCheck) keepLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
 	stopping, confirmed = c.noteFlipLocked(proxy, v)
 	c.latest[proxy] = v
 	if v.Verdict != claudeRegionUnknown {
-		c.decided[proxy] = v
+		key := claudeRegionProxyKey(proxy)
+		c.decided[key] = v
+		c.storeLocked(key, v)
 	}
 	return stopping, confirmed
 }
@@ -277,11 +390,12 @@ func (c *claudeRegionCheck) keep(proxy string, v claudeRegionVerdict) {
 // noteFlipLocked keeps the flip through proxy up to date with answer v, and reports whether v stops the running
 // turns, and whether v is the answer that confirms the flip (owner decision ④, contract §10). A blocked answer while
 // turns through proxy run — the last decided verdict allowed, none decided yet, or a blocked one past its
-// carry-over — starts a flip, and the check is made again claudeRegionRecheckAfter later. A blocked answer at least
-// that long after the flip's first confirms it, and it and every blocked answer after it stop what is running then:
-// a turn an engine starts on its own after the confirmation is stopped by the next one. An allowed answer ends the
-// flip. An unknown one leaves it standing, as it leaves the verdict: the next decided answer, the recheck's or a
-// later one, settles it.
+// carry-over — starts a flip, and the check is made again claudeRegionRecheckAfter later; so does the first blocked
+// answer in a process with no flip of its own, such as a runner started on a blocked verdict the store kept, which
+// held its turns back meanwhile. A blocked answer at least that long after the flip's first confirms it, and it and
+// every blocked answer after it stop what is running then: a turn an engine starts on its own after the confirmation
+// is stopped by the next one. An allowed answer ends the flip. An unknown one leaves it standing, as it leaves the
+// verdict: the next decided answer, the recheck's or a later one, settles it.
 func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) (stopping, confirmed bool) {
 	flip := c.flips[proxy]
 	switch v.Verdict {
@@ -293,7 +407,7 @@ func (c *claudeRegionCheck) noteFlipLocked(proxy string, v claudeRegionVerdict) 
 			delete(c.flips, proxy)
 		}
 	case claudeRegionBlocked:
-		if last, ok := c.decided[proxy]; flip == nil || !ok || !claudeRegionHolds(last, v.At) {
+		if last, ok := c.decided[claudeRegionProxyKey(proxy)]; flip == nil || !ok || !claudeRegionHolds(last, v.At) {
 			if flip != nil && flip.recheck != nil {
 				flip.recheck.Stop()
 			}

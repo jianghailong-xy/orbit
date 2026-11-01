@@ -358,7 +358,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     @Composable
     fun MemberRow(session: DirectorySession) {
         val view = if (session.effectiveLifecycleState == "COMPLETED") SessionView.COMPLETED else SessionView.OPEN
-        SessionRow(session, { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) }) {
+        SessionRow(session, data.machineName(session.workspace), { open(OrbitRoute(Destination.SESSION, session.id, route.workspaceId, origin = Origin.LIST)) }) {
             action = DirectoryDialog.SessionMenu(session, view)
         }
     }

@@ -24,7 +24,10 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.management.RunnerPage
+import io.orbitd.android.management.text
 import io.orbitd.android.navigation.*
 import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.ui.LocalOrbitColors
@@ -127,7 +130,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                             if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
                                 projectMenu = project
                             }
-                            else SessionRow(session, { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
+                            else SessionRow(session, data.machineName(session.workspace),
+                                { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
                                 { action = DirectoryDialog.SessionMenu(session, view) })
                         }
                     }
@@ -201,8 +205,10 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
     }
 }
 
+/** A session's row. [machine] is the runner it runs on, by name: a session held for the Claude region says Anthropic is unavailable
+ * there (web `statusLabel`, OrbitKit `SessionHeader.statusWord`), where it is known. */
 @Composable
-fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> Unit) {
+fun SessionRow(session: DirectorySession, machine: String?, onOpen: () -> Unit, onOptions: () -> Unit) {
     ListItem(headlineContent = { Text(session.name) }, supportingContent = {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (session.pendingApprovals == 0 && session.confirmationUnderReview != null) Row(verticalAlignment = Alignment.CenterVertically,
@@ -210,7 +216,8 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
                 // iOS's clock glyph for a run whose report is with its reviewer, in the quiet tone (A08-1).
                 Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(session.stateLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else Text(session.stateLabel, color = if (session.pendingApprovals > 0) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Text(ClaudeRegion.heldWords(session.regionHeld, machine) ?: session.stateLabel, Modifier.testTag("session-state:${session.id}"),
+                color = if (session.pendingApprovals > 0) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
             // The second line, in the web's order (`sessionLine`): a message of yours that has no answer yet, then the server's
             // rolling recap, then the raw last reply. Off with the account's Session recaps switch, the recap is skipped as
             // though the row never had one. The line is the sentence alone, and the row draws no tags (the owner, 2026-10-22):
@@ -225,6 +232,13 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
         }
     }, trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${session.name}") } },
         modifier = Modifier.clickable(role = Role.Button, onClick = onOpen))
+}
+
+/** The machine a workspace's sessions run on, by the name its page gives it (web `machineName(runner)`): what a session held for the
+ * Claude region says Anthropic is unavailable on. Null before the runners are read. */
+internal fun DirectoryData.machineName(workspaceId: String?): String? {
+    val runnerId = workspaces.firstOrNull { ObjectId.same(it.id, workspaceId) }?.runnerId ?: return null
+    return effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) }?.let(RunnerPage::displayName)
 }
 
 /**
