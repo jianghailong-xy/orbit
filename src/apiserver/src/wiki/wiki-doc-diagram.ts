@@ -8,7 +8,7 @@ import { WIKI_DOC_DIAGRAM_RULES } from '@orbit/shared';
  * past the rules' sizes: the caller drops the block.
  *
  * What the diagram shows — each node's label (its id where it has none), each link's label and each subgraph's title —
- * comes back with it, for the check against the section's sourced sentences (wiki-docs.ts `keepSourcedDiagrams`).
+ * comes back with it, for the check against the document's verified text (wiki-docs.ts `keepSourcedDiagrams`).
  */
 export interface WikiDocDiagram {
   /** The flowchart written out again: the diagram block's text, which a page draws. */
