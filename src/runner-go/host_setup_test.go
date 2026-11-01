@@ -27,6 +27,8 @@ func (f *fakeHostRunner) run(name string, args ...string) error {
 func testHostEnv(t *testing.T, euid int) (hostSetupEnv, *fakeHostRunner, string) {
 	t.Helper()
 	root := t.TempDir()
+	// It stands for /, which every account can enter; t.TempDir() makes it 0700.
+	chmod(t, root, 0o755)
 	cmds := &fakeHostRunner{}
 	return hostSetupEnv{
 		prefix:     root,
@@ -383,7 +385,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 		want: []string{
 			"refusing to set this host up with {root}/home/alice/.orbit/bin/orbit: it belongs to uid {uid} rather than root.\n",
 			"\nPut a root-owned copy in place, then set the host up from it:\n" +
-				"  sudo install -o root -g root -m 0755 {root}/home/alice/.orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo install -o 0 -g 0 -m 0755 {root}/home/alice/.orbit/bin/orbit /usr/local/bin/orbit\n" +
 				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}, {
@@ -445,7 +447,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 		want: []string{
 			"refusing to set this host up with {root}/opt/orbit/bin/orbit: {root}/opt/orbit, a directory above it, is not root's alone (owned by uid {account}, mode 0755).\n",
 			"\nPut a root-owned copy in place, then set the host up from it:\n" +
-				"  sudo install -o root -g root -m 0755 {root}/opt/orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo install -o 0 -g 0 -m 0755 {root}/opt/orbit/bin/orbit /usr/local/bin/orbit\n" +
 				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}, {
@@ -488,7 +490,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 		},
 		want: []string{
 			"refusing to set this host up with {root}/tmp/orbit: its directory {root}/tmp is a shared directory anyone can write (mode 1777).\n",
-			"\n  sudo install -o root -g root -m 0755 {root}/tmp/orbit /usr/local/bin/orbit\n" +
+			"\n  sudo install -o 0 -g 0 -m 0755 {root}/tmp/orbit /usr/local/bin/orbit\n" +
 				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}} {
@@ -542,6 +544,106 @@ func TestHostSetupAcceptsDirectoriesOnceTheirGroupCannotWrite(t *testing.T) {
 	}
 	if last := cmds.calls[len(cmds.calls)-1]; last != "systemctl enable --now orbit-hostd.socket" {
 		t.Errorf("setup must finish by starting the broker, ended with %q", last)
+	}
+}
+
+// Every account's runner runs the binary setup names in ExecStart= as that account, so setup
+// also refuses one other accounts cannot execute — root's own copy above all, which install.sh
+// puts in root's 0700 home — before it writes or runs anything, naming every level closed to
+// others and what to run instead.
+func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		arrange func(t *testing.T, env *hostSetupEnv, root string)
+		// What the error must say. {root} is the directory standing in for /.
+		want []string
+	}{{
+		name: "in /root, which others cannot enter",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, "/root/.orbit/bin/orbit")
+			chmod(t, filepath.Join(root, "/root"), 0o700)
+			env.executable = func() (string, error) { return "/root/.orbit/bin/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/root/.orbit/bin/orbit: {root}/root, a directory above it, cannot be entered by others (mode 0700).\n",
+			"\nPut a root-owned copy in place, then set the host up from it:\n" +
+				"  sudo install -o 0 -g 0 -m 0755 {root}/root/.orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "root's own copy, as install.sh leaves it",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			// mktemp's 0600 made executable, in a ~/.orbit made 0700, in /root.
+			chmod(t, placeBinary(t, root, "/root/.orbit/bin/orbit"), 0o711)
+			chmod(t, filepath.Join(root, "/root/.orbit"), 0o700)
+			chmod(t, filepath.Join(root, "/root"), 0o700)
+			env.executable = func() (string, error) { return "/root/.orbit/bin/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/root/.orbit/bin/orbit: {root}/root/.orbit, a directory above it, cannot be entered by others (mode 0700); " +
+				"{root}/root, a directory above it, cannot be entered by others (mode 0700).\n",
+			"\n  sudo install -o 0 -g 0 -m 0755 {root}/root/.orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "a binary others cannot execute",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			chmod(t, placeBinary(t, root, "/opt/orbit/orbit"), 0o750)
+			env.executable = func() (string, error) { return "/opt/orbit/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/opt/orbit/orbit: others cannot execute it (mode 0750).\n",
+			"\nPut a root-owned copy in place, then set the host up from it:\n" +
+				"  sudo install -o 0 -g 0 -m 0755 {root}/opt/orbit/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		// Already where the machine's binary belongs, where a copy would land on itself.
+		name: "the machine's binary, which others cannot execute",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			chmod(t, placeBinary(t, root, machineBinaryPath), 0o700)
+		},
+		want: []string{
+			"refusing to set this host up with {root}/usr/local/bin/orbit: others cannot execute it (mode 0700).\n",
+			"\nLet every account run it, then set the host up again:\n" +
+				"  sudo chmod o+x {root}/usr/local/bin/orbit\n" +
+				"  sudo orbit host setup --server https://orbit.example.com",
+		},
+	}, {
+		name: "the machine's binary in a directory others cannot enter",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, machineBinaryPath)
+			chmod(t, filepath.Join(root, "/usr/local/bin"), 0o750)
+		},
+		want: []string{
+			"refusing to set this host up with {root}/usr/local/bin/orbit: its directory {root}/usr/local/bin cannot be entered by others (mode 0750).\n",
+			"\n  sudo chmod o+x {root}/usr/local/bin\n" +
+				"  sudo orbit host setup --server https://orbit.example.com",
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, cmds, root := testHostEnv(t, 0)
+			tc.arrange(t, &env, root)
+			before := installedFiles(t, root)
+
+			err := hostSetup(env, "https://orbit.example.com")
+			if err == nil {
+				t.Fatal("setup accepted a binary other accounts cannot execute")
+			}
+			fill := strings.NewReplacer("{root}", root)
+			for _, want := range tc.want {
+				if want = fill.Replace(want); !strings.Contains(err.Error(), want) {
+					t.Errorf("the error must say %q, got:\n%v", want, err)
+				}
+			}
+			// Refused before it began: not one file written, not one command run.
+			if after := installedFiles(t, root); strings.Join(after, "\n") != strings.Join(before, "\n") {
+				t.Errorf("a refused setup wrote files:\nbefore: %v\nafter:  %v", before, after)
+			}
+			if len(cmds.calls) != 0 {
+				t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
+			}
+		})
 	}
 }
 
