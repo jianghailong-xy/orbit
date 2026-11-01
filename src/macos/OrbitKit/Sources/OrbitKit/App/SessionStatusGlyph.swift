@@ -52,9 +52,10 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     public static let offlineLabel = "Disconnected — runner went offline"
 
     /// The glyph for a session. Lifecycle location never overrides the run's actual state.
-    /// `watching` is the session as an observer (see `SessionHeader.statusWord`).
+    /// `watching` is the session as an observer, and `machine` the runner it runs on, whose name a
+    /// session held for the Claude region says (see `SessionHeader.statusWord`).
     public static func make(for s: Session, watching: WatchSessionSummary? = nil,
-                            now: Date = Date()) -> SessionStatusGlyph {
+                            now: Date = Date(), machine: String? = nil) -> SessionStatusGlyph {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
@@ -65,7 +66,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              retryPending: s.retryPending(now: now),
              watchingLabel: watching?.word,
              waitingKind: s.waitingKind,
-             underReview: s.confirmationUnderReview != nil)
+             underReview: s.confirmationUnderReview != nil,
+             heldLabel: ClaudeRegion.heldWords(s, machine: machine))
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -103,7 +105,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             retryPending: Bool = false,
                             watchingLabel: String? = nil,
                             waitingKind: SessionWaitingKind? = nil,
-                            underReview: Bool = false) -> SessionStatusGlyph {
+                            underReview: Bool = false,
+                            heldLabel: String? = nil) -> SessionStatusGlyph {
         // Somebody waiting on YOU outranks everything else — first, and outside the generating gate,
         // exactly as it is in the word beside this glyph (`SessionHeader.statusWord`) and in the web
         // `StatusIcon` both mirror. The two are read together on one row: a pause glyph labelled
@@ -125,7 +128,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         }
         switch runState {
         case .queued:
-            return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
+            // Held for the Claude region, the clock says what the row says (web `StatusIcon`).
+            return .init(shape: .symbol("clock"), tone: .neutral, label: heldLabel ?? "Queued")
 
         case .running:
             return generating()

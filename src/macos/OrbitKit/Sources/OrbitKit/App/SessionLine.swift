@@ -30,9 +30,11 @@ public struct SessionLine: Equatable, Sendable {
     /// `watching` is the session as an observer: parked with a live watch that will resume it.
     /// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off
     /// means the row falls through to the raw reply exactly as it did before the recap existed. It
-    /// gates that one line and nothing else — every live line above it is untouched.
+    /// gates that one line and nothing else — every live line above it is untouched. `machine` is the
+    /// runner the session runs on, by name: a session held for the Claude region says that Anthropic is
+    /// unavailable there (`ClaudeRegion.heldWords`), where it is known.
     public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil,
-                            recaps: Bool = true) -> SessionLine {
+                            recaps: Bool = true, machine: String? = nil) -> SessionLine {
         // Somebody is waiting on YOU here, which outranks everything else the row could say: every
         // other line reports what the agent is doing, and this one is the only one you can act on.
         //
@@ -72,7 +74,7 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "Running…", tone: .running)
         }
         if live && s.effectiveRunState == .queued {
-            return SessionLine(text: "Queued", tone: .queued)
+            return SessionLine(text: ClaudeRegion.heldWords(s, machine: machine) ?? "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's

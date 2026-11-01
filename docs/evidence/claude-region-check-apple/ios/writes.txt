@@ -1,0 +1,11 @@
+    POST /__reset body: 
+    POST /__reset body: 
+    POST /api/runners/hpc/region-check body: 
+    POST /__reset body: 
+    PATCH /api/sessions/S1/config body: {"permissionMode":"default","effort":"high","model":"deepseek-v4.1-flash","provider":"deepseek"}
+    POST /__reset body: 
+    POST /__reset body: 
+    POST /__reset body: 
+    POST /__reset body: 
+    POST /api/runners/hpc/region-check body: 
+    POST /__reset body: 

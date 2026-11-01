@@ -1390,7 +1390,9 @@ struct NewSessionView: View {
                                     else { app.openRunnerEngine(rid, engine: engine) }
                                 }
                             } label: {
-                                Text("\(blocker) on this runner · Fix it")
+                                // A reason nothing on the page fixes — the runner's Claude region —
+                                // links to its explanation rather than a fix (web parity).
+                                Text("\(blocker) on this runner · \(currentProviderChoice.regionBlocked ? ClaudeRegionCopy.CLAUDE_REGION_DETAILS : "Fix it")")
                                     .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
                                     .multilineTextAlignment(.center)
                             }
@@ -1606,8 +1608,11 @@ struct AgentSessionRow: View {
     // it and no "Recap · <time>" before it (the owner, 2026-10-22). Tags are filed and filtered by.
     private var line: SessionLine {
         SessionLine.make(for: session, live: !deleted, watching: watching,
-                         recaps: app.user?.preferences?.showRecaps ?? true)
+                         recaps: app.user?.preferences?.showRecaps ?? true, machine: machine)
     }
+    /// The machine the session runs on: a session held for the Claude region names it ("Anthropic
+    /// unavailable on HPC", web `sessionLine`'s `machine`).
+    private var machine: String? { app.agents?.machineName(for: session) }
 
     var body: some View {
         #if os(iOS)
@@ -1630,7 +1635,7 @@ struct AgentSessionRow: View {
                 .fill(isPinned ? Color.accentColor : .clear)
                 .frame(width: 3)
             HStack(spacing: 8) {
-                StatusGlyphView(glyph: .make(for: session, watching: watching))
+                StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title ?? "Untitled session").lineLimit(1)
                     HStack(spacing: 7) {
@@ -1687,7 +1692,7 @@ struct AgentSessionRow: View {
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching))
+        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
     }
 
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
@@ -1716,7 +1721,7 @@ struct AgentSessionRow: View {
         // done, queued) would otherwise no longer announce their status the way the dropped leading
         // glyph did. `statusWord` is the shared, tested port of web's `statusLabel`.
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching))
+        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner

@@ -1282,7 +1282,9 @@ struct ComposerView: View {
     private func providerRowLabel(_ choice: ProviderChoice, blocked: Bool, fixable: Bool) -> some View {
         let selected = choice.slug == console.provider
         if blocked {
-            let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
+            // The runner's Claude region is a reason nothing here fixes: the row names no fix, and its
+            // press still opens the machine's Claude Code page, which explains (web parity).
+            let fix = fixable && !choice.regionBlocked ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
             menuItemLabel("\(SessionProviderChoices.providerName(on: console.engine, choice)) — \(choice.unavailable ?? "")\(fix)",
                           selected: false)
         } else {
