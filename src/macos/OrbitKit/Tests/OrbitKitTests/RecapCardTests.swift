@@ -105,6 +105,7 @@ final class RecapCardTests: XCTestCase {
     func testTheWordsAreTheWebCardsWords() throws {
         let web = try webSource("src/web/src/components/SessionRecapCard.tsx")
         XCTAssertTrue(web.contains("word: '\(RecapCard.word)'"))
+        XCTAssertTrue(web.contains("more: '\(RecapCard.more)'"))
         XCTAssertTrue(web.contains("refresh: '\(RecapCard.refresh)'"))
         XCTAssertTrue(web.contains("hide: '\(RecapCard.hide)'"))
         XCTAssertTrue(web.contains("upToDate: '\(RecapCard.upToDate)'"))

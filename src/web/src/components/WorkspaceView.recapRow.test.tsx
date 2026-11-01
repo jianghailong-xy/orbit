@@ -266,7 +266,7 @@ describe('the opened conversation over a recapped session', { timeout: 60_000 },
     expect(card.querySelector('.chat-recap-word')?.textContent).toBe('Recap');
     expect(card.querySelector('.chat-recap-when')?.textContent).toBe(`· ${clock(RECAP_AT)}`);
     expect(card.querySelector('.chat-recap-text')?.textContent).toBe(RECAP_TEXT);
-    expect(card.querySelector('button')?.getAttribute('aria-label')).toBe('Refresh recap');
+    expect(card.querySelector('button')?.getAttribute('aria-label')).toBe('Recap actions');
   });
 
   it('steps aside for the visit once a turn starts, and stays aside when the session parks again', async () => {
@@ -301,7 +301,7 @@ describe('the opened conversation over a recapped session', { timeout: 60_000 },
     expect(recapCard()).toBeNull();
   });
 
-  it('hides its recap with ×, on this device and only in this conversation, until a newer one is written', async () => {
+  it('hides its recap from its ⋯, on this device and only in this conversation, until a newer one is written', async () => {
     // A working storage for this test: the hidden recap is remembered in it across a reopen.
     const stored = new Map<string, string>();
     vi.stubGlobal('localStorage', {
@@ -314,8 +314,14 @@ describe('the opened conversation over a recapped session', { timeout: 60_000 },
     await act(async () => {
       await vi.waitFor(() => expect(recapCard()).not.toBeNull(), { timeout: 20_000, interval: 20 });
     });
-    const hide = recapCard()!.querySelector<HTMLButtonElement>('.chat-recap-hide')!;
-    expect(hide.getAttribute('aria-label')).toBe('Hide recap');
+    await act(async () => {
+      recapCard()!.querySelector<HTMLButtonElement>('button[aria-label="Recap actions"]')!.click();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(document.body.querySelector('[role="menu"]')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    const hide = [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')]
+      .find((item) => item.textContent?.trim() === 'Hide recap')!;
     await act(async () => {
       hide.click();
     });

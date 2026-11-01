@@ -72,9 +72,11 @@ private val recapDay = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 internal object RecapCardCopy {
     /** The card's name, over the recap. */
     const val word = "Recap"
-    /** The refresh button, as TalkBack reads it. */
+    /** The ⋮ at the end of the recap that holds Refresh and Hide (2026-11-02, 07-last-line B), as TalkBack reads it. */
+    const val more = "Recap actions"
+    /** The menu's item that writes the recap again now. */
     const val refresh = "Refresh recap"
-    /** The × that hides this recap in this conversation on this device, as TalkBack reads it. */
+    /** The menu's item that hides this recap in this conversation on this device. */
     const val hide = "Hide recap"
     const val upToDate = "The recap is already up to date."
     const val tooLittle = "There's too little to recap yet."

@@ -1,14 +1,17 @@
-import { AlignLeftOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useState } from 'react';
+import { AlignLeftOutlined, CloseOutlined, EllipsisOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionRecap, type RecapOutcome } from '../api';
 import { sessionQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { Glyph } from './ProjectPanoramaHeader';
+import { Menu } from './ui/Menu';
 
 /** The card's words. The native clients say the same ones (OrbitKit `RecapCard`, Android's
  *  `RecapCard`), and their copy-parity tests hold them to this file. */
 export const RECAP_CARD_COPY = {
   word: 'Recap',
+  more: 'Recap actions',
   refresh: 'Refresh recap',
   hide: 'Hide recap',
   upToDate: 'The recap is already up to date.',
@@ -81,9 +84,11 @@ export function recapRefreshNotice(reason: string): { text: string; failed: bool
  *
  * Drawn as a footnote, not a panel (the owner, 2026-10-27, 05-quiet A): a filled box the composer's
  * shape, sitting on the composer, read as something floating over the conversation. So it is one
- * paragraph in the list line's own size and colour — the head runs into the recap — and Refresh
- * shows only under the pointer or keyboard focus (always, on a screen with no hover). Beside it, ×
- * hides this recap in this conversation on this device (06-hide); the conversation remembers that.
+ * paragraph in the list line's own size and colour — the head runs into the recap. Refresh, and the
+ * × that hides this recap in this conversation on this device (06-hide; the conversation remembers
+ * that), sit behind one ⋯ at the end of the last line (07-last-line B, 2026-11-02): beside the first
+ * line they held a column down the whole card. The ⋯ shows under the pointer, on keyboard focus and
+ * while its menu is open (always, on a screen with no hover).
  */
 export function SessionRecapCard({
   sessionId,
@@ -119,9 +124,10 @@ export function SessionRecapCard({
     },
     onError: () => message.error(RECAP_CARD_COPY.failed),
   });
+  const [menuOpen, setMenuOpen] = useState(false);
   const when = recapWhen(recapAt);
   return (
-    <div className={`chat-recap${refresh.isPending ? ' is-busy' : ''}`} aria-busy={refresh.isPending || undefined}>
+    <div className={`chat-recap${refresh.isPending ? ' is-busy' : ''}${menuOpen ? ' is-open' : ''}`} aria-busy={refresh.isPending || undefined}>
       <p className="chat-recap-line">
         <span className="chat-recap-head">
           <AlignLeftOutlined aria-hidden="true" />
@@ -131,25 +137,22 @@ export function SessionRecapCard({
         <span className="chat-recap-text">{text}</span>
       </p>
       <span className="chat-recap-actions">
-        <button
-          type="button"
-          className="chat-recap-refresh"
-          aria-label={RECAP_CARD_COPY.refresh}
-          title={RECAP_CARD_COPY.refresh}
+        <Menu
+          side="bottom"
+          align="end"
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
           disabled={refresh.isPending}
-          onClick={() => refresh.mutate()}
-        >
-          {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <ReloadOutlined />}
-        </button>
-        <button
-          type="button"
-          className="chat-recap-hide"
-          aria-label={RECAP_CARD_COPY.hide}
-          title={RECAP_CARD_COPY.hide}
-          onClick={onHide}
-        >
-          <CloseOutlined />
-        </button>
+          items={[
+            { key: 'refresh', icon: <ReloadOutlined />, label: RECAP_CARD_COPY.refresh, onSelect: () => refresh.mutate() },
+            { key: 'hide', icon: <CloseOutlined />, label: RECAP_CARD_COPY.hide, onSelect: onHide },
+          ]}
+          trigger={
+            <button type="button" className="chat-recap-more" aria-label={RECAP_CARD_COPY.more}>
+              {refresh.isPending ? <Glyph shape="spinner" color="currentColor" size={13} /> : <EllipsisOutlined />}
+            </button>
+          }
+        />
       </span>
     </div>
   );
