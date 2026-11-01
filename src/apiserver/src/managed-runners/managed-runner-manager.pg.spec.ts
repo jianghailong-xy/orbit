@@ -709,12 +709,17 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     const ensured = await call(server, 'POST', '/api/managed-runner/ensure', alice, { idempotencyKey: 'alice-1' });
     assert.equal(ensured.status, 202, ensured.text);
     assert.equal(ensured.json.managementState, 'REQUESTED');
-    const mine = await mappingOf(alice);
-    assert.equal(toUuid(ensured.json.runnerId), mine.runnerId, 'ids leave in the public id codec');
-    assert.equal(toUuid(ensured.json.workspaceId), mine.defaultWorkspaceId);
     const again = await call(server, 'POST', '/api/managed-runner/ensure', alice, { idempotencyKey: 'alice-2' });
     assert.equal(again.status, 202);
     assert.equal(again.json.runnerId, ensured.json.runnerId, 'ensure again answers the same mapping');
+    // Each ensure kicked the real worker (onModuleInit started it), and its background pass reconciles
+    // Alice's mapping, one revision per step, whenever it gets there. stop() waits for the pass in
+    // flight and no kick starts one after it, so from here on only the requests below could move
+    // Alice's revision. (app.close() stops the worker again, which changes nothing.)
+    await runtime.worker.stop();
+    const mine = await mappingOf(alice);
+    assert.equal(toUuid(ensured.json.runnerId), mine.runnerId, 'ids leave in the public id codec');
+    assert.equal(toUuid(ensured.json.workspaceId), mine.defaultWorkspaceId);
 
     // Bob names Alice's runner, workspace and revision: the body cannot address them.
     const theirs = await call(server, 'GET', '/api/managed-runner', bob);
