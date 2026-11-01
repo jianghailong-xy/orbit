@@ -248,6 +248,12 @@
   color: var(--success);
 }
 
+/* What lands under the card is brought into view whole: its end stops above the pane's 20px fade (the
+   `.workspace-scroll-wrap > .workspace-sessions` padding), where a Withdraw under it would read as dimmed. */
+.msc-revealed {
+  scroll-margin-bottom: 24px;
+}
+
 /* The first message, held until the card is done: the bubble it will be, with its state under it. Its
    copy and time row is the sent message's, so it has no place here. */
 .msc-held {
