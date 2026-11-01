@@ -52,8 +52,8 @@ type hostSetupEnv struct {
 	geteuid    func() int
 	executable func() (string, error)
 	run        func(name string, args ...string) error
-	// invokedAs is how the caller spelled this binary, echoed back in the sudo hint so
-	// the line they are told to re-run is the line they just typed.
+	// invokedAs is how the caller spelled this binary, echoed back in the sudo hint when it
+	// is a path (sudoName), so the line they are told to re-run is the line they just typed.
 	invokedAs string
 	out       io.Writer
 	// rootUID is who the binary the units will run, and every directory above it, must
@@ -89,6 +89,19 @@ func (env hostSetupEnv) withDefaults() hostSetupEnv {
 // path resolves one of the absolute paths above against the environment's root.
 func (env hostSetupEnv) path(p string) string { return filepath.Join(env.prefix, p) }
 
+// sudoName is how the sudo hint names this binary: as the caller spelled it when that is a path,
+// which sudo runs as it is, and otherwise by its own path, since sudo looks a bare `orbit` up only
+// on its secure_path, which an account's own ~/.orbit/bin is never on.
+func (env hostSetupEnv) sudoName() string {
+	if strings.Contains(env.invokedAs, "/") {
+		return env.invokedAs
+	}
+	if exe, err := env.executable(); err == nil {
+		return exe
+	}
+	return env.invokedAs
+}
+
 // hostSetup installs the machine broker and the per-user runner template, then reloads
 // systemd and starts the broker's socket. Idempotent: re-running it overwrites the same
 // five files and re-issues the same three commands.
@@ -104,7 +117,7 @@ func hostSetup(env hostSetupEnv, server string) error {
 		// The only root step in the whole design. Print the exact line to re-run rather
 		// than leaving the operator to reconstruct it from the error.
 		return fmt.Errorf("setup writes machine-wide systemd units and must run as root — re-run: sudo %s host setup --server %s",
-			env.invokedAs, server)
+			env.sudoName(), server)
 	}
 
 	exe, err := env.executable()
@@ -163,7 +176,7 @@ func (env hostSetupEnv) checkBinary(exe, server string) error {
 	if !errors.As(err, &fault) {
 		return fmt.Errorf("cannot inspect %s, the binary the units would run: %w", path, err)
 	}
-	rerun := fmt.Sprintf("sudo %s host setup --server %s", env.invokedAs, server)
+	rerun := fmt.Sprintf("sudo %s host setup --server %s", env.sudoName(), server)
 	var how, fix string
 	switch {
 	case fault.foreign == "":
@@ -224,7 +237,7 @@ func (env hostSetupEnv) checkRunnable(exe, server string) error {
 		// Already where the machine's binary belongs, where a copy would land on itself.
 		how = "Let every account run it, then set the host up again:"
 		fix = "sudo chmod o+x " + strings.Join(closed, " ")
-		rerun = fmt.Sprintf("sudo %s host setup --server %s", env.invokedAs, server)
+		rerun = fmt.Sprintf("sudo %s host setup --server %s", env.sudoName(), server)
 	}
 	return fmt.Errorf("refusing to set this host up with %s: %s.\n"+
 		"Every account's runner would run this binary as that account, so every account has to be able to execute it: "+

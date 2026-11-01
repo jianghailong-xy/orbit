@@ -76,6 +76,7 @@ import {
   runnerNamesMore,
   runnerNamesTwo,
   runnerOfflineLastSeen,
+  runnerUpgradeCommandIn,
   runnerVersionTag,
 } from './runnerCopy';
 
@@ -656,8 +657,9 @@ function runnerSaid(words: string | undefined, otherwise: string): string {
  * Behind the latest release, and not catching up by itself.
  *
  * A runner that reports where its updates stand (`selfUpdate`) is taken at its word:
- * - `dirNotWritable`: the user it runs as can't write its install folder. `sudo orbit upgrade` there
- *   moves the install somewhere it can, once.
+ * - `dirNotWritable`: the user it runs as can't write its install folder. `sudo <installDir>/orbit upgrade`
+ *   moves the install somewhere it can, once. sudo runs the binary by that path, since it looks a bare
+ *   `orbit` up only on its secure_path; a runner that doesn't say which folder gets RUNNER_UPGRADE_COMMAND.
  * - `disabledByEnv`: its updater is off, and the reason says by what. Only ORBIT_NO_SELFUPDATE is a
  *   switch to turn back; a development build or a platform with no release has none.
  * - `failed`: the check or the install failed, in its own words. Update Runner Now tries again, so
@@ -667,7 +669,7 @@ function runnerSaid(words: string | undefined, otherwise: string): string {
  *
  * A runner too old to report it is judged by runsAsRoot, as before there was a report. Root is what
  * lets the updater replace the binary in a root-owned install directory; a regular user stays on
- * its version until someone runs `sudo orbit upgrade` there. Unknown (null) is not flagged, and a
+ * its version until someone runs RUNNER_UPGRADE_COMMAND there. Unknown (null) is not flagged, and a
  * root runner that is behind installs the release itself when no turn is running.
  */
 function cannotSelfUpdateItem(
@@ -693,7 +695,8 @@ function cannotSelfUpdateItem(
   }
   const reported = { version, latest: latestVersion, state: report.state, reason: report.reason ?? null };
   switch (report.state) {
-    case 'dirNotWritable':
+    case 'dirNotWritable': {
+      const command = report.installDir ? runnerUpgradeCommandIn(report.installDir) : RUNNER_UPGRADE_COMMAND;
       return {
         kind: 'cannotSelfUpdate',
         tone: 'warn',
@@ -703,11 +706,12 @@ function cannotSelfUpdateItem(
           report.installDir ?? RUNNER_INSTALL_FOLDER,
           version,
           latestVersion,
-          RUNNER_UPGRADE_COMMAND,
+          command,
         ),
-        action: { kind: 'copyCommand', command: RUNNER_UPGRADE_COMMAND },
+        action: { kind: 'copyCommand', command },
         params: { version, latest: latestVersion, state: report.state, installDir: report.installDir ?? null },
       };
+    }
     case 'disabledByEnv': {
       const why = runnerSaid(report.reason, ATTENTION_UPDATER_OFF);
       const detail = attentionUpdatesTurnedOffDetail(why, version, latestVersion);

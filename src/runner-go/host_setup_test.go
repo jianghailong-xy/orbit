@@ -231,25 +231,33 @@ func TestHostRunnerTemplateBakesInNoEnvironment(t *testing.T) {
 }
 
 // Setup is the one command in this design that needs root, so a non-root run has to end
-// with the exact line to re-run — not a diagnosis the operator has to translate.
+// with the exact line to re-run — not a diagnosis the operator has to translate. sudo looks
+// a bare name up only on its secure_path, which an account's own ~/.orbit/bin is never on, so
+// a bare `orbit` comes back as the binary's own path, and a path comes back as it was typed.
 func TestHostSetupWithoutRootNamesTheSudoCommand(t *testing.T) {
-	env, cmds, root := testHostEnv(t, 1000)
+	for _, tc := range []struct{ invokedAs, rerun string }{
+		{"orbit", "sudo /usr/local/bin/orbit host setup"},
+		{"./orbit", "sudo ./orbit host setup"},
+		{"/home/alice/.orbit/bin/orbit", "sudo /home/alice/.orbit/bin/orbit host setup"},
+	} {
+		t.Run(tc.invokedAs, func(t *testing.T) {
+			env, cmds, root := testHostEnv(t, 1000)
+			env.invokedAs = tc.invokedAs
 
-	err := hostSetup(env, "https://orbit.example.com")
-	if err == nil {
-		t.Fatal("setup as a non-root user must fail")
-	}
-	if !strings.Contains(err.Error(), "sudo orbit host setup") {
-		t.Errorf("the error must name the command to re-run, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "--server https://orbit.example.com") {
-		t.Errorf("the re-run line must carry the arguments back, got: %v", err)
-	}
-	if installed := installedFiles(t, root); len(installed) != 0 {
-		t.Errorf("a refused setup must write nothing, found %v", installed)
-	}
-	if len(cmds.calls) != 0 {
-		t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
+			err := hostSetup(env, "https://orbit.example.com")
+			if err == nil {
+				t.Fatal("setup as a non-root user must fail")
+			}
+			if want := "re-run: " + tc.rerun + " --server https://orbit.example.com"; !strings.HasSuffix(err.Error(), want) {
+				t.Errorf("the error must end with the line to re-run, %q, got: %v", want, err)
+			}
+			if installed := installedFiles(t, root); len(installed) != 0 {
+				t.Errorf("a refused setup must write nothing, found %v", installed)
+			}
+			if len(cmds.calls) != 0 {
+				t.Errorf("a refused setup must run nothing, ran %v", cmds.calls)
+			}
+		})
 	}
 }
 
@@ -357,7 +365,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 			"refusing to set this host up with {root}/usr/local/bin/orbit: it belongs to uid {uid} rather than root.\n",
 			"\nMake it root's, then set the host up again:\n" +
 				"  sudo chown root:root {root}/usr/local/bin/orbit\n" +
-				"  sudo orbit host setup --server https://orbit.example.com",
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}, {
 		name: "a link into an account's ~/.orbit/bin, as the installer leaves it",
@@ -374,7 +382,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// What resolvedExecutable reports when `sudo orbit` runs through the link: the
+			// What resolvedExecutable reports when `sudo /usr/local/bin/orbit` runs through the link: the
 			// file it leads to, which is what the units would run.
 			env.executable = func() (string, error) {
 				resolved, err := filepath.EvalSymlinks(link)
@@ -414,7 +422,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 			"refusing to set this host up with {root}/usr/local/bin/orbit: its directory {root}/usr/local/bin is not root's alone (owned by uid {uid}, mode 0775).\n",
 			"\nTake that write access back, then set the host up again:\n" +
 				"  sudo chmod g-w {root}/usr/local/bin\n" +
-				"  sudo orbit host setup --server https://orbit.example.com",
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}, {
 		name: "a directory others can write",
@@ -607,7 +615,7 @@ func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
 			"refusing to set this host up with {root}/usr/local/bin/orbit: others cannot execute it (mode 0700).\n",
 			"\nLet every account run it, then set the host up again:\n" +
 				"  sudo chmod o+x {root}/usr/local/bin/orbit\n" +
-				"  sudo orbit host setup --server https://orbit.example.com",
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}, {
 		name: "the machine's binary in a directory others cannot enter",
@@ -618,7 +626,7 @@ func TestHostSetupRefusesABinaryOtherAccountsCannotExecute(t *testing.T) {
 		want: []string{
 			"refusing to set this host up with {root}/usr/local/bin/orbit: its directory {root}/usr/local/bin cannot be entered by others (mode 0750).\n",
 			"\n  sudo chmod o+x {root}/usr/local/bin\n" +
-				"  sudo orbit host setup --server https://orbit.example.com",
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
 		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {

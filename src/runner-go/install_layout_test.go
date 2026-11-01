@@ -374,7 +374,7 @@ func TestUserBinFindsTheSystemdServicesRunningABinary(t *testing.T) {
 	}
 }
 
-// `sudo orbit upgrade` on a legacy Linux install: the binary moves into the service account's
+// `sudo /usr/local/bin/orbit upgrade` on a legacy Linux install: the binary moves into the service account's
 // ~/.orbit/bin, the unit is rewritten to run it — byte for byte the unit register would now
 // write — and the service restarts only once the caller says the release is in place.
 func TestUserBinUpgradeMigratesALegacySystemdService(t *testing.T) {
@@ -557,8 +557,22 @@ func TestUserBinRegisterKeepsAnInstallItMustNotMove(t *testing.T) {
 	})
 }
 
+// A move that fails leaves the service on the binary where it is, and says what moves it later:
+// that binary by its path, since sudo looks a bare `orbit` up only on its secure_path.
+func TestUserBinRegisterThatCannotMoveNamesTheBinarysPath(t *testing.T) {
+	l := newLegacyInstall(t)
+	recordInstallCommands(t, errors.New("exit status 1"))
+	stderr := captureStderr(t)
+	if got := adoptUserBin(l.exe, l.alice, nil, false, "sudo"); got != l.exe {
+		t.Fatalf("adoptUserBin = %q, want %q", got, l.exe)
+	}
+	if want := "the runner cannot update itself until `sudo " + l.exe + " upgrade` does.\n"; !strings.Contains(stderr(), want) {
+		t.Errorf("stderr %q does not say %q", stderr(), want)
+	}
+}
+
 // A self-update of an install.sh install replaces the file in ~/.orbit/bin, leaving the
-// /usr/local/bin/orbit symlink pointing at it. As root (`sudo orbit upgrade`) the new file
+// /usr/local/bin/orbit symlink pointing at it. As root (`sudo ~/.orbit/bin/orbit upgrade`) the new file
 // stays the account's.
 func TestUserBinSelfUpdateReplacesTheCopyInOrbitBin(t *testing.T) {
 	if platformKey() == "" {

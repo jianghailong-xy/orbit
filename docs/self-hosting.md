@@ -1152,7 +1152,7 @@ Created symlink /etc/systemd/system/sockets.target.wants/orbit-hostd.socket → 
 Run without root, it changes nothing and says what to run instead:
 
 ```text
-orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo orbit host setup --server https://orbit.example.com
+orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
 In the same way, it refuses a binary that other accounts cannot execute, since each account's runner runs it as that
@@ -1190,7 +1190,7 @@ orbit host: refusing to set this host up with /usr/local/bin/orbit: its director
 Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
 Take that write access back, then set the host up again:
   sudo chmod g-w /usr/local/bin /usr/local
-  sudo orbit host setup --server https://orbit.example.com
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
 Members of `staff` then need root to install there too. Whatever setup refuses, it names what is wrong and the
@@ -1356,7 +1356,7 @@ An administrator does one of two things:
   download by running it as root, and restarts no runner, so the runners are restarted after it:
 
   ```bash
-  sudo orbit upgrade
+  sudo /usr/local/bin/orbit upgrade
   sudo systemctl restart 'orbit-runner@*'
   ```
 
