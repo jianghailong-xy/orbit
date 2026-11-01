@@ -24,6 +24,7 @@ import {
   predicateHolds,
   predicateLeafTests,
   predicateReachable,
+  sessionJobsOf,
   WatchLeafTest,
   WatchTargetFact,
   WatchTargetKind,
@@ -66,10 +67,13 @@ import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch
  * mechanism, not a backstop.
  *
  * STALLS
- * A no-progress leaf starts to hold when a Task's reported position has gone unchanged for its window.
- * Nothing announces that moment — it is the absence of a report — so the landing that sees one coming
- * schedules the watch's next evaluation at it: `next_evaluate_at` becomes the earliest stall deadline,
- * and the claim that serves every due watch serves this one. No sleep, timer or process waits on a watch.
+ * A no-progress leaf starts to hold when a Task's reported position has gone unchanged for its window, and
+ * the job leaf when a session's job in flight has produced no output for its window. Nothing announces
+ * either moment — it is the absence of a report — so the landing that sees one coming schedules the
+ * watch's next evaluation at it: `next_evaluate_at` becomes the earliest stall deadline, and the claim that
+ * serves every due watch serves this one. No sleep, timer or process waits on a watch. A job's last output
+ * is an instant in this server's timebase that only a runner's report moves, so a runner that stopped
+ * reporting — crashed, cut off, asleep — leaves it where it was, and its deadline arrives all the same.
  *
  * CONTINUOUS
  * A CONTINUOUS watch matches at crossings: its predicate holding at an evaluation when it did not at the
@@ -629,7 +633,8 @@ async function readTargets(tx: Prisma.TransactionClient, watchId: string): Promi
  * The leaves' source columns (contract `leaves[].sourceColumns`) for every target not yet GONE, plus the
  * owner the permission recheck compares. A Task's progress and lifecycle epoch come from `task_progress`,
  * and a Task with no row there is in epoch 0, begun at its creation, with nothing reported. The report's
- * message is not read: no leaf may decide from it.
+ * message is not read: no leaf may decide from it. A session's jobs in flight come from `running_bg_jobs`
+ * and `running_bg_job_activity`, which the runner's job reports keep; nothing a job printed is read.
  */
 async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetRow[]): Promise<Map<string, OwnedFact>> {
   const ids = (kind: WatchTargetKind) =>
@@ -668,14 +673,22 @@ async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetR
   }
   const sessionIds = ids('SESSION');
   if (sessionIds.length > 0) {
-    const sessions = await tx.$queryRaw<Array<Extract<WatchTargetFact, { kind: 'SESSION' }> & { id: string; ownerId: string }>>`
+    const sessions = await tx.$queryRaw<Array<Omit<Extract<WatchTargetFact, { kind: 'SESSION' }>, 'kind' | 'jobs'> & {
+      id: string;
+      ownerId: string;
+      runningBgJobs: string[];
+      runningBgJobActivity: unknown;
+    }>>`
       SELECT s."id", s."owner_id" AS "ownerId", s."kind" AS "sessionKind", s."status"::text AS "status",
              s."end_reason" AS "endReason",
              s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt", s."deleted_at" AS "deletedAt",
-             EXISTS (SELECT 1 FROM "approval" a WHERE a."session_id" = s."id" AND a."status" = 'PENDING') AS "pendingApproval"
+             EXISTS (SELECT 1 FROM "approval" a WHERE a."session_id" = s."id" AND a."status" = 'PENDING') AS "pendingApproval",
+             s."running_bg_jobs" AS "runningBgJobs", s."running_bg_job_activity" AS "runningBgJobActivity"
       FROM "session" s
       WHERE s."id" = ANY(${sessionIds}::uuid[])`;
-    for (const { id, ...session } of sessions) facts.set(`SESSION:${id}`, { ...session, kind: 'SESSION' });
+    for (const { id, runningBgJobs, runningBgJobActivity, ...session } of sessions) {
+      facts.set(`SESSION:${id}`, { ...session, kind: 'SESSION', jobs: sessionJobsOf(runningBgJobs, runningBgJobActivity) });
+    }
   }
   return facts;
 }

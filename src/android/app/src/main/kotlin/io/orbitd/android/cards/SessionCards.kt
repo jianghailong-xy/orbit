@@ -190,7 +190,9 @@ fun SessionCardsReads(cards: SessionCardsModel) {
 fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
     val (app, session) = cardSession() ?: return
     val results by cards.actions.state.collectAsState()
-    val shown = cards.shown(session)
+    // A question whose answer a turn of this conversation handed to the coordinator is drawn by that turn, once (`AnsweredQuestions`).
+    val answered = LocalAnsweredQuestions.current
+    val shown = cards.shown(session).filterNot { answered?.leftToItsTurn(it) == true }
     Column(Modifier.fillMaxWidth().testTag("interaction-cards"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (shown.isNotEmpty()) {
             Text("Decisions and requests", style = MaterialTheme.typography.titleMedium)
@@ -384,8 +386,9 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
                     val talk = discuss?.let { into -> { context: String -> cards.close(); into(context) } }
                     val submit = { verb: CardVerb, input: CardInput ->
                         cards.pressed = CardPress(card, verb, input, java.time.Instant.now()); cards.submit(card, verb, input) }
-                    // A question answered with its review open is its record now: the review replays it.
-                    if (card.family == CardFamily.QUESTION_RECORD) QuestionRecordReview(card, open)
+                    // A question answered with its review open is its record now: the review replays it — and, drawn by the turn that
+                    // told the coordinator, what that turn said.
+                    if (card.family == CardFamily.QUESTION_RECORD) QuestionRecordReview(card, LocalAnsweredQuestions.current?.told(card), open)
                     else if (card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                         CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, talk, submit = submit)
                     } else if (card.family == CardFamily.PROMOTION) PromotionCardReview(cards, session, card, fresh, result)

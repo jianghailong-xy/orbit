@@ -43,12 +43,15 @@ Usage:
 Options:
   --target KIND:ID         A task or session to watch, as TASK:<id> or SESSION:<id>. Repeatable;
                            the set is fixed when the watch is made
-  --predicate JSON         The condition in the v1 grammar: {"kind":"ALL"|"ANY","over":"ALL_TARGETS",
-                           "leaf":LEAF} or {"kind":"ALL_OF"|"ANY_OF","operands":[...]}. Leaves:
+  --predicate JSON         The condition: {"kind":"ALL"|"ANY","over":"ALL_TARGETS","leaf":LEAF} or
+                           {"kind":"ALL_OF"|"ANY_OF","operands":[...]}. Version 1 leaves:
                            TASK_TERMINAL, TASK_FAILED, TASK_DONE, SESSION_TURN_SETTLED,
-                           SESSION_RUN_TERMINAL, SESSION_LIFECYCLE_TERMINAL, SESSION_NEEDS_ATTENTION
+                           SESSION_RUN_TERMINAL, SESSION_LIFECYCLE_TERMINAL, SESSION_NEEDS_ATTENTION.
+                           Version 2 adds {"kind":"AT_LEAST","count":N,...} and "params" for
+                           TASK_PROGRESS_AT_LEAST and TASK_NO_PROGRESS_FOR; version 3 adds
+                           SESSION_JOB_NO_OUTPUT_FOR (watch_create's description says how to ask each)
   --predicate-file -       Read the predicate from stdin; filesystem paths are rejected
-  --predicate-version N    The grammar version (default 1)
+  --predicate-version N    The grammar version: 1, 2 or 3 (default: the lowest the predicate needs)
   --action ACTION          RESUME_SESSION (default) starts a turn in this session when it holds;
                            NOTIFY_USER notifies the person instead
   --ttl-seconds N          How long it may wait: 60 to 2592000 (default 86400). If it runs out
@@ -121,10 +124,10 @@ Options:
 // watchCLICapabilities are listed inside a session only (SessionOnly). session_await is not here: it sits
 // with the session commands, behind the orchestration gate session_get is behind.
 var watchCLICapabilities = []cliCapabilitySpec{
-	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; the v1 grammar)", "--predicate-version <n> (predicateVersion; default 1)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 3)", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_get", Argv: []string{"orbit", "watch", "get"}, Usage: "orbit watch get WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, SessionOnly: true},
 	{Tool: "watch_list", Argv: []string{"orbit", "watch", "list"}, Usage: "orbit watch list [--state STATE] [--json]", Arguments: []string{"--state <" + strings.Join(watchStates, "|") + ">", "--json"}, SessionOnly: true},
-	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion; default 1)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
+	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "watch_cancel", Argv: []string{"orbit", "watch", "cancel"}, Usage: "orbit watch cancel WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, Mutates: true, SessionOnly: true},
 	{Tool: "task_await", Argv: []string{"orbit", "task", "await"}, Usage: "orbit task await --task-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("task-id", "taskIds", taskAwaitPresets), Mutates: true, SessionOnly: true},
 }
@@ -205,9 +208,9 @@ func cliWatchCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	fs := newCLIFlagSet("orbit watch create")
 	var targets stringList
 	fs.Var(&targets, "target", "a task or session to watch, as TASK:<id> or SESSION:<id> (repeatable)")
-	predicate := fs.String("predicate", "", "the condition, as v1 predicate JSON")
+	predicate := fs.String("predicate", "", "the condition, as predicate JSON")
 	predicateFile := fs.String("predicate-file", "", "read the predicate from stdin (-)")
-	predicateVersion := fs.Int("predicate-version", watchPredicateVersion, "the predicate grammar version")
+	predicateVersion := fs.Int("predicate-version", watchPredicateVersion, "the predicate grammar version; the lowest the predicate needs when omitted")
 	action := fs.String("action", "", "RESUME_SESSION or NOTIFY_USER")
 	ttl := fs.Int("ttl-seconds", 0, "how long the watch may wait")
 	key := fs.String("idempotency-key", "", "retry key")
@@ -229,7 +232,7 @@ func cliWatchCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if !set {
 		return fmt.Errorf("--predicate or --predicate-file - is required")
 	}
-	body := map[string]interface{}{"predicateVersion": *predicateVersion, "predicate": parsed, "targets": refs}
+	body := map[string]interface{}{"predicateVersion": cliWatchPredicateVersion(fs, *predicateVersion, parsed), "predicate": parsed, "targets": refs}
 	if flagWasSet(fs, "action") {
 		body["action"] = strings.ToUpper(strings.TrimSpace(*action))
 	}
@@ -308,9 +311,9 @@ func cliWatchList(args []string, out io.Writer, ctx cliOrchestrationContext) err
 func cliWatchUpdate(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit watch update")
-	predicate := fs.String("predicate", "", "the new condition, as v1 predicate JSON")
+	predicate := fs.String("predicate", "", "the new condition, as predicate JSON")
 	predicateFile := fs.String("predicate-file", "", "read the predicate from stdin (-)")
-	predicateVersion := fs.Int("predicate-version", watchPredicateVersion, "the predicate grammar version")
+	predicateVersion := fs.Int("predicate-version", watchPredicateVersion, "the predicate grammar version; the lowest the predicate needs when omitted")
 	ttl := fs.Int("ttl-seconds", 0, "the new deadline, counted from now")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
@@ -327,7 +330,7 @@ func cliWatchUpdate(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	}
 	if set {
 		body["predicate"] = parsed
-		body["predicateVersion"] = *predicateVersion
+		body["predicateVersion"] = cliWatchPredicateVersion(fs, *predicateVersion, parsed)
 	}
 	if flagWasSet(fs, "ttl-seconds") {
 		if err := checkWatchTTLFlag(*ttl); err != nil {
@@ -424,6 +427,15 @@ func parseWatchTargetFlags(values []string) ([]watchTargetRef, error) {
 }
 
 // readWatchPredicateFlags reads --predicate or --predicate-file -, and reports whether either was given.
+// cliWatchPredicateVersion is --predicate-version when it was given, and otherwise the lowest grammar the
+// predicate needs, as watch_create and watch_update send it (minimalWatchPredicateVersion).
+func cliWatchPredicateVersion(fs *flag.FlagSet, given int, predicate map[string]interface{}) int {
+	if flagWasSet(fs, "predicate-version") {
+		return given
+	}
+	return minimalWatchPredicateVersion(predicate)
+}
+
 func readWatchPredicateFlags(in io.Reader, fs *flag.FlagSet, direct, file string) (map[string]interface{}, bool, error) {
 	text, set, err := readCLIText(in, direct, flagWasSet(fs, "predicate"), file, flagWasSet(fs, "predicate-file"), "predicate")
 	if err != nil || !set {

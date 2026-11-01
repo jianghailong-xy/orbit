@@ -1433,6 +1433,20 @@ public final class APIClient: @unchecked Sendable {
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
 
+    // MARK: directory probe relay (docs/first-workspace-contract.md §2)
+
+    /// Ask what is at `path` on a machine: one question per machine, which replaces the one before.
+    /// Refused while the machine is offline. The runner answers on a later heartbeat.
+    public func askDirProbe(runnerID: String, path: String) async throws {
+        let _: DirProbeAnswer = try await post("runners/\(runnerID)/dir-probe", body: DirProbeQuestion(path: path))
+    }
+
+    /// Read the answer about `path`: `pending` while the runner is looking, `done` with its result, and
+    /// `idle` once the question has been replaced — an answer is only ever returned for its own path.
+    public func readDirProbe(runnerID: String, path: String) async throws -> DirProbeAnswer {
+        try await getCancellable("runners/\(runnerID)/dir-probe", query: [URLQueryItem(name: "path", value: path)])
+    }
+
     // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
 
     /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no
@@ -1563,6 +1577,14 @@ public final class APIClient: @unchecked Sendable {
     @discardableResult
     public func requestRunnerSelfUpdate(_ id: String) async throws -> RunnerSelfUpdateRequest {
         try await postEmpty("runners/\(id)/self-update")
+    }
+
+    /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at
+    /// once, and the answer lands in `Runner.region` like any other check's. Refused while the runner
+    /// is offline, and for one that does not check.
+    @discardableResult
+    public func requestRunnerRegionCheck(_ id: String) async throws -> ClaudeRegionCheckRequest {
+        try await postEmpty("runners/\(id)/region-check")
     }
 
     // MARK: engine sign-in relay

@@ -43,16 +43,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -67,6 +64,7 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
@@ -408,8 +406,11 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 }
             }
             FormSection(RunnerCopy.WORKSPACES, workspaces.size.takeIf { it > 0 }?.toString(),
-                footerContent = { WorkspacesFooter(RunnerPage.runnerWebUrl(api.handle.account.server, id)) }) {
-                if (workspaces.isEmpty()) Text("No workspaces on this runner yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
+                footer = if (workspaces.isEmpty()) null else MachineSetupCopy.RUNNER_WORKSPACES_TAP) {
+                if (workspaces.isEmpty()) Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(MachineSetupCopy.machineEmptyHere(RunnerPage.displayName(runner)), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                    Button(onClick = { open(OrbitRoute(Destination.DRAFT, id = id)) }) { Text(MachineSetupCopy.START_A_SESSION) }
+                }
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
                     WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts)) { openWorkspace(workspace.text("id")) }
@@ -480,19 +481,6 @@ private fun RunnerHead(runner: JsonObject, now: Long) {
             RunnerPage.hostLine(runner).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
-}
-
-/** The Workspaces footer with "on the web" a link to this runner's page there, which the browser opens (project 34pLjYBjU6ILsehatEjJs,
- * contract 6; OrbitKit RunnerPageFormat.workspacesFooter). Without an address the words stay plain. */
-@Composable
-private fun WorkspacesFooter(url: String?) {
-    val (before, words, after) = RunnerPage.workspacesFooter()
-    val link = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary))
-    Text(buildAnnotatedString {
-        append(before)
-        if (url != null) withLink(LinkAnnotation.Url(url, link)) { append(words) } else append(words)
-        append(after)
-    }, Modifier.testTag("workspaces-footer"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -1127,7 +1115,8 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
  */
 @Composable
 internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
-                             autoStart: Boolean = false, onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+                             autoStart: Boolean = false, signInTitle: String? = null, onUseApiKey: (() -> Unit)? = null,
+                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
@@ -1211,13 +1200,23 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                         }
                     }
                     Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-                } else Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
-                    Text(when {
-                        relay.busy -> "Starting…"
-                        // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
-                        relay.status == "failed" -> if (engine == ProviderEngines.CURSOR) CursorCopy.GET_A_NEW_LINK else "Try signing in to $cli again"
-                        engine == "antigravity" -> AccountCopy.SIGN_IN_WITH_GOOGLE; else -> "Sign in to $cli"
-                    })
+                    onUseApiKey?.let { useKey ->
+                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                    }
+                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
+                        Text(when {
+                            relay.busy -> "Starting…"
+                            // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
+                            relay.status == "failed" -> if (engine == ProviderEngines.CURSOR) CursorCopy.GET_A_NEW_LINK else "Try signing in to $cli again"
+                            engine == "antigravity" -> AccountCopy.SIGN_IN_WITH_GOOGLE
+                            signInTitle != null -> signInTitle
+                            else -> "Sign in to $cli"
+                        })
+                    }
+                    onUseApiKey?.let { useKey ->
+                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                    }
                 }
                 close()
             }
@@ -1368,9 +1367,10 @@ internal fun AddRunnerDialog(api: ManagementApi, onDismiss: () -> Unit, open: (S
                 }
                 FormSection {
                     val newRunner = arrived
-                    if (newRunner != null) Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("✓ Runner online — “${RunnerPage.displayName(newRunner)}” is ready", Modifier.weight(1f), color = Ink.green)
-                        Button(onClick = { open(newRunner.text("id")) }) { Text("Open") }
+                    if (newRunner != null) Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("✓ Runner online — “${RunnerPage.displayName(newRunner)}” is ready", color = Ink.green, fontWeight = FontWeight.SemiBold)
+                        Text(MachineSetupCopy.REGISTER_NEXT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                        Button(onClick = { open(newRunner.text("id")) }) { Text(MachineSetupCopy.START_A_SESSION) }
                     } else Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text(RunnerCopy.WAITING_FOR_NEW)
                     }

@@ -143,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -228,7 +228,26 @@ export const LOCK_ORDER = [
       + 'are the cycles such a wait closed; the timeout would not keep them harmless, since the other '
       + 'side\'s deadlock check can come before it. It takes no session lock — the item\'s `session_id` '
       + 'is history, not a key — and the job gates that end such an item write it inside their own '
-      + 'rank-60 transactions.',
+      + 'rank-60 transactions. '
+      + '`session_wakeup_loop` (0458) is a session\'s child like the ticks it writes into '
+      + '`session_scheduled_wakeup`, and every writer that takes both takes the session row (30) first, '
+      + 'then the loop row, then its tick. createTurn (a tick\'s delivery), the revive (sessions.resume) '
+      + 'and interrupt (the Stop that ends a loop) already hold the session FOR UPDATE when they reach the '
+      + 'loop. The two writers that hold no session lock of their own take it FOR KEY SHARE as their first '
+      + 'statement — the runner door (`runner-api/scheduled-wakeup.ts` `scheduleWakeup`: a replacing loop, '
+      + 'and a one-shot wakeup superseding the waiting one) and the worker\'s own drop (`settleLoopTick`, '
+      + 'from `missTick` and `endLoopAtTick`) — the mode and the row their tick insert\'s foreign key takes '
+      + 'anyway, moved earlier, as I4 does. Taken at the insert instead, it came after the loop row (or the '
+      + 'superseded wakeup), while createTurn and interrupt hold the session FOR UPDATE and then reach for '
+      + 'that row: a deadlock cycle. A stop inserts nothing and takes no session lock: it ends the loop and '
+      + 'cancels its tick, and meets the others on the loop row. The settlement of the wakeups filed onto '
+      + 'a queued `bg-wake:` turn taken away unrun (`runner-api/wake-turn-withdraw.ts` `settleUnrunWakeTurns`) '
+      + 'writes a loop\'s counts and then its ticks — loop rows sorted by id before any tick row — and takes no '
+      + 'session lock of its own: every caller already holds the session, FOR UPDATE (interrupt, the '
+      + 'withdrawal, turnComplete, finalize, transitionEnd) or FOR NO KEY UPDATE through the status UPDATE it '
+      + 'has just made (ReaperService.forceFinalize). Rank 30, then 60, so it meets the worker\'s drop and a '
+      + 'stop on the loop row, in their order. The one-shot wakeup it re-arms for an armed retry is an INSERT '
+      + 'whose foreign key takes the session FOR KEY SHARE, which the held lock covers.',
   },
   {
     rank: 70,

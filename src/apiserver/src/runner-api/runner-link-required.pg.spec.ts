@@ -7,14 +7,14 @@
  *
  *   1. 0446 made the one table it describes.
  *   2. Never switched, it reads off on the administrators' route and on the gateway's, and every one of
- *      RunnerApiController's 53 routes serves an HTTPS call as it always has: none answers 426.
+ *      RunnerApiController's 54 routes serves an HTTPS call as it always has: none answers 426.
  *   3. Only a signed-in administrator reads or switches it: not a member, not an access token, not the gateway's secret,
  *      not anybody unsigned; a body that is not a boolean is refused, and turning it off while it is off writes nothing.
  *   4. Switched on — on the replica that took the PUT at once, on the other within a second — each of the 48 daemon
  *      routes, read off the controller, answers an HTTPS call that names no caller 426 UPGRADE_REQUIRED, saying why and
  *      to run `orbit upgrade`. A token the runner guard refuses is still answered 401. Asking for it again writes nothing.
- *   5. Switched on, what is never refused: the 5 routes kept on HTTPS (registration, the device flow, the attachments,
- *      D14); the shared routes as `orbit mcp`, the Antigravity hook and the CLI call them, naming themselves; a link call
+ *   5. Switched on, what is never refused: the 6 routes kept on HTTPS (registration, the device flow, the attachments,
+ *      D14, and the Claude region check); the shared routes as `orbit mcp`, the Antigravity hook and the CLI call them, naming themselves; a link call
  *      through the internal listener; and the other controllers under /runner (the agent tool API, the link token, the
  *      release check, the welcome route).
  *   6. The gateway's route answers the switch to the gateway's secret only.
@@ -154,7 +154,7 @@ test('RUNNER_LINK_REQUIRED: the daemon routes refuse HTTPS while it is on, and s
     await sql.end().catch(() => undefined);
   });
 
-  assert.equal(ROUTES.length, 53, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
+  assert.equal(ROUTES.length, 54, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
   assert.equal(DAEMON_ROUTES.length, 48);
 
   // ── accounts, the machine, its checkout and a session on it ──────────────────────────────────────────────────────
@@ -367,6 +367,11 @@ test('RUNNER_LINK_REQUIRED: the daemon routes refuse HTTPS while it is on, and s
     assert.deepEqual([image.status, image.text], [200, 'PNG!'], 'the attachment, as its bytes');
     const upload = await send(a.port, 'POST', `/api/runner/sessions/${uuidToBase62(sessionId)}/attachments`, bearer(machine.token), {});
     assert.equal(upload.status, 400, `an upload with no file is the route's own refusal, not the switch's: ${upload.text}`);
+    // The Claude region check, which leaves through Claude's proxy and so never over the link: answered, and kept.
+    const region = await send(a.port, 'GET', '/api/runner/region-check?viaProxy=1', bearer(machine.token));
+    assert.equal(region.status, 200, region.text);
+    assert.deepEqual({ verdict: region.json.verdict, viaProxy: region.json.viaProxy }, { verdict: 'unknown', viaProxy: true },
+      'no proxy this deployment trusts passed it on, so where it came from is unknown');
 
     // The routes the daemon shares with processes that name themselves: served for them, refused for the daemon.
     const route = (rest: string) => `/api/runner/sessions/${uuidToBase62(sessionId)}/${rest}`;

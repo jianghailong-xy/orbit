@@ -587,17 +587,35 @@ export function diagramWord(token: string): string {
 }
 
 /**
- * A section's diagrams kept as far as its sourced sentences go (contract `docs.diagram.check`): one whose every label's
- * fact tokens are, ending aside (`diagramWord`), among those of the sentences that carry a verified footnote —
- * `verified[i]` for the section's footnote i — or are a flowchart's own words; the first that is, as `perSection`
- * allows. Every other one is taken out with its block, the sentences after it moving up a block.
+ * The words inside a text's fact tokens (contract `docs.diagram.check`), lowercased: a code name, a path or a compound
+ * read word by word, so `sessionId` gives session, and `wiki-worker` gives wiki and worker. Words of letters alone: a
+ * number stays what its whole token says.
  */
-export function keepSourcedDiagrams(body: SectionBody, verified: readonly boolean[]): SectionBody {
+export function diagramNameWords(text: string): string[] {
+  const out = new Set<string>();
+  for (const [token] of text.matchAll(FACT_TOKEN)) {
+    const spaced = token.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').replace(/([A-Z])([A-Z][a-z])/gu, '$1 $2');
+    for (const word of spaced.split(/[^A-Za-z]+/u)) if (word.length >= 3) out.add(word.toLowerCase());
+  }
+  return [...out];
+}
+
+/**
+ * A section's diagrams kept as far as the document's verified text goes (contract `docs.diagram.check`): one whose every
+ * label's fact tokens are, ending aside (`diagramWord`), among those of the section's sentences that carry a verified
+ * footnote — `verified[i]` for the section's footnote i — or of `sources`, what the rest of the document verified, or
+ * the words inside either (`diagramNameWords`), or are a flowchart's own words; the first that is, as `perSection`
+ * allows. A label's own code name is compared whole, so one made of a source's parts is not found. Every other diagram
+ * is taken out with its block, the sentences after it moving up a block.
+ */
+export function keepSourcedDiagrams(body: SectionBody, verified: readonly boolean[], sources: readonly string[]): SectionBody {
   if (body.diagrams.length === 0) return body;
   const known = new Set<string>(WIKI_DOC_DIAGRAM_RULES.structureWords.map(diagramWord));
-  for (const sentence of body.sentences) {
-    if (sentence.notes.some((n) => verified[n])) for (const token of factTokens(sentence.text)) known.add(diagramWord(token));
-  }
+  const read = (text: string): void => {
+    for (const token of [...factTokens(text), ...diagramNameWords(text)]) known.add(diagramWord(token));
+  };
+  for (const sentence of body.sentences) if (sentence.notes.some((n) => verified[n])) read(sentence.text);
+  for (const text of sources) read(text);
   const dropped = new Set<number>();
   let kept = 0;
   for (const diagram of body.diagrams) {
@@ -1161,11 +1179,18 @@ export class WikiDocs {
     // Every record read again and checked, redacted as everything stored is, before the transaction.
     const literals = await ownerEnvLiterals(this.prisma, ownerId);
     const sectionOf = new Map(planDoc.sections.map((section) => [section.key, section]));
+    const others = [...bodies.values()].some((parsed) => parsed.diagrams.length > 0) ? await this.diagramSources(ownerId, spaceId, slug) : [];
     const prepared: PreparedSection[] = [];
     for (const section of request.sections) {
       const footnotes: FootnoteRow[] = [];
       for (const footnote of section.footnotes) footnotes.push(await this.checkFootnote(ownerId, footnote, literals));
-      const parsedBody = keepSourcedDiagrams(bodies.get(section.at)!, footnotes.map((footnote) => footnote.verdict === 'verified'));
+      const parsed = bodies.get(section.at)!;
+      const parsedBody = keepSourcedDiagrams(parsed, footnotes.map((footnote) => footnote.verdict === 'verified'), [
+        ...footnotes.filter((footnote) => footnote.verdict === 'verified').flatMap((footnote) => [footnote.quote ?? '', footnote.excerpt ?? '']),
+        ...planHeadings(planDoc),
+        ...parsed.blocks.filter((block) => block.kind === 'heading').map((block) => block.text ?? ''),
+        ...others.filter((other) => other.key !== section.key).flatMap((other) => other.texts),
+      ]);
       const stats: WikiDocSectionStats = {
         sentences: parsedBody.sentences.length,
         footnotes: footnotes.length,
@@ -1216,6 +1241,25 @@ export class WikiDocs {
       }),
       counts: outcome.counts,
     };
+  }
+
+  /**
+   * What each written section of the document gives a diagram to name (contract `docs.diagram.check`): its sentences
+   * that stand sourced and its heading blocks, as the document stands now. A section being written is left out by its
+   * key: its old words are no source for what is drawn in their place.
+   */
+  private async diagramSources(ownerId: string, spaceId: string, slug: string): Promise<Array<{ key: string; texts: string[] }>> {
+    const sections = await this.prisma.wikiDocSection.findMany({
+      where: { ownerId, doc: { spaceId, slug } },
+      select: { key: true, blocks: true, sentences: { where: { status: 'sourced' }, select: { text: true } } },
+    });
+    return sections.map((section) => ({
+      key: section.key,
+      texts: [
+        ...section.sentences.map((sentence) => sentence.text),
+        ...(section.blocks as unknown as BodyBlock[]).filter((block) => block.kind === 'heading').map((block) => block.text ?? ''),
+      ],
+    }));
   }
 
   /**

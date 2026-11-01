@@ -37,12 +37,17 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
+import io.orbitd.android.composer.CreatedWorkspaceLine
+import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.SessionPendingTray
+import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
+import io.orbitd.android.cards.LocalAnsweredQuestions
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
@@ -223,7 +228,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
-    val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
+    val liveTail = transcript != null && state.window.newerAfter == null
+    val queuedShown = if (liveTail) queued.size else 0
+    // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
+    // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
+    val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
+        val tail = if (liveTail) accepted + queued.map { it.event } else emptyList()
+        AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail, cards::open)
+    }
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
             null -> null
@@ -332,7 +344,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
     }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -367,6 +379,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
+            var renamedWorkspaceName by remember(handle, route.id) { mutableStateOf<String?>(null) }
+            val createdWorkspaceLine = remember(detail, worktreeState.detail, data.effectiveRunnerRows, data.effectiveWorkspaceRows, renamedWorkspaceName) {
+                val source = worktreeState.detail ?: detail ?: return@remember null
+                CreatedWorkspaceLine.fromSession(source, data.effectiveRunnerRows, data.effectiveWorkspaceRows)?.let { line ->
+                    if (renamedWorkspaceName != null) line.copy(name = renamedWorkspaceName!!) else line
+                }
+            }
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
@@ -405,6 +424,36 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
+                    }
+                    if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
+                        item(key = "created-workspace") {
+                            CreatedWorkspaceLineView(
+                                line = createdWorkspaceLine,
+                                settingsEnabled = data.workspaces.any { ObjectId.same(it.id, createdWorkspaceLine.workspaceId) } ||
+                                    data.effectiveWorkspaceRows.any { ObjectId.same(it.string("id"), createdWorkspaceLine.workspaceId) },
+                                onRename = { newName ->
+                                    scope.launch {
+                                        try {
+                                            api.renameWorkspace(createdWorkspaceLine.workspaceId, newName)
+                                            renamedWorkspaceName = newName
+                                            app.realtime.refreshDirectory()
+                                            app.realtime.refreshSession()
+                                        } catch (cancel: CancellationException) {
+                                            throw cancel
+                                        } catch (e: Exception) {
+                                            OrbitToasts.show(
+                                                MachineSetupCopy.CREATED_RENAME_FAILED,
+                                                detail = io.orbitd.android.directory.directoryError(e),
+                                                tone = ToastTone.ERROR,
+                                            )
+                                        }
+                                    }
+                                },
+                                onOpenSettings = {
+                                    open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = createdWorkspaceLine.workspaceId))
+                                },
+                            )
+                        }
                     }
                     items(displayedRows, key = { it.key }, contentType = { it.event.type }) { row ->
                         TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))

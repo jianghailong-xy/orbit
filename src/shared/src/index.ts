@@ -4,6 +4,8 @@ export * from './background';
 export * from './dto';
 export * from './permissionSemantics';
 export * from './bashRules';
+export * from './claude-region-check';
+export * from './claude-regions';
 export * from './codec';
 export * from './codexRateLimitReset';
 export * from './criteria-changes';

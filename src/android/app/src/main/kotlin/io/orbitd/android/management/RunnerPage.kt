@@ -4,7 +4,6 @@ import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -60,9 +59,6 @@ internal object RunnerCopy {
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
     fun updateFailed(version: String, whenText: String) = "Update to $version failed $whenText"
     const val WORKTREES = "Worktrees"
-    const val WORKSPACES_FOOTER = "Tap a workspace to open its sessions. Add or change workspaces on the web."
-    /** The words of WORKSPACES_FOOTER that link to this runner's page on the web (RunnerPage.workspacesFooter). */
-    const val WORKSPACES_FOOTER_LINK = "on the web"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
     const val ABOUT_HOSTNAME = "Hostname"
@@ -118,6 +114,10 @@ internal object RunnerCopy {
     const val NO_CLI_SIGNED_IN = "No coding CLI is signed in"
     fun noCliSignedInDetail(cli: String) = "Nothing can run on this machine until one is. $cli is installed here."
     fun noCliSignedInDetailMany(clis: String) = "Nothing can run on this machine until one is. $clis are installed here."
+    /** A machine blocked for the Claude region (docs/claude-region-check-contract.md): its attention line and card title, and the
+     * card's detail — OrbitKit ClaudeRegionCopy, the web's claudeRegionCopy.ts. */
+    const val CLAUDE_REGION_ATTENTION = "Claude Code can’t use Anthropic here"
+    fun claudeRegionAttentionDetail(region: String) = "Anthropic doesn’t offer Claude in $region."
     /** Names listed in one sentence: the last after "and", the rest between commas — `Claude Code, Codex and Kimi Code`. */
     fun namesTwo(first: String, second: String) = "$first and $second"
     const val NAMES_COMMA = ", "
@@ -580,7 +580,12 @@ internal object RunnerPage {
      * machine by the same answer (Infrastructure.attention).
      */
     fun noCliSignedIn(runner: JsonObject, workspaces: List<JsonObject>): List<String>? {
-        val installed = loginEngines.filter { engineHealth(runner, it)?.bool("installed") == true }
+        // A signed-out Claude Code on a machine blocked for the Claude region is no CLI to sign in: Orbit won't start a Claude sign-in
+        // there, and the region's own item says why.
+        val installed = loginEngines.filter {
+            engineHealth(runner, it)?.bool("installed") == true &&
+                !(it == "claude" && engineHealth(runner, it)?.str("auth") == "no" && regionBlocked(runner))
+        }
         if (installed.isEmpty() || installed.any { engineHealth(runner, it)?.str("auth") != "no" }) return null
         if (workspaces.any(::runsOnKeyOrPool)) return null
         return installed
@@ -599,12 +604,24 @@ internal object RunnerPage {
 
     private fun signedOutItems(runner: JsonObject, workspaces: List<JsonObject>) = loginEngines.mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true && it.str("auth") == "no" } ?: return@mapNotNull null
+        if (engine == "claude" && regionBlocked(runner)) return@mapNotNull null
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
         val name = loginNames.getValue(engine)
         AttentionItem("engineSignedOut", "bad", "$name signed out", "$name is signed out",
             if (users.size == 1) "${users[0]} runs on this machine’s $name login — its sessions fail until you sign in again."
             else "${namesPhrase(users)} run on this machine’s $name login — their sessions fail until you sign in again.",
             AttentionAction("signIn", engine = health.str("engine")), names = users)
+    }
+
+    /** Whether this runner's effective Claude region verdict is blocked (`region`, docs/claude-region-check-contract.md §5, §6):
+     * Orbit then runs no Anthropic account on it and starts no Claude sign-in. Null for one that doesn't check. */
+    private fun regionBlocked(runner: JsonObject) = runner.obj("region")?.str("verdict") == "blocked"
+
+    /** Claude Code can't use Anthropic here, with Check again (OrbitKit RunnerAttention's claudeRegionItem). */
+    private fun claudeRegionItem(runner: JsonObject): AttentionItem? {
+        val region = runner.obj("region")?.takeIf { it.str("verdict") == "blocked" } ?: return null
+        return AttentionItem("claudeRegionUnsupported", "warn", RunnerCopy.CLAUDE_REGION_ATTENTION, RunnerCopy.CLAUDE_REGION_ATTENTION,
+            RunnerCopy.claudeRegionAttentionDetail(region.str("name").orEmpty()), AttentionAction("checkRegion"))
     }
 
     /** One item per stuck checkout, however many workspaces work in it, named after the first. */
@@ -637,6 +654,8 @@ internal object RunnerPage {
      * Default that runs on the machine's Gemini key (runsOnEnvKey) has no quota to run out of. */
     private fun quotaItems(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long) = loginEngines.mapNotNull { engine ->
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        // No Anthropic account runs on a machine blocked for the region, nor is its usage read there.
+        if (engine == "claude" && regionBlocked(runner)) return@mapNotNull null
         // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
         val usage = EngineAccounts.usage(engine, runner)
         val health = engineHealth(runner, engine)
@@ -741,6 +760,7 @@ internal object RunnerPage {
         if (offline) items += offlineItem(runner, nowMs)
         else {
             items += noCliSignedIn(runner, workspaces)?.let { listOf(noCliSignedInItem(it)) } ?: signedOutItems(runner, workspaces)
+            claudeRegionItem(runner)?.let { items += it }
             items += checkoutItems(workspaces)
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
@@ -748,20 +768,6 @@ internal object RunnerPage {
         cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
-    }
-
-    /** This runner's page on the web, where its workspaces are added and changed: <server>/runners/<id>, the id in its public spelling
-     * (OrbitKit RunnerPageFormat.runnerWebURL). Null for a server address that is no URL. */
-    fun runnerWebUrl(server: String, runnerId: String): String? = server.toHttpUrlOrNull()?.newBuilder()
-        ?.addPathSegment("runners")?.addPathSegment(ObjectId.toPublic(runnerId))?.build()?.toString()
-
-    /** The Workspaces footer split around its "on the web", the words that link to this runner's page there (OrbitKit
-     * RunnerPageFormat.workspacesFooter): the words before, the link's own, the words after. */
-    fun workspacesFooter(): Triple<String, String, String> {
-        val footer = RunnerCopy.WORKSPACES_FOOTER
-        val at = footer.indexOf(RunnerCopy.WORKSPACES_FOOTER_LINK).takeIf { it >= 0 } ?: return Triple(footer, "", "")
-        val end = at + RunnerCopy.WORKSPACES_FOOTER_LINK.length
-        return Triple(footer.substring(0, at), RunnerCopy.WORKSPACES_FOOTER_LINK, footer.substring(end))
     }
 
     /** The list's third line: the first two items' short lines; none for an offline runner. */

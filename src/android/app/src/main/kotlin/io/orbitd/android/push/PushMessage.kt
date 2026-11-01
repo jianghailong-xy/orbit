@@ -32,7 +32,8 @@ data class PushPayload(
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
-        kind == "engine-signed-out" -> runnerId?.let { "orbit://runner/$it" }
+        // About a machine: its sign-in lapsed, or its Claude connection to Anthropic is in a region Anthropic does not offer Claude in.
+        kind == "engine-signed-out" || kind == "claude-region-blocked" -> runnerId?.let { "orbit://runner/$it" }
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
         // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
         kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
@@ -68,7 +69,7 @@ data class PushMessage(
         private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
         private val kinds = PushPayload.ownerItemKinds + setOf("approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
-            "wiki-review-mode-tiered", "wiki-maintenance-failing")
+            "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked")
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -105,10 +106,12 @@ data class PushMessage(
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
-                    "approval", "finished", "failed" -> require(payload.sessionId != null)
+                    // A wakeup loop that stopped running, and a wakeup dropped with its FAILED session, are about that session.
+                    "approval", "finished", "failed", "loop-missed", "wakeup-dropped" -> require(payload.sessionId != null)
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
-                    "engine-signed-out" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
+                    // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
+                    "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
                     "watch-matched" -> require(payload.watchId != null && (payload.generation ?: 0) > 0)
                     in PushPayload.ownerItemKinds -> require(payload.projectId != null && payload.openItemId != null)
                     else -> require(payload.wikiSpaceId != null)

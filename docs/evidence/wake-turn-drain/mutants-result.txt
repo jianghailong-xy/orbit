@@ -1,0 +1,65 @@
+M1 the reap drains without settling: KILLED by
+    reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+    reap with the retry armed and a newer one-shot wakeup already waiting: the drained one is SUPERSEDED, the newer one left as it was
+    a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize
+    task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+M2 a failed turn drains without settling: KILLED by
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+M3 the runner's finalize drains without settling: KILLED by
+    a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize
+    the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told
+M4 the owner's End of a queued session drains without settling: KILLED by
+    a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize
+M5 the owner's End of a running session retires without settling: KILLED by
+    a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize
+M6 a turn handed to the engine is settled as unrun too: KILLED by
+    task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+    an interrupt and a withdrawal leave the tick they take CANCELLED, as before, and take it out of its loop's runs
+M7 the counts are never corrected: KILLED by
+    task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+    an interrupt and a withdrawal leave the tick they take CANCELLED, as before, and take it out of its loop's runs
+M8 one run fewer per tick, not per turn: KILLED by
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+M9 only a drain corrects the counts: KILLED by
+    an interrupt and a withdrawal leave the tick they take CANCELLED, as before, and take it out of its loop's runs
+M10 a drained tick is CANCELLED, not DROPPED: KILLED by
+    task E's loop B: tick 9, filed behind the turn the runner died in, is dropped with the reap; tick 44 says 35 ticks missed and session_get reads 9 fired, 35 missed
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+M11 a one-shot of a recovering session is dropped: KILLED by
+    reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back
+    reap with the retry armed and a newer one-shot wakeup already waiting: the drained one is SUPERSEDED, the newer one left as it was
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+M12 the drained row itself goes back to PENDING (no copy): KILLED by
+    reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back
+    a tick already handed to the engine ran: the reap leaves it DELIVERED and counted, and the ticks queued behind it on one turn move one run, not two, to missed
+M13 the copy forgets when it was asked for: KILLED by
+    reap with the retry armed: the one-shot wakeup goes back to waiting as a copy of itself, is held while the retry is armed, and is filed and delivered once the session is back
+M14 a copy is made though a newer one waits: KILLED by
+    reap with the retry armed and a newer one-shot wakeup already waiting: the drained one is SUPERSEDED, the newer one left as it was
+M15 a drop with a FAILED session is not told: KILLED by
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+    the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told
+M16 a drop with an ended session is told too: KILLED by
+    a session that ended: the one-shot wakeup is DROPPED and nobody is told — an End the runner never honored, the owner's End of a running and of a queued session, and the runner's finalize
+M17 the reaper does not push: KILLED by
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+M18 a failed turn does not push: KILLED by
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+M19 the runner's finalize does not push: KILLED by
+    the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told
+M20 a drop is pushed twice: KILLED by
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+    a turn that fails its session (turn-complete): the one-shot wakeup behind it is DROPPED and its owner told, and the tick beside it is DROPPED and uncounted
+    the runner's finalize FAILED with no retry armed: the one-shot wakeup on the drained turn is DROPPED and its owner told
+M21 a job's wake on a drained turn is kept: KILLED by
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+M22 the reaper drops the PushService it is given: KILLED by
+    reap with no retry armed: the one-shot wakeup is DROPPED and its owner is told, once; a job's wake on the same turn is deleted
+    the reaper RealtimeModule builds holds the one PushService of the application

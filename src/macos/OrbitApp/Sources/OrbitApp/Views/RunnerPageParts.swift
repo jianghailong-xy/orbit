@@ -211,6 +211,9 @@ private func runnerAttentionGlyph(_ kind: RunnerAttentionKind) -> String {
     switch kind {
     case .offline: return "power"
     case .noCliSignedIn, .engineSignedOut: return "person.crop.circle.badge.exclamationmark"
+    // The machine's Claude connection is where Anthropic doesn't offer Claude: a warning, as the web
+    // draws it (docs/claude-region-check-contract.md).
+    case .claudeRegionUnsupported: return "exclamationmark.triangle"
     case .checkoutStuck: return "arrow.triangle.branch"
     case .quotaNearLimit: return "gauge.with.dots.needle.67percent"
     case .diskLow: return "internaldrive"
@@ -323,7 +326,11 @@ struct RunnerEngineRow: View {
                             .font(.orbitLabel)
                             .foregroundStyle(Color.secondary)
                     } else if RunnerPageFormat.needsSignIn(health) {
-                        RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }
+                        // On a machine blocked for the Claude region no Claude sign-in starts: the page
+                        // draws Check Again under this row instead, a press of its own.
+                        if !RunnerPageFormat.claudeRegionBlocked(runner, engine: health.engine) {
+                            RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }
+                        }
                     }
                     // Several accounts: whose window this is — the account a new session starts on.
                     if let next {
@@ -349,6 +356,10 @@ struct RunnerEngineRow: View {
         }
         .padding(.vertical, 2)
     }
+
+    /// Where the row's words start: past the engine's mark and the gap after it — where a press drawn
+    /// under the row lines up with them.
+    static let textInset: CGFloat = 28 + 12
 
     /// Whether the row opens the engine's page: an engine the machine has, one it lacks whose page installs
     /// it (`Infrastructure.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
@@ -409,6 +420,37 @@ struct RunnerWorkspaceRow: View {
             RunnerChevron()
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// What a machine blocked for the Claude region says under its Claude Code row, on its page and on the
+/// engine's (board 03's group footnote, the web's note): why, and what still runs there, with
+/// Anthropic's Supported regions after it; then when it was checked and where Claude's connection came
+/// out — and, offline, that nothing here can be pressed until it is back.
+struct ClaudeRegionNoteView: View {
+    let region: RunnerPageFormat.RegionNote
+    let offline: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(noteText)
+            if let checked = region.checked {
+                Text(checked)
+            }
+            if offline {
+                Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
+            }
+        }
+    }
+
+    private var noteText: AttributedString {
+        typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
+        var text = AttributedString(region.note + " ")
+        var link = AttributedString(ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS)
+        link.link = URL(string: ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS_URL)
+        link[Colour.self] = Color.accentColor
+        text += link
+        return text
     }
 }
 

@@ -192,6 +192,10 @@ function makeService(
     // The outcomes riding on any of these turns (session-request.ts `readSessionReplyCards`, read for
     // every listed turn as the echo reads them): none here.
     sessionRequest: { findMany: async () => [] },
+    // What a turn under a `derivedUuid` key reads to become a fact told to this session
+    // (coordinator-delivery-card.ts): the wake whose delivery names it here. None does: the
+    // coordinator's turn below is listed with its key and no wake behind it.
+    projectCoordinatorWake: { findMany: async () => [] },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(

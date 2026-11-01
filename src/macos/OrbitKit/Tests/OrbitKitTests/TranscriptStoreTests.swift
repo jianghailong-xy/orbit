@@ -162,6 +162,25 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(restored.state.maxSeq, 61)
     }
 
+    /// A notice and a folded diagnostic come back from a snapshot as the same two kinds of row.
+    func testNoticeAndDiagnosticRowsSurviveTheSnapshot() throws {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "notice": .string("Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent")])))
+        for (seq, ts) in [(2, "15:13:06"), (3, "15:14:06")] {
+            r.apply(RunEvent(seq: seq, type: .system, payload: .object([
+                "stderr": .string("2026-10-28T\(ts).979719Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out")])))
+        }
+        let restored = try roundTrip(r)
+
+        XCTAssertEqual(restored.state, r.state)
+        guard case .notice? = restored.state.items.first, case .diagnostic(let row)? = restored.state.items.last else {
+            return XCTFail("expected a notice row and a diagnostic row, got \(restored.state.items)")
+        }
+        XCTAssertEqual(row.label, "model_catalog · timeout")
+        XCTAssertEqual(row.repeats, 2)
+    }
+
     // MARK: - FileTranscriptStore
 
     private func tempDir() -> URL {
@@ -203,8 +222,8 @@ final class TranscriptStoreTests: XCTestCase {
         // Rewind the stored envelope to the previous schema version.
         let url = dir.appendingPathComponent("sess-A.json")
         let text = try String(contentsOf: url, encoding: .utf8)
-        let downgraded = text.replacingOccurrences(of: #""version":7"#, with: #""version":6"#)
-        XCTAssertNotEqual(downgraded, text, "expected a v7 envelope to rewrite")
+        let downgraded = text.replacingOccurrences(of: #""version":8"#, with: #""version":7"#)
+        XCTAssertNotEqual(downgraded, text, "expected a v8 envelope to rewrite")
         try downgraded.write(to: url, atomically: true, encoding: .utf8)
 
         XCTAssertNil(store.load(sessionID: "sess-A"))

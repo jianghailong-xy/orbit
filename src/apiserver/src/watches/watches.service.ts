@@ -45,6 +45,7 @@ import {
   observationOf,
   predicateHolds,
   predicateLeafTests,
+  sessionJobsOf,
   type WatchTargetFact,
 } from './watch-predicate';
 import {
@@ -128,13 +129,15 @@ const WATCH_VIEW_SELECT = {
 
 type WatchRow = Prisma.WatchGetPayload<{ select: typeof WATCH_VIEW_SELECT }>;
 
-/** A watch as a client reads it: every target carries its own name and standing, read with the watch (`named`). */
+/** A watch as a client reads it: every target carries its own name and standing, read with the watch (`named`),
+ *  and the watch says how many of its deliveries never got there (`deadLetterCount`). */
 type NamedWatchRow = Omit<WatchRow, 'targets'> & {
   targets: (WatchRow['targets'][number] & {
     targetTitle: string | null;
     targetStatus: WatchTargetStatusView | null;
     targetTask: WatchTargetTaskView | null;
   })[];
+  deadLetterCount: number;
 };
 
 /** A delivery as the operations read lists it: what a watch's read shows, and the watch and Match it belongs to. */
@@ -469,6 +472,9 @@ export class WatchesService {
           targetTask: row?.task ?? null,
         };
       }),
+      // Counted from the deliveries this read already carries: every Match's, and the one the watch's end owes.
+      deadLetterCount: [...watch.matches.flatMap((match) => match.deliveries), ...watch.expiryDeliveries]
+        .filter((delivery) => delivery.state === 'DEAD_LETTER').length,
     }));
   }
 
@@ -704,6 +710,8 @@ export class WatchesService {
       select: {
         id: true, sessionKind: true, status: true, endReason: true,
         completedAt: true, archivedAt: true, deletedAt: true,
+        // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
+        runningBgJobs: true, runningBgJobActivity: true,
       },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
@@ -759,6 +767,7 @@ export class WatchesService {
           archivedAt: session.archivedAt,
           deletedAt: session.deletedAt,
           pendingApproval: awaitingAnswer.has(target.id),
+          jobs: sessionJobsOf(session.runningBgJobs, session.runningBgJobActivity),
         },
       };
     });

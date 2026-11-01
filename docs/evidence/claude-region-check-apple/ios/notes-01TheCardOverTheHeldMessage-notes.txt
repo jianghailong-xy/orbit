@@ -1,0 +1,7 @@
+card: Use another provider 9 label="Use another provider" value="" frame=(26.0, 632.3333333333333, 151.66666666666666, 29.666666666666742) hittable=true
+card: Check again 9 label="Check again" value="" frame=(26.0, 670.0, 98.66666666666667, 29.66666666666663) hittable=true
+card: Move to another machine 9 label="Move to another machine" value="" frame=(185.66666666666666, 632.3333333333333, 177.66666666666666, 29.666666666666742) hittable=true
+card: the presses take 2 row(s)
+card: This run never started at (26.0, 493.0, 203.6666717529297, 20.33331298828125)
+card: No engine ran · your message is still here at (26.0, 707.6666666666666, 215.66666666666666, 13.333333333333371)
+card: Now do the same for the sign-up test. at (119.0, 343.0, 255.0, 49.287109375)

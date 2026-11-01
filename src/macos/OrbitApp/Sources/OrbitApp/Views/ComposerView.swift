@@ -300,6 +300,8 @@ struct ComposerView: View {
         if offeredSuggestion != nil { return "" }
         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (contract §3.2).
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
+        // A machine's new session page has no workspace to send to, and no question to answer.
+        if let machine = console.machinePlaceholder { return machine }
         return console.replyContext?.placeholder ?? "Message…"
     }
 
@@ -1280,7 +1282,9 @@ struct ComposerView: View {
     private func providerRowLabel(_ choice: ProviderChoice, blocked: Bool, fixable: Bool) -> some View {
         let selected = choice.slug == console.provider
         if blocked {
-            let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
+            // The runner's Claude region is a reason nothing here fixes: the row names no fix, and its
+            // press still opens the machine's Claude Code page, which explains (web parity).
+            let fix = fixable && !choice.regionBlocked ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
             menuItemLabel("\(SessionProviderChoices.providerName(on: console.engine, choice)) — \(choice.unavailable ?? "")\(fix)",
                           selected: false)
         } else {

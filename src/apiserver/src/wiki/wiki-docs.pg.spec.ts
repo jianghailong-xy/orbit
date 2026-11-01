@@ -918,6 +918,36 @@ test('a diagram its sourced sentences back is stored as the server wrote it out,
   assert.deepEqual(s2.sentences.map((sentence) => [sentence.block, sentence.status]), [[0, 'sourced'], [1, 'unverified']], 'the sentence after it moved up a block');
 });
 
+test('a diagram may name what the document verifies elsewhere: other sections, verified originals, headings; never an unverified original, nor its own section\'s old text (docs.diagram)', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const version = await confirmPlan(h, s);
+  const note = code('export function claimTask(', { excerpt: 'export function claimTask(queueDepth: number) {' });
+  const drawn = async (label: string): Promise<[number, number]> => {
+    const markdown = ['A dispatch starts in `claimTask`[1].', '', '```mermaid', 'flowchart LR', `  a[${label}]`, '```'].join('\n');
+    const answer = await writeDoc(h, s, 'task-dispatch', writeBody(version, [{ key: 's2', markdown, footnotes: [note] }]));
+    expectStatus(answer, 200, `the flow section drawing ${label}`);
+    return [answer.body.sections[0].stats.diagrams, answer.body.sections[0].stats.diagramsDropped];
+  };
+  const pitfalls = await writeDoc(h, s, 'task-dispatch', writeBody(version, [{
+    key: 's3',
+    markdown: ['A claim spends the `retryBudget`[1].', '', '### Lease timing', '', 'The `ghostQueue` holds it[2].'].join('\n'),
+    footnotes: [code('export function claimTask('), code('ghostQueue(', { verified: false, excerpt: 'const phantomName = 1;' })],
+  }]));
+  expectStatus(pitfalls, 200, 'the pitfalls, one sentence verified and one not');
+
+  assert.deepEqual(await drawn('claimTask'), [1, 0], 'its own sentence');
+  assert.deepEqual(await drawn('retryBudget'), [1, 0], 'another section\'s sourced sentence');
+  assert.deepEqual(await drawn('queue'), [1, 0], 'its verified footnote\'s excerpt, word by word');
+  assert.deepEqual(await drawn('Lease timing'), [1, 0], 'another section\'s heading');
+  assert.deepEqual(await drawn('ghostQueue'), [0, 1], 'another section\'s sentence with no verified footnote');
+  assert.deepEqual(await drawn('phantomName'), [0, 1], 'an unverified footnote\'s excerpt');
+
+  const before = await writeDoc(h, s, 'task-dispatch', writeBody(version, [{ key: 's2', markdown: 'The `oldName` runs[1].', footnotes: [note] }]));
+  expectStatus(before, 200, 'the flow section saying a name');
+  assert.deepEqual(await drawn('oldName'), [0, 1], 'the old text of the section being written');
+});
+
 // ── 5. unchanged material, unchanged section ────────────────────────────────────────────────────
 
 test('a section whose material did not change is not written again; one whose material did is; a section the plan dropped goes', { skip }, async () => {

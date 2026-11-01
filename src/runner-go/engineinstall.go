@@ -251,6 +251,13 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		return InstallResultRequest{Status: installDone, Command: engineRenewCmd}
 	}
 
+	// Claude Code's installer sends the login stored here to Anthropic (claudeLoginBlocked).
+	if spec.bin == providerClaude {
+		if machine, region, blocked := claudeLoginBlocked(context.Background(), nil); blocked {
+			logln("engine-install (requested):", spec.name, "refused —", errClaudeStartRegionBlocked.Error())
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: claudeInstallRefusedMessage(machine, region)}
+		}
+	}
 	logln("engine-install (requested):", spec.name, "->", spec.installCmd)
 	ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
 	defer cancel()
@@ -258,6 +265,10 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 	cmd.Env = append(os.Environ(), "PATH="+serviceLoginPath())
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
+	}
+	// Claude Code's installer from one that does not talk to Anthropic, while blocked: quiet (claude_region.go).
+	if spec.bin == providerClaude {
+		cmd.Env = claudeQuietEnv(cmd.Env, nil)
 	}
 	// See configureEngineCommandTree: an installer that forks outlives the `sh` the context
 	// kills, and its open pipe would hold this timeout — and the lock above — open forever.
@@ -351,6 +362,13 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 		logln("engine-install:", spec.name, "refreshed the installed file in place")
 		return ""
 	}
+	// Claude Code's installer sends the login stored here to Anthropic (claudeLoginBlocked).
+	if bin == providerClaude {
+		if machine, region, blocked := claudeLoginBlocked(ctx, nil); blocked {
+			logln("engine-install:", spec.name, "refused —", errClaudeStartRegionBlocked.Error())
+			return claudeInstallRefusedMessage(machine, region)
+		}
+	}
 
 	if installed {
 		// The installer is the repair: a binary that is present and cannot run is replaced by
@@ -367,6 +385,10 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	cmd.Env = append(os.Environ(), "PATH="+serviceLoginPath())
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
+	}
+	// Claude Code's installer from one that does not talk to Anthropic, while blocked: quiet (claude_region.go).
+	if bin == providerClaude {
+		cmd.Env = claudeQuietEnv(cmd.Env, nil)
 	}
 	// This one is on a session's first turn: a forked installer that outlives its `sh` would
 	// hold the turn open past the timeout meant to bound it. See configureEngineCommandTree.

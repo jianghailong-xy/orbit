@@ -71,6 +71,9 @@ func TestAnIdleSessionsSpoolGoesAtStartupOverHTTPS(t *testing.T) {
 	_, live, _, done := idleSession(t, tr, pool, "sess-idle")
 
 	waitUntil(t, func() bool { return len(spoolFiles(linkSpoolDir())) == 0 }, "the idle session's spool was never sent")
+	// The last segment goes as its batch is stored; the send says so on its next pass, once it finds nothing held.
+	waitUntil(t, func() bool { return logged(logs, "the events idle session sess-idle held through seq 65 are stored") },
+		"the runner never said the idle session's spool was stored")
 	store.mu.Lock()
 	for i, want := range spool {
 		got, ok := store.stored[int(want.seq)]
@@ -98,8 +101,7 @@ func TestAnIdleSessionsSpoolGoesAtStartupOverHTTPS(t *testing.T) {
 		t.Error("the idle session stopped waiting for its claim once its spool was sent")
 	default:
 	}
-	if !logged(logs, "session sess-idle is idle; the 56 events through seq 65 an earlier process could not send go now, not at its next claim") ||
-		!logged(logs, "the events idle session sess-idle held through seq 65 are stored") {
+	if !logged(logs, "session sess-idle is idle; the 56 events through seq 65 an earlier process could not send go now, not at its next claim") {
 		t.Errorf("the runner did not say what it sent: %v", logs.all())
 	}
 }

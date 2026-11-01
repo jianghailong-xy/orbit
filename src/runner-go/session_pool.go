@@ -1020,6 +1020,11 @@ func (p *sessionPool) activate(job *ClaimedSession) (*liveSession, bool) {
 // then publishes the claim and wakeup. Credential staging uses this hook so a
 // heartbeat cannot begin detaching the epoch between staging and activation.
 func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*liveSession, bool) {
+	// A warm Claude engine is not reused for a turn the region check refuses (claude_region.go): it
+	// is recycled instead, and the cold start that takes its place refuses the turn before any
+	// engine is spawned (runSessionProcess). Asked before the lock, since the check can go to the
+	// network, and only of a session with an idle engine to reuse.
+	regionRefused := p.idleEngineFor(job.SessionID) && claudeRegionRefusal(context.Background(), job) != ""
 	p.mu.Lock()
 	s := p.sessions[job.SessionID]
 	if s == nil || s.detaching {
@@ -1043,6 +1048,11 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		job.SourceRefusal = s.job.SourceRefusal
 	}
 	s.job = job
+	var cancels []context.CancelFunc
+	if regionRefused {
+		// Before the permit below: an engine that holds one is not recycled.
+		cancels = append(cancels, p.requestEvictLocked(s))
+	}
 	s.active = true
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
@@ -1051,11 +1061,20 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		s.warmTimer.Stop()
 		s.warmTimer = nil
 	}
-	cancels := p.evictWarmExcessLocked()
+	cancels = append(cancels, p.evictWarmExcessLocked()...)
 	p.signalLocked(s)
 	p.mu.Unlock()
 	runCancels(cancels)
 	return s, true
+}
+
+// idleEngineFor reports whether the session's supervisor holds an engine a claim would reuse: one
+// that is resident, idle and not already on its way out, which is what requestEvictLocked recycles.
+func (p *sessionPool) idleEngineFor(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := p.sessions[id]
+	return s != nil && s.resident && !s.active && !s.evictRequested && !s.selfDrivenTurn && !s.detaching
 }
 
 // park releases the active-turn permit only after /turn-complete has durably

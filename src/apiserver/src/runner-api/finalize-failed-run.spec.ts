@@ -82,6 +82,10 @@ function makeController(
       updateMany: async () => ({ count: 0 }),
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
+    // What a queued wake turn the drain answers carried (wake-turn-withdraw.ts). No fixture here files
+    // one, so it settles nothing.
+    backgroundJobWake: { deleteMany: async () => ({ count: 0 }) },
+    sessionScheduledWakeup: { findMany: async () => [] },
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {

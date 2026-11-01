@@ -36,6 +36,12 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
             add(InteractionCard("record:${event.seq}:ownerAnswer", CardFamily.SESSION_REQUEST, CoordinatorQueue.sent, answer, "",
                 objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
+        // A fact told to this session — the coordinator told of one, or a session the answer to its criteria proposal: one line, its
+        // sentence, that opens to the words the agent read (`CoordinatorDeliveryLine`).
+        payload.obj("coordinatorDelivery")?.let { delivery -> CoordinatorDeliveryLine.parse(delivery)?.let { card ->
+            add(InteractionCard("record:${event.seq}:coordinatorDelivery", CardFamily.SESSION_REQUEST, CoordinatorDeliveryLine.sentence(card),
+                delivery, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
+        } }
         addProjection("sessionMessage", "Message from another session", CardFamily.SESSION_REQUEST, listOf("fromSessionId"))
         payload.objects("sessionReplies").forEach { row ->
             if (row.text("requestId").isNullOrBlank() || row.text("fromSessionId").isNullOrBlank() ||

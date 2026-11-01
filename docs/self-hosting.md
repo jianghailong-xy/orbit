@@ -580,35 +580,52 @@ processes and a database host of its own busy.
 The cell's load at its peak:
 
 - 15,000 connections;
-- 500 heartbeats a second, a quarter of them reconciled in full (an estimate for production's commands and changes);
+- 500 heartbeats a second, 11.4% of them reconciled in full: every five minutes, and whenever a report that changes in
+  production changed, at production's rates. Commands, cancellations and settings changes mark more of them; an
+  estimate puts production's share at a quarter, which the figures below do not cover;
 - 2,000 durable events a second;
 - 10,000 live deltas a second, forwarded to whoever watches.
 
-The sizes below are what each operation costs on the runner link's load test, measured at a fifth of that and projected
-linearly. [The load test's README](../scripts/runner-link/README.md#the-cells-size) gives the measurements, the
-arithmetic, and how to repeat both.
+A cell of the sizes below carried that load for an hour on the runner link's load test (task C2b, 2026-10-31), the
+whole stack on one machine, a GCE c2d-standard-56 (AMD EPYC 7B13): once as the criterion has it, and once with the
+live deltas too. What the table gives as measured comes from those two hours, the task's comments C2b evidence 24 to
+29. What it gives as projected is linear in each rate, from what each operation cost on the same machine (C2b
+evidence 23). [The load test's README](../scripts/runner-link/README.md#re-testing-at-cell-scale-task-c2b) gives the
+runs, the arithmetic, and how to repeat both.
 
-| Part | For a cell | What it carries at the peak |
-| --- | --- | --- |
-| Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | 5,000 connections each, 7,500 with one node down (about 1.4 GB of connections); about 0.4 cores across the cell |
-| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 41% busy, 54% with one of them down. The live relay adds about 0.4 cores, spread too: 52% busy, 70% with one down (see below). The first one also takes people's other requests. |
-| Database | 8 cores, 32 GB of memory, its own fast disk | 4.2 cores at its 10-second peak, 53% of its cores |
-| NATS | 1 node, 1 core | Hints, and the live stream |
+| Part | For a cell | Measured | Projected, at the peak |
+| --- | --- | --- | --- |
+| Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | One node carried all 15,000 connections: 0.8 cores on average (1.5 with the live deltas) and 2.2 GiB | 5,000 connections a node, 7,500 with one node down (1.1 GiB of them); 1.5 cores across the cell |
+| apiservers | 6 processes, each 2 GB | With the live deltas, each process's main thread was at most 49–52% busy over 10 seconds; without them, 33–37%. Each process used under 600 MiB | Each main thread 52% busy, 62% with one process down. The first one also takes people's other requests |
+| Database | 11 cores, 32 GB of memory, its own fast disk | 5.85 cores at its 10-second peak, 53.2% of its cores, during an autovacuum (43.4% outside one); 50.3% with the live deltas | 4.2 cores on average, 6.3 at its 10-second peak |
+| NATS | 1 node, 1 core | 0.34 cores with the live deltas | 0.3 cores |
 
+- **Why six and 11.** The cell was first sized at four apiservers and 8 database cores, from a fifth of its load. On
+  the same machine, four apiservers carrying the live deltas ran their main threads 63–64% busy at the 10-second peak,
+  and the database's peak measured above would be 73.1% of 8 cores (C2b evidence 23, 26). Six and 11 are the
+  projection from the costs measured there; the two hours above then measured a cell of that size.
 - **The apiservers' limit is the main thread.** It does nine tenths of a process's work, so a process carries about one
-  core. The count leaves room for one process to fail: three carry the peak at 54%.
-- **Losing a gateway node.** Its 5,000 runners reconnect to the other two, which let in 200 handshakes a second each.
-  For about 13 seconds that adds up to 1.9 apiserver cores and 3.5 database cores, while each connection's first
-  heartbeat is reconciled in full. The database then runs near its 8 cores; about 13 would keep even that under 60%.
-- **Commands and changes.** A heartbeat costs the database 0.63 ms, or 6.37 ms when it is reconciled in full: when
-  something it delivers changed (a merge, a commit, a sign-in, a cancellation), and at least every five minutes. Each
-  percent of beats reconciled in full adds about 0.03 database cores.
+  core. The count leaves room for one process to fail: five carry the peak at 62% (projected).
+- **Losing a gateway node.** Its 5,000 runners reconnect to the other two, which let in 200 handshakes a second each,
+  for about 13 seconds. Projected as if each runner minted a link token and had its first heartbeat reconciled in full,
+  that adds up to 5.4 apiserver cores and 8.7 database cores meanwhile, more than 11 cores have spare at the peak. A
+  runner whose token is still good does not mint one. Measured: when the test's one gateway restarted, its 15,000
+  runners came back at 200 a second over about 110 seconds, and the database's busiest 5 seconds took 6.5 cores (with
+  four apiservers and 8 cores then; C2b evidence 20).
+- **Commands and changes.** On the test's machine a heartbeat cost the database 3.35 ms on average, 11.4% of them
+  reconciled in full (C2b evidence 17, 23); the two kinds were not measured apart there. On another host (task O1) a heartbeat cost the
+  database 0.63 ms, or 6.37 ms when it was reconciled in full: when something it delivers changed (a merge, a commit, a
+  sign-in, a cancellation), and at least every five minutes. Each percent of beats reconciled in full added about
+  0.03 database cores there.
 - **The database's disk and memory.** On the load test's sessions an event takes about 1.5 KB stored (its row, its tool
   call and their indexes) and about 5.7 KB of WAL. At 4,000 events a person a day that is about 60 GB of tables and
   230 GB of WAL a day for a cell, before the archive compresses it. Size the disk and the WAL archive for that.
   - Raise `max_wal_size` to 8 GB or more. At the default 1 GB the peak's WAL forces a checkpoint every 90 seconds or
     so, each followed by full-page writes. With 8 GB, checkpoints wait for `checkpoint_timeout` (5 minutes).
   - Give `shared_buffers` a quarter of the memory.
+  - The test's database had 16 GiB of memory, and sat at that limit throughout: its page cache was evicted and read
+    back all hour, though nothing was killed and its CPU stayed within the criterion (C2b evidence 26, 29). The 32 GB
+    in the table is the earlier projection's, for the newest events' cache, and was not measured.
 - **A failover must not lose an acknowledged commit.** A runner lets go of its copy of a batch of events once their
   acknowledgement arrives, so an event the database acknowledged exists nowhere else. An asynchronous standby can lose
   the last moments' commits when it takes over. A cell's database needs one of these:
@@ -619,16 +636,18 @@ arithmetic, and how to repeat both.
   Keep the standby near, since every commit that writes events waits for it.
 - **The live relay** is spread over every apiserver, with the session streams it feeds (the web gateway's routes under
   [Several apiservers](#several-apiservers)).
-  - **Its cost** is an order-of-magnitude estimate: every run that could have measured it cleanly on the test host was
-    voided by the host's swapping. Each delta forwarded to a watcher costs about 0.04 ms of CPU on the apiserver that
-    holds the session's streams, which comes to 0.4 cores at 10,000 a second. Each delta reached its watcher about
-    105 ms after it was produced (p99): two 50 ms gatherings, the runner's and the stream's.
-  - **Why it is spread.** On one apiserver it does not fit. With every stream on the first apiserver, its main thread
-    would be about 87% busy at the peak, with its share of the runners' calls. A test on a slower host measured it: at
-    a cell's live rate, the first apiserver's main thread was 98% busy and the others' about 40%. Every delta still
-    reached its watcher, but the other work of that process waited, the link tokens it alone signed among it.
-- **Not measured here:** people's own requests (web and apps), which go to the first apiserver, their session streams
-  apart; and what each apiserver's own background work costs the database. Each process's figures leave room for them.
+  - **Its cost**, measured: each delta forwarded to a watcher took about 0.09 ms of CPU across the apiservers (0.1 ms
+    over six), about one core at 10,000 a second. Every delta reached its watcher, 116 ms after it was produced at the
+    p99: two 50 ms gatherings, the runner's and the stream's (C2b evidence 23, 29).
+  - **Why it is spread.** On one apiserver it does not fit: the relay alone would keep its main thread about 99% busy
+    at the peak (projected, C2b evidence 23). A test on a slower host measured it: at a cell's live rate, the first apiserver's main
+    thread was 98% busy and the others' about 40%. Every delta still reached its watcher, but the other work of that
+    process waited, the link tokens it alone signed among it.
+- **Not measured here:** a cell of three gateway nodes, since the test's one node carried every connection; how the
+  database's peak moves as its tables grow, each autovacuum longer and heavier (the judging hour began with 19.8
+  million stored events); people's own requests (web and apps), which go to the first apiserver, their session
+  streams apart; and what each apiserver's own background work costs a production database. Each process's figures
+  leave room for them.
 
 ### Several apiservers
 
@@ -711,6 +730,17 @@ docker compose up -d --wait apiserver-2 link-gateway gateway
 docker compose ps apiserver apiserver-2 link-gateway gateway
 docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls are served'
 ```
+
+**Idle connections: the caller closes first.** Every apiserver keeps an idle HTTP connection open for 120 seconds,
+on port 3000 and on `RUNNER_LINK_INTERNAL_PORT`. Whatever calls it must close an idle connection sooner. If the
+apiserver closed it first, a request sent on it at that moment would be reset: through the web gateway the caller gets
+a 502, and the link gateway sends the call again or tells the runner to.
+
+- The web gateway closes an idle connection after 60 seconds. That is nginx's upstream `keepalive_timeout`, which
+  applies with no `keepalive` directive since nginx 1.29.7.
+- The link gateway closes one after 90 seconds (`IdleConnTimeout` in `src/link-gateway/backend.go`).
+- If you set `keepalive_timeout` in the web gateway's upstreams, or put another proxy or load balancer in front of the
+  apiservers, keep its idle timeout under 120 seconds.
 
 **How the session streams are spread:**
 

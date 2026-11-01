@@ -72,11 +72,6 @@ public enum RunnerPageCopy {
     }
 
     public static let RUNNER_WORKSPACE_WORKTREES = "Worktrees"
-    public static let RUNNER_WORKSPACES_FOOTER =
-        "Tap a workspace to open its sessions. Add or change workspaces on the web."
-    /// The words of RUNNER_WORKSPACES_FOOTER that link to this runner's page on the web
-    /// (`RunnerPageFormat.workspacesFooter`).
-    public static let RUNNER_WORKSPACES_FOOTER_LINK = "on the web"
     public static func runnerWorkspaceRunning(count: Int) -> String { "\(count) running" }
 
     public static let RUNNER_ABOUT_NAME = "Name"

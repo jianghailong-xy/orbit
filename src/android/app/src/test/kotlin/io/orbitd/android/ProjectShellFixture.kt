@@ -8,11 +8,15 @@ import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
+import java.time.ZoneOffset
+import java.util.TimeZone
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 
 /** One controlled Orbit server for the A05d shell tests: the production Activity, AuthSession, RealtimeStore and navigation over
  * these answers. Project Launch's coordinator and a running member are in Alpha, a member waiting on you in Beta, a member in
@@ -409,6 +413,19 @@ internal object ProjectShell {
     }, "a05d-shell", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://a05d.test"), "owner@a05d.test", "fixture")
+}
+
+/** For one test, the JVM's default zone at the whole-hour offset where the real clock reads between noon and one; the zone it found is put
+ * back once the test is over. The pages file rows by local day off the real clock, and this server's rows are minutes old: in the first
+ * minutes after midnight they read as Yesterday, which is how these tests failed on CI between 00:00 and 00:10 UTC. Only the local day
+ * moves: every instant, and so every relative clock a test reads ("asked 2h ago"), stays the server's. */
+class MiddayZone : TestWatcher() {
+    private var found: TimeZone? = null
+    override fun starting(description: Description) {
+        found = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone(ZoneOffset.ofHours(12 - Instant.now().atOffset(ZoneOffset.UTC).hour)))
+    }
+    override fun finished(description: Description) = TimeZone.setDefault(found)
 }
 
 /** The shell's application with the controlled server in place of the network and the device stores. */

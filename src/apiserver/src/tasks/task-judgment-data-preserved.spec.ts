@@ -2592,6 +2592,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored
       // runner reads NULL in each new column, and every workspace and session false.
       '0457_first_workspace_in_conversation',
+      // Wakeup loops held by the control plane (0458, docs/long-running-loop-contract.md §1): a new table,
+      // `session_wakeup_loop`, with its own CHECKs, a foreign key to `session` and one partial unique index;
+      // on `session_scheduled_wakeup`, one nullable UUID column `loop_id` added with IF NOT EXISTS, its
+      // foreign key to the new table, 0264's one-pending key dropped and created again narrowed to
+      // `loop_id IS NULL`, one more partial unique index and one partial index. `session` is only pointed
+      // at; no `task`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored wakeup reads
+      // `loop_id` NULL, which is exactly what the narrowed key held before.
+      '0458_session_wakeup_loop',
       // A background job's stall wake (0459, runner-api/background-job-wake.ts): `background_job_wake`, the table 0262
       // created, has its own `background_job_wake_trigger_check` dropped and added back under the same name, widened by
       // 'stall' — every stored row reads 'exit' or 'output' — and gains `elapsed_ms` and `idle_ms` (BIGINT) and
@@ -2600,7 +2610,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions is named, and no function, trigger, type or index is created,
       // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: adding the
       // CHECK back reads the stored wakes to validate them, and every one reads NULL in each new column.
-      '0459_background_job_wake_stall'],
+      '0459_background_job_wake_stall',
+      // The wakes delivered to a conversation, found by that conversation (0460, projects/coordinator-delivery-card.ts):
+      // one partial index on `project_coordinator_wake` (`session_id` WHERE status = 'DELIVERED'), created IF NOT EXISTS.
+      // That table is not a preserved relation; no `task`, `session`, `project` or `project_acceptance_*` object nor any
+      // of the six preserved triggers/functions is named, and no column, function, trigger, type or constraint is created,
+      // replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0460_coordinator_wake_delivered_session',
+      // Which country a runner's Claude connection to Anthropic comes out in (0461, docs/claude-region-check-contract.md
+      // §4, §7; runners/runner-region.ts): `runner` gains `region` (JSONB) and `region_check_requested_at` (TIMESTAMP(3)),
+      // both nullable with no default and added with IF NOT EXISTS — catalog-only. Only `runner` is altered, and it is not
+      // a preserved relation: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six
+      // preserved triggers/functions is named, and no function, trigger, type, index or constraint is created, replaced
+      // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
+      // NULL in both.
+      '0461_runner_region'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

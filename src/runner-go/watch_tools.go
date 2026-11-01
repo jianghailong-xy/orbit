@@ -16,16 +16,90 @@ import (
 // loses nothing. `orbit watch`, `orbit task await` and `orbit session await` (watch_cli.go) send the same
 // requests from flags.
 
-// watchPredicateVersion is the one grammar these tools describe (contracts/watch.contract.json).
+// watchPredicateVersion is the grammar of every predicate this binary writes by itself: the await presets
+// and session_create(wait) are all version-1 terms, which every Watch server accepts.
 const watchPredicateVersion = 1
+
+// watchPredicateVersions are the grammars watch_create and watch_update describe and send
+// (contracts/watch.contract.json servedPredicateVersions). A predicate an agent writes goes out under the
+// version it names or, when it names none, the lowest of these that has every term it uses
+// (minimalWatchPredicateVersion). So a version-1 predicate stays version 1, which a server older than the
+// later grammars still takes, and one that needs a later grammar is sent under it, which such a server
+// refuses by name (PREDICATE_VERSION_UNSUPPORTED) instead of reading it under a grammar it was not written in.
+var watchPredicateVersions = []int{1, 2, 3}
+
+// watchLeafSinceVersion is the grammar each leaf first appears in (contract leaves[].sinceVersion).
+var watchLeafSinceVersion = map[string]int{
+	"SESSION_TURN_SETTLED":       1,
+	"SESSION_RUN_TERMINAL":       1,
+	"SESSION_LIFECYCLE_TERMINAL": 1,
+	"SESSION_NEEDS_ATTENTION":    1,
+	"TASK_TERMINAL":              1,
+	"TASK_FAILED":                1,
+	"TASK_DONE":                  1,
+	"TASK_PROGRESS_AT_LEAST":     2,
+	"TASK_NO_PROGRESS_FOR":       2,
+	"SESSION_JOB_NO_OUTPUT_FOR":  3,
+}
 
 // The contract's limits, repeated so a schema states the bounds a request would be refused against.
 const (
-	watchMaxTargets    = 200
-	watchMinTTLSeconds = 60
-	watchMaxTTLSeconds = 2592000
-	watchListLimit     = 100
+	watchMaxTargets           = 200
+	watchMinTTLSeconds        = 60
+	watchMaxTTLSeconds        = 2592000
+	watchListLimit            = 100
+	watchMinNoProgressSeconds = 60
+	watchMinNoOutputSeconds   = 300
 )
+
+// minimalWatchPredicateVersion is the lowest grammar with every term of a predicate: AT_LEAST and a leaf's
+// params arrive in version 2, and each leaf in its own (watchLeafSinceVersion). A kind or a leaf this
+// binary does not know is sent under the newest grammar, so the server's refusal names everything it serves.
+func minimalWatchPredicateVersion(term interface{}) int {
+	newest := watchPredicateVersions[len(watchPredicateVersions)-1]
+	node, _ := term.(map[string]interface{})
+	if node == nil {
+		return newest
+	}
+	version := 1
+	raise := func(to int) {
+		if to > version {
+			version = to
+		}
+	}
+	switch node["kind"] {
+	case "ALL", "ANY":
+	case "AT_LEAST":
+		raise(2)
+	case "ALL_OF", "ANY_OF":
+		operands, _ := node["operands"].([]interface{})
+		for _, operand := range operands {
+			raise(minimalWatchPredicateVersion(operand))
+		}
+		return version
+	default:
+		return newest
+	}
+	if _, ok := node["params"]; ok {
+		raise(2)
+	}
+	leaf, _ := node["leaf"].(string)
+	since, known := watchLeafSinceVersion[leaf]
+	if !known {
+		return newest
+	}
+	raise(since)
+	return version
+}
+
+// watchPredicateVersionArg is the version a watch_create or watch_update request carries: the one the agent
+// named, passed on as given for the server to judge, or the predicate's own (minimalWatchPredicateVersion).
+func watchPredicateVersionArg(args map[string]interface{}, predicate map[string]interface{}) interface{} {
+	if version, ok := args["predicateVersion"]; ok && version != nil {
+		return version
+	}
+	return minimalWatchPredicateVersion(predicate)
+}
 
 // watchStates is contracts/watch.contract.json states.watch.values.
 var watchStates = []string{"ACTIVE", "PAUSED", "MATCHED", "EXPIRED", "CANCELLED", "REVOKED", "UNRESOLVABLE"}
@@ -173,14 +247,30 @@ func awaitWatchBody(kind string, ids []string, preset watchAwaitPreset, ttlSecon
 	return body
 }
 
-const watchPredicateGrammar = "The condition, in the closed v1 grammar: no shell, SQL or free text. A term is either " +
-	"{\"kind\":\"ALL\"|\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":LEAF}, where ALL holds when LEAF holds for every target and " +
-	"ANY when it holds for at least one, or {\"kind\":\"ALL_OF\"|\"ANY_OF\",\"operands\":[terms]}, with at most 4 operands " +
-	"and 2 levels. Task leaves: TASK_TERMINAL (DONE, CANCELLED or FAILED), TASK_FAILED, TASK_DONE. Session leaves: " +
+var watchPredicateGrammar = "The condition, in Orbit's closed grammar: no shell, SQL or free text, and the server runs no " +
+	"command. A term is either {\"kind\":\"ALL\"|\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":LEAF}, where ALL holds when " +
+	"LEAF holds for every target and ANY when it holds for at least one, or {\"kind\":\"ALL_OF\"|\"ANY_OF\",\"operands\":" +
+	"[terms]}, with at most 4 operands and 2 levels. Every leaf must be about the kind of every target. " +
+	"Version 1 task leaves: TASK_TERMINAL (DONE, CANCELLED or FAILED), TASK_FAILED, TASK_DONE. Version 1 session leaves: " +
 	"SESSION_TURN_SETTLED (no longer PENDING or RUNNING: waiting for input, or over; for a LANDING session, only " +
 	"once its landing has ended), SESSION_RUN_TERMINAL (its run " +
 	"SUCCEEDED, FAILED or ended), SESSION_LIFECYCLE_TERMINAL (moved to Completed or Trash), SESSION_NEEDS_ATTENTION (an " +
-	"approval waits on a person). Every leaf must be about the kind of every target. \"All terminal or any failed\" is " +
+	"approval waits on a person). " +
+	"Version 2 adds the quorum {\"kind\":\"AT_LEAST\",\"count\":N,\"over\":\"ALL_TARGETS\",\"leaf\":LEAF}, which holds " +
+	"when LEAF holds for at least N of the targets, and \"params\" on the leaves that take them: TASK_PROGRESS_AT_LEAST " +
+	"with {\"current\":N} or {\"percent\":P} (the progress the task reports with task_progress_report reaches a count, or " +
+	"that share of its total), and TASK_NO_PROGRESS_FOR with {\"seconds\":S} (the task is still open and its reported " +
+	"progress has not moved for S seconds, " + strconv.Itoa(watchMinNoProgressSeconds) + " at least). " +
+	"Version 3 adds SESSION_JOB_NO_OUTPUT_FOR with {\"seconds\":S} or {\"seconds\":S,\"jobId\":\"bgj_...\"}: a job the " +
+	"session started with bg_run and still has running (the one jobId names, or any of them) has written no output for S " +
+	"seconds, " + strconv.Itoa(watchMinNoOutputSeconds) + " at least. Orbit's server decides it from the runner's " +
+	"once-a-minute reports, so it holds even when that runner has died: the silence keeps growing. A job that has " +
+	"ended no longer counts, so a watch on it alone waits until it expires; to hear about the session's run ending too, " +
+	"put {\"kind\":\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":\"SESSION_RUN_TERMINAL\"} beside it under ANY_OF. A watch " +
+	"that resumes this session cannot name this session as a target: for this session's own job, start it with bg_run's " +
+	"wakeOnStall instead. To catch an external system (CI, a deploy, a queue) stalling, there is no shell leaf: run a " +
+	"polling script with bg_run that prints a line only when the state it polls changes, with wakeOnStall, so its " +
+	"silence is the stall. \"All terminal or any failed\" is " +
 	"{\"kind\":\"ANY_OF\",\"operands\":[{\"kind\":\"ALL\",\"over\":\"ALL_TARGETS\",\"leaf\":\"TASK_TERMINAL\"}," +
 	"{\"kind\":\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":\"TASK_FAILED\"}]}."
 
@@ -195,9 +285,10 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		"description": "The watch id, as watch_create, task_await, session_await or watch_list returned it.",
 	}
 	predicateVersionProp := map[string]interface{}{
-		"type":        "integer",
-		"enum":        []int{watchPredicateVersion},
-		"description": "The grammar version. Omit it for 1, the grammar described under predicate.",
+		"type": "integer",
+		"enum": watchPredicateVersions,
+		"description": "The grammar version the predicate is written in: 1, 2 or 3, as described under predicate. Omit it " +
+			"and the lowest version that has every term the predicate uses is sent.",
 	}
 	keyProp := map[string]interface{}{"type": "string", "minLength": 1, "maxLength": 200, "description": watchIdempotencyKeyDescription}
 	return []map[string]interface{}{
@@ -206,7 +297,10 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 			"description": "Ask Orbit to watch Orbit tasks or sessions and wake this session when a condition holds. This is " +
 				"how to wait on Orbit's own work: do not poll it with sleep, Bash loops, Monitor, bg_run or schedule_wakeup. " +
 				"Orbit's server holds the watch, so it outlives this call, this engine being recycled and the runner " +
-				"restarting. Name an explicit set of targets, fixed when the watch is made, and a predicate. The first time " +
+				"restarting. A condition reads Orbit's own records only (a task's status or reported progress, a session's " +
+				"state, a session's bg_run job going quiet) and never runs a command: to watch a system outside Orbit, run a " +
+				"polling script with bg_run that prints only when what it polls changes, with wakeOnStall. " +
+				"Name an explicit set of targets, fixed when the watch is made, and a predicate. The first time " +
 				"the predicate holds, Orbit records one Match and starts a turn in THIS session carrying a structured payload " +
 				"(watchId, generation, reason, changedTargets, latestSnapshot). A watch that ends without matching (it " +
 				"expired, its permission was revoked, or every target is gone) also starts one turn saying so; a cancelled " +
@@ -254,7 +348,9 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		{
 			"name": "watch_list",
 			"description": "List this session's watches, newest first and at most 100: each one's id, state, action, " +
-				"condition, targets and deadline. This is how to find a watch made before an engine restart or a compaction.",
+				"condition, targets and deadline, when the server evaluates it next (nextEvaluateAt, null once it has ended) " +
+				"and last did (lastEvaluatedAt), and how many of its wakes or notifications were never delivered " +
+				"(deadLetterCount; watch_get says why). This is how to find a watch made before an engine restart or a compaction.",
 			"inputSchema": obj(map[string]interface{}{
 				"state": map[string]interface{}{"type": "string", "enum": watchStates, "description": "Only watches in this state."},
 			}),
@@ -395,9 +491,10 @@ func runWatchTool(t *Transport, caller cliOrchestrationContext, name string, arg
 		if !present {
 			return "", fmt.Errorf("predicate is required: %s", headlineWatchPredicateHint())
 		}
-		body := map[string]interface{}{"predicateVersion": watchPredicateVersion, "predicate": predicate, "targets": targets}
-		if version, ok := args["predicateVersion"]; ok && version != nil {
-			body["predicateVersion"] = version
+		body := map[string]interface{}{
+			"predicateVersion": watchPredicateVersionArg(args, predicate),
+			"predicate":        predicate,
+			"targets":          targets,
 		}
 		if action := strings.ToUpper(strings.TrimSpace(getString(args, "action"))); action != "" {
 			body["action"] = action
@@ -472,10 +569,7 @@ func runWatchTool(t *Transport, caller cliOrchestrationContext, name string, arg
 		}
 		if present {
 			body["predicate"] = predicate
-			body["predicateVersion"] = watchPredicateVersion
-			if version, ok := args["predicateVersion"]; ok && version != nil {
-				body["predicateVersion"] = version
-			}
+			body["predicateVersion"] = watchPredicateVersionArg(args, predicate)
 		}
 		ttl, err := watchTTLArg(args)
 		if err != nil {
@@ -608,7 +702,13 @@ type watchSummary struct {
 	Predicate json.RawMessage `json:"predicate"`
 	ExpiresAt string          `json:"expiresAt"`
 	CreatedAt string          `json:"createdAt"`
-	Targets   []struct {
+	// When the server evaluates the condition next (null once the watch has ended) and last did.
+	NextEvaluateAt  *string `json:"nextEvaluateAt"`
+	LastEvaluatedAt *string `json:"lastEvaluatedAt"`
+	// How many of its wakes or notifications became dead letters. Nil from a server that does not count them,
+	// which is left out of the summary rather than shown as none.
+	DeadLetterCount *int `json:"deadLetterCount"`
+	Targets         []struct {
 		TargetKind string `json:"targetKind"`
 		State      string `json:"state"`
 	} `json:"targets"`
@@ -626,14 +726,19 @@ func (w watchSummary) compact() map[string]interface{} {
 		states[target.State]++
 	}
 	out := map[string]interface{}{
-		"watchId":      w.ID,
-		"state":        w.State,
-		"action":       w.Action,
-		"predicate":    w.Predicate,
-		"expiresAt":    w.ExpiresAt,
-		"createdAt":    w.CreatedAt,
-		"targets":      kinds,
-		"targetStates": states,
+		"watchId":         w.ID,
+		"state":           w.State,
+		"action":          w.Action,
+		"predicate":       w.Predicate,
+		"expiresAt":       w.ExpiresAt,
+		"createdAt":       w.CreatedAt,
+		"nextEvaluateAt":  w.NextEvaluateAt,
+		"lastEvaluatedAt": w.LastEvaluatedAt,
+		"targets":         kinds,
+		"targetStates":    states,
+	}
+	if w.DeadLetterCount != nil {
+		out["deadLetterCount"] = *w.DeadLetterCount
 	}
 	if n := len(w.Matches); n > 0 {
 		out["lastMatch"] = w.Matches[n-1]

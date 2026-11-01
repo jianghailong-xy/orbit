@@ -353,10 +353,12 @@ const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note:
   },
   {
     method: 'turnComplete',
-    statements: 4,
+    statements: 5,
     note:
-      'Four spellings, one write on every path. The steer wake-up returns immediately after its ' +
-      'own. The merge-state clear rides along with the park (one write), and is spelled out again ' +
+      'Five spellings, one write on every path. The steer wake-up returns immediately after its ' +
+      'own, and so does the hold a message the region check refused puts the session in ' +
+      '(docs/claude-region-check-contract.md §10), issued only when its turn went back in the queue. ' +
+      'The merge-state clear rides along with the park (one write), and is spelled out again ' +
       'on the two paths where the park wrote nothing — a duplicate ack, which returns before the ' +
       'park, and a park that matched no row, which leaves the tuple and its xmin alone. So the ' +
       'clear and the park are never both issued as writes in one transaction.',

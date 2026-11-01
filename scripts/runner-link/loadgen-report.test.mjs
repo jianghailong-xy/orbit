@@ -3,7 +3,12 @@
 // counts again from zero, and so does its container's cgroup; the report adds up what each process counted, so every
 // figure comes out as in the run without a restart, except what the reconnects themselves did. The report of the run
 // without a restart is byte for byte what the report was before it added anything up (testdata/loadgen-report-steady.md
-// and .json, written by loadgen-report.mjs at c615e5f18). Run from the repository root:
+// and .json, written by loadgen-report.mjs at c615e5f18), with the second verdict's lines added since: callerVerdict and
+// callerErrorCounts in report.json, the verdict's line and the errors a caller saw in report.md.
+//
+// Then the errors a caller saw (task C2b, 2026-10-31): on a synthetic run whose one such error a runner and the web
+// gateway both counted, beside errors no caller saw; and on C2b's two judging runs, from their report.json. Run from the
+// repository root:
 //
 //   node --test scripts/runner-link/
 //
@@ -44,8 +49,11 @@ const gatewayAt = (t, restarts) => {
 };
 const usec = (cores, t, start) => Math.round(cores * 1000 * (t - start));
 
-// A run directory, as loadgen-run.sh leaves it, of a stack whose link gateway restarts at each of `restarts`.
-function writeRun(name, restarts) {
+// A run directory, as loadgen-run.sh leaves it, of a stack whose link gateway restarts at each of `restarts`. With
+// `faults`, these too, from T0 + 300 s, as C2b's first judging run had them: a link token the web gateway answered 502,
+// which its runner counts as well (token_mint_failed); 3 heartbeat calls the gateway sent again and got answered, and 2
+// whose runner had gone; a Welcome's lookup that timed out; and a statement timeout in the database's log.
+function writeRun(name, restarts, faults = false) {
   const dir = join(scratch, name);
   mkdirSync(dir);
   const put = (file, value) => writeFileSync(join(dir, file), JSON.stringify(value));
@@ -61,6 +69,7 @@ function writeRun(name, restarts) {
     containers: Object.fromEntries(Object.entries(SCOPES).map(([svc, cgroup]) => [svc, { cgroup, cpuset: '' }])),
   });
   const errors = restarts.length ? { connection_lost: 1000 * restarts.length } : {};
+  if (faults) errors.token_mint_failed = 1;
   put('summary.json', {
     config: { runners: 1000, activeSessions: 500, eventRate: 20, perSessionRate: 0.04, liveRate: 0 },
     startedAt: iso(T0), steadyStartedAt: iso(STEADY_FROM), steadyEndedAt: iso(STEADY_TO), endedAt: iso(END), rampSeconds: 20,
@@ -71,7 +80,7 @@ function writeRun(name, restarts) {
         eventsResent: 0, payloadBytes: 7_200_000 },
       eventsAckedPerSecond: 20, batchesAckedPerSecond: 10, heartbeatAcksPerSecond: 67,
       ackBatch: latency(60, 120), ackEvent: latency(60, 120), heartbeatAck: latency(2, 9), tokenMint: latency(3, 8),
-      dialToWelcome: latency(4, 40), errorTotal: 1000 * restarts.length, errors,
+      dialToWelcome: latency(4, 40), errorTotal: Object.values(errors).reduce((n, v) => n + v, 0), errors,
     },
     whole: { seconds: 690 },
     unacknowledgedEvents: 0,
@@ -121,6 +130,8 @@ function writeRun(name, restarts) {
       'link_backend_calls_total{kind="events",result="answered"}': 150 * n,
       'link_backend_calls_total{kind="heartbeat",result="answered"}': 1000 * n,
       ...(g.from === T0 && t >= T0 + 200_000 ? { 'link_backend_retries_total{kind="welcome",reason="lost"}': 7 } : {}),
+      ...(faults && t >= T0 + 300_000 ? { 'link_backend_retries_total{kind="heartbeat",reason="lost"}': 3,
+        'link_backend_calls_total{kind="heartbeat",result="cancelled"}': 2, 'link_backend_calls_total{kind="welcome",result="timeout"}': 1 } : {}),
       'link_event_batches_total{result="stored"}': 150 * n,
       link_events_stored_total: 300 * n,
       'link_event_ack_duration_seconds_bucket{le="0.1"}': 120 * n,
@@ -140,6 +151,12 @@ function writeRun(name, restarts) {
     };
     return `# scrape ${t}\n` + Object.entries(series).map(([k, v]) => `${k} ${v}\n`).join('');
   }).join(''));
+  if (faults) {
+    mkdirSync(join(dir, 'logs'));
+    const token = (status) => `172.18.0.9 - - [28/Oct/2026:02:05:00 +0000] "POST /api/runner/link-token HTTP/1.1" ${status} 157 "-" "Go-http-client/1.1"\n`;
+    writeFileSync(join(dir, 'logs', 'gateway.log'), token(200) + token(502) + token(200));
+    writeFileSync(join(dir, 'logs', 'postgres.log'), '2026-10-28 02:05:00.123 UTC [4242] ERROR:  canceling statement due to statement timeout\n');
+  }
   return dir;
 }
 
@@ -176,7 +193,7 @@ for (const [label, restarts] of [['once', [T0 + 375_000]], ['twice (an OOM loop)
   });
 }
 
-test('a run without a restart: the report is byte for byte what it was before restarts were added up', () => {
+test('a run without a restart: the report is byte for byte what it was before restarts were added up, the second verdict added', () => {
   const { md, text } = report(writeRun('steady', []));
   if (process.argv.includes('--update-golden')) {
     mkdirSync(join(here, 'testdata'), { recursive: true });
@@ -191,3 +208,42 @@ test('a run without a restart: the report is byte for byte what it was before re
   assert.equal(md, readFileSync(`${golden}.md`, 'utf8'));
   assert.equal(text, readFileSync(`${golden}.json`, 'utf8'));
 });
+
+test('the errors a caller saw: a 502 once, and no retry answered, call its runner had left or database line', () => {
+  const { md, text } = report(writeRun('faults', [], true));
+  const r = JSON.parse(text);
+  assertTheLoad(r);
+  // The report's own count, as before: the 502 as the runner's and as the web gateway's, the retries, the calls whose
+  // runner had gone, the Welcome that timed out, and the database's line.
+  assert.deepEqual(r.errorCounts, { loadgen: 1, gateway: 13, gatewayLogWarnError: 0, apiserverErrorLines: 0, http5xx: 1,
+    postgresErrorLines: 1, deadlocks: 0, natsErrorLines: 0 });
+  assert.deepEqual(r.callerErrorCounts, { runners: 1, http5xx: 0, welcomesUnanswered: 1 });
+  assert.equal(r.callerVerdict, false);
+  assert.match(md, /^\*\*Verdict, counting only the errors a caller saw: FAIL\*\*$/m);
+  assert.match(md, /^Errors a caller saw, each once: 2 \(the report's own count: 16\)\.$/m);
+});
+
+// Task C2b's two judging runs, from their report.json as its comments hold them: evidence 16 (34pY2HDYWSnX3JeUpItJL,
+// sha256 be81a84efff2d53c…) and evidence 25 (34pdFTWYp1hDd2zF8IQ0h, sha256 623f62bf6c6d4758…), cut to what the second
+// verdict reads:
+//
+//   jq '{run, sha, verdict, criteria, errorCounts, gatewayErrors,
+//     loadgen: {steady: {errorTotal: .loadgen.steady.errorTotal, errors: .loadgen.steady.errors}},
+//     nginx: {byStatus: .nginx.byStatus, linkToken: .nginx.linkToken},
+//     gateway: {link_backend_calls_total: .gateway.link_backend_calls_total,
+//       link_backend_retries_total: .gateway.link_backend_retries_total}}' report.json
+for (const [label, run, ownErrors, callers, pass] of [
+  ['first judging run (full-1h, 736f80245): its six link-token 502s count once, and fail it', 'full-1h', 43,
+    { runners: 6, http5xx: 0, welcomesUnanswered: 0 }, false],
+  ['judging rerun (full-1h-r2, f6a150f07): 28 errors by its own count, none a caller saw', 'full-1h-r2', 28,
+    { runners: 0, http5xx: 0, welcomesUnanswered: 0 }, true],
+]) {
+  test(`C2b's ${label}`, () => {
+    const r = spawnSync(process.execPath, [join(here, 'loadgen-report.mjs'), '--from-report', join(here, 'testdata', `c2b-${run}.report.json`)],
+      { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, new RegExp(`^\\*\\*Verdict: FAIL\\*\\* \\(errors ${ownErrors}\\)$`, 'm'));
+    assert.match(r.stdout, new RegExp(`^\\*\\*Verdict, counting only the errors a caller saw: ${pass ? 'PASS' : 'FAIL'}\\*\\*$`, 'm'));
+    for (const [k, v] of Object.entries(callers)) assert.match(r.stdout, new RegExp(`^\\| ${k} \\| ${v} \\|$`, 'm'));
+  });
+}

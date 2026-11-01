@@ -14,6 +14,8 @@ function makeService(executableAfterDelete: number) {
   let controlTurns = 0;
   let inboxWakes = 0;
   const created: Array<{ kind: string; content?: string; clientTurnId: string }> = [];
+  /** The reasons the session's wakeup loop was ended with (endWakeupLoop): only the composer's Stop ends it. */
+  const loopEnds: string[] = [];
   const currentWork = currentWorkTerminalizationDouble();
   const tx = {
     $queryRaw: async () => [{ id: session.id }],
@@ -33,6 +35,12 @@ function makeService(executableAfterDelete: number) {
         return { id: '44444444-4444-4444-8444-444444444444', seq: 4 };
       },
     },
+    sessionWakeupLoop: {
+      updateManyAndReturn: async (args: { data: { endedReason: string } }) => {
+        loopEnds.push(args.data.endedReason);
+        return [];
+      },
+    },
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }) },
@@ -48,6 +56,7 @@ function makeService(executableAfterDelete: number) {
     controlTurns: () => controlTurns,
     created: () => created,
     inboxWakes: () => inboxWakes,
+    loopEnds: () => loopEnds,
   };
 }
 
@@ -78,6 +87,7 @@ test('a plain interrupt writes no payload onto its turn', async () => {
 
   assert.equal(h.created()[0].kind, 'interrupt');
   assert.equal(h.created()[0].content, undefined);
+  assert.deepEqual(h.loopEnds(), [], 'a plain interrupt ended the wakeup loop');
 });
 
 // The composer's Stop, and the whole of what makes it more than an interrupt: the explicit flag
@@ -91,6 +101,8 @@ test("Stop's explicit flag rides the interrupt turn", async () => {
   assert.deepEqual(JSON.parse(h.created()[0].content!), {
     stopBackgroundWork: true,
   });
+  // A wakeup loop is background work: the Stop ends it too, and says it was the owner's.
+  assert.deepEqual(h.loopEnds(), ['OWNER_STOP']);
 });
 
 // The follow-up payload keeps its own shape and gains the flag: whatever reads `content`/

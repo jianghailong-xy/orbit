@@ -29,6 +29,7 @@ struct ConsoleView: View {
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var ownerAnswerTold: OwnerAnswerTold?
+    @State private var coordinatorDeliveryTold: CoordinatorDeliveryTold?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     /// Whether the reader has gone back far enough through the history for a phone's composer band to
@@ -237,7 +238,7 @@ struct ConsoleView: View {
             // two engine-repair cards below when it has something to say — one fact,
             // one card (an engine reason it does not claim is theirs, and the reverse).
             if let runStart = console.runStart {
-                SessionRunStartCardView(console: console, card: runStart)
+                SessionRunStartCardView(console: console, card: runStart, onMove: moveFromCard)
                     .padding(.bottom, .composerBandGap)
             } else if let repair = console.queuedDshRepair {
                 DshRepairCardView(console: console, repair: repair)
@@ -351,6 +352,13 @@ struct ConsoleView: View {
                 .sheet(item: $ownerAnswerTold) { told in
                     OwnerAnswerSheet(told: told)
                 }
+                // And the words a fact told to this session stands for (`CoordinatorDeliveryLineView`).
+                .environment(\.openCoordinatorDelivery, { told in
+                    coordinatorDeliveryTold = told
+                })
+                .sheet(item: $coordinatorDeliveryTold) { told in
+                    CoordinatorDeliverySheet(told: told)
+                }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
                     approvalReview = target
@@ -379,6 +387,7 @@ struct ConsoleView: View {
             promotionReview = nil
             promotionReceipt = nil
             ownerAnswerTold = nil
+            coordinatorDeliveryTold = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
             readingBack = false
@@ -483,9 +492,31 @@ struct ConsoleView: View {
         }
     }
 
+    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
+    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    private var moveFromCard: (() -> Void)? {
+        #if os(iOS)
+        guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
+        return { openMove(session) }
+        #else
+        return nil
+        #endif
+    }
+
     #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
+    }
+
+    /// Move…, from the ⋯ menu or the region card: the sheet opens on the folder counts the app already
+    /// holds for the session's workspace, which its own read then replaces.
+    private func openMove(_ session: Session) {
+        let listed = session.effectiveLifecycleState == .completed
+            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
+        moveListed = listed.filter {
+            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
+        }
+        movingSession = session
     }
 
     private func sessionMenu(_ session: Session) -> some View {
@@ -524,14 +555,7 @@ struct ConsoleView: View {
                         Label(session.pinnedAt == nil ? "Pin" : "Unpin",
                               systemImage: session.pinnedAt == nil ? "pin" : "pin.slash")
                     }
-                    Button {
-                        let listed = session.effectiveLifecycleState == .completed
-                            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
-                        moveListed = listed.filter {
-                            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
-                        }
-                        movingSession = session
-                    } label: {
+                    Button { openMove(session) } label: {
                         Label("Move…", systemImage: "folder")
                     }
                     .disabled(sessionWorkspace(session) == nil)
@@ -800,6 +824,9 @@ struct TranscriptView: View {
         // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
         // including the 1pt scroll-anchor row at the tail.
         .environment(\.defaultMinListRowHeight, 0)
+        // The ended questions this conversation holds: a turn handing one's answer to the coordinator
+        // is that question's card — in the transcript and on the queue alike (`OwnerAnswerLineView`).
+        .environment(\.answeredQuestions, console.answeredQuestions)
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1066,7 +1093,8 @@ struct TranscriptView: View {
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
                                             taskStart: b.taskStart, startedCard: b.startedCard,
-                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer)
+                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer,
+                                            coordinatorDelivery: b.coordinatorDelivery)
     }
 
     private var stuckBubble: UserBubble? {
@@ -1087,7 +1115,8 @@ struct TranscriptView: View {
                              showWorkingIndicator: console.showWorkingIndicator,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
-                             recap: recapCard)
+                             recap: recapCard,
+                             createdWorkspace: console.createdWorkspaceLine)
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
@@ -1123,6 +1152,9 @@ struct TranscriptView: View {
     @ViewBuilder
     private func transcriptRow(_ row: TranscriptRow) -> some View {
         switch row {
+        case .createdWorkspace(let line):
+            // No `AnchorRow`: what the conversation made is no "Your question".
+            CreatedWorkspaceLineView(line: line, console: console)
         case .loadOlder:
             // List laziness keeps this un-materialized — and the fetch un-fired — while the user
             // stays at the tail.
@@ -1223,7 +1255,8 @@ struct TranscriptView: View {
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
-                                       sessionMessage: bubble.sessionMessage)
+                                       sessionMessage: bubble.sessionMessage,
+                                       coordinatorDelivery: bubble.coordinatorDelivery)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1374,7 +1407,9 @@ struct TranscriptView: View {
 
     private var headerStatus: String {
         let watching = app.watches?.summary(for: console.sessionID)
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching) {
+        // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
+        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
+                                                 machine: console.runnerName) {
             return subtitle
         }
         return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
@@ -1932,6 +1967,8 @@ struct TranscriptItemView: View {
             // behind the triangle.
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+        case .diagnostic(let notice):
+            DiagnosticNoticeRow(notice: notice)
         }
     }
 
@@ -1949,6 +1986,30 @@ struct TranscriptItemView: View {
     private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
         guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
         return { Task { await console.putBack(bubble) } }
+    }
+}
+
+/// A recoverable runtime diagnostic, drawn as web draws `.chat-notice.chat-diagnostic`: only the mark
+/// keeps the warning tone; the label is dim, the engine's words are in the secondary text colour, and
+/// the repeats folded into the row are a dimmed count after them. The whole logged line, stamp and
+/// module included, is the row's help text, as it is web's tooltip.
+struct DiagnosticNoticeRow: View {
+    let notice: DiagnosticNotice
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            if !notice.label.isEmpty {
+                Text(notice.label).font(.orbitMeta).monospacedDigit().foregroundStyle(.tertiary)
+            }
+            Text(notice.text).foregroundStyle(.secondary).textSelection(.enabled)
+            if notice.repeats > 1 {
+                Text("×\(notice.repeats)").font(.orbitMeta).monospacedDigit()
+                    .foregroundStyle(Color.orange.opacity(0.7))
+            }
+        }
+        .font(.orbitLabel)
+        .help(notice.message)
     }
 }
 

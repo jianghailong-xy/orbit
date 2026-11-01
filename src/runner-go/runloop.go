@@ -1081,6 +1081,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
 
+	// Where Claude's connection to Anthropic comes out (claude_region.go): checked at the start and
+	// on the engine probe's clock, on the owner's Check again, and by any Anthropic-bound Claude turn
+	// whose last answer is a minute old. A flip to blocked is checked again a minute on, for as long
+	// as this loop runs, and a second blocked answer stops the running Anthropic-bound Claude turns.
+	regionCheck := newClaudeRegionCheck(t, cfg.Name)
+	regionCheck.lifetime = loopCtx
+	claudeRegion.Store(regionCheck)
+	defer claudeRegion.Store(nil)
+	engineHealth.checkRegion = func() { regionCheck.check(loopCtx) }
+
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
 	// Each probe refreshes quickly while active and slowly while an agent for that
@@ -1244,7 +1254,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// beat function below), because only the control plane knows those directories.
 	sweepIntegrationScratch([]string{worktreesDir()}, nil)
 
-	// Heartbeat every 30s; honor server-requested cancellations.
+	// Heartbeat every 30s, and first right after the reclaim below; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
 	// A session that finds its engine signed out as it starts it says so (noteEngineSignedOut): the
@@ -1667,6 +1677,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					mergeMu.Unlock()
 				}(a)
 			}
+			// The owner's Check again (claude_region.go): checked at once, once per request. Off the
+			// heartbeat goroutine, which must not wait on a proxy that does not answer.
+			if rr := resp.RegionCheckRequest; rr != nil && regionCheck.takeCheckAgain(rr.RequestedAt) {
+				go regionCheck.check(loopCtx)
+			}
 			// Drive the browser-less sign-in the user started from the web. Both actions are
 			// idempotent: the server redelivers each one until a status report moves it on,
 			// and the relay itself refuses to start a second CLI while one is running.
@@ -1993,6 +2008,17 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			pending.endTakeover()
 		}
 		reclaimed = true
+	}
+
+	// A self-managed runner's first heartbeat, now rather than at the first tick half a minute on: until
+	// it lands, this machine reads offline with nothing reported, and someone may be watching it come up
+	// (a machine just approved has never been heard from at all). Not before the reclaim above: a beat
+	// hands out work against the supervisors it advertises, and until then there are none. The engines
+	// are a probe away, so what it finds gets a beat of its own. A managed instance has beaten already,
+	// or is waiting for that probe to (managedStartupBeat).
+	if currentManagedInstance() == nil {
+		beatNow()
+		go beatOnceProbed(loopCtx, engineHealth.probed(), beatNow)
 	}
 
 	// Reap orphan worktrees from a previous process — any checkout whose session we did

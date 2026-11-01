@@ -35,7 +35,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   PlanUsage,
@@ -44,6 +44,7 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerRegionView,
   RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
@@ -266,6 +267,10 @@ export interface Runner {
   /** The account removal in flight on this runner: which engine's store, which slot, and — when the
    *  machine refused — what it said. */
   accountRemove?: RunnerAccountRemoveState | null;
+  /** Where Claude's connection to Anthropic last came out, with the effective verdict
+   *  (docs/claude-region-check-contract.md §6). null/undefined for a runner that does not check, one
+   *  no check has decided yet, or an older control plane: never gated, drawn as before. */
+  region?: RunnerRegionView | null;
 }
 
 interface Workspace {
@@ -441,6 +446,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const [editingWorkspaces, setEditingWorkspaces] = useState(false);
 
+  // Under the fixed entries, Workspaces and Projects scroll as one; while every Workspace fits with
+  // the Projects head still showing under them, the Workspaces stay put and only Projects scrolls
+  // (docs/mocks/sidebar-projects-scroll, 02).
+  const listsRef = useRef<HTMLDivElement>(null);
+  const [pinWorkspaces, setPinWorkspaces] = useState(false);
+
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
@@ -600,6 +611,28 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       },
     ];
   };
+  // Measured before paint, and again whenever the list or the Workspaces group changes size. With no
+  // ResizeObserver (jsdom) the default stands: the two groups scroll as one.
+  const hasProjects = openProjects.length > 0;
+  useLayoutEffect(() => {
+    const lists = listsRef.current;
+    if (!lists || typeof ResizeObserver === 'undefined') return undefined;
+    const workspacesGroup = lists.querySelector<HTMLElement>(':scope > .tp-group-workspaces');
+    const measure = () => {
+      const projectsHead = lists.querySelector<HTMLElement>(':scope > .tp-group-projects > .tp-group-head');
+      if (!workspacesGroup || !projectsHead) return setPinWorkspaces(false);
+      const room = lists.getBoundingClientRect().height;
+      const needed = projectsHead.getBoundingClientRect().bottom - workspacesGroup.getBoundingClientRect().top;
+      // A list with no height (the rail folded to its icons) has nothing to pin.
+      setPinWorkspaces(room > 0 && needed <= room);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(lists);
+    if (workspacesGroup) observer.observe(workspacesGroup);
+    return () => observer.disconnect();
+  }, [hasProjects]);
+
   const workspaceSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -721,6 +754,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
+  // A Workspace reached by ⌘↑/↓ or ⌘1‒9 while its row is scrolled out of the shared list scrolls into
+  // view there. Only the list moves: scrollIntoView would also move the off-canvas drawer's ancestors.
+  useEffect(() => {
+    const lists = listsRef.current;
+    const row = lists?.querySelector<HTMLElement>('.tp-group-workspaces .tp-item.active');
+    if (!lists || !row) return;
+    const list = lists.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    if (box.top < list.top) lists.scrollTop -= list.top - box.top;
+    else if (box.bottom > list.bottom) lists.scrollTop += box.bottom - list.bottom;
+  }, [litWorkspaceId]);
+
   // A project's row opens its sessions page over the workspace showing (members span workspaces,
   // so the workspace only decides where the page's back leads), or the first one; with no
   // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
@@ -837,7 +882,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         })}
       </div>
 
-      <div className="tp-scroll autohide-scrollbar">
+      <div className="tp-scroll">
         <div className="tp-section">
           {topItems.map((t) => (
             <div
@@ -875,121 +920,126 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
         <div className="tp-divider" />
 
-        <div className="tp-group">
-          {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
-            <WorkspacesHead
-              count={orderedWorkspaces.length}
-              open={workspacesOpen}
-              editing={editingWorkspaces}
-              onToggle={() => setWorkspacesOpen((o) => !o)}
-              onEdit={() => {
-                setWorkspacesOpen(true);
-                setEditingWorkspaces(true);
-              }}
-              onDone={() => setEditingWorkspaces(false)}
-            />
-          )}
-          {/* Until Edit, no row registers with this context, so nothing here can be dragged. A
-              row with no runner stays out of it even then: it sorts last whatever it is given. */}
-          <DndContext
-            sensors={workspaceSensors}
-            collisionDetection={closestCenter}
-            onDragOver={onWorkspaceDragOver}
-            onDragEnd={onWorkspaceDragEnd}
-            onDragCancel={() => setDragPreviewIds(null)}
-          >
-            <SortableContext
-              items={orderedWorkspaces.filter((a) => workspaceRunnerId(a)).map((a) => a.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {(workspacesOpen || editingWorkspaces) &&
-                orderedWorkspaces.map((a, index) => {
-                  const runnerId = workspaceRunnerId(a);
-                  const runnerLabel =
-                    (runnerId ? runnerLabels.get(runnerId) : null) ??
-                    a.runner?.displayName ??
-                    a.runner?.name ??
-                    'Shared';
-                  const row = (dragHandle?: ReactNode) => (
-                    <WorkspaceRow
-                      key={a.id}
-                      workspace={a}
-                      runnerLabel={runnerLabel}
-                      active={a.id === litWorkspaceId}
-                      offline={workspaceRunnerIsOffline(
-                        runnerId,
-                        runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                      )}
-                      running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                      jobs={workspaceJobs.get(a.id) ?? 0}
-                      needsYou={workspaceNeedsYou.get(a.id) ?? 0}
-                      shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
-                      onOpen={openWorkspace}
-                      menu={workspaceMenu(a)}
-                      dragHandle={dragHandle}
-                    />
-                  );
-                  return editingWorkspaces && runnerId ? (
-                    <SortableWorkspaceRow
-                      key={a.id}
-                      workspace={a}
-                      disabled={reorderWorkspaces.isPending}
-                    >
-                      {row}
-                    </SortableWorkspaceRow>
-                  ) : (
-                    row()
-                  );
-                })}
-            </SortableContext>
-          </DndContext>
-          {(workspacesOpen || editingWorkspaces) &&
-            bareMachines.map((runner) => (
-              <div
-                key={runner.id}
-                className={`tp-item tp-setup${runner.id === settingUpRunnerId ? ' active' : ''}`}
-                onClick={() => {
-                  onNavigate?.();
-                  navigate(machineDraftPath(runner.id));
+        <div
+          ref={listsRef}
+          className={`tp-lists autohide-scrollbar${pinWorkspaces ? ' pin-workspaces' : ''}`}
+        >
+          <div className="tp-group tp-group-workspaces">
+            {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && (
+              <WorkspacesHead
+                count={orderedWorkspaces.length}
+                open={workspacesOpen}
+                editing={editingWorkspaces}
+                onToggle={() => setWorkspacesOpen((o) => !o)}
+                onEdit={() => {
+                  setWorkspacesOpen(true);
+                  setEditingWorkspaces(true);
                 }}
+                onDone={() => setEditingWorkspaces(false)}
+              />
+            )}
+            {/* Until Edit, no row registers with this context, so nothing here can be dragged. A
+                row with no runner stays out of it even then: it sorts last whatever it is given. */}
+            <DndContext
+              sensors={workspaceSensors}
+              collisionDetection={closestCenter}
+              onDragOver={onWorkspaceDragOver}
+              onDragEnd={onWorkspaceDragEnd}
+              onDragCancel={() => setDragPreviewIds(null)}
+            >
+              <SortableContext
+                items={orderedWorkspaces.filter((a) => workspaceRunnerId(a)).map((a) => a.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <span className="tp-ico tp-workspace-icon">
-                  <FolderAddOutlined aria-hidden="true" />
-                </span>
-                <span className="tp-label tp-workspace-label">
-                  <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
-                </span>
-              </div>
-            ))}
-          {confirmation}
-        </div>
-
-        {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && openProjects.length > 0 && (
-          <div className="tp-divider" />
-        )}
-
-        {/* The open projects close the rail, as they close the iPhone drawer: the ones waiting on
-            you first, then by the newest activity (lib/projectAttention `sidebarProjects`). The
-            task lists that stood here are picked from the Tasks page's title now, as the phone
-            picks them from its Tasks page. Closed projects are the Projects page's to list. */}
-        {openProjects.length > 0 && (
-          <div className="tp-group">
-            <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
-              <span className="tp-group-name">Projects</span>
-              <span className="tp-count">{openProjects.length}</span>
-              <CaretDownOutlined className={`tp-caret ${projectsOpen ? '' : 'collapsed'}`} />
-            </div>
-            {projectsOpen &&
-              openProjects.map((project) => (
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  active={sel === `project:${encodeId(project.id)}`}
-                  onOpen={openProject}
-                />
+                {(workspacesOpen || editingWorkspaces) &&
+                  orderedWorkspaces.map((a, index) => {
+                    const runnerId = workspaceRunnerId(a);
+                    const runnerLabel =
+                      (runnerId ? runnerLabels.get(runnerId) : null) ??
+                      a.runner?.displayName ??
+                      a.runner?.name ??
+                      'Shared';
+                    const row = (dragHandle?: ReactNode) => (
+                      <WorkspaceRow
+                        key={a.id}
+                        workspace={a}
+                        runnerLabel={runnerLabel}
+                        active={a.id === litWorkspaceId}
+                        offline={workspaceRunnerIsOffline(
+                          runnerId,
+                          runnerId ? runnerOnlineById.get(runnerId) : undefined,
+                        )}
+                        running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                        jobs={workspaceJobs.get(a.id) ?? 0}
+                        needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                        shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
+                        onOpen={openWorkspace}
+                        menu={workspaceMenu(a)}
+                        dragHandle={dragHandle}
+                      />
+                    );
+                    return editingWorkspaces && runnerId ? (
+                      <SortableWorkspaceRow
+                        key={a.id}
+                        workspace={a}
+                        disabled={reorderWorkspaces.isPending}
+                      >
+                        {row}
+                      </SortableWorkspaceRow>
+                    ) : (
+                      row()
+                    );
+                  })}
+              </SortableContext>
+            </DndContext>
+            {(workspacesOpen || editingWorkspaces) &&
+              bareMachines.map((runner) => (
+                <div
+                  key={runner.id}
+                  className={`tp-item tp-setup${runner.id === settingUpRunnerId ? ' active' : ''}`}
+                  onClick={() => {
+                    onNavigate?.();
+                    navigate(machineDraftPath(runner.id));
+                  }}
+                >
+                  <span className="tp-ico tp-workspace-icon">
+                    <FolderAddOutlined aria-hidden="true" />
+                  </span>
+                  <span className="tp-label tp-workspace-label">
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                  </span>
+                </div>
               ))}
+            {confirmation}
           </div>
-        )}
+
+          {(orderedWorkspaces.length > 0 || bareMachines.length > 0) && openProjects.length > 0 && (
+            <div className="tp-divider" />
+          )}
+
+          {/* The open projects close the rail, as they close the iPhone drawer: the ones waiting on
+              you first, then by the newest activity (lib/projectAttention `sidebarProjects`). The
+              task lists that stood here are picked from the Tasks page's title now, as the phone
+              picks them from its Tasks page. Closed projects are the Projects page's to list. */}
+          {openProjects.length > 0 && (
+            <div className="tp-group tp-group-projects autohide-scrollbar">
+              <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
+                <span className="tp-group-name">Projects</span>
+                <span className="tp-count">{openProjects.length}</span>
+                <CaretDownOutlined className={`tp-caret ${projectsOpen ? '' : 'collapsed'}`} />
+              </div>
+              {projectsOpen &&
+                openProjects.map((project) => (
+                  <ProjectRow
+                    key={project.id}
+                    project={project}
+                    active={sel === `project:${encodeId(project.id)}`}
+                    onOpen={openProject}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="tp-user">

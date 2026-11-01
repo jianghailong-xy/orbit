@@ -1409,6 +1409,92 @@ export interface OwnerAnswerCard {
 }
 
 /**
+ * What a `CoordinatorDeliveryCard` says, one value per sentence its line can read. A fact a
+ * coordinator is told (apiserver `buildCoordinatorDeliveryMessage`) is one wake event; the two that
+ * are told in more than one way — evidence handed over by a confirmed move, and the three readings
+ * of a project whose criteria have all landed — are one value per reading. The last two are the
+ * answer to a criteria proposal, sent back to the session that filed it (`criteria-decision-reply.ts`).
+ */
+export const COORDINATOR_DELIVERY_KINDS = [
+  /** `COMPLETION_EVIDENCE_REVISED`: a task submitted a revision of its evidence. */
+  'EVIDENCE_SUBMITTED',
+  /** `COMPLETION_EVIDENCE_REVISED`, handed over undecided by a confirmed move from another project. */
+  'EVIDENCE_MOVED_IN',
+  /** `DEPENDENT_READY`: a task waiting on prerequisites can start, and nothing will start it. */
+  'DEPENDENT_READY',
+  /** `TASK_DISPATCH_REFUSED`: a start of a task was refused before its run began. */
+  'TASK_DISPATCH_REFUSED',
+  /** `PROJECT_BLOCKER_RAISED`: a task's delivery raised a blocker only the owner can rule on. */
+  'PROJECT_BLOCKER_RAISED',
+  /** `CRITERION_UNLANDED`: a criterion's tasks are done and their work is not on main. */
+  'CRITERION_UNLANDED',
+  /** `PROJECT_ACCEPTANCE_LANDED`, its criteria not confirmed: the owner is to be asked. */
+  'ACCEPTANCE_LANDED',
+  /** `PROJECT_ACCEPTANCE_LANDED`, confirmed, and DONE still withheld. */
+  'ACCEPTANCE_LANDED_HELD',
+  /** `PROJECT_ACCEPTANCE_LANDED`, confirmed and recorded DONE. */
+  'ACCEPTANCE_LANDED_DONE',
+  /** `PROJECT_TASKS_SETTLED`: the project looks finished, and Orbit cannot record it Done by itself. */
+  'LOOKS_FINISHED',
+  /** `PROJECT_SETTLED_UNMERGED`: the project settled with commits on its line and not on main. */
+  'SETTLED_UNMERGED',
+  /** The owner approved the session's criteria proposal. */
+  'CRITERIA_APPROVED',
+  /** The owner refused the session's criteria proposal. */
+  'CRITERIA_REJECTED',
+] as const;
+
+export type CoordinatorDeliveryKind = (typeof COORDINATOR_DELIVERY_KINDS)[number];
+
+/**
+ * What a turn Orbit writes to tell a session about a committed fact carries beside its words: a
+ * project's coordinator told of a fact (`CoordinatorDeliveryService`, every notification
+ * `buildCoordinatorDeliveryMessage` writes), and a session told the owner's answer to its criteria
+ * proposal (`criteria-decision-reply.ts`).
+ *
+ * The words are written for the AGENT — `From Orbit · project “…” has a revision of completion
+ * evidence for you to decide`, then paragraphs of protocol — and they stay exactly what they were.
+ * Without this a client had nothing else to draw the turn from, and drew the platform's message as a
+ * bubble the owner had typed. Recorded beside the runner's echo like `OwnerAnswerCard`, so a client
+ * draws the turn as one line — `Evidence revision 1 submitted: <task> · Sent to the coordinator ·
+ * 07:30 PM`, or `Sent to this session` where this conversation is not the project's coordinator
+ * (`toCoordinator`) — that opens to those words. The sentence is the clients' to write from these fields
+ * (web `coordinatorDeliverySentence`, OrbitKit `CoordinatorDelivery`, Android
+ * `CoordinatorDeliveryLine`), one copy held by parity tests.
+ */
+export interface CoordinatorDeliveryCard {
+  kind: CoordinatorDeliveryKind;
+  /**
+   * The task the fact is about, by the title the coordinator was told — for the four facts that
+   * name one (evidence, a task that can start, a refused start, a blocker). Null for the rest.
+   */
+  task: { id: string; title: string } | null;
+  /** The evidence revision the sentence names (`EVIDENCE_SUBMITTED`, `EVIDENCE_MOVED_IN`). Null otherwise. */
+  revision: number | null;
+  /**
+   * What the sentence counts: the tasks whose work is not on main (`CRITERION_UNLANDED`), the
+   * criteria that landed (the three `ACCEPTANCE_LANDED` readings), the commits not on main
+   * (`SETTLED_UNMERGED`). Null otherwise.
+   */
+  count: number | null;
+  /**
+   * When this conversation was handed it: the moment the delivery was bound to its turn (the moment
+   * the owner's evidence card reads as `Sent to the coordinator`), or the reply turn's own.
+   */
+  deliveredAt: string;
+  /**
+   * Whether this conversation is the project's coordinator, by the project's own pointer
+   * (`project.coordinator_session_id`) as it stood when the card was read: when the runner echoed
+   * the turn, for the card stored with the echo. True for every fact a coordinator is told. For the
+   * answer to a criteria proposal it is true only where the proposal was filed from the conversation
+   * coordinating that project; filed from anywhere else, a task's run above all, it is false, and
+   * the line says `Sent to this session` and opens to `What this session was told`. A client reads a
+   * card stored before this field existed as true, the way it was drawn.
+   */
+  toCoordinator: boolean;
+}
+
+/**
  * What the message telling a coordinator its project was started carries beside its words
  * (apiserver `project-started.ts`), so a client draws it as a card rather than as a bubble the
  * reader typed.

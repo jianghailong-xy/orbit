@@ -99,7 +99,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -1547,9 +1547,23 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
 
 /**
  * How many of each project's tasks are being worked right now: its tasks that are still OUTSTANDING
- * (not DONE, not CANCELLED) and that a live or queued session occupies (TASK_OCCUPYING). A project's
+ * (not DONE, not CANCELLED) and that one of their work sessions CARRIES (`sessionCarriesTaskSql`,
+ * sessions/task-work-carrier.ts) — a turn queued or running, or a session parked at AWAITING_INPUT
+ * with something that will wake it: a running background job, a watch it waits on, a scheduled
+ * wake-up, an armed retry, running sub-agents or an engine turn of its own. A project's
  * `max_concurrent_tasks` less this is the room it has — "At most N tasks at a time" — and every
- * automatic door spends it (`takeProjectBudget`).
+ * automatic door spends it (`projectBudgetSpent`, `spendProjectBudget`).
+ *
+ * Carried, not TASK_OCCUPYING. A session parked with nothing to wake it — waiting for a person, or
+ * stopped by one (INTERRUPTED) — is not work in flight, and counting it let it hold a slot for as
+ * long as it stayed open: on 2026-10-26 a session waiting for its fix held the last of three slots,
+ * and the fix sat ready and unstarted for 13 hours. Such a session gives its slot back. A message
+ * from its owner still reaches it, outside this budget as the owner's own Run is, and once that
+ * message has it working it counts again, so the doors start nothing more while the project is at
+ * or past its cap. A wait on another task through `task_await` leaves an ACTIVE RESUME_SESSION
+ * watch, which carries: that wait still holds its slot. TASK_OCCUPYING goes on answering its own
+ * questions — is THIS task already being run (the candidate scans, the claim index), has its run
+ * stalled (reclaimStalledTask) — and a parked session still occupies its own task for each of them.
  *
  * Outstanding, because a task's run does not end when the task does: `statusAfterTurnCompleted`
  * parks the session that just derived DONE at AWAITING_INPUT, which is live and resumable, and a
@@ -1558,7 +1572,14 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
  * A CTE body, named `occupied` by its caller and MATERIALIZED there, so "once per statement" is the
  * statement's shape rather than the planner's choice: entered through the few sessions that occupy
  * anything and grouped by project it is one pass of ~6ms, where the same count as a correlated
- * subquery per candidate was 294ms a count on the 109,878-task project (2026-09-29).
+ * subquery per candidate was 294ms a count on the 109,878-task project (2026-09-29). The carried
+ * predicate keeps that entry. Measured 2026-11-01 on a corpus of that shape (112k tasks, 28k heap
+ * pages, jit off as production runs it): the live sessions come through
+ * `session_task_execution_claim_idx`, the watch and wake-up checks run once as hashed subplans, and
+ * the outstanding tasks are probed through `task_pkey` — 0.7ms with 700 live task sessions, where
+ * the status list took 2ms. What grows is the planner's ESTIMATE, not the run: it prices those two
+ * checks per live task session (about 14 units each), so a server left at jit = on with ~10k parked
+ * runs would JIT-compile the ready sweep's scan.
  */
 const PROJECT_OCCUPIED_SQL = projectOccupiedSql();
 
@@ -1575,10 +1596,7 @@ function projectOccupiedSql(settling?: string): Prisma.Sql {
      AND EXISTS (
        SELECT 1 FROM session s
         WHERE s.task_id = o.id
-          AND s.status IN (${Prisma.join(
-            TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-            ', ',
-          )})
+          AND ${Prisma.raw(sessionCarriesTaskSql('s'))}
      )
    GROUP BY o.project_id`;
 }
@@ -10978,10 +10996,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * and not paused (projectMovesSql). It used to be `coordinator_enabled`, the Automatic setting,
    * when Automatic doubled as the project's on switch; Automatic now says who decides for the owner,
    * and a started, unpaused project releases its next independent task whichever way it is set.
-   * `max_concurrent_tasks` is the Project's own budget, counted over the Project's tasks that a live
-   * session already occupies, and it bounds what one completion may start. Everything about the
-   * candidate itself is PROJECT_INDEPENDENT_READY_SQL, which is the sweep's predicate with its one
-   * anchor inverted.
+   * `max_concurrent_tasks` is the Project's own budget, counted over the Project's outstanding tasks
+   * that a work session carries (PROJECT_OCCUPIED_SQL), and it bounds what one completion may start.
+   * Everything about the candidate itself is PROJECT_INDEPENDENT_READY_SQL, which is the sweep's
+   * predicate with its one anchor inverted.
    *
    * Best-effort and self-contained, like the dependency dispatch it sits beside: every failure is
    * logged and none of them reaches the caller, because the completion this rides on is committed
@@ -11004,27 +11022,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // or paused — returns no row at all, which is the difference between "no room" and "not mine
       // to fill".
       //
-      // A slot is held by work that is still OUTSTANDING, which is why the count skips the settled
-      // tasks rather than every task with a live session. A task's run does not end when the task
-      // does: `statusAfterTurnCompleted` parks the session that just derived DONE at
+      // The room is counted as every other door counts it (PROJECT_OCCUPIED_SQL): a slot is held by
+      // a task still OUTSTANDING that a work session carries, which is why the count skips the
+      // settled tasks rather than every task with a live session. A task's run does not end when the
+      // task does: `statusAfterTurnCompleted` parks the session that just derived DONE at
       // AWAITING_INPUT, which is live and resumable — so counting it would have this pass find the
       // budget filled by the very completion that woke it, and a Project would stop releasing
-      // anything for good once it had finished `max_concurrent_tasks` tasks.
+      // anything for good once it had finished `max_concurrent_tasks` tasks. A session parked with
+      // nothing to wake it holds no slot either. The shared count rather than a copy of it: this
+      // pass used to spell its own, with the raw status list, which is how two doors come to
+      // disagree about the same project.
       const [room] = await this.prisma.$queryRaw<Array<{ free: number }>>(Prisma.sql`
-        SELECT p.max_concurrent_tasks - (
-                 SELECT count(*)::int FROM task o
-                  WHERE o.project_id = p.id
-                    AND o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
-                    AND EXISTS (
-                      SELECT 1 FROM session s
-                       WHERE s.task_id = o.id
-                         AND s.status IN (${Prisma.join(
-                           TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                           ', ',
-                         )})
-                    )
-               ) AS "free"
+        WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
+        SELECT p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
           FROM project p
+          LEFT JOIN occupied ON occupied.project_id = p.id
          WHERE p.id = ${projectId}::uuid
            AND p.owner_id = ${ownerId}::uuid
            AND ${Prisma.raw(projectMovesSql('p'))}`);
@@ -11291,9 +11303,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `project.status` is read by both predicates rather than by this join — through
     // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
-      -- Counted exactly as the completion edge counts it, down to the skipped statuses: a slot is
-      -- held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run of a task that has
-      -- just finished does not fill the budget it was released into (PROJECT_OCCUPIED_SQL).
+      -- Counted exactly as every other door counts it (PROJECT_OCCUPIED_SQL): a slot is held by an
+      -- OUTSTANDING task that a work session carries — a turn queued or running, or a session parked
+      -- with something that will wake it. So the parked AWAITING_INPUT run of a task that has just
+      -- finished does not fill the budget it was released into, and neither does a session parked
+      -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
       WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
@@ -11639,8 +11653,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * How many more of each of these projects' tasks may start now: its `max_concurrent_tasks` less its
-   * outstanding tasks that a live or queued session occupies (PROJECT_OCCUPIED_SQL) — the count the
-   * independent release has always spent — for `projectBudgetSpent` and `spendProjectBudget`. One
+   * outstanding tasks that a work session carries (PROJECT_OCCUPIED_SQL) — the count the independent
+   * release spends too — for `projectBudgetSpent` and `spendProjectBudget`. One
    * statement for a pass, whatever it holds; a pass with no task in a project asks nothing.
    * `settling` is a task counted as already DONE (`projectOccupiedSql`).
    */
@@ -13992,6 +14006,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `the ${error.runtime} engine is signed out on this agent's runner`,
           true,
           `sign in to ${error.runtime} on that runner; the mention then delivers itself`,
+        );
+      }
+      // The same kind of condition (docs/claude-region-check-contract.md §12): the agent's runner cannot use Anthropic
+      // from where its Claude connection is, which an allowed check, another provider's key or another machine clears.
+      if (isClaudeRegionRefused(error)) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          error.refusal.message,
+          true,
+          "point this agent at a key from another provider, or at a workspace on another machine; the mention then delivers itself",
         );
       }
       throw error;

@@ -448,6 +448,16 @@ type HeartbeatResponse struct {
 	// from older control planes and for every other runner; nothing acts on it unless this process is
 	// a managed instance.
 	ManagedSleep *ManagedSleepRequest `json:"managedSleep,omitempty"`
+	// The owner's Check again (docs/claude-region-check-contract.md §7): check where Claude's
+	// connection to Anthropic comes out now, once per RequestedAt (claude_region.go). Repeated on every
+	// response until the control plane records a check made at or after it. Nil on older control
+	// planes and whenever nobody is asking.
+	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+}
+
+// ClaudeRegionCheckRequest mirrors @orbit/shared: when the owner asked for a region check, ISO 8601.
+type ClaudeRegionCheckRequest struct {
+	RequestedAt string `json:"requestedAt"`
 }
 
 // WikiRepoOpCommand mirrors @orbit/shared: one claimed repository operation — what to read, at which

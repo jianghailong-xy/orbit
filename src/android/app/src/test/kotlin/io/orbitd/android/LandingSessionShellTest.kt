@@ -42,6 +42,9 @@ class LandingSessionShellTest {
         override fun starting(description: Description) { Dispatchers.setMain(UnconfinedTestDispatcher()) }
         override fun finished(description: Description) { Dispatchers.resetMain() }
     }
+    /** The window's day sections read at midday, whatever the hour the suite runs at. */
+    @get:Rule(order = 0)
+    val midday = MiddayZone()
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 

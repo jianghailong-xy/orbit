@@ -157,9 +157,26 @@ export function clientAddress(seen: string, forwardedFor: string | string[] | un
  * address rather than per person, one reason the share links' is generous.
  */
 export function visitorAddress(req: Request): string {
+  return clientAddress(nearestHop(req), req.headers['x-forwarded-for'], TRUSTED_PROXIES);
+}
+
+/** The address the nearest proxy saw: X-Real-IP, which both nginx configs overwrite with it, or the socket's peer
+ *  when nothing in front of the apiserver set one. */
+function nearestHop(req: Request): string {
   const real = req.headers['x-real-ip'];
-  const seen = (typeof real === 'string' && real) || req.socket.remoteAddress || '';
-  return clientAddress(seen, req.headers['x-forwarded-for'], TRUSTED_PROXIES);
+  return (typeof real === 'string' && real) || req.socket?.remoteAddress || '';
+}
+
+/**
+ * Whether the hop nginx saw is a proxy `TRUSTED_PROXIES` names: only then is a header that hop adds its statement
+ * rather than whatever the client wrote. Behind Cloudflare that hop is Cloudflare's edge, and Cloudflare overwrites
+ * `CF-IPCountry` and `cf-region-code` on every request it passes on, so those two say where the request came from
+ * (docs/claude-region-check-contract.md §3). From any other hop they are the client's own words. With nothing
+ * trusted, nothing came through a trusted proxy. X-Forwarded-For is not read: its entries are whatever the client
+ * sent until a trusted proxy appends one, and the question is who added the headers, not who the client is.
+ */
+export function cameThroughTrustedProxy(req: Request, trusted: BlockList = TRUSTED_PROXIES): boolean {
+  return within(trusted, canonicalAddress(nearestHop(req).trim()));
 }
 
 /**

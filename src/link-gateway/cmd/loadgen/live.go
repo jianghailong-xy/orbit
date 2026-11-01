@@ -114,9 +114,10 @@ func (r *runner) answerPrefix(c *rconn, req *linkpb.TurnPrefixRequest, now time.
 	r.g.stats.with(func(w *window) { w.TurnPrefixAnswers++ })
 }
 
-// liveInterArrival is the gap before a watched session's next delta: -live-rate shared by the sessions watched now.
+// liveInterArrival is the gap before a watched session's next delta: -live-rate shared by the sessions watched now, of
+// this shard's share of it with -shard.
 func (r *runner) liveInterArrival() time.Duration {
-	rate := r.g.o.liveRate
+	rate := r.g.liveRate
 	if rate <= 0 {
 		return time.Hour
 	}

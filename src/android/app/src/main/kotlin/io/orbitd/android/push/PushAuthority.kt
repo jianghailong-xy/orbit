@@ -58,7 +58,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
             }
             payload.runnerId != null -> {
                 val runner = array(get(listOf("runners"))).firstOrNull { ObjectId.same(it.text("id"), payload.runnerId) }
-                if (runner == null) PushCheck.MISSING else {
+                if (runner == null) PushCheck.MISSING
+                // The runner's effective region verdict (docs/claude-region-check-contract.md §6): the flip stands while it
+                // reads blocked. A runner that reads no region says nothing either way.
+                else if (payload.kind == "claude-region-blocked") {
+                    when (runner.obj("region")?.text("verdict")) { "blocked" -> PushCheck.ACTIVE; "allowed" -> PushCheck.STALE; else -> PushCheck.UNKNOWN }
+                } else {
                     val engine = runner.optionalArray("engines").firstOrNull { it.text("engine") == payload.engine }
                     when (engine?.text("auth")) { "no" -> PushCheck.ACTIVE; "yes" -> PushCheck.STALE; else -> PushCheck.UNKNOWN }
                 }

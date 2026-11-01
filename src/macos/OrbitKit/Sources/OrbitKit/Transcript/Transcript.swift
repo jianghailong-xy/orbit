@@ -28,6 +28,10 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
     /// broken (web parity: `NoticeNode`).
     case notice(id: String, message: String)
+    /// A runtime diagnostic its runner marked recoverable: an auxiliary path degraded while the turn
+    /// went on (Codex failing to refresh its model catalog, say). Quieter than a notice, as web's
+    /// `.chat-notice.chat-diagnostic` draws it: only the mark keeps the warning tone.
+    case diagnostic(DiagnosticNotice)
 
     public var id: String {
         switch self {
@@ -40,7 +44,31 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
         case .notice(let id, _): return id
+        case .diagnostic(let d): return d.id
         }
+    }
+}
+
+/// One recoverable diagnostic, with the repeats of it folded into its row (web parity: `DiagnosticNode`).
+public struct DiagnosticNotice: Equatable, Sendable, Codable, Identifiable {
+    public let id: String
+    /// What it is about, as web labels it: "model_catalog · timeout",
+    /// "Startup · model_catalog · token_invalidated". Empty when the diagnostic names none of it.
+    public let label: String
+    /// The engine's words: the logged line without the stamp, level and module a logger opens it
+    /// with (web's `parseEngineLogLine`), or the whole line when it has no such preamble.
+    public let text: String
+    /// The line as the engine logged it the first time, preamble included.
+    public let message: String
+    /// How many reports folded into this row; 1 when it was seen once.
+    public var repeats: Int
+
+    public init(id: String, label: String, text: String, message: String, repeats: Int = 1) {
+        self.id = id
+        self.label = label
+        self.text = text
+        self.message = message
+        self.repeats = repeats
     }
 }
 
@@ -139,10 +167,18 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var itemCard: OpenItemDelivery?
     /// The owner's answer handed to the coordinator, when the control plane recorded which item and
     /// when this conversation was told beside the echo (`ownerAnswer`, see `OwnerAnswer.parse`). Nobody
-    /// typed it either: the console draws one line, "Sent to the coordinator · 08:29", that opens to
-    /// `text` — the words written for the agent. Nil for every other turn, and for every answer stored
-    /// before the payload existed, which keeps the reading it has always had.
+    /// typed it either: the console draws the question's own Answered card where it holds that
+    /// question's record (`OwnerAnswer.record`), and otherwise one line, "Sent to the coordinator ·
+    /// 08:29" — each opening to `text`, the words written for the agent. Nil for every other turn, and
+    /// for every answer stored before the payload existed, which keeps the reading it has always had.
     public var ownerAnswer: OwnerAnswer?
+    /// A fact told to this session — a coordinator told of a committed fact, or a session the answer to
+    /// its criteria proposal — when the control plane recorded what the line says and when it was sent
+    /// beside the echo (`coordinatorDelivery`, see `CoordinatorDelivery.parse`). Nobody typed it either:
+    /// the console draws one line, "Evidence revision 1 submitted: <task> · Sent to the coordinator ·
+    /// 07:30 PM", that opens to `text` — the words written for the agent. Nil for every other turn, and
+    /// for every delivery stored before the payload existed, which keeps the reading it has always had.
+    public var coordinatorDelivery: CoordinatorDelivery?
     /// The turn that starts a task's run, when the control plane recorded the task its brief was built
     /// from beside the echo (`taskStart`, see `TaskStart.parse`). Nobody typed this turn either: the
     /// console draws the task as a card instead of the bubble, with `text` — the brief written for the
@@ -208,7 +244,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil, withdrawable: Bool = false,
                 itemCard: OpenItemDelivery? = nil,
-                ownerAnswer: OwnerAnswer? = nil, taskStart: TaskStart? = nil,
+                ownerAnswer: OwnerAnswer? = nil, coordinatorDelivery: CoordinatorDelivery? = nil,
+                taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
@@ -231,6 +268,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.withdrawable = withdrawable
         self.itemCard = itemCard
         self.ownerAnswer = ownerAnswer
+        self.coordinatorDelivery = coordinatorDelivery
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
@@ -248,7 +286,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, ownerAnswer, taskStart, startedCard, sessionMessage, sessionReplies
+        case note, steer, delivery, itemCard, ownerAnswer, coordinatorDelivery, taskStart, startedCard
+        case sessionMessage, sessionReplies
         case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
         case receipt, deliveryCode, deliveryReason
     }
@@ -273,6 +312,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for the owner's answer handed to the coordinator: a snapshot from before it existed keeps
         // the bubble.
         ownerAnswer = try? c.decodeIfPresent(OwnerAnswer.self, forKey: .ownerAnswer)
+        // And for a fact told to this session: a snapshot from before it existed keeps the bubble.
+        coordinatorDelivery = try? c.decodeIfPresent(CoordinatorDelivery.self, forKey: .coordinatorDelivery)
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)

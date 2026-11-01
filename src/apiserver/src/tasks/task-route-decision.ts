@@ -25,6 +25,7 @@ import { sessionEngine, sessionEnginesOf } from '../providers/session-engine';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
+import { blockedRunnerRegion } from '../runners/runner-region';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
@@ -76,6 +77,8 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
         modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
         name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true,
+        // The Claude region check's verdict, which rules Claude's own sign-in out as a sign-out does (engineState).
+        capabilities: true, region: true,
       },
     })),
     engine: (provider: string, providerBuiltin: boolean | null) => once(
@@ -237,6 +240,10 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * account `sessions.create` would start it on (automaticAccount, runAccount), signed in as its
  * preflight judges it (signedOutEngineRefusal). The quota is the fullest window that caps the whole
  * engine; a model family's own window (Opus weekly) only moves the tier's model (§5).
+ *
+ * Claude's sign-in talks to Anthropic, so on a runner whose Claude connection to Anthropic is in a region
+ * Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12) it is ruled out the way a
+ * signed-out one is: `sessions.create` would refuse the run there with CLAUDE_REGION_UNSUPPORTED.
  */
 function engineState(
   engine: AccountEngine,
@@ -274,7 +281,8 @@ function engineState(
     if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
     if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
   }
-  return { signedOut, quota };
+  const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
+  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}) };
 }
 
 /** The engine a task's newest work run was created on: what a verification looks past (§6). */

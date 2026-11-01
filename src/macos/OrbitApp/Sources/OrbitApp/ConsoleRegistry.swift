@@ -61,6 +61,18 @@ final class ConsoleRegistry {
     func takeDraftAccount(agentID: String) -> (engine: String, account: String)? {
         pendingDraftAccounts.removeValue(forKey: agentID)
     }
+
+    /// What waited on a machine that got a workspace some other way: the next draft there starts with
+    /// it in the composer, rather than it vanishing with the page.
+    private var pendingDraftMessages: [String: HeldMessage] = [:]
+
+    func queueDraftMessage(agentID: String, message: HeldMessage) {
+        pendingDraftMessages[agentID] = message
+    }
+
+    func takeDraftMessage(agentID: String) -> HeldMessage? {
+        pendingDraftMessages.removeValue(forKey: agentID)
+    }
     /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
     /// followed here, not in the console: its poll stops with its focus, so leaving the session
     /// meant the result card never came — or came late, the next time the session was opened. From
@@ -131,7 +143,8 @@ final class ConsoleRegistry {
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = { [weak self, weak model] session in
             if let self, let model {
-                self.model(for: session.id, agentID: agent.id)
+                // A machine's first draft names no workspace: its session says which one it made.
+                self.model(for: session.id, agentID: session.agent?.id ?? session.agentId ?? agent.id)
                     .adoptCreatedSession(session, from: model)
             }
             onCreated(session)

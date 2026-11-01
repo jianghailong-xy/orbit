@@ -6,15 +6,15 @@
  */
 
 /** The newest predicate grammar this build serves. */
-export const WATCH_PREDICATE_VERSION = 2;
+export const WATCH_PREDICATE_VERSION = 3;
 
 /**
  * Every grammar this build serves; any other version is refused, never guessed at. Version 2 is
- * version 1 plus the two progress leaves, the `params` a leaf takes and the `AT_LEAST` quorum. A
- * predicate is decided under the version it was stored with, so a version-1 watch never meets a term
- * it did not ask for.
+ * version 1 plus the two progress leaves, the `params` a leaf takes and the `AT_LEAST` quorum; version 3
+ * is version 2 plus `SESSION_JOB_NO_OUTPUT_FOR`. A predicate is decided under the version it was stored
+ * with, so a version-1 watch never meets a term it did not ask for.
  */
-export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2];
+export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2, 3];
 
 /** Every leaf, and the only target kind each one can be evaluated against. */
 export const WATCH_LEAVES = {
@@ -27,6 +27,7 @@ export const WATCH_LEAVES = {
   TASK_DONE: 'TASK',
   TASK_PROGRESS_AT_LEAST: 'TASK',
   TASK_NO_PROGRESS_FOR: 'TASK',
+  SESSION_JOB_NO_OUTPUT_FOR: 'SESSION',
 } as const;
 
 export type WatchLeaf = keyof typeof WATCH_LEAVES;
@@ -42,6 +43,7 @@ export const WATCH_LEAF_SINCE_VERSION: Readonly<Record<WatchLeaf, number>> = {
   TASK_DONE: 1,
   TASK_PROGRESS_AT_LEAST: 2,
   TASK_NO_PROGRESS_FOR: 2,
+  SESSION_JOB_NO_OUTPUT_FOR: 3,
 };
 
 /** What a target may name. Only `SESSION` and `TASK` are watchable; the other two are refused as live sets. */
@@ -50,11 +52,12 @@ export type WatchTargetKind = 'SESSION' | 'TASK';
 export const WATCH_RESOURCE_KINDS: readonly WatchResourceKind[] = ['SESSION', 'TASK', 'TASK_LIST', 'PROJECT'];
 
 /**
- * What a parameterized leaf is asked (predicateVersion 2). `TASK_PROGRESS_AT_LEAST` takes exactly one of
- * `current` (the reported count reaches it) or `percent` (the count reaches that share of the reported
- * total); `TASK_NO_PROGRESS_FOR` takes `seconds`. No other leaf takes any.
+ * What a parameterized leaf is asked (predicateVersion 2 and later). `TASK_PROGRESS_AT_LEAST` takes exactly
+ * one of `current` (the reported count reaches it) or `percent` (the count reaches that share of the
+ * reported total); `TASK_NO_PROGRESS_FOR` takes `seconds`; `SESSION_JOB_NO_OUTPUT_FOR` takes `seconds` and,
+ * to ask about one job rather than any, the `jobId` bg_run returned. No other leaf takes any.
  */
-export type WatchLeafParams = { current: number } | { percent: number } | { seconds: number };
+export type WatchLeafParams = { current: number } | { percent: number } | { seconds: number; jobId?: string };
 
 /** A closed grammar: no shell, no SQL, no log regex, no free-text expression. */
 export type WatchPredicate =
@@ -78,6 +81,11 @@ export const WATCH_LIMITS = {
   maxContinuousWakeBudget: 100,
   /** The shortest `TASK_NO_PROGRESS_FOR` window; the longest is the longest TTL. */
   minNoProgressSeconds: 60,
+  /**
+   * The shortest `SESSION_JOB_NO_OUTPUT_FOR` window; the longest is the longest TTL. Five of the runner's
+   * once-a-minute job reports: what the server knows of a job's last output can be one report behind it.
+   */
+  minNoOutputSeconds: 300,
   /** The failed attempt that brings a delivery's `attempts` here makes it a dead letter. */
   maxDeliveryAttempts: 8,
   /** Live (ACTIVE or PAUSED) watches one account may hold. A create that would stay live past it is `WATCH_QUOTA_EXCEEDED`. */
@@ -160,6 +168,16 @@ export interface UpdateWatchRequest {
   ttlSeconds?: number;
 }
 
+/**
+ * One runner-hosted job a session had in flight, as `SESSION_JOB_NO_OUTPUT_FOR` read it: its bg_run id, and
+ * when its output last moved in the server's timebase, or null when no runner ever said. Only a predicate
+ * that names the job leaf records it, and nothing the job printed is ever part of it.
+ */
+export interface WatchObservedJob {
+  id: string;
+  lastOutputAt: string | null;
+}
+
 /** A Task's progress as a progress leaf read it. Only a predicate that names a progress leaf records it. */
 export interface WatchObservedProgress {
   phase: string | null;
@@ -185,7 +203,15 @@ export interface WatchTargetObservation {
   leaves?: Record<string, boolean>;
   observed?:
     | { status: string; progress?: WatchObservedProgress }
-    | { status: string; endReason: string | null; runState: string; lifecycleState: string; pendingApproval: boolean };
+    | {
+      status: string;
+      endReason: string | null;
+      runState: string;
+      lifecycleState: string;
+      pendingApproval: boolean;
+      /** The session's jobs in flight, recorded only when the predicate names `SESSION_JOB_NO_OUTPUT_FOR`. */
+      jobs?: WatchObservedJob[];
+    };
 }
 
 /** A Match's `perTargetSnapshot`, and an expiry's. */
@@ -413,6 +439,12 @@ export interface WatchView {
   matches: WatchMatchView[];
   /** At most one, and only for a RESUME_SESSION watch that expired, was revoked or became unresolvable; a cancelled watch has none. A dead letter shows here just as it does on a Match. */
   expiryDeliveries: WatchExpiryDeliveryView[];
+  /**
+   * How many of the watch's deliveries are dead letters — a wake or a notification that never got there — across its
+   * Matches and `expiryDeliveries`, whichever code each stopped under; each one says why where it is. Absent from an
+   * older server.
+   */
+  deadLetterCount?: number;
 }
 
 /** The bounds a progress report is held to (contract `progress.limits`); the database's CHECKs hold the same. */

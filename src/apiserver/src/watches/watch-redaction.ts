@@ -1,5 +1,6 @@
 import { WATCH_LEAVES, type WatchSnapshot, type WatchTargetObservation } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
+import { WATCH_JOB_ID } from './watch-predicate';
 
 /**
  * What a Watch lets out of the database about the rows it watches, and in what shape (contract
@@ -25,13 +26,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const WORD = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 /**
  * What the evaluator writes as a reason: `describePredicate`'s kinds, leaves, counts, parentheses and commas, a
- * leaf's parameters as `(600s)`, `(50%)` or `(5)`, and on a CONTINUOUS watch's Match the crossings its window
- * coalesced and which wake of its budget it is.
+ * leaf's parameters as `(600s)`, `(50%)`, `(5)` or `(1800s, bgj_0a1b2c3d4e5f)` — a job id only right after a
+ * window, in WATCH_JOB_ID's shape — and on a CONTINUOUS watch's Match the crossings its window coalesced and which
+ * wake of its budget it is.
  */
 const REASON =
-  /^[A-Z](?:[A-Z_(), 0-9/]|(?<=\(\d+)[s%](?=\)))*(?:; \d+ crossings? since \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z; wake \d+ of \d+)?$/;
-/** A key of a target's `leaves`: the leaf, followed by its parameters when it takes any, as in `TASK_NO_PROGRESS_FOR(600s)`. */
-const LEAF_LABEL = /^([A-Z][A-Z_]*)(?:\(\d+[s%]?\))?$/;
+  /^[A-Z](?:[A-Z_(), 0-9/]|(?<=\(\d+)[s%](?=\))|(?<=\(\d+)s(?=, bgj_)|(?<=\(\d+s, )bgj_[0-9a-z]{1,64}(?=\)))*(?:; \d+ crossings? since \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z; wake \d+ of \d+)?$/;
+/**
+ * A key of a target's `leaves`: the leaf, followed by its parameters when it takes any, as in `TASK_NO_PROGRESS_FOR(600s)`
+ * or `SESSION_JOB_NO_OUTPUT_FOR(1800s, bgj_0a1b2c3d4e5f)`.
+ */
+const LEAF_LABEL = /^([A-Z][A-Z_]*)(?:\(\d+(?:%|s(?:, bgj_[0-9a-z]{1,64})?)?\))?$/;
 const REASON_MAX_CHARS = 1_000;
 const ERROR_MAX_CHARS = 1_000;
 const TARGET_KINDS: readonly string[] = ['SESSION', 'TASK'];
@@ -94,6 +99,18 @@ function redactTarget(stored: unknown): WatchTargetObservation {
         epochStartedAt: instant(progress.epochStartedAt),
       };
       view.progress ??= REDACTED;
+    }
+    // Only a predicate that reads job output records the session's jobs: each one's id and when its output last
+    // moved. Nothing a job printed is ever part of it.
+    if ('jobs' in observed) {
+      view.jobs = Array.isArray(observed.jobs)
+        ? observed.jobs.map((job: unknown) => (isRecord(job)
+          ? {
+            id: typeof job.id === 'string' && WATCH_JOB_ID.test(job.id) ? job.id : REDACTED,
+            lastOutputAt: job.lastOutputAt === null ? null : instant(job.lastOutputAt),
+          }
+          : REDACTED))
+        : REDACTED;
     }
     observation.observed = view;
   }

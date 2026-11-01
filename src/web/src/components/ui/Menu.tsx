@@ -18,6 +18,10 @@ interface MenuAction {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   children?: MenuItem[];
+  /** A row with `children` only: whether its level is open, for a page that opens it itself (the session card's Use
+   *  another provider opens the composer's Provider level). Left out, the level opens on hover and press as usual. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
   className?: string;
   /** The item's native tip, as the replaced item's `title` (P5.3: a session row's Complete that cannot run says why). */
@@ -74,7 +78,7 @@ function handOver(event: ReactKeyboardEvent<HTMLElement> & { preventBaseUIHandle
 const itemClass = (item: MenuAction) => `orbit-menu-item${item.className ? ` ${item.className}` : ''}`;
 
 function Submenu({ item, contents, container, zIndex, slide }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement | undefined; zIndex: number; slide: boolean }) {
-  const layer = useFloating({});
+  const layer = useFloating({ open: item.open, onOpenChange: item.onOpenChange });
   const anchor = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const { positioner, ...placement } = useSubmenuPlacement(anchor, slide);

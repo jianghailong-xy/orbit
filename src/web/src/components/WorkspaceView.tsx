@@ -325,6 +325,7 @@ import {
   type NeverStartedActions,
   type NeverStartedSession,
 } from './RunNeverStartedCard';
+import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, type CursorQuotaHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
@@ -1227,7 +1228,15 @@ const waitingLabel = (s: any): string => {
 // `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off means
 // the row falls through to the raw reply exactly as it did before the recap existed. It only ever
 // gates that one line — every live line above it is untouched.
-export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null, recaps = true): SessionLine => {
+// `machine` is the runner the session runs on, by name: a session held for the Claude region says
+// that Anthropic is unavailable there (claudeRegionHeldWords), where it is known.
+export const sessionLine = (
+  s: any,
+  live: boolean,
+  watching?: SessionWatching | null,
+  recaps = true,
+  machine?: string | null,
+): SessionLine => {
   // `sessionReadingState`, not the run's own status: a refused SOURCE is over (SR34) and its row
   // wears what a dead run wears, rather than the Starting line the wait would otherwise draw.
   const state = sessionReadingState(s);
@@ -1266,7 +1275,7 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && state === 'QUEUED') return { text: queuedLabel(s), tone: 'queued' };
+  if (live && state === 'QUEUED') return { text: claudeRegionHeldWords(s, machine) ?? queuedLabel(s), tone: 'queued' };
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -1641,7 +1650,10 @@ export function SessionProjectListRow({
 // (lib/watches `watchingWord`), which the header reads instead of "Waiting for your reply" — a wake
 // is coming, and nobody is being asked for one. Absent wherever a caller has no watches to hand
 // (the search palette's rows), which keeps the previous reading rather than inventing one.
-export function statusLabel(session: any, watching?: string | null): string {
+//
+// `machine`, where the caller knows it, is the runner the session runs on: a session held for the
+// Claude region reads 'Anthropic unavailable on {machine}' in place of its queue word.
+export function statusLabel(session: any, watching?: string | null, machine?: string | null): string {
   // See sessionLine: a refused SOURCE reads as the failure it is.
   const state = sessionReadingState(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
@@ -1667,7 +1679,7 @@ export function statusLabel(session: any, watching?: string | null): string {
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return queuedLabel(session); // PENDING
+  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
 }
 
 // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
@@ -1734,7 +1746,7 @@ function RunningStatusIcon() {
 //
 // `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
 // absent wherever a caller holds no watches.
-export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
+export function StatusIcon({ session, watching, machine }: { session: any; watching?: string | null; machine?: string | null }) {
   // See sessionLine: the glyph agrees with the word beside it on a refused run too.
   const state = sessionReadingState(session);
   const fontSize = 16;
@@ -1848,9 +1860,9 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
         <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
-  // PENDING — waiting for an active turn slot
+  // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
   return (
-    <Tooltip content={queuedTitle(session)}>
+    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -3434,10 +3446,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
+      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled],
   );
   // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
   // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
@@ -3928,6 +3940,7 @@ export function WorkspaceView({
       antigravityKeyAvailable,
       dshRunner: runner,
       fleet,
+      region: runner.region,
     }),
     [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
   );
@@ -4220,6 +4233,7 @@ export function WorkspaceView({
             runtime: selectedRuntime,
             keyName: selectedKeyName,
             runnerName: runner.displayName || runner.name,
+            region: runner.region ?? null,
           })
         : null,
     [
@@ -4231,8 +4245,25 @@ export function WorkspaceView({
       selectedKeyName,
       runner.displayName,
       runner.name,
+      runner.region,
     ],
   );
+  // Held for the region (docs/claude-region-check-contract.md §10–§11): nothing is working on its
+  // message, so the transcript keeps no working clock over it.
+  const selectedRegionHeld = !!selected && !selectedTrashed && claudeRegionHeld(selectedSession ?? selected);
+  // The region card's Check again, and its Use another provider: the composer's model menu opened on
+  // its Provider level (board 02 C), so both are held here rather than inside the menu.
+  const regionCheck = useClaudeRegionCheckAgain(runner);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
+  // On the next tick: opened inside the card's own click, the menu would take that click for one
+  // outside it and close again.
+  const openProviderMenu = (): void => {
+    setTimeout(() => {
+      setModelMenuOpen(true);
+      setProviderMenuOpen(true);
+    }, 0);
+  };
   const scopedEvents = useMemo(
     () => (eventsSessionId === selectedId ? events : []),
     [events, eventsSessionId, selectedId],
@@ -7421,7 +7452,7 @@ export function WorkspaceView({
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
       sessionStatus: selectedSession
-        ? statusLabel(selectedSession, selectedWatchingWord)
+        ? statusLabel(selectedSession, selectedWatchingWord, machineName(runner))
         : selectedMissing
           ? 'not found'
           : null,
@@ -9419,7 +9450,14 @@ export function WorkspaceView({
     // The conversation is the other way to answer a refusal, so this only arms it:
     // the reader's own words are the point, and nothing is sent for them.
     chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
-    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending,
+    // The region refusal's ways out (board 02 B): the same Claude Code on another credential, where
+    // the Provider menu lists any (every row is the session's own engine's); a workspace on another
+    // machine; and a check now, where this runner checks at all (`region` is null where it doesn't).
+    otherProvider:
+      configEditable && !managedDraftBlocked && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
+    moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
+    checkAgain: runner.region ? regionCheck.checkAgain : undefined,
+    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
     // A re-selection is still a preference, even when the session config already matches it.
@@ -9631,7 +9669,11 @@ export function WorkspaceView({
                 <span className="scope-menu-row">
                   <span className="composer-provider-name">
                     {(choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
-                    {blocked ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}, fix it →` : choice.label}
+                    {/* The runner's Claude region has no fix on any page (board 02 C ③): the row names the
+                        reason alone, and its press opens the machine's row, which explains it. */}
+                    {blocked
+                      ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}${choice.regionBlocked ? '' : ', fix it →'}`
+                      : choice.label}
                     {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
                   </span>
                   {checkSlot(choice.slug === shownProvider)}
@@ -9820,6 +9862,9 @@ export function WorkspaceView({
       ? [
           {
             key: 'provider',
+            // Opened by the region card's Use another provider, as well as by hover and press.
+            open: providerMenuOpen,
+            onOpenChange: setProviderMenuOpen,
             label: (
               <span className="scope-menu-row">
                 Provider
@@ -10068,7 +10113,7 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord) : '';
+  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -10489,7 +10534,7 @@ export function WorkspaceView({
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
                 const watching = sessionWatching(watchingBySession, s.id);
-                const line = sessionLine(actionSession, openable, watching, recapsEnabled);
+                const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -10628,7 +10673,7 @@ export function WorkspaceView({
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={actionSession} watching={watching?.word} />
+                        <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
                       </span>
                       <div className="session-main">
                         {renaming ? (
@@ -11253,7 +11298,7 @@ export function WorkspaceView({
                               <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
                                 <Transcript
                                   events={transcriptEvents}
-                                  live={live}
+                                  live={live && !selectedRegionHeld}
                                   turnImages={turnImages}
                                   artifactSessionId={selectedId}
                                   streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
@@ -12390,6 +12435,11 @@ export function WorkspaceView({
                   side="top"
                   align="end"
                   disabled={!configEditable}
+                  open={modelMenuOpen}
+                  onOpenChange={(open) => {
+                    setModelMenuOpen(open);
+                    if (!open) setProviderMenuOpen(false);
+                  }}
                   // Rows that open a level down open on hover where the pointer can hover, the way
                   // the browser's own menus do — and on a tap where it cannot, because a phone has
                   // no hover to give: one row, two gestures, decided by the pointer.

@@ -15,6 +15,7 @@ import { ownerItemAlert } from './owner-item-alert';
 import { settleAlert } from './settle-alert';
 import { FcmTransport } from './fcm-transport';
 import { fcmData } from './fcm-payload';
+import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -41,6 +42,18 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
   cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
+};
+
+/**
+ * Why a wakeup the session asked for is not running (docs/long-running-loop-contract.md §4): its runner is
+ * offline, its session FAILED, or the turn it was filed onto is waiting in the queue.
+ */
+export type WakeupMissedReason = 'RUNNER_OFFLINE' | 'SESSION_FAILED' | 'TURN_QUEUED';
+
+const WAKEUP_MISSED_REASONS: Record<WakeupMissedReason, string> = {
+  RUNNER_OFFLINE: 'the runner is offline',
+  SESSION_FAILED: 'the session failed',
+  TURN_QUEUED: 'its turn is queued and has not started',
 };
 
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
@@ -252,6 +265,46 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that Claude Code can no longer use Anthropic there: a confirmed flip put the machine's Claude
+   * connection to Anthropic in `region`, where Anthropic does not offer Claude (docs/claude-region-check-contract.md
+   * §10, board 04 "push (flip)"). Edge-triggered by the check route on the blocked check that takes blockedChecks to 2,
+   * so one flip is one alert, never one per check. From then on its Anthropic-bound Claude sessions wait in the queue
+   * and its running ones stop, and this is the only thing that says so before somebody finds one waiting.
+   *
+   * About the machine, as notifyEngineSignedOut is: no badge and no sessionID, and a tap opens the runner.
+   * Fire-and-forget: the check route `void`s it.
+   */
+  async notifyClaudeRegionBlocked(runnerId: string, region: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const runner = await this.prisma.runner.findUnique({
+        where: { id: runnerId },
+        select: { name: true, displayName: true, ownerId: true },
+      });
+      if (!runner) return;
+      const tokens = await this.targets(runner.ownerId);
+      if (tokens.length === 0) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: runner.displayName || runner.name || 'Orbit',
+            body: claudeRegionPushBody(regionMachineName(runner), region),
+          },
+          sound: 'default',
+          'thread-id': `runner-${runnerId}`,
+        },
+        runnerID: runnerId,
+        engine: AgentProvider.CLAUDE,
+        kind: 'claude-region-blocked',
+      });
+
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`Claude region notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -634,6 +687,59 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `watch-${input.watchId}-${input.generation}`);
     } catch (err) {
       this.log.warn(`watch notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell the owner a wakeup their session asked for is not running (docs/long-running-loop-contract.md §4):
+   * a loop none of whose ticks has reached the engine for max(2 × every, 15 minutes) — the dead-man signal —
+   * or a one-shot wakeup dropped because its session had FAILED.
+   *
+   * Once per failure, and that is the caller's to guarantee: for a loop, the scheduled-wakeup worker's
+   * compare-and-set on `session_wakeup_loop.alerted_at`, which only a later run of the loop lets fire again;
+   * for a one-shot wakeup, the compare-and-set that dropped it. Collapsed on that failure all the same. The
+   * tap opens the session. No badge: nothing here is waiting for a reply. Best-effort like the others: a
+   * failure is logged, never thrown.
+   */
+  async notifyLoopMissed(input: {
+    ownerId: string;
+    sessionId: string;
+    /** The session's title, which the alert is titled with as the session's other alerts are. */
+    title: string | null;
+    /** A loop: how many of its due times have not run since its last run, and when this failure was
+     *  alerted. Or a one-shot wakeup, dropped. */
+    missed: { loopId: string; ticks: number; alertedAt: Date } | { wakeupId: string };
+    reason: WakeupMissedReason;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.targets(input.ownerId);
+      if (tokens.length === 0) return;
+      const { missed } = input;
+      const because = WAKEUP_MISSED_REASONS[input.reason];
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: input.title || 'Orbit',
+            body: 'loopId' in missed
+              ? `Wakeup loop missed ${missed.ticks === 1 ? '1 tick' : `${missed.ticks} ticks`}: ${because}.`
+              : `Scheduled wakeup dropped: ${because}.`,
+          },
+          sound: 'default',
+          'thread-id': input.sessionId,
+        },
+        sessionID: input.sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
+        kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped',
+      });
+      await this.deliver(
+        tokens,
+        body,
+        'alert',
+        '10',
+        'loopId' in missed ? `loop-${missed.loopId}-${missed.alertedAt.getTime()}` : `wakeup-${missed.wakeupId}`,
+      );
+    } catch (err) {
+      this.log.warn(`wakeup missed notify failed: ${(err as Error).message}`);
     }
   }
 

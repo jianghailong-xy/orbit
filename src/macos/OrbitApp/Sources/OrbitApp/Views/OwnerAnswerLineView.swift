@@ -1,8 +1,10 @@
 import SwiftUI
 import OrbitKit
 
-/// The owner's answer handed to the coordinator, drawn as one line — "Sent to the coordinator · 08:29"
-/// — instead of the owner's own bubble (design: docs/mocks/coordinator-question-answered, step 4).
+/// The owner's answer handed to the coordinator. Where this conversation can draw the question it
+/// answers, the turn is that question's own card, Answered, and nothing else (design:
+/// docs/mocks/owner-answer-sent-card/merged.html). Otherwise it is one line — "Sent to the coordinator
+/// · 08:29" — instead of the owner's own bubble (docs/mocks/coordinator-question-answered, step 4).
 ///
 /// The owner already reads what they answered on the question's own card. The turn under it is the
 /// platform handing that answer on, in words written for the AGENT — the question replayed in full,
@@ -10,13 +12,23 @@ import OrbitKit
 /// second time, in the reader's name. What the reader needs from it is that it was sent and when; the
 /// words stay one tap away, in a sheet, for whoever wants to check what the coordinator read.
 ///
-/// The pill a merge's record is drawn as (`PromotionReceiptLine`), saying what a version handed to
-/// its coordinator says (`SentToCoordinatorLine`) on the same clock. Its sheet is hosted by the
-/// console (`openOwnerAnswer`), as the receipt's is, so a recycled row cannot dismiss it. Web parity:
-/// `OwnerAnswerLine.tsx`, every word from OrbitKit's `OwnerAnswerCard`, which
-/// `OwnerAnswerCopyParityTests` holds to the web's.
+/// WHY THE CARD AND NOT A SECOND ONE. The owner reads "Answered" as "the agent has my answer", so a
+/// line under the card saying it was sent said the same thing twice. The card is drawn once, by this
+/// turn: where the coordinator was handed the answer, which is where its next turn starts — the
+/// conversation leaves it out at the moment the owner answered (`OwnerAnswer.handedOver`). Still on
+/// the queue, the card is dashed and says so, with no Cancel: the answer is given, and taking the turn
+/// back would leave the coordinator never told. Unconfirmed, it says that; the words the coordinator
+/// read are folded at the foot of its sheet (`CoordinatorQuestionRecordView`).
+///
+/// The line is for what the card cannot be: a Not yet… to a request to record the project done, which
+/// has no card, and a question this conversation holds no record of. It is the pill a merge's record
+/// is drawn as (`PromotionReceiptLine`), saying what a version handed to its coordinator says
+/// (`SentToCoordinatorLine`) on the same clock. Its sheet is hosted by the console (`openOwnerAnswer`),
+/// as the receipt's is, so a recycled row cannot dismiss it. Web parity: `OwnerAnswerLine.tsx`, every
+/// word from OrbitKit's `OwnerAnswerCard`, which `OwnerAnswerCopyParityTests` holds to the web's.
 struct OwnerAnswerLineView: View {
     @Environment(\.openOwnerAnswer) private var openTold
+    @Environment(\.answeredQuestions) private var answered
     let card: OwnerAnswer
     /// The words the agent was handed, verbatim — what the line opens to.
     let text: String
@@ -30,6 +42,19 @@ struct OwnerAnswerLineView: View {
     private var queued: Bool { onCancelQueued != nil }
 
     var body: some View {
+        if let record = OwnerAnswer.record(of: card, in: answered) {
+            // The queue's Cancel is not offered here: the answer is given. Its sheet is the record's own
+            // review, which folds the words this turn told the coordinator at its foot.
+            CoordinatorQuestionRecordView(record: record, queued: queued && !undelivered,
+                                          notice: undelivered ? OwnerAnswerCard.undelivered : nil)
+                .environment(\.approvalReviewTarget,
+                             .delivered(DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record))))
+        } else {
+            line
+        }
+    }
+
+    private var line: some View {
         VStack(spacing: 4) {
             Button { openTold(OwnerAnswerTold(card: card, text: text, attached: attached)) } label: {
                 HStack(spacing: 6) {
@@ -84,11 +109,23 @@ private struct OpenOwnerAnswerKey: EnvironmentKey {
     static let defaultValue: (OwnerAnswerTold) -> Void = { _ in }
 }
 
+private struct AnsweredQuestionsKey: EnvironmentKey {
+    static let defaultValue: [String: ProjectClosedQuestion] = [:]
+}
+
 extension EnvironmentValues {
     /// Opens the words an answer's line stands for, in a sheet the console hosts.
     var openOwnerAnswer: (OwnerAnswerTold) -> Void {
         get { self[OpenOwnerAnswerKey.self] }
         set { self[OpenOwnerAnswerKey.self] = newValue }
+    }
+
+    /// The ended questions this conversation draws, by item key (`ConsoleModel.answeredQuestions`):
+    /// what a turn handing one's answer to the coordinator is drawn as. Empty where no console sets
+    /// it, and every such turn is then its line.
+    var answeredQuestions: [String: ProjectClosedQuestion] {
+        get { self[AnsweredQuestionsKey.self] }
+        set { self[AnsweredQuestionsKey.self] = newValue }
     }
 }
 

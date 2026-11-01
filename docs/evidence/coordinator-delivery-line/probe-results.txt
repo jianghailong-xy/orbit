@@ -1,0 +1,87 @@
+Native probe for task 34pVGFQvGcjxSppunCWTK: client.yml's gates and the iPhone/Mac pictures, on GitHub Actions.
+Harness: probe-harness/ (RECORD.md says how it ran). All three runs pushed to probe/coordinator-delivery-line;
+both that branch and probe/coordinator-delivery-line-results were deleted after round 3 (see the end).
+
+ROUND 3 (the pictures in ios/ and mac/ come from this run)
+  run      https://github.com/jianghailong-xy/orbit/actions/runs/41220538047  (Client CI (macOS + iOS), push)
+  commit   d7a9a6d91a90d178634d0b518b4564b4a7d63bfd = the tree of task-branch tip fdd7a4d48, which contains main
+           f76ab872b, plus .cdl-probe/ and client.probe.yml in place of .github/workflows/client.yml.
+           `git diff --quiet fdd7a4d48 d7a9a6d91 -- src docs` held: src/ and docs/ are the branch's, byte for byte.
+  jobs     Font tokens (bare system(size:) audit)              success  job 124593961826
+           Navigation (one push mechanism per stack)           success  job 124593961947
+           macOS (build + test)                                success  job 124593961960
+           iOS (generate + build)                              success  job 124593961706
+           Coordinator delivery line probe (iPhone + Mac)      success  job 124593961896
+           Push the results where a clone can read them        success  job 124600067869
+  also     https://github.com/jianghailong-xy/orbit/actions/runs/41220538026  (Android CI, same push, same commit)
+           Android (test + lint + debug APK)                   success  job 124593961765
+
+Toolchains
+  macos, ios jobs (macos-15 runner)  Xcode 26.3 (17C529), Apple Swift 6.2.4, macOS 15.8.2 (24H232); XcodeGen 2.46.0 (ios)
+  shots job (macos-26 runner)        Xcode 26.6 (17F113), Apple Swift 6.3.3, macOS 26.6.2 (25G83), XcodeGen 2.46.0;
+                                     iPhone 17 Pro simulator, iOS 26.5
+
+macOS job
+  OrbitKit `swift test`: Executed 4157 tests, with 5 tests skipped and 0 failures (0 unexpected)
+    of them, 48 cases passed and 0 failed in the suites this task touched: CoordinatorDeliveryTests 12,
+    CoordinatorDeliveryCopyParityTests 8, AcceptedTurnPlaceholderTests 16, UserTurnRowWiringTests 7, QueuedTurnCardsTests 5
+  OrbitApp `swift build`: Build complete! (106.26s)
+ios job
+  `xcodebuild -project Orbit.xcodeproj -scheme Orbit -destination 'generic/platform=iOS Simulator' build`: ** BUILD SUCCEEDED **
+
+What each build compiled, for the three files this task changed (the job's own log lines, then the object files):
+  macOS job (swift build of src/macos/OrbitApp, arm64-apple-macosx):
+    == CoordinatorDeliveryLineView.swift
+      [375/437] Compiling OrbitApp CoordinatorDeliveryLineView.swift
+      .build/arm64-apple-macosx/debug/OrbitApp.build/CoordinatorDeliveryLineView.swift.o (639280 bytes)
+    == UserTurnRow.swift
+      [374/437] Compiling OrbitApp UserTurnRow.swift
+      .build/arm64-apple-macosx/debug/OrbitApp.build/UserTurnRow.swift.o (415312 bytes)
+    == ConsoleView.swift
+      [408/459] Compiling OrbitApp ConsoleView.swift
+      .build/arm64-apple-macosx/debug/OrbitApp.build/ConsoleView.swift.o (3129536 bytes)
+  
+  ios job (xcodebuild -scheme Orbit, generic/platform=iOS Simulator, Debug):
+    == CoordinatorDeliveryLineView.swift
+      SwiftCompile normal x86_64 src/macos/OrbitApp/Sources/OrbitApp/Views/CoordinatorDeliveryLineView.swift (in target 'Orbit' from project 'Orbit')
+      SwiftCompile normal arm64 src/macos/OrbitApp/Sources/OrbitApp/Views/CoordinatorDeliveryLineView.swift (in target 'Orbit' from project 'Orbit')
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/arm64/CoordinatorDeliveryLineView.o (656640 bytes)
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/x86_64/CoordinatorDeliveryLineView.o (652032 bytes)
+    == UserTurnRow.swift
+      SwiftCompile normal x86_64 src/macos/OrbitApp/Sources/OrbitApp/Views/Console/UserTurnRow.swift (in target 'Orbit' from project 'Orbit')
+      SwiftCompile normal arm64 src/macos/OrbitApp/Sources/OrbitApp/Views/Console/UserTurnRow.swift (in target 'Orbit' from project 'Orbit')
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/arm64/UserTurnRow.o (424664 bytes)
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/x86_64/UserTurnRow.o (464080 bytes)
+    == ConsoleView.swift
+      SwiftCompile normal x86_64 src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift (in target 'Orbit' from project 'Orbit')
+      SwiftCompile normal arm64 src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift (in target 'Orbit' from project 'Orbit')
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/arm64/ConsoleView.o (4367256 bytes)
+      .../Orbit.build/Debug-iphonesimulator/Orbit.build/Objects-normal/x86_64/ConsoleView.o (4585424 bytes)
+
+shots job (.cdl-probe/run.sh; XCUITest against stub.py)
+  iPhone  test1TheLineOnAPhone passed, test2TheSheet passed, test3QueuedIsTheSameLine passed,
+          test4UndeliveredSaysSo passed, test5TheStickyHeader passed: Executed 5 tests, with 0 failures
+  Mac     test6MacLineAndSheet passed: Executed 1 test, with 0 failures
+  measured  iPhone line 402 x 57.3 pt (two rows); queued and undelivered lines 370 x 45.3 pt;
+            Mac line 322 x 44 pt in the console beside the session list (two rows), 645 x 27 pt with the
+            source list folded away (one row); the Mac sheet's heading and `Its task ↗` found.
+
+EARLIER ROUNDS
+  round 1  https://github.com/jianghailong-xy/orbit/actions/runs/41214913863  commit 21fccd42b
+           (task branch a50ac8f10 merged with main d77c88e91, plus the harness)
+           font-tokens, nav-push, macos, ios: success (jobs 124577334304, 124577334204, 124577334310, 124577334241);
+           shots: failure (job 124577334302), the harness's own faults: a label dump that raced the element
+           list, the sticky header looked for at the live tail (where the app hides it by design), and an
+           upload refused for XCTest's quoted attachment names, so no picture came back.
+  round 2  https://github.com/jianghailong-xy/orbit/actions/runs/41217351697  commit 86b5aec1b (same tree, harness fixed)
+           every job success (ios 124584563740, nav-push 124584563847, macos 124584563924, shots 124584563928,
+           font-tokens 124584563936, report 124591220590). The Mac picture showed a real fault: in the console
+           beside the session list the line kept one row and cut the sentence to its first letter
+           ("E · Sent to the coordinator · …"). Fixed in 88bc396fb: CoordinatorDeliveryLineView takes the phone's
+           two rows wherever one row cannot keep 160 pt of the sentence beside the whole time. Round 3 is after it.
+
+PROBE BRANCHES DELETED
+  git push origin --delete probe/coordinator-delivery-line probe/coordinator-delivery-line-results
+    - [deleted]  probe/coordinator-delivery-line
+    - [deleted]  probe/coordinator-delivery-line-results
+  git ls-remote --exit-code origin 'refs/heads/probe/coordinator-delivery-line*'  ->  no refs, exit 2

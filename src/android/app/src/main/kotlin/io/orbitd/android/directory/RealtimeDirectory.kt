@@ -33,6 +33,7 @@ internal fun directoryData(live: RealtimeState, trashing: Set<String> = emptySet
             folders = decode(snapshot?.folders.orEmpty(), Folder.serializer()), tags = decode(snapshot?.tags.orEmpty(), Tag.serializer()),
             waitingForConnection = snapshot == null && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
             ready = snapshot != null, fresh = live.directoryFresh, refreshing = live.directoryRefreshing, cached = live.directoryCached,
+            runnerRows = snapshot?.runners.orEmpty(), workspaceRows = snapshot?.workspaces.orEmpty(),
             error = live.directoryError?.let { when (it.httpStatus) {
                 403 -> "You don't have permission to load this directory."
                 401 -> "Your access changed. Please sign in again."

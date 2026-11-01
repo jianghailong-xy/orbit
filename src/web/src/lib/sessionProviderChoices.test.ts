@@ -973,3 +973,111 @@ describe('what the cards and settings call a key and an engine', () => {
     expect(engineVia(CODEX, 'gone', [])).toBe('Codex via gone');
   });
 });
+
+/**
+ * The Claude region check (docs/claude-region-check-contract.md §8, board 02 C): on a runner whose
+ * Claude connection comes out where Anthropic doesn't offer Claude, every Anthropic-bound credential
+ * under Claude Code reads 'Region not supported' — its own sign-in, a Claude pool, an Anthropic key —
+ * while a DeepSeek or vLLM key runs the same Claude Code as before.
+ */
+describe('a runner blocked for the Claude region', () => {
+  const blocked = { region: { verdict: 'blocked' as const } };
+  const anthropicKey: ConfiguredProvider = { ...claudeMax, slug: 'anthropic', label: 'Personal Max', engines: ['claude'] };
+  const anthropicKey2: ConfiguredProvider = { ...anthropicKey, slug: 'anthropic-2', label: 'Work' };
+  const vllm: ConfiguredProvider = { ...custom, slug: 'local-vllm', label: 'Local vLLM' };
+  const claudePool = { id: '0196e000-0000-7000-8000-00000000d002', slug: 'claude-pool', label: 'Claude Pool', members: [{ slug: 'anthropic' }] };
+  const codexPool = { id: '0196e000-0000-7000-8000-00000000d001', slug: 'codex-pool', label: 'Codex Pool', engine: 'codex', members: [{ slug: 'gw' }] };
+  const threeAccounts = [
+    {
+      engine: 'claude' as const,
+      installed: true,
+      auth: 'yes' as const,
+      accounts: [
+        { id: 'default', name: 'Personal', home: '/root/.claude', auth: 'yes' as const },
+        { id: 'slot-2', name: 'Work', home: '/root/.orbit/claude-accounts/1', auth: 'yes' as const },
+        { id: 'slot-3', name: 'Team', home: '/root/.orbit/claude-accounts/2', auth: 'yes' as const },
+      ],
+    },
+    { engine: 'codex' as const, installed: true, auth: 'yes' as const },
+  ];
+  const region = (row: ProviderChoice | undefined) =>
+    row && { unavailable: row.unavailable, fixEngine: row.fixEngine, regionBlocked: row.regionBlocked };
+  const REGION = { unavailable: 'Region not supported', fixEngine: 'claude', regionBlocked: true };
+
+  it('says Region not supported on Claude Code’s sign-in, Claude pools and Anthropic keys, and nothing on other keys', () => {
+    const rows = engineProviders(
+      CLAUDE,
+      sources({ configured: [deepseek, anthropicKey, anthropicKey2, vllm], pools: [claudePool], engineHealth: threeAccounts, ...blocked }),
+    );
+    expect(slugs(rows)).toEqual(['claude', 'claude-pool', 'deepseek', 'anthropic', 'anthropic-2', 'local-vllm']);
+    expect(rows.map(region)).toEqual([
+      REGION,
+      REGION,
+      { unavailable: undefined, fixEngine: undefined, regionBlocked: undefined },
+      REGION,
+      REGION,
+      { unavailable: undefined, fixEngine: undefined, regionBlocked: undefined },
+    ]);
+    // None of the sign-in's accounts can take a session there, so none is offered under it.
+    expect(loginOf(rows)?.accounts).toBeUndefined();
+  });
+
+  it('outranks any other reason an Anthropic credential has: nothing installed or signed in changes it', () => {
+    const missing = [{ engine: 'claude' as const, installed: false, auth: 'unknown' as const }];
+    const rows = engineProviders(CLAUDE, sources({ configured: [anthropicKey, deepseek], engineHealth: missing, ...blocked }));
+    expect(rows.map(region)).toEqual([
+      REGION,
+      REGION,
+      // A DeepSeek key keeps its own reason: Claude Code's CLI is what it lacks.
+      { unavailable: 'Not installed', fixEngine: 'claude', regionBlocked: undefined },
+    ]);
+  });
+
+  it('gates Claude Code alone: the same keys and pools under another engine are untouched', () => {
+    const codexRows = engineProviders(CODEX, sources({ configured: [deepseek], pools: [codexPool], engineHealth: threeAccounts, ...blocked }));
+    expect(codexRows.every((row) => !row.regionBlocked && !row.unavailable)).toBe(true);
+    const openCode = engineProviders(OPENCODE, sources({ configured: [deepseek, anthropicKey], ...blocked }));
+    expect(openCode.some((row) => row.regionBlocked)).toBe(false);
+  });
+
+  it('draws what it draws today for a runner that reads no region, or an allowed one', () => {
+    const base = { configured: [deepseek, anthropicKey, vllm], pools: [claudePool], engineHealth: threeAccounts };
+    const today = engineProviders(CLAUDE, sources(base));
+    expect(engineProviders(CLAUDE, sources({ ...base, region: null }))).toEqual(today);
+    expect(engineProviders(CLAUDE, sources({ ...base, region: { verdict: 'allowed' } }))).toEqual(today);
+    expect(today.some((row) => row.regionBlocked)).toBe(false);
+  });
+
+  it('keeps the Claude Code engine row pickable while another credential can run it, landing there', () => {
+    const engines = engineChoices(
+      sources({ configured: [deepseek, anthropicKey, vllm], engineHealth: threeAccounts, ...blocked }),
+      [{ engine: CLAUDE, provider: CLAUDE }],
+    );
+    const claude = engineOf(engines, CLAUDE);
+    expect(claude?.unavailable).toBeUndefined();
+    expect(claude?.regionBlocked).toBeUndefined();
+    expect(claude?.provider?.slug).toBe('deepseek');
+  });
+
+  it('greys the Claude Code engine row only when no other credential can run it', () => {
+    const engines = engineChoices(sources({ configured: [anthropicKey], pools: [claudePool], engineHealth: threeAccounts, ...blocked }));
+    const claude = engineOf(engines, CLAUDE);
+    expect(claude?.unavailable).toBe('Region not supported');
+    expect(claude?.fixEngine).toBe('claude');
+    expect(claude?.regionBlocked).toBe(true);
+    // Its own sign-in is where it lands, as for any engine none of whose credentials can run.
+    expect(claude?.provider?.slug).toBe('claude');
+    // Codex on the same runner is untouched.
+    expect(engineOf(engines, CODEX)?.unavailable).toBeUndefined();
+  });
+
+  it('keeps a draft on Claude Code’s own sign-in naming the reason, which the hero explains', () => {
+    const blockedSources = sources({ configured: [deepseek], engineHealth: threeAccounts, ...blocked });
+    const engines = engineChoices(blockedSources, [{ engine: CLAUDE, provider: CLAUDE }]);
+    const current = currentEngineChoice(CLAUDE, CLAUDE, engines, blockedSources);
+    expect(current.provider?.unavailable).toBe('Region not supported');
+    expect(current.provider?.regionBlocked).toBe(true);
+    expect(current.unavailable).toBe('Region not supported');
+    expect(current.regionBlocked).toBe(true);
+  });
+});

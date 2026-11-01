@@ -269,15 +269,49 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// a session needs to move between them (`CodexAccounts.moveCapability`). Nil from an older server,
     /// which claims nothing.
     public var capabilities: [String]? = nil
+    /// The directory `orbit register` ran in: a suggestion for this machine's first workspace, to be
+    /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
+    /// nothing registered one, and from an older server.
+    public var registerDir: String? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
     public let accountRemove: RunnerAccountRemoveState?
+    /// Where this runner's Claude connection to Anthropic last came out, with the effective verdict
+    /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
+    /// has decided yet, or an older server: never gated, drawn as before.
+    public var region: RunnerRegionView? = nil
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
         engines?.first { $0.engine == engine.rawValue }
     }
+}
+
+/// `region` on GET /runners (docs/claude-region-check-contract.md §6, the web's `RunnerRegionView`):
+/// where the runner's Claude connection to Anthropic last came out. `verdict` is the effective one —
+/// blocked only for a blocked check under 24 hours old. Every field is optional and the verdict a raw
+/// string, so a newer control plane cannot make the runner list undecodable.
+public struct RunnerRegionView: Codable, Equatable, Sendable {
+    public let verdict: String?
+    public let country: String?
+    public let regionCode: String?
+    public let name: String?
+    public let viaProxy: Bool?
+    public let checkedAt: String?
+
+    public init(verdict: String?, country: String? = nil, regionCode: String? = nil, name: String? = nil,
+                viaProxy: Bool? = nil, checkedAt: String? = nil) {
+        self.verdict = verdict
+        self.country = country
+        self.regionCode = regionCode
+        self.name = name
+        self.viaProxy = viaProxy
+        self.checkedAt = checkedAt
+    }
+
+    /// Whether this runner's Anthropic-bound Claude turns are gated now.
+    public var blocked: Bool { verdict == "blocked" }
 }
 
 /// Why an ended session cannot currently be resumed on its original runner. Unknown values stay
@@ -402,6 +436,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (`CursorRuntime.conversationStarted`, the server's own test).
     public var numTurns: Int? = nil
     public var runtimeSessionId: String? = nil
+    /// This session made its workspace (docs/first-workspace-contract.md §3.3), so the conversation
+    /// opens by saying so. Only `GET /sessions/:id` and the create answer carry it: a list row's nil
+    /// says nothing.
+    public var createdWorkspace: Bool? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -630,6 +668,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         cursorAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .cursorAccountPinned)
         numTurns = try? values.decodeIfPresent(Int.self, forKey: .numTurns)
         runtimeSessionId = try? values.decodeIfPresent(String.self, forKey: .runtimeSessionId)
+        createdWorkspace = try? values.decodeIfPresent(Bool.self, forKey: .createdWorkspace)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -844,7 +883,7 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
 /// when task/orchestration-created sessions leave their own overrides null.
 public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
-    public let name: String?
+    public var name: String?
     /// @deprecated No longer served — an agent holds no provider. Read the session's own
     /// `provider`, which is always set and is what the session actually ran on.
     public let provider: String?
@@ -865,6 +904,10 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
     public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
+    /// Its folder on the machine, and when it was deleted: the detail payload's workspace row, which
+    /// the conversation that made it reads (`CreatedWorkspaceLine`).
+    public var workDir: String? = nil
+    public var deletedAt: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -1097,6 +1140,13 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// predates the field.
     public let ownerAnswer: JSONValue?
     public var ownerAnswerCard: OwnerAnswer? { OwnerAnswer.parseCard(ownerAnswer) }
+    /// The same for a fact told to this session — a coordinator told of a committed fact, or a session
+    /// the answer to its criteria proposal (`coordinatorDelivery`) — held raw for
+    /// `CoordinatorDelivery.parseCard`, the reader the echo's payload is read by, so the line drawn while
+    /// the turn waits is the line its echo is drawn as. Nil on every other turn, and from a server that
+    /// predates the field.
+    public let coordinatorDelivery: JSONValue?
+    public var coordinatorDeliveryCard: CoordinatorDelivery? { CoordinatorDelivery.parseCard(coordinatorDelivery) }
     /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
     /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
@@ -1132,7 +1182,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
     public var cards: TurnCards {
-        TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, taskStart: taskStartCard, startedCard: startedCard,
+        TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, coordinatorDelivery: coordinatorDeliveryCard,
+                  taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, sessionReplies: replyCards,
                   reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
     }
@@ -1143,7 +1194,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                ownerAnswer: JSONValue? = nil, taskStart: JSONValue? = nil,
+                ownerAnswer: JSONValue? = nil, coordinatorDelivery: JSONValue? = nil, taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
@@ -1161,6 +1212,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.ownerAnswer = ownerAnswer
+        self.coordinatorDelivery = coordinatorDelivery
         self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
@@ -1212,13 +1264,17 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
     public let folderId: String?
+    /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
+    /// the transaction that creates it (docs/first-workspace-contract.md §3).
+    public let newWorkspace: NewWorkspaceRequest?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
-                cursorAccount: String? = nil, folderId: String? = nil) {
+                cursorAccount: String? = nil, folderId: String? = nil,
+                newWorkspace: NewWorkspaceRequest? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1237,6 +1293,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.kimiAccount = kimiAccount
         self.cursorAccount = cursorAccount
         self.folderId = folderId
+        self.newWorkspace = newWorkspace
     }
 }
 

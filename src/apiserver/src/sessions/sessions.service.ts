@@ -24,7 +24,7 @@ import {
   SessionRunSource,
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
+import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -108,6 +108,7 @@ import {
   type AccountEngine,
   type PlanUsage,
   CREATE_WORKDIR_CAPABILITY,
+  credentialIsAnthropicBound,
 } from '@orbit/shared';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -245,7 +246,13 @@ import {
   type TranscriptPage,
   type TranscriptRecordKind,
 } from './transcript-around';
-import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
+import {
+  ClaudeRegionConflict,
+  EngineSignedOutConflict,
+  engineSignInAction,
+  signedOutEngineRefusal,
+} from './engine-signin-preflight';
+import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
 import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
 import {
   MANAGED_RUNNER_DEMAND,
@@ -1240,6 +1247,8 @@ export class SessionsService {
       select: {
         name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
+        // The region check's verdict (docs/claude-region-check-contract.md §12, below).
+        region: true,
       },
     });
     if (runtime === AgentProvider.DSH) {
@@ -1296,6 +1305,17 @@ export class SessionsService {
     const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
     const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
     const cursorAccount = pickedCursorAccount ?? automatic(AgentProvider.CURSOR);
+    // Claude Code on a credential that talks to Anthropic (its own sign-in, an Anthropic key, a Claude pool), bound for
+    // a runner whose Claude connection to Anthropic is in a region Anthropic does not offer Claude in: refused now with
+    // the code (docs/claude-region-check-contract.md §12) rather than created to wait in the queue from its first
+    // second (§11). Before the signed-out refusal, which a sign-in would not clear there either — Claude's sign-in is
+    // refused on that machine too. A runner that does not declare claude-region/v1 is never refused (⑤). A task's run
+    // starts here as well, and is refused as a signed-out engine refuses it.
+    const regionRefusal =
+      targetRunner && runtime === AgentProvider.CLAUDE && credentialIsAnthropicBound(regionCredentialOf(resolved.credential))
+        ? claudeRegionCreateRefusal(targetRunner, assignedRunnerId, new Date())
+        : null;
+    if (regionRefusal) throw new ClaudeRegionConflict(regionRefusal);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1559,7 +1579,8 @@ export class SessionsService {
    * what `create` writes after the INSERT on every other path: the uploads the session adopts and, for a shell-first or
    * attachments-only opening, the opening turn. An ordinary prompt becomes turn 1 at the claim, as for every session.
    *
-   * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`).
+   * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`). One log
+   * line says how it ended, either way: nothing else on this path does.
    */
   private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null }>(
     ownerId: string,
@@ -1568,7 +1589,7 @@ export class SessionsService {
     opening: { attachmentIds: readonly string[]; shell: boolean; attachmentsAlone: boolean },
   ): Promise<S> {
     const lockKey = parseInt(createHash('sha256').update(ownerId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
-    const session = await withTransactionRetry(this.prisma, async (tx) => {
+    const made = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.WORKSPACE_NAME_LOCK_NAMESPACE}, ${lockKey})`;
       const taken = await tx.workspace.findMany({
         where: { ownerId, deletedAt: null, name: { startsWith: target.name } },
@@ -1584,7 +1605,7 @@ export class SessionsService {
           enableWorktree: false,
           autoCreateWorkDir: target.autoCreateWorkDir,
         },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       const created = await insertSession(tx, workspace.id);
       if (opening.attachmentIds.length > 0) {
@@ -1601,10 +1622,15 @@ export class SessionsService {
         });
       }
       if (opening.attachmentsAlone) await this.ensurePromptSeeded(tx, created);
-      return created;
-    }, loggedRetry(this.logger, 'sessions.createInNewWorkspace'));
+      return { created, workspace };
+    }, loggedRetry(this.logger, 'sessions.createInNewWorkspace')).catch((error: unknown) => {
+      // The error's code or class, not its message, which can quote the values it was writing.
+      this.logger.warn(`workspace ${JSON.stringify(target.name)} for owner ${ownerId} on runner ${target.runnerId} at ${JSON.stringify(target.workDir)} not created: ${(error as { code?: string })?.code ?? (error as Error)?.name}`);
+      throw error;
+    });
+    this.logger.log(`workspace ${made.workspace.id} ${JSON.stringify(made.workspace.name)} for owner ${ownerId} on runner ${target.runnerId} at ${JSON.stringify(target.workDir)} created with session ${made.created.id}`);
     this.realtime.markRunnerChanged(target.runnerId);
-    return session;
+    return made.created;
   }
 
   /** pg_advisory_xact_lock namespace for the import-claim serializer (see importSession). */
@@ -2459,6 +2485,9 @@ export class SessionsService {
     return withSessionState({
       ...compact,
       engine,
+      // When the session is woken next, when a wakeup last reached its engine, and its loop
+      // (docs/long-running-loop-contract.md §3).
+      wakeups: await readSessionWakeups(this.prisma, id),
       ...(landing ? { landing } : {}),
     });
   }
@@ -6194,6 +6223,11 @@ export class SessionsService {
       // here — every one of them, because an interrupt drops the whole queue and not one named turn
       // (runner-api/wake-turn-withdraw.ts). A refusal below rolls this back too.
       await settleUnrunWakeTurns(tx, id, { interrupted: true });
+      // The composer's Stop ends the session's background work, and a wakeup loop is background work: it
+      // ends here, OWNER_STOP, with the tick it has waiting (docs/long-running-loop-contract.md §1). A plain
+      // interrupt leaves the loop running — it only took the loop's tick already queued, just above — and
+      // the next tick comes due as it would have.
+      if (stopBackgroundWork) await endWakeupLoop(tx, id, 'OWNER_STOP');
       // An exception item queued behind the interrupted turn is taken back unrun. The conversation
       // lives on, so the item stays the coordinator's and is delivered again when its next turn ends.
       await returnQueuedTurns(tx, id, { code: 'TURN_INTERRUPTED' });
@@ -7736,6 +7770,9 @@ export class SessionsService {
         // a DONE task's identity was waiting for (§10.5 O-L4 3).
         await settleDeliveredIdentityAfterFinish(tx, session);
         await retireSessionInboxGeneration(tx, sessionId);
+        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: now },
@@ -7750,6 +7787,10 @@ export class SessionsService {
             endReason: reason,
           },
         });
+        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+        // dropped with the session that is ending, and taken out of their loop's runs
+        // (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         // Retire queued messages in place. This prevents replay while preserving target FKs,
         // attachments and clientTurnId receipts as durable audit evidence.
         await tx.conversationTurn.updateMany({
@@ -9770,8 +9811,8 @@ export class SessionsService {
       if (!session) throw new NotFoundException('session not found');
       assertEngineSessionRow(session);
       if (workspaceId && workspaceId !== session.workspaceId) {
-        await this.moveToWorkspaceLocked(tx, ownerId, id, { workspaceId, held: !!workspace }, folder, folderId);
-        return { from: session.workspaceId, workspaceId, changed: true };
+        const queuedFor = await this.moveToWorkspaceLocked(tx, ownerId, id, { workspaceId, held: !!workspace }, folder, folderId);
+        return { from: session.workspaceId, workspaceId, changed: true, queuedFor };
       }
       if (session.deletedAt) {
         throw new ConflictException('this session is in Trash; restore it before moving it');
@@ -9796,6 +9837,8 @@ export class SessionsService {
       this.realtime.publishSessionUpdated(id);
       if (moved.from) this.realtime.publishWorkspaceChanged(id, moved.from, false);
       if (moved.workspaceId) this.realtime.publishWorkspaceChanged(id, moved.workspaceId, false);
+      // A session the region check held moved still queued: its new runner may take it now.
+      if ('queuedFor' in moved && moved.queuedFor) this.queue.notifySessionQueued(moved.queuedFor);
     } else if (moved.changed) {
       // The list row moved; other clients learn where from the summary's folderId.
       this.realtime.publishSessionUpdated(id);
@@ -9824,7 +9867,7 @@ export class SessionsService {
     to: { workspaceId: string; held: boolean },
     folder: { ownerId: string; workspaceId: string } | undefined,
     folderId: string | null,
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (!to.held) {
       const workspace = await tx.workspace.findFirst({
         where: { id: to.workspaceId, ownerId },
@@ -9839,7 +9882,7 @@ export class SessionsService {
     }
     const subject = await this.readMoveSubject(tx, ownerId, id);
     if (!subject) throw new NotFoundException('session not found');
-    const { session, runtime, verdict } = subject;
+    const { session, runtime, verdict, regionHeld } = subject;
     if (verdict.reason) throw new ConflictException(verdict.reason);
     if (verdict.needsEnd) throw new ConflictException(MOVE_REFUSAL.END);
     const target = await tx.workspace.findUniqueOrThrow({
@@ -9892,8 +9935,14 @@ export class SessionsService {
           from: session.workspace,
           runnerEngines: sourceRunner?.engines,
         }),
+        // A session the region check held moves still queued, its message with it, and the sentence that named the
+        // machine it left goes: the claim on the one it moved to holds it again only if that machine is in such a
+        // region too (§11).
+        ...(regionHeld ? { error: null } : {}),
       },
     });
+    // Queued still: the runner it is now assigned to is the one to wake.
+    return regionHeld ? target.runnerId : null;
   }
 
   /** What the move reads of a session: what §5.2 judges, and what the move then writes from. */
@@ -9902,6 +9951,8 @@ export class SessionsService {
     ownerId: true,
     title: true,
     status: true,
+    // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
+    error: true,
     deletedAt: true,
     completedAt: true,
     importSourceCwd: true,
@@ -9978,6 +10029,12 @@ export class SessionsService {
       : 0;
     // The session's own engine, which a move never changes and its credential never decided.
     const runtime = await sessionEngine(db, session);
+    // Held in the queue for its runner's region (docs/claude-region-check-contract.md §11), with nothing of it out on a
+    // delivery: the hold's sentence is on it, which the claim writes and clears.
+    const regionHeld =
+      session.status === RunStatus.PENDING &&
+      isClaudeRegionError(session.error) &&
+      (await db.conversationTurn.count({ where: { sessionId: id, status: 'IN_FLIGHT' } })) === 0;
     const verdict = sessionMoveVerdict({
       ...session,
       coordinatesProject: session.coordinatorForProject != null,
@@ -9985,8 +10042,9 @@ export class SessionsService {
       queuedTurns,
       mergeRecoveryOpen: readMergeRecovery(session.mergeRecovery) != null,
       runtime,
+      regionHeld,
     });
-    return { session, runtime, verdict };
+    return { session, runtime, verdict, regionHeld };
   }
 
   /**

@@ -33,7 +33,9 @@ import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { PushService } from '../push/push.service';
 import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_BEATS,
@@ -195,10 +197,10 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  *
  * Save for one thing the runner says just as surely: `claimedAt`, the session's own claim of the
  * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
- * is presence. A process that has just started claims at once, while its first heartbeat waits for
- * the first tick of its 30-second ticker (runner-go runloop.go), so for that long the runner's last
- * beat is still its predecessor's. A managed runner woken from sleep is exactly that, every
- * time: on the lab's real k3s (task T06, 2026-10-18) the run a woken runner claimed at 00:56:34.7
+ * is presence. A process that has just started claims at once, and until its first heartbeat lands
+ * (runner-go runloop.go) the runner's last beat is still its predecessor's. A managed runner woken
+ * from sleep is exactly that, every time: on the lab's real k3s (task T06, 2026-10-18) the run a
+ * woken runner claimed at 00:56:34.7
  * was finalized `runner offline` at 00:56:35.4, its heartbeat six minutes old from before the sleep.
  * The finalizing write asks the same of the row it writes (`claimedLongAgo`), under its lock.
  *
@@ -219,8 +221,8 @@ function runnerLooksOffline(
 /**
  * Whether an offline verdict was read from silence: the runner is there and has not signed off. The
  * other two ways `runnerLooksOffline` says offline are facts on the record — a runner marked OFFLINE
- * (reported by a runner about itself as it leaves, or a managed runner's row before it ever beat), or
- * no runner at all — and `silenceHold`, which is about silence, does not hold them.
+ * (reported by a runner about itself as it leaves, or a runner's row before it ever beat), or no
+ * runner at all — and `silenceHold`, which is about silence, does not hold them.
  */
 function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
   return !!runner && runner.status !== 'OFFLINE';
@@ -275,6 +277,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
      * service; `@Optional()` for the specs that build the reaper by hand, which sweep whenever they ask.
      */
     @Optional() private readonly leader?: ControlPlaneLeader,
+    /**
+     * Tells an owner that a one-shot wakeup of theirs was dropped with its FAILED session when a reap
+     * drained the turn it was filed onto (runner-api/wake-turn-withdraw.ts, contract §4). RealtimeModule
+     * imports PushModule, so production always has it (`reaper-push-wiring.spec.ts` builds that module and
+     * checks); `@Optional()` for the specs that build the reaper by hand about something else.
+     */
+    @Optional() private readonly push?: PushService,
   ) {}
 
   onModuleInit(): void {
@@ -891,6 +900,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         closesRequests: true,
         retryArmed: retryAt != null,
       });
+      // And a wakeup filed onto a `bg-wake:` turn still queued — a tick due while the runner was already
+      // dead, before this reap — which the drain below answers unrun: settled by the status written above,
+      // held for the retry or dropped, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+      // Left DELIVERED, it would point at a turn no engine was ever handed.
+      const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
@@ -916,6 +930,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         taskReclaimed,
         currentWorkTerminalized,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        droppedWakeups,
       };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!outcome.ok) {
@@ -924,6 +939,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       }
       return;
     }
+    // The one-shot wakeups this reap dropped with the session it FAILED, retry unarmed: their owner is told,
+    // once, now that the drop has committed (contract §4).
+    signalDrainedWakeups(this.push, this.log, outcome.droppedWakeups ?? []);
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.

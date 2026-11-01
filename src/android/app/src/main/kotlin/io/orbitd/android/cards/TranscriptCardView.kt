@@ -13,14 +13,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.LocalReaderResources
@@ -55,6 +58,11 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     // The owner's answer handed to the coordinator is one line that opens to the words the agent read, not a card of fields.
     if (card.key.endsWith(":ownerAnswer")) {
         OwnerAnswerLineView(card, event); return
+    }
+    // So is a fact told to this session — the coordinator told of one, or the answer to its criteria proposal: its sentence, then when it
+    // was sent, opening to the words the agent read.
+    if (card.key.endsWith(":coordinatorDelivery")) {
+        CoordinatorDeliveryLineView(card, event, open); return
     }
     val resources = LocalReaderResources.current
     val app = LocalContext.current.applicationContext as? OrbitApplication
@@ -102,14 +110,55 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
 }
 
 /**
- * The owner's answer handed to the coordinator (`OwnerAnswerLine`): one line, "Sent to the coordinator · 08:29" — the pill a revision handed to
- * its coordinator leaves (`SentToCoordinatorLine`) — in place of the owner's own bubble, which asked the question a second time in the
- * reader's name. Pressing it opens the words the agent read (web `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
+ * The ended questions this conversation draws — its rail's records — and the turns of it that hand their answers to the coordinator, each
+ * by item in one spelling, whichever each read was served ([key]; web `AnsweredQuestionsCtx`, `answeredItemKey`, `answersHandedOver`).
+ * Such a turn draws its question's record in its own place (`OwnerAnswerLineView`), so the rail leaves that record out
+ * ([leftToItsTurn]), and the record's review folds what the coordinator was told at its foot ([told]). [open] opens a record's review.
+ */
+internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>, val open: (String) -> Unit) {
+    private val records = records.filter { it.family == CardFamily.QUESTION_RECORD }.associateBy { key(it.objectId) }
+    private val turns = turns.mapNotNull { turn -> OwnerAnswerLine.question(turn)?.let { key(it) to turn } }.toMap()
+
+    /** The record the turn handing over [answer] draws in its place, when this conversation holds it. */
+    fun record(answer: JsonObject): InteractionCard? = OwnerAnswerLine.question(answer)?.let { records[key(it)] }
+
+    /** Whether a turn of this conversation draws [card] in its own place. */
+    fun leftToItsTurn(card: InteractionCard) = card.family == CardFamily.QUESTION_RECORD && key(card.objectId).let { it in turns && it in records }
+
+    /** The turn that told the coordinator [card]'s answer, the newest where several did. */
+    fun told(card: InteractionCard): RunEvent? = if (leftToItsTurn(card)) turns[key(card.objectId)] else null
+
+    private companion object { fun key(itemId: String) = ObjectId.canonical(itemId) ?: itemId }
+}
+
+/** The conversation's [AnsweredQuestions]; none outside a conversation, where every such turn is its line. */
+internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { null }
+
+/**
+ * The owner's answer handed to the coordinator (`OwnerAnswerLine`). Where the conversation holds the question it answers, the turn is that
+ * question's own card, Answered, and nothing else (docs/mocks/owner-answer-sent-card/merged.html): the owner reads Answered as "the agent
+ * has my answer", so a line under it said so twice. Drawn here, where the coordinator was handed the answer, the card is dashed and says so
+ * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and its review folds the words the agent read.
+ *
+ * Otherwise — a Not yet… to a request to record the project done, which has no card, or a question the conversation does not hold — it is
+ * one line, "Sent to the coordinator · 08:29" — the pill a revision handed to its coordinator leaves (`SentToCoordinatorLine`) — in place of
+ * the owner's own bubble, which asked the question a second time in the reader's name. Pressing it opens the words the agent read (web
+ * `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
  */
 @Composable
-internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?) {
+internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false) {
     var open by rememberSaveable(card.key) { mutableStateOf(false) }
     val undelivered = event?.fields?.text("delivery") in setOf("failed", "unconfirmed")
+    val answered = LocalAnsweredQuestions.current
+    val record = answered?.record(card.source)
+    if (answered != null && record != null) {
+        Box(Modifier.fillMaxWidth().testTag(card.key)) {
+            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered }) {
+                answered.open(record.key)
+            }
+        }
+        return
+    }
     val tone = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().testTag(card.key), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -142,6 +191,84 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
                 note?.let { AttachedNoteEntry(it.trim()) }
+            }
+        }
+    }
+}
+
+/**
+ * A fact told to this session (`CoordinatorDeliveryLine`): one line — the fact's sentence, then "Sent to the coordinator · 08:29" — in
+ * place of the owner's own bubble, which filled the screen with protocol written for the agent (web `CoordinatorDeliveryLine.tsx`, iOS
+ * `CoordinatorDeliveryLineView`). The owner's answer's pill (`OwnerAnswerLineView`): the sentence gives way with an ellipsis and the
+ * time does not; at a phone's width the two take a row each, the sentence first. Pressing it opens the words
+ * the agent read, with the task the fact names a press away. Unconfirmed, it says so in every Orbit card's words, and nothing of it goes
+ * back to the composer: nobody typed it. Where this conversation is not the project's coordinator — the owner's answer to a criteria
+ * proposal a task's run filed — the line says "Sent to this session" and opens to "What this session was told".
+ */
+@Composable
+internal fun CoordinatorDeliveryLineView(card: InteractionCard, event: RunEvent?, open: (String) -> Unit) {
+    val delivery = remember(card.source) { CoordinatorDeliveryLine.parse(card.source) } ?: return
+    var shown by rememberSaveable(card.key) { mutableStateOf(false) }
+    val state = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+    val undelivered = state in setOf("failed", "unconfirmed")
+    val tone = MaterialTheme.colorScheme.onSurfaceVariant
+    val sentence = CoordinatorDeliveryLine.sentence(delivery)
+    val sent = CoordinatorDeliveryLine.sent(delivery)
+    // A phone's width, as the web's `@media (max-width: 600px)` reads it: the window's, not the row's.
+    val phone = LocalConfiguration.current.screenWidthDp < 600
+    Column(Modifier.fillMaxWidth().testTag(card.key), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row((if (phone) Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)) else Modifier.clip(RoundedCornerShape(50)))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClickLabel = CoordinatorDeliveryLine.told(delivery)) { shown = true }.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("→", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = tone)
+            if (phone) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(sentence, Modifier.testTag("${card.key}:sentence"), style = MaterialTheme.typography.labelMedium, color = tone,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(sent, Modifier.testTag("${card.key}:sent"), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline, maxLines = 1, softWrap = false)
+                }
+            } else {
+                Text(sentence, Modifier.weight(1f, fill = false).testTag("${card.key}:sentence"), style = MaterialTheme.typography.labelMedium,
+                    color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("·", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                Text(sent, Modifier.testTag("${card.key}:sent"), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline, maxLines = 1, softWrap = false)
+            }
+            Text("›", Modifier.clearAndSetSemantics { }, style = MaterialTheme.typography.labelMedium, color = tone)
+        }
+        if (undelivered) Text(OwnerAnswerLine.undelivered, style = MaterialTheme.typography.labelSmall, color = LocalOrbitColors.current.needsYou)
+    }
+    if (shown) CoordinatorDeliveryTold(card, delivery, event, open) { shown = false }
+}
+
+/** What the coordinator — or this session — was told: the line it was sent as, its words verbatim, what delivery appended folded under
+ * them, and the task. */
+@Composable
+private fun CoordinatorDeliveryTold(card: InteractionCard, delivery: CoordinatorDelivery, event: RunEvent?, open: (String) -> Unit,
+    close: () -> Unit) {
+    val words = event?.personWords().orEmpty()
+    val note = event?.fields?.text("controlPlaneNote")?.takeIf { it.isNotBlank() }
+    Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(Modifier.padding(12.dp).verticalScroll(rememberScrollState()).testTag("${card.key}:told"),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(CoordinatorDeliveryLine.told(delivery), style = MaterialTheme.typography.titleSmall)
+                    TextButton(onClick = close) { Text("Close") }
+                }
+                Text(CoordinatorDeliveryLine.sentence(delivery), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(CoordinatorDeliveryLine.sent(delivery), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
+                note?.let { AttachedNoteEntry(it.trim()) }
+                delivery.task?.let { task ->
+                    TextButton(onClick = { close(); open("orbit-task:${task.id}") }, Modifier.testTag("${card.key}:task")) {
+                        Text(CoordinatorDeliveryLine.itsTask)
+                    }
+                }
             }
         }
     }

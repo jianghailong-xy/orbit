@@ -346,13 +346,12 @@ final class AppModel {
     /// Invalidates async detail reads when logout or an instance switch replaces their scope.
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
-    #if os(iOS)
     /// The 4s Open loop also keeps the Workspace navigation's Runner state fresh, but Runner
     /// heartbeats do not need that cadence. This gate yields an approximately 16s refresh on the
-    /// existing tick (15s minimum) without starting another long-lived task.
+    /// existing tick (15s minimum) without starting another long-lived task. On both platforms: a
+    /// machine's Set up row comes and goes with it (`AgentsModel.machinesToSetUp`).
     private var runnerSnapshotRefreshNotBefore = Date.distantPast
     private static let runnerSnapshotRefreshInterval: TimeInterval = 15
-    #endif
     private var lastSnapshot: [Session]?
     /// True from a cold launch's restore (`adoptLaunchSnapshot`) until the first fetched Open
     /// snapshot lands. The list in hand until then is the previous run's, or built on it by an
@@ -567,6 +566,7 @@ final class AppModel {
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
+        machineSetups = [:]
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
@@ -889,6 +889,7 @@ final class AppModel {
             tokenStore.setRefreshToken(nil, for: baseURL)
         }
         signedIn = false
+        machineSetups = [:]
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
@@ -975,11 +976,9 @@ final class AppModel {
     func startPolling() {
         guard pollTask == nil else { return }
         startControlPlane()
-        #if os(iOS)
-        // The always-mounted iPhone drawer / iPad sidebar performs the initial Workspace + Runner
-        // load. Start the lightweight refresh one interval later instead of duplicating that request.
+        // The always-mounted drawer or sidebar performs the initial Workspace + Runner load. Start the
+        // lightweight refresh one interval later instead of duplicating that request.
         runnerSnapshotRefreshNotBefore = Date().addingTimeInterval(Self.runnerSnapshotRefreshInterval)
-        #endif
         pollTask = Task { @MainActor [weak self] in
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
@@ -988,9 +987,7 @@ final class AppModel {
             while !Task.isCancelled {
                 if let self { await self.loadSessions() }
                 if let self {
-                    #if os(iOS)
                     await self.refreshRunnerSnapshotIfDue()
-                    #endif
                     // The control stream has no purge event, and a Completed / Trash cold route is
                     // absent from Open by definition. Refresh only that one focused fallback so a
                     // remote lifecycle change or permanent deletion cannot leave a ghost console.
@@ -1016,7 +1013,6 @@ final class AppModel {
         await watches.load()
     }
 
-    #if os(iOS)
     /// Claim one Runner refresh when the shared poll reaches the 15s gate. The claim is recorded
     /// before awaiting so a re-entrant UI task cannot start a duplicate request; cancellation rides
     /// the parent `pollTask`, which logout already cancels.
@@ -1025,7 +1021,6 @@ final class AppModel {
         runnerSnapshotRefreshNotBefore = now.addingTimeInterval(Self.runnerSnapshotRefreshInterval)
         await agents.refreshRunnerSnapshot()
     }
-    #endif
 
     // MARK: control-plane stream (GET /api/events)
 
@@ -1798,11 +1793,121 @@ final class AppModel {
         agents?.registerCreatedSession(session)
     }
 
-    /// ⌘N: open the draft composer for `currentAgentID`, navigating into the Agents section.
-    /// Mirrors the "New session" button in `AgentPanes`.
+    /// Where New session goes (`AgentListLogic.newSessionTarget`): nil only while the workspace list
+    /// hasn't answered, which is what greys it.
+    var newSessionTarget: NewSessionTarget? {
+        AgentListLogic.newSessionTarget(currentAgentID: currentAgentID, list: agents?.listPresentation,
+                                        firstOnlineMachine: agents?.firstOnlineMachine)
+    }
+
+    /// ⌘N, File ▸ New Session and the drawer's New session: open the draft composer for
+    /// `currentAgentID`, navigating into the Agents section. Mirrors the "New session" button in
+    /// `AgentPanes`. With no workspace, the first online machine's new session page, else Machines &
+    /// models (board rule 11). A machine's new session page is a new session already.
     func newSessionInCurrentAgent() {
-        guard let id = currentAgentID else { return }
+        guard machineDraftRunnerID == nil else { return }
+        guard let id = currentAgentID else { return newSessionWithNoWorkspace() }
         show(.compose(agentID: id, folderID: nil), agent: id)
+    }
+
+    private func newSessionWithNoWorkspace() {
+        switch newSessionTarget {
+        case .machine(let id)?: openMachineDraft(id)
+        case .machines?:        selectedSection = .runners
+        case .workspace?, nil:  break
+        }
+    }
+
+    // MARK: a machine with no workspace (board rules 1–12)
+
+    /// Each machine's new session page as it has been left, for this run of the app. Mutated by
+    /// `machineSetup(for:)`, so not an Observation input of anything drawn.
+    @ObservationIgnored private var machineSetups: [String: MachineSetupModel] = [:]
+
+    /// The machine whose new session page is showing in the Agents section.
+    var machineDraftRunnerID: String? { selectedSection == .agents ? nav.machineDraftOnTop : nil }
+
+    /// A machine's own new session page: where its Set up row, New session and Start a session go.
+    func openMachineDraft(_ runnerID: String) {
+        selectedSection = .agents
+        nav.openMachineDraft(runnerID: runnerID)
+    }
+
+    /// Start a session on a machine, whatever it holds: its first workspace's draft once it has one.
+    func startSession(onMachine runnerID: String) {
+        if let workspace = agents?.firstWorkspace(onRunner: runnerID) {
+            show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
+        } else {
+            openMachineDraft(runnerID)
+        }
+    }
+
+    /// That page's model, made the first time and kept (`MachineSetupModel`). Call from a `.task` or an
+    /// event handler, never a view `body`.
+    func machineSetup(for runner: Runner) -> MachineSetupModel? {
+        let key = PublicID.storageKey(runner.id)
+        if let kept = machineSetups[key] { return kept }
+        guard let agents, let consoleRegistry else { return nil }
+        let standIn = Agent.machineDraft(runnerID: runner.id, name: RunnerPageFormat.displayName(runner),
+                                         engine: MachineSetup.firstEngineOn(runner.engines))
+        let draft = consoleRegistry.draftModel(
+            for: standIn, defaultModel: agents.effectiveDefaultModel(for: standIn),
+            configuredProviders: agents.configuredProviders,
+            configuredProvidersLoaded: agents.configuredProvidersLoaded,
+            providerPools: agents.providerPools, sharedPools: agents.sharedPools,
+            modelCatalog: agents.modelCatalog(for: runner.id),
+            accountDefaultEffort: user?.preferences?.defaultEffort) { [weak self] session in
+                self?.openCreatedMachineSession(session, runnerID: runner.id)
+            }
+        let setup = MachineSetupModel(runner: runner, draft: draft)
+        machineSetups[key] = setup
+        return setup
+    }
+
+    /// The first message made the workspace: the page you are on becomes the conversation, in the
+    /// workspace it made, and the Set up row turns into that workspace's row.
+    private func openCreatedMachineSession(_ session: Session, runnerID: String) {
+        registerCreatedAgentSession(session)
+        machineSetups[PublicID.storageKey(runnerID)] = nil
+        if machineDraftRunnerID == runnerID {
+            show(.console(sessionID: session.id, origin: .list), agent: session.agent?.id ?? session.agentId)
+        }
+        Task { await agents?.load() }
+    }
+
+    /// The machine got a workspace some other way (another device, the web's form): the page moves on
+    /// to it, and what was being set up here no longer applies. What was waiting comes back in that
+    /// workspace's composer rather than vanishing.
+    func machineGotWorkspace(_ runnerID: String) {
+        guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
+        else { return }
+        let key = PublicID.storageKey(runnerID)
+        if let held = machineSetups[key]?.handOff() {
+            consoleRegistry?.queueDraftMessage(agentID: workspace.id, message: held)
+        }
+        machineSetups[key] = nil
+        show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
+    }
+
+    /// The machine is gone from the account: it has no page.
+    func leaveMachineDraft(_ runnerID: String) {
+        guard machineDraftRunnerID == runnerID else { return }
+        machineSetups[PublicID.storageKey(runnerID)] = nil
+        nav.popToRoot()
+    }
+
+    /// What is at `path` on a machine, through the directory probe relay. With `ask` false it only
+    /// reads what is stored, which is all an offline machine can give.
+    func probeDir(runnerID: String, path: String, ask: Bool) async -> DirProbeRelay.Outcome {
+        guard let api else { return .unanswered }
+        do {
+            return try await DirProbeRelay.probe(
+                ask: ask ? { try await api.askDirProbe(runnerID: runnerID, path: path) } : nil,
+                read: { try await api.readDirProbe(runnerID: runnerID, path: path) },
+                sleep: { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) })
+        } catch {
+            return .unanswered
+        }
     }
 
     /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
@@ -1851,6 +1956,8 @@ final class AppModel {
             nav.popToRoot()
             #endif
             selectedAgentID = id
+        } else if nav.machineDraftOnTop != nil {
+            nav.popToRoot()
         }
     }
 
@@ -2575,6 +2682,8 @@ final class AppModel {
             if selectedAgentID != agentID {
                 nav.switchWorkspace(from: selectedAgentID, to: agentID, folders: sessionFolders)
                 selectedAgentID = agentID
+            } else if nav.machineDraftOnTop != nil {
+                nav.popToRoot()
             } else if inColumn {
                 nav.leaveProjectSessions()
             } else {
@@ -2582,6 +2691,8 @@ final class AppModel {
             }
         case .project(let projectID):
             openProjectSessions(projectID, inColumn: inColumn)
+        case .machine(let runnerID):
+            openMachineDraft(runnerID)
         }
     }
 
@@ -3336,8 +3447,9 @@ final class AppModel {
     }
 
     /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
-    /// the first agent, else the Infrastructure section when the server says there are none — the native
-    /// parallel of web's runners/register onboarding. A deep link / notification that already chose
+    /// the first agent, else the first online machine's new session page when the server says there
+    /// are none, else the Infrastructure section — the native parallel of web's runners/register
+    /// onboarding. A deep link / notification that already chose
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides
     /// instead. The rules live in `LoadFailureLogic.defaultLanding`.
@@ -3353,11 +3465,13 @@ final class AppModel {
             section: selectedSection,
             selectedAgentID: selectedAgentID,
             selectedSessionID: selectedAgentSessionID,
-            provisionalAgentID: nav.sectionAtRoot ? provisionalLandingAgentID : nil)
+            provisionalAgentID: nav.sectionAtRoot ? provisionalLandingAgentID : nil,
+            firstOnlineMachine: agents.firstOnlineMachine)
         switch landing {
         case .undecided: return
         case .keepCurrent: break
         case .agent(let id): if selectedAgentID != id { selectedAgentID = id }
+        case .machine(let id): openMachineDraft(id)
         case .runners: selectedSection = .runners
         }
         didResolveDefaultLanding = true
