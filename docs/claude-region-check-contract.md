@@ -362,7 +362,8 @@ On the server:
   polling process declares.
 
 **The runner's other requests to Anthropic** wait on the answer its turns go by (§10: under 60 seconds old, else
-asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_region.go`):
+asked now, an unknown one carrying a blocked verdict over for 24 hours), and a blocked one stops them
+(`claudeConnectionBlocked` in `claude_region.go`):
 
 - **Plan usage** (`planusage.go`, for Default and every added account): no read of `api.anthropic.com`, and no token
   refresh for one, since that talks to Anthropic too. Each account's probe logs
@@ -376,7 +377,7 @@ asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_r
   route records like any other. While it answers blocked, Claude Code's line reads `Anthropic: region not supported`,
   doctor offers and suggests no Claude sign-in, and a `Claude region` section follows the engines (board 03). The
   address under it is `CLAUDE_REGIONS_SOURCE_URL` (§2). Its answer is the process's own check, so the gates below
-  hold in doctor too.
+  hold in doctor too. It keeps that answer as a check keeps one of its own (`keep`), flip included (§10).
 - **The runner's own `claude` starts** go by the turns' rule (①): they wait only when the `claude` they would start is
   Anthropic-bound (§8, from that process's environment and `settings.json`) and the answer is blocked
   (`claudeStartBlocked`). A machine whose own Claude Code points at another provider keeps them. Any `claude` start
@@ -398,8 +399,9 @@ asked now), and a blocked one stops them (`claudeConnectionBlocked` in `claude_r
 - **Quiet starts.** While blocked, every `claude` the runner starts that is not Anthropic-bound runs with
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` (`claudeQuietEnv`). That covers a session on another provider's key
   (`spawnClaude`, first spawn and respawn) and each start above that runs. "Blocked" here means the last decided
-  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`). It is read with no
-  request and no wait, so such a turn is never checked and never waits on the route (①).
+  answer the check holds for Claude's proxy is blocked and under a day old (`claudeStartsQuiet`, by the carry-over's
+  own rule, `claudeRegionHolds`). It is read with no request and no wait, so such a turn is never checked and never
+  waits on the route (①).
   - Measured on Claude Code 2.1.316, such a `claude` with a Claude login stored sends that login to
     `api.anthropic.com` (`/api/claude_cli/bootstrap`, `/api/claude_code_penguin_mode`). With the variable it sends
     Anthropic nothing, while the turn, its reply and its prompt suggestion still go to the other provider.
