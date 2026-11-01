@@ -1,0 +1,6 @@
+mac-wide-light: no window after launch; File > New Window
+mac-wide-light-figure: in view after 2 drag(s) at (637.0, 443.0, 337.0, 129.0)
+mac-wide-light-drawn: in view after 0 drag(s) at (637.0, 443.0, 337.0, 129.0)
+mac-wide-light: drawn figure: 43 label="Diagram" value="" frame=(637.0, 443.0, 337.0, 129.0) hittable=true
+mac-wide-light: after the sideways move: 43 label="Diagram" value="" frame=(637.0, 443.0, 337.0, 129.0) hittable=true
+mac-wide-light: a vertical move started on the diagram took its top from 443.0 to 383.0

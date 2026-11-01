@@ -1,0 +1,5 @@
+{
+  "fits": "flowchart TD\n  subgraph s1[\"apiserver\"]\n    n1[\"Turn stored\"]\n    n2[(\"run_event row\")]\n  end\n  n3([\"Gateway delivers\"])\n  n4[[\"Runner #amp; engine #lt;1#gt;\"]]\n  n1 --> n2\n  n2 --> n3\n  n3 --> n4",
+  "wide": "flowchart LR\n  n1[\"Owner sends a message\"]\n  n2[\"apiserver stores the turn\"]\n  n3[\"Gateway wakes the runner\"]\n  n4[\"Runner starts the engine\"]\n  n5[\"Engine answers\"]\n  n6[\"Answer stored as events\"]\n  n1 --> n2\n  n2 --> n3\n  n3 --> n4\n  n4 --> n5\n  n5 --> n6",
+  "broken": "flowchart TD\n  n1[\"Lease expired\"] -->"
+}

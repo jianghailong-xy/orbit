@@ -1,0 +1,5 @@
+ios-wide-light-figure: in view after 3 drag(s) at (0.0, 585.6666666666667, 402.0, 141.9999999999999)
+ios-wide-light-drawn: in view after 0 drag(s) at (0.0, 585.6666666666667, 402.0, 141.9999999999999)
+ios-wide-light: drawn figure: 43 label="Diagram" value="" frame=(0.0, 585.6666666666667, 402.0, 141.9999999999999) hittable=true
+ios-wide-light: after the sideways move: 43 label="Diagram" value="" frame=(0.0, 585.6666666666667, 402.0, 141.9999999999999) hittable=true
+ios-wide-light: a vertical move started on the diagram took its top from 585.6666666666667 to 480.0
