@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount } from './dto';
 import {
   accountOfEnv,
+  antigravityModelBuckets,
   codexAccountOfEnv,
   codexAccountSnapshot,
   planUsageBlockedUntil,
@@ -691,6 +692,46 @@ describe('a runner with more than one Antigravity Google account', () => {
     expect(accountOfEnv('antigravity', { ORBIT_ANTIGRAVITY_GOOGLE_DIR: '/elsewhere' }, accounts)).toBeNull();
     // A Gemini key of the session's own spends no account's subscription.
     expect(accountOfEnv('antigravity', { GEMINI_API_KEY: 'key' }, accounts)).toBeNull();
+  });
+});
+
+describe('antigravityModelBuckets — the buckets a run on one model spends', () => {
+  // agy 1.4.12's /usage on a Pro plan (2026-11-01), as the runner flattens it: Gemini 4 Argon's own
+  // week spent while the Gemini group the Flash models share has plenty left.
+  const buckets = [
+    { id: 'gemini-weekly', window: 'weekly', remainingFraction: 0.97, resetTime: '2026-11-08T12:28:16Z' },
+    { id: 'gemini-5h', window: '5h', remainingFraction: 0.93, resetTime: '2026-11-01T17:28:16Z' },
+    { id: '3p-weekly', window: 'weekly', remainingFraction: 1, resetTime: '2026-11-08T12:40:00Z' },
+    { id: '3p-5h', window: '5h', remainingFraction: 1, resetTime: '2026-11-01T17:40:00Z' },
+    { id: 'gemini-argon-wtu-weekly', window: 'weekly', remainingFraction: 0, resetTime: '2026-11-07T17:41:35Z' },
+  ];
+  const ids = (model: string | null | undefined) => antigravityModelBuckets(buckets, model).map((bucket) => bucket.id);
+
+  it("gives a Gemini Flash or Pro model the Gemini group's, never Argon's", () => {
+    expect(ids('gemini-3.8-flash')).toEqual(['gemini-weekly', 'gemini-5h']);
+    expect(ids('gemini-3.8-flash-high')).toEqual(['gemini-weekly', 'gemini-5h']);
+    expect(ids('gemini-3.1-pro')).toEqual(['gemini-weekly', 'gemini-5h']);
+  });
+
+  it('gives Gemini 4 Argon the group that names it, and the Gemini one where it has none of its own', () => {
+    expect(ids('gemini-4-argon')).toEqual(['gemini-argon-wtu-weekly']);
+    expect(ids('gemini-4-argon-medium')).toEqual(['gemini-argon-wtu-weekly']);
+    // An Ultra plan's Argon draws on the Gemini group, and agy reports no group of its own.
+    expect(antigravityModelBuckets(buckets.slice(0, 4), 'gemini-4-argon').map((bucket) => bucket.id)).toEqual([
+      'gemini-weekly',
+      'gemini-5h',
+    ]);
+  });
+
+  it("gives Claude and GPT-OSS the third-party group's", () => {
+    expect(ids('claude-opus-5-5')).toEqual(['3p-weekly', '3p-5h']);
+    expect(ids('gpt-oss-120b')).toEqual(['3p-weekly', '3p-5h']);
+  });
+
+  it("keeps every bucket for agy's own default model, and for a model no group is", () => {
+    expect(ids('')).toHaveLength(5);
+    expect(ids(null)).toHaveLength(5);
+    expect(antigravityModelBuckets(buckets.slice(0, 2), 'claude-opus-5-5')).toHaveLength(2);
   });
 });
 

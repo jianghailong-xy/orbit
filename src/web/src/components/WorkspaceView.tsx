@@ -497,7 +497,7 @@ import {
   HELD_ALREADY_WAITING_DETAIL,
 } from '../lib/machineSetupCopy';
 import { useMachineSetup, type HeldMessage } from '../lib/useMachineSetup';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
 import { setSessionTags } from '../lib/sessionTags';
@@ -7475,7 +7475,9 @@ export function WorkspaceView({
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? bindingPlanUsageRow(currentPlanUsageRows(shownPlanUsage)) : undefined;
+    const planRow = shownPlanUsage
+      ? bindingPlanUsageRow(currentPlanUsageRows(modelPlanUsage(shownPlanUsage, shownModel)))
+      : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,
@@ -12521,6 +12523,8 @@ export function WorkspaceView({
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
+                // The pill's number is the quota the model the control names spends, not another model's.
+                model={shownModel}
                 // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
                 // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
                 // an email. A draft names the one it would start on.

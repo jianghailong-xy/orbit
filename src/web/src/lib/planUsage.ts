@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  antigravityModelBuckets,
   codexAccountSnapshot,
   type PlanUsage,
   type PlanUsageRateLimit,
@@ -96,6 +97,17 @@ export function sessionPlanUsage(
   if (provider === engine) return planUsageSnapshotForProvider(runnerUsage, engine);
   const builtin = Object.values(AgentProvider).some((p) => p === provider);
   return (builtin ? undefined : configured?.find((p) => p.slug === provider))?.planUsage ?? null;
+}
+
+/**
+ * `usage` as a run on `model` spends it. An Antigravity account's buckets belong to model groups, so
+ * only the ones that model draws on are kept (antigravityModelBuckets): another group's spent bucket
+ * stops nothing this run does. Any other engine's windows are the whole login's, and come back as
+ * they are.
+ */
+export function modelPlanUsage(usage: PlanUsageSnapshot, model: string | null | undefined): PlanUsageSnapshot {
+  if (usage.provider !== AgentProvider.ANTIGRAVITY || !usage.buckets) return usage;
+  return { ...usage, buckets: antigravityModelBuckets(usage.buckets, model) };
 }
 
 /** Split a runner's possibly multi-runtime quota payload into display sections. */

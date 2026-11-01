@@ -616,7 +616,7 @@ struct ComposerView: View {
                 // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
                 // detail rather than beside it, where a phone's footer has no room for an email (web
                 // parity).
-                PlanUsageIndicator(usage: usage,
+                PlanUsageIndicator(usage: usage, model: console.modelID,
                                    account: (console.accountLabel ?? console.poolAccountLabel).map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
                                    }, resetConsole: console)
@@ -1989,6 +1989,8 @@ private struct PlanUsageAccount {
 /// bucket's, which says what is left, as agy does, and says so ("4% left").
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
+    /// The model the session runs: the pill's number is the quota it spends (`bindingRow(model:)`).
+    let model: String
     var account: PlanUsageAccount?
     let resetConsole: ConsoleModel?
     @State private var showDetail = false
@@ -2006,7 +2008,7 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let row = usage.bindingRow() {
+        if let row = usage.bindingRow(model: model) {
             let pct = row.percent
             // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
             // (web parity).
