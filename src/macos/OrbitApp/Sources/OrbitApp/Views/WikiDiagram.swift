@@ -7,9 +7,10 @@ import OrbitKit
 // the app carries (`Resources/mermaid.min.js`) — strict, in the page's light or dark theme, at its own size: a wide one
 // scrolls sideways rather than shrinking its words. Its source shows as code when it does not draw.
 //
-// The web view is a picture and nothing more. It takes no touch or click (the page's scroll views move it); its page
-// may load nothing (its Content-Security-Policy); every navigation after its own page is refused; and the page has no
-// handler of the app's to call — the drawing is asked for with `callAsyncJavaScript`, which answers with its size.
+// The web view is a picture and nothing more. It takes no touch or click (the page's scroll views move it, and on the
+// Mac a wheel turned over it is handed to them); its page may load nothing (its Content-Security-Policy); every
+// navigation after its own page is refused; and the page has no handler of the app's to call — the drawing is asked
+// for with `callAsyncJavaScript`, which answers with its size.
 
 /// A section's diagram block.
 struct WikiDiagram: View {
@@ -214,8 +215,41 @@ private struct WikiDiagramWeb: NSViewRepresentable {
     }
 }
 
-/// A web view that is a picture: clicks and scrolls go to the page around it.
+/// A web view that is a picture. A click, a hover or a menu goes to the page around it. A scroll it takes only to hand
+/// on: sideways to the figure's own scroll view, up and down to the nearest scroll view that moves that way — which the
+/// figure's sideways one would otherwise keep, leaving the page still under a wheel turned over the diagram.
 private final class WikiDiagramPicture: WKWebView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// The scroll under way goes up and down: decided as it begins, so one slanted swipe stays with one scroll view.
+    private var upDown = true
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        NSApp.currentEvent?.type == .scrollWheel && frame.contains(point) ? self : nil
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        // A trackpad's gesture as it begins; a mouse wheel's every turn is one of its own.
+        if event.phase == .began || (event.phase.isEmpty && event.momentumPhase.isEmpty) {
+            upDown = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX)
+        }
+        if upDown, let page = pageScrollView() {
+            page.scrollWheel(with: event)
+        } else {
+            nextResponder?.scrollWheel(with: event)
+        }
+    }
+
+    /// The nearest scroll view around the figure's own whose content is taller than it: the document page's. The
+    /// figure's own is passed over: with scroll bars always shown, its scroller can leave its content a little taller.
+    private func pageScrollView() -> NSScrollView? {
+        var view = enclosingScrollView?.superview
+        while let current = view {
+            if let scroll = current as? NSScrollView, let content = scroll.documentView,
+               content.frame.height > scroll.contentView.bounds.height {
+                return scroll
+            }
+            view = current.superview
+        }
+        return nil
+    }
 }
 #endif
