@@ -1,13 +1,14 @@
 # Helpers scripts/hostd-e2e.sh runs inside its container:  bash -c '. /opt/orbit-e2e/in-container.sh; ...'
 
 # runner_pids UID — the `orbit run` processes whose real or effective uid is UID, one pid per line.
-# Every runner on the machine, whichever unit started it: two of them for one account is exactly
-# what the legacy-unit migration exists to prevent.
+# Every runner on the machine, whichever unit started it and whichever orbit it runs — the machine's
+# or an account's own ~/.orbit/bin/orbit: two of them for one account is exactly what the
+# legacy-unit migration exists to prevent.
 runner_pids() {
   local d cmd uids
   for d in /proc/[0-9]*; do
     cmd=$(tr '\0' ' ' <"$d/cmdline" 2>/dev/null) || continue
-    case "$cmd" in "/usr/local/bin/orbit run ") ;; *) continue ;; esac
+    case "$cmd" in /*/orbit" run ") ;; *) continue ;; esac
     uids=$(awk '/^Uid:/ { print $2, $3 }' "$d/status" 2>/dev/null) || continue
     case " $uids " in *" $1 "*) echo "${d#/proc/}" ;; esac
   done
@@ -15,6 +16,14 @@ runner_pids() {
 
 # euid PID — the effective uid the process runs with.
 euid() { awk '/^Uid:/ { print $3 }' "/proc/$1/status"; }
+
+# exe PID — the binary the process runs, as the kernel names it. Read as the process's own uid and
+# gid: another account's /proc/<pid>/exe takes CAP_SYS_PTRACE, which the container's root lacks.
+exe() {
+  local uid gid
+  uid=$(awk '/^Uid:/ { print $3 }' "/proc/$1/status") && gid=$(awk '/^Gid:/ { print $3 }' "/proc/$1/status") || return 1
+  setpriv --reuid="$uid" --regid="$gid" --clear-groups readlink "/proc/$1/exe"
+}
 
 # unit_of PID — the unit whose cgroup the process lives in.
 unit_of() { sed -n 's|^0::.*/||p' "/proc/$1/cgroup"; }

@@ -470,21 +470,28 @@ func TestUserBinUpgradeLeavesASharedBinaryAlone(t *testing.T) {
 		l.assertLegacyUntouched(t)
 		assertCommands(t, *calls)
 	})
-	t.Run("host broker", func(t *testing.T) {
-		l := newLegacyInstall(t)
-		for path, content := range map[string]string{
-			"orbit-runner@.service": hostRunnerTemplate(l.exe),
-			"orbit-hostd.service":   hostdServiceUnitFile(l.exe),
-		} {
-			if err := os.WriteFile(filepath.Join(l.unitDir, path), []byte(content), 0o644); err != nil {
-				t.Fatal(err)
+	// The broker runs the binary as root, alone on a host set up now, beside every account's
+	// instance on one set up before instances ran each account's own copy.
+	for name, template := range map[string]func(string) string{
+		"host broker":                  func(string) string { return hostRunnerTemplate() },
+		"host broker and uid template": uidHostRunnerTemplate,
+	} {
+		t.Run(name, func(t *testing.T) {
+			l := newLegacyInstall(t)
+			for path, content := range map[string]string{
+				"orbit-runner@.service": template(l.exe),
+				"orbit-hostd.service":   hostdServiceUnitFile(l.exe),
+			} {
+				if err := os.WriteFile(filepath.Join(l.unitDir, path), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		if restart := migrateServices(l.exe, systemdServicesRunning(l.unitDir, l.exe)); restart != nil {
-			t.Fatal("migrateServices moved the binary the host broker runs as root")
-		}
-		l.assertLegacyUntouched(t)
-	})
+			if restart := migrateServices(l.exe, systemdServicesRunning(l.unitDir, l.exe)); restart != nil {
+				t.Fatal("migrateServices moved the binary the host broker runs as root")
+			}
+			l.assertLegacyUntouched(t)
+		})
+	}
 }
 
 // Only a binary in a directory only root can write is moved: one the runner can already

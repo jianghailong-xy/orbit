@@ -12,10 +12,11 @@ import (
 )
 
 // `orbit host setup` — the one command in this design that needs root, and it is run
-// once per machine. It installs the machine broker (orbit-hostd, socket-activated) and
-// the orbit-runner@<uid> template each user's runner is an instance of. Everything a
-// user does afterwards — register, unregister, restart, update — goes through the
-// broker's socket and needs no sudo at all.
+// once per machine. It installs the machine broker (orbit-hostd, socket-activated), which
+// runs /usr/local/bin/orbit, and the orbit-runner@ template: each user's runner is the
+// instance orbit-runner@<escaped user name>, running that user's own ~/.orbit/bin/orbit.
+// Everything a user does afterwards — register, unregister, restart, update — goes
+// through the broker's socket or the runner itself and needs no sudo at all.
 
 // The files this command owns. Every one of them is written whole on every run: setup
 // is meant to be re-runnable (a new binary path, a moved control plane), and a run that
@@ -150,35 +151,48 @@ func hostSetup(env hostSetupEnv, server string) error {
 	}
 
 	fmt.Fprintf(env.out, "\n✓ this host is set up for Orbit runners.\n"+
-		"  Broker:  %s (socket-activated; %s)\n"+
-		"  Runners: orbit-runner@<uid>.service, one instance per Linux user\n"+
+		"  Broker:  %s (socket-activated; %s), running %s\n"+
+		"  Runners: orbit-runner@<user>.service, one instance per Linux user,\n"+
+		"           each running that user's own ~/.orbit/bin/orbit\n"+
 		"  Server:  %s\n\n"+
 		"  Every user on this host can now run `orbit register` without root.\n",
-		hostdSocketUnit, hostdSocketPath, server)
+		hostdSocketUnit, hostdSocketPath, exe, server)
 	return nil
 }
 
-// machineBinaryPath is where a machine keeps the one binary all its accounts run, and where
-// setup tells an operator to put a root-owned copy of one that cannot be it.
+// machineBinaryPath is the one binary the host broker runs, as root, and where setup tells
+// an operator to put a root-owned copy of one that cannot be it.
 const machineBinaryPath = "/usr/local/bin/orbit"
 
 // checkBinary refuses exe — before anything is written or run — unless it is fit to be
-// named in ExecStart=: the machine's own (checkMachineBinary, the rule hostd's update holds
-// it to as well), and one every account can execute (checkRunnable). Either way it says
-// which part of the rule it breaks and what to run instead.
+// named in orbit-hostd.service's ExecStart=: the machine's own (checkMachineBinary, the
+// rule hostd's update holds it to as well), at machineBinaryPath, which is the only binary
+// the broker runs. Either way it says which part of the rule it breaks and what to run
+// instead. Root's own copy in its home is one setup refuses for that reason: it is root's
+// file, but it is not the machine's.
 func (env hostSetupEnv) checkBinary(exe, server string) error {
 	path := env.path(exe)
 	err := checkMachineBinary(path, env.path("/"), env.rootUID)
+	if err == nil && exe == machineBinaryPath {
+		return nil
+	}
 	if err == nil {
-		return env.checkRunnable(exe, server)
+		how, fix, rerun := machineCopy(path, server)
+		return fmt.Errorf("refusing to set this host up with %s: the host broker runs only %s.\n"+
+			"It runs as root, so it runs one binary, the root-owned copy at %s that hostd's updates replace; every account's runner runs that account's own ~/.orbit/bin/orbit instead.\n"+
+			"%s\n  %s\n  %s", path, machineBinaryPath, machineBinaryPath, how, fix, rerun)
 	}
 	var fault *machineBinaryError
 	if !errors.As(err, &fault) {
-		return fmt.Errorf("cannot inspect %s, the binary the units would run: %w", path, err)
+		return fmt.Errorf("cannot inspect %s, the binary the host broker would run: %w", path, err)
 	}
 	rerun := fmt.Sprintf("sudo %s host setup --server %s", env.sudoName(), server)
 	var how, fix string
 	switch {
+	case exe != machineBinaryPath:
+		// Another account's copy, or one in its directories — or anything else, which setup
+		// would refuse next for not being the broker's one binary.
+		how, fix, rerun = machineCopy(path, server)
 	case fault.foreign == "":
 		bits := "g-w"
 		if fault.othersWrite {
@@ -186,63 +200,15 @@ func (env hostSetupEnv) checkBinary(exe, server string) error {
 		}
 		how = "Take that write access back, then set the host up again:"
 		fix = fmt.Sprintf("sudo chmod %s %s", bits, strings.Join(fault.writable, " "))
-	case exe != machineBinaryPath:
-		// Another account's copy, or one in its directories.
-		how, fix, rerun = machineCopy(path, server)
 	default:
 		// Already where the machine's binary belongs, only not root's.
 		how = "Make it root's, then set the host up again:"
 		fix = "sudo chown root:root " + fault.foreign
 	}
 	return fmt.Errorf("refusing to set this host up with %s: %v.\n"+
-		"Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: "+
+		"The host broker would run this binary as root, so no account may be able to change it: "+
 		"it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.\n"+
 		"%s\n  %s\n  %s", path, fault, how, fix, rerun)
-}
-
-// checkRunnable refuses exe, which checkMachineBinary has already found to be the machine's
-// own, unless every account can execute it: each account's runner runs it as that account,
-// so the file and every directory from its own up to / need the execute bit for others.
-// Root's own copy is what fails it — install.sh puts it in root's home, normally 0700 — and
-// systemd would then fail every other account's runner at exec (203/EXEC). Setup's question
-// alone, not checkMachineBinary's: hostd's update replaces in place the file setup named.
-func (env hostSetupEnv) checkRunnable(exe, server string) error {
-	path, top := env.path(exe), env.path("/")
-	var closed, reasons []string
-	for at := path; ; at = filepath.Dir(at) {
-		fi, err := os.Stat(at)
-		if err != nil {
-			return fmt.Errorf("cannot inspect %s, the binary the units would run: %w", path, err)
-		}
-		if perm := fi.Mode().Perm(); perm&0o001 == 0 {
-			closed = append(closed, at)
-			switch at {
-			case path:
-				reasons = append(reasons, fmt.Sprintf("others cannot execute it (mode %04o)", perm))
-			case filepath.Dir(path):
-				reasons = append(reasons, fmt.Sprintf("its directory %s cannot be entered by others (mode %04o)", at, perm))
-			default:
-				reasons = append(reasons, fmt.Sprintf("%s, a directory above it, cannot be entered by others (mode %04o)", at, perm))
-			}
-		}
-		if at == top || at == filepath.Dir(at) {
-			break
-		}
-	}
-	if len(closed) == 0 {
-		return nil
-	}
-	how, fix, rerun := machineCopy(path, server)
-	if exe == machineBinaryPath {
-		// Already where the machine's binary belongs, where a copy would land on itself.
-		how = "Let every account run it, then set the host up again:"
-		fix = "sudo chmod o+x " + strings.Join(closed, " ")
-		rerun = fmt.Sprintf("sudo %s host setup --server %s", env.sudoName(), server)
-	}
-	return fmt.Errorf("refusing to set this host up with %s: %s.\n"+
-		"Every account's runner would run this binary as that account, so every account has to be able to execute it: "+
-		"it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).\n"+
-		"%s\n  %s\n  %s", path, strings.Join(reasons, "; "), how, fix, rerun)
 }
 
 // machineCopy is the way out for a binary that cannot be the machine's where it is: a copy
@@ -264,7 +230,7 @@ func hostSetupFiles(exe, server string) ([]hostFile, error) {
 		return nil, err
 	}
 	return []hostFile{
-		{path: hostRunnerTemplatePath, mode: 0o644, content: hostRunnerTemplate(exe)},
+		{path: hostRunnerTemplatePath, mode: 0o644, content: hostRunnerTemplate()},
 		{path: hostdSocketUnitPath, mode: 0o644, content: hostdSocketUnitFile()},
 		{path: hostdServiceUnitPath, mode: 0o644, content: hostdServiceUnitFile(exe)},
 		{path: hostdTmpfilesPath, mode: 0o644, content: hostdTmpfilesEntry()},
@@ -294,19 +260,23 @@ func (env hostSetupEnv) writeFile(f hostFile) error {
 	return nil
 }
 
-// hostRunnerTemplate is the per-user runner unit, instantiated as orbit-runner@<uid>.
-// The instance key is the uid, so User=%i is the account itself — see unitForUid for
-// why a username cannot be used.
-func hostRunnerTemplate(exe string) string {
-	return fmt.Sprintf(`[Unit]
-Description=Orbit runner (uid %%i)
+// hostRunnerTemplate is the per-user runner unit, instantiated as orbit-runner@<escaped
+// user name> (unitForAccount): User=%I is the instance name unescaped, the account itself.
+// Every instance runs its account's own ~/.orbit/bin/orbit, which that account's runner
+// updates itself.
+func hostRunnerTemplate() string {
+	return `[Unit]
+Description=Orbit runner (%I)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=%%i
-ExecStart=%s run
+User=%I
+# The account's own binary, reached through $HOME: systemd sets it from the passwd entry
+# of User=, and the shell, not systemd, expands it. exec leaves that binary as the main
+# process, so the drain below and /proc/<pid>/exe are the runner's own.
+ExecStart=/bin/sh -c 'exec "$HOME/.orbit/bin/orbit" run'
 Restart=always
 RestartSec=5
 # Send SIGTERM to the runner only (not the claude children), so on stop/restart the
@@ -317,14 +287,14 @@ KillMode=mixed
 TimeoutStopSec=180
 # No Environment= lines here, deliberately. One template serves every instance, and the
 # home, the runner state dir and the login PATH each belong to the instance's own
-# account — while the specifiers that would fill them in (%%h, %%s) expand in a *system*
+# account — while the specifiers that would fill them in (%h, %s) expand in a *system*
 # unit against the service manager, root, rather than against User=. Baking them in
 # would therefore point every user's runner at /root. The runner works out its own
 # environment at startup instead, where it knows which account it is.
 
 [Install]
 WantedBy=multi-user.target
-`, exe)
+`
 }
 
 // hostdSocketUnitFile is the broker's rendezvous point, and the only part of hostd that
@@ -373,10 +343,13 @@ Usage:
   orbit host setup --server <url>
 
 Installs orbit-hostd, the root-owned broker each user's orbit talks to over
-/run/orbit/host.sock, and the orbit-runner@<uid> template their runners are instances
-of. This is the only Orbit command that needs root, and it is run once per machine:
-after it, every Linux user on this host registers, restarts and updates their own
-runner with no sudo anywhere.
+/run/orbit/host.sock, and the orbit-runner@ template: each user's runner is the
+instance orbit-runner@<user name> (escaped as systemd-escape does), which runs as
+that user from the user's own ~/.orbit/bin/orbit. The broker runs as root from
+/usr/local/bin/orbit and from nothing else, so setup is run from a root-owned copy
+there. This is the only Orbit command that needs root, and it is run once per
+machine: after it, every Linux user on this host registers, restarts and updates
+their own runner with no sudo anywhere.
 
 Re-running it is safe — the same files are rewritten and systemd reloaded.
 
