@@ -435,6 +435,20 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 			"\n  sudo chmod g-w {root}/usr/local\n",
 		},
 	}, {
+		// Root's own file, but whoever owns a directory above it can swap out everything below.
+		name: "under a directory further up an account owns",
+		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
+			placeBinary(t, root, "/opt/orbit/bin/orbit")
+			chownToAnAccount(t, filepath.Join(root, "/opt/orbit"))
+			env.executable = func() (string, error) { return "/opt/orbit/bin/orbit", nil }
+		},
+		want: []string{
+			"refusing to set this host up with {root}/opt/orbit/bin/orbit: {root}/opt/orbit, a directory above it, is not root's alone (owned by uid {account}, mode 0755).\n",
+			"\nPut a root-owned copy in place, then set the host up from it:\n" +
+				"  sudo install -o root -g root -m 0755 {root}/opt/orbit/bin/orbit /usr/local/bin/orbit\n" +
+				"  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com",
+		},
+	}, {
 		name: "every such directory at once, as older Debian has /usr/local and /usr/local/bin",
 		arrange: func(t *testing.T, env *hostSetupEnv, root string) {
 			placeBinary(t, root, machineBinaryPath)
@@ -487,7 +501,7 @@ func TestHostSetupRefusesABinaryAnAccountCouldChange(t *testing.T) {
 			if err == nil {
 				t.Fatal("setup accepted a binary an account could change")
 			}
-			fill := strings.NewReplacer("{root}", root, "{uid}", strconv.Itoa(os.Geteuid()))
+			fill := strings.NewReplacer("{root}", root, "{uid}", strconv.Itoa(os.Geteuid()), "{account}", strconv.Itoa(hostSetupChildUID))
 			for _, want := range tc.want {
 				if want = fill.Replace(want); !strings.Contains(err.Error(), want) {
 					t.Errorf("the error must say %q, got:\n%v", want, err)
@@ -534,6 +548,19 @@ func TestHostSetupAcceptsDirectoriesOnceTheirGroupCannotWrite(t *testing.T) {
 func chmod(t *testing.T, path string, mode os.FileMode) {
 	t.Helper()
 	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// chownToAnAccount gives the directory at path to an unprivileged account, while the
+// file below it stays the suite's own. Only root can, so a suite running unprivileged
+// skips the case rather than fake an owner: the point is that the walk reads the real one.
+func chownToAnAccount(t *testing.T, path string) {
+	t.Helper()
+	if os.Geteuid() != 0 {
+		t.Skip("giving a directory to another account takes root")
+	}
+	if err := os.Chown(path, hostSetupChildUID, hostSetupChildGID); err != nil {
 		t.Fatal(err)
 	}
 }

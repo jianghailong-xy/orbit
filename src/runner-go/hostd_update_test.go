@@ -692,6 +692,13 @@ func TestHostdUpdateRefusesABinaryThatIsNotRootsAlone(t *testing.T) {
 				h.t.Fatal(err)
 			}
 		},
+	}, {
+		// And so can whoever owns one, without any write bit set.
+		name: "under a directory further up another account owns",
+		want: "/usr/local, a directory above it, is not root's alone (owned by uid " + strconv.Itoa(hostSetupChildUID) + ", mode 0755)",
+		arrange: func(h *hostdUpdateHarness) {
+			chownToAnAccount(h.t, filepath.Dir(h.dir))
+		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHostdUpdateHarness(t, rolloutTestPrevious, newRolloutRelease(t, rolloutTestLatest))
