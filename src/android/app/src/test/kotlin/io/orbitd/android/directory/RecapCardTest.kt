@@ -68,6 +68,20 @@ class RecapCardTest {
         assertNull("another pass wrote first: reading again shows its line", RecapCard.notice("cas-lost"))
     }
 
+    /** The card's × (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide): the recap this device hid stays hidden in that
+     * conversation until the server writes a newer one; a recap that came with no time is known by its words. */
+    @Test fun aHiddenRecapStaysHiddenUntilANewerOneIsWritten() {
+        val written = session(recapAt = "2026-10-22T09:00:00Z")
+        val hidden = RecapCard.hideKey(written.recapAt, recap)
+        assertNull(RecapCard.make(written, true, now, utc, hidden = hidden))
+        assertNotNull("a newer recap", RecapCard.make(session(recapAt = "2026-10-22T09:30:00Z"), true, now, utc, hidden = hidden))
+        assertNotNull("nothing hidden", RecapCard.make(written, true, now, utc))
+        val untimed = RecapCard.hideKey(null, recap)
+        assertNull(RecapCard.make(session(), true, now, utc, hidden = untimed))
+        assertNotNull("an untimed recap with other words", RecapCard.make(session(recapText = "Another recap."), true, now, utc, hidden = untimed))
+        assertEquals("recap.hidden.s", RecapCard.hiddenPreferenceKey("s"))
+    }
+
     /** Every word of [RecapCardCopy] is declared, under the same name, in OrbitKit's RecapCard.swift — and nothing more is. */
     @Test fun everyWordIsTheSwiftCardsWord() {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
@@ -75,7 +89,7 @@ class RecapCardTest {
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RecapCard.swift").readText()
         val words = RecapCardCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .associate { it.isAccessible = true; it.name to it.get(null) as String }
-        assertEquals(6, words.size)
+        assertEquals(7, words.size)
         words.forEach { (name, value) ->
             assertTrue("RecapCard.swift no longer declares $name as \"$value\"", swift.contains("public static let $name = \"$value\""))
         }

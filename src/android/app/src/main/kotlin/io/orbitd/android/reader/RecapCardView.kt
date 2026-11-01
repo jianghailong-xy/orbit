@@ -36,10 +36,11 @@ import io.orbitd.android.directory.RecapCardCopy
  *
  * A footnote, not a panel (the owner, 2026-10-27, 05-quiet A): a filled card the composer's shape, sitting on the composer, read as
  * something floating over the conversation. So it is one paragraph in the muted colour, the head running into the recap, with
- * Refresh beside its first line — always shown, as a phone has no hover to show it on.
+ * Refresh beside its first line — always shown, as a phone has no hover to show it on. Beside Refresh, × hides this recap in this
+ * conversation on this device (2026-11-01, 06-hide); [onHide] remembers that.
  */
 @Composable
-internal fun RecapCardView(card: RecapCard, refreshing: Boolean, onRefresh: () -> Unit) {
+internal fun RecapCardView(card: RecapCard, refreshing: Boolean, onRefresh: () -> Unit, onHide: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.bodyMedium
     // The first line sits on the 48dp refresh button's centre line, where the card's head line sat; the mark is sized in sp, so it
@@ -64,6 +65,9 @@ internal fun RecapCardView(card: RecapCard, refreshing: Boolean, onRefresh: () -
         IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.testTag("recap-refresh")) {
             if (refreshing) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
             else Icon(painterResource(R.drawable.ic_refresh), RecapCardCopy.refresh, Modifier.size(18.dp), tint = muted)
+        }
+        IconButton(onClick = onHide, modifier = Modifier.testTag("recap-hide")) {
+            Icon(painterResource(R.drawable.ic_close), RecapCardCopy.hide, Modifier.size(18.dp), tint = muted)
         }
     }
 }

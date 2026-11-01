@@ -1,6 +1,9 @@
 package io.orbitd.android.reader
 
+import android.content.Context
 import androidx.compose.foundation.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
@@ -251,7 +254,23 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val recapRests = listed?.let { RecapCard.rests(it) } ?: true
     var recapAside by remember(handle, route.id) { mutableStateOf(false) }
     LaunchedEffect(recapRests) { if (!recapRests) recapAside = true }
-    val recapCard = if (recapAside) null else listed?.let { RecapCard.make(it, LocalSessionRecaps.current) }
+    // A recap this device hid with the card's × stays hidden in this conversation until the server writes a newer one (the owner,
+    // 2026-11-01, docs/mocks/session-recap-display/06-hide); the list row keeps it.
+    val context = LocalContext.current
+    val recapPreferences = remember { context.getSharedPreferences("orbit.recaps", Context.MODE_PRIVATE) }
+    var hiddenRecap by remember(route.id) {
+        mutableStateOf(route.id?.let { recapPreferences.getString(RecapCard.hiddenPreferenceKey(it), null) })
+    }
+    val recapCard = if (recapAside) null else listed?.let { RecapCard.make(it, LocalSessionRecaps.current, hidden = hiddenRecap) }
+    val hideRecap: () -> Unit = {
+        val id = route.id
+        val text = listed?.recapText?.trim()?.takeIf { it.isNotEmpty() }
+        if (id != null && text != null) {
+            val key = RecapCard.hideKey(listed?.recapAt, text)
+            recapPreferences.edit { putString(RecapCard.hiddenPreferenceKey(id), key) }
+            hiddenRecap = key
+        }
+    }
     var recapRefreshing by remember(handle, route.id) { mutableStateOf(false) }
     val refreshRecap: () -> Unit = {
         if (!recapRefreshing) {
@@ -483,7 +502,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
-                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap) }
+                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap, hideRecap) }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
