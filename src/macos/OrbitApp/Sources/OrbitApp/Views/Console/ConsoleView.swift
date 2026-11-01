@@ -677,6 +677,10 @@ struct TranscriptView: View {
     /// iPad split keep one console view across sessions (`AgentsView`), so a plain flag would carry
     /// one conversation's choice into the next.
     @State private var recapAsideFor: String?
+    /// The recaps this device hid with the card's × this run, by session (`RecapCard.hideKey`); the
+    /// rest are read from UserDefaults as their session is shown. A hidden recap stays hidden in its
+    /// conversation until the server writes a newer one (the owner, 2026-11-01, 06-hide).
+    @State private var hiddenRecaps: [String: String] = [:]
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -1120,11 +1124,23 @@ struct TranscriptView: View {
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
-    /// this visit. Read off the session the list and the header read, under the account's Session
-    /// recaps switch, which governs the list row's recap too.
+    /// this visit or this device hid it. Read off the session the list and the header read, under the
+    /// account's Session recaps switch, which governs the list row's recap too.
     private var recapCard: RecapCard? {
         guard recapAsideFor != console.sessionID, let session = app.session(id: console.sessionID) else { return nil }
-        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true)
+        let hidden = hiddenRecaps[console.sessionID]
+            ?? UserDefaults.standard.string(forKey: RecapCard.hiddenDefaultsKey(session: console.sessionID))
+        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true, hidden: hidden)
+    }
+
+    /// The card's ×: this recap, in this conversation, on this device. The list row keeps it.
+    private func hideRecap() {
+        guard let session = app.session(id: console.sessionID),
+              let text = session.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+        else { return }
+        let key = RecapCard.hideKey(recapAt: session.recapAt, text: text)
+        UserDefaults.standard.set(key, forKey: RecapCard.hiddenDefaultsKey(session: console.sessionID))
+        hiddenRecaps[console.sessionID] = key
     }
 
     /// Whether this conversation is at rest for its card right now (`RecapCard.rests`); a session
@@ -1183,7 +1199,7 @@ struct TranscriptView: View {
             ApprovalCard(console: console, approval: approval)
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
-            RecapCardView(card: card, sessionID: console.sessionID)
+            RecapCardView(card: card, sessionID: console.sessionID, onHide: hideRecap)
         case .working:
             WorkingIndicatorView()
         case .queued(let bubble):
