@@ -34,9 +34,9 @@ test('a flowchart is written out again in one spelling: its own ids, every label
     '  n2(["docs_build job"])',
     '  n3[("wiki-worker")]',
     '  n4{{"Repository"}}',
-    '  n5{"Model queue"}',
     '  subgraph s1["The server"]',
     '    direction TB',
+    '    n5{"Model queue"}',
     '    n6(("System model"))',
     '  end',
     '  n1 --> n2',
@@ -45,8 +45,63 @@ test('a flowchart is written out again in one spelling: its own ids, every label
     '  n3 -.-> n5',
     '  n5 ==> n6',
     '  n6 --- n1',
-  ].join('\n'), 'no config directive, style or click is carried, and a node keeps the subgraph it first appeared in');
-  assert.deepEqual(diagram.labels, ['Plan confirmed', 'docs_build job', 'wiki-worker', 'Repository', 'Model queue', 'The server', 'System model', 'claims', 'reads']);
+  ].join('\n'), 'no config directive, style or click is carried, and a node stands in the first subgraph that names it');
+  assert.deepEqual(diagram.labels, ['Plan confirmed', 'docs_build job', 'wiki-worker', 'Repository', 'The server', 'Model queue', 'System model', 'claims', 'reads']);
+});
+
+test('a node stands where Mermaid draws it: in the first subgraph that names it, wherever it first appeared', () => {
+  // Links first, subgraphs after: every subgraph keeps its nodes, rather than standing empty beside them.
+  const diagram = parseDiagram([
+    'flowchart LR',
+    '  app[Client] -->|HTTPS| api[apiserver]',
+    '  api --> db[(Postgres)]',
+    '  api --> gw[gateway]',
+    '  gw --> runner[runner]',
+    '  subgraph server[Server]',
+    '    api',
+    '    db & gw',
+    '  end',
+    '  subgraph machine[Machine]',
+    '    runner --> engine[engine CLI]',
+    '  end',
+    '  subgraph other[Other]',
+    '    gw',
+    '  end',
+    '  runner --> app',
+  ].join('\n'));
+  assert.ok(diagram);
+  assert.equal(diagram.source, [
+    'flowchart LR',
+    '  n1["Client"]',
+    '  subgraph s1["Server"]',
+    '    n2["apiserver"]',
+    '    n3[("Postgres")]',
+    '    n4["gateway"]',
+    '  end',
+    '  subgraph s2["Machine"]',
+    '    n5["runner"]',
+    '    n6["engine CLI"]',
+    '  end',
+    '  subgraph s3["Other"]',
+    '  end',
+    '  n1 -->|"HTTPS"| n2',
+    '  n2 --> n3',
+    '  n2 --> n4',
+    '  n4 --> n5',
+    '  n5 --> n6',
+    '  n5 --> n1',
+  ].join('\n'), 'a node named by a second subgraph stays in the first, and a mention after every subgraph moves nothing');
+  // Nested: the innermost subgraph that names it.
+  assert.equal(parseDiagram('flowchart TB\n  a --> b\n  subgraph outer[Outer]\n    subgraph inner[Inner]\n      a\n    end\n    b\n  end')?.source, [
+    'flowchart TB',
+    '  subgraph s1["Outer"]',
+    '    subgraph s2["Inner"]',
+    '      n1["a"]',
+    '    end',
+    '    n2["b"]',
+    '  end',
+    '  n1 --> n2',
+  ].join('\n'));
 });
 
 test('a label is shown as text: Mermaid\'s characters as entity codes, line breaks as spaces, an id where it has none', () => {

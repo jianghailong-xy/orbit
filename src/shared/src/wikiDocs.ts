@@ -124,8 +124,11 @@ export type WikiDocBlockKind = (typeof WIKI_DOC_BLOCK_KINDS)[number];
 export const WIKI_DOC_DIAGRAM_RULES = {
   /** The section kinds whose prompt offers a diagram, and whose fingerprint carries `version`. */
   kinds: ['overview', 'concepts', 'flow', 'data'],
-  /** Raised when what a diagram is asked to be changes, so every section of those kinds is written once more. */
-  version: 3,
+  /**
+   * Raised when what a diagram is asked to be changes, or what the server keeps of one, so every section of those
+   * kinds is written once more. 4: a node stands in the first subgraph that names it, as Mermaid draws it.
+   */
+  version: 4,
   /** The diagrams a section keeps: the first that passes the check. */
   perSection: 1,
   nodesMax: 30,
