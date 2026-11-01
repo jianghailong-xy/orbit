@@ -1,0 +1,154 @@
+{
+ "before-light-desktop-s1": {
+  "id": "wk-diagram-_r_j_",
+  "viewBox": "4 4 822.015625 190",
+  "figure": 840,
+  "scrolls": true
+ },
+ "before-light-desktop-s3": {
+  "id": "wk-diagram-_r_k_",
+  "viewBox": "4 4 251.5 1195.29736328125",
+  "figure": 840,
+  "scrolls": false
+ },
+ "before-light-desktop-s7": {
+  "id": "wk-diagram-_r_1d_",
+  "viewBox": "4 4 1475.046875 302.148681640625",
+  "figure": 840,
+  "scrolls": true
+ },
+ "before-light-desktop-unhandled": [],
+ "before-light-phone-s1": {
+  "id": "wk-diagram-_r_d_",
+  "viewBox": "4 4 822.015625 190",
+  "figure": 361,
+  "scrolls": true
+ },
+ "before-light-phone-s3": {
+  "id": "wk-diagram-_r_e_",
+  "viewBox": "4 4 251.5 1195.29736328125",
+  "figure": 361,
+  "scrolls": false
+ },
+ "before-light-phone-s7": {
+  "id": "wk-diagram-_r_r_",
+  "viewBox": "4 4 1475.046875 302.148681640625",
+  "figure": 361,
+  "scrolls": true
+ },
+ "before-light-phone-unhandled": [],
+ "before-dark-desktop-s1": {
+  "id": "wk-diagram-_r_j_",
+  "viewBox": "4 4 822.015625 190",
+  "figure": 840,
+  "scrolls": true
+ },
+ "before-dark-desktop-s3": {
+  "id": "wk-diagram-_r_k_",
+  "viewBox": "4 4 251.5 1195.29736328125",
+  "figure": 840,
+  "scrolls": false
+ },
+ "before-dark-desktop-s7": {
+  "id": "wk-diagram-_r_1d_",
+  "viewBox": "4 4 1475.046875 302.148681640625",
+  "figure": 840,
+  "scrolls": true
+ },
+ "before-dark-desktop-unhandled": [],
+ "before-dark-phone-s1": {
+  "id": "wk-diagram-_r_d_",
+  "viewBox": "4 4 822.015625 190",
+  "figure": 361,
+  "scrolls": true
+ },
+ "before-dark-phone-s3": {
+  "id": "wk-diagram-_r_e_",
+  "viewBox": "4 4 251.5 1195.29736328125",
+  "figure": 361,
+  "scrolls": false
+ },
+ "before-dark-phone-s7": {
+  "id": "wk-diagram-_r_r_",
+  "viewBox": "4 4 1475.046875 302.148681640625",
+  "figure": 361,
+  "scrolls": true
+ },
+ "before-dark-phone-unhandled": [],
+ "after-light-desktop-s1": {
+  "id": "wk-diagram-_r_j_",
+  "viewBox": "8 8 663.9375 138.515625",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-light-desktop-s3": {
+  "id": "wk-diagram-_r_k_",
+  "viewBox": "8 8 209.50390625 930.9298095703125",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-light-desktop-s7": {
+  "id": "wk-diagram-_r_1d_-tb",
+  "viewBox": "18.15625 8 276.75 750.9613647460938",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-light-desktop-unhandled": [],
+ "after-light-phone-s1": {
+  "id": "wk-diagram-_r_d_-tb",
+  "viewBox": "8 8 173.640625 435.015625",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-light-phone-s3": {
+  "id": "wk-diagram-_r_e_",
+  "viewBox": "8 8 209.50390625 930.9298095703125",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-light-phone-s7": {
+  "id": "wk-diagram-_r_r_-tb",
+  "viewBox": "18.15625 8 276.75 750.9613647460938",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-light-phone-unhandled": [],
+ "after-dark-desktop-s1": {
+  "id": "wk-diagram-_r_j_",
+  "viewBox": "8 8 663.9375 138.515625",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-dark-desktop-s3": {
+  "id": "wk-diagram-_r_k_",
+  "viewBox": "8 8 209.50390625 930.9298095703125",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-dark-desktop-s7": {
+  "id": "wk-diagram-_r_1d_-tb",
+  "viewBox": "18.15625 8 276.75 750.9613647460938",
+  "figure": 840,
+  "scrolls": false
+ },
+ "after-dark-desktop-unhandled": [],
+ "after-dark-phone-s1": {
+  "id": "wk-diagram-_r_d_-tb",
+  "viewBox": "8 8 173.640625 435.015625",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-dark-phone-s3": {
+  "id": "wk-diagram-_r_e_",
+  "viewBox": "8 8 209.50390625 930.9298095703125",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-dark-phone-s7": {
+  "id": "wk-diagram-_r_r_-tb",
+  "viewBox": "18.15625 8 276.75 750.9613647460938",
+  "figure": 361,
+  "scrolls": false
+ },
+ "after-dark-phone-unhandled": []
+}

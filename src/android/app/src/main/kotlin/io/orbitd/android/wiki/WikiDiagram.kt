@@ -38,7 +38,8 @@ import kotlinx.serialization.json.*
 
 // A section's diagram (contract `docs.diagram`), drawn the way the web's `WikiDiagram.tsx` draws it: the Mermaid flowchart the
 // server wrote out again, rendered strict by the Mermaid that src/web's lockfile pins — bundled as an asset, never fetched — in
-// the app's light or dark theme, at its own size, centred, and scrolling sideways when wider than the column rather than
+// the diagram look (docs/mocks/wiki-diagram-look) in the app's light or dark theme, at its own size, centred. A left-to-right
+// one wider than the column is drawn top to bottom when that is narrower; one still wider scrolls sideways rather than
 // shrinking its words. A diagram that does not draw shows its source as code. Mermaid runs in a WebView as wide as the column
 // and as high as the drawing, whose page scrolls a wide one sideways, as the web's figure does; it loads that one file and
 // nothing else, never leaves its page, and has one way back: the size of what it drew.
@@ -66,14 +67,95 @@ internal object WikiDiagramPage {
     val reportSaver = Saver<Report?, IntArray>(save = { it?.let { report -> intArrayOf(report.width, report.height) } },
         restore = { Report(it[0], it[1]) })
 
-    /** Mermaid's settings: the web's, in the app's theme. */
-    fun options(dark: Boolean): JsonObject = buildJsonObject {
-        put("startOnLoad", false)
-        put("securityLevel", "strict")
-        put("theme", if (dark) "dark" else "neutral")
-        put("fontFamily", FONT)
-        putJsonObject("flowchart") { put("useMaxWidth", false) }
-    }
+    /** The web's drawing (WikiDiagram.tsx), line for line the iOS and Mac app's (`WikiDiagramPage.draw` in WikiDiagram.swift, between
+     * the same two marks): Mermaid in the diagram look, what it drew finished, and a left-to-right flowchart drawn top to bottom
+     * while it is wider than `room` and that is narrower. It is the body of an async function of `source`, `dark` and `room` (the
+     * width inside the figure, 0 while unknown) that answers the drawn size; a theme's pictures are drawn once and kept. */
+    val DRAW = """
+        // wiki diagram drawing: from here
+        const colors = {
+          light: { fill: '#ffffff', border: '#d5d8dd', text: '#1f2329', label: '#646a73', line: '#9aa0a8', group: 'rgba(0, 0, 0, 0.035)', groupBorder: 'rgba(0, 0, 0, 0.06)' },
+          dark: { fill: 'rgba(255, 255, 255, 0.07)', border: 'rgba(255, 255, 255, 0.18)', text: '#c9ced5', label: '#a7adb6', line: '#6e737b', group: 'rgba(255, 255, 255, 0.035)', groupBorder: 'rgba(255, 255, 255, 0.06)' },
+        };
+        const c = dark ? colors.dark : colors.light;
+        const fontFamily = getComputedStyle(document.body).fontFamily;
+        const options = {
+          startOnLoad: false, securityLevel: 'strict', look: 'classic', theme: 'base', fontFamily,
+          themeVariables: { darkMode: dark, fontSize: '13px', primaryColor: c.fill, mainBkg: c.fill, primaryBorderColor: c.border, nodeBorder: c.border,
+            primaryTextColor: c.text, nodeTextColor: c.text, textColor: c.text, lineColor: c.line, clusterBkg: c.group, clusterBorder: c.groupBorder, titleColor: c.label },
+          flowchart: { useMaxWidth: false, curve: 'basis', nodeSpacing: 28, rankSpacing: 34, padding: 10, wrappingWidth: 200, minNodeWidth: 0, diagramPadding: 4 },
+          themeCSS: '.node rect { rx: 6px; ry: 6px; } .cluster rect { rx: 8px; ry: 8px; } .cluster-label span { font-size: 12px; font-weight: 600; }'
+            + ' .edgeLabel, .edgeLabel p, .labelBkg { background-color: transparent; font-size: 12px; color: ' + c.label + '; } .edgeLabel rect { fill: none; } .flowchart-link { stroke-width: 1.2px; }',
+        };
+        const translation = (element) => {
+          const at = /translate\(\s*([-\d.e]+)[\s,]+([-\d.e]+)\s*\)/u.exec((element && element.getAttribute('transform')) || '');
+          return at ? [Number(at[1]), Number(at[2])] : null;
+        };
+        const childrenOf = (element, name) => Array.from(element.children).filter((child) => child.classList.contains(name));
+        const finish = (svg) => {
+          for (const cluster of svg.querySelectorAll('g.cluster')) {
+            const box = Array.from(cluster.children).find((child) => child.tagName.toLowerCase() === 'rect');
+            const title = childrenOf(cluster, 'cluster-label')[0];
+            const at = translation(title);
+            if (box && title && at) title.setAttribute('transform', 'translate(' + (Number(box.getAttribute('x')) + 10) + ', ' + (at[1] + 4) + ')');
+          }
+          svg.querySelectorAll('g.root').forEach((root, n) => {
+            const holes = [];
+            const hole = (x, y, text) => {
+              const width = Number(text && text.getAttribute('width'));
+              const height = Number(text && text.getAttribute('height'));
+              if (width > 0 && height > 0) holes.push([x - 3, y - 1, width + 6, height + 2]);
+            };
+            for (const labels of childrenOf(root, 'edgeLabels')) {
+              for (const label of childrenOf(labels, 'edgeLabel')) {
+                const outer = translation(label);
+                const inner = translation(label.firstElementChild);
+                if (outer && inner) hole(outer[0] + inner[0], outer[1] + inner[1], label.querySelector('foreignObject'));
+              }
+            }
+            for (const clusters of childrenOf(root, 'clusters')) {
+              for (const cluster of childrenOf(clusters, 'cluster')) {
+                const title = childrenOf(cluster, 'cluster-label')[0];
+                const at = translation(title);
+                if (title && at) hole(at[0], at[1], title.querySelector('foreignObject'));
+              }
+            }
+            if (holes.length === 0) return;
+            const ns = svg.namespaceURI;
+            const rect = (x, y, width, height, fill) => {
+              const shape = document.createElementNS(ns, 'rect');
+              for (const [name, value] of [['x', x], ['y', y], ['width', width], ['height', height], ['fill', fill]]) shape.setAttribute(name, String(value));
+              return shape;
+            };
+            const mask = document.createElementNS(ns, 'mask');
+            const id = svg.id + '-links-' + n;
+            for (const [name, value] of [['id', id], ['maskUnits', 'userSpaceOnUse'], ['x', '-100000'], ['y', '-100000'], ['width', '200000'], ['height', '200000']]) {
+              mask.setAttribute(name, value);
+            }
+            mask.append(rect(-100000, -100000, 200000, 200000, 'white'), ...holes.map(([x, y, width, height]) => rect(x, y, width, height, 'black')));
+            root.prepend(mask);
+            for (const links of childrenOf(root, 'edgePaths')) links.setAttribute('mask', 'url(#' + id + ')');
+          });
+        };
+        const turned = /^flowchart LR\n/u.test(source) ? source.replace(/^flowchart LR/u, 'flowchart TB') : null;
+        const widthOf = (svg) => Number((/viewBox="[-\d.e]+ [-\d.e]+ ([\d.e]+)/u.exec(svg) || [])[1]) || 0;
+        const pictures = window.wikiDiagramPictures || (window.wikiDiagramPictures = {});
+        const key = (dark ? 'dark' : 'light') + '\n' + source;
+        pictures[key] = pictures[key] || (async () => {
+          mermaid.initialize(options);
+          const written = (await mermaid.render('wk-diagram', source)).svg;
+          const other = turned === null ? null : await mermaid.render('wk-diagram-tb', turned).then((drawn) => drawn.svg, () => null);
+          return { written, turned: other };
+        })();
+        const drawn = await pictures[key];
+        const svg = drawn.turned !== null && room > 0 && widthOf(drawn.written) > room && widthOf(drawn.turned) < widthOf(drawn.written) ? drawn.turned : drawn.written;
+        const figure = document.getElementById('figure');
+        figure.innerHTML = svg;
+        finish(figure.firstElementChild);
+        const box = figure.firstElementChild.getBoundingClientRect();
+        return [Math.ceil(box.width), Math.ceil(box.height)];
+        // wiki diagram drawing: to here
+    """.trimIndent()
 
     /** JSON as a script literal: ASCII only, `<`, `>` and `&` escaped too, so no text can close the script it sits in. */
     fun script(value: JsonElement): String = buildString {
@@ -82,34 +164,37 @@ internal object WikiDiagramPage {
         }
     }
 
-    /** The page: Mermaid, from the app's assets, draws [source] into it — centred, or scrolling sideways when wider than the
-     * page — and reports the size of what it drew. */
-    fun html(source: String, dark: Boolean): String = """
-        |<!doctype html>
-        |<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-        |<style>html, body { margin: 0; background: transparent; font-family: $FONT; user-select: none; -webkit-touch-callout: none; }
-        |#diagram { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; } #diagram > svg { display: block; margin: 0 auto; }</style>
-        |</head><body><div id="diagram"></div>
-        |<script src="$SCRIPT"></script>
-        |<script>
-        |(async () => {
-        |  let width = 0, height = 0;
-        |  try {
-        |    mermaid.initialize(${script(options(dark))});
-        |    const { svg } = await mermaid.render('wk-diagram', ${script(JsonPrimitive(source))});
-        |    const figure = document.getElementById('diagram');
-        |    figure.innerHTML = svg;
-        |    const drawn = figure.firstElementChild.getBoundingClientRect();
-        |    width = Math.ceil(drawn.width);
-        |    height = Math.ceil(drawn.height);
-        |  } catch (e) {
-        |    // Not drawn: 0 x 0, and the app shows the source.
-        |  }
-        |  $BRIDGE.size(width, height);
-        |})();
-        |</script>
-        |</body></html>
-        |""".trimMargin()
+    /** The page: Mermaid, from the app's assets, draws [source] into it with [DRAW] — centred, or scrolling sideways when wider
+     * than the page — and reports the size of what it drew; again for each new width the WebView takes, which picks between the
+     * pictures already drawn. */
+    fun html(source: String, dark: Boolean): String = listOf(
+        "<!doctype html>",
+        """<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">""",
+        "<style>html, body { margin: 0; background: transparent; font-family: $FONT; user-select: none; -webkit-touch-callout: none; }",
+        "#figure { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; } #figure > svg { display: block; margin: 0 auto; }</style>",
+        """</head><body><div id="figure"></div>""",
+        """<script src="$SCRIPT"></script>""",
+        "<script>",
+        "async function draw(source, dark, room) {",
+        DRAW,
+        "}",
+        "let drawnFor = -1;",
+        "async function report() {",
+        "  drawnFor = document.documentElement.clientWidth;",
+        "  let size = [0, 0];",
+        "  try {",
+        "    size = await draw(${script(JsonPrimitive(source))}, $dark, drawnFor);",
+        "  } catch (e) {",
+        "    // Not drawn: 0 x 0, and the app shows the source.",
+        "  }",
+        "  $BRIDGE.size(size[0], size[1]);",
+        "}",
+        "report();",
+        "addEventListener('resize', () => { if (document.documentElement.clientWidth !== drawnFor) report(); });",
+        "</script>",
+        "</body></html>",
+        "",
+    ).joinToString("\n")
 
     /** Whether a drag that has moved ([dx], [dy]) since it went down is the diagram's own: sideways, over a diagram wider than
      * its WebView ([wide]), which its page scrolls. Any other drag goes on to the list and the drawer, as over any block. */

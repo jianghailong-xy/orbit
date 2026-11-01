@@ -16,10 +16,11 @@ import org.junit.runner.RunWith
 
 /**
  * A wiki document's diagrams (contract `docs.diagram`) on a device, over the test's own fixture: a space whose confirmed plan has one
- * written document whose two sections each draw a diagram as the server writes one out again — one that fits the column, and the
- * server spec's own written-out flowchart (wiki-doc-diagram.spec.ts), wider than it. The real app opens the document from the wiki's
- * home and the real WebView draws both with the bundled Mermaid; each check reads the drawn SVG back from its page, and the
- * screenshots show the page in the account's light and dark theme.
+ * written document whose three sections each draw a diagram as the server writes one out again — one that fits the column; the
+ * server spec's own written-out flowchart (wiki-doc-diagram.spec.ts), left to right and wider than the column, so drawn top to
+ * bottom; and a top-to-bottom one wider than the column even so, which scrolls sideways. The real app opens the document from the
+ * wiki's home and the real WebView draws them with the bundled Mermaid in the diagram look; each check reads the drawn SVG back
+ * from its page, and the screenshots show the page in the account's light and dark theme.
  */
 @RunWith(AndroidJUnit4::class)
 class WikiDiagramDeviceTest : IncrementDeviceTest() {
@@ -34,6 +35,9 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
     private val wide = listOf("flowchart LR", "  n1[\"Plan confirmed\"]", "  n2([\"docs_build job\"])", "  n3[(\"wiki-worker\")]",
         "  n4{{\"Repository\"}}", "  n5{\"Model queue\"}", "  subgraph s1[\"The server\"]", "    direction TB", "    n6((\"System model\"))", "  end",
         "  n1 --> n2", "  n2 -->|\"claims\"| n3", "  n3 -->|\"reads\"| n4", "  n3 -.-> n5", "  n5 ==> n6", "  n6 --- n1").joinToString("\n")
+    private val broad = listOf("flowchart TB", "  n1[\"Plan confirmed\"]", "  n2[\"docs_build job\"]", "  n3[\"wiki-worker\"]",
+        "  n4[\"Repository\"]", "  n5[\"Model queue\"]", "  n6[\"System model\"]", "  n1 --> n2", "  n1 --> n3", "  n1 --> n4", "  n1 --> n5",
+        "  n1 --> n6").joinToString("\n")
 
     private fun spaceRow() = """{"id":"$space","publicId":"$space","slug":"orbit","title":"Orbit","repoUrlNorm":"github.com/jianghailong-xy/orbit",
         "rootCommitSha":"4db4f9f0a1b2c3d4e5f60718293a4b5c6d7e8f90","pendingOps":0,"planWaiting":0,"workspaceIds":["$workspace"],"docs":null,
@@ -61,7 +65,10 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
         {"key":"s2","number":2,"title":"How the docs are built","kind":"flow","written":true,"stale":false,"generatedAt":"${ago(30)}","blocks":[
           {"kind":"paragraph","sentences":[${sentence("Once the plan is confirmed, a docs_build job is queued and the wiki-worker claims it.", 2)},
             ${sentence("The wiki-worker reads the Repository and puts its calls in the Model queue, which the System model on the server answers.", 2)}]},
-          {"kind":"diagram","text":${quote(wide)},"sentences":[]}]}],
+          {"kind":"diagram","text":${quote(wide)},"sentences":[]}]},
+        {"key":"s3","number":3,"title":"What a confirmed plan starts","kind":"flow","written":true,"stale":false,"generatedAt":"${ago(30)}","blocks":[
+          {"kind":"paragraph","sentences":[${sentence("A confirmed plan starts the docs_build job, the wiki-worker, the Repository, the Model queue and the System model.", 2)}]},
+          {"kind":"diagram","text":${quote(broad)},"sentences":[]}]}],
         "footnotes":[{"n":1,"kind":"code","verdict":"verified","checkedBy":"server","quote":"await this.waitForInbox(sessionId)",
           "path":"src/apiserver/src/realtime/realtime.service.ts","sha":"${"c".repeat(40)}","lineStart":120,"lineEnd":134,
           "symbol":"RealtimeService.waitForInbox"},
@@ -115,35 +122,46 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
         verify("it is wholly on screen", whole("wiki-doc-block:s1.1"))
         capture("01-$theme-section-diagram")
 
-        // The server's own written-out flowchart: wider than the column, so its page scrolls it sideways.
+        // The server's own written-out flowchart: left to right it is wider than the column, so it is drawn top to bottom, inside it.
         compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-block:s2.1"))
         val two = drawn("wiki-doc-block:s2.1", listOf("Plan confirmed", "docs_build job", "wiki-worker", "Repository", "Model queue",
             "The server", "System model", "claims", "reads"), theme)
         toTop("wiki-doc-section:s2")
-        verify("it is wider than the column (${two.width} dp against ${inside("wiki-doc-block:s2.1")} dp)", two.width > inside("wiki-doc-block:s2.1"))
-        verify("it starts at its left edge", two.left == 0)
-        verify("it is wholly on screen", whole("wiki-doc-block:s2.1"))
-        capture("02-$theme-wide-diagram")
-        val wide = bounds("wiki-doc-block:s2.1")
+        verify("it is drawn top to bottom (${two.id})", two.id == "wk-diagram-tb")
+        verify("so it fits the column (${two.width} dp in ${inside("wiki-doc-block:s2.1")} dp)", two.width <= inside("wiki-doc-block:s2.1"))
+        verify("its page centres it (left ${two.left} of ${two.page} dp)", abs(two.left - (two.page - two.width) / 2f) <= 1f)
+        capture("02-$theme-turned-diagram")
+
+        // Top to bottom and wider than the column even so: its page scrolls it sideways.
+        compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-block:s3.1"))
+        val three = drawn("wiki-doc-block:s3.1", listOf("Plan confirmed", "docs_build job", "wiki-worker", "Repository", "Model queue",
+            "System model"), theme)
+        toTop("wiki-doc-section:s3")
+        verify("it is drawn as written (${three.id})", three.id == "wk-diagram")
+        verify("it is wider than the column (${three.width} dp against ${inside("wiki-doc-block:s3.1")} dp)", three.width > inside("wiki-doc-block:s3.1"))
+        verify("it starts at its left edge", three.left == 0)
+        verify("it is wholly on screen", whole("wiki-doc-block:s3.1"))
+        capture("03-$theme-wide-diagram")
+        val wide = bounds("wiki-doc-block:s3.1")
         val middle = (wide.top + wide.bottom) / 2f
         swipe(wide.right - 80f, middle, wide.left + 80f, middle)
         var last = -1
         // The drag is the diagram's: the drawer and the list around it do not take it after the touch slop.
         await("a drag scrolls it sideways, well past the touch slop, and it comes to rest") {
-            val now = scrollLeft("wiki-doc-block:s2.1")
+            val now = scrollLeft("wiki-doc-block:s3.1")
             val rest = now > 100 && now == last
             last = now
             if (!rest) android.os.SystemClock.sleep(300)
             rest
         }
-        note("scrolled sideways by $last dp of ${two.width - two.page}")
-        capture("03-$theme-wide-diagram-scrolled")
+        note("scrolled sideways by $last dp of ${three.width - three.page}")
+        capture("04-$theme-wide-diagram-scrolled")
 
         // A drag down over a diagram scrolls the document, as over any block.
-        val before = bounds("wiki-doc-block:s2.1").top
+        val before = bounds("wiki-doc-block:s3.1").top
         val x = (wide.left + wide.right) / 2f
         swipe(x, before + 100f, x, before + 500f, ms = 1_500)
-        verify("a drag down over it scrolls the document (${bounds("wiki-doc-block:s2.1").top} from $before)", bounds("wiki-doc-block:s2.1").top > before)
+        verify("a drag down over it scrolls the document (${bounds("wiki-doc-block:s3.1").top} from $before)", bounds("wiki-doc-block:s3.1").top > before)
         verify("the app fetched nothing for it", calls.none { it.contains("mermaid", ignoreCase = true) })
     }
 
@@ -175,8 +193,9 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
 
     // ---- What the page drew. ----
 
-    /** What a page drew, in dp: its SVG's size, where the SVG's left edge stands in the page, and the page's width. */
-    private class Shot(val width: Int, val height: Int, val left: Int, val page: Int)
+    /** What a page drew, in dp: its SVG's size, where the SVG's left edge stands in the page, and the page's width; and the SVG's id,
+     * `wk-diagram-tb` when it was drawn top to bottom. */
+    private class Shot(val width: Int, val height: Int, val left: Int, val page: Int, val id: String)
     private class Located(val left: Int, val top: Int, val right: Int, val bottom: Int)
     private class Box(val left: Float, val top: Float, val right: Float, val bottom: Float) {
         val width get() = right - left
@@ -219,25 +238,24 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
         return at
     }
 
-    /** Asks the page in [view] what Mermaid drew: the SVG's size and place, the page's sideways scroll, the labels, the font, the
-     * first node's fill and the scripts the page loaded. */
+    /** Asks the page in [view] what Mermaid drew: the SVG's id, size and place, the page's sideways scroll, the labels, the font, the
+     * first node label's colour and the scripts the page loaded. */
     private fun probe(view: WebView): JsonObject? {
         val latch = CountDownLatch(1)
         var answer: String? = null
         compose.activityRule.scenario.onActivity {
             view.evaluateJavascript("""(() => {
-                const svg = document.querySelector('#diagram > svg');
+                const svg = document.querySelector('#figure > svg');
                 if (!svg) return null;
                 const box = svg.getBoundingClientRect();
-                const fills = [...svg.querySelectorAll('.node rect, .node polygon, .node path, .node circle')]
-                  .map((e) => getComputedStyle(e).fill).filter((f) => f.startsWith('rgb') && !/,\s*0\)$/.test(f));
+                const label = svg.querySelector('.node .nodeLabel');
                 const words = svg.cloneNode(true);
                 words.querySelectorAll('style').forEach((e) => e.remove());
-                return JSON.stringify({ width: Math.ceil(box.width), height: Math.ceil(box.height), left: Math.round(box.left), page: innerWidth,
-                  scrollLeft: Math.round(document.getElementById('diagram').scrollLeft),
+                return JSON.stringify({ id: svg.id, width: Math.ceil(box.width), height: Math.ceil(box.height), left: Math.round(box.left), page: innerWidth,
+                  scrollLeft: Math.round(document.getElementById('figure').scrollLeft),
                   labels: [...svg.querySelectorAll('.nodeLabel, .edgeLabel, .cluster-label')].map((e) => e.textContent.trim()).filter((t) => t),
                   text: words.textContent.replace(/\s+/g, ' ').trim(),
-                  font: getComputedStyle(svg).fontFamily, fill: fills.length ? fills[0] : null,
+                  font: getComputedStyle(svg).fontFamily, color: label ? getComputedStyle(label).color : null,
                   scripts: [...document.scripts].map((s) => s.src).filter((s) => s) });
               })()""") { answer = it; latch.countDown() }
         }
@@ -269,9 +287,11 @@ class WikiDiagramDeviceTest : IncrementDeviceTest() {
         verify("$tag is set in the page's font", svg["font"]!!.jsonPrimitive.content.contains("sans-serif"))
         verify("$tag loaded Mermaid from the app's assets alone",
             svg["scripts"]!!.jsonArray.map { it.jsonPrimitive.content } == listOf("https://appassets.androidplatform.net/mermaid/mermaid.min.js"))
-        val fill = svg["fill"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val rgb = Regex("""\d+""").findAll(fill).take(3).map { it.value.toInt() }.toList()
-        verify("$tag is in the $theme theme (first node $fill)", rgb.size == 3 && (rgb.sum() / 3 < 128) == (theme == "dark"))
-        return Shot(svg["width"]!!.jsonPrimitive.int, svg["height"]!!.jsonPrimitive.int, svg["left"]!!.jsonPrimitive.int, svg["page"]!!.jsonPrimitive.int)
+        // The look's text: dark on the light theme's white cards, light on the dark theme's veiled ones.
+        val color = svg["color"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val rgb = Regex("""\d+""").findAll(color).take(3).map { it.value.toInt() }.toList()
+        verify("$tag is in the $theme theme (its labels $color)", rgb.size == 3 && (rgb.sum() / 3 >= 128) == (theme == "dark"))
+        return Shot(svg["width"]!!.jsonPrimitive.int, svg["height"]!!.jsonPrimitive.int, svg["left"]!!.jsonPrimitive.int, svg["page"]!!.jsonPrimitive.int,
+            svg["id"]!!.jsonPrimitive.content)
     }
 }

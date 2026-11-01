@@ -34,9 +34,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** A section's diagram (contract `docs.diagram`) on a phone: the page its WebView loads — the Mermaid the web pins, from the
- * app's assets, with the web's settings in the app's theme — what that WebView may reach, and the figure it sits in on a
- * document's page: named Diagram, 120 dp high while it draws, then at the size the page reports, centred or scrolling sideways,
- * and the source as code when it does not draw. Robolectric runs no JavaScript: the page's report is played on its bridge. */
+ * app's assets, drawing in the web's diagram look, line for line the iOS and Mac app's, in the app's theme — what that WebView
+ * may reach, and the figure it sits in on a document's page: named Diagram, 120 dp high while it draws, then at the size the page
+ * reports, centred or scrolling sideways, and the source as code when it does not draw. Robolectric runs no JavaScript: the page's
+ * report is played on its bridge. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp")
 class WikiDiagramTest {
@@ -48,15 +49,37 @@ class WikiDiagramTest {
 
     // MARK: the page
 
-    @Test fun mermaidIsSetUpAsTheWebSetsItUpInTheAppsTheme() {
-        assertEquals(Json.parseToJsonElement("""{"startOnLoad":false,"securityLevel":"strict","theme":"neutral","fontFamily":"sans-serif",
-            "flowchart":{"useMaxWidth":false}}"""), WikiDiagramPage.options(dark = false))
-        assertEquals(JsonPrimitive("dark"), WikiDiagramPage.options(dark = true)["theme"])
-        // The web's settings, which these follow; its page font is the page's, as this page's is.
+    @Test fun theDiagramIsDrawnLineForLineAsTheWebAndTheAppleAppsDrawIt() {
+        // The drawing is the iOS and Mac app's (WikiDiagramPage.draw), between the same two marks.
+        val swift = wikiShared("src/macos/OrbitApp/Sources/OrbitApp/Views/WikiDiagram.swift").readText()
+        val start = "// wiki diagram drawing: from here"
+        val end = "// wiki diagram drawing: to here"
+        assertTrue(WikiDiagramPage.DRAW.startsWith(start) && WikiDiagramPage.DRAW.endsWith(end))
+        assertEquals(swift.substring(swift.indexOf(start), swift.indexOf(end) + end.length).lines().map { it.trim() },
+            WikiDiagramPage.DRAW.lines().map { it.trim() })
+        // Its look is the web's (docs/mocks/wiki-diagram-look), line by line: the colours, Mermaid's options, the finish, the turn.
         val web = wikiShared("src/web/src/components/WikiDiagram.tsx").readText()
-        listOf("startOnLoad: false", "securityLevel: 'strict'", "theme: theme === 'dark' ? 'dark' : 'neutral'",
-            "fontFamily: getComputedStyle(document.body).fontFamily", "flowchart: { useMaxWidth: false }", "draw.render(id, source)")
-            .forEach { assertTrue("WikiDiagram.tsx no longer says $it", web.contains(it)) }
+        listOf(
+            """light: { fill: '#ffffff', border: '#d5d8dd', text: '#1f2329', label: '#646a73', line: '#9aa0a8', group: 'rgba(0, 0, 0, 0.035)', groupBorder: 'rgba(0, 0, 0, 0.06)' },""",
+            """dark: { fill: 'rgba(255, 255, 255, 0.07)', border: 'rgba(255, 255, 255, 0.18)', text: '#c9ced5', label: '#a7adb6', line: '#6e737b', group: 'rgba(255, 255, 255, 0.035)', groupBorder: 'rgba(255, 255, 255, 0.06)' },""",
+            "startOnLoad: false, securityLevel: 'strict', look: 'classic', theme: 'base', fontFamily,",
+            "themeVariables: { darkMode: dark, fontSize: '13px', primaryColor: c.fill, mainBkg: c.fill, primaryBorderColor: c.border, nodeBorder: c.border,",
+            "primaryTextColor: c.text, nodeTextColor: c.text, textColor: c.text, lineColor: c.line, clusterBkg: c.group, clusterBorder: c.groupBorder, titleColor: c.label },",
+            "flowchart: { useMaxWidth: false, curve: 'basis', nodeSpacing: 28, rankSpacing: 34, padding: 10, wrappingWidth: 200, minNodeWidth: 0, diagramPadding: 4 },",
+            "'.node rect { rx: 6px; ry: 6px; } .cluster rect { rx: 8px; ry: 8px; } .cluster-label span { font-size: 12px; font-weight: 600; }'",
+            "' .edgeLabel, .edgeLabel p, .labelBkg { background-color: transparent; font-size: 12px; color: ' + c.label + '; } .edgeLabel rect { fill: none; } .flowchart-link { stroke-width: 1.2px; }'",
+            "title.setAttribute('transform', 'translate(' + (Number(box.getAttribute('x')) + 10) + ', ' + (at[1] + 4) + ')');",
+            "if (width > 0 && height > 0) holes.push([x - 3, y - 1, width + 6, height + 2]);",
+            "if (outer && inner) hole(outer[0] + inner[0], outer[1] + inner[1], label.querySelector('foreignObject'));",
+            "if (title && at) hole(at[0], at[1], title.querySelector('foreignObject'));",
+            "for (const links of childrenOf(root, 'edgePaths')) links.setAttribute('mask', 'url(#' + id + ')');",
+            """/^flowchart LR\n/u.test(source) ? source.replace(/^flowchart LR/u, 'flowchart TB') : null;""",
+        ).forEach {
+            assertTrue("WikiDiagram.tsx no longer says $it", web.contains(it))
+            assertTrue("the drawing no longer says $it", WikiDiagramPage.DRAW.contains(it))
+        }
+        // Its page font is the page's, as the web's is.
+        assertTrue(web.contains("getComputedStyle(document.body).fontFamily") && WikiDiagramPage.DRAW.contains("getComputedStyle(document.body).fontFamily"))
         // The figure's name is the web's.
         assertEquals("Diagram", WikiDocCopy.diagram)
         assertTrue(wikiShared("src/web/src/lib/wikiDocs.ts").readText().contains("export const WIKI_DOC_DIAGRAM = '${WikiDocCopy.diagram}';"))
@@ -79,13 +102,17 @@ class WikiDiagramTest {
         assertEquals(listOf(WikiDiagramPage.SCRIPT), Regex("""<script src="([^"]*)"></script>""").findAll(page).map { it.groupValues[1] }.toList())
         assertEquals("the page addresses nothing but the app's script", listOf(WikiDiagramPage.SCRIPT),
             Regex("""[a-z]+://[^\s"'<>)]*""").findAll(page).map { it.value }.toList())
-        assertTrue(page.contains("mermaid.initialize(${WikiDiagramPage.options(dark = false)});"))
-        assertTrue(WikiDiagramPage.html(source, dark = true).contains("mermaid.initialize(${WikiDiagramPage.options(dark = true)});"))
+        assertTrue("the page draws with the drawing", page.contains("async function draw(source, dark, room) {\n${WikiDiagramPage.DRAW}\n}\n"))
+        assertTrue(page.contains("size = await draw(${WikiDiagramPage.script(JsonPrimitive(source))}, false, drawnFor);"))
+        assertTrue(WikiDiagramPage.html(source, dark = true).contains("size = await draw(${WikiDiagramPage.script(JsonPrimitive(source))}, true, drawnFor);"))
         assertEquals(source, rendered(page))
         assertTrue(page.contains("font-family: ${WikiDiagramPage.FONT};"))
         assertTrue("a wide drawing scrolls sideways in the page, a narrow one is centred",
-            page.contains("#diagram { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; } #diagram > svg { display: block; margin: 0 auto; }"))
-        assertTrue("what it drew, or 0 x 0, is the page's one report", page.contains("${WikiDiagramPage.BRIDGE}.size(width, height);"))
+            page.contains("#figure { overflow-x: auto; overflow-y: hidden; touch-action: pan-x; } #figure > svg { display: block; margin: 0 auto; }"))
+        assertTrue("the room it draws for is the WebView's width", page.contains("drawnFor = document.documentElement.clientWidth;"))
+        assertTrue("what it drew, or 0 x 0, is the page's report", page.contains("${WikiDiagramPage.BRIDGE}.size(size[0], size[1]);"))
+        assertTrue("and again for each new width the WebView takes",
+            page.contains("addEventListener('resize', () => { if (document.documentElement.clientWidth !== drawnFor) report(); });"))
     }
 
     @Test fun noSourceCanBreakOutOfItsScript() {
@@ -259,9 +286,9 @@ class WikiDiagramTest {
         return doc.decodeAs(WikiDoc.serializer()) to "wiki-doc-block:${section.str("key")}.1"
     }
 
-    /** The source the page hands Mermaid, read back from its script literal. */
+    /** The source the page hands its drawing, read back from its script literal. */
     private fun rendered(page: String): String =
-        Json.parseToJsonElement(page.substringAfter("mermaid.render('wk-diagram', ").substringBefore(");\n")).jsonPrimitive.content
+        Json.parseToJsonElement(requireNotNull(Regex("""size = await draw\(("(?:[^"\\]|\\.)*")""").find(page)).groupValues[1]).jsonPrimitive.content
 
     private fun bridge(view: WebView) = shadowOf(view).getJavascriptInterface(WikiDiagramPage.BRIDGE) as WikiDiagramPage.Bridge
 
