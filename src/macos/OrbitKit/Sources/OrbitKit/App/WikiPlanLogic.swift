@@ -854,7 +854,8 @@ public enum WikiPlanLogic {
     /// The references not found in one document (`wikiPlanDocMissing`).
     public static func docMissing(_ shown: Shown, doc: ShownDoc) -> [WikiPlanRepoCheck.Miss] {
         (shown.repoCheck?.missing ?? []).filter { miss in
-            miss.at.map { firstMatch("(?:^|\\.)docs\\[\(doc.index)\\](?:\\.|$)", in: $0) != nil } ?? false
+            // From the path's start: `.sources.docs[1]` further along is a section's source, not the second document.
+            miss.at.map { firstMatch("^(?:plan\\.)?docs\\[\(doc.index)\\](?:\\.|$)", in: $0) != nil } ?? false
         }
     }
 

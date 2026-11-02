@@ -342,10 +342,10 @@ describe('the plan page, by what its job is doing', () => {
     expect(text('b', gate)[0]).toBe('Ready for review');
     expect(text('.wk-pl-ck .n', gate)).toEqual(['Documents', 'Documents', 'Protected documents', 'References', 'References', 'Fields']);
     expect(text('.wk-pl-ck .r', gate)).toContain('Search ranking was left out: nothing was written for it.');
-    expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '1.1 §2']);
+    expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '1.1 §2', '3.1 §1']);
     expect(planPage().querySelector('.wk-pl-hint')).toBeNull();
     expect(planPage().querySelector('.wk-pl-check.fail')).toBeNull();
-    expect(text('.wk-pl-doc .notn', planPage())).toEqual(['1 not found', '1 not found']);
+    expect(text('.wk-pl-doc .notn', planPage())).toEqual(['1 not found', '1 not found', '1 not found']);
     expect(button('Confirm plan', planPage())?.disabled).toBe(false);
     expect(button('Redraft…', planPage())?.disabled).toBe(false);
   });

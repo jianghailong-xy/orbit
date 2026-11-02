@@ -2779,6 +2779,11 @@
               "kind": "docSection",
               "ref": "docs/architecture.md § 1. Why",
               "at": "plan.docs[0].sections[1].sources.docs[0].section"
+            },
+            {
+              "kind": "docSection",
+              "ref": "docs/wiki-design.md § Gate rounds",
+              "at": "plan.docs[2].sections[0].sources.docs[1].section"
             }
           ]
         },
@@ -5253,7 +5258,7 @@
         "gate": {
           "passed": false,
           "title": "Ready for review",
-          "line": "4 to look at · references checked at 99cd3c4",
+          "line": "5 to look at · references checked at 99cd3c4",
           "aside": "attempt 2",
           "rows": [
             {
@@ -5278,7 +5283,7 @@
               "check": "references",
               "ok": false,
               "title": "References",
-              "text": "5,564 of 5,566 found at 99cd3c4 — the rest stay on their sections, and a document is written without any that’s still missing"
+              "text": "5,563 of 5,566 found at 99cd3c4 — the rest stay on their sections, and a document is written without any that’s still missing"
             },
             {
               "check": "references",
@@ -5294,8 +5299,8 @@
             }
           ],
           "refKinds": [
-            "1 symbol",
-            "1 doc section"
+            "2 doc sections",
+            "1 symbol"
           ],
           "refs": [
             {
@@ -5308,6 +5313,12 @@
               "where": "1.1 §2",
               "kind": "Doc section",
               "ref": "docs/architecture.md § 1. Why",
+              "why": "no such heading"
+            },
+            {
+              "where": "3.1 §1",
+              "kind": "Doc section",
+              "ref": "docs/wiki-design.md § Gate rounds",
               "why": "no such heading"
             }
           ]
@@ -5358,8 +5369,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "notFound": 0,
-                "notFoundLabel": null,
+                "notFound": 1,
+                "notFoundLabel": "1 not found",
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -5667,6 +5678,7 @@
         "protected": false,
         "head": [
           "v2 · Draft",
+          "1 not found",
           "1 section · 800–1,200 chars"
         ],
         "length": "800–1,200 chars",

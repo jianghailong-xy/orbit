@@ -790,7 +790,8 @@ export const wikiPlanChangeCount = (count: number): string => plural(count, 'cha
 
 /** The references not found in one document. */
 export function wikiPlanDocMissing(shown: WikiPlanShown, doc: Pick<WikiPlanShownDoc, 'index'>): WikiPlanRepoCheck['missing'] {
-  const at = new RegExp(`(?:^|\\.)docs\\[${doc.index}\\](?:\\.|$)`, 'u');
+  // From the path's start: `.sources.docs[1]` further along is a section's source, not the second document.
+  const at = new RegExp(`^(?:plan\\.)?docs\\[${doc.index}\\](?:\\.|$)`, 'u');
   return (shown.repoCheck?.missing ?? []).filter((miss) => !!miss.at && at.test(miss.at));
 }
 

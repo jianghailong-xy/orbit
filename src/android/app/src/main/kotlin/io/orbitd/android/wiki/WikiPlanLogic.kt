@@ -486,8 +486,9 @@ internal object WikiPlanLogic {
     fun categoryLine(category: ShownCategory) = plural(category.docs.size, "document", "documents")
     fun docLine(doc: ShownDoc) = "${plural(doc.sections.size, "section", "sections")} · ${WikiPlanCopy.chars(doc.length)}"
     /** The references not found in one document (`wikiPlanDocMissing`). */
+    /** From the path's start: `.sources.docs[1]` further along is a section's source, not the second document. */
     fun docMissing(shown: Shown, doc: ShownDoc) = shown.repoCheck?.missing.orEmpty().filter { miss ->
-        miss.at?.let { firstMatch("(?:^|\\.)docs\\[${doc.index}\\](?:\\.|$)", it) != null } ?: false }
+        miss.at?.let { firstMatch("^(?:plan\\.)?docs\\[${doc.index}\\](?:\\.|$)", it) != null } ?: false }
     fun drawsOn(doc: ShownDoc): String {
         val docs = mutableListOf<String>(); val code = mutableListOf<String>(); val contracts = mutableListOf<String>()
         val topics = mutableListOf<String>(); val projects = mutableListOf<String>()

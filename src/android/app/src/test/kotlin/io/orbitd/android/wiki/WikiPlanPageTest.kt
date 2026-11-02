@@ -124,20 +124,21 @@ class WikiPlanPageTest {
         compose.onNodeWithTag("wiki-plan-redraft").assertIsEnabled().performClick()
         assertEquals(listOf("confirm v2", "redraft"), calls)
         scrollTo("wiki-plan-gate")
-        says("wiki-plan-gate", WikiPlanCopy.ready, "4 to look at · references checked at 99cd3c4 · attempt 2")
+        says("wiki-plan-gate", WikiPlanCopy.ready, "5 to look at · references checked at 99cd3c4 · attempt 2")
         assertEquals("the report's title is amber", Color(0xFFB35C00), gateTextColour(WikiPlanCopy.ready))
         compose.onAllNodesWithTag("wiki-plan-gate-row:docCount").assertCountEquals(2)
         says("wiki-plan-gate-row:docCount", "3 documents — within 3–5", "Search ranking was left out: nothing was written for it.")
         compose.onAllNodesWithTag("wiki-plan-gate-row:references").assertCountEquals(2)
         says("wiki-plan-gate-row:references", "A topic isn’t this wiki’s and was left out: invented.",
-            "5,564 of 5,566 found at 99cd3c4 — the rest stay on their sections, and a document is written without any that’s still missing")
+            "5,563 of 5,566 found at 99cd3c4 — the rest stay on their sections, and a document is written without any that’s still missing")
         compose.onNodeWithTag("wiki-plan-gate-ref:0").assertTextContains("2.1 §2 Symbol src/runner-go/runloop.go: runLoop() — not in the file", substring = true)
         compose.onNodeWithTag("wiki-plan-gate-ref:1").assertTextContains("1.1 §2 Doc section docs/architecture.md § 1. Why — no such heading", substring = true)
         compose.onAllNodesWithTag("wiki-plan-gate-more").assertCountEquals(0)
         scrollTo("wiki-plan-doc:session-runtime")
         compose.onNodeWithTag("wiki-plan-doc:session-runtime").assertTextContains("1 not found · 4 sections · 3,000–4,500 chars", substring = true)
         scrollTo("wiki-plan-doc:agent-tests")
-        compose.onNodeWithTag("wiki-plan-doc:agent-tests").assert(!hasText("not found", substring = true))
+        // Its miss is a section's second doc source: counted here, not against the second document as well.
+        compose.onNodeWithTag("wiki-plan-doc:agent-tests").assertTextContains("1 not found · ", substring = true)
     }
 
     @Test fun aCountOutsideItsTargetIsOneThingToLookAt() {
