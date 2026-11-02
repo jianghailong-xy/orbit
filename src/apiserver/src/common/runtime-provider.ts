@@ -107,12 +107,12 @@ export function normalizeBuiltinPermissionMode(
   if (provider === AgentProvider.DSH) return assertDshPermissionMode(permissionMode);
   // Cursor CLI keeps the modes measured on it (docs/cursor-runtime-contract.md §5.4); `--force` runs as root.
   if (provider === AgentProvider.CURSOR) return assertCursorPermissionMode(permissionMode);
-  if (!permissionModeAvailableOnRunner(permissionMode, runsAsRoot)) {
-    return ROOT_FALLBACK_PERMISSION_MODE;
-  }
-  if (permissionMode !== PermissionMode.AUTO) return permissionMode;
-  return autoAvailable(provider, model, customProvider, modelCatalog as RunnerModelCatalog | null)
+  const runnable = permissionModeAvailableOnRunner(permissionMode, runsAsRoot)
     ? permissionMode
+    : ROOT_FALLBACK_PERMISSION_MODE;
+  if (runnable !== PermissionMode.AUTO) return runnable;
+  return autoAvailable(provider, model, customProvider, modelCatalog as RunnerModelCatalog | null)
+    ? runnable
     : PermissionMode.DEFAULT;
 }
 

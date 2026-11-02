@@ -195,7 +195,7 @@ func TestEveryMCPConsentOfACodexSessionGetsItsOwnCard(t *testing.T) {
 	for _, mode := range []string{"default", "acceptEdits"} {
 		t.Run(mode, func(t *testing.T) {
 			session := newConsentSession(t, mode)
-			session.raise(t, 0, codexMCPElicitationMethod, consentParams("bg_run"))
+			session.raise(t, 0, codexMCPElicitationMethod, consentParams("bg_kill"))
 			// Answered before the next is raised, as Codex does for calls made one after another.
 			first := session.answers(t, 1)
 			session.raise(t, 1, codexMCPElicitationMethod, consentParams("bg_output"))
@@ -211,10 +211,10 @@ func TestEveryMCPConsentOfACodexSessionGetsItsOwnCard(t *testing.T) {
 			if cards[0].ToolUseID == "" || cards[0].ToolUseID == cards[1].ToolUseID {
 				t.Fatalf("toolUseIds %q and %q, want two different ids", cards[0].ToolUseID, cards[1].ToolUseID)
 			}
-			if !strings.Contains(fmt.Sprint(cards[0].Input["message"]), "bg_run") || !strings.Contains(fmt.Sprint(cards[1].Input["message"]), "bg_output") {
+			if !strings.Contains(fmt.Sprint(cards[0].Input["message"]), "bg_kill") || !strings.Contains(fmt.Sprint(cards[1].Input["message"]), "bg_output") {
 				t.Fatalf("cards ask about %#v and %#v", cards[0].Input, cards[1].Input)
 			}
-			if cards[0].ToolName != "mcp__orbit__bg_run" || cards[1].ToolName != "mcp__orbit__bg_output" {
+			if cards[0].ToolName != "mcp__orbit__bg_kill" || cards[1].ToolName != "mcp__orbit__bg_output" {
 				t.Fatalf("cards are named %q and %q", cards[0].ToolName, cards[1].ToolName)
 			}
 		})
@@ -248,7 +248,7 @@ func TestEachAnswerReachesOnlyTheMCPConsentItWasGivenFor(t *testing.T) {
 	session.table.deny("approval-2")
 	want := map[int]string{0: "accept", 1: "decline", 2: "accept"}
 	for id := 0; id < 3; id++ {
-		session.raise(t, id, codexMCPElicitationMethod, consentParams("bg_run"))
+		session.raise(t, id, codexMCPElicitationMethod, consentParams("bg_kill"))
 		if got := session.answers(t, 1)[id]["action"]; got != want[id] {
 			t.Fatalf("request %d answered %v, want %s", id, got, want[id])
 		}
@@ -308,8 +308,8 @@ func TestCodexMCPConsentToolNamesOneToolOrNone(t *testing.T) {
 // than it could be.
 func TestAnMCPConsentInAnUnknownWordingStillReachesAPerson(t *testing.T) {
 	session := newConsentSession(t, "default")
-	params := strings.Replace(consentParams("bg_run"), `Allow the orbit MCP server to run tool \"bg_run\"?`, `Run bg_run?`, 1)
-	if params == consentParams("bg_run") {
+	params := strings.Replace(consentParams("bg_kill"), `Allow the orbit MCP server to run tool \"bg_kill\"?`, `Run bg_kill?`, 1)
+	if params == consentParams("bg_kill") {
 		t.Fatal("the message was not replaced")
 	}
 	session.raise(t, 0, codexMCPElicitationMethod, params)
@@ -326,7 +326,7 @@ func TestAnMCPConsentInAnUnknownWordingStillReachesAPerson(t *testing.T) {
 // (measured on 0.166). It is the same question, so it finds the card already filed.
 func TestAReplayedMCPConsentKeepsItsOneCard(t *testing.T) {
 	session := newConsentSession(t, "default")
-	params := consentParams("bg_run")
+	params := consentParams("bg_kill")
 	session.raise(t, 0, codexMCPElicitationMethod, params)
 	replies := session.answers(t, 1)
 	session.raise(t, 0, codexMCPElicitationMethod, params)
@@ -347,7 +347,7 @@ func TestAnMCPConsentFromANewCodexProcessIsANewCard(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	dir := t.TempDir()
 	bin := t.TempDir()
-	request := fmt.Sprintf(`{"id":0,"method":%q,"params":%s}`, codexMCPElicitationMethod, strings.ReplaceAll(consentParams("bg_run"), "\n", " "))
+	request := fmt.Sprintf(`{"id":0,"method":%q,"params":%s}`, codexMCPElicitationMethod, strings.ReplaceAll(consentParams("bg_kill"), "\n", " "))
 	writeFakeBin(t, bin, "codex", "printf '%s\\n' '"+request+"'\nexec cat >/dev/null")
 	t.Setenv("PATH", bin+":"+"/usr/bin:/bin")
 

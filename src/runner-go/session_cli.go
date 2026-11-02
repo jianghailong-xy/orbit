@@ -115,9 +115,12 @@ Options:
                            runs on the engine it always ran on — a key on its protocol's own CLI
   --permission-mode MODE   How much the session may do unattended: %s.
                            Defaults to the owner's account setting; the ask-me modes park
-                           the session on an approval card until a human answers. Inside a
-                           session it can never be wider than that session's own mode: a
-                           wider mode is refused, and a wider default gives way to its mode
+                           the session on an approval card until a human answers. dontAsk
+                           never asks but refuses anything not already approved, commands
+                           and background jobs included: for unattended work that has to
+                           run commands, use auto. Inside a session it can never be wider
+                           than that session's own mode: a wider mode is refused, and a
+                           wider default gives way to its mode
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries

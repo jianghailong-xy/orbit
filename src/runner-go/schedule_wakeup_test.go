@@ -21,7 +21,8 @@ import (
 func TestBgGuardRefusesScheduleWakeup(t *testing.T) {
 	decide := func(tool string, input map[string]interface{}) (string, string) {
 		t.Helper()
-		body, err := json.Marshal(hookInput{HookEventName: "PreToolUse", ToolName: tool, ToolInput: input})
+		// In a mode that does not ask, where having no objection reads as allow (hookModeSkipsAsking).
+		body, err := json.Marshal(hookInput{HookEventName: "PreToolUse", ToolName: tool, ToolInput: input, PermissionMode: "auto"})
 		if err != nil {
 			t.Fatal(err)
 		}

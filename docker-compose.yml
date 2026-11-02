@@ -260,6 +260,13 @@ services:
       ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
       ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
       ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
+      # The most one account may keep in Orbit Files, in bytes: past it an upload is refused. Empty means no limit, a
+      # self-hosted deployment's default. A hosted instance sets it.
+      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"
+      # The two values pgbackup keeps base backups by, with its defaults: an expired file's bytes go no sooner than
+      # max(7 days, interval x (keep + 1)) after its tombstone, so restoring any retained backup finds the bytes its rows name.
+      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
+      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
       # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
       # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed

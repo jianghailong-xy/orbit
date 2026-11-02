@@ -216,10 +216,11 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   await t.test('(6) a file past its retention keeps its summary', async () => {
     const report = sample('playwright-retries.json');
     const file = await kept(report, 'report.json');
-    // What the retention job does to a row (§2.8): it stamps it and removes the bytes. The row stays.
+    // What the retention sweep does to a row (§2.8), by hand so that this case is about the summary; a real sweep does it in
+    // file-retention.pg.spec.ts (15). It stamps the row and removes the bytes. The row stays.
     await db.attachment.update({ where: { id: file.id }, data: { expiresAt: new Date(), expiredAt: new Date() } });
     rmSync(path.join(dir, file.sha256.slice(0, 2), file.sha256));
-    assert.equal((await bytesOf(file.publicId)).status, 404, 'the bytes are gone');
+    assert.equal((await bytesOf(file.publicId)).status, 410, 'the bytes are gone');
     assert.deepEqual(await summaryOnRow(file.id), file.testReport, 'the summary is not');
     assert.deepEqual((await listed()).find((row) => row.id === file.publicId)?.testReport, file.testReport, 'and it is still answered');
   });
@@ -280,11 +281,13 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
     const stored = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId } });
     assert.ok(!JSON.stringify(stored.evidence).includes('passed'), 'the summary is not in what the digest covers');
 
+    // Only by hand, since no sweep can reach this: a version waiting for a decision holds what it cites
+    // (file-retention.pg.spec.ts (4)). A card can still come to draw a file its version no longer holds.
     const pending = await db.attachment.update({
       where: { id: file.id }, data: { expiresAt: new Date(), expiredAt: new Date() }, select: { sha256: true },
     });
     rmSync(path.join(dir, (pending.sha256 as string).slice(0, 2), pending.sha256 as string));
-    assert.equal((await bytesOfSession(runId, file.publicId)).status, 404, 'the bytes are gone');
+    assert.equal((await bytesOfSession(runId, file.publicId)).status, 410, 'the bytes are gone');
     const [afterwards] = await citations();
     assert.equal(afterwards.resolved, true, 'the citation still resolves');
     assert.deepEqual(afterwards.testReport, file.testReport, 'and the summary is still there');

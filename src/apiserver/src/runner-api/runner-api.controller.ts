@@ -445,6 +445,7 @@ import {
   AUTO_ALLOWED_MESSAGE,
   dispatchAllowedTools,
   ruleCoversApproval,
+  ruleCoversBackgroundJobCard,
   serverMatchedRuntime,
 } from '../common/permission-rules';
 import {
@@ -5830,15 +5831,22 @@ export class RunnerApiController {
     // A card that names only a server may be about any of its tools, and a rule cannot have been
     // given for a tool nobody named.
     if (reachesPastOneMcpTool(dto.toolName)) return false;
+    // A shell command asked about from a runner-hosted job is the runner's gate asking on the job's
+    // behalf (runner-go background_gate.go), whichever engine the session runs on. No engine has been
+    // through it, so no engine's rule has been applied to it, and a person's "always allow" on such a
+    // card reaches the next one only through here.
+    const backgroundJob = dto.toolName === 'Bash' && !!stripNul(dto.backgroundJobId ?? '').trim();
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
-    const runtime = await sessionEngine(this.prisma, session);
-    if (!runtime || !serverMatchedRuntime(runtime)) return false;
+    const runtime = backgroundJob ? null : await sessionEngine(this.prisma, session);
+    if (!backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
       select: { toolName: true, ruleContent: true },
     });
-    return ruleCoversApproval(runtime, dto.toolName, dto.input, rules);
+    return runtime
+      ? ruleCoversApproval(runtime, dto.toolName, dto.input, rules)
+      : ruleCoversBackgroundJobCard(dto.input, rules);
   }
 
   /** Long-poll one approval until a human decides (window elapsed undecided → PENDING). */

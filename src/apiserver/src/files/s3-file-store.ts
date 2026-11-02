@@ -10,8 +10,8 @@ import { removeTempFile, type FileStore, type S3FilesConfig } from './file-store
  * `files/<sha256[0:2]>/<sha256>`, addressed path-style (`<endpoint>/<bucket>/<key>`), which AWS S3, MinIO,
  * Ceph, R2 and the other S3-compatible services all answer.
  *
- * Three requests and a signature, on node:http and node:crypto, rather than an S3 SDK: the AWS SDK brings
- * dozens of packages for what is here HEAD, PUT and GET of one object, and the smaller signing libraries
+ * Four requests and a signature, on node:http and node:crypto, rather than an S3 SDK: the AWS SDK brings
+ * dozens of packages for what is here HEAD, PUT, GET and DELETE of one object, and the smaller signing libraries
  * sign `fetch` requests, whose streamed bodies cannot carry the Content-Length a PUT needs. The signing is
  * held to AWS's published examples (s3-file-store.spec.ts) and the store to a real S3-compatible server
  * (files.pg.spec.ts).
@@ -67,9 +67,18 @@ export class S3FileStore implements FileStore {
     throw await failure(response, 'GET', this.keyOf(sha256));
   }
 
+  async remove(sha256: string): Promise<void> {
+    const response = await this.send('DELETE', this.keyOf(sha256));
+    // 204 whether or not the object was there, on AWS S3; a 404 from a service that says so is the same answer.
+    if (response.statusCode !== 204 && response.statusCode !== 200 && response.statusCode !== 404) {
+      throw await failure(response, 'DELETE', this.keyOf(sha256));
+    }
+    response.resume();
+  }
+
   /** One signed request; resolves with the response once its headers have arrived. */
   private send(
-    method: 'HEAD' | 'GET' | 'PUT',
+    method: 'HEAD' | 'GET' | 'PUT' | 'DELETE',
     key: string,
     upload?: { body: Readable; sizeBytes: number; sha256: string },
   ): Promise<IncomingMessage> {

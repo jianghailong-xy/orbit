@@ -330,6 +330,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
     nested: ['fileId'],
   },
+  'PUT /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
+  'DELETE /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
   'POST /runner/sessions/:id/file-bundles': {
     as: RUNNER,
     request: (of) => ({
@@ -1005,6 +1015,16 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { dependsOnTaskId: of.dependencyTaskId } }),
   },
+  'POST /runner/tasks/:id/dependencies header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { dependsOnTaskId: mine.dependencyTaskId },
+  })),
+  // An edge that is not there: the answer is the task, and this one has no comment to name its tenant.
+  'DELETE /runner/tasks/:id/dependencies/:dependsOnTaskId header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.dependencyTaskId, dependsOnTaskId: mine.taskId },
+  })),
+  'POST /runner/tasks/:id/progress header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { phase: 'census' },
+  })),
   'POST /runner/tasks/:id/comments body mentions[]': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { body: 'from the census', mentions: [of.workspaceId] } }),
@@ -1031,6 +1051,9 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: of.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] } }),
   },
+  'POST /runner/task-lists/:id/dag-apply header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] },
+  })),
   'POST /runner/task-lists/:id/dag-apply body ops[].dependsOnTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: of.dependencyTaskId }] } }),
@@ -1321,6 +1344,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-sessions.controller.ts:222)',
     
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
+  'DELETE /runner/tasks/:id header x-orbit-session-id':
+    'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
+    + 'as one naming none, and the only task it can delete is the caller\'s own the path names. Read rather than sent: '
+    + 'each send would take away the task the next one needs (verifier-write-authority.ts:88)',
   'POST /runner/tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press: it keys only the caller\'s own run receipt '
     + '(tasks.service.ts:12768)',

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
+import { settleCitedFileExpiry } from '../files/file-retention';
 import { FilesService, type EvidenceFileList } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -19,6 +20,7 @@ import {
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
   assertIndependentDecidingSession,
+  assertRunMayDecide,
   decisionNote,
 } from './task-evidence-decision';
 import {
@@ -398,13 +400,29 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
-        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8).
+        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
+        // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
+        // for this commit or has already written the tombstone this finds.
         if (fileIds.length > 0) {
-          await tx.attachment.updateMany({
-            where: { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] },
-            data: { evidenceId: evidence.id },
+          const cited = { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] };
+          await tx.attachment.updateMany({ where: { ...cited, expiredAt: null }, data: { evidenceId: evidence.id } });
+          const expired = await tx.attachment.findMany({
+            where: { ...cited, expiredAt: { not: null } },
+            select: { fileName: true },
+            take: 5,
           });
+          if (expired.length > 0) {
+            throw new ConflictException({
+              code: 'EVIDENCE_FILE_EXPIRED',
+              message:
+                `evidence.checks cites a file that has expired (${expired.map(({ fileName }) => fileName ?? 'a pasted image').join(', ')}); `
+                + 'nothing was written. Upload it again and cite the new id, or pin the file first if its bytes are still kept',
+              requiredAction: 'UPLOAD_THE_FILE_AGAIN',
+            });
+          }
         }
+        // This version holds what it cites, and the one before it no longer does.
+        await settleCitedFileExpiry(tx, { ownerId, taskId });
       }
 
       if (idempotencyKey) {
@@ -647,6 +665,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
       });
@@ -696,7 +715,8 @@ export class TaskCompletionEvidenceService {
    * session can read why.
    *
    * The four checks run in the order authority, subject, standard: may this caller answer at all
-   * (independent of the work, and acting for the project the task is in), is it answering the
+   * (independent of the work, acting for the project the task is in, and no run the evidence is
+   * not addressed to), is it answering the
    * version that is actually open, and is the standard it is answering still the one stated. A
    * refusal at any of them writes nothing.
    */
@@ -758,6 +778,9 @@ export class TaskCompletionEvidenceService {
       // And it acts for the project the task is in NOW: a confirmed move takes the undecided
       // evidence with the task, and the project it left decides it no more.
       await assertDecidingSessionInTaskProject(tx, { ownerId, projectId: task.projectId }, decidingSession);
+      // And a run decides only what is addressed to it. The owner in the app decides whichever
+      // session the press names, so this is not asked of a press.
+      if (!ownerInTheApp) await assertRunMayDecide(tx, { ownerId, taskId }, decidingSession);
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
@@ -814,6 +837,8 @@ export class TaskCompletionEvidenceService {
         },
         include: decisionInclude,
       });
+      // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
 
       // The derivation, and the only thing this door writes outside its own row. It asks the
       // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION

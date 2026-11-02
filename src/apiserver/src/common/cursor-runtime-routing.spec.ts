@@ -95,7 +95,7 @@ test('P1 Cursor CLI effort values are opaque and the live catalogue decides them
 test('P1 the server admits exactly the Cursor CLI modes the picker calls kept, and defaults to Accept Edits', () => {
   // Auto is the runner's own review of each request Cursor CLI asks about (P5c), on any model.
   for (const mode of [PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN, PermissionMode.AUTO, PermissionMode.DONT_ASK, PermissionMode.BYPASS]) {
-    // Root is no concern of Cursor CLI's: `--force` runs as root, so Bypass is not swapped for Don't Ask.
+    // Root is no concern of Cursor CLI's: `--force` runs as root, so Bypass is not swapped for Auto.
     for (const runsAsRoot of [undefined, false, true]) {
       assert.equal(normalizeBuiltinPermissionMode(AgentProvider.CURSOR, MODEL, mode, false, runsAsRoot), mode);
     }
@@ -115,6 +115,6 @@ test('P1 the server admits exactly the Cursor CLI modes the picker calls kept, a
   }
   // Nothing moves for the others: Claude Code's root fallback and Auto still apply to Claude.
   assert.equal(normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'claude-opus-5', PermissionMode.BYPASS, false, true),
-    PermissionMode.DONT_ASK);
+    PermissionMode.AUTO);
   assert.equal(normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'claude-opus-5', PermissionMode.DEFAULT), PermissionMode.DEFAULT);
 });

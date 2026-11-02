@@ -76,6 +76,10 @@ type sessionFile struct {
 	SizeBytes int64  `json:"sizeBytes"`
 	SHA256    string `json:"sha256"`
 	CreatedAt string `json:"createdAt"`
+	// When it expires, when it did, and when it was pinned, which keeps it past that date. Empty where there is no such date.
+	ExpiresAt string `json:"expiresAt"`
+	ExpiredAt string `json:"expiredAt"`
+	PinnedAt  string `json:"pinnedAt"`
 	// What the server read out of a test report, passed on as it came: a binary can be older than the fields in it.
 	TestReport map[string]interface{} `json:"testReport"`
 	Note       string                 `json:"note"`
@@ -103,6 +107,10 @@ type fileAnswer struct {
 	SHA256    string `json:"sha256,omitempty"`
 	Link      string `json:"link"`
 	CreatedAt string `json:"createdAt,omitempty"`
+	// When it expires, unless evidence holds it or it is pinned; when it did; and when it was pinned.
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	ExpiredAt string `json:"expiredAt,omitempty"`
+	PinnedAt  string `json:"pinnedAt,omitempty"`
 	// Where file_fetch put it.
 	Path string `json:"path,omitempty"`
 	// A bundle's files, by path: from file_upload, or from file_fetch out of its manifest.
@@ -119,6 +127,7 @@ func answerFor(f sessionFile) fileAnswer {
 	return fileAnswer{
 		ID: f.id(), Kind: f.Kind, Name: f.Name, Label: f.Label, MimeType: f.MimeType,
 		SizeBytes: f.SizeBytes, SHA256: f.SHA256, Link: fileLink(f.id()), CreatedAt: f.CreatedAt,
+		ExpiresAt: f.ExpiresAt, ExpiredAt: f.ExpiredAt, PinnedAt: f.PinnedAt,
 		TestReport: f.TestReport, Note: f.Note,
 	}
 }
@@ -231,6 +240,17 @@ func (t *Transport) describeFile(sessionID, fileID string) (sessionFile, error) 
 	return out, err
 }
 
+// setFilePinned pins one file, or takes its pin away. A folder bundle's id covers the files in it.
+func (t *Transport) setFilePinned(sessionID, fileID string, pinned bool) (sessionFile, error) {
+	method := http.MethodPut
+	if !pinned {
+		method = http.MethodDelete
+	}
+	var out sessionFile
+	err := t.do(nil, method, "/runner/sessions/"+sessionID+"/files/"+url.PathEscape(fileID)+"/pin", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, http.MethodGet, "/runner/files?"+filter.Encode(), nil, &out, taskOpTimeout)
@@ -281,7 +301,7 @@ func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name
 // ── The tools ───────────────────────────────────────────────────────────────────────────────────
 
 // fileToolNames is the set callFileTool answers for.
-var fileToolNames = map[string]bool{"file_upload": true, "file_fetch": true, "file_list": true}
+var fileToolNames = map[string]bool{"file_upload": true, "file_fetch": true, "file_list": true, "file_pin": true}
 
 // fileToolContext is who a file tool acts for, the session it is called from when there is one, and how long it has.
 type fileToolContext struct {
@@ -319,9 +339,16 @@ func runFileTool(t *Transport, tool fileToolContext, name string, args map[strin
 	var err error
 	switch name {
 	case "file_upload":
-		answer, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"), getString(args, "as"))
+		var kept fileAnswer
+		kept, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"), getString(args, "as"))
+		if err == nil && getBool(args, "pin") {
+			kept = pinKept(t, tool, kept)
+		}
+		answer = kept
 	case "file_fetch":
 		answer, err = fetchFile(t, tool, getString(args, "id"))
+	case "file_pin":
+		answer, err = pinFile(t, tool, getString(args, "id"), getBool(args, "unpin"))
 	case "file_list":
 		return listSessionFiles(t, tool, getString(args, "taskId"), getString(args, "sessionId"), getString(args, "evidenceId"))
 	default:
@@ -775,6 +802,39 @@ func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error
 	return out, nil
 }
 
+// pinFile is file_pin: a file this session may read stays past the date it would expire on, or goes back to that date.
+func pinFile(t *Transport, tool fileToolContext, id string, unpin bool) (fileAnswer, error) {
+	var out fileAnswer
+	sessionID, err := fileSessionOf(tool, "file_pin")
+	if err != nil {
+		return out, err
+	}
+	if err := validatePathSegmentID(id); err != nil {
+		return out, fmt.Errorf("file_pin: %w", err)
+	}
+	file, err := t.setFilePinned(sessionID, id, !unpin)
+	if err != nil {
+		return out, fileCallError("file_pin "+id, err)
+	}
+	return answerFor(file), nil
+}
+
+// pinKept pins what file_upload has just kept. A pin that does not take costs no upload, so the file is answered all the
+// same, and its note says what is left to do.
+func pinKept(t *Transport, tool fileToolContext, kept fileAnswer) fileAnswer {
+	pinned, err := pinFile(t, tool, kept.ID, false)
+	if err != nil {
+		note := "The file was kept but not pinned: " + err.Error()
+		if kept.Note != "" {
+			note = kept.Note + " " + note
+		}
+		kept.Note = note
+		return kept
+	}
+	kept.PinnedAt = pinned.PinnedAt
+	return kept
+}
+
 // listSessionFiles is file_list: one task's, one session's or one evidence version's, and this session's when none is
 // named. Rows come from the server as they are and are given their links here.
 func listSessionFiles(t *Transport, tool fileToolContext, taskID, sessionID, evidenceID string) (json.RawMessage, error) {
@@ -825,7 +885,10 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"![name](link) for an image or [name](link) for anything else. A directory becomes one folder bundle with " +
 				"a manifest of its relative paths, and each file is listed with its own id. Symbolic links are not " +
 				"followed; they, empty files and anything else that cannot be kept are listed under skipped. One file may " +
-				"be 25 MiB and a folder " + strconv.Itoa(fileBundleMaxFiles) + " files; a folder over either is refused whole.",
+				"be 25 MiB and a folder " + strconv.Itoa(fileBundleMaxFiles) + " files; a folder over either is refused whole. " +
+				"A file expires 14 days after upload unless evidence cites it; once a version citing it is sent back or " +
+				"replaced, 30 days after that. Its name, size, sha256 and test summary stay; only the bytes go. Use pin or " +
+				"file_pin for a file that has to outlast that.",
 			"inputSchema": obj(map[string]interface{}{
 				"path": map[string]interface{}{
 					"type": "string",
@@ -853,6 +916,10 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"names. It stays after the file expires, and evidence citing the file shows it. Anything else, a " +
 						"directory included, is kept as a plain file and note says so.",
 				},
+				"pin": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Keep it past the date it would expire on, as file_pin does. On a directory it covers the whole bundle.",
+				},
 			}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
@@ -870,6 +937,24 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				},
 			}, "id"),
 			// It changes nothing in Orbit, and it does write a file here.
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name": "file_pin",
+			"description": "Keep a file past the date it would expire on, or with unpin let that date apply again: one " +
+				"this session uploaded, or one cited by completion evidence this session judges. A folder bundle's id covers " +
+				"the files in it. Pinning an expired file brings it back while its bytes are still kept, and says so if they " +
+				"have gone.",
+			"inputSchema": obj(map[string]interface{}{
+				"id": map[string]interface{}{
+					"type":        "string",
+					"description": "The file's or the bundle's id, as file_upload or file_list gave it.",
+				},
+				"unpin": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Take the pin away. If its date has passed, the file expires at the next cleanup, within the hour.",
+				},
+			}, "id"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{

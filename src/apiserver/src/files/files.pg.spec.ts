@@ -28,7 +28,8 @@
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
  *       multer has written the whole file: it is answered 400 on every upload door, with no file and no row, while the
  *       same upload with a well-formed id is kept;
- *   (9) evidence citing an image reads its size off the head of whichever store holds it, leaving the rest unread.
+ *   (9) evidence citing an image reads its size off the head of whichever store holds it, leaving the rest unread;
+ *  (10) a store lets bytes go when the retention sweep says so, and bytes already gone are no error.
  *
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
  */
@@ -520,6 +521,16 @@ function storeCases(leg: Leg) {
       assert.equal(answer.status, 201, JSON.stringify(receipt));
       assert.deepEqual(receipt.evidence.checks, [{ kind: 'FILE', ref: b62(toUuid(file)), sha256: sha256(image), width: 1280, height: 800 }]);
       assert.ok((await stored(sha256(image)))?.equals(image), 'and the store answers the whole of it after that');
+    });
+
+    await t.test(`${leg.storage}: (10) a store lets bytes go when the retention sweep says so, and bytes already gone are no error`, async () => {
+      const bytes = randomBytes(1024);
+      idOf(await upload(server!, '/api/attachments', bearer, bytes, 'going.bin'), 'POST /attachments');
+      assert.equal(await store.has(sha256(bytes)), true);
+      await store.remove(sha256(bytes));
+      assert.equal(await store.has(sha256(bytes)), false);
+      assert.equal(await stored(sha256(bytes)), null);
+      await store.remove(sha256(bytes));
     });
   };
 }
