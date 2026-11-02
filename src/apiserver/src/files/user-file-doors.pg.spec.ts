@@ -1,7 +1,7 @@
 /**
  * Every door that answers with a user's file, over real HTTP on the production server (build/main.js, the
- * whole AppModule) against a real, fully migrated PostgreSQL. Each one answers with
- * Content-Security-Policy: sandbox and X-Content-Type-Options: nosniff, and a type off the list
+ * whole AppModule) against a real, fully migrated PostgreSQL, once with each file store. Each one answers
+ * with Content-Security-Policy: sandbox and X-Content-Type-Options: nosniff, and a type off the list
  * (files/user-file-response.ts) is an attachment under the file's own name.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/user-file-doors.pg.spec.ts
@@ -13,7 +13,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 
 import { Client } from 'pg';
 
@@ -23,6 +23,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
+import { startS3 } from '../test-support/s3-test-server';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const EMAIL = `user-file-doors-${randomUUID().slice(0, 8)}@example.invalid`;
@@ -61,23 +62,19 @@ function assertHeld(reply: Reply, kind: Kind, door: string, saved: 'always' | 'u
   }
 }
 
-test('every door that answers with a user file holds it to the rule', { skip: !URL, concurrency: 1, timeout: 300_000 }, async (t) => {
+/**
+ * The doors on one store. Each store's files directory is its own, so that the same bytes are kept again in this
+ * leg's store rather than found in the other's.
+ */
+const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: Record<string, string>) => async (t: TestContext) => {
   const url = URL!;
-  assertCoordinatorPgUrlIsIsolated(url);
-  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
-  await sql.connect();
-  await verifyCoordinatorPgIdentity(sql);
-  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-user-file-doors-'));
   let server: Apiserver | undefined;
-  t.after(async () => {
-    await server?.stop();
-    await sql.end().catch(() => undefined);
-    rmSync(scratch, { recursive: true, force: true });
-  });
-  const api = await bootScrubbedApiserver(scratch, 'doors', {
+  t.after(() => server?.stop());
+  const api = await bootScrubbedApiserver(scratch, storage, {
     DATABASE_URL: url,
     JWT_SECRET: randomBytes(32).toString('hex'),
-    ORBIT_FILES_DIR: path.join(scratch, 'files'),
+    ORBIT_FILES_DIR: path.join(scratch, `${storage}-files`),
+    ...env,
   });
   server = api;
 
@@ -94,24 +91,27 @@ test('every door that answers with a user file holds it to the rule', { skip: !U
   }
 
   // ── the world: an owner, a runner of theirs, a conversation it runs, a task, a link to each ────────
-  const boot = await call(api, 'POST', '/api/auth/bootstrap', undefined, { email: EMAIL, name: 'Doors', password: PASSWORD });
-  assert.equal(boot.status, 201, boot.text);
-  const access: string = boot.json.accessToken;
-  const enrollment = await call(api, 'POST', '/api/runners/enrollment-tokens', access, { label: 'doors' });
+  // The first store's run bootstraps the owner, who signs in on the second's.
+  const signIn = storage === 'local'
+    ? await call(api, 'POST', '/api/auth/bootstrap', undefined, { email: EMAIL, name: 'Doors', password: PASSWORD })
+    : await call(api, 'POST', '/api/auth/login', undefined, { email: EMAIL, password: PASSWORD });
+  assert.equal(signIn.status, 201, signIn.text);
+  const access: string = signIn.json.accessToken;
+  const enrollment = await call(api, 'POST', '/api/runners/enrollment-tokens', access, { label: `doors-${storage}` });
   assert.equal(enrollment.status, 201, enrollment.text);
-  const registered = await call(api, 'POST', '/api/runner/register', undefined, { enrollmentToken: enrollment.json.token, name: 'doors' });
+  const registered = await call(api, 'POST', '/api/runner/register', undefined, { enrollmentToken: enrollment.json.token, name: `doors-${storage}` });
   assert.equal(registered.status, 201, registered.text);
   const runnerToken: string = registered.json.runnerToken;
   const beat = await call(api, 'POST', '/api/runner/heartbeat', runnerToken, {});
   assert.ok(beat.status === 200 || beat.status === 201, beat.text);
 
   const { rows: [owner] } = await sql.query('SELECT id FROM "user" WHERE email = $1', [EMAIL]);
-  const { rows: [runner] } = await sql.query('SELECT id FROM runner WHERE owner_id = $1', [owner.id]);
+  const { rows: [runner] } = await sql.query('SELECT id FROM runner WHERE owner_id = $1 AND name = $2', [owner.id, `doors-${storage}`]);
   const workspaceId = randomUUID();
   const sessionId = randomUUID();
   await sql.query(
-    `INSERT INTO workspace (id, owner_id, runner_id, name, enabled) VALUES ($1, $2, $3, 'doors', true)`,
-    [workspaceId, owner.id, runner.id],
+    `INSERT INTO workspace (id, owner_id, runner_id, name, enabled) VALUES ($1, $2, $3, $4, true)`,
+    [workspaceId, owner.id, runner.id, `doors-${storage}`],
   );
   const changedFiles = KINDS.map((kind) => ({ path: `shots/${kind.name}`, status: 'M' }));
   await sql.query(
@@ -127,6 +127,11 @@ test('every door that answers with a user file holds it to the rule', { skip: !U
 
   const inSession = new Map<Kind, string>();
   for (const kind of KINDS) inSession.set(kind, await upload(`/api/attachments?sessionId=${sessionId}`, access, kind));
+  const { rows: stores } = await sql.query(
+    'SELECT DISTINCT b.storage FROM attachment a JOIN file_blob b ON b.sha256 = a.sha256 WHERE a.session_id = $1',
+    [sessionId],
+  );
+  assert.deepEqual(stores, [{ storage }], 'the bytes are in the store this run is about');
 
   const task = await call(api, 'POST', '/api/tasks', access, { title: 'Doors', completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
   assert.equal(task.status, 201, task.text);
@@ -220,4 +225,27 @@ test('every door that answers with a user file holds it to the rule', { skip: !U
     assert.equal(ordinary.status, 200, ordinary.text);
     assert.equal(ordinary.headers['content-security-policy'], undefined);
   });
+};
+
+test('every door that answers with a user file holds it to the rule', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const scratch = mkdtempSync(path.join(tmpdir(), 'orbit-user-file-doors-'));
+  t.after(async () => {
+    await sql.end().catch(() => undefined);
+    rmSync(scratch, { recursive: true, force: true });
+  });
+  await t.test('local', doorCases(sql, scratch, 'local', { ORBIT_FILES_BACKEND: 'local' }));
+  const s3 = await startS3((fn) => t.after(fn));
+  await t.test('s3', doorCases(sql, scratch, 's3', {
+    ORBIT_FILES_BACKEND: 's3',
+    ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
+    ORBIT_FILES_S3_BUCKET: s3.bucket,
+    ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
+    ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+    ORBIT_FILES_S3_REGION: s3.region,
+  }));
 });

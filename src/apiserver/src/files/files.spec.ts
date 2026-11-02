@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { once, EventEmitter } from 'node:events';
+import fs, { fstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import test from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { BadRequestException, type ExecutionContext } from '@nestjs/common';
+import type { Response } from 'express';
 import { lastValueFrom, of, throwError, type Observable } from 'rxjs';
 import {
   DEFAULT_FILES_DIR,
@@ -16,7 +22,8 @@ import {
 } from './file-store';
 import { FileUploadCleanupInterceptor } from './file-upload-cleanup.interceptor';
 import { fileUploadStorage } from './file-upload-storage';
-import { sigV4Authorization, sigV4Encode } from './s3-file-store';
+import { streamable } from './files.service';
+import { S3FileStore, sigV4Authorization, sigV4Encode } from './s3-file-store';
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
@@ -80,6 +87,82 @@ test('the S3 signature is AWS\'s own for its PUT Object example, a key that need
 test('a key is encoded the way the signature reads it: unreserved characters kept, the rest percent-encoded', () => {
   assert.equal(sigV4Encode('test$file.text'), 'test%24file.text');
   assert.equal(sigV4Encode("a b!'()*~-._"), 'a%20b%21%27%28%29%2A~-._');
+});
+
+/** Until `condition` holds; a test fails on one that never does. */
+async function settles(condition: () => boolean, what: string): Promise<void> {
+  for (let i = 0; i < 300 && !condition(); i += 1) await sleep(10);
+  assert.ok(condition(), what);
+}
+
+const bucketOn = (server: net.Server) => new S3FileStore({
+  endpoint: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, bucket: 'b', accessKeyId: 'a', secretAccessKey: 's', region: 'us-east-1',
+});
+
+test('an upload the bucket refuses unread gives back its file and its connection', async (t) => {
+  const dir = scratch(t);
+  // Refuses on the first bytes, reads no more of them, and leaves the connection for the client to end. Having stopped
+  // reading it would not see that happen, so what is asked below is the client's own agent.
+  const refusal = '<Error><Code>AccessDenied</Code></Error>';
+  const connections = new Set<net.Socket>();
+  const refusing = net.createServer((socket) => {
+    connections.add(socket);
+    socket.on('error', () => undefined);
+    socket.once('data', () => {
+      socket.pause();
+      socket.write(`HTTP/1.1 403 Forbidden\r\nContent-Length: ${refusal.length}\r\n\r\n${refusal}`);
+    });
+  });
+  t.after(() => {
+    for (const socket of connections) socket.destroy();
+    refusing.close();
+  });
+  await once(refusing.listen(0, '127.0.0.1'), 'listening');
+  const descriptors = () => readdirSync('/dev/fd').length;
+  const before = descriptors();
+  // Larger than a socket's buffers, so that the refusal arrives with the body still being read.
+  const bytes = Buffer.alloc(32 * 1024 * 1024);
+  const temp = path.join(dir, 'tmp-upload');
+  writeFileSync(temp, bytes);
+  await assert.rejects(bucketOn(refusing).put(sha256(bytes), temp, bytes.length), /answered 403 AccessDenied/);
+  assert.deepEqual(readdirSync(dir), [], 'the temporary file is gone');
+  await settles(() => Object.keys(http.globalAgent.sockets).length === 0, 'the connection is given up');
+  for (const socket of connections) socket.destroy();
+  await settles(() => descriptors() <= before, 'the file is closed');
+});
+
+test('an upload the bucket keeps frees its connection, however soon the bucket answers', async (t) => {
+  const dir = scratch(t);
+  // The read that finds the end of the file comes after the answer, as it does when the thread pool is busy.
+  const read = fs.read;
+  t.mock.method(fs, 'read', ((fd: number, buffer: Buffer, offset: number, length: number, position: number, done: (...result: unknown[]) => void) => {
+    read(fd, buffer, offset, length, position, (error, bytesRead, into) => {
+      if (bytesRead === 0) setTimeout(done, 100, error, bytesRead, into);
+      else done(error, bytesRead, into);
+    });
+  }) as unknown as typeof fs.read);
+  let connections = 0;
+  const keeping = http.createServer((request, response) => {
+    request.resume();
+    request.on('end', () => response.end());
+  });
+  keeping.on('connection', () => {
+    connections += 1;
+  });
+  t.after(() => {
+    keeping.closeAllConnections();
+    keeping.close();
+  });
+  await once(keeping.listen(0, '127.0.0.1'), 'listening');
+  const store = bucketOn(keeping);
+  for (const name of ['first', 'second']) {
+    const bytes = Buffer.from(name);
+    const temp = path.join(dir, name);
+    writeFileSync(temp, bytes);
+    await store.put(sha256(bytes), temp, bytes.length);
+    await sleep(150);
+  }
+  assert.equal(connections, 1, 'the second upload went over the connection the first one freed');
 });
 
 // ── Configuration ──────────────────────────────────────────────────────────────────────────────
@@ -213,3 +296,113 @@ test('the local store keeps a content once at <sha256[0:2]>/<sha256>, by renamin
   for await (const chunk of (await store.open(name))!) chunks.push(chunk as Buffer);
   assert.ok(Buffer.concat(chunks).equals(bytes));
 });
+
+// ── A stream nobody finishes ───────────────────────────────────────────────────────────────────
+const opened = (content: Readable) => ({ content, mimeType: 'image/png', sizeBytes: 1, fileName: 'a.png' });
+const responseWith = (destroyed: boolean) => Object.assign(new EventEmitter(), { destroyed }) as unknown as EventEmitter & Pick<Response, 'once' | 'destroyed'>;
+
+test('a stream whose response has already closed is closed at once', () => {
+  const content = new PassThrough();
+  streamable(opened(content), responseWith(true));
+  assert.equal(content.destroyed, true);
+});
+
+test('a stream is closed when its response closes, and not before', () => {
+  const content = new PassThrough();
+  const response = responseWith(false);
+  streamable(opened(content), response);
+  assert.equal(content.destroyed, false);
+  response.emit('close');
+  assert.equal(content.destroyed, true);
+});
+
+test('a stored file whose response has already closed gives its descriptor back', { timeout: 10_000 }, async (t) => {
+  const dir = scratch(t);
+  const store = new LocalFileStore(dir);
+  const bytes = randomBytes(4096);
+  const temp = path.join(dir, 'tmp-upload');
+  writeFileSync(temp, bytes);
+  await store.put(sha256(bytes), temp);
+  const content = (await store.open(sha256(bytes))) as Readable & { fd: number };
+  const { fd } = content;
+  assert.ok(fstatSync(fd).isFile());
+  const closed = once(content, 'close');
+  streamable(opened(content), responseWith(true));
+  await closed;
+  assert.throws(() => fstatSync(fd), { code: 'EBADF' });
+});
+
+/**
+ * Run in a process of its own, which `--expose-gc` lets collect and which holds nothing else: $CASE leaves a stream
+ * unreachable, collections run, and the answer is how many descriptors were open before it, with it, and after.
+ */
+const DROPPING = String.raw`
+const { once } = require('node:events');
+const { fstatSync, openSync, readdirSync } = require('node:fs');
+const { PassThrough } = require('node:stream');
+const { setTimeout: sleep } = require('node:timers/promises');
+const { LocalFileStore, writeHashedTempFile } = require(process.env.FILE_STORE);
+
+const { FILES_DIR, NAME } = process.env;
+const open = () => new LocalFileStore(FILES_DIR).open(NAME);
+const descriptors = () => readdirSync('/dev/fd').length;
+let kept;
+const cases = {
+  async unread() {
+    await open();
+  },
+  async 'read in part'() {
+    const stream = await open();
+    await once(stream, 'readable');
+    stream.read(1);
+  },
+  async 'being written'() {
+    writeHashedTempFile(new PassThrough(), FILES_DIR).catch(() => undefined);
+    await sleep(100);
+  },
+  // Its descriptor's number goes to the next file opened, whose descriptor stays that file's.
+  async 'read to the end'() {
+    const stream = await open();
+    const { fd } = stream;
+    for await (const chunk of stream) void chunk;
+    kept = openSync(new LocalFileStore(FILES_DIR).pathOf(NAME), 'r');
+    if (kept !== fd) throw new Error('the next file got another number');
+  },
+};
+
+(async () => {
+  const before = descriptors();
+  await cases[process.env.CASE]();
+  const held = descriptors();
+  for (let round = 0; round < 40; round += 1) {
+    globalThis.gc();
+    await sleep(5);
+  }
+  if (kept !== undefined) fstatSync(kept);
+  console.log(JSON.stringify({ before, held, after: descriptors() }));
+})();
+`;
+
+for (const [what, expected] of [
+  ['unread', 'closed'],
+  ['read in part', 'closed'],
+  ['being written', 'closed'],
+  ['read to the end', 'kept'],
+] as const) {
+  test(expected === 'closed' ? `a stream dropped ${what} gives its descriptor back` : `a stream ${what} has no claim left on its descriptor's number`, async (t) => {
+    const dir = scratch(t);
+    const bytes = randomBytes(256 * 1024);
+    const temp = path.join(dir, 'tmp-upload');
+    writeFileSync(temp, bytes);
+    await new LocalFileStore(dir).put(sha256(bytes), temp);
+    const child = spawnSync(process.execPath, ['--expose-gc', '-e', DROPPING], {
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: { PATH: process.env.PATH, CASE: what, FILES_DIR: dir, NAME: sha256(bytes), FILE_STORE: path.join(__dirname, 'file-store.js') },
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const { before, held, after } = JSON.parse(child.stdout) as { before: number; held: number; after: number };
+    assert.equal(held, before + 1, 'the stream held one descriptor');
+    assert.equal(after, expected === 'closed' ? before : held);
+  });
+}
