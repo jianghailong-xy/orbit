@@ -51,7 +51,7 @@ own id. Symbolic links are not followed; they, empty files and anything else tha
 listed under "skipped". One file may be 25 MiB and a folder ` + strconv.Itoa(fileBundleMaxFiles) + ` files; a folder over either is
 refused whole.
 `,
-	"fetch": `orbit file fetch — download one of this session's files
+	"fetch": `orbit file fetch — download one of this session's files, or one evidence it judges cites
 
 Usage:
   orbit file fetch <id> [--json]
@@ -79,7 +79,8 @@ Options:
 
 Newest first, each with its id, sha256, sizeBytes and orbit-attachment: link. With none of the three
 it lists the session it runs in. A folder is one row of kind "bundle": fetch it for the files
-inside. This says what exists; fetch reads only this session's own files.
+inside. This says what exists; fetch reads this session's own files and those cited by evidence it
+judges.
 `,
 }
 

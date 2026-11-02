@@ -127,10 +127,11 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 // until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
 // orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
 // (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
-// because the tool call that printed it is already stored. ASCII like the rest.
+// because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
+// bytes into the evidence the way a commit would, and it is how whoever judges the work gets to read it. ASCII like the rest.
 const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
 	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
-	"directories and returns a link that also works in a reply.\n\n"
+	"directories and returns a link that also works in a reply, and an id to cite as a FILE check.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn

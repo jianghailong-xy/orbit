@@ -22,7 +22,7 @@
  *   (8) `file_list` takes exactly one of task, session and evidence version, refuses an id that names nothing rather
  *       than answering empty, shows a bundle as one row, and says when it stopped short;
  *   (9) a file is read as an attachment is, in the session that holds it: another session of the same owner is told it
- *       is not there, and another runner is refused the session.
+ *       is not there, and another runner is refused the session. Who else may read one is tasks/file-evidence.pg.spec.ts.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -406,8 +406,14 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     });
     const empty = await list(`?evidenceId=${b62(evidence.id)}`);
     assert.deepEqual({ status: empty.status, files: empty.json.files }, { status: 200, files: [] }, 'a version with no files');
-    await db.attachment.update({ where: { id: single.id }, data: { evidenceId: evidence.id } });
-    const cited = await list(`?evidenceId=${b62(evidence.id)}`);
+    const citing = await db.taskCompletionEvidence.create({
+      data: {
+        taskId: evidenceTaskId, ownerId, actorType: 'USER', actorId: ownerId, sourceSessionId: sessionId,
+        criterionRevision: 'a'.repeat(64), criterion: {}, evidenceDigest: 'c'.repeat(64), revision: 2n,
+        evidence: { claim: 'a', criterion: { key: 'k', text: 't' }, checks: [{ kind: 'FILE', ref: single.publicId, sha256: single.sha256 }], gaps: [] },
+      },
+    });
+    const cited = await list(`?evidenceId=${b62(citing.id)}`);
     assert.deepEqual(cited.json.files.map((file: { id: string }) => file.id), [single.publicId]);
 
     const crowded = await sessionOf('a crowded session');
@@ -427,7 +433,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     assert.equal(own.status, 200, own.text);
     assert.equal(own.json.id, file.publicId, 'this door speaks public ids');
     assert.equal(own.json.sha256, sha256(file.bytes));
-    assert.equal((await describe(otherSessionId, file.publicId)).status, 404, 'another session of the same owner, until T4');
+    assert.equal((await describe(otherSessionId, file.publicId)).status, 404, 'another session of the same owner');
     assert.equal((await describe(sessionId, randomUUID())).status, 404);
     assert.equal((await describe(sessionId, file.publicId, otherMachine.token)).status, 403, 'another runner');
     const stranger = await upload(api, door(sessionId), otherMachine.token);

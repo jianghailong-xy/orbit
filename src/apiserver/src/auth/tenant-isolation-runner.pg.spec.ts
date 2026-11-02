@@ -220,6 +220,9 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const sessionAttachmentId = await fileOf({ sessionId: machineSessionId });
     const uploadedFileId = await uploadOf(machineSessionId);
     const { id: evidenceRevisionId } = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId: of.evidenceTaskId }, select: { id: true } });
+    // Cited by that revision, so that the doors reading a session's files are also asked about a file evidence cites, the
+    // one thing that reaches beyond the session (FilesService.readableInSession).
+    await db.attachment.update({ where: { id: sessionAttachmentId }, data: { evidenceId: evidenceRevisionId } });
     const runningTaskId = await task('task the machine is running');
     const runningTaskSessionId = await open('session running a task', { status: 'RUNNING', taskId: runningTaskId });
     const allowedApprovalId = randomUUID();

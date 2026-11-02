@@ -27,7 +27,8 @@
  *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
  *       multer has written the whole file: it is answered 400 on every upload door, with no file and no row, while the
- *       same upload with a well-formed id is kept.
+ *       same upload with a well-formed id is kept;
+ *   (9) evidence citing an image reads its size off the head of whichever store holds it, leaving the rest unread.
  *
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
  */
@@ -54,6 +55,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { TasksService } from '../tasks/tasks.service';
 import { LocalFileStore, type FilesConfig, type S3FilesConfig } from './file-store';
 import { FilesService } from './files.service';
+import { IMAGE_HEADER_BYTES } from './image-size';
 import { S3FileStore, sigV4Authorization } from './s3-file-store';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -533,6 +535,44 @@ function storeCases(leg: Leg) {
         assert.deepEqual(tempFiles(), [], `${door}: nothing is left in the temporary directory`);
       }
       assert.ok((await stored(sha256(refused)))?.equals(refused), 'the store holds the bytes');
+    });
+
+    await t.test(`${leg.storage}: evidence citing an image reads its size off the head of the store's bytes`, async () => {
+      const standard = 'the image shows it';
+      const citingTask = randomUUID();
+      await db.task.create({
+        data: {
+          id: citingTask, title: 'cite an image', ownerId, creatorType: 'USER', creatorId: ownerId, status: 'IN_PROGRESS',
+          completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: standard,
+        },
+      });
+      const run = randomUUID();
+      await db.session.create({
+        data: {
+          id: run, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, taskId: citingTask,
+          startsTaskWork: true, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
+        },
+      });
+      const head = Buffer.alloc(24);
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(head);
+      head.writeUInt32BE(13, 8);
+      head.write('IHDR', 12, 'latin1');
+      head.writeUInt32BE(1280, 16);
+      head.writeUInt32BE(800, 20);
+      // Past what is read of it, so that the stream is left part way, which a bucket's connection has to survive.
+      const image = Buffer.concat([head, randomBytes(2 * IMAGE_HEADER_BYTES)]);
+      const file = idOf(await upload(server!, `/api/runner/sessions/${b62(run)}/files`, machine.token, image, 'large.png'), 'the upload');
+      const answer = await fetch(`http://127.0.0.1:${server!.port}/api/runner/tasks/${b62(citingTask)}/evidence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${machine.token}`, 'content-type': 'application/json', 'x-orbit-session-id': run },
+        body: JSON.stringify({
+          evidence: { claim: 'it does', criterion: { key: b62(citingTask), text: standard }, checks: [{ kind: 'FILE', ref: file }], gaps: [] },
+        }),
+      });
+      const receipt = await answer.json() as { evidence: { checks: unknown[] } };
+      assert.equal(answer.status, 201, JSON.stringify(receipt));
+      assert.deepEqual(receipt.evidence.checks, [{ kind: 'FILE', ref: b62(toUuid(file)), sha256: sha256(image), width: 1280, height: 800 }]);
+      assert.ok((await stored(sha256(image)))?.equals(image), 'and the store answers the whole of it after that');
     });
   };
 }
