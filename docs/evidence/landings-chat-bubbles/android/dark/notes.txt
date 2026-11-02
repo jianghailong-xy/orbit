@@ -1,0 +1,25 @@
+PASS the workspace
+PASS the project's row
+PASS the Landings row
+PASS the waiting card's head
+PASS the waiting card's doors
+PASS the checking card's budget
+PASS today's group
+PASS the bar's door
+a: chips=[Today, Now] titles=[Merged into main, T3 sudo hints name the binary's real path, Merged into main] cards=[T5 orbit doctor reports the runner's own binary, T6 upgrade keeps each account's service running] avatars=2 footer=Orbit runs these landings — nothing to type here. | Decisions: the coordinator
+captured a-window-at-its-bottom at 2026-11-02T01:02:51.847397Z
+PASS yesterday's groups
+b: chips=[Yesterday, Today] titles=[T1 install.sh: keep one orbit binary per account, Merged into main, T2 host setup refuses a binary it did not install, Merged into main, T4 install.sh under sudo writes the unit file once, Merged into main, T3 sudo hints name the binary's real path, Merged into main] details=[Landed, 3c1e9a0 · 1 task · automatically, Landed, b74d2f1 · 1 task · automatically, Landed, e05a8c3 · 1 task · automatically, Landed, 91fd6b2 · 1 task · automatically] times=[22:11, 22:13, 23:07, 23:09, 23:25, 23:29, 04:31, 04:31] avatars=4
+captured b-day-chips-and-groups at 2026-11-02T01:02:52.871522Z
+PASS T3's record
+c: panel=[Generation 1, 04:22, ≡, Task marked done · queued to land on project/install-sh, 04:22, ↻, Claimed by runner workstation-gpu · claim 1, 04:22, ↻, Merge check started · claim 1 · workstation-gpu, 04:30, ✓, Merge check passed · 8m 41s, Log ›, 04:31, ✓, Landed on project/install-sh · c58b2f4, Open task ›, Open source session ›]
+captured c-bubble-opened at 2026-11-02T01:02:53.894572Z
+PASS T3 folded
+PASS the bubble's menu
+d: menu=[Open task, Open source session, Open coordinator]
+captured d-bubble-long-press-menu at 2026-11-02T01:02:55.202907Z
+PASS the menu closed, the window still up
+PASS T2, open and outlined
+captured e-opened-on-a-landing-outlined at 2026-11-02T01:02:56.042745Z
+PASS the outline gone, T2 still open
+captured e2-after-the-outline at 2026-11-02T01:02:56.830025Z
