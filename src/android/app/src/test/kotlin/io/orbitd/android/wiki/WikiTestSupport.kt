@@ -48,7 +48,7 @@ internal object WikiPlanFixture {
     fun online(name: String) = spec(name)["runnerOnline"].bool()
     fun state(name: String) = state(spec(name))
     fun state(spec: JsonObject) = WikiPlanState("sp1", if (spec["confirmed"].text() == "v1") version("v1") else null,
-        if (spec["draft"].text() == "v2") version("v2") else null, if (spec["proposals"].bool() == true) proposals else emptyList(),
+        spec["draft"].text()?.let { version(it) }, if (spec["proposals"].bool() == true) proposals else emptyList(),
         spec["job"].text()?.let { WikiPlanJob.read(plan.fobj("jobs")[it]) })
     /** The state as `GET /api/wiki/spaces/:id/plan` answers it. */
     fun read(name: String): JsonObject {
@@ -56,7 +56,7 @@ internal object WikiPlanFixture {
         return buildJsonObject {
             put("spaceId", "sp1")
             put("confirmed", if (spec["confirmed"].text() == "v1") plan.fobj("versions").fobj("v1") else JsonNull)
-            put("draft", if (spec["draft"].text() == "v2") plan.fobj("versions").fobj("v2") else JsonNull)
+            put("draft", spec["draft"].text()?.let { plan.fobj("versions").fobj(it) } ?: JsonNull)
             put("proposals", if (spec["proposals"].bool() == true) plan.farr("proposals") else JsonArray(emptyList()))
             put("job", spec["job"].text()?.let { plan.fobj("jobs").fobj(it) } ?: JsonNull)
         }

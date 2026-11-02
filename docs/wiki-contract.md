@@ -1434,7 +1434,7 @@ runner-go 的 `wiki_plan.go` 与 `orbit wiki plan draft / revise / check` 在 P1
 - **已确认的版本不再改动**：篇和节只插入；起草、编辑、接受建议都产生新版本，在 space 行的锁（`FOR NO KEY UPDATE`）下一个事务写完。
   一个版本唯一会被更新的是它自己那一行 `wiki_plan` 的状态（被确认、被取代）。所以 owner 确认的那一版，就是文档据以写的那一版，一字不差。
 - 草稿和编辑都要写明它建在哪一版上（`baseVersion`，首个草稿为 null），而且必须是当前最新的未取代版本（有草稿就是草稿，否则是已确认版）；
-  否则 `WIKI_PLAN_STALE`（409），什么都不写——同一份草稿带着存下它的幂等键再落一次除外（见 21.6）。接受建议建在它找到的最新版本上，
+  否则 `WIKI_PLAN_STALE`（409），什么都不写——同一份草稿带着存下它的幂等键再落一次除外（见 21.6），作业重放时走回的前几轮也除外：它们按它自己存下的草稿修订过的版本过闸。接受建议建在它找到的最新版本上，
   写入期间 plan 变了也同样 409。
 
 ### 21.2 plan 的形状（`plan.schema`）
@@ -1459,7 +1459,7 @@ runner-go 的 `wiki_plan.go` 与 `orbit wiki plan draft / revise / check` 在 P1
 | check | 查什么 |
 |---|---|
 | `schema` | 每个字段都在 schema 里（或已声明为需新增），类型对、长度在 `rules` 内；节的类别在闭集里；大类 key、文档 slug、同篇的节 key 不重复 |
-| `docCount` | 篇数在目标范围内：请求没写 `target` 时是 `rules.docsMin`–`rules.docsMax`（20–35），写了就按它（上限 `docsCeiling` 200） |
+| `docCount` | 一个 plan 至多 `docsCeiling`（200）篇。目标范围（请求没写 `target` 时是 `rules.docsMin`–`rules.docsMax`，20–35，写了就按它）是起草作业的要求，owner 可以把范围外的草稿确认下来；对版本的改动（修改建议）不能让它比原来更远 |
 | `protected` | 被修订版本里受保护的篇，在新版本里原样保留：slug、大类、字段、各节及其顺序都不变（节的 key 不算）；只有 owner 能把一篇设为受保护，草稿或建议自己设的拒。owner 自己的编辑不查这一项 |
 | `references` | 会话条件里的项目是 owner 的（按 id，或只有一个项目叫这个名字的完整标题）、主题是本 space 的、条目 kind 在闭集里；文档的大类是本 plan 的大类；`scopeOut` 指向的篇是本 plan 的篇；建议的事实是本 space 的条目或 owner 的会话 |
 
@@ -1467,6 +1467,10 @@ runner-go 的 `wiki_plan.go` 与 `orbit wiki plan draft / revise / check` 在 P1
   （草稿是 `plan.docs[3].sections[2].sources.sessions.projects[0]`，编辑是 `doc.…` / `section.…`，建议是 `change.doc.…`）；编辑和建议
   会让整个 plan 变成什么样，关于那份结果的错误按结果 plan 的位置写（`plan.docs[20].protected`）。最多列 `rules.errorsMax`（200）条，
   消息里写总数。什么都不存，起草作业把清单交回模型重做。
+- **错误只给写它的人**（`plan.gate.author`，owner 2026-11-02）：草稿的作者是模型，闸的错误交回模型，owner 不读它们；owner 自己的编辑不过闸，错误才回给 owner。
+  存下来的版本一定满足 schema，能确认、能生成：起草作业最后一轮还剩的错误由作业自己收口（21.10），不让整份草稿作废。起因：2026-11-02 的两份草稿，
+  一份 953 处引用有 4 处读错（行格式的缺口），一份 1,099 处引用全部找到、9 个大类 key 和 31 篇 slug 带着模板标签，都是流水线的缺陷，
+  却都以红色的「没过检查」页面交给 owner，而 owner 唯一的门 Redraft 重跑的是同一条流水线。
 - **拒绝主题时列出本 space 的主题**（2026-10-10）：会话条件里的主题不是本 space 的，报错是 `"<主题>" is not a topic of this space: `
   后面接本 space 的主题简表，写法和起草作业的材料一样（`wikiPlanTopicsBrief`）：`Existing topics (slug «name» · active entries): wiki «Wiki» · 3; …`，
   按创建先后；space 还没有主题时是「(this space has no topics yet: a session condition names no topic)」。重试的一轮由此知道能写哪些。起因：canary 上维护作业的
@@ -1482,8 +1486,11 @@ runner-go 的 `wiki_plan.go` 与 `orbit wiki plan draft / revise / check` 在 P1
   取服务端的闸和 runner 的闸两边修剪集合的并集，任一边接受的值这里都读）。plan 作业自己的闸（21.10）和维护运行对修改建议的检查，读法和写法都一样。
 - **仓库引用不在服务端的闸里查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 做出的那份 space 快照上、按某个
   提交核对（`plan.jobs.server.repository`），随草稿报 `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection /
-  symbol / contract）；服务端原样存在版本上（`repo_sha`、`repo_check`），不评判。owner 做出的版本没有核对过，这两项为空。
-- 过了闸的版本存检查闸报告：`{ checkedAt, checks（各项 passed；owner 编辑时 protected 为 skipped）, docs, target, needsNewFields }`。
+  symbol / contract）；服务端原样存在版本上（`repo_sha`、`repo_check`），不评判。owner 的编辑和接受的建议不再核对，带着所改版本的结果走（`plan.gate.repo`）：
+  `sha` 不变，`missing` 的每一条跟着它的引用换位置，引用没了它也没了，`checked` 随引用增减。所改版本没有核对过的，这两项为空。
+- 过了闸的版本存检查闸报告：`{ checkedAt, checks（各项 passed；owner 编辑时 protected 为 skipped）, docs, target, needsNewFields, notes? }`。
+  `notes`（`plan.gate.notes`，至多 `rules.notesMax` 50 条）是起草作业收口时留给 owner 的话：`[{ check, text }]`，`text` 是服务端写好的英文句子，客户端照画在
+  它那一项下面。没有就不写这个字段。owner 的编辑和接受的建议照带。找不到的引用和目标外的篇数不进 `notes`：客户端从 `repoCheck.missing` 和 `docs`、`target` 读出来。
 
 ### 21.4 修改建议（`plan.proposals`）
 
@@ -1540,7 +1547,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   `EXECUTABLE` 是 `orbit wiki plan check`（契约原来的 `plan.jobs.task`），P11 随维护会话删除。
 - **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，或会话提议时隐式建的 space）；
   `owner`——owner 在 plan 页要求（`POST /api/wiki/spaces/:id/plan/redraft`，只认 JWT，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
-  body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草），或者确认一个版本
+  body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草。客户端有两个门：有版本时 Redraft… 必须写字，它读那个版本；
+  不读版本的重新起草走 ⋯ 里的 Start over…，确认后发不带 `instructions` 的请求；没有版本时 Redraft… 可以不写字。上一个作业没留下草稿时，输入框带着它的 `instructions`），或者确认一个版本
   （`POST /api/wiki/spaces/:id/plan/versions/:version/confirm`，要的是按它生成文档：`build`），或者对在册版本再要一次生成
   （`POST …/plan/versions/:version/build`，21.11）。`support`——管理员为支持再要一次（`POST /api/admin/wiki/spaces/:id/plan/build`，
   21.11，迁移 0429）。
@@ -1561,8 +1569,9 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **作业状态**（`GET …/plan` 的 `job`，先取没结束的，否则取最后结束的，从没有过就是 null）：`queued`（记下了、还没建出：要求一来就建，所以
   只在没建成时停在这里，owner 的下一次要求或改设置再问）、`held`（附 `held: { reason, at }`）、`running`（它的 wiki_job 已建出——在 worker 里
   排队、在跑或在等——带当前第几轮 `attempt` / `attemptsMax`、`startedAt`；生成作业另带 `progress: { docs: { done, total }, current: { slug, title } | null }`，
-  plan 页的「Writing documents」读它）、`succeeded`（存下的 `version`；生成作业是它写的已确认版本）、`failed`（最后一轮检查闸的 `errors`、`error`、
-  运行报告 `report`，以及它最后那份草稿 `draft`，照送进检查闸时的样子；或它的 wiki_job 在说明怎么结束之前就结束了）。作业种类
+  plan 页的「Writing documents」读它）、`succeeded`（存下的 `version`；生成作业是它写的已确认版本）、`failed`（拿不出草稿：`error` 是给 owner 读的一句话，见 `plan.jobs.noDraft`，
+  加运行报告 `report`；或它的 wiki_job 在说明怎么结束之前就结束了）。2026-11-02 之前结束的作业还带最后一轮的 `errors` 和最后那份 `draft`，`error` 读作 It didn’t pass the plan check.，
+  已发布的客户端照旧读它们。作业种类
   `draft | revise | build`。读里的 `waitingFor`、`taskId`、`provider`、`sessionId` 是 runner 路径的：服务端跑的作业都是 null，服务端执行之前
   由任务建出的作业保留它的 `taskId` 与 `sessionId`。2026-10-19 起客户端不再读 `waitingFor`、`taskId`、`provider`；保留了会话的作业，
   它的 View run 打开那次会话。
@@ -1586,11 +1595,11 @@ P11（2026-10-19）删除了这三条命令（契约原来的 `plan.jobs.cli`）
   与每节材料来源 → 规则草案。401 让整个队列停下（§25.6）。P11 之前每步是 runner 上一次干净的 Claude Code 调本地模型。
 - **检查闸**：先过作业自己的闸——字段与格式、篇数、受保护的篇、引用（文件、docs 章节、符号、契约在快照那个 sha 上都存在；项目、主题
   存在；正文里「→ x.y」「see x.y」指向本 plan 的篇，中文写成的旧版本里的「见 x.y」也照认）、修订时移出的节只能是约定类（`conventions`）——再交服务端的闸（21.3）。
-  任一道不过，就把逐条错误交回模型、只重做出错的单元，最多 `rules.attemptsMax`（3）轮；仍不过，plan 作业以失败结束、带最后一轮的错误。
+  任一道不过，就把逐条错误交回模型、只重做出错的单元，最多 `rules.attemptsMax`（3）轮；第 3 轮还剩的错误由作业收口（21.10），草稿照样存下。
 - **修订**：模型先出新目录（每篇写明由上一版哪些篇组成，以及移到给 agent 的大类的节），只重写合并或新增的篇；只由上一版一篇组成的，
   沿用它的大纲、去掉移出的节。受保护的篇原样带过去。交给模型的上一版的篇（以及重做时交回的那一篇），会话条件里的项目写标题，和起草
   提示里一样，不写要模型照抄的 id；只有标题和别的项目重名、或者材料里的项目清单可能被截断时，才保留 id。
-- **结束**：plan 作业以草稿成为的版本、或最后一轮的错误结束（`plan.jobs.finish`、`plan.jobs.server.finish`）。P11 之前是
+- **结束**：plan 作业以草稿成为的版本结束；拿不出草稿才以失败结束（`plan.jobs.noDraft`、`plan.jobs.finish`、`plan.jobs.server.finish`）。P11 之前是
   `POST …/plan/job/finish`，再由验收命令 `orbit wiki plan check` 读作业：结束且成功、版本还在，才退出 0。
 - **门的瞬时故障**：P11 起没有这回事——作业在进程里提交草稿（带草稿的幂等键，21.6），平台的失败按 infra 重试、重放问同样的问题（21.10）。
   P11 之前 runner 经 `Transport.doWiki` 重发读、`progress`、`finish` 和草稿（`wikiRecordsOnce`）。
@@ -1643,11 +1652,24 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
 - **检查闸**：先过作业自己的闸——21.8 的本地检查，错误文案逐字相同，文件、docs 章节、符号、契约都在快照上查——再过服务端的闸（21.3）：
   作业在进程内提交（`WikiPlans.submitServerDraft`），带草稿的幂等键，`repoCheck` 是快照的 sha 和作业的闸查到的结果，所以服务端的闸
   现在也查得了仓库。两道闸查出的错误，连同可用的章节标题和符号，按单元交回模型重做，一共至多 `rules.attemptsMax`（3）轮。
+- **key 和 slug 由代码定形**（`plan.jobs.server.names`）：大类 key 和文档 slug 是标识，不是模型的话，写法不算草稿的错，不占轮次。采用目录时（`wikiPlanAdoptCatalogue`）
+  先去掉模板标签（`<slug: storage>` 读作 storage），再写成小写字母和数字、单连字符相连，至多 64 字符（`wikiPlanIdentifier`）；什么都不剩的，大类用序号 `c<n>`，文档用标题，
+  标题也不剩就用标题摘要 `doc-<8 位十六进制>`，所以同一个回答下一轮还是同一个名字，已写的内容不丢；重复的接 `-2`、`-3`。改了多少记进运行日志：模型总要人改，是提示词该看了。
+- **收口**（`plan.jobs.server.settle`，`wikiPlanSettle`）：第 3 轮还剩错误时，作业把这一轮的草稿做成能存的样子，不替 owner 做决定：
+  - 仓库引用（文件、docs 章节、符号、契约）留在节上，照受保护的篇的做法记进 `repoCheck.missing`，页面标出来；生成时按当时的提交再找一次，仍找不到就跳过这条来源（22.11）；
+  - 不能入库的值去掉，其余保留：不是本账号的项目、不是本 space 的主题、不存在的条目 kind 从会话条件里去掉，记一条 note；不在闭集里的节类型改成 `other`，记一条 note；服务端的闸在最后一轮报的同样处理，再交一次；
+  - 目标外的篇数照存，由 owner 决定确认还是 Redraft；没有给 agent 的大类，记一条 note；
+  - 受保护的篇由代码按原样带回，连同它的大类和它的 `scopeOut` 指向的篇；不能成立的移动撤销，节留在原处，记 note；
+  - 始终没写出大纲的篇不进草稿，记 note；
+  - 其余字段放回 `rules` 之内：文字截断，必填的文字用目录卡片的内容或默认值补，长度从各节长度算；指向不存在的篇的「see x.y」留在文字里，`scopeOut` 只留下本 plan 的篇。
+  不设质量下限：找不到多少引用都照存，数字摆给 owner 看。一节的来源全部找不到时，生成照样动笔，写出来的句子没有出处，由 Needs review 标出来。
+- **拿不出草稿才算失败**（`plan.jobs.noDraft`，`WIKI_PLAN_NO_DRAFT`）：目录读不出来、一篇都没写成、平台到了重试上限、plan 在作业期间被改了、以及收口之后服务端的闸仍然拒绝（这是缺陷）。
+  `error` 只是一句给 owner 读的话，字段路径和模型的话一律不进去，细节在运行日志和 `wiki_job` 上。Redraft 是 owner 的下一步。
 - **作者**：存下的版本记跑出它的 `wiki_job`（`wiki_plan.author_job_id`，读出来是 `authorJobId`），服务端执行之前会话起草的版本记会话；来源 `maintenance`，
   模型名是 System model 的。
 - **进度与结束**：plan 作业照 21.7 记进度——第一次运行记 `started_at`，每轮记 `attempt`，plan 页读的就是这些；`wiki_job` 自己的进度是
   `{ planJobId, attempt, step }`。运行照 21.7 的规则结束 plan 作业（`WikiPlans.finishServerJob`）：成功时带上这个作业存下的本 space 的版本，
-  失败时带最后一轮的错误、出错原因、报告和最后那份草稿；`wiki_job` 以 `{ kind, planJobId, outcome, version, error, plan }` 结束。平台的
+  失败时带一句给 owner 读的原因（`plan.jobs.noDraft`）和报告，细节写进运行日志；`wiki_job` 以 `{ kind, planJobId, outcome, version, error, plan }` 结束。平台的
   失败——请求等待超限、space 的 runner 不在——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running；worker 停机也不算，
   `wiki_job` 交还、不计次（24.3），plan 作业同样保持 running。`wiki_job`
   结束了而 plan 作业没结束的，留到 space 下一次要作业时记为失败（21.7「不重复」），到了重试上限就和 `wiki_job` 一起结束（24.4）。

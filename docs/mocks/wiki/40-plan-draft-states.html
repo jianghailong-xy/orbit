@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>40 plan draft states</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="wiki-desktop.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<link rel="stylesheet" href="wiki-p3.css">
+<style>
+  /* The one new look: a stored draft with things to look at. Same tokens as the Held card. */
+  .pl-check.note { border-color: var(--warning-border); }
+  .pl-check.note > .h { background: var(--warning-bg); border-bottom-color: var(--warning-border); }
+  .pl-check.note > .h .ic, .pl-check.note > .h b { color: var(--warning); }
+  .pl-ck.is-note > .ic { color: var(--warning); }
+  .pl-doc .notn { display: inline-flex; align-items: center; gap: 4px; color: var(--warning); font-weight: 600; }
+  .pl-doc .notn .ic { font-size: 12px; }
+  .pl-src .r .ok { color: var(--success); }
+  .pl-src .r .miss { color: var(--warning); font-weight: 600; white-space: nowrap; }
+  .pl-errs .pl-err .why { color: var(--text-3) !important; }
+  .pl-check > .h b { white-space: nowrap; }
+  .pl-sec > .src { border: 0 !important; padding: 0 !important; background: none !important; box-shadow: none !important; height: auto !important; border-radius: 0 !important; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 880px) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  .m-card .pl-titlerow .t-title { font-size: 24px; }
+  .m-card .pl-check { margin-top: 12px; }
+  .reasons { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .reasons td { padding: 6px 8px; border-top: 1px solid var(--border-subtle); vertical-align: top; color: var(--text-1); }
+  .reasons tr:first-child td { border-top: 0; }
+  .reasons td:first-child { color: var(--text-3); white-space: nowrap; font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+  .ban { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: var(--warning-bg); border: 1px solid var(--warning-border); font-size: 13px; color: var(--text-1); }
+  .ban .ic { color: var(--warning); }
+  .ban a { margin-left: auto; color: var(--brand); }
+</style>
+<script>
+  addEventListener('load', () => setTimeout(() => {
+    for (const f of window.__afterLoad || []) f();
+    const h = Math.ceil(document.querySelector('.m-sheet').getBoundingClientRect().height);
+    document.title = document.title + ' · H=' + h;
+  }, 60));
+</script>
+</head>
+<body class="m">
+<script src="wiki-desktop-icons.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<div class="m-sheet wide p2">
+<h1 class="m-h1 zh">40 · plan 草稿的结果（web 桌面）：一份能审的草稿，或者没起草出来</h1>
+<p class="m-sub zh">接图 21、22，取代 ① 的红色报告和 ⑨ 的“没过闸”状态。三端同一套状态和文案。样例是 Orbit 自己的 plan，数字是示意。</p>
+
+<div class="m-stage">
+  <div class="grid2">
+    <div>
+      <div class="m-stage-l zh"><span class="m-k new">改</span>① 带要看的项的草稿：它是一份真版本，Confirm、Edit、Redraft 都能用</div>
+      <article class="pl-page" style="padding:6px 18px 10px">
+        <div class="wk-crumb"><span style="color:var(--brand)">Wiki</span><svg class="ic "><use href="#i-right"/></svg><span>Plan</span></div>
+        <div class="pl-titlerow"><h1 class="t-title">Plan</h1><span class="pl-ver">v1 <span class="tdp-badge tone-muted">Draft</span><svg class="ic "><use href="#i-down"/></svg></span><span class="grow"></span><span class="wk-btn primary">Confirm plan</span><span class="wk-btn"><svg class="ic "><use href="#i-redo"/></svg>Redraft…</span></div>
+        <div class="pl-meta"><span>First draft · at your request</span><span class="sep">·</span><span>qwen3.8-27b-fp8 · Nov 2, 12:05</span><span class="sep">·</span><span>9 categories · 31 documents · 234 sections</span></div>
+
+        <div class="m-mark" style="margin-top:16px"><span class="m-n">1</span><section class="pl-check note" style="margin-top:0">
+          <div class="h"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><b>Ready for review</b><span class="sub">4 to look at · references checked at <code>99cd3c4</code></span><span class="r">attempt 3</span></div>
+          <div class="pl-ck is-ok"><svg class="ic "><use href="#i-check-circle-f3"/></svg><span class="n">Documents</span><span class="r">31 documents — within 20–35</span></div>
+          <div class="pl-ck is-ok"><svg class="ic "><use href="#i-check-circle-f3"/></svg><span class="n">Protected documents</span><span class="r">No document is protected</span></div>
+          <div class="pl-ck is-note"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><span class="n">References</span><span class="r">1,095 of 1,099 found at <code>99cd3c4</code> — the rest stay on their sections, and a document is written without any that’s still missing</span>
+            <div class="pl-errs"><div class="by"><span><b>3</b> doc sections</span> · <span><b>1</b> symbol</span></div>
+              <div class="pl-err"><span class="at">5.2 §3</span><span class="k">Doc section</span><span class="m"><code>docs/wiki-contract.md § 21.12 Plan repair</code> <span class="why">— no such heading</span></span></div>
+              <div class="pl-err"><span class="at">5.2 §6</span><span class="k">Doc section</span><span class="m"><code>docs/wiki-design.md § Gate rounds</code> <span class="why">— no such heading</span></span></div>
+              <div class="pl-err"><span class="at">3.4 §4</span><span class="k">Symbol</span><span class="m"><code>wikiPlanRetry</code> in <code>src/apiserver/src/wiki/wiki-plan.ts</code> <span class="why">— not in the file</span></span></div>
+              <div class="pl-err"><span class="at">7.1 §2</span><span class="k">Doc section</span><span class="m"><code>docs/architecture.md § Realtime</code> <span class="why">— no such heading</span></span></div>
+            </div>
+          </div>
+          <div class="pl-ck is-ok"><svg class="ic "><use href="#i-check-circle-f3"/></svg><span class="n">Fields</span><span class="r">Every field is one the plan has</span></div>
+        </section></div>
+
+        <div class="pl-cat"><div class="pl-cat-h"><span class="no">5</span><b>Landing and promotion</b><span class="q">How a branch reaches main, and who decides</span><span class="c">3 documents</span></div>
+          <div class="pl-doc"><span class="caret"><svg class="ic caret"><use href="#i-right"/></svg></span><span class="no">5.1</span><div class="main"><div class="t"><span class="tt">The project line and landing</span></div><div class="q">How does finished work get from a task's branch onto the project line?</div></div><span class="meta"><span>7 sections · 3,000–4,500 chars</span></span></div>
+          <div class="pl-doc open m-mark"><span class="m-n">2</span><span class="caret"><svg class="ic caret"><use href="#i-down"/></svg></span><span class="no">5.2</span><div class="main"><div class="t"><span class="tt">Plan checks and redrafts</span></div><div class="q">What happens to a draft between the model and the owner?</div></div><span class="meta"><span class="notn"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg>2 not found</span><span>8 sections · 3,500–5,000 chars</span><span class="wk-btn sm"><svg class="ic "><use href="#i-edit"/></svg>Edit</span></span>
+            <div class="pl-body"><div class="pl-secs"><div class="h">Sections <span class="c">8 · each with where its material comes from</span></div>
+              <div class="pl-sec"><span class="n">2</span><span class="t">What the gate checks<span class="cov">The four checks, and what each is held to.</span></span><span class="ty">Concepts</span><span class="len">~600 chars</span><span class="src">2 doc sections · 1 code file</span></div>
+              <div class="pl-sec open"><span class="n">3</span><span class="t">How a draft is repaired<span class="cov">What goes back to the model, a round at a time.</span></span><span class="ty">Flow</span><span class="len">~800 chars</span><span class="src">2 doc sections · 1 code file</span>
+                <div class="pl-src"><div class="g">Design docs</div>
+                  <div class="r"><span class="p"><code>docs/wiki-contract.md</code> § 21.8 How the draft job runs</span><span class="ok">✓ found</span></div>
+                  <div class="r"><span class="p"><code>docs/wiki-contract.md</code> § 21.12 Plan repair</span><span class="miss">✕ not found at 99cd3c4</span></div>
+                  <div class="g">Code</div>
+                  <div class="r"><span class="p"><code>src/apiserver/src/wiki-worker/wiki-plan-gate.ts</code> <span class="sym">· wikiPlanAssemble()</span></span><span class="ok">✓ found</span></div>
+                </div>
+              </div>
+            </div></div>
+          </div>
+          <div class="pl-doc"><span class="caret"><svg class="ic caret"><use href="#i-right"/></svg></span><span class="no">5.3</span><div class="main"><div class="t"><span class="tt">When a project is done</span></div><div class="q">What decides that a project is finished?</div></div><span class="meta"><span>6 sections · 2,500–4,000 chars</span></span></div>
+        </div>
+      </article>
+    </div>
+
+    <div class="stack">
+      <div><div class="m-cap">② 全过的草稿 <small>· 不变</small></div><section class="pl-check pass solo"><div class="h"><svg class="ic "><use href="#i-check-circle-f3"/></svg><b>Passed the plan check</b><span class="sub">4 checks · references checked at <code>99cd3c4</code></span><span class="r">attempt 2</span></div></section></div>
+
+      <div><div class="m-cap">③ 篇数在目标外 <small>· 不再挡确认：你说 38 篇可以，就是可以</small></div>
+        <section class="pl-check note"><div class="h"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><b>Ready for review</b><span class="sub">1 to look at</span></div>
+          <div class="pl-ck is-note"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><span class="n">Documents</span><span class="r">38 documents — the plan asks for 20–35. Confirm it as it is, or Redraft with what to merge or split.</span></div></section></div>
+
+      <div><div class="m-cap">④ 模型漏了东西 <small>· 文案由服务端写好，三端照着画</small></div>
+        <section class="pl-check note"><div class="h"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><b>Ready for review</b><span class="sub">2 to look at</span></div>
+          <div class="pl-ck is-note"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><span class="n">Documents</span><span class="r">Search ranking was left out: nothing was written for it.</span></div>
+          <div class="pl-ck is-note"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg><span class="n">Fields</span><span class="r">No category for the agents’ conventions. Redraft to add one.</span></div></section></div>
+
+      <div><div class="m-cap">⑤ 第一份就没起草出来 <small>· 没有版本，也就没有假的 v1；Redraft 留在原位</small></div>
+        <div class="m-card"><div class="wk-crumb"><span style="color:var(--brand)">Wiki</span><svg class="ic "><use href="#i-right"/></svg><span>Plan</span></div><div class="pl-titlerow"><h1 class="t-title">Plan</h1><span class="grow"></span><span class="wk-btn"><svg class="ic "><use href="#i-redo"/></svg>Redraft…</span></div><div class="pl-meta"><span>First draft · you asked Nov 2, 11:40</span></div>
+          <section class="pl-check fail solo"><div class="h"><svg class="ic "><use href="#i-close-circle-f3"/></svg><b>The draft didn’t finish</b><span class="sub">The model’s catalogue couldn’t be read. Nothing was saved.</span></div></section></div></div>
+
+      <div><div class="m-cap">⑥ 有草稿时 Redraft 失败 <small>· 原来的草稿不受影响，页面继续显示它</small></div>
+        <section class="pl-check fail solo"><div class="h"><svg class="ic "><use href="#i-close-circle-f3"/></svg><b>The redraft didn’t finish</b><span class="sub">The plan changed while it was being written. Draft v2 is unchanged.</span></div></section></div>
+
+      <div><div class="m-cap">⑦ 失败原因 <small>· 每种一句话，不显示字段路径</small></div>
+        <div class="m-card" style="padding:6px 8px"><table class="reasons">
+          <tr><td>目录读不出</td><td>The model’s catalogue couldn’t be read.</td></tr>
+          <tr><td>一篇都没写成</td><td>The model didn’t write any document.</td></tr>
+          <tr><td>到了重试上限</td><td>The repository or the model couldn’t be reached.</td></tr>
+          <tr><td>plan 中途被改</td><td>The plan changed while it was being written.</td></tr>
+          <tr><td>预料外的错</td><td>Something went wrong on Orbit’s side.</td></tr>
+        </table></div></div>
+
+      <div><div class="m-cap">⑧ 首页和 Activity <small>· 只有没起草出来才算要处理的问题</small></div>
+        <div class="ban"><svg class="ic "><use href="#i-exclamation-circle-f"/></svg>Plan draft didn’t finish<a>Open plan</a></div></div>
+    </div>
+  </div>
+
+  <ol class="m-notes p2 two zh">
+    <li><span class="m-n">1</span><span><b>报告保留四行</b>：结构和图 21 ② 一样，只是红换成琥珀，标题换成 Ready for review。找不到的引用还是逐条列出，点一行跳到那一篇。</span></li>
+    <li><span class="m-n">2</span><span><b>引用留在节上</b>：标 ✕，不删。生成时按当时的提交再找一次，仍找不到就跳过这条来源。Edit 抽屉改不了来源：不想要这条引用，就删掉那一节，或者 Redraft。</span></li>
+    <li><span class="m-n">3</span><span><b>Confirm 永远可按</b>：不加二次确认，要看的项就在按钮下面。不设质量下限，数字摆给你看，由你决定。</span></li>
+    <li><span class="m-n">4</span><span><b>两个门</b>：有版本时 Redraft… 必须写字，从这份草稿修订，没动的篇直接沿用；要从头起草走 ⋯ 里的 Start over…，确认后才发。没有版本时 Redraft… 可以不写字。Edit 之后，要看的项跟着带到新版本。</span></li>
+    <li><span class="m-n">5</span><span><b>文案改动</b>：删掉 Didn’t pass the plan check、Confirm needs a passing check、版本下拉里 didn’t pass the check 那一行；Redraft 弹窗去掉 “redrafted with its errors, up to 3 times” 这句。</span></li>
+    <li><span class="m-n">6</span><span><b>旧客户端</b>：已发布的 iOS、Android、macOS 看到的是普通草稿，能确认。它们不认识要看的项，检查报告仍显示全过，升级后才准确。</span></li>
+  </ol>
+</div>
+</div>
+</body>
+</html>

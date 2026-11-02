@@ -26,6 +26,7 @@ import { WikiContentsButton } from './WikiDirectory';
 import { WikiDocRow } from './WikiDocList';
 import { WikiSourceCard } from './WikiSources';
 import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
 import { Input } from './ui/Input';
@@ -98,6 +99,9 @@ import {
   WIKI_PLAN_REFS_SHOWN_PHONE,
   WIKI_PLAN_REJECT,
   WIKI_PLAN_SAVE_DRAFT,
+  WIKI_PLAN_START_OVER,
+  WIKI_PLAN_START_OVER_GO,
+  WIKI_PLAN_START_OVER_TITLE,
   WIKI_PLAN_SECTIONS,
   WIKI_PLAN_SESSION_ANCHORS,
   WIKI_PLAN_SESSION_EVIDENCE,
@@ -133,10 +137,10 @@ import {
   wikiPlanConfirmed,
   wikiPlanDefault,
   wikiPlanDiff,
-  wikiPlanDocErrors,
   wikiPlanDocForm,
   wikiPlanDocEdit,
   wikiPlanDocLine,
+  wikiPlanDocMissing,
   wikiPlanDocPath,
   wikiPlanDraftSaved,
   wikiPlanDrawsOn,
@@ -144,26 +148,21 @@ import {
   wikiPlanEditHead,
   wikiPlanEditSection,
   wikiPlanEditTitle,
-  wikiPlanErrorCount,
-  wikiPlanFailedHint,
   wikiPlanFailedJob,
-  wikiPlanFromFailedJob,
   wikiPlanFromVersion,
   wikiPlanGate,
   wikiPlanJobCard,
   wikiPlanJobHead,
-  wikiPlanLostLabel,
-  wikiPlanLostSections,
   wikiPlanMeta,
-  wikiPlanMovedTo,
   wikiPlanNewest,
   wikiPlanNextVersion,
+  wikiPlanNotFoundCount,
   wikiPlanOpenJob,
   wikiPlanPath,
   wikiPlanProtectedKept,
-  wikiPlanProtectedMove,
-  wikiPlanProtectedMovePhone,
   wikiPlanRedraftNote,
+  wikiPlanRedraftReady,
+  wikiPlanRedraftWords,
   wikiPlanSaveNote,
   wikiPlanSectionChars,
   wikiPlanSectionEditBody,
@@ -173,6 +172,8 @@ import {
   wikiPlanSectionsHint,
   wikiPlanSourceFound,
   wikiPlanSourceLines,
+  wikiPlanStartOver,
+  wikiPlanStartOverText,
   wikiPlanSourcesSummary,
   wikiPlanTime,
   wikiPlanUpdateAsked,
@@ -207,17 +208,17 @@ import { useToast } from '../lib/toast';
  *
  * TOP TO BOTTOM, THE PHONE'S ORDER (`WIKI_PLAN_PAGE_SECTIONS`, held by `WikiPlanCopyParityTests`): the
  * crumb; the title with the version shown; where that version came from; Redraft…, Confirm plan and ···;
- * a failed draft's hint; the job's card — queued, drafting, held, failed, or the documents being
- * written; the gate's report; the changes a maintenance run proposed; the categories and documents.
+ * the job's card — queued, drafting, held, failed, or the documents being written; the gate's report;
+ * the changes a maintenance run proposed; the categories and documents.
  * On a desktop the actions stand in the title's row (a grid, the same DOM), and a document opens where
  * it is; on a phone a document, and then a section, is a page of its own.
  *
  * THE OWNER'S DOOR ONLY. Every write here is the JWT door's (`lib/wikiWrites.ts`): the server refuses a
  * request with a session header, and there is no MCP tool that confirms or accepts anything.
  *
- * WHAT THE PAGE SHOWS FIRST: a draft a job last failed with — the server stores nothing the gate refused,
- * so it is the job's own copy, numbered as the version it would have been, with Confirm plan off — then
- * a draft waiting, then the version in force. `?v=` shows any other.
+ * WHAT THE PAGE SHOWS FIRST: a draft waiting, then the version in force. `?v=` shows any other. A stored
+ * draft can always be confirmed: its report says what to look at, and stands in nothing's way. A job that left
+ * no draft is one line on its card, over whatever version stands, and Redraft.
  */
 
 /** What the page reads: the plan, the version asked for, and the facts its job and head are said with. */
@@ -234,33 +235,27 @@ function usePlanPage(spaceId: string) {
   const health = useQuery(wikiHealthQuery(spaceId));
   const plan = state.data;
   const failed = plan ? wikiPlanFailedJob(plan) : null;
-  const failedNumber = plan && failed ? wikiPlanNextVersion(plan) : null;
-  const stored = plan && asked !== null && asked !== failedNumber && asked !== plan.draft?.version && asked !== plan.confirmed?.version ? asked : null;
+  const stored = plan && asked !== null && asked !== plan.draft?.version && asked !== plan.confirmed?.version ? asked : null;
   const other = useQuery(wikiPlanVersionQuery(spaceId, stored));
 
   const shown = useMemo((): WikiPlanShown | null => {
     if (!plan) return null;
     if (asked === null) return wikiPlanDefault(plan);
-    if (failed && asked === failedNumber) return wikiPlanFromFailedJob(failed, asked, wikiPlanNewest(plan)?.version ?? null);
     if (plan.draft?.version === asked) return wikiPlanFromVersion(plan.draft);
     if (plan.confirmed?.version === asked) return wikiPlanFromVersion(plan.confirmed);
     return other.data ? wikiPlanFromVersion(other.data) : null;
-  }, [plan, asked, failed, failedNumber, other.data]);
+  }, [plan, asked, other.data]);
 
   // What the shown version is held against: the version it revised, for the protection check and Compare.
   const base = useMemo((): WikiPlanShown | null => {
     if (!plan || !shown) return null;
-    if (shown.status === 'failed') {
-      const newest = wikiPlanNewest(plan);
-      return newest ? wikiPlanFromVersion(newest) : null;
-    }
     if (shown.status === 'draft' && plan.confirmed) return wikiPlanFromVersion(plan.confirmed);
     return null;
   }, [plan, shown]);
 
   const docs = directory.data?.plan ? directory.data.docs : null;
   const serverExecutes = health.data?.executor?.serverExecutes === true;
-  return { asked, state, plan, versions, directory, docs, space, maintenance, serverExecutes, failed, failedNumber, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
+  return { asked, state, plan, versions, directory, docs, space, maintenance, serverExecutes, failed, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
 }
 
 export function WikiPlanRoute({
@@ -311,7 +306,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   const card = wikiPlanJobCard(plan.job, {
     now,
     runnerOnline: page.maintenance.runnerOnline,
-    failed: shown?.status === 'failed' ? page.failed : null,
+    failed: page.failed ? { job: page.failed, state: plan } : null,
     inForce,
     directory: page.directory.data,
   });
@@ -320,6 +315,9 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   // The version in force's documents asked for again (contract `plan.jobs.rebuild`): while the server executes the wiki.
   const update = useWikiWrite(({ version }: { version: number }) => buildWikiPlan(spaceId, version));
   const updateDocs = wikiPlanUpdateDocs(plan, { inForce, serverExecutes: page.serverExecutes });
+  const startOver = wikiPlanStartOver(plan);
+  const [confirmStartOver, startOverConfirmation] = useConfirm();
+  const more = useRef<HTMLButtonElement>(null);
   const diff = comparing && shown && page.base ? wikiPlanDiff(shown, page.base) : null;
   const canEdit = !!shown && (shown.status === 'draft' || inForce) && wikiPlanNewest(plan)?.version === shown.version;
   const showsChanges = !!shown && shown.status !== 'superseded' && plan.proposals.length > 0;
@@ -352,10 +350,24 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
     }
   };
 
+  const onStartOver = (version: number) =>
+    void confirmStartOver({
+      title: WIKI_PLAN_START_OVER_TITLE,
+      description: wikiPlanStartOverText(version),
+      confirmText: WIKI_PLAN_START_OVER_GO,
+      cancelText: WIKI_PLAN_CANCEL,
+      onConfirm: async () => {
+        const answer = await draft.mutateAsync(undefined);
+        message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
+      },
+      returnFocus: more,
+    });
+
   const moreItems = [
     ...(shown && page.base && shown.version !== page.base.version
       ? [{ key: 'compare', label: comparing ? WIKI_PLAN_HIDE_COMPARE : wikiPlanCompare(page.base.version), onSelect: () => setComparing(!comparing) }]
       : []),
+    ...(startOver !== null ? [{ key: 'start-over', label: WIKI_PLAN_START_OVER, onSelect: () => onStartOver(startOver) }] : []),
   ];
 
   return (
@@ -376,7 +388,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         <div className="wk-pl-meta">
           {shown ? (
             <>
-              {wikiPlanMeta(shown, { job: shown.status === 'failed' ? page.failed : open ?? plan.job, docs: inForce ? page.docs : null }).map((part, i) => (
+              {wikiPlanMeta(shown, { job: open ?? plan.job, docs: inForce ? page.docs : null }).map((part, i) => (
                 <Fragment key={part}>
                   {i > 0 && <span className="sep">·</span>}
                   <span>{part}</span>
@@ -391,20 +403,20 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
                 </>
               )}
             </>
-          ) : open ? (
-            <span>{wikiPlanJobHead(open)}</span>
+          ) : open || page.failed ? (
+            <span>{wikiPlanJobHead(open ?? page.failed!)}</span>
           ) : (
             <span>{WIKI_PLAN_NONE}</span>
           )}
         </div>
-        {shown && (
+        {(shown || page.failed) && (
           <div className="wk-pl-acts">
-            {(shown.status === 'draft' || shown.status === 'failed') && (
-              <Button variant="primary" disabled={shown.status === 'failed' || confirm.isPending} loading={confirm.isPending} onClick={onConfirm}>
+            {shown?.status === 'draft' && (
+              <Button variant="primary" disabled={confirm.isPending} loading={confirm.isPending} onClick={onConfirm}>
                 {WIKI_PLAN_CONFIRM}
               </Button>
             )}
-            {shown.status !== 'superseded' && (
+            {shown?.status !== 'superseded' && (
               <Button icon={<SyncOutlined />} onClick={() => setRedrafting(true)} disabled={!!open}>
                 {WIKI_PLAN_REDRAFT}
               </Button>
@@ -415,21 +427,17 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
               </Button>
             )}
             {moreItems.length > 0 && (
-              <Menu items={moreItems} trigger={<Button icon={<EllipsisOutlined />} aria-label="More" />} />
+              <Menu items={moreItems} trigger={<Button ref={more} icon={<EllipsisOutlined />} aria-label="More" />} />
             )}
           </div>
         )}
       </div>
-      {shown?.status === 'failed' && <div className="wk-pl-hint">{wikiPlanFailedHint(plan.confirmed?.version ?? null)}</div>}
-
-      {card && <PlanJobCard card={card} spaceSlug={spaceSlug} solo={!!shown && card.look === 'failed'} />}
-      {!shown && !open && (
+      {card && <PlanJobCard card={card} spaceSlug={spaceSlug} />}
+      {!shown && !open && !page.failed && (
         <PlanEmpty busy={draft.isPending} onDraft={onDraft} />
       )}
 
-      {shown && (shown.status === 'draft' || shown.status === 'failed') && (
-        <PlanGateReport shown={shown} base={page.base} job={shown.status === 'failed' ? page.failed : plan.job} phone={phone} />
-      )}
+      {shown?.status === 'draft' && <PlanGateReport shown={shown} base={page.base} job={plan.job} phone={phone} />}
 
       {showsChanges && (
         <PlanChanges plan={plan} spaceId={spaceId} spaceSlug={spaceSlug} base={page.plan?.confirmed ? wikiPlanFromVersion(page.plan.confirmed) : null} onEdit={(doc) => setEditing({ doc })} />
@@ -449,7 +457,9 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         />
       )}
 
+      {startOverConfirmation}
       <PlanRedraftModal
+        key={page.failed?.id ?? 'no-failure'}
         open={redrafting}
         onClose={() => setRedrafting(false)}
         spaceId={spaceId}
@@ -470,11 +480,11 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   );
 }
 
-/** The version menu beside the title (mock 21 strip): every stored version, and a failed draft over them. */
+/** The version menu beside the title (mock 21 strip): every stored version. */
 function PlanVersionMenu({ page, spaceSlug }: { page: PlanPage; spaceSlug: string }) {
   const navigate = useNavigate();
   const shown = page.shown!;
-  const rows = wikiPlanVersionRows(page.versions.data ?? [], page.failed && page.failedNumber ? { version: page.failedNumber, at: page.failed.endedAt } : null);
+  const rows = wikiPlanVersionRows(page.versions.data ?? []);
   const items = rows.map((row) => ({
     key: String(row.version),
     label: (
@@ -503,7 +513,7 @@ function PlanVersionMenu({ page, spaceSlug }: { page: PlanPage; spaceSlug: strin
 }
 
 /** The job's card (mock 21 ⑨, 22 ⑩): grey queued, blue drafting and writing, amber held, red failed. */
-function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSlug: string; solo: boolean }) {
+function PlanJobCard({ card, spaceSlug }: { card: WikiPlanJobCard; spaceSlug: string }) {
   const tone = card.look === 'queued' ? 'wait' : card.look === 'held' ? 'held' : card.look === 'failed' ? 'fail' : 'run';
   const icon =
     card.look === 'queued' ? (
@@ -518,7 +528,7 @@ function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSl
   const link = card.link;
   const to = link?.to === 'run' && link.sessionId ? `/sessions/${encodeId(link.sessionId)}` : link?.to === 'settings' ? wikiSettingsPath(spaceSlug) : link?.to === 'runners' ? '/infrastructure' : null;
   return (
-    <section className={`wk-pl-check wk-pl-job solo ${tone}${solo ? ' failed-solo' : ''}`} role="status">
+    <section className={`wk-pl-check wk-pl-job solo ${tone}`} role="status">
       <div className="h">
         {icon}
         <b>{card.title}</b>
@@ -560,26 +570,27 @@ function PlanEmpty({ busy, onDraft }: { busy: boolean; onDraft: () => void }) {
   );
 }
 
-/** The gate's report (mock 21 ①, E): four rows, and the references not found listed where they were named. */
+/** The gate's report (mock 40 ①, 21 E): four rows and the draft's notes, and the references not found listed where they stand. */
 function PlanGateReport({ shown, base, job, phone }: { shown: WikiPlanShown; base: WikiPlanShown | null; job: WikiPlanJob | null; phone: boolean }) {
   const gate = wikiPlanGate(shown, { base, job });
   const [all, setAll] = useState(false);
   const refs = all ? gate.refs : gate.refs.slice(0, phone ? WIKI_PLAN_REFS_SHOWN_PHONE : WIKI_PLAN_REFS_SHOWN);
   const hidden = gate.refs.length - refs.length;
+  const refsAt = gate.rows.findIndex((row) => row.check === 'references');
   return (
-    <section className={`wk-pl-check ${gate.passed ? 'pass' : 'fail'}`}>
+    <section className={`wk-pl-check ${gate.passed ? 'pass' : 'note'}`}>
       <div className="h">
-        {gate.passed ? <CheckCircleFilled className="ic" /> : <CloseCircleFilled className="ic" />}
+        {gate.passed ? <CheckCircleFilled className="ic" /> : <ExclamationCircleFilled className="ic" />}
         <b>{gate.title}</b>
         <span className="sub">{gate.line}</span>
         {gate.aside && <span className="r">{gate.aside}</span>}
       </div>
-      {gate.rows.map((row) => (
-        <div className={`wk-pl-ck ${row.ok ? 'is-ok' : 'is-bad'}`} key={row.check}>
-          {row.ok ? <CheckCircleFilled className="ic" /> : <CloseCircleFilled className="ic" />}
+      {gate.rows.map((row, at) => (
+        <div className={`wk-pl-ck ${row.ok ? 'is-ok' : 'is-note'}`} key={`${row.check}:${at}`}>
+          {row.ok ? <CheckCircleFilled className="ic" /> : <ExclamationCircleFilled className="ic" />}
           <span className="n">{row.title}</span>
           <span className="r">{row.text}</span>
-          {row.check === 'references' && gate.refs.length > 0 && (
+          {at === refsAt && gate.refs.length > 0 && (
             <div className="wk-pl-errs">
               <div className="by">
                 {gate.refKinds.map((kind) => {
@@ -842,7 +853,7 @@ function PlanDocuments({
     for (const proposal of plan.proposals) counts.set(proposal.change.doc.slug, (counts.get(proposal.change.doc.slug) ?? 0) + 1);
     return counts;
   }, [plan.proposals]);
-  const version = shown.status === 'failed' || shown.status === 'superseded' || shown.version !== (plan.draft ?? plan.confirmed)?.version ? shown.version : null;
+  const version = shown.status === 'superseded' || shown.version !== (plan.draft ?? plan.confirmed)?.version ? shown.version : null;
   return (
     <div className="wk-pl-docs">
       {heading && (
@@ -864,7 +875,7 @@ function PlanDocuments({
             <span className="c">{wikiPlanCategoryLine(category)}</span>
           </div>
           {category.docs.map((doc) => {
-            const errors = wikiPlanDocErrors(shown, doc).length;
+            const missing = wikiPlanDocMissing(shown, doc).length;
             const marked = diff?.docs.get(doc.slug);
             if (phone) {
               return (
@@ -877,8 +888,8 @@ function PlanDocuments({
                   line={doc.question}
                   extra={
                     <span className="l3">
-                      {errors > 0 && <span className="errn">{wikiPlanErrorCount(errors)}</span>}
-                      {errors > 0 && ' · '}
+                      {missing > 0 && <span className="notn">{wikiPlanNotFoundCount(missing)}</span>}
+                      {missing > 0 && ' · '}
                       {wikiPlanDocLine(doc)}
                     </span>
                   }
@@ -901,9 +912,9 @@ function PlanDocuments({
                   {!isOpen && <span className="q">{doc.question}</span>}
                 </button>
                 <span className="meta">
-                  {errors > 0 && (
-                    <span className="errn">
-                      <CloseCircleFilled className="ic" /> {wikiPlanErrorCount(errors)}
+                  {missing > 0 && (
+                    <span className="notn">
+                      <ExclamationCircleFilled className="ic" /> {wikiPlanNotFoundCount(missing)}
                     </span>
                   )}
                   {(changes.get(doc.slug) ?? 0) > 0 && <span className="wk-pl-chg">{wikiPlanChangeCount(changes.get(doc.slug)!)}</span>}
@@ -917,7 +928,7 @@ function PlanDocuments({
                 {isOpen && (
                   <div className="wk-pl-body">
                     <PlanDocFields shown={shown} doc={doc} />
-                    <PlanSections shown={shown} base={base} doc={doc} />
+                    <PlanSections shown={shown} doc={doc} />
                   </div>
                 )}
               </div>
@@ -1008,49 +1019,25 @@ function PlanDocFields({ shown, doc }: { shown: WikiPlanShown; doc: WikiPlanShow
   );
 }
 
-/** A document's sections (mock 21 ④), each opening to its sources; a protected document's lost sections in red. */
-function PlanSections({ shown, base, doc }: { shown: WikiPlanShown; base: WikiPlanShown | null; doc: WikiPlanShownDoc }) {
+/** A document's sections (mock 21 ④), each opening to its sources. */
+function PlanSections({ shown, doc }: { shown: WikiPlanShown; doc: WikiPlanShownDoc }) {
   const [open, setOpen] = useState<number | null>(null);
-  const lost = shown.status === 'failed' ? wikiPlanLostSections(shown, base, doc.slug) : [];
-  const rows: Array<{ kind: 'section'; index: number } | { kind: 'lost'; at: number }> = [];
-  doc.sections.forEach((_, index) => {
-    lost.forEach((row, at) => {
-      if (row.number - 1 === index) rows.push({ kind: 'lost', at });
-    });
-    rows.push({ kind: 'section', index });
-  });
-  lost.forEach((row, at) => {
-    if (row.number - 1 >= doc.sections.length) rows.push({ kind: 'lost', at });
-  });
   return (
     <div className="wk-pl-secs">
       <div className="h">
         {WIKI_PLAN_SECTIONS} <span className="c">{wikiPlanSectionsHint(doc.sections.length)}</span>
       </div>
-      {rows.map((row) =>
-        row.kind === 'lost' ? (
-          <div className="wk-pl-sec gone" key={`lost:${row.at}`}>
-            <span className="n">−</span>
-            <span className="t">{wikiPlanLostLabel(base?.version ?? 0, lost[row.at].number, lost[row.at].title)}</span>
-            <span className="ty">{lost[row.at].movedTo ? wikiPlanMovedTo(lost[row.at].movedTo!) : ''}</span>
-            <span className="len" />
-            <span className="src" />
-            <span className="why">
-              <CloseCircleFilled className="ic" /> {wikiPlanProtectedMove(doc.number)}
-            </span>
-          </div>
-        ) : (
-          <PlanSectionRow
-            key={row.index}
-            shown={shown}
-            doc={doc}
-            section={doc.sections[row.index]}
-            index={row.index}
-            open={open === row.index}
-            onToggle={() => setOpen(open === row.index ? null : row.index)}
-          />
-        ),
-      )}
+      {doc.sections.map((section, index) => (
+        <PlanSectionRow
+          key={index}
+          shown={shown}
+          doc={doc}
+          section={section}
+          index={index}
+          open={open === index}
+          onToggle={() => setOpen(open === index ? null : index)}
+        />
+      ))}
     </div>
   );
 }
@@ -1221,11 +1208,10 @@ function WikiPlanDocPage({ page, spaceId, spaceSlug, doc }: { page: PlanPage; sp
   const shown = page.shown!;
   const plan = page.plan!;
   const [editing, setEditing] = useState(false);
-  const errors = wikiPlanDocErrors(shown, doc).length;
-  const version = shown.version !== (plan.draft ?? plan.confirmed)?.version || shown.status === 'failed' ? shown.version : null;
+  const missing = wikiPlanDocMissing(shown, doc).length;
+  const version = shown.version !== (plan.draft ?? plan.confirmed)?.version ? shown.version : null;
   const category = shown.categories.find((row) => row.key === doc.category);
   const canEdit = (shown.status === 'draft' || shown.status === 'confirmed') && wikiPlanNewest(plan)?.version === shown.version && !!doc.stored;
-  const lost = shown.status === 'failed' ? wikiPlanLostSections(shown, page.base, doc.slug) : [];
   return (
     <div className="wk-pl-page wk-pl-docpage">
       <PlanSubCrumb spaceSlug={spaceSlug} parent={category ? `${category.number} ${category.title}` : WIKI_PLAN_TITLE} parentTo={wikiPlanPath(spaceSlug, version)} />
@@ -1240,10 +1226,10 @@ function WikiPlanDocPage({ page, spaceId, spaceSlug, doc }: { page: PlanPage; sp
         <span>
           {wikiPlanVersionLabel(shown.version)} · {WIKI_PLAN_STATUS_LABELS[shown.status]}
         </span>
-        {errors > 0 && (
+        {missing > 0 && (
           <>
             <span className="sep">·</span>
-            <span className="errn">{wikiPlanErrorCount(errors)}</span>
+            <span className="notn">{wikiPlanNotFoundCount(missing)}</span>
           </>
         )}
         <span className="sep">·</span>
@@ -1255,24 +1241,14 @@ function WikiPlanDocPage({ page, spaceId, spaceSlug, doc }: { page: PlanPage; sp
           {WIKI_PLAN_SECTIONS} <span className="c">{wikiCount(doc.sections.length)}</span>
         </div>
         {doc.sections.map((section, index) => (
-          <Fragment key={index}>
-            {lost
-              .filter((row) => row.number - 1 === index)
-              .map((row) => (
-                <div className="wk-pl-sec gone phone" key={`lost:${row.number}`}>
-                  <span className="t">− {wikiPlanLostLabel(page.base?.version ?? 0, row.number, row.title)}</span>
-                  <span className="why">{wikiPlanProtectedMovePhone(row.movedTo, doc.number)}</span>
-                </div>
-              ))}
-            <Link className="wk-pl-sec phone" to={wikiPlanSectionPath(spaceSlug, doc.slug, index, version)}>
-              <span className="n">{index + 1}</span>
-              <span className="t">
-                {section.title}
-                <span className="cov">{wikiPlanSectionLine(section)}</span>
-              </span>
-              <RightOutlined className="chev" />
-            </Link>
-          </Fragment>
+          <Link className="wk-pl-sec phone" to={wikiPlanSectionPath(spaceSlug, doc.slug, index, version)} key={index}>
+            <span className="n">{index + 1}</span>
+            <span className="t">
+              {section.title}
+              <span className="cov">{wikiPlanSectionLine(section)}</span>
+            </span>
+            <RightOutlined className="chev" />
+          </Link>
         ))}
       </div>
       {editing && (
@@ -1301,7 +1277,7 @@ function WikiPlanSectionPage({
   const shown = page.shown!;
   const plan = page.plan!;
   const [editing, setEditing] = useState(false);
-  const version = shown.version !== (plan.draft ?? plan.confirmed)?.version || shown.status === 'failed' ? shown.version : null;
+  const version = shown.version !== (plan.draft ?? plan.confirmed)?.version ? shown.version : null;
   const canEdit = (shown.status === 'draft' || shown.status === 'confirmed') && wikiPlanNewest(plan)?.version === shown.version && !!doc.stored;
   return (
     <div className="wk-pl-page wk-pl-secpage">
@@ -1336,7 +1312,11 @@ function WikiPlanSectionPage({
 
 // ── Redraft… ───────────────────────────────────────────────────────────────────────────────────
 
-/** Redraft the plan (mock 21 ⑧, 22 ⑧): what to change, in the owner's words; empty is a fresh draft. */
+/**
+ * Redraft the plan (mock 21 ⑧, 22 ⑧): what to change, in the owner's words, which a version stored needs — a fresh draft
+ * over one is Start over…'s, and it says what it costs. It opens holding the words of the run that failed; a new failure
+ * makes a new one (its key), and anything else leaves what was typed.
+ */
 function PlanRedraftModal({
   open,
   onClose,
@@ -1351,7 +1331,7 @@ function PlanRedraftModal({
   protectedDocs: string[];
 }) {
   const message = useToast();
-  const [words, setWords] = useState('');
+  const [words, setWords] = useState(() => wikiPlanRedraftWords(plan));
   const field = useRef<HTMLTextAreaElement>(null);
   const redraft = useWikiWrite((instructions: string) => redraftWikiPlan(spaceId, instructions));
   const newest = wikiPlanNewest(plan);
@@ -1379,7 +1359,7 @@ function PlanRedraftModal({
       footer={
         <>
           <Button onClick={onClose}>{WIKI_PLAN_CANCEL}</Button>
-          <Button variant="primary" loading={redraft.isPending} onClick={() => void submit()}>
+          <Button variant="primary" loading={redraft.isPending} disabled={!wikiPlanRedraftReady(plan, words)} onClick={() => void submit()}>
             {WIKI_PLAN_REDRAFT_GO}
           </Button>
         </>

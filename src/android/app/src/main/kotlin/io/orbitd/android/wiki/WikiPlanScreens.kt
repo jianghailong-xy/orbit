@@ -2,7 +2,10 @@ package io.orbitd.android.wiki
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
@@ -29,13 +32,10 @@ import kotlinx.serialization.json.JsonObject
 internal fun wikiMaintenanceRunnerId(space: WikiSpace?, data: DirectoryData): String? =
     space?.settings?.maintenance?.workspaceId?.let { id -> data.workspaces.firstOrNull { ObjectId.same(it.id, id) } }?.runnerId
 
-/** The version asked for, as the web's page reads it: none is the one shown first; a failed draft's number is its draft;
- * the draft and the version in force are the read's own; any other is read whole (iOS `WikiPlanScreen.shown`). */
+/** The version asked for, as the web's page reads it: none is the one shown first; the draft and the version in force
+ * are the read's own; any other is read whole (iOS `WikiPlanScreen.shown`). */
 internal fun wikiPlanShown(state: WikiPlanState, asked: Int?, reads: Map<Int, WikiPlanVersion>): WikiPlanLogic.Shown? {
     asked ?: return WikiPlanLogic.defaultShown(state)
-    WikiPlanLogic.failedJob(state)?.takeIf { asked == WikiPlanLogic.nextVersion(state) }?.let { failed ->
-        return WikiPlanLogic.fromFailedJob(failed, asked, WikiPlanLogic.newest(state)?.version)
-    }
     state.draft?.takeIf { it.version == asked }?.let { return WikiPlanLogic.fromVersion(it) }
     state.confirmed?.takeIf { it.version == asked }?.let { return WikiPlanLogic.fromVersion(it) }
     return reads[asked]?.let(WikiPlanLogic::fromVersion)
@@ -60,6 +60,8 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     val now = rememberMinuteClock()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
     var redrafting by rememberSaveable { mutableStateOf(false) }
+    // The version Start over… asks about, while its confirmation is up.
+    var startingOver by rememberSaveable { mutableStateOf<Int?>(null) }
     var editing by rememberSaveable(stateSaver = editTargetSaver) { mutableStateOf<WikiPlanEditTarget?>(null) }
     var refused by remember { mutableStateOf<Map<String, List<WikiPlanGateError>>>(emptyMap()) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
@@ -77,7 +79,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
 
     // MARK: the writes
 
-    /** Draft plan, or Redraft… with the owner's words. True once the server took it. */
+    /** Draft plan, Start over…, or Redraft… with the owner's words. True once the server took it. */
     suspend fun redraft(words: String?, failed: String = WikiCopy.planDraftFailed): Boolean {
         val (created, refusal) = store.redraftPlan(words)
         if (refusal != null) { noticeTitle = failed; notice = refusal; return false }
@@ -129,6 +131,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     val actions = WikiPlanActions(
         draft = { scope.launch { redraft(null) } },
         redraft = { redrafting = true },
+        startOver = { version -> startingOver = version },
         confirm = { version -> scope.launch { confirm(version) } },
         pickVersion = { version -> nav.replace(OrbitRoute(Destination.WIKI_PLAN, wikiVersion = version)) },
         openDoc = { doc -> nav.open(OrbitRoute(Destination.WIKI_PLAN_DOC, doc, wikiVersion = route.wikiVersion)) },
@@ -160,7 +163,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
                             if (index != null) {
                                 if (index in doc.sections.indices) WikiPlanSectionPage(route, shown, doc, index, canEdit, actions)
                                 else PlanPlaceholder(route, "wiki-plan-unavailable") { StatusMessage(WikiPlanCopy.title, "That section is not in this document.") }
-                            } else WikiPlanDocPage(route, shown, doc, WikiPlanLogic.base(shown, plan), canEdit, actions)
+                            } else WikiPlanDocPage(route, shown, doc, canEdit, actions)
                         }
                         shown == null -> PlanPlaceholder(route, "wiki-plan-loading") { LoadingMessage("Loading…") }
                         else -> PlanPlaceholder(route, "wiki-plan-unavailable") {
@@ -168,11 +171,10 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
                         }
                     }
                 } else {
-                    val failed = WikiPlanLogic.failedJob(plan)
                     val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && plan.confirmed?.version == shown.version
                     val card = WikiPlanLogic.jobCard(plan.job, now, runnerOnline,
-                        if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, state.docsDirectory)
-                    val rows = WikiPlanLogic.versionRows(state.planVersions, failed?.let { WikiPlanLogic.nextVersion(plan) to it.endedAt })
+                        WikiPlanLogic.failedJob(plan)?.let { it to plan }, inForce, state.docsDirectory)
+                    val rows = WikiPlanLogic.versionRows(state.planVersions)
                     WikiPlanPage(route, plan, shown, shown?.let { WikiPlanLogic.base(it, plan) }, rows, card, planWritten(state),
                         now, state.busy, refused, actions)
                 }
@@ -188,11 +190,20 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     // MARK: the sheets
 
     if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Plan, runnerOnline, close = { contentsShown = false }) { pick -> wikiGo(pick, nav) }
-    if (redrafting) {
-        val newest = state.plan?.let(WikiPlanLogic::newest)
+    if (redrafting) state.plan?.let { plan ->
+        val newest = WikiPlanLogic.newest(plan)
         val protectedDocs = newest?.let { version -> WikiPlanLogic.fromVersion(version).docs.filter { it.protected }.map { it.number } }.orEmpty()
-        WikiPlanRedraftSheet(WikiPlanCopy.redraftNote(newest?.let { it.version to (it.status == "confirmed") }), protectedDocs, state.busy,
+        WikiPlanRedraftSheet(plan, WikiPlanCopy.redraftNote(newest?.let { it.version to (it.status == "confirmed") }), protectedDocs, state.busy,
             close = { redrafting = false }) { words -> redraft(words, WikiCopy.planRedraftFailed) }
+    }
+    startingOver?.let { version ->
+        AlertDialog(onDismissRequest = { startingOver = null }, title = { Text(WikiPlanCopy.startOverTitle) },
+            text = { Text(WikiPlanCopy.startOverText(version)) },
+            dismissButton = { TextButton(onClick = { startingOver = null }, modifier = Modifier.testTag("wiki-plan-start-over-cancel")) { Text(WikiPlanCopy.cancel) } },
+            confirmButton = { TextButton(onClick = {
+                startingOver = null
+                scope.launch { redraft(null, WikiCopy.planRedraftFailed) }
+            }, modifier = Modifier.testTag("wiki-plan-start-over-go")) { Text(WikiPlanCopy.startOverGo) } })
     }
     // Edit a document, or one of its sections, of the newest version — the draft waiting, else the one in force.
     editing?.let { target ->

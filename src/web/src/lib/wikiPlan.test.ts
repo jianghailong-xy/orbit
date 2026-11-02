@@ -17,7 +17,7 @@ import { acceptWikiPlanProposal, wikiPlanGateErrors } from './wikiWrites';
  */
 
 interface StateCase {
-  spec: { confirmed: 'v1' | null; draft: 'v2' | null; proposals: boolean; job: string | null; runnerOnline: boolean | null };
+  spec: { confirmed: 'v1' | null; draft: string | null; proposals: boolean; job: string | null; runnerOnline: boolean | null };
   look: P.WikiPlanLook | null;
   pending: number;
   banner: P.WikiPlanBanner | null;
@@ -28,7 +28,6 @@ interface StateCase {
   shown: { version: number; status: string; label: string; statusLabel: string } | null;
   head: string | null;
   meta: string[] | null;
-  hint: string | null;
   jobCard: P.WikiPlanJobCard | null;
   gate: Omit<P.WikiPlanGate, never> | null;
   categories: unknown[];
@@ -38,14 +37,15 @@ interface StateCase {
 interface PlanFixture {
   words: Record<string, unknown>;
   orders: { page: string[]; doc: string[]; section: string[]; change: string[]; looks: string[] };
-  versions: { v1: WikiPlanVersion; v2: WikiPlanVersion };
+  versions: Record<string, WikiPlanVersion> & { v1: WikiPlanVersion; v2: WikiPlanVersion };
   proposals: WikiPlanProposal[];
   jobs: Record<string, WikiPlanJob>;
   states: Record<string, StateCase>;
-  versionRows: { versions: WikiPlanVersionSummary[]; failed: { version: number; at: string }; rows: P.WikiPlanVersionRow[] };
+  versionRows: { versions: WikiPlanVersionSummary[]; rows: P.WikiPlanVersionRow[] };
   docPages: Array<Record<string, unknown> & { version: number; slug: string }>;
   changes: Array<Record<string, unknown> & { proposal: string }>;
   counts: Record<string, Array<Record<string, unknown> & { says: string }>>;
+  doors: Array<{ about: string; spec: StateCase['spec']; words: string; ready: boolean; boxHolds: string; startOver: number | null }>;
   edit: {
     stored: WikiPlanVersion['docs'][number];
     input: unknown;
@@ -114,16 +114,7 @@ function stateOf(spec: StateCase['spec']): WikiPlanState {
 /** What the page shows first, and what it is held against, as `WikiPlanPage` reads them. */
 function shownOf(state: WikiPlanState) {
   const shown = P.wikiPlanDefault(state);
-  const newest = P.wikiPlanNewest(state);
-  const base = shown
-    ? shown.status === 'failed'
-      ? newest
-        ? P.wikiPlanFromVersion(newest)
-        : null
-      : shown.status === 'draft' && state.confirmed
-        ? P.wikiPlanFromVersion(state.confirmed)
-        : null
-    : null;
+  const base = shown?.status === 'draft' && state.confirmed ? P.wikiPlanFromVersion(state.confirmed) : null;
   return { shown, base };
 }
 
@@ -154,11 +145,15 @@ describe("the plan's words", () => {
       [P.WIKI_PLAN_QUEUED, w.queued],
       [P.WIKI_PLAN_DRAFTING, w.drafting],
       [P.WIKI_PLAN_HELD, w.held],
-      [P.WIKI_PLAN_FAILED, w.failed],
+      [P.WIKI_PLAN_READY, w.ready],
+      [P.WIKI_PLAN_START_OVER, w.startOver],
+      [P.WIKI_PLAN_START_OVER_TITLE, w.startOverTitle],
+      [P.WIKI_PLAN_START_OVER_GO, w.startOverGo],
       [P.WIKI_PLAN_PASSED, w.passed],
       [P.WIKI_PLAN_WRITING, w.writing],
       [P.WIKI_PLAN_WRITING_NOW, w.writingNow],
       [P.WIKI_PLAN_JOB_FAILED, w.jobFailed],
+      [P.WIKI_PLAN_REDRAFT_FAILED, w.redraftFailed],
       [P.WIKI_PLAN_BUILD_FAILED, w.buildFailed],
       [P.WIKI_PLAN_QUESTION, w.question],
       [P.WIKI_PLAN_WRITTEN_FOR, w.writtenFor],
@@ -225,7 +220,7 @@ describe("the plan's words", () => {
     const c = plan.counts;
     for (const row of c.chars) expect(P.wikiPlanChars(row.length as { min: number; max: number })).toBe(row.says);
     for (const row of c.sectionChars) expect(P.wikiPlanSectionChars(row.n as number)).toBe(row.says);
-    for (const row of c.errors) expect(P.wikiPlanErrorCount(row.n as number)).toBe(row.says);
+    for (const row of c.notFound) expect(P.wikiPlanNotFoundCount(row.n as number)).toBe(row.says);
     for (const row of c.changesCount) expect(P.wikiPlanChangeCount(row.n as number)).toBe(row.says);
     for (const row of c.time) expect(P.wikiPlanTime(row.since as string | null, row.until as string | null)).toBe(row.says);
     for (const row of c.protectedKept) expect(P.wikiPlanProtectedKept(row.numbers as string[])).toBe(row.says);
@@ -235,7 +230,7 @@ describe("the plan's words", () => {
     for (const row of c.changeAdded) expect(P.wikiPlanChangeAdded(row.n as number)).toBe(row.says);
     for (const row of c.draftSaved) expect(P.wikiPlanDraftSaved(row.n as number)).toBe(row.says);
     for (const row of c.andMore) expect(P.wikiPlanAndMore(row.n as number)).toBe(row.says);
-    for (const row of c.failedHint) expect(P.wikiPlanFailedHint(row.inForce as number | null)).toBe(row.says);
+    for (const row of c.startOverText) expect(P.wikiPlanStartOverText(row.version as number)).toBe(row.says);
   });
 
   it('are drawn in the fixture’s orders: the page, a document’s, a section’s, a change’s card, and the home’s looks', () => {
@@ -271,6 +266,17 @@ describe('the plan’s words that name a drafter', () => {
   });
 });
 
+describe('the two doors to a new draft', () => {
+  for (const door of plan.doors) {
+    it(door.about, () => {
+      const state = stateOf(door.spec);
+      expect(P.wikiPlanRedraftReady(state, door.words)).toBe(door.ready);
+      expect(P.wikiPlanRedraftWords(state)).toBe(door.boxHolds);
+      expect(P.wikiPlanStartOver(state)).toBe(door.startOver);
+    });
+  }
+});
+
 describe('every state of the plan', () => {
   for (const [name, expected] of Object.entries(plan.states)) {
     it(`${name}: the home's look and banner, the page's version, head, job and gate`, () => {
@@ -294,12 +300,11 @@ describe('every state of the plan', () => {
         const open = P.wikiPlanOpenJob(state);
         const failed = P.wikiPlanFailedJob(state);
         const inForce = shown?.status === 'confirmed' && state.confirmed?.version === shown.version;
-        expect(!shown && open ? P.wikiPlanJobHead(open) : null).toBe(expected.head);
-        expect(shown ? P.wikiPlanMeta(shown, { job: shown.status === 'failed' ? failed : (open ?? state.job), docs: inForce ? docs : null }) : null).toEqual(expected.meta);
-        expect(shown?.status === 'failed' ? P.wikiPlanFailedHint(state.confirmed?.version ?? null) : null).toBe(expected.hint);
+        expect(!shown && (open ?? failed) ? P.wikiPlanJobHead((open ?? failed)!) : null).toBe(expected.head);
+        expect(shown ? P.wikiPlanMeta(shown, { job: open ?? state.job, docs: inForce ? docs : null }) : null).toEqual(expected.meta);
         const directory = state.confirmed ? fixture.docs.directory.read : null;
-        expect(P.wikiPlanJobCard(state.job, { now, runnerOnline, failed: shown?.status === 'failed' ? failed : null, inForce, directory })).toEqual(expected.jobCard);
-        const gate = shown && (shown.status === 'draft' || shown.status === 'failed') ? P.wikiPlanGate(shown, { base, job: shown.status === 'failed' ? failed : state.job }) : null;
+        expect(P.wikiPlanJobCard(state.job, { now, runnerOnline, failed: failed ? { job: failed, state } : null, inForce, directory })).toEqual(expected.jobCard);
+        const gate = shown?.status === 'draft' ? P.wikiPlanGate(shown, { base, job: state.job }) : null;
         expect(gate).toEqual(expected.gate);
         expect(
           shown
@@ -309,8 +314,8 @@ describe('every state of the plan', () => {
                 title: category.title,
                 line: P.wikiPlanCategoryLine(category),
                 docs: category.docs.map((doc) => {
-                  const errors = P.wikiPlanDocErrors(shown, doc).length;
-                  return { slug: doc.slug, number: doc.number, title: doc.title, protected: doc.protected, errors, errorLabel: errors > 0 ? P.wikiPlanErrorCount(errors) : null, line: P.wikiPlanDocLine(doc) };
+                  const notFound = P.wikiPlanDocMissing(shown, doc).length;
+                  return { slug: doc.slug, number: doc.number, title: doc.title, protected: doc.protected, notFound, notFoundLabel: notFound > 0 ? P.wikiPlanNotFoundCount(notFound) : null, line: P.wikiPlanDocLine(doc) };
                 }),
               }))
             : [],
@@ -359,26 +364,26 @@ describe("Activity's amber plan banners", () => {
 });
 
 describe('the version menu, a document’s and a section’s pages', () => {
-  it('lists every version with a failed draft over them', () => {
+  it('lists every version, and nothing that is none', () => {
     inTimeZone(fixture.timeZone, () => {
-      expect(P.wikiPlanVersionRows(plan.versionRows.versions, plan.versionRows.failed)).toEqual(plan.versionRows.rows);
+      expect(P.wikiPlanVersionRows(plan.versionRows.versions)).toEqual(plan.versionRows.rows);
     });
   });
 
-  it('reads a document of the shown version as its page does, with the sections a protected document lost', () => {
+  it('reads a document of the shown version as its page does', () => {
     for (const expected of plan.docPages) {
-      const state = expected.version === 1 ? stateOf(plan.states.inForce.spec) : stateOf(plan.states.draftFailed.spec);
-      const { shown, base } = shownOf(state);
+      const state = expected.version === 1 ? stateOf(plan.states.inForce.spec) : stateOf(plan.states.draftNoted.spec);
+      const { shown } = shownOf(state);
       const doc = shown!.docs.find((row) => row.slug === expected.slug)!;
       const numbers = new Map(shown!.docs.map((row) => [row.slug, row.number]));
-      const errors = P.wikiPlanDocErrors(shown!, doc).length;
+      const notFound = P.wikiPlanDocMissing(shown!, doc).length;
       expect({
         version: shown!.version,
         slug: doc.slug,
         title: doc.title,
         number: doc.number,
         protected: doc.protected,
-        head: [`${P.wikiPlanVersionLabel(shown!.version)} · ${P.WIKI_PLAN_STATUS_LABELS[shown!.status]}`, ...(errors > 0 ? [P.wikiPlanErrorCount(errors)] : []), P.wikiPlanDocLine(doc)],
+        head: [`${P.wikiPlanVersionLabel(shown!.version)} · ${P.WIKI_PLAN_STATUS_LABELS[shown!.status]}`, ...(notFound > 0 ? [P.wikiPlanNotFoundCount(notFound)] : []), P.wikiPlanDocLine(doc)],
         length: P.wikiPlanChars(doc.length),
         protectedNote: doc.protected ? P.WIKI_PLAN_PROTECTED_NOTE : P.WIKI_PLAN_NOT_PROTECTED_NOTE,
         drawsOn: P.wikiPlanDrawsOn(doc),
@@ -404,11 +409,6 @@ describe('the version menu, a document’s and a section’s pages', () => {
                 }
               : null,
           },
-        })),
-        lost: P.wikiPlanLostSections(shown!, base, doc.slug).map((row) => ({
-          number: row.number,
-          label: P.wikiPlanLostLabel(base?.version ?? 0, row.number, row.title),
-          why: P.wikiPlanProtectedMovePhone(row.movedTo, doc.number),
         })),
       }).toEqual(expected);
     }

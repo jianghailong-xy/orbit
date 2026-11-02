@@ -124,8 +124,8 @@ class WikiPlanContractTest {
         assertEquals("Other", WikiDocCopy.sectionKind(shown.docs.first().sections.first().kind))
     }
 
-    /** The job on the plan's read, as each card of the plan page draws it: queued, held with why, running on a round, and
-     * failed with the gate's errors. A job a task made before server execution keeps its session, which View run opens. */
+    /** The job on the plan's read: queued, held with why, running on a round, and failed, with the errors a job that failed
+     * before 2026-11-02 keeps. A job a task made before server execution keeps its session, which View run opens. */
     @Test fun theJobDecodes() {
         val running = WikiPlanState.decode(Json.parseToJsonElement("""
             {"spaceId":"34WSpace","confirmed":null,"draft":null,"proposals":[],

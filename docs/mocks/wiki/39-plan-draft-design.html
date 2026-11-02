@@ -1,0 +1,93 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>39 plan draft design</title>
+<link rel="stylesheet" href="diagram-kit.css"><script src="diagram-kit.js"></script>
+<style>
+  .board { width: 1320px; }
+  .lane { left: -14px; right: -14px; }
+  .lane.inside { top: -14px; height: 380px; background: #eef1f4; }
+  .lane.owner { top: 392px; height: 186px; background: #e9eef6; }
+  .lane .lab { color: var(--muted); }
+  .lane.owner .lab { left: 86px; }
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+  .rule { background: #fff; border: 2.5px solid var(--blue); border-radius: 12px; padding: 12px 18px; }
+  .rule b { color: #0550ae; font-size: 19px; }
+  .rule p { margin: 3px 0 0; color: var(--muted); font-size: 15px; }
+  h2 { font-size: 20px; margin: 30px 0 10px; }
+  table.grid td, table.grid th { font-size: 15px; line-height: 1.42; }
+  table.grid td:first-child { font-weight: 600; width: 215px; }
+  table.grid td:nth-child(2) { color: var(--muted); width: 305px; }
+  table.grid td:nth-child(4) { width: 240px; }
+  table.grid tr.round td { background: #fbfcfd; }
+  table.grid tr.stop td { background: var(--red-bg); }
+  table.grid tr.stop td:nth-child(2) { color: var(--ink); }
+  .tag { display: inline-block; font-size: 12.5px; font-weight: 650; padding: 0 8px; border-radius: 999px; line-height: 21px; white-space: nowrap; }
+  .tag.none { background: var(--gray-bg); color: var(--muted); }
+  .tag.amber { background: var(--amber-bg); color: #7d4e00; }
+  .tag.red { background: #ffcecb; color: #a40e26; }
+  .tag.blue { background: var(--blue-bg); color: #0550ae; }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 22px; }
+  .card { background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 13px 16px; font-size: 15px; }
+  .card .h { font-weight: 650; margin-bottom: 4px; font-size: 16px; }
+  .card ul { margin: 0; padding-left: 18px; color: var(--muted); }
+  .card li + li { margin-top: 3px; }
+  .card del { color: #a40e26; text-decoration-thickness: 1.5px; }
+  .chips { margin-top: 5px; }
+  .chip.door { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+</style></head>
+<body><div class="board">
+  <h1 class="title">Plan 草稿：闸留在流水线里，owner 只看到结果</h1>
+  <p class="subtitle">检查一条不少，变的是用完 3 轮之后怎么办：现在是整份作废，改成能留的都留下，并标出来给你看。</p>
+
+  <div class="rules">
+    <div class="rule"><b>规则一：报错只发给能改它的人</b><p>草稿的作者是模型，闸的错误交回模型。你自己 Edit 时作者是你，错误照旧在抽屉里报给你。</p></div>
+    <div class="rule"><b>规则二：存下来的草稿，一定能确认、能生成</b><p>所以 Confirm 不再有灰掉的状态，也不再有“起草出来了但不给确认”的中间态。</p></div>
+  </div>
+
+  <div class="canvas" style="height:600px;margin-top:40px">
+    <div class="lane inside"><div class="lab">流水线内部：你看不到，页面只显示 Drafting · attempt 2 of 3</div></div>
+    <div class="lane owner"><div class="lab">你看到的只有这三种结果</div></div>
+
+    <div class="node" id="n1" style="left:0;top:40px;width:200px;height:104px"><div class="h">模型写草稿</div><div class="s">目录 → 细节 → 大纲</div></div>
+    <div class="node orbit" id="n2" style="left:250px;top:40px;width:220px;height:104px"><div class="h">① 代码规整</div><div class="s">key、slug 的写法当场改对，不算错</div></div>
+    <div class="node orbit big" id="n3" style="left:520px;top:40px;width:230px;height:104px"><div class="h">② 检查闸</div><div class="s">四项检查，一条不少</div></div>
+    <div class="node fact big" id="n4" style="left:810px;top:40px;width:398px;height:104px"><div class="h">⑤ 存成草稿 vN</div><div class="s">满足全部存储规则，能确认，能生成</div></div>
+
+    <div class="node agent" id="n5" style="left:250px;top:214px;width:220px;height:128px"><div class="h">③ 交回模型重做</div><div class="s">只重做出错的篇，最多 3 轮</div></div>
+    <div class="node warn" id="n6" style="left:520px;top:214px;width:560px;height:128px"><div class="h">④ 收口：3 轮后还在的问题，不再整份作废</div><div class="s">找不到的引用留在节上并标记，写不进库的值才去掉；受保护的篇由代码按原样带回；篇数不对就照存，由你决定。</div></div>
+
+    <div class="node bad" id="r1" style="left:0;top:432px;width:376px;height:128px"><div class="h">The draft didn’t finish</div><div class="s">拿不出草稿：一句原因，没有版本</div><div class="chips"><span class="chip door">Redraft…</span></div></div>
+    <div class="node warn" id="r2" style="left:416px;top:432px;width:376px;height:128px"><div class="h">Ready for review · 4 to look at</div><div class="s">一份正常草稿，要看的项列出来</div><div class="chips"><span class="chip door">Confirm plan</span><span class="chip door">Edit</span><span class="chip door">Redraft…</span></div></div>
+    <div class="node fact" id="r3" style="left:832px;top:432px;width:376px;height:128px"><div class="h">Passed the plan check</div><div class="s">和现在一样</div><div class="chips"><span class="chip door">Confirm plan</span><span class="chip door">Edit</span><span class="chip door">Redraft…</span></div></div>
+  </div>
+
+  <h2>每一类问题的去向</h2>
+  <table class="grid">
+    <tr><th>问题</th><th>例子</th><th>谁处理、怎么处理</th><th>你看到</th></tr>
+    <tr><td>写法问题</td><td><code>&lt;slug: build-pipeline&gt;</code>、大写、下划线、key 重复</td><td>代码当场规整，不进闸。今天这 40 条属于这一类</td><td><span class="tag none">看不到</span></td></tr>
+    <tr><td>模型写错的内容</td><td>编造的路径和符号、多余的行、节类型不在闭集</td><td>交回模型，只重做出错的篇，最多 3 轮</td><td><span class="tag blue">Drafting · attempt 2 of 3</span></td></tr>
+    <tr class="round"><td>3 轮后：仓库引用找不到</td><td>文件、章节、符号、contract（今早 953 处里的 4 处）</td><td>留在节上标 ✗。生成时按当时的提交再找一次，仍找不到就跳过这条来源</td><td><span class="tag amber">References 行逐条列出</span></td></tr>
+    <tr class="round"><td>3 轮后：写不进库的值</td><td>不是你的项目、不存在的主题、不认识的节类型</td><td>只去掉这个值（节类型改成 other），其余保留</td><td><span class="tag amber">一句话说明</span></td></tr>
+    <tr class="round"><td>3 轮后：篇数在目标外、没有 agents 大类</td><td>38 篇，目标 20–35</td><td>照存，由你决定确认还是 Redraft</td><td><span class="tag amber">Documents 行说明</span></td></tr>
+    <tr class="round"><td>3 轮后：受保护的篇被动了</td><td>目录漏了它，或它的节被移走</td><td>代码按原样带回，撤销这次移动</td><td><span class="tag amber">一句话说明</span></td></tr>
+    <tr class="round"><td>3 轮后：某篇一直没写出来</td><td>模型始终没答这一篇</td><td>这篇先不进草稿，其余保留</td><td><span class="tag amber">点名是哪几篇</span></td></tr>
+    <tr class="stop"><td>拿不出草稿</td><td>目录读不出来、一篇都没写成、仓库读不到、plan 被中途改了、其它预料外的错</td><td>不存，作业以失败结束。只有这一类算失败</td><td><span class="tag red">红卡、一句原因、Redraft…</span></td></tr>
+  </table>
+
+  <div class="three">
+    <div class="card"><div class="h">为什么闸要留</div><ul><li>orbitd.io 跑到闸的 3 份，第一轮全没过，每份 32–64 处引用错误</li><li>都是错误交回模型后才通过的</li></ul></div>
+    <div class="card"><div class="h">为什么红页要去掉</div><ul><li>已知走到红页的 2 次，一次 parser 缺口，一次模板标签，都是流水线的缺陷</li><li>你唯一的门是 Redraft，重跑的是同一条流水线</li></ul></div>
+    <div class="card"><div class="h">从页面上去掉</div><ul><li><del>没存却显示成 v1 Draft 的假版本</del></li><li><del>红色检查报告和每篇的 N errors</del></li><li><del>灰掉的 Confirm plan</del></li><li><del>Confirm needs a passing check</del></li></ul></div>
+  </div>
+</div>
+<script>drawWires([
+  {from:'n1',to:'n2',color:'gray'},
+  {from:'n2',to:'n3',color:'blue'},
+  {from:'n3',to:'n4',color:'green',label:'过了',ly:-16},
+  {from:'n3',to:'n5',fs:'bottom',ts:'top',fo:-60,color:'purple',label:'没过，还有轮数'},
+  {from:'n5',to:'n1',fs:'left',ts:'bottom',color:'purple',dash:true},
+  {from:'n3',to:'n6',fs:'bottom',ts:'top',fo:45,too:-120,color:'amber',label:'3 轮用完',lx:50},
+  {from:'n6',to:'n4',fs:'top',ts:'bottom',fo:160,too:-49,color:'amber'},
+  {from:'n1',to:'r1',fs:'bottom',ts:'top',fo:-60,too:-148,color:'red',label:'目录都读不出来',lx:66,ly:132},
+  {from:'n4',to:'r3',fs:'bottom',ts:'top',fo:160,too:149,color:'green',label:'全过',lx:-30},
+  {from:'n4',to:'r2',fs:'bottom',ts:'top',fo:100,my:234,color:'amber',label:'带要看的项',ly:-1},
+]);</script>
+</body></html>
