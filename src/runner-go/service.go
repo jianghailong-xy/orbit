@@ -88,24 +88,29 @@ func uninstallService() {
 	case "linux":
 		uninstallServiceLinux(serviceBrokerSocket, uninstallSystemd)
 	case "darwin":
-		label := launchdLabel
 		home := os.Getenv("HOME")
 		if home == "" {
 			if h, err := os.UserHomeDir(); err == nil {
 				home = h
 			}
 		}
-		plistPath := filepath.Join(home, "Library", "LaunchAgents", label+".plist")
-		bootoutLaunchd(launchdDomain(), plistPath, label)
-		if err := os.Remove(plistPath); err != nil {
-			if os.IsNotExist(err) {
-				return
-			}
-			fmt.Fprintf(os.Stderr, "note: could not remove %s (%v)\n  remove it with: sudo rm %s\n", plistPath, err, plistPath)
+		uninstallLaunchd(home, launchdLabel)
+	}
+}
+
+// uninstallLaunchd takes the agent down from the domain its plist put it in and removes the plist.
+func uninstallLaunchd(home, label string) {
+	plistPath := filepath.Join(home, "Library", "LaunchAgents", label+".plist")
+	installed, _ := os.ReadFile(plistPath)
+	bootoutLaunchd(launchdDomain(string(installed), launchdUID()), label)
+	if err := os.Remove(plistPath); err != nil {
+		if os.IsNotExist(err) {
 			return
 		}
-		fmt.Println("✓ removed the LaunchAgent")
+		fmt.Fprintf(os.Stderr, "note: could not remove %s (%v)\n  remove it with: sudo rm %s\n", plistPath, err, plistPath)
+		return
 	}
+	fmt.Println("✓ removed the LaunchAgent")
 }
 
 // uninstallServiceLinux is setupServiceLinux's counterpart: ask the broker to take this
@@ -550,7 +555,11 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 	}
 	pathEnv = runnerEnginePath(home, pathEnv)
 
-	plist := renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath, proxyVars)
+	uid := launchdUID()
+	background := launchdNeedsBackground(uid)
+	// Read before it is replaced: it says where the agent it describes was loaded.
+	installed, _ := os.ReadFile(plistPath)
+	plist := renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath, background, proxyVars)
 
 	agentsDir := filepath.Dir(plistPath)
 	if err := writePlist(agentsDir, plistPath, plist); err != nil {
@@ -567,90 +576,150 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 			return nil, fmt.Errorf("failed to write %s: %w", plistPath, err)
 		}
 	}
-	// What the runner logs from here on is this start's (runnerService.logFrom).
+	// What the runner logs from here on is this start's (runnerService.logFrom). Noted as each bootstrap
+	// is asked for, so that what counts is the one that succeeds: the runner this one replaces goes on
+	// logging its drain after bootout has returned, and has stopped by then.
 	var logFrom int64
-	if fi, err := os.Stat(logPath); err == nil {
-		logFrom = fi.Size()
+	noteLogEnd := func() {
+		if fi, err := os.Stat(logPath); err == nil {
+			logFrom = fi.Size()
+		}
 	}
-	if err := startLaunchd(launchdDomain(), plistPath, label); err != nil {
+	if err := startLaunchd(launchdDomain(string(installed), uid), launchdDomain(plist, uid), plistPath, label, noteLogEnd); err != nil {
 		return nil, err
 	}
-	return &runnerService{label: label, logPath: logPath, logFrom: logFrom, how: "starts at login"}, nil
+	svc := &runnerService{label: label, logPath: logPath, logFrom: logFrom, how: "starts at login"}
+	if background {
+		svc.how = launchdBackgroundHow
+		svc.notes = []string{
+			"After a restart, start it again over SSH: launchctl bootstrap " + launchdDomain(plist, uid) + " " + plistPath,
+			launchdKeychainNote,
+		}
+	}
+	return svc, nil
 }
 
-// launchdDomain is the GUI session of the account the runner service runs as. A LaunchAgent that
-// belongs to a login must be bootstrapped there, not into whatever bootstrap namespace the
-// command happened to run in: over SSH, and under a root hand-off, that is not the same place.
-func launchdDomain() string {
-	uid := strconv.Itoa(os.Getuid())
-	if u, err := registeringUser(); err == nil && u.Uid != "" {
-		uid = u.Uid
+// launchdSessionKey limits a LaunchAgent to one session type. An agent with no such key is an Aqua
+// one, which loads only into the desktop session of an account logged in at the Mac's screen. Over
+// SSH, an account with no desktop session has only its Background session.
+const launchdSessionKey = "<key>LimitLoadToSessionType</key>"
+
+// How register describes a Background agent. Nothing starts one by itself: launchd loads the account's
+// agents for a desktop login, and an SSH login that brings the Background session up loads none of them.
+// Nor can that session read the login Keychain, whoever unlocked it: a shell's unlocking stays in that
+// shell. Claude Code then keeps a login in its credentials file, which the session reads like any other
+// file, but a login made at the desktop stays in the Keychain and reads as signed out.
+const (
+	launchdBackgroundHow = "runs until this Mac restarts"
+	launchdKeychainNote  = "It cannot read this account's login Keychain: a Claude login kept there shows as signed out until you sign in again from Orbit."
+)
+
+// launchdUID is the account whose agent this process installs or removes: the one it runs as. Under
+// sudo, register and unregister are handed to the account first (handOffUnderSudo), and what stays
+// root is about root's own runner.
+func launchdUID() string {
+	if u, err := currentUser(); err == nil && u.Uid != "" {
+		return u.Uid
+	}
+	return strconv.Itoa(os.Getuid())
+}
+
+// launchdNeedsBackground reports whether the account has no desktop session for an Aqua agent to
+// load into. launchd is asked about the account rather than about this shell: `launchctl managername`
+// says Background in any SSH shell, also on an account that is at its desktop too, and that one has
+// its login Keychain only in an Aqua agent. Root's agent loads into the system domain, which has no
+// sessions.
+func launchdNeedsBackground(uid string) bool {
+	if uid == "0" {
+		return false
+	}
+	_, err := serviceQuery("launchctl", "print", "gui/"+uid)
+	return err != nil
+}
+
+// launchdDomain is where the agent plist describes belongs. The plist is the record of that: root
+// restarts agents on an upgrade, where no shell of the account's is there to ask, and a plist that
+// names no session is what every install before this one wrote.
+func launchdDomain(plist, uid string) string {
+	switch {
+	case uid == "0":
+		return "system"
+	case plistSessionType(plist) == "Background":
+		return "user/" + uid
 	}
 	return "gui/" + uid
 }
 
-// bootoutLaunchd removes the agent an earlier registration, or the macOS app, loaded. Both
-// spellings are attempted: bootout is the modern one, unload the one an older launchd has. It is
-// best-effort — launchd fails both when there is no such job — and a removal that is still
-// draining is handled by startLaunchd's retry.
-func bootoutLaunchd(domain, plistPath, label string) {
-	runQuiet("launchctl", "bootout", domain, plistPath)
-	runQuiet("launchctl", "bootout", domain+"/"+label)
-	runQuiet("launchctl", "unload", plistPath)
+// plistSessionType is the session type a plist limits its agent to, or nothing when it does not.
+func plistSessionType(plist string) string {
+	_, rest, ok := strings.Cut(plist, launchdSessionKey)
+	if !ok {
+		return ""
+	}
+	_, rest, ok = strings.Cut(rest, "<string>")
+	if !ok {
+		return ""
+	}
+	session, _, _ := strings.Cut(rest, "</string>")
+	return session
 }
 
-// launchdBootstrapTries is how long startLaunchd waits for a job bootout just removed to finish
-// exiting: launchd refuses to bootstrap its replacement until it has. The macOS client uses the
-// same one-second rhythm; kept as vars so a test does not spend thirty seconds proving it.
+// bootoutLaunchd removes the agent an earlier registration, or the macOS app, loaded in domain, and
+// reports whether there was one.
+func bootoutLaunchd(domain, label string) bool {
+	_, err := runCapture("launchctl", "bootout", domain+"/"+label)
+	return err == nil
+}
+
+// How long startLaunchd goes on past a bootstrap launchd refuses for a job still there. bootout
+// returns at once, while the old runner drains, and bootstrap fails until it has exited: for up to
+// launchdDrainTries when bootout removed a job, ExitTimeOut and a margin, though launchd may stop it
+// sooner (at 60 s on macOS 26 and 27.2). With nothing removed there is no such wait to sit through, and
+// launchd says the same words for an agent it will never load. Vars so a test need not sit through them.
 var (
-	launchdBootstrapTries = 30
+	launchdBootstrapTries = 3
+	launchdDrainTries     = 190
 	launchdBootstrapPause = time.Second
 )
 
-// startLaunchd loads the account's LaunchAgent into its own GUI domain.
-//
-// `launchctl load -w` is the pre-Yosemite spelling: it lands wherever launchctl was run from, so
-// over SSH (or from a root hand-off) it can miss the user's GUI session, and it fails outright
-// when a job from an earlier registration is still loaded. `bootout` then `bootstrap gui/<uid>`
-// is the pair the macOS client already uses, and the one that works from a login shell or an SSH
-// session. A bootout leaves the old runner draining for a moment, so bootstrap is retried while
-// launchd says the job is still there; anything else it says is reported as it came.
-func startLaunchd(domain, plistPath, label string) error {
-	bootoutLaunchd(domain, plistPath, label)
-	// A job disabled by an earlier install stays disabled across bootstrap.
+// startLaunchd moves the agent from oldDomain, where the plist replaced by this install put it, to
+// domain. `launchctl load` is no way to do it: it lands wherever launchctl runs, and on an account with
+// no desktop session it aborts having loaded nothing. A refusal is reported in launchd's own words, the
+// only thing that says why. beforeBootstrap runs right before each try.
+func startLaunchd(oldDomain, domain, plistPath, label string, beforeBootstrap func()) error {
+	tries := launchdBootstrapTries
+	if bootoutLaunchd(oldDomain, label) {
+		tries = launchdDrainTries
+	}
+	// `load -w` cleared a disabled mark; bootstrap refuses a disabled job.
 	runQuiet("launchctl", "enable", domain+"/"+label)
 
-	var last string
-	var lastErr error
-	for attempt := 0; attempt < launchdBootstrapTries; attempt++ {
-		var err error
-		last, err = runCapture("launchctl", "bootstrap", domain, plistPath)
-		if err == nil {
+	var out string
+	var err error
+	for attempt := 0; attempt < tries; attempt++ {
+		beforeBootstrap()
+		if out, err = runCapture("launchctl", "bootstrap", domain, plistPath); err == nil {
 			return nil
 		}
-		lastErr = err
-		if !launchdBootstrapRetry(last) {
+		if !launchdBootstrapRetry(out) {
 			break
 		}
-		if attempt+1 < launchdBootstrapTries {
+		if attempt == 0 && tries == launchdDrainTries {
+			fmt.Println("    Waiting for the runner already here to stop…")
+		}
+		if attempt+1 < tries {
 			time.Sleep(launchdBootstrapPause)
 		}
 	}
 	msg := "launchctl bootstrap " + domain + " failed"
-	if last != "" {
-		msg += ": " + firstLine(last)
-	} else if lastErr != nil {
-		msg += " (" + firstLine(lastErr.Error()) + ")"
+	if out != "" {
+		return errors.New(msg + ": " + firstLine(out))
 	}
-	if strings.Contains(last, "125: Domain does not support specified action") {
-		msg += " — this account has no GUI login session on this Mac; log in at its desktop (or enable automatic login), then run `orbit register` again"
-	}
-	return errors.New(msg)
+	return fmt.Errorf("%s (%w)", msg, err)
 }
 
-// launchdBootstrapRetry is whether launchd's refusal is the transient one a job that bootout has
-// not finished removing produces. A missing GUI domain, a malformed plist or a disabled service
-// says the same thing on every try; waiting is not going to change it.
+// launchdBootstrapRetry is whether launchd's refusal is the one a job still there produces. A
+// malformed plist or a domain that does not exist says the same thing on every try.
 func launchdBootstrapRetry(out string) bool {
 	for _, transient := range []string{"Input/output error", "Operation already in progress", "already bootstrapped"} {
 		if strings.Contains(out, transient) {
@@ -672,13 +741,17 @@ func printServiceStarted(how string) {
 		"      Stop or remove it later with `orbit unregister`.\n", user, how)
 }
 
-func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, proxyVars []envVar) string {
+func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, background bool, proxyVars []envVar) string {
+	session := ""
+	if background {
+		session = "  " + launchdSessionKey + "<string>Background</string>\n"
+	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key><string>%s</string>
-  <key>ProgramArguments</key>
+%s  <key>ProgramArguments</key>
   <array>
     <string>%s</string>
     <string>run</string>
@@ -698,7 +771,7 @@ func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, pr
   <key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, label, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
+`, label, session, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
 }
 
 // run and runQuiet are vars, not plain funcs, so a test can record what a path shells

@@ -1483,7 +1483,7 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 | 同上 + 外来 HOME | **弹 SecurityAgent 确认框，无人应答就一直挂着**（8 s 采样被 kill） | 3 s 超时 → `Error: Your macOS login keychain is locked.` exit 1 |
 
 - 弹框发生在 GUI 控制台（本机有登录会话时用户在屏幕上能看到；无 GUI 登录的 Mac 上则直接失败）。
-- `LimitLoadToSessionType=Background` 的 agent 在新版 macOS 上无法 bootstrap（EIO），没有这个会话类型可测；SSH 环境变量路径与 ASSUME_SSH 路径实测行为相同。
+- `LimitLoadToSessionType=Background` 的 agent 只能 bootstrap 进 `user/<uid>`，进 `gui/<uid>` 是 EIO。这个会话读不到登录钥匙串（`security` 退出码 36，在 SSH 里解锁过也一样，2026-11-02 实测 macOS 15、26）；上面的表没有覆盖它。SSH 环境变量路径与 ASSUME_SSH 路径实测行为相同。
 
 ### 18.7 D4：macOS 上的账号隔离
 
