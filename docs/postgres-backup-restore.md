@@ -75,8 +75,7 @@ of the old history. Each poll, before `--delete`, the sidecar lists the target's
 | Nothing Postgres wrote, or the directory is not there yet | A first install: it syncs |
 | A base backup that is also here, and no WAL | A first sync that was cut short: it syncs |
 | A base backup that is not here, and no WAL | Refused: nothing there says whose it is |
-| A segment with the same name, mode, size and time as one here | The same cluster: it syncs |
-| No such segment, and its smallest segment has this cluster's system identifier | The same cluster, restored or back after an outage: it syncs |
+| Segments whose smallest has this cluster's system identifier | The same cluster, restored or back after an outage too: it syncs |
 | Segments with another system identifier | Refused |
 | WAL further on than here, on a later timeline or a later segment | Refused: `--delete` would remove it |
 
@@ -85,6 +84,11 @@ over an archive copied back looks like. A restored cluster keeps its system iden
 it syncs as usual. The identifier is read from the segment's own first page, so this works on a mirror made
 before this check, and writes no marker on the target. A new `initdb` is a new cluster however it comes about: moving to a
 new major version by dump and restore or by `pg_upgrade` gives it a new identifier, and the old mirror has to be moved aside.
+
+The read happens on every poll, before every `--delete`, because a listing's name, size and time say nothing of whose a file
+is. It fetches that one segment whole: about 17 KB for a segment closed nearly empty, and around 12 MB for a full one, so at
+most about 1 GB a day at one poll every 15 minutes. A torn copy sorts first and holds no identifier, so the next smallest is
+read instead, three at most; if none of the three holds one the target is refused as `cluster unknown`.
 
 A refusal is `ERROR: refusing off-host sync …`, every poll until it is dealt with, and says why. It costs nothing
 else: base backups carry on, and so does the [files copy](#attachment-files), which deletes nothing that way. To deal

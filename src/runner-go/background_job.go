@@ -1164,7 +1164,7 @@ func (b *bgTailer) jobOutput(jobID string, tail int, sinceOffset int64) (bgJobOu
 		OutputPath: status.OutputPath,
 		NextOffset: sinceOffset,
 	}
-	f, err := os.Open(status.OutputPath)
+	f, err := openRegularFile(status.OutputPath)
 	if err != nil {
 		return out, nil // not written to yet; an empty read is not an error
 	}

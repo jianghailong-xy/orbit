@@ -231,9 +231,13 @@ max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × (`ORBIT_BASE_BACKUP_KEEP` + 1)). The
 set them where the sidecar reads them, in `.env`, and recreate both services when they change. Pinning a file in its grace
 period brings it back. The sweep runs on one apiserver about once an hour, and says what it did in the apiserver's log.
 
-A session in Trash stays there past its 30 days while evidence holds one of its files, until the task is deleted. Deleting a
-session from Trash by hand takes its files with it, pinned or held. Evidence that cited them keeps only their sha256, and its
-card shows an expired placeholder.
+A session in Trash stays there past its 30 days while one of its files is pinned, or is cited by evidence and has not expired,
+even with a date ahead of it. Everything else in the session stays with it, including its transcript. Its other files still
+expire on their own dates, and a pin still holds the file after its task is deleted. Once nothing holds it, the hourly purge
+takes the session and its rows, an expired file's included, though that file's bytes still have their grace period.
+
+Deleting a session from Trash by hand takes its files with it, pinned or cited. Whichever way a row goes, evidence that cited it
+keeps only the sha256 it recorded, and its card shows an expired placeholder: the name and test summary went with the row.
 
 Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
 `.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A

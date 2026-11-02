@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -74,8 +75,9 @@ func monitorTimeoutMs(text string) int64 {
 // writers, each was a hold with no process behind it: nothing would ever end it,
 // so the session's merges and commits stayed fenced until its engine stopped.
 //
-// bgLaunchIsPlausible is the one check an INFERRED identity gets before it is
-// registered as a writer. It asks only whether this pair could have been issued
+// bgLaunchIsPlausible is the check an INFERRED identity gets, on a call that did
+// ask for a shell (onToolResult), before it is registered as a writer. It asks
+// only whether this pair could have been issued
 // rather than typed — a shell id is a single identifier token, and an output
 // path is absolute and spelled out in full. Placeholder text fails that;
 // `${shellId}`, `<id>` and an elided `/…/` are not things an id generator or a
@@ -157,6 +159,10 @@ type bgTailer struct {
 	workflows         map[string]*workflowTranscript
 	claudeSessionUUID string
 	claudeConfigDir   string
+	// backgroundCalls are the engine's tool calls that asked for a background shell and have no result yet: the only
+	// results read as a launch (onToolResult). engineSessions are the ids the engine has said it runs under.
+	backgroundCalls map[string]bool
+	engineSessions  map[string]bool
 	// monitors are the Claude Monitors the engine is running, keyed by the launching tool_use id.
 	// A Monitor only watches, so it is no writer of the checkout: it holds nothing and nothing
 	// counts it. It is kept so the engine's stop can say the Monitor stopped with it, and so the
@@ -231,6 +237,9 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 		terminal: map[string]bool{},
 		monitors: map[string]engineMonitor{},
 		jobs:     map[string]*bgJob{},
+
+		backgroundCalls: map[string]bool{},
+		engineSessions:  map[string]bool{},
 	}
 	// Every running job states its freshness on a ticker, for as long as this tailer lives — see
 	// heartbeatJobs for why a job that is producing has to keep saying so. Started here so no caller
@@ -311,18 +320,57 @@ func (b *bgTailer) markTerminal(toolUseID string) bool {
 	return true
 }
 
-// onToolResult inspects a tool_result's text for the "running in background" confirmation and,
-// when found, starts tailing that process's output file. toolUseID correlates the tail (and
-// the later completion) with the launching Bash call. A Monitor's start receipt is registered
-// instead (noteMonitorStart).
+// noteEngineSession records an id the engine says it runs under (system/init). Nothing but the engine writes those frames,
+// and the directory it keeps a shell's output in is named after that id (engineOutputPath). A /clear gives it a new one
+// while it may go on writing under the old, so every id it has said counts.
+func (b *bgTailer) noteEngineSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.engineSessions[sessionID] = true
+}
+
+// noteToolUse records a call of the engine's that asks for a background shell. Which call a result answers is the engine's
+// own word, and what a result says is not: a command's output, or a file being read, can say anything.
+func (b *bgTailer) noteToolUse(toolUseID, name string, input interface{}) {
+	fields, _ := input.(map[string]interface{})
+	if toolUseID == "" || (name != "Bash" && name != "PowerShell") || !asBool(fields["run_in_background"]) {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.backgroundCalls[toolUseID] = true
+}
+
+// takeBackgroundCall reports whether this result answers a call that asked for a background shell.
+func (b *bgTailer) takeBackgroundCall(toolUseID string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	asked := b.backgroundCalls[toolUseID]
+	delete(b.backgroundCalls, toolUseID)
+	return asked
+}
+
+// onToolResult starts tailing the output file a background call's result names. toolUseID correlates the tail (and the
+// later completion) with the launching call. A result of any other call says nothing about a launch, whatever its text
+// reads. A Monitor's start receipt is registered instead (noteMonitorStart).
+//
+// The tail reads only the engine's own file for that shell (engineOutputPath). A launch that names any other file still
+// holds the checkout and is reported when the engine stops, because the shell may well be running, and that file is not read.
 func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if toolUseID == "" || content == "" {
 		return
 	}
+	asked := b.takeBackgroundCall(toolUseID)
 	if b.noteMonitorStart(toolUseID, content) {
 		return
 	}
 	if b.startWorkflowTranscript(toolUseID, content) {
+		return
+	}
+	if !asked {
 		return
 	}
 	idM := bgLaunchID.FindStringSubmatch(content)
@@ -333,7 +381,38 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if !bgLaunchIsPlausible(idM[1], pathM[1]) {
 		return // text describing the launch format, not a shell that exists
 	}
-	b.startTail(toolUseID, idM[1], pathM[1], true)
+	root, rel, ok := b.engineOutputPath(idM[1], pathM[1])
+	if !ok {
+		b.noteEngineBackgroundShell(toolUseID, idM[1])
+		return
+	}
+	b.startTailReading(toolUseID, idM[1], true, func() (string, int64) { return readEngineOutput(root, rel) })
+}
+
+// engineOutputPath splits path at the engine's temporary directory, when it is the file this session's engine keeps that
+// shell's output in: <temp>/claude-<uid>/<working directory's name>/<session id>/tasks/<shell id>.output. <temp> is the
+// engine's to choose (CLAUDE_CODE_TMPDIR, TMPDIR, /tmp; measured on Claude Code 2.1.316), so it is not held to one place:
+// what makes this file the engine's is the session id, which belongs to no other session, with no link anywhere on the way
+// to it. A directory of that shape made elsewhere holds only what its maker wrote there, and that is theirs.
+func (b *bgTailer) engineOutputPath(shellID, path string) (root, rel string, ok bool) {
+	tasks := filepath.Dir(path)
+	session := filepath.Dir(tasks)
+	root = filepath.Dir(filepath.Dir(session))
+	if filepath.Clean(path) != path || filepath.Base(path) != shellID+".output" || filepath.Base(tasks) != "tasks" ||
+		filepath.Base(root) != "claude-"+strconv.Itoa(os.Getuid()) || realPath(root) != root {
+		return "", "", false
+	}
+	b.mu.Lock()
+	known := b.engineSessions[filepath.Base(session)]
+	b.mu.Unlock()
+	if !known {
+		return "", "", false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", "", false
+	}
+	return root, rel, true
 }
 
 // noteMonitorStart registers a Monitor from its start receipt, reporting whether content was one.
@@ -429,6 +508,11 @@ func (b *bgTailer) hasLiveMonitors() bool {
 // toolUseID). Shared by agent shells (engineOwned: file parsed from a tool_result) and user
 // `!`-shells (file the runner owns).
 func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) {
+	b.startTailReading(toolUseID, shellID, engineOwned, func() (string, int64) { return readCappedThrough(path) })
+}
+
+// startTailReading is startTail with how to read the output, and the offset that read ended at.
+func (b *bgTailer) startTailReading(toolUseID, shellID string, engineOwned bool, readOutput func() (string, int64)) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
@@ -445,7 +529,7 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) 
 	b.mu.Unlock()
 	go func() {
 		defer b.wg.Done()
-		b.tail(ctx, toolUseID, shellID, path)
+		b.tail(ctx, toolUseID, shellID, readOutput)
 	}()
 }
 
@@ -579,11 +663,60 @@ func readCapped(path string) string {
 // readCappedThrough is readCapped with the offset its read ended at: how much of the file the text it
 // returns accounts for, taken from the read itself so the two always agree.
 func readCappedThrough(path string) (string, int64) {
-	f, err := os.Open(path)
+	f, err := openRegularFile(path)
 	if err != nil {
 		return "", 0
 	}
 	defer f.Close()
+	return readCappedFile(f)
+}
+
+// readEngineOutput is readCappedThrough for the engine's own output file. The open goes down from the engine's temporary
+// directory a directory handle at a time and fails closed on a link anywhere below it: all of that is the session's to
+// write in.
+func readEngineOutput(root, rel string) (string, int64) {
+	rootInfo, err := os.Lstat(root)
+	if err != nil || !rootInfo.IsDir() {
+		return "", 0
+	}
+	f, err := openWorktreeArtifactFile(root, rel, rootInfo)
+	if err != nil {
+		return "", 0
+	}
+	defer f.Close()
+	if err := requireRegularFile(f); err != nil {
+		return "", 0
+	}
+	return readCappedFile(f)
+}
+
+// openRegularFile opens a file a session could have got at (a job's output, the engine's transcript) to read it for the
+// control plane. Nothing else stands in for it: a link is not followed, and a named pipe fails at once rather than holding
+// the caller, and with it the session's stop, until a writer comes.
+func openRegularFile(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRegularFile(f); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+func requireRegularFile(f *os.File) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("not a regular file")
+	}
+	return nil
+}
+
+func readCappedFile(f *os.File) (string, int64) {
 	var start int64
 	if info, statErr := f.Stat(); statErr == nil && info.Size() > bgTailCap {
 		start = info.Size() - bgTailCap
@@ -862,12 +995,12 @@ func (b *bgTailer) stopAll() {
 	b.wg.Wait()
 }
 
-func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID, path string) {
+func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID string, readOutput func() (string, int64)) {
 	tk := time.NewTicker(bgPollInterval)
 	defer tk.Stop()
 	var last string
 	read := func() {
-		s, size := readCappedThrough(path)
+		s, size := readOutput()
 		if s == "" {
 			return // file not there yet / transient — try again next tick
 		}
@@ -1003,7 +1136,7 @@ func (b *bgTailer) watchJSONL(sessionUUID, configDir string) {
 // line (a partial trailing line is left to be re-read on the next tick). A shrunken file (rotated
 // or truncated on resume) is rescanned from the start.
 func (b *bgTailer) scanTranscript(path string, offset int64) int64 {
-	f, err := os.Open(path)
+	f, err := openRegularFile(path)
 	if err != nil {
 		return offset
 	}
