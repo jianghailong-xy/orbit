@@ -36,27 +36,28 @@ var (
 )
 
 // setupService installs + starts a background service that runs `orbit run` (with
-// ORBIT_HOME=orbitHome) and restarts on failure. Linux uses systemd; macOS uses a
-// launchd LaunchAgent. Returns an error instead of exiting, so `orbit register` can
-// call it best-effort. The runner authenticates through the machine's local Claude
-// Code login, so no API key is involved here.
-func setupService(orbitHome string, proxyVars []envVar) error {
+// ORBIT_HOME=orbitHome) and restarts on failure, and returns the service it started, for
+// `orbit register` to wait on. Linux uses systemd; macOS uses a launchd LaunchAgent.
+// Returns an error instead of exiting, so `orbit register` can call it best-effort. The
+// runner authenticates through the machine's local Claude Code login, so no API key is
+// involved here.
+func setupService(orbitHome string, proxyVars []envVar) (*runnerService, error) {
 	// The symlink-resolved path, the file a self-update replaces: with install.sh's layout,
 	// ~/.orbit/bin/orbit rather than the /usr/local/bin/orbit link to it.
 	exe, err := resolvedExecutable()
 	if err != nil {
-		return fmt.Errorf("cannot locate executable: %w", err)
+		return nil, fmt.Errorf("cannot locate executable: %w", err)
 	}
 
 	switch runtime.GOOS {
 	case "linux":
-		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() error {
+		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() (*runnerService, error) {
 			return installSystemd(exe, orbitHome, systemdService, proxyVars)
 		})
 	case "darwin":
 		return installLaunchd(exe, orbitHome, launchdLabel, proxyVars)
 	default:
-		return errors.New("background service is only supported on Linux (systemd) and macOS (launchd); run `orbit run` under your own supervisor")
+		return nil, errors.New("background service is only supported on Linux (systemd) and macOS (launchd); run `orbit run` under your own supervisor")
 	}
 }
 
@@ -68,9 +69,13 @@ func setupService(orbitHome string, proxyVars []envVar) error {
 // answer: a broker that refuses because this account has no copy of its own for its
 // instance to run (hostdOwnCopyRefusal) ends the registration's service step with its
 // reason and command, since the sudo path's unit would run another binary instead.
-func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() error) error {
-	if done, err := registerViaHostd(socketPath, proxyVars); done || err != nil {
-		return err
+func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() (*runnerService, error)) (*runnerService, error) {
+	unit, err := registerViaHostd(socketPath, proxyVars)
+	switch {
+	case err != nil:
+		return nil, err
+	case unit != "":
+		return &runnerService{unit: unit, how: "runs at boot"}, nil
 	}
 	return installLegacy()
 }
@@ -111,8 +116,9 @@ func uninstallServiceLinux(socketPath string, removeLegacy func()) {
 	removeLegacy()
 }
 
-// uninstallSystemd is the pre-broker removal path, unchanged: it needs root, because
-// the unit it is removing is one `orbit register` wrote into /etc/systemd/system.
+// uninstallSystemd is the pre-broker removal path: it needs root, because the unit it is
+// removing is one `orbit register` wrote into /etc/systemd/system. Anyone else goes through
+// sudo, as register did to write it.
 func uninstallSystemd() {
 	// Remove this OS user's per-user unit (orbit-runner-<user>); fall back to the
 	// bare legacy name if the user can't be resolved.
@@ -121,28 +127,45 @@ func uninstallSystemd() {
 		username = u.Username
 		svc = systemdServiceFor(username)
 	}
+	sctl := func(args ...string) { runQuiet("systemctl", args...) }
+	remove := func(path string) { _ = os.Remove(path) }
 	if processEUID() != 0 {
-		fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
-		return
+		sudo, err := exec.LookPath("sudo")
+		if err != nil || !sudoUsable(sudo) {
+			fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
+			return
+		}
+		if interactive() {
+			fmt.Printf("\nRemoving the %s service needs root — you may be prompted for your password.\n", svc)
+		}
+		sctl = func(args ...string) { runQuiet(sudo, append([]string{"systemctl"}, args...)...) }
+		remove = func(path string) { runQuiet(sudo, "rm", "-f", path) }
 	}
-	runQuiet("systemctl", "disable", "--now", svc)
-	_ = os.Remove(filepath.Join(serviceUnitDir, svc+".service"))
+	sctl("disable", "--now", svc)
+	remove(filepath.Join(serviceUnitDir, svc+".service"))
 	// Also drop a leftover legacy single-runner unit, but only if it's this user's.
 	if svc != systemdService && unitRunsAsUser(systemdService, username) {
-		runQuiet("systemctl", "disable", "--now", systemdService)
-		_ = os.Remove(filepath.Join(serviceUnitDir, systemdService+".service"))
+		sctl("disable", "--now", systemdService)
+		remove(filepath.Join(serviceUnitDir, systemdService+".service"))
 	}
-	runQuiet("systemctl", "daemon-reload")
+	sctl("daemon-reload")
 	fmt.Printf("✓ removed the %s service\n", svc)
 }
 
-func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
+// sudoUsable reports whether this process can get root through sudo: at a terminal sudo can
+// ask for a password, and without one it must need none, which `sudo -n true` finds out by
+// running nothing.
+func sudoUsable(sudo string) bool {
+	return interactive() || exec.Command(sudo, "-n", "true").Run() == nil
+}
+
+func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) (*runnerService, error) {
 	// The runner — and the `claude` processes it spawns — should operate as the
 	// user who ran `orbit register`, not root, so files and git ops are owned by
 	// that user and claude reads that user's ~/.claude login.
 	u, err := registeringUser()
 	if err != nil {
-		return fmt.Errorf("cannot determine the user to run the service as: %w", err)
+		return nil, fmt.Errorf("cannot determine the user to run the service as: %w", err)
 	}
 	grp := primaryGroup(u)
 
@@ -161,17 +184,20 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	pathEnv := runnerEnginePath(u.HomeDir, userLoginPath(u, os.Getenv("PATH")))
 
 	// Writing the unit + enabling it needs root. When we aren't root, run the install
-	// step and every systemctl call via sudo (prompts once) so `orbit register` ends
-	// with a live service without a separate command.
+	// step and every systemctl call via sudo (prompts once at a terminal; without one,
+	// only a sudo that needs no password will do) so `orbit register` ends with a live
+	// service without a separate command.
 	root := processEUID() == 0
 	var sudo string
 	if !root {
 		s, err := exec.LookPath("sudo")
-		if err != nil || !interactive() {
-			return fmt.Errorf("installing the systemd service needs root: write %s then run `systemctl enable %s && systemctl restart %s`", unitPath, svc, svc)
+		if err != nil || !sudoUsable(s) {
+			return nil, fmt.Errorf("installing the systemd service needs root: write %s then run `systemctl enable %s && systemctl restart %s`", unitPath, svc, svc)
 		}
 		sudo = s
-		fmt.Printf("\nInstalling the %s service needs root — you may be prompted for your password.\n", svc)
+		if interactive() {
+			fmt.Printf("\nInstalling the %s service needs root — you may be prompted for your password.\n", svc)
+		}
 	}
 	// systemctl, as root directly or via sudo.
 	sctl := func(args ...string) error {
@@ -189,22 +215,22 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	// Write the unit file (root writes it directly; non-root installs it via sudo).
 	if root {
 		if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", unitPath, err)
+			return nil, fmt.Errorf("failed to write %s: %w", unitPath, err)
 		}
 	} else {
 		tmp, err := os.CreateTemp("", svc+"-*.service")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		tmpPath := tmp.Name()
 		defer os.Remove(tmpPath)
 		if _, err := tmp.WriteString(unit); err != nil {
 			tmp.Close()
-			return err
+			return nil, err
 		}
 		tmp.Close()
 		if err := run(sudo, "install", "-m", "0644", tmpPath, unitPath); err != nil {
-			return fmt.Errorf("failed to install %s", unitPath)
+			return nil, fmt.Errorf("failed to install %s", unitPath)
 		}
 	}
 
@@ -215,28 +241,19 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	migrateLegacyUnit(sctl, root, sudo, legacySvc, svc, u.Username)
 
 	if err := sctl("daemon-reload"); err != nil {
-		return errors.New("systemctl daemon-reload failed — is this a systemd host?")
+		return nil, errors.New("systemctl daemon-reload failed — is this a systemd host?")
 	}
 	if err := sctl("enable", svc); err != nil {
-		return errors.New("systemctl enable failed — is this a systemd host?")
-	}
-	// Dropping privileges to another user: hand them the runner's config + run scratch
-	// so the service (now that user) can read/write them. Do this before the (re)start
-	// below so the service comes up able to read the new config. Only when we're root —
-	// a non-root register already runs as the owning user.
-	if root && u.Uid != "0" {
-		_ = run("chown", "-R", u.Username+":"+grp, orbitHome)
+		return nil, errors.New("systemctl enable failed — is this a systemd host?")
 	}
 	// restart, not just start: a re-register rewrites config.json with a freshly issued
 	// credential, but `enable --now`/`start` is a no-op on an already-running unit — the
 	// live runner would keep its stale in-memory token and 401 until restarted. restart
 	// starts a stopped unit and replaces a running one.
 	if err := sctl("restart", svc); err != nil {
-		return errors.New("systemctl restart failed — is this a systemd host?")
+		return nil, errors.New("systemctl restart failed — is this a systemd host?")
 	}
-
-	printServiceStarted("runs at boot")
-	return nil
+	return &runnerService{unit: svc + ".service", how: "runs at boot"}, nil
 }
 
 // renderSystemdUnit is the per-user runner unit installSystemd writes: exe run as username,
@@ -454,7 +471,7 @@ func pathContains(path, dir string) bool {
 	return false
 }
 
-func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
+func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerService, error) {
 	home := os.Getenv("HOME")
 	if home == "" {
 		if h, err := os.UserHomeDir(); err == nil {
@@ -494,29 +511,28 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 	agentsDir := filepath.Dir(plistPath)
 	if err := writePlist(agentsDir, plistPath, plist); err != nil {
 		if !os.IsPermission(err) {
-			return err
+			return nil, err
 		}
 		// Managed Macs often ship a root-owned ~/Library/LaunchAgents. Hand it back
 		// to this user with sudo, then retry — the agent must load in the user's own
 		// session to keep the login-Keychain access Claude Code's login relies on.
 		if rerr := repairAgentsDir(agentsDir); rerr != nil {
-			return fmt.Errorf("failed to write %s: %w", plistPath, rerr)
+			return nil, fmt.Errorf("failed to write %s: %w", plistPath, rerr)
 		}
 		if err := writePlist(agentsDir, plistPath, plist); err != nil {
-			return fmt.Errorf("failed to write %s: %w", plistPath, err)
+			return nil, fmt.Errorf("failed to write %s: %w", plistPath, err)
 		}
 	}
 	runQuiet("launchctl", "unload", plistPath) // best-effort; ignore "not loaded" noise
 	if err := run("launchctl", "load", "-w", plistPath); err != nil {
-		return fmt.Errorf("launchctl load failed")
+		return nil, fmt.Errorf("launchctl load failed")
 	}
-
-	printServiceStarted("starts at login")
-	return nil
+	return &runnerService{label: label, logPath: logPath, how: "starts at login"}, nil
 }
 
-// printServiceStarted is the one success line every service path prints, so
-// `orbit register` reads the same whatever started the runner.
+// printServiceStarted is the one success line every service path ends with, once the
+// control plane has heard from the runner it started, so `orbit register` reads the same
+// whatever started it.
 func printServiceStarted(how string) {
 	user := "this account"
 	if u, err := registeringUser(); err == nil {

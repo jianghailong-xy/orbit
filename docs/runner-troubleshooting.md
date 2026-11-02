@@ -70,6 +70,8 @@ tokens, browser codes, cookies, full server URLs if private, account/runner IDs,
    above. Expected: the service is running and the age stays recent as heartbeats advance. A successful
    registration alone does not start polling when `--no-service` was used. Start the installed service
    or run `orbit run` in the intended supervised terminal. Resolve a crash loop from its first error.
+   `orbit register` waits for the service it installs to reach the deployment; when it does not, it ends
+   with "not online", the service's state, the end of its log and these commands.
 2. Run the two curl probes from branch A on the runner host. Expected: both routes answer through the
    configured origin. If the gateway works but API requests return 502, inspect API/container health.
    If both fail, check DNS, TLS certificates, firewall, and the service's proxy/network environment.

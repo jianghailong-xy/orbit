@@ -448,8 +448,12 @@ func main() {
 	}
 }
 
-// registerCommand is `orbit register` as typed: args is the command and its arguments.
+// registerCommand is `orbit register` as typed: args is the command and its arguments. Under
+// sudo it is the invoking account's to run (handOffUnderSudo).
 func registerCommand(args []string) {
+	if handOffUnderSudo(args) {
+		return
+	}
 	flags, bools := parseFlags(args)
 	cmdRegister(flags, bools)
 }
@@ -648,19 +652,18 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		fmt.Printf("\n    ✓ %s is now a runner.\n", cfg.Name)
 	}
 
-	serviceStarted := false
+	outcome := registeredOnly
 	if withService {
-		if err := setupService(machineHome(), proxyVars); err != nil {
-			printServiceFailure(os.Stderr, err)
-		} else {
-			serviceStarted = true
-		}
+		outcome = startService(cfg, proxyVars)
 	}
 	if u, err := registeringUser(); err == nil && u.Username == "root" {
 		fmt.Println("    Running as root — agents will have root access on this machine.")
 		fmt.Println("    For production, register with a dedicated user.")
 	}
-	printRegisterReceipt(os.Stdout, cfg, serviceStarted, foreground)
+	printRegisterReceipt(os.Stdout, cfg, outcome, foreground)
+	if outcome == serviceNotOnline {
+		os.Exit(1)
+	}
 
 	if foreground {
 		fmt.Printf("\nrunning %q in the foreground — Ctrl-C to stop\n", cfg.Name)
@@ -670,6 +673,36 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		clearInheritedSessionContext()
 		runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	}
+}
+
+// startService installs and starts the background service for cfg's runner, then waits for the
+// control plane to hear from it (onlineWatch) before saying it started. A service that started but
+// was not heard from is reported with why, what it logged and where to look further.
+func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
+	me := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).me
+	// What the control plane last heard from this runner, before the service starts: a runner
+	// registered again keeps the beats of the process its old credential belonged to.
+	before, _ := me()
+	started := time.Now()
+	svc, err := setupService(machineHome(), proxyVars)
+	if err != nil {
+		printServiceFailure(os.Stderr, err)
+		return registeredOnly
+	}
+	state := func() (serviceState, bool) { return launchdState(svc.label) }
+	if svc.unit != "" {
+		restarts := systemdRestarts(svc.unit)
+		state = func() (serviceState, bool) { return systemdState(svc.unit, restarts) }
+	}
+	server := strings.TrimRight(cfg.ServerURL, "/")
+	fmt.Printf("    Waiting for the runner to reach %s…\n", server)
+	watch := onlineWatch{server: server, me: me, state: state, sleep: time.Sleep, now: time.Now, wait: onlineWait, poll: onlinePoll}
+	if err := watch.until(before); err != nil {
+		printNotOnline(os.Stderr, cfg.Name, svc, err, serviceLog(svc, started.Add(-time.Second), 15))
+		return serviceNotOnline
+	}
+	printServiceStarted(svc.how)
+	return serviceOnline
 }
 
 // printServiceFailure says why the background service did not start and what to do
@@ -691,14 +724,31 @@ func autoInstallEnabled(bools map[string]bool) bool {
 	return !bools["no-auto-install-engines"]
 }
 
-// printRegisterReceipt is the last thing a successful registration prints: what
-// this machine is, and the one thing to do next.
-func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foreground bool) {
-	state := "is registered"
-	if serviceStarted {
-		state = "is online"
+// registerOutcome is how a registration ended, for its receipt.
+type registerOutcome int
+
+const (
+	// registeredOnly: no background service — --no-service, --foreground, or one that could not
+	// be installed (printServiceFailure said why).
+	registeredOnly registerOutcome = iota
+	// serviceOnline: the service started and the control plane heard from it.
+	serviceOnline
+	// serviceNotOnline: the service was installed and started, and the control plane did not hear
+	// from it (printNotOnline said why).
+	serviceNotOnline
+)
+
+// printRegisterReceipt is the last thing a registration prints: what this machine is, and
+// the one thing to do next.
+func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, outcome registerOutcome, foreground bool) {
+	switch outcome {
+	case serviceOnline:
+		fmt.Fprintf(w, "\n✓ Setup complete — %s is online.\n\n", cfg.Name)
+	case serviceNotOnline:
+		fmt.Fprintf(w, "\n✗ Setup incomplete — %s is registered, but not online.\n\n", cfg.Name)
+	default:
+		fmt.Fprintf(w, "\n✓ Setup complete — %s is registered.\n\n", cfg.Name)
 	}
-	fmt.Fprintf(w, "\n✓ Setup complete — %s %s.\n\n", cfg.Name, state)
 	machine := cfg.Name
 	if host := hostnameOr(); host != "" && host != cfg.Name {
 		machine = fmt.Sprintf("%s (%s)", cfg.Name, host)
@@ -709,8 +759,10 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 	switch {
 	case foreground:
 		fmt.Fprintln(w, "    Next     Start a session; Ctrl-C stops the runner.")
-	case serviceStarted:
+	case outcome == serviceOnline:
 		fmt.Fprintln(w, "    Next     Start a session")
+	case outcome == serviceNotOnline:
+		fmt.Fprintln(w, "    Next     get its service running (see above), then Start a session")
 	default:
 		fmt.Fprintln(w, "    Next     start it with `orbit run`, then Start a session")
 	}
@@ -718,8 +770,12 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
 }
 
-// unregisterCommand is `orbit unregister` as typed: args is the command and its arguments.
+// unregisterCommand is `orbit unregister` as typed: args is the command and its arguments. Under
+// sudo it is the invoking account's to run, as register is (handOffUnderSudo).
 func unregisterCommand(args []string) {
+	if handOffUnderSudo(args) {
+		return
+	}
 	_, bools := parseFlags(args)
 	cmdUnregister(bools)
 }

@@ -154,6 +154,14 @@ The installer can create a systemd or launchd service. Use `--foreground` for an
 `ORBIT_NO_REGISTER=1` to install only the binary. Run `orbit doctor` on the runner to diagnose missing runtime
 installations or authentication.
 
+The runner works as the OS account that registers it. Under sudo — `curl … | sudo bash`, `sudo orbit register`,
+or `orbit register` in a `sudo -i` shell — registration runs as the account that ran sudo: the runner runs as
+that account and keeps its config in that account's `~/.orbit`, and sudo is used again only to install the
+system service. `orbit unregister` under sudo removes that same account's runner. Registration says the machine
+is online only once its service has reached the deployment. When that does not happen within a minute,
+`orbit register` says why, shows the end of the service's log and the commands to look further, and exits
+non-zero.
+
 Scripts can also act as a person rather than a machine. A user logs the `orbit` CLI in with a personal
 access token, on a runner or on any other machine. `orbit login` opens the deployment's `/cli-login` page to
 approve one, and `--with-token` takes one issued under **Settings → Access tokens**:
@@ -1214,6 +1222,7 @@ broker enables and starts the account's instance, nothing asks for a password, a
 
 ```text
     ✓ Approved — build-01-alice is now a runner.
+    Waiting for the runner to reach https://orbit.example.com…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 
