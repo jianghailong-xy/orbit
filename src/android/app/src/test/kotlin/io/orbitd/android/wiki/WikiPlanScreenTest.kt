@@ -169,6 +169,55 @@ class WikiPlanScreenTest {
         compose.onAllNodesWithTag("wiki-plan-redraft-sheet").assertCountEquals(0)
     }
 
+    /** A failed job with no version: the card the read's job makes, and Redraft… still opens, from no version, holding the
+     * words that run was given, to send again. */
+    @Test fun aFirstDraftThatLeftNothingIsRedraftedFromItsCard() {
+        plan = 200 to WikiPlanFixture.read("noneFailed").toString()
+        writes["redraft"] = 200 to """{"created":true,"job":{"id":"j","kind":"revise","state":"queued"}}"""
+        screen(OrbitRoute(Destination.WIKI_PLAN))
+        compose.onNode(hasAnyAncestor(hasTestTag("wiki-plan-job")) and hasText(WikiPlanCopy.jobFailed), useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithTag("wiki-plan-empty").assertCountEquals(0)
+        compose.onAllNodesWithTag("wiki-plan-version-menu").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-plan-redraft").performClick()
+        compose.onNodeWithText(WikiPlanCopy.redraftNote(null)).assertExists()
+        compose.onNodeWithTag("wiki-plan-redraft-go").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/redraft"), writes())
+        assertEquals(buildJsonObject { put("instructions", "合并到 30 篇左右") }, rig.body(rig.requests.first { it.method != HttpMethod.GET }))
+    }
+
+    @Test fun startOverAsksInItsOwnWordsThenSendsNoInstructions() {
+        plan = 200 to WikiPlanFixture.read("inForce").toString()
+        writes["redraft"] = 200 to """{"created":true,"job":{"id":"j","kind":"draft","state":"queued"}}"""
+        screen(OrbitRoute(Destination.WIKI_PLAN))
+        compose.onNodeWithTag("wiki-plan-more").performClick()
+        compose.onNodeWithTag("wiki-plan-start-over").performClick()
+        compose.onAllNodesWithText(WikiPlanCopy.startOverTitle).assertCountEquals(2) // the title, and the button that says the same
+        compose.onNodeWithText(WikiPlanCopy.startOverText(1)).assertExists()
+        assertEquals("nothing is sent until it is confirmed", emptyList<String>(), writes())
+        compose.onNodeWithTag("wiki-plan-start-over-cancel").performClick()
+        compose.waitForIdle()
+        assertEquals("backing out sends nothing", emptyList<String>(), writes())
+        compose.onNodeWithTag("wiki-plan-more").performClick()
+        compose.onNodeWithTag("wiki-plan-start-over").performClick()
+        compose.onNodeWithTag("wiki-plan-start-over-go").assertTextEquals(WikiPlanCopy.startOverGo).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/redraft"), writes())
+        assertEquals(buildJsonObject {}, rig.body(rig.requests.first { it.method != HttpMethod.GET }))
+        assertEquals(WikiPlanCopy.redraftAsked, OrbitToasts.feed.value.transient?.message)
+    }
+
+    /** A job that failed over a stored draft: the card says the draft stands, and the draft is confirmed all the same. */
+    @Test fun aDraftStaysConfirmableUnderTheCardOfARedraftThatLeftNone() {
+        plan = 200 to WikiPlanFixture.read("draftFailedOver").toString()
+        writes["confirm"] = 200 to """{"id":"v2","version":2,"status":"confirmed"}"""
+        screen(OrbitRoute(Destination.WIKI_PLAN))
+        compose.onNode(hasAnyAncestor(hasTestTag("wiki-plan-job")) and hasText(WikiPlanCopy.redraftFailed), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("wiki-plan-confirm").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/versions/2/confirm"), writes())
+    }
+
     @Test fun aVersionPickedFromTheMenuTakesThePagesPlace() {
         screen(OrbitRoute(Destination.WIKI_PLAN))
         compose.onNodeWithTag("wiki-plan-version-menu").performClick()

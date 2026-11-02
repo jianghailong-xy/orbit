@@ -6,9 +6,8 @@ import java.util.UUID
 import kotlinx.serialization.json.*
 
 // The plan pages' words and readings, ported from OrbitKit `WikiPlanCopy` / `WikiPlanLogic`. Two shapes of a
-// plan, one page, as there: a stored version is read back with ids and positions; the draft a job that failed
-// the gate last had is kept as it was sent. Both are read into `Shown` first. An owner's edit goes the other
-// way, in the draft's shape — never as it was read back.
+// plan, as there: a stored version is read back with ids and positions, and read into `Shown` for the page. An
+// owner's edit goes the other way, in the draft's shape — never as it was read back.
 
 internal object WikiPlanCopy {
     const val title = "Plan"
@@ -30,11 +29,12 @@ internal object WikiPlanCopy {
     const val queued = "Queued"
     const val drafting = "Drafting"
     const val held = "Held"
-    const val failed = "Didn’t pass the plan check"
+    const val ready = "Ready for review"
     const val passed = "Passed the plan check"
     const val writing = "Writing documents"
     const val writingNow = "Writing now:"
     const val jobFailed = "The draft didn’t finish"
+    const val redraftFailed = "The redraft didn’t finish"
     const val buildFailed = "Writing documents didn’t finish"
     const val queuedText = "starts after the Wiki maintenance run that’s going now"
     const val writingSoon = "waiting for its run to start"
@@ -69,12 +69,17 @@ internal object WikiPlanCopy {
     const val from = "From"
     const val check = "Check"
     const val changeRejected = "Change rejected"
-    const val redraftAsked = "Redraft asked for — it runs as a Wiki maintenance task"
+    const val redraftAsked = "Redraft asked for — it runs on the server with the System model"
     const val redraftAlready = "A draft is already on its way"
     const val acceptRefused = "This change no longer passes the plan check, so nothing was confirmed:"
     const val redraftTitle = "Redraft the plan"
     const val redraftGo = "Redraft"
-    const val redraftPlaceholder = "What should change: what to merge, split, move or leave out"
+    const val redraftPlaceholder = "What should change: what to merge, add or leave out"
+    /** Start over…: the ⋯ menu's item, and its confirmation. */
+    const val more = "More"
+    const val startOver = "Start over…"
+    const val startOverTitle = "Start over"
+    const val startOverGo = "Start over"
     const val editTitleField = "Title"
     const val editKind = "Kind"
     const val protectedSwitch = "A redraft keeps it as it is"
@@ -98,12 +103,12 @@ internal object WikiPlanCopy {
      * it with the System model. */
     const val noteServer = "System model · about 1–2 hours"
     const val emptyNoteServer = "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
-    fun failedHint(inForce: Int?) = "Confirm needs a passing check. Redraft with what to change — " +
-        (inForce?.let { "v$it stays in force until you confirm" } ?: "until you confirm a plan, the Wiki shows its topic articles") + "."
+    fun startOverText(version: Int) =
+        "Writes a new plan from the repository. It doesn’t read v$version: only protected documents stay. Once you confirm it, most documents are written again."
     fun chars(length: WikiPlanRange) = if (length.min == length.max) "${WikiArticleCopy.count(length.min)} chars"
         else "${WikiArticleCopy.count(length.min)}–${WikiArticleCopy.count(length.max)} chars"
     fun sectionChars(n: Int) = "~${WikiArticleCopy.count(n)} chars"
-    fun errorCount(n: Int) = plural(n, "error", "errors")
+    fun notFoundCount(n: Int) = "${WikiArticleCopy.count(n)} not found"
     fun changeCount(n: Int) = plural(n, "change", "changes")
     fun andMore(n: Int) = "and ${WikiArticleCopy.count(n)} more"
     fun saveNote(next: Int) = "Saving makes draft v$next; it goes through the plan check again."
@@ -119,11 +124,8 @@ internal object WikiPlanCopy {
     fun time(since: String?, until: String?) = if (since == null && until == null) "any time" else "${since ?: "the start"} → ${until ?: "now"}"
     fun redraftNote(from: Pair<Int, Boolean>?): String {
         val base = from?.let { if (it.second) " from v${it.first}, the plan in force," else " from draft v${it.first}," } ?: ""
-        return "The $drafterServer drafts it again$base with what you write here. A draft that doesn’t pass the plan check is " +
-            "redrafted with its errors, up to 3 times."
+        return "The $drafterServer drafts it again$base with what you write here."
     }
-    fun lostLabel(base: Int, number: Int, title: String) = "v$base §$number $title"
-    fun protectedMovePhone(movedTo: String?, number: String) = "${movedTo?.let { "Moved to $it" } ?: "Moved out"} — $number is protected"
 }
 
 internal object WikiPlanLogic {
@@ -132,7 +134,7 @@ internal object WikiPlanLogic {
     // MARK: orders — the web phone's, top to bottom
 
     /** The plan page's blocks (`WIKI_PLAN_PAGE_SECTIONS`). */
-    enum class PageSection { CRUMB, TITLE, META, ACTIONS, HINT, JOB, GATE, CHANGES, DOCUMENTS }
+    enum class PageSection { CRUMB, TITLE, META, ACTIONS, JOB, GATE, CHANGES, DOCUMENTS }
     /** A document's own page (`WIKI_PLAN_DOC_SECTIONS`). */
     enum class DocSection { CRUMB, TITLE, META, FIELDS, SECTIONS }
     /** A section's own page (`WIKI_PLAN_SECTION_SECTIONS`). */
@@ -154,11 +156,10 @@ internal object WikiPlanLogic {
         val audience: List<String>, val scopeIn: List<String>, val scopeOut: List<ShownScopeOut>, val length: WikiPlanRange,
         val protected: Boolean, val sections: List<ShownSection>, val stored: WikiPlanDoc?)
     data class ShownCategory(val key: String, val number: Int, val title: String, val question: String, val forAgents: Boolean, val docs: List<ShownDoc>)
-    enum class ShownStatus(val label: String) { DRAFT("Draft"), CONFIRMED("Confirmed"), SUPERSEDED("Superseded"), FAILED("Draft") }
+    enum class ShownStatus(val label: String) { DRAFT("Draft"), CONFIRMED("Confirmed"), SUPERSEDED("Superseded") }
     data class Shown(val version: Int, val status: ShownStatus, val origin: String, val baseVersion: Int?, val proposalId: String?,
         val categories: List<ShownCategory>, val docs: List<ShownDoc>, val target: WikiPlanRange, val gate: WikiPlanGateReport?,
-        val repoCheck: WikiPlanRepoCheck?, val model: String?, val createdAt: String?, val confirmedAt: String?,
-        val errors: List<WikiPlanGateError>)
+        val repoCheck: WikiPlanRepoCheck?, val model: String?, val createdAt: String?, val confirmedAt: String?)
 
     private class DocRow(val index: Int, val slug: String, val category: String, val title: String, val question: String,
         val audience: List<String>, val scopeIn: List<String>, val scopeOut: List<ShownScopeOut>, val length: WikiPlanRange,
@@ -204,34 +205,19 @@ internal object WikiPlanLogic {
         val (shownCategories, docs) = numbered(categories, rows)
         return Shown(version.version, shownStatus(version.status), version.origin ?: "maintenance", version.baseVersion, version.proposalId,
             shownCategories, docs, version.target ?: WikiPlanRange(20, 35), version.gate, version.repoCheck, version.model,
-            version.createdAt, version.confirmedAt, emptyList())
-    }
-
-    /** The draft a failed job last had, numbered as the version it would have been (`wikiPlanFromFailedJob`). */
-    fun fromFailedJob(job: WikiPlanJob, number: Int, baseVersion: Int?): Shown? {
-        val draft = job.draft ?: return null
-        val report = if (job.kind != "build") job.report else null
-        val rows = draft.docs.mapIndexed { index, doc ->
-            DocRow(index, doc.slug, doc.category, doc.title, doc.question, doc.audience, doc.scopeIn,
-                doc.scopeOut.map { ShownScopeOut(it.text, it.docs.orEmpty()) }, doc.length, doc.protected ?: false,
-                doc.sections.map { section ->
-                    ShownSection(section.key, section.title, section.kind, section.covers, section.length,
-                        ShownSources(section.sources.docs.orEmpty().map { ShownDocSource(it.path, it.section) },
-                            section.sources.code.orEmpty().map { ShownCodeSource(it.path, it.symbols.orEmpty()) },
-                            section.sources.contracts.orEmpty().map { it.path },
-                            section.sources.sessions?.let { s -> ShownSessions(s.projects.orEmpty().map { ShownProject(null, it) }, s.since, s.until,
-                                s.keywords.orEmpty(), s.anchorPaths.orEmpty(), s.entryKinds.orEmpty(), s.topics.orEmpty(), s.evidence ?: "") }))
-                }, null)
-        }
-        val categories = draft.categories.map { CategoryRow(it.key, it.title ?: it.key, it.question ?: "", it.forAgents ?: false) }
-        val (shownCategories, docs) = numbered(categories, rows)
-        val repo = report?.repo?.let { WikiPlanRepoCheck(it.sha, it.checked, emptyList()) }
-        return Shown(number, ShownStatus.FAILED, "maintenance", baseVersion, null, shownCategories, docs, report?.target ?: WikiPlanRange(20, 35),
-            null, repo, report?.model, job.endedAt, null, job.errors.orEmpty())
+            version.createdAt, version.confirmedAt)
     }
 
     fun newest(state: WikiPlanState) = state.draft ?: state.confirmed
-    /** A draft or a revision that ended failed with no version stored since it was asked for (`wikiPlanFailedJob`). */
+    /** Whether Redraft can be sent (`wikiPlanRedraftReady`): a redraft reads the version stored, so it needs words; with none
+     * stored, it may go empty. */
+    fun redraftReady(state: WikiPlanState, words: String) = newest(state) == null || words.isNotBlank()
+    /** What Redraft's box opens holding (`wikiPlanRedraftWords`): the words of the run that failed. */
+    fun redraftWords(state: WikiPlanState) = failedJob(state)?.instructions.orEmpty()
+    /** The version Start over… would leave unread, or null when the menu has no such item (`wikiPlanStartOver`): only with a
+     * version stored, and no draft job open. It sends the redraft with no instructions: a fresh draft. */
+    fun startOver(state: WikiPlanState): Int? = if (openJob(state) == null) newest(state)?.version else null
+    /** A draft or a revision that left no draft, with no version stored since it was asked for (`wikiPlanFailedJob`). */
     fun failedJob(state: WikiPlanState): WikiPlanJob? {
         val job = state.job ?: return null
         if (job.state != "failed" || job.kind == "build") return null
@@ -243,16 +229,11 @@ internal object WikiPlanLogic {
     fun openJob(state: WikiPlanState): WikiPlanJob? = state.job?.takeIf { it.kind != "build" && it.state in openStates }
     fun nextVersion(state: WikiPlanState) = maxOf(state.confirmed?.version ?: 0, state.draft?.version ?: 0) + 1
     fun defaultShown(state: WikiPlanState): Shown? {
-        failedJob(state)?.let { failed -> fromFailedJob(failed, nextVersion(state), newest(state)?.version)?.let { return it } }
         state.draft?.let { return fromVersion(it) }
         state.confirmed?.let { return fromVersion(it) }
         return null
     }
-    fun base(shown: Shown, state: WikiPlanState): Shown? = when (shown.status) {
-        ShownStatus.FAILED -> newest(state)?.let(::fromVersion)
-        ShownStatus.DRAFT -> state.confirmed?.let(::fromVersion)
-        else -> null
-    }
+    fun base(shown: Shown, state: WikiPlanState): Shown? = if (shown.status == ShownStatus.DRAFT) state.confirmed?.let(::fromVersion) else null
 
     // MARK: the head
 
@@ -279,16 +260,14 @@ internal object WikiPlanLogic {
         }
     }
     data class VersionRow(val version: Int, val status: ShownStatus, val note: String)
-    fun versionRows(versions: List<WikiPlanVersionSummary>, failed: Pair<Int, String?>?, zone: ZoneId = ZoneId.systemDefault()): List<VersionRow> {
+    fun versionRows(versions: List<WikiPlanVersionSummary>, zone: ZoneId = ZoneId.systemDefault()): List<VersionRow> {
         val rows = versions.map { row ->
             val at = WikiDocCopy.monthDayTime(row.confirmedAt ?: row.createdAt, zone) ?: ""
             val made = if (row.origin == "owner") (if (row.proposalId != null) "Accepted change" else "Your edit") else if (row.baseVersion != null) "Redraft" else "First draft"
             val status = shownStatus(row.status)
             val note = when (status) { ShownStatus.CONFIRMED -> "$at · confirmed by you"; ShownStatus.DRAFT -> "$made · $at · waiting for you"; else -> "$made · $at" }
             VersionRow(row.version, status, note)
-        }.toMutableList()
-        if (failed != null) rows.add(0, VersionRow(failed.first, ShownStatus.FAILED,
-            "Redraft · ${WikiDocCopy.monthDayTime(failed.second, zone) ?: ""} · didn’t pass the check"))
+        }
         return rows.sortedByDescending { it.version }
     }
     fun jobHead(job: WikiPlanJob, zone: ZoneId = ZoneId.systemDefault()): String {
@@ -333,12 +312,15 @@ internal object WikiPlanLogic {
         data class Link(val label: String, val to: LinkTo, val sessionId: String?)
         data class Progress(val done: Int, val total: Int, val now: String?)
     }
-    /** The gate's checks this build names (OrbitKit `WikiPlanGateCheck`); any other is one `unknown`, as Swift decodes it. */
-    private val gateChecks = setOf("schema", "docCount", "protected", "references")
-    fun failedChecks(errors: List<WikiPlanGateError>) = errors.map { it.check.takeIf { c -> c in gateChecks } ?: "unknown" }.toSet().size
-    private fun attempts(job: WikiPlanJob) = job.attempt ?: (if (job.kind != "build") job.report?.attempts?.size else null) ?: job.attemptsMax ?: 3
+    /** Why a job left no draft, and what stands (`wikiPlanFailedText`): its own words, then the version nothing happened to. */
+    fun failedText(job: WikiPlanJob, state: WikiPlanState): String {
+        val why = job.error ?: "Its run ended without a draft."
+        state.draft?.let { return "$why Draft v${it.version} is unchanged." }
+        return "$why ${state.confirmed?.let { "v${it.version} stays in force." } ?: "Nothing was saved."}"
+    }
     private fun runLink(sessionId: String?) = sessionId?.let { JobCard.Link(WikiPlanCopy.viewRun, JobCard.LinkTo.RUN, it) }
-    fun jobCard(job: WikiPlanJob?, now: Instant, runnerOnline: Boolean?, failed: WikiPlanJob?, inForce: Boolean, directory: WikiDocsDirectory?): JobCard? {
+    /** [failed]: the job that left no draft, if the plan shows one, with the plan it left as it was (`wikiPlanJobCard`). */
+    fun jobCard(job: WikiPlanJob?, now: Instant, runnerOnline: Boolean?, failed: Pair<WikiPlanJob, WikiPlanState>?, inForce: Boolean, directory: WikiDocsDirectory?): JobCard? {
         val draft = job?.takeIf { it.kind != "build" && it.state in openStates }
         val build = if (inForce) job?.takeIf { it.kind == "build" && it.state in openStates } else null
         val going = draft ?: build
@@ -365,10 +347,9 @@ internal object WikiPlanLogic {
                 counts?.let { JobCard.Progress(it.first, it.second, writingDoc(build, directory)) })
         }
         if (failed != null) {
-            val errors = failed.errors.orEmpty()
-            if (errors.isEmpty()) return JobCard(JobLook.FAILED, WikiPlanCopy.jobFailed, failed.error ?: "Its run ended without a draft.", runLink(failed.sessionId), null)
-            return JobCard(JobLook.FAILED, WikiPlanCopy.failed, "${failedChecks(errors)} of 4 checks failed · after ${plural(attempts(failed), "attempt", "attempts")} · " +
-                "${plural(errors.size, "error", "errors")} listed below", null, null)
+            val (left, state) = failed
+            val title = if (state.confirmed != null || state.draft != null) WikiPlanCopy.redraftFailed else WikiPlanCopy.jobFailed
+            return JobCard(JobLook.FAILED, title, failedText(left, state), runLink(left.sessionId), null)
         }
         if (inForce && job != null && job.kind == "build" && job.state == "failed")
             return JobCard(JobLook.FAILED, WikiPlanCopy.buildFailed, buildFailedText(job), runLink(job.sessionId), null)
@@ -410,29 +391,6 @@ internal object WikiPlanLogic {
         firstMatch("\\.sections\\[(\\d+)\\]", path)?.get(1)?.toIntOrNull()?.let { return row to "${row.number} §${it + 1}" }
         return row to row.number
     }
-    private fun valueAt(shown: Shown, path: String): String? {
-        val d = firstMatch("(?:^|\\.)docs\\[(\\d+)\\]", path)?.get(1)?.toIntOrNull()?.takeIf { it < shown.docs.size } ?: return null
-        val s = firstMatch("\\.sections\\[(\\d+)\\]", path)?.get(1)?.toIntOrNull()?.takeIf { it < shown.docs[d].sections.size } ?: return null
-        val section = shown.docs[d].sections[s]
-        fun at(pattern: String) = firstMatch(pattern, path)?.drop(1)?.mapNotNull { it.toIntOrNull() }
-        at("\\.sources\\.code\\[(\\d+)\\]\\.symbols\\[(\\d+)\\]$")?.takeIf { it.size == 2 }?.let { m ->
-            val code = section.sources.code.getOrNull(m[0]) ?: return null
-            return "${code.symbols.getOrNull(m[1]) ?: ""} in ${code.path}"
-        }
-        at("\\.sources\\.code\\[(\\d+)\\]")?.firstOrNull()?.let { return section.sources.code.getOrNull(it)?.path }
-        at("\\.sources\\.docs\\[(\\d+)\\]\\.section$")?.firstOrNull()?.let { i ->
-            val doc = section.sources.docs.getOrNull(i) ?: return null
-            return "${doc.path} § ${doc.section ?: ""}"
-        }
-        at("\\.sources\\.docs\\[(\\d+)\\]")?.firstOrNull()?.let { return section.sources.docs.getOrNull(it)?.path }
-        at("\\.sources\\.contracts\\[(\\d+)\\]")?.firstOrNull()?.let { return section.sources.contracts.getOrNull(it) }
-        val sessions = section.sources.sessions ?: return null
-        listOf(sessions.projects.map { it.title } to "\\.projects\\[(\\d+)\\]$", sessions.topics to "\\.topics\\[(\\d+)\\]$",
-            sessions.anchorPaths to "\\.anchorPaths\\[(\\d+)\\]$", sessions.entryKinds to "\\.entryKinds\\[(\\d+)\\]$").forEach { (list, pattern) ->
-            at(pattern)?.firstOrNull()?.let { return list.getOrNull(it) }
-        }
-        return null
-    }
     data class Lost(val number: Int, val title: String, val movedTo: String?)
     fun lostSections(shown: Shown, base: Shown?, slug: String): List<Lost> {
         val before = base?.docs?.firstOrNull { it.slug == slug } ?: return emptyList()
@@ -467,62 +425,69 @@ internal object WikiPlanLogic {
         val rest = if (unchanged.isEmpty()) "" else " ${joinAnd(unchanged)} ${if (unchanged.size == 1) "is" else "are"} unchanged."
         return "${changed.joinToString("; ")}.$rest"
     }
+    /** What a reference not found was looked for in: why the report lists it (`MISS_WHY`). */
+    private fun missWhy(kind: String) = when (kind) { "file", "contract" -> "no such file"; "docSection" -> "no such heading"; "symbol" -> "not in the file"; else -> "" }
+    /** How many things a stored draft says to look at: its references not found, a count outside its target, its notes (`wikiPlanToLook`). */
+    fun toLook(shown: Shown): Int {
+        val docs = shown.gate?.docs ?: shown.docs.size
+        val target = shown.gate?.target ?: shown.target
+        val outside = docs < target.min || docs > target.max
+        return shown.repoCheck?.missing.orEmpty().size + shown.gate?.notes.orEmpty().size + (if (outside) 1 else 0)
+    }
+    /** What was checked, and what the draft says to look at (`wikiPlanGate`, mock 40): the references not found, each placed
+     * where it stands, a count outside the target, and the notes of its last round under the check each belongs to. A stored
+     * draft can always be confirmed: the amber look says read this, and nothing here stands in the way. */
     fun gate(shown: Shown, base: Shown?, job: WikiPlanJob?): Gate {
         val sha = shown.repoCheck?.let { WikiLogic.shortSha(it.sha) }
         val at = sha?.let { " · references checked at $it" } ?: ""
-        if (shown.status != ShownStatus.FAILED) {
-            val gate = shown.gate
-            val docs = gate?.docs ?: shown.docs.size
-            val target = gate?.target ?: shown.target
-            val skipped = gate?.checks?.get("protected") == "skipped"
-            val newFields = gate?.needsNewFields.orEmpty()
-            val attempt = if (job?.version == shown.version) job.attempt?.let { "attempt $it" } else null
-            val rows = gateOrder.map { check ->
-                val text = when (check) {
-                    "docCount" -> "${plural(docs, "document", "documents")} — within ${target.min}–${target.max}"
-                    "protected" -> if (skipped) "Not checked — the version is your own edit" else protectedText(shown, base)
-                    "references" -> shown.repoCheck?.let { "All ${WikiArticleCopy.count(it.checked ?: 0)} found at ${sha ?: ""}" } ?: "Every project and topic is this space’s"
-                    else -> if (newFields.isEmpty()) "Every field is one the plan has"
-                        else "${plural(newFields.size, "field", "fields")} to add: ${newFields.joinToString(", ") { "${it.name} (${it.at})" }}"
+        val gate = shown.gate
+        val docs = gate?.docs ?: shown.docs.size
+        val target = gate?.target ?: shown.target
+        val skipped = gate?.checks?.get("protected") == "skipped"
+        val newFields = gate?.needsNewFields.orEmpty()
+        val notes = gate?.notes.orEmpty()
+        val missing = shown.repoCheck?.missing.orEmpty()
+        val outside = docs < target.min || docs > target.max
+        val toLook = toLook(shown)
+        val attempt = if (job?.version == shown.version) job.attempt?.let { "attempt $it" } else null
+        fun rowOf(check: String): GateRow {
+            val title = gateTitle(check)
+            return when (check) {
+                "docCount" -> if (outside) GateRow(check, false, title,
+                    "${plural(docs, "document", "documents")} — the plan asks for ${target.min}–${target.max}. Confirm it as it is, or Redraft with what to merge or split.")
+                    else GateRow(check, true, title, "${plural(docs, "document", "documents")} — within ${target.min}–${target.max}")
+                "protected" -> GateRow(check, true, title, if (skipped) "Not checked — the version is your own edit" else protectedText(shown, base))
+                "references" -> {
+                    val checked = shown.repoCheck?.checked ?: 0
+                    if (missing.isNotEmpty()) GateRow(check, false, title,
+                        "${WikiArticleCopy.count(maxOf(0, checked - missing.size))} of ${WikiArticleCopy.count(checked)} found at ${sha ?: ""} — " +
+                            "the rest stay on their sections, and a document is written without any that’s still missing")
+                    else GateRow(check, true, title, if (shown.repoCheck != null) "All ${WikiArticleCopy.count(checked)} found at ${sha ?: ""}" else "Every project and topic is this space’s")
                 }
-                GateRow(check, true, gateTitle(check), text)
+                else -> GateRow(check, true, title, if (newFields.isEmpty()) "Every field is one the plan has"
+                    else "${plural(newFields.size, "field", "fields")} to add: ${newFields.joinToString(", ") { "${it.name} (${it.at})" }}")
             }
-            return Gate(true, WikiPlanCopy.passed, "4 checks$at", attempt, rows, emptyList(), emptyList())
         }
-        val byCheck = shown.errors.groupBy { it.check }
-        val kinds = mutableListOf<Triple<String, String, Int>>() // many, one, count
-        val refs = byCheck["references"].orEmpty().map { error ->
-            val kind = refKind(error.path)
-            val i = kinds.indexOfFirst { it.first == kind.second }
-            if (i >= 0) kinds[i] = kinds[i].copy(third = kinds[i].third + 1) else kinds += Triple(kind.second, kind.first, 1)
-            RefRow(errorWhere(shown, error.path).second, kind.first, valueAt(shown, error.path) ?: error.path, error.message)
+        val kinds = LinkedHashMap<String, Int>() // many, count
+        val refs = missing.map { miss ->
+            val path = miss.at ?: ""
+            val (kind, many) = refKind(path)
+            kinds[many] = (kinds[many] ?: 0) + 1
+            RefRow(errorWhere(shown, path).second, kind, miss.ref, missWhy(miss.kind))
         }
-        val checked: Int? = if (job?.kind != "build") job?.report?.repo?.checked else null
-        val rows = gateOrder.map { check ->
-            val errors = byCheck[check].orEmpty()
-            val ok = errors.isEmpty()
-            val text = when (check) {
-                "docCount" -> "${plural(shown.docs.size, "document", "documents")} — ${if (ok) "within" else "the plan asks for"} ${shown.target.min}–${shown.target.max}"
-                "protected" -> if (ok || base != null) protectedText(shown, base) else errors.joinToString(" ") { it.message }
-                "references" -> if (ok) { if (checked != null && sha != null) "All ${WikiArticleCopy.count(checked)} found at $sha" else "Every reference was found" }
-                    else "${WikiArticleCopy.count(errors.size)}${checked?.let { " of ${WikiArticleCopy.count(it)}" } ?: ""} not found" +
-                        "${sha?.let { " at $it" } ?: ""} — files, symbols and headings on origin/main; projects and topics in this space"
-                else -> if (ok) "Every field is one the plan has"
-                    else "${plural(errors.size, "field isn’t", "fields aren’t")} the plan’s: ${errors.take(3).joinToString("; ") { "${it.path} ${it.message}" }}"
-            }
-            GateRow(check, ok, gateTitle(check), text)
-        }
-        val order = kinds.withIndex().sortedWith(compareByDescending<IndexedValue<Triple<String, String, Int>>> { it.value.third }.thenBy { it.index })
-        return Gate(false, WikiPlanCopy.failed, "${failedChecks(shown.errors)} of 4 checks failed$at",
-            job?.let { "${shown.model ?: WikiCopy.historyMaintenance} tried ${plural(attempts(it), "time", "times")}" }, rows,
-            order.map { "${WikiArticleCopy.count(it.value.third)} ${if (it.value.third == 1) singular(it.value.first) else it.value.first}" }, refs)
+        return Gate(toLook == 0, if (toLook == 0) WikiPlanCopy.passed else WikiPlanCopy.ready,
+            if (toLook == 0) "4 checks$at" else "${WikiArticleCopy.count(toLook)} to look at$at", attempt,
+            gateOrder.flatMap { check -> listOf(rowOf(check)) + notes.filter { it.check == check }.map { GateRow(check, false, gateTitle(check), it.text) } },
+            kinds.entries.sortedByDescending { it.value }.map { (many, count) -> "${WikiArticleCopy.count(count)} ${if (count == 1) singular(many) else many}" }, refs)
     }
 
     // MARK: categories, documents and sections
 
     fun categoryLine(category: ShownCategory) = plural(category.docs.size, "document", "documents")
     fun docLine(doc: ShownDoc) = "${plural(doc.sections.size, "section", "sections")} · ${WikiPlanCopy.chars(doc.length)}"
-    fun docErrors(shown: Shown, doc: ShownDoc) = shown.errors.filter { firstMatch("(?:^|\\.)docs\\[${doc.index}\\](?:\\.|$)", it.path) != null }
+    /** The references not found in one document (`wikiPlanDocMissing`). */
+    fun docMissing(shown: Shown, doc: ShownDoc) = shown.repoCheck?.missing.orEmpty().filter { miss ->
+        miss.at?.let { firstMatch("(?:^|\\.)docs\\[${doc.index}\\](?:\\.|$)", it) != null } ?: false }
     fun drawsOn(doc: ShownDoc): String {
         val docs = mutableListOf<String>(); val code = mutableListOf<String>(); val contracts = mutableListOf<String>()
         val topics = mutableListOf<String>(); val projects = mutableListOf<String>()
@@ -565,8 +530,7 @@ internal object WikiPlanLogic {
     fun sourceFound(shown: Shown, doc: ShownDoc, section: Int, kind: String, at: Int): Boolean? {
         val tail = "docs[${doc.index}].sections[$section].sources.$kind[$at]"
         val plain = "docs[${doc.index}].sections[$section].$kind[$at]"
-        val missed = shown.errors.any { it.check == "references" && (it.path.contains(tail) || it.path.contains(plain)) } ||
-            shown.repoCheck?.missing.orEmpty().any { miss -> miss.at?.let { it.contains(tail) || it.contains(plain) } ?: false }
+        val missed = shown.repoCheck?.missing.orEmpty().any { miss -> miss.at?.let { it.contains(tail) || it.contains(plain) } ?: false }
         if (missed) return false
         return if (shown.repoCheck != null) true else null
     }
@@ -722,7 +686,7 @@ internal object WikiPlanLogic {
                 val what = if (job != null) "Plan draft held" else "Writing documents held"
                 if (why == Held.RUNNER_OFFLINE) Banner("$what — the runner is offline", true, false) else Banner("$what — set up maintenance", true, true)
             }
-            Look.DRAFT_FAILED -> Banner("Plan draft didn’t pass the check", true, false)
+            Look.DRAFT_FAILED -> Banner("Plan draft didn’t finish", true, false)
             Look.DRAFT_READY -> Banner("Plan draft ready to confirm", true, false)
             Look.CHANGES -> Banner("${plural(state.proposals.orEmpty().size, "plan change", "plan changes")} to review", true, false)
             Look.DRAFTING -> Banner("Drafting the plan${job?.startedAt?.let { " · started ${WikiHealthLogic.ago(it, now)}" } ?: ""}", false, false)
