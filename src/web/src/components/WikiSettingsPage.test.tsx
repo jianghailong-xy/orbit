@@ -10,6 +10,7 @@ import {
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_EXECUTOR_READ,
   type WikiSpaceSettings,
+  type WikiSpaceWorkspaces,
   type WikiSystemModelRead,
   type WikiSystemModelReadState,
 } from '@orbit/shared';
@@ -44,6 +45,9 @@ function space(settings: Partial<WikiSpaceSettings> = {}): WikiSpaceRow {
 }
 
 let patches: Array<Record<string, unknown>> = [];
+/** What `GET /api/wiki/spaces/:id/workspaces` answers, and the writes the Workspaces card made. */
+let members: WikiSpaceWorkspaces = { workspaces: [], addable: [] };
+let memberWrites: string[] = [];
 /** Every path the page read. */
 let reads: string[] = [];
 /** What `GET /api/wiki/system-model` answers; null is a control plane from before the read (a 404). */
@@ -89,6 +93,13 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     return reply(200, {});
   }
   reads.push(url);
+  const members_ = `/api/wiki/spaces/${SPACE_ID}/workspaces`;
+  if (url === members_ && (init?.method ?? 'GET') === 'GET') return reply(200, members);
+  if (url.startsWith(members_)) {
+    const body = init?.body ? ` ${JSON.parse(String(init.body)).workspaceId as string}` : '';
+    memberWrites.push(`${init?.method} ${url.slice(members_.length)}${body}`);
+    return reply(200, {});
+  }
   if (url === '/api/workspaces') {
     return reply(200, [
       { id: WORKSPACE_ID, name: 'orbit', runner: { id: 'r', name: 'wikova', displayName: null } },
@@ -113,6 +124,8 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', vi.fn(serve));
   patches = [];
+  members = { workspaces: [], addable: [] };
+  memberWrites = [];
   reads = [];
   systemModel = servedBy();
   container = document.createElement('div');
@@ -180,12 +193,13 @@ function button(label: string, scope: ParentNode = document.body): HTMLButtonEle
 }
 
 describe('Wiki settings', () => {
-  it('draws Review mode then Maintenance, the three modes in order with Tiered the default', async () => {
+  it('draws Review mode, Workspaces, then Maintenance, the three modes in order with Tiered the default', async () => {
     await mount(space({ reviewMode: 'tiered' }));
     const page = text();
     expect(page).toContain('Wiki settings');
     expect(page).toContain('orbit · github.com/jianghailong-xy/orbit');
-    expect(page.indexOf('Review mode')).toBeLessThan(page.indexOf('Maintenance'));
+    const titles = [...container.querySelectorAll('.orbit-card-title')].map((node) => node.textContent);
+    expect(titles).toEqual(['Review mode', 'Workspaces', 'Maintenance']);
     expect(page).toContain('Only you can switch it');
     const modes = [...container.querySelectorAll('.wk-mode .wk-mode-t')].map((node) => node.textContent);
     expect(modes).toEqual(['Manual', 'Tiered', 'Automatic']);
@@ -298,6 +312,67 @@ describe('Wiki settings', () => {
     await act(async () => button('Turn off', container).click());
     await settle();
     expect(patches).toEqual([{ maintenance: { enabled: false } }]);
+  });
+});
+
+describe('The Workspaces card (mock 38)', () => {
+  const row = (id: string, name: string, inWiki: boolean, runner: string | null = 'build-01') => ({ id, name, runner, inWiki });
+  const rows = () => [...container.querySelectorAll<HTMLElement>('.wk-ws-row')];
+  const toggle = (name: string) => container.querySelector<HTMLElement>(`[role="switch"][aria-label="${name}"]`)!;
+
+  it('lists the workspaces in this wiki, and says what a left-out one means', async () => {
+    members = { workspaces: [row('a', 'shop-cli @ EU', false), row('b', 'shop-cli @ SG', true), row('c', 'notes', true, null)], addable: [] };
+    await mount(space());
+    expect(rows().map((one) => one.querySelector('.wk-ws-t')?.textContent)).toEqual([
+      'shop-cli @ EU · build-01', 'shop-cli @ SG · build-01', 'notes',
+    ]);
+    expect(rows().map((one) => one.querySelector('.wk-ws-d')?.textContent ?? null)).toEqual([
+      'Left out. It stays out until you turn it back on.', null, null,
+    ]);
+    expect(rows().map((one) => one.classList.contains('off'))).toEqual([true, false, false]);
+    expect(toggle('shop-cli @ EU').getAttribute('aria-checked')).toBe('false');
+    expect(toggle('shop-cli @ SG').getAttribute('aria-checked')).toBe('true');
+    expect(text()).toContain('Agents in these workspaces read this wiki, and maintenance learns from their sessions.');
+    expect(text()).toContain('New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.');
+  });
+
+  it('leaves one out and turns one back on through the owner’s door, at once', async () => {
+    members = { workspaces: [row('a', 'shop-cli @ EU', false), row('b', 'shop-cli @ SG', true)], addable: [] };
+    await mount(space());
+    await press(toggle('shop-cli @ SG'));
+    expect(memberWrites).toEqual(['DELETE /b']);
+    await press(toggle('shop-cli @ EU'));
+    expect(memberWrites).toEqual(['DELETE /b', 'POST  a']);
+    expect(patches).toEqual([]);
+  });
+
+  it('offers the workspaces with no repository, and adds the one picked', async () => {
+    members = { workspaces: [row('b', 'shop-cli @ SG', true)], addable: [row('n', 'notes', false), row('s', 'scratch', false, null)] };
+    await mount(space());
+    await act(async () => button('Add workspace…').click());
+    await settle();
+    const menu = document.body.querySelector('.orbit-menu')!;
+    expect(menu.querySelector('.orbit-menu-group-label')?.textContent).toBe('Workspaces with no repository');
+    const items = [...menu.querySelectorAll<HTMLElement>('.orbit-menu-item')];
+    expect(items.map((item) => item.textContent)).toEqual(['notes · build-01', 'scratch']);
+    await act(async () => items[0].click());
+    await settle();
+    expect(memberWrites).toEqual(['POST  n']);
+  });
+
+  it('draws no Add workspace when there is nothing to add', async () => {
+    members = { workspaces: [row('b', 'shop-cli @ SG', true)], addable: [] };
+    await mount(space());
+    expect([...container.querySelectorAll('button')].map((one) => one.textContent)).not.toContain('Add workspace…');
+  });
+
+  it('says so when a wiki with no repository has no workspace yet', async () => {
+    members = { workspaces: [], addable: [row('n', 'notes', false)] };
+    await mount({ ...space(), repoUrlNorm: null });
+    expect(container.querySelector('.wk-ws-empty')?.textContent).toBe('No workspace is in this wiki yet.');
+    expect(text()).toContain('This wiki has no repository behind it, so a workspace joins only when you add it.');
+    expect(text()).not.toContain('New workspaces on this repository');
+    expect(button('Add workspace…')).toBeTruthy();
   });
 });
 

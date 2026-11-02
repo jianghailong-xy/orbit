@@ -63,18 +63,27 @@
     "rootCommitSha": "The repository's first root commit, 40 lowercase hex characters, once a runner reports it. It tells apart two repositories behind one URL; NULL until then.",
     "binding": {
       "table": "wiki_space_workspace",
-      "rule": "A workspace is bound to at most one space (workspace_id is unique) and only to a space of its own owner (the composite foreign key refuses any other).",
-      "automatic": "A workspace with a repo_url is bound on first use to its owner's space with the same repo_url_norm.",
-      "manual": "A workspace without a repo_url is bound by the owner in Wiki settings (POST /api/wiki/spaces/:id/workspaces).",
-      "unbound": "A session whose workspace is bound to no space is refused WIKI_SPACE_UNBOUND, with one sentence saying how to bind it.",
+      "rule": "A workspace has at most one row (workspace_id is unique), and only to a space of its own owner (the composite foreign key refuses any other). A row is what the owner or a session said, and it outranks the repository.",
+      "automatic": "A workspace on a space's repository is in that space with no row: its repo_url normalizes to the space's repo_url_norm. Membership is read that way (wiki/wiki-workspaces.ts) rather than written, so a workspace joins however its repo_url came to be, and a space made after its workspaces has them all. A session of a workspace still writes a row on first use, which makes the space when its repository has none yet.",
+      "manual": "A workspace with no repository is added by the owner in Wiki settings (POST /api/wiki/spaces/:id/workspaces). One on another repository is refused 400: that repository has its own space, and what its sessions teach would be dropped here as another repository's knowledge.",
+      "leftOut": "The owner leaves a workspace out in Wiki settings (DELETE /api/wiki/spaces/:id/workspaces/:workspaceId): wiki_space_workspace.left_out_at is set, on a row made for it if it was in by its repository alone. Its sessions feed no maintenance run and are refused the wiki tools, what it already taught stays, and it does not rejoin by itself. The same POST turns it back on.",
+      "ownerChannel": "Both writes are the account owner's: a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token OWNER_INTERACTIVE_CREDENTIAL_REQUIRED, because who is in a space is who reads its entries. Neither moves the cursor: a workspace that joins is read from the space's watermark on.",
+      "unbound": "A session whose workspace is in no space is refused WIKI_SPACE_UNBOUND, with one sentence saying how to bind it. A session of a workspace left out is refused the same code, saying so.",
       "projects": "A project reaches its space through its codebase's canonical repository URL. There is no project-to-space table."
+    },
+    "workspaces": {
+      "route": "GET /api/wiki/spaces/:id/workspaces",
+      "shape": "{ workspaces, addable }, each a list of { id, name, runner, inWiki }: a public id, the workspace's name, the machine it is on as the app names it (null when no runner holds it), and whether it is in this space.",
+      "workspaces": "The live workspaces on the space's repository, and the ones a row of this space names, by name whatever the case, so a row stays where it is when its switch moves. A workspace left out stays on the list with inWiki false.",
+      "addable": "The live workspaces Wiki settings' Add workspace offers: no repository, and in no wiki. One the owner left out of another space counts as in none. inWiki is false in every row.",
+      "clients": "Web, macOS/iOS and Android draw it as the Workspaces section between Review mode and Maintenance (docs/mocks/wiki/38-workspaces)."
     },
     "list": {
       "route": "GET /api/wiki/spaces",
       "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last three takes them as absent.",
       "pendingOps": "The ops of its changesets that wait in Review (decision pending). Plan proposals are not ops and are not in it. Over the owner's spaces it is what the Activity page's first banner and Review's head show.",
       "planWaiting": "The things of its plan that wait on the owner, one each: the draft, revision or build on its way (the job plan.routes.state shows) that is held — by the server (plan.jobs.held), or made and not started while the maintenance workspace's runner is offline; the draft or revision that failed with no version stored since it was asked for; the draft waiting to be confirmed; and every proposal waiting. What is only going on (queued, drafting, writing) and a build that failed are not counted. The runner is the one the space's maintenance workspace is on, online by the runners list's own rule (isRunnerOnline); with no maintenance workspace, or one deleted or without a runner, it is unknown, and unknown is not offline. The count web wikiPlanPending and OrbitKit WikiPlanLogic.pending make, held by all three to the vectors of src/shared/src/wiki-docs.fixture.json plan.states (each case's pending). Added to pendingOps over the owner's spaces, it is the number waiting on the owner that the drawer, the web sidebar and the Wiki's Activity badge show — the sum of the Activity page's amber banners.",
-      "workspaceIds": "The workspaces bound to it (binding) that are not deleted, in the order they were bound: public ids, like every id on the user door.",
+      "workspaceIds": "The workspaces in it (binding) that are not deleted: the ones a row keeps there in the order they were bound, then the ones on its repository: public ids, like every id on the user door.",
       "docs": "{ written, total }: its confirmed plan's documents and how many are written, as docs.reads.directory counts them; null while it has no confirmed plan."
     },
     "settings": {
@@ -2158,7 +2167,7 @@
 
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
-    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
+    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is in no space and could not be bound on first use, or the owner left it out. The message says which in one sentence." },
     { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden, a source ref of a kind in sourceInput.rowIdKinds that is neither spelling of an id. errors[] names every field that failed." },
     { "code": "WIKI_KIND_OWNER_ONLY", "httpStatus": 403, "scope": "op", "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)." },
     { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows (errors[] names it by its path), cites a wiki entry or view, or an op that must cite a source cites none." },
@@ -2226,7 +2235,9 @@
           "GET /api/wiki/spaces",
           "POST /api/wiki/spaces",
           "PATCH /api/wiki/spaces/:id",
+          "GET /api/wiki/spaces/:id/workspaces",
           "POST /api/wiki/spaces/:id/workspaces",
+          "DELETE /api/wiki/spaces/:id/workspaces/:workspaceId",
           "GET /api/wiki/spaces/:id",
           "GET /api/wiki/spaces/:id/entries",
           "GET /api/wiki/spaces/:id/topics/:slug",
@@ -2299,7 +2310,7 @@
       "sessionHeader": "refused WIKI_OWNER_CHANNEL_ONLY whatever the session's role (the precedent is refuseSessionAuthoredConfirmation in coordinator-authority.ts)",
       "why": "The confirmation card in the runner is not a gate: the server never checks it and a headless call passes it. So only the owner channel decides."
     },
-    "readBoundary": "A session reads a space's entries only when its workspace is bound to that space: binding a workspace is the owner agreeing to share confirmed entries across the space's workspaces. A pending proposal is visible only to the session that made it.",
+    "readBoundary": "A session reads a space's entries only when its workspace is in that space (space.binding): being in a space is the owner agreeing to share confirmed entries across the space's workspaces, which the owner takes back by leaving one out. A pending proposal is visible only to the session that made it.",
     "excludedSessions": "Verifier, foreman and judgment sessions are refused every wiki_* call (WIKI_SESSION_EXCLUDED) and are never pushed to.",
     "rollout": {
       "env": "ORBIT_WIKI",
@@ -2321,7 +2332,7 @@
     "publishedWhen": [
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
-      "a space was created, its settings changed, or a workspace was bound",
+      "a space was created, its settings changed, or a workspace was added to it, turned back on or left out",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",

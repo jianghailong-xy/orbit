@@ -378,6 +378,42 @@ public struct WikiMaintenanceHeld: Codable, Equatable, Sendable {
 /// One owner's wiki for one codebase. `GET /wiki/spaces` answers these with `pendingOps` — the
 /// proposals waiting in it, which the drawer's amber number sums — and what the contract's
 /// `space.list` adds beside it; `GET /wiki/spaces/:id` with `usage` when asked for it.
+/// One row of Wiki settings' Workspaces section, or of what Add workspace offers (contract `space.workspaces`).
+public struct WikiSpaceWorkspaceRow: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    /// The machine it is on, as the app names it; nil for a workspace no runner holds.
+    public let runner: String?
+    public let inWiki: Bool
+
+    public init(id: String, name: String, runner: String?, inWiki: Bool) {
+        self.id = id
+        self.name = name
+        self.runner = runner
+        self.inWiki = inWiki
+    }
+}
+
+/// `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it.
+public struct WikiSpaceWorkspaces: Codable, Equatable, Sendable {
+    public let workspaces: [WikiSpaceWorkspaceRow]
+    public let addable: [WikiSpaceWorkspaceRow]
+
+    public init(workspaces: [WikiSpaceWorkspaceRow], addable: [WikiSpaceWorkspaceRow]) {
+        self.workspaces = workspaces
+        self.addable = addable
+    }
+}
+
+/// What `POST /wiki/spaces/:id/workspaces` carries.
+public struct WikiWorkspaceAddRequest: Encodable, Sendable {
+    public let workspaceId: String
+
+    public init(workspaceId: String) {
+        self.workspaceId = workspaceId
+    }
+}
+
 public struct WikiSpace: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let slug: String

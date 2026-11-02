@@ -128,7 +128,7 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 | 表 | 是什么 |
 | --- | --- |
 | `wiki_space` | 一个 owner 的一个代码库的 wiki，含设置 |
-| `wiki_space_workspace` | 哪些 workspace 的会话读这个 space；一个 workspace 最多绑一个 |
+| `wiki_space_workspace` | owner 或会话对某个 workspace 说过什么：手动加入、第一次使用时绑定，或被 owner 留在外面（`left_out_at`）；一个 workspace 最多一行 |
 | `wiki_topic` | 条目的主题分组，以及落在它下面的锚点路径前缀 |
 | `wiki_entry` | 谱系行：id 跨修订不变（`orbit-wiki:<id>` 指向它），带当前修订的内容、status、trust 与推送要读的标记 |
 | `wiki_entry_revision` | 每一版，只插入不更新；`(entry_id, revision)` 唯一 |
@@ -186,9 +186,13 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   `git@github.com:a/b.git` 与 `https://github.com/a/b` 都读作 `github.com/a/b`。它在每个 owner 内唯一；
   NULL 表示背后没有仓库的 space，这种可以有任意多个。`root_commit_sha` 等 runner 补报后用来区分同一 URL 背后的两个仓库。
 - **slug**：`^[a-z0-9]+(?:-[a-z0-9]+)*$`，至多 64 字符，每个 owner 内唯一。主题的 slug 同形，在 space 内唯一。
-- **绑定**：一个 workspace 最多绑一个 space，且只能绑自己 owner 的 space（复合外键拒绝别的）。带 `repo_url` 的
-  workspace 第一次使用时自动绑到同 owner、同 `repo_url_norm` 的 space；没有的由 owner 在 Wiki 设置里手动绑。
-  会话所在 workspace 没绑定时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
+- **绑定**：一个 workspace 最多一行，且只能指向自己 owner 的 space（复合外键拒绝别的）。行代表 owner 或会话说过的话，优先于仓库。
+  - 仓库和 space 相同的 workspace 不需要行就在这个 space 里：读取时比较规范化后的 `repo_url` 和 `repo_url_norm`（`wiki/wiki-workspaces.ts`），不写入。所以不管 `repo_url` 是怎么来的都会加入，后建的 space 也能拿到已有的 workspace。会话第一次调 wiki 工具时仍写一行，这个仓库还没有 space 时也由这一步建出来。
+  - 没有仓库的 workspace 由 owner 在 Wiki 设置里加入（`POST /api/wiki/spaces/:id/workspaces`）。别的仓库的 workspace 回 400：那个仓库有自己的 space，它的会话写出来的知识在这里也会被当成别的仓库的知识丢掉。
+  - owner 在 Wiki 设置里把 workspace 留在外面（`DELETE /api/wiki/spaces/:id/workspaces/:workspaceId`），写 `left_out_at`；只靠仓库加入的 workspace 会为此新建一行。它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来。同一个 POST 能把它打开。
+  - 这两个写入都只属于 owner：带会话头回 `WIKI_OWNER_CHANNEL_ONLY`，个人访问令牌回 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，因为谁在 space 里就是谁能读它的条目。两者都不动游标：加入的 workspace 从 space 当前的水位往后读。
+  - 会话所在 workspace 不在任何 space 时返回 `WIKI_SPACE_UNBOUND`，并用一句话说明怎么绑；被留在外面的 workspace 返回同一个码，并说明这一点。项目通过其 codebase 的仓库地址找到 space，没有单独的表。
+  - Wiki 设置的 Workspaces 卡（web、macOS/iOS、Android，在 Review mode 和 Maintenance 之间，效果图 38）读 `GET /api/wiki/spaces/:id/workspaces`：`{ workspaces, addable }`，每行 `{ id, name, runner, inWiki }`。`workspaces` 是这个仓库上、或这个 space 的行点名的活 workspace，按名字排（不分大小写），切开关时行不跳，被留在外面的留在列表里，`inWiki` 为 false。`addable` 是 `Add workspace…` 能加的：没有仓库、也不在任何 wiki 里（被别的 space 留在外面的算不在）。
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
@@ -213,7 +217,7 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
     `src/shared/src/wiki-docs.fixture.json` 的 `plan.states`（每个用例的 `pending`）上，服务端是 `wiki-plan-waiting.spec.ts`。
     所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、web 侧栏和 Wiki 页头 Activity 角标的那个「等你」数，等于
     Activity 页琥珀横幅之和；
-  - `workspaceIds`：绑在这个 space 上、没被删的 workspace，按绑定的先后，和 user 门上所有 id 一样是 public id；
+  - `workspaceIds`：在这个 space 里、没被删的 workspace：先是行留在这里的（按绑定的先后），再是靠仓库加入的，和 user 门上所有 id 一样是 public id；
   - `docs`：`{ written, total }`，已确认 plan 的篇数与已写篇数，算法同目录（§22.7）；没有已确认的 plan 时为 null。
 
 ---
@@ -704,7 +708,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 | 代码 | HTTP | 范围 | 何时 |
 | --- | --- | --- | --- |
 | `WIKI_DISABLED` | 404 | 请求 | 这个账号的 wiki 关着（`ORBIT_WIKI` 灰度） |
-| `WIKI_SPACE_UNBOUND` | 409 | 请求 | 调用会话的 workspace 没绑 space，也没能自动绑上 |
+| `WIKI_SPACE_UNBOUND` | 409 | 请求 | 调用会话的 workspace 不在任何 space 里、也没能自动绑上，或者被 owner 留在了外面 |
 | `WIKI_SCHEMA` | 400 | op | 形状不对：字段、限制、阶段 3 的 kind、amend 一条 decision、该带或不该带 baseRevision、该是行 id 的出处 ref 解不出 id（`sourceInput.rowIdKinds`）；`errors[]` 列出每个出错字段 |
 | `WIKI_KIND_OWNER_ONLY` | 403 | op | 非 owner 对只有 owner 能写的类型 add / amend / supersede |
 | `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到（`errors[]` 按 path 点名那条）、引用了 wiki 条目或视图，或该带出处却没带 |
@@ -755,7 +759,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   维护运行不是会话：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（§27.3 第 7 步）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
-- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
+- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、读 / 加入 / 留在外面 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
   按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
@@ -767,8 +771,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
   整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求。
-- **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
-  workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
+- **读的边界**：只有在 space 里的 workspace（§2 绑定）的会话能读这个 space 的条目；在 space 里就是 owner 同意在这些
+  workspace 之间共享**已确认**的条目，把某个 workspace 留在外面就是收回。待审提议只有提出它的会话看得见。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
   对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
   `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口和 ⌘K 的 Wiki 分区。
@@ -799,7 +803,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 - owner 级，走用户级控制面流（`GET /api/events`），信封不带会话。载荷只有 `id`：内容、Review 队列、绑定或设置发生变化的那个 **space** 的 id。
   不带条目、标题、状态、op 或计数；客户端据此重读，读的结果决定它能看到什么。
-- 何时发：记录了东西的变更集、owner 的决定、space 建立 / 改设置 / 绑定、记下了核实结论、待审过期或撤回，都在事务提交之后发。
+- 何时发：记录了东西的变更集、owner 的决定、space 建立 / 改设置 / 加入或留在外面 workspace、记下了核实结论、待审过期或撤回，都在事务提交之后发。
   幂等重放、dryRun、什么都没记录的请求不发。
 - 正确性不依赖它：丢掉所有事件只让客户端多等一会儿（聚焦、重连时都会重读）。web 把它映射到 wiki 查询组，不能落到 `groupsFor`
   默认的 sessions 组；Swift 解码为 `ControlEvent.wikiChanged`。

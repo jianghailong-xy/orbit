@@ -1478,7 +1478,7 @@ describe('wiki contract', () => {
       ...surface.doors.runner.routes,
       ...surface.doors.runner.verificationRoutes,
     ];
-    for (const route of user) expect(route).toMatch(/^(GET|POST|PATCH) \/api\/wiki\//u);
+    for (const route of user) expect(route).toMatch(/^(GET|POST|PATCH|DELETE) \/api\/wiki\//u);
     for (const route of runner) expect(route).toMatch(/^(GET|POST) \/api\/runner\/wiki\//u);
     // Deciding is the owner's, on the owner's door, and nowhere an agent can reach.
     expect(user).toContain(surface.decide.route);

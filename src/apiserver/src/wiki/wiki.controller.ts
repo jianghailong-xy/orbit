@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -138,12 +138,39 @@ export class WikiController {
     return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers), user.credential);
   }
 
-  /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */
-  @PatScope('wiki:write', { workspaceConfinable: false })
+  /** Who is in this space and who can be added: the Workspaces card of Wiki settings (contract `space.workspaces`). */
+  @PatScope('wiki:read', { workspaceConfinable: false })
+  @Get('spaces/:id/workspaces')
+  spaceWorkspaces(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.wiki.spaceWorkspaces(user.userId, id);
+  }
+
+  /**
+   * Bring a workspace into this space, or back into it. The owner's to say, as a review mode is: who is in a space is
+   * who reads its entries, so a session header is refused WIKI_OWNER_CHANNEL_ONLY and a personal access token at the guard.
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('spaces/:id/workspaces')
   @HttpCode(HttpStatus.OK)
-  bindWorkspace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: BindWikiWorkspaceDto) {
-    return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId);
+  bindWorkspace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: BindWikiWorkspaceDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId, actingSession(request.headers));
+  }
+
+  /** Leave a workspace out of this space: the owner's to say, as bringing one in is. */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Delete('spaces/:id/workspaces/:workspaceId')
+  leaveWorkspaceOut(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('workspaceId', PublicIdPipe) workspaceId: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.leaveWorkspaceOut(user.userId, id, workspaceId, actingSession(request.headers));
   }
 
   @PatScope('wiki:read', { workspaceConfinable: false })

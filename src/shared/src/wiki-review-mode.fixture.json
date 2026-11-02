@@ -26,8 +26,18 @@
     "crumb": "Settings",
     "sections": [
       "Review mode",
+      "Workspaces",
       "Maintenance"
     ],
+    "workspaces": {
+      "lead": "Agents in these workspaces read this wiki, and maintenance learns from their sessions.",
+      "leftOut": "Left out. It stays out until you turn it back on.",
+      "join": "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.",
+      "joinNoRepository": "This wiki has no repository behind it, so a workspace joins only when you add it.",
+      "empty": "No workspace is in this wiki yet.",
+      "add": "Add workspace…",
+      "addGroup": "Workspaces with no repository"
+    },
     "reviewModeHint": "Only you can switch it",
     "lead": "Who has to look at a change before agents get it.",
     "defaultTag": "default",

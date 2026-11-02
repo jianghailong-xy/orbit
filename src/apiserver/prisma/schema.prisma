@@ -7329,9 +7329,11 @@ model WikiSpace {
   @@map("wiki_space")
 }
 
-/// A workspace whose sessions read a space. Binding one is the owner agreeing to share confirmed
-/// entries across the space's workspaces. A workspace is bound to at most one space, and only to one
-/// of its own owner's: it is reached through (workspace_id, owner_id).
+/// What the owner said about a workspace and a space: it joined by hand, or a session of it bound it on
+/// first use, or the owner left it out (`leftOutAt`). A workspace on a space's repository needs no row to
+/// be in that space (`wiki/wiki-workspaces.ts`); a row, when there is one, is what counts. Being in a space
+/// is the owner agreeing to share confirmed entries across the space's workspaces. A workspace has at most
+/// one row, and only to a space of its own owner's: it is reached through (workspace_id, owner_id).
 model WikiSpaceWorkspace {
   id          String    @id @default(uuid(7)) @db.Uuid
   spaceId     String    @map("space_id") @db.Uuid
@@ -7340,6 +7342,9 @@ model WikiSpaceWorkspace {
   workspaceId String    @unique(map: "wiki_space_workspace_workspace_id_key") @map("workspace_id") @db.Uuid
   workspace   Workspace @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_space_workspace_workspace_fkey")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// When the owner left the workspace out (0463): it reads nothing of the space and feeds nothing to it, and
+  /// does not rejoin by itself. NULL: it is in the space.
+  leftOutAt   DateTime? @map("left_out_at") @db.Timestamptz(3)
 
   @@index([spaceId], map: "wiki_space_workspace_space_id_idx")
   @@map("wiki_space_workspace")

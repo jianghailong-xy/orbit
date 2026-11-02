@@ -67,6 +67,15 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
             body = buildJsonObject { putJsonArray("ops") { add(op) }; put("rationale", rationale); put("idempotencyKey", idempotencyKey) }))
     /** `PATCH /wiki/spaces/:id`: a key left out is left as it is. */
     suspend fun updateSpace(id: String, update: JsonObject): JsonElement = json(spacePath(id), method = HttpMethod.PATCH, body = update)
+    suspend fun spaceWorkspaces(id: String): WikiSpaceWorkspaces = get(spacePath(id, "workspaces"), WikiSpaceWorkspaces.serializer())
+    /** Bring a workspace into the wiki, or back into it. Refused to every session. */
+    suspend fun addWorkspace(spaceId: String, workspaceId: String) {
+        raw(spacePath(spaceId, "workspaces"), method = HttpMethod.POST, body = buildJsonObject { put("workspaceId", workspaceId) })
+    }
+    /** Leave a workspace out of the wiki. Refused to every session. */
+    suspend fun leaveWorkspaceOut(spaceId: String, workspaceId: String) {
+        raw(spacePath(spaceId, "workspaces", workspaceId), method = HttpMethod.DELETE)
+    }
     suspend fun confirmEntry(id: String) { raw(listOf("wiki", "entries", id, "confirm"), method = HttpMethod.POST) }
     suspend fun rejectEntry(id: String, reason: String) {
         raw(listOf("wiki", "entries", id, "reject"), method = HttpMethod.POST, body = buildJsonObject { put("reason", reason) })

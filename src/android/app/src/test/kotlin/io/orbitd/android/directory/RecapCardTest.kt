@@ -89,7 +89,7 @@ class RecapCardTest {
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RecapCard.swift").readText()
         val words = RecapCardCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .associate { it.isAccessible = true; it.name to it.get(null) as String }
-        assertEquals(7, words.size)
+        assertEquals(8, words.size)
         words.forEach { (name, value) ->
             assertTrue("RecapCard.swift no longer declares $name as \"$value\"", swift.contains("public static let $name = \"$value\""))
         }

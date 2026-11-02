@@ -21,6 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
+import { wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
 export { setWikiMaintenance } from './wiki-maintenance-settings';
 
@@ -122,8 +123,8 @@ export interface SpaceScope {
 /**
  * The space's scope (contract `maintenance.cursor.scope`).
  *
- * AN ORDINARY SESSION BELONGS TO THE WORKSPACE IT RAN IN, and a space reads the sessions of its bound
- * workspaces. A session that SPEAKS FOR A PROJECT does not: a project's coordinator session and the
+ * AN ORDINARY SESSION BELONGS TO THE WORKSPACE IT RAN IN, and a space reads the sessions of the workspaces in
+ * it (`wiki-workspaces.ts`). A session that SPEAKS FOR A PROJECT does not: a project's coordinator session and the
  * judgment sessions its wakes open run in the coordinator's workspace, which says where the coordinator
  * was set up and nothing about the codebase the project works on. Such a session belongs to the space
  * only when one of its projects WORKS here: one of the project's task sessions ran in one of the
@@ -143,12 +144,7 @@ export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId
     select: { id: true, repoUrlNorm: true, settings: true },
   });
   if (!space) throw new NotFoundException('no such wiki space');
-  const bindings = await prisma.wikiSpaceWorkspace.findMany({
-    where: { spaceId, ownerId },
-    select: { workspaceId: true },
-    orderBy: { workspaceId: 'asc' },
-  });
-  const workspaceIds = bindings.map((binding) => binding.workspaceId);
+  const workspaceIds = [...((await wikiWorkspacesOfSpaces(prisma, ownerId, [space])).get(spaceId) ?? [])].sort();
   // A project is the space's when its work runs here — a task session in one of the space's
   // workspaces — or when its codebase is the space's repository (contract `space.binding.projects`),
   // compared through the one normalizer repository identity has.

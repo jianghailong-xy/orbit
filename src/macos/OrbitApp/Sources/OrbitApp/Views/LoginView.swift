@@ -375,8 +375,9 @@ private struct ServerSheet: View {
 
 /// The app icon (`src/ios/Support/Assets.xcassets/AppIcon.appiconset`) drawn as vectors: the
 /// macOS build ships no compiled asset catalog (see `VectorMark`), so `Image("AppIcon")` would
-/// render blank there. The mark is the favicon's 64-unit geometry, placed where the icon puts it.
-private struct OrbitAppIcon: View {
+/// render blank there. The mark is the favicon's 64-unit geometry, placed where the icon puts it. It is
+/// also Orbit's avatar beside its messages in the Landings window.
+struct OrbitAppIcon: View {
     let size: CGFloat
 
     var body: some View {

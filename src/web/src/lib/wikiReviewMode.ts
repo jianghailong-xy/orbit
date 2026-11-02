@@ -45,6 +45,17 @@ export const WIKI_SETTINGS_TITLE = 'Wiki settings';
 export const WIKI_REVIEW_MODE = 'Review mode';
 export const WIKI_REVIEW_MODE_HINT = 'Only you can switch it';
 export const WIKI_REVIEW_MODE_LEAD = 'Who has to look at a change before agents get it.';
+
+/** The Workspaces card (mock 38, contract `space.workspaces`): who is in this wiki, which the owner can change. */
+export const WIKI_WORKSPACES = 'Workspaces';
+export const WIKI_WORKSPACES_LEAD = 'Agents in these workspaces read this wiki, and maintenance learns from their sessions.';
+export const WIKI_WORKSPACE_LEFT_OUT = 'Left out. It stays out until you turn it back on.';
+export const WIKI_WORKSPACES_JOIN =
+  'New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.';
+export const WIKI_WORKSPACES_JOIN_NO_REPOSITORY = 'This wiki has no repository behind it, so a workspace joins only when you add it.';
+export const WIKI_WORKSPACES_EMPTY = 'No workspace is in this wiki yet.';
+export const WIKI_ADD_WORKSPACE = 'Add workspace…';
+export const WIKI_ADD_WORKSPACE_GROUP = 'Workspaces with no repository';
 export const WIKI_MODE_DEFAULT = 'default';
 
 /** The three modes, in the order both clients list them, each with its one sentence. */
@@ -167,7 +178,7 @@ export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: {
  * The sections of the settings page, top to bottom — the order both clients draw them in, which
  * `WikiReviewModeCopyParityTests` reads out of the page and holds `WikiLogic.SettingsSection` to.
  */
-export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_MAINTENANCE] as const;
+export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE] as const;
 
 // ── The marks an entry wears, and the owner's two answers (mocks 17–18) ─────────────────────────
 

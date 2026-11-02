@@ -209,6 +209,14 @@ internal object WikiModeCopy {
     const val reviewModeHint = "Only you can switch it"
     const val reviewModeLead = "Who has to look at a change before agents get it."
     const val modeDefault = "default"
+    const val workspaces = "Workspaces"
+    const val workspacesLead = "Agents in these workspaces read this wiki, and maintenance learns from their sessions."
+    const val workspaceLeftOut = "Left out. It stays out until you turn it back on."
+    const val workspacesJoin = "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki."
+    const val workspacesJoinNoRepository = "This wiki has no repository behind it, so a workspace joins only when you add it."
+    const val workspacesEmpty = "No workspace is in this wiki yet."
+    const val addWorkspace = "Add workspace…"
+    const val addWorkspaceGroup = "Workspaces with no repository"
     fun modeLabel(mode: String?) = when (mode) { "manual" -> "Manual"; "tiered" -> "Tiered"; "automatic" -> "Automatic"; else -> "" }
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."
