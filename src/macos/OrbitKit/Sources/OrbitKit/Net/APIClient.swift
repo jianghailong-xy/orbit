@@ -574,6 +574,14 @@ public final class APIClient: @unchecked Sendable {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
     }
 
+    /// What one version of a task's evidence cites, a page at a time, for the card that shows it
+    /// (`EvidenceFiles.swift`): read from rows, so a file reads the same after it has expired. The
+    /// first page leaves the offset out, as web's read does.
+    public func evidenceFiles(taskID: String, revision: String, offset: Int = 0) async throws -> EvidenceFilePage {
+        try await get("tasks/\(taskID)/evidence/\(revision)/files",
+                      query: offset > 0 ? [URLQueryItem(name: "offset", value: String(offset))] : [])
+    }
+
     // MARK: an OWNER_CONFIRMED task — the question only its owner answers
 
     /// What an OWNER_CONFIRMED task is waiting on and what its owner has decided about it — the read

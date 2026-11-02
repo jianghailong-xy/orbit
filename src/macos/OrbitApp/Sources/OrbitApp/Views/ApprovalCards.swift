@@ -941,7 +941,7 @@ private struct EvidenceDecisionCard: View {
     /// it can no longer be answered.
     @ViewBuilder private func facts(_ standing: EvidenceDecisionStanding) -> some View {
         if let row = standing.row {
-            EvidenceDecisionFacts(row: row)
+            EvidenceDecisionFacts(console: console, row: row)
         } else {
             // The address and nothing else: a revision that has left the read is not published
             // any more, and this card kept no copy of what it said.
@@ -1013,6 +1013,7 @@ private struct EvidenceDecisionCard: View {
 /// One row, in the order a person decides in: what is claimed, what is admitted missing, and what
 /// was checked for them. Every visible string is a field of the row or a count of one.
 private struct EvidenceDecisionFacts: View {
+    let console: ConsoleModel
     let row: EvidenceDecisionRow
 
     @State private var claimOpen = false
@@ -1032,6 +1033,12 @@ private struct EvidenceDecisionFacts: View {
                 .font(.orbitLabel.bold()).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             standardBlock
+            // What the evidence is, right under what it is measured against, and only when the version
+            // cites a file: a card with none is the card it has always been, and reads nothing more.
+            if EvidenceFiles.citesFiles(row.citations) {
+                EvidenceFilesArea(console: console, taskID: row.taskId, revision: row.evidenceRevision,
+                                  citations: row.citations)
+            }
             gapsBlock
             checksBlock
             accountBlock
@@ -2226,7 +2233,7 @@ struct AnsweredDecisionView: View {
                 Text(CriteriaDecisions.provenanceLabel)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                EvidenceDecisionFacts(row: row)
+                EvidenceDecisionFacts(console: console, row: row)
             } actions: {
                 EmptyView()
             }

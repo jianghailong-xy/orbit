@@ -30,7 +30,7 @@ final class FileHandoffWiringTests: XCTestCase {
     private func deliver() throws -> String {
         let file = try source(Self.handoff)
         let start = try XCTUnwrap(file.range(of: "static func deliver("))
-        let end = try XCTUnwrap(file.range(of: "private static func markAsDownloaded",
+        let end = try XCTUnwrap(file.range(of: "static func safeName",
                                            range: start.upperBound..<file.endIndex))
         return String(file[start.lowerBound..<end.lowerBound])
     }
@@ -81,24 +81,52 @@ final class FileHandoffWiringTests: XCTestCase {
     }
 
     /// A file on a Mac carries the mark before anything else happens to it, and a file that cannot be
-    /// marked goes no further. iOS has no such mark, and its share sheet is the system's own.
+    /// marked goes no further. iOS has no such mark, and its share sheet is the system's own. What the
+    /// mark is, on a real file, is `DownloadMarkTests`.
     func testEveryFileIsMarkedBeforeItIsHandedOn() throws {
         let body = try deliver()
-        let write = try offset(of: "try data.write(to: file, options: .atomic)", in: body)
-        let mark = try offset(of: "try markAsDownloaded(file)", in: body)
+        let write = try offset(of: "try DownloadMark.write(data, to: file)", in: body)
         let caught = try offset(of: "} catch {", in: body)
         let decide = try offset(of: "guard opensFromATap.contains(", in: body)
-        XCTAssertLessThan(write, mark)
-        XCTAssertLessThan(mark, caught, "a failure to mark no longer ends the handoff")
+        XCTAssertLessThan(write, caught, "a failure to mark no longer ends the handoff")
         XCTAssertLessThan(caught, decide)
-
-        let file = try source(Self.handoff)
-        let helper = try XCTUnwrap(file.range(of: "private static func markAsDownloaded"))
-        let rest = String(file[helper.lowerBound...])
-        XCTAssertTrue(rest.contains("values.quarantineProperties = ["))
-        XCTAssertTrue(rest.contains("try file.setResourceValues(values)"))
+        XCTAssertFalse(body.contains("data.write("), "bytes are written here without the mark")
         XCTAssertTrue(body.contains("UIActivityViewController(activityItems: [file]"),
                       "the iPhone's share sheet is no longer what a tap shows there")
+    }
+
+    /// The file preview's two ways out write the same bytes under the same agent-chosen name, so they
+    /// carry the same mark: the Save panel's file once the panel has written it, and a share as the
+    /// transfer writes it. Each is one wire, and cutting it makes a saved file run unchecked.
+    func testAFilePreviewsSaveAndShareCarryTheMark() throws {
+        let preview = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/WorktreeFilePreview.swift")
+        let exporter = try XCTUnwrap(preview.range(of: ".fileExporter(isPresented: $exporting,"))
+        let alert = try XCTUnwrap(preview.range(of: ".alert(errorTitle,", range: exporter.upperBound..<preview.endIndex))
+        let save = String(preview[exporter.lowerBound..<alert.lowerBound])
+        XCTAssertTrue(save.contains("try DownloadMark.finishSaving(result)"),
+                      "a file saved from the preview no longer gets the mark")
+        XCTAssertTrue(save.contains("exportError = APIClient.failureReason(error)"),
+                      "and a reader is no longer told when it did not")
+
+        let shared = try XCTUnwrap(preview.range(of: "private struct WorktreeSharedFile: Transferable"))
+        let share = String(preview[shared.lowerBound...])
+        XCTAssertTrue(share.contains("try DownloadMark.write(item.data, to: url)"),
+                      "a shared file no longer gets the mark")
+        XCTAssertFalse(share.contains("item.data.write("), "bytes are written here without the mark")
+    }
+
+    /// The mark has one spelling, so a new way out cannot carry a different one. Everything in the app
+    /// that writes bytes somebody else chose the name of comes through `DownloadMark`.
+    func testTheMarkLivesInOnePlace() throws {
+        let sources = try root().appendingPathComponent("src/macos/OrbitApp/Sources")
+        let walker = try XCTUnwrap(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            XCTAssertFalse(text.contains("quarantineProperties"), "\(url.lastPathComponent) marks a file itself")
+        }
+        let mark = try source("src/macos/OrbitKit/Sources/OrbitKit/App/DownloadMark.swift")
+        XCTAssertTrue(mark.contains("values.quarantineProperties = ["))
+        XCTAssertTrue(mark.contains("try file.setResourceValues(values)"))
     }
 
     /// Finder shows this folder to the reader, and the name in it is not one Orbit chose.
