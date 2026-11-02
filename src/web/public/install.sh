@@ -8,10 +8,11 @@
 # /usr/local/bin/orbit, so the binary replaces that file as root, owned by uid 0 and gid 0 with
 # mode 0755, through sudo unless already root. Anywhere else it goes to ~/.orbit/bin/orbit of the
 # account the runner service runs as (under sudo, the account that invoked it; root included),
-# where the runner can replace it when it updates itself, and that account's ~/.bashrc and
-# ~/.zshrc put ~/.orbit/bin first on PATH: no sudo, and /usr/local/bin/orbit is left as it is.
-# The account writes all of that itself, under sudo too, so root follows no link in its home, and
-# it runs `orbit register` itself, so root never executes a file the account can replace.
+# where the runner can replace it when it updates itself. A launcher, ~/.local/bin/orbit, is a
+# symlink to it. install.sh never edits ~/.bashrc or ~/.zshrc: when ~/.local/bin is not on PATH,
+# it prints the line that adds it, for the account to run. The account writes all of that itself,
+# under sudo too, so root follows no link in its home, and it runs `orbit register` itself, so
+# root never executes a file the account can replace.
 # Set ORBIT_BIN_DIR to install the binary straight into that directory instead; /usr/local/bin
 # itself is still written as on a set-up machine.
 set -euo pipefail
@@ -20,8 +21,6 @@ BASE_URL="${ORBIT_BASE_URL:-https://orbitd.io}"
 MACHINE_DIR="/usr/local/bin"
 TEMPLATE="/etc/systemd/system/orbit-runner@.service"
 NAME="orbit"
-PATH_BEGIN="# >>> orbit >>>"
-PATH_END="# <<< orbit <<<"
 
 case "$(uname -s)" in
   Linux)  os="linux" ;;
@@ -98,7 +97,9 @@ elif [ -e "$TEMPLATE" ]; then
   machine=1
 fi
 
-rcs=""
+launcher=""
+local_bin=""
+path_hint=""
 if [ -n "$machine" ]; then
   target="${MACHINE_DIR}/${NAME}"
   [ ! -e "$TEMPLATE" ] || echo "note: hostd and every account's runner on this machine run ${target}, so it is installed there, as root."
@@ -149,16 +150,20 @@ else
     exit 1
   fi
   rm -f "$tmp"
-  # The account's interactive shells find it first on PATH: one marked block in each rc file,
-  # left alone once it is there, which the account looks for and adds itself, as above. $HOME and
-  # $PATH in it are for the rc file to expand.
-  for rc in "${home}/.bashrc" "${home}/.zshrc"; do
-    # shellcheck disable=SC2016
-    as_owner sh -c '{ [ -f "$1" ] && grep -qxF "$2" "$1"; } || { [ ! -s "$1" ] || echo; printf "%s\n" "$2" "$3" "$4"; } >>"$1"' \
-      sh "$rc" "$PATH_BEGIN" 'export PATH="$HOME/.orbit/bin:$PATH"' "$PATH_END" </dev/null ||
-      { echo "note: could not add ${bin_dir} to PATH in ${rc}" >&2; continue; }
-    rcs="${rcs:+${rcs}, }${rc}"
-  done
+  # A launcher in ~/.local/bin, the conventional user bin directory, is how PATH finds orbit. The
+  # account makes it itself, under sudo too. install.sh does not edit the account's rc files; if
+  # this shell's PATH does not hold ~/.local/bin, the closing words give the line that adds it.
+  local_bin="${home}/.local/bin"
+  # shellcheck disable=SC2016
+  if as_owner sh -c 'set -e; mkdir -p "$1"; ln -sfn "$2" "$1/orbit"' sh "$local_bin" "$target" </dev/null; then
+    launcher="${local_bin}/${NAME}"
+    case ":${PATH}:" in
+      *":${local_bin}:"*) ;;
+      *) path_hint=1 ;;
+    esac
+  else
+    echo "note: could not create ${local_bin}/${NAME}; use ${target} directly" >&2
+  fi
 fi
 trap - EXIT
 
@@ -166,10 +171,19 @@ trap - EXIT
 ver="$(as_owner "$target" version </dev/null 2>/dev/null || echo '?')"
 echo ""
 echo "✓ Orbit ${ver} installed to ${target}"
-if [ -n "$rcs" ]; then
-  echo "  ${bin_dir} is first on PATH in new terminals (${rcs})."
-  echo "  In this terminal, log in again or run:  source ~/.bashrc   (zsh: source ~/.zshrc)"
-  echo "  Non-interactive use (ssh host cmd, cron) does not read these files: there, use ${target}."
+if [ -n "$launcher" ]; then
+  echo "  Launcher: ${launcher} -> ${target}"
+  if [ -n "$path_hint" ]; then
+    # shellcheck disable=SC2016
+    cat <<EOF
+  ${local_bin} is not on PATH. Add it in your shell startup file:
+    echo 'export PATH="\$HOME/.local/bin:\$PATH"' >> ~/.zshrc && source ~/.zshrc    # zsh
+    echo 'export PATH="\$HOME/.local/bin:\$PATH"' >> ~/.bashrc && source ~/.bashrc  # bash
+EOF
+  else
+    echo "  ${local_bin} is on PATH: new terminals find orbit there."
+  fi
+  echo "  Non-interactive use (ssh host cmd, cron): ${target}."
 fi
 
 # Hand straight off to `orbit register` so install + connect is one command. `curl … | bash`
