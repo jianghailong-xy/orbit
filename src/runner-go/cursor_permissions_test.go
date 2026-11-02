@@ -438,15 +438,17 @@ func TestCursorApprovalInterrupted(t *testing.T) {
 					if run.completions[0].Status != stInterrupted {
 						t.Fatalf("stopped turn settled %+v", run.completions[0])
 					}
-					if cancels := run.fake.received(t); func() int {
-						n := 0
-						for _, line := range cancels {
-							if line.Message["method"] == "session/cancel" {
-								n++
+					cancels, answered := 0, false
+					for _, line := range run.fake.received(t) {
+						if line.Message["method"] == "session/cancel" {
+							cancels++
+							if answered {
+								t.Error("the request waiting on the turn was answered before Cursor CLI was told to cancel it")
 							}
 						}
-						return n
-					}() != 1 {
+						answered = answered || (s.card != "" && line.Message["method"] == nil && rpcIDKey(line.Message["id"]) == s.request)
+					}
+					if cancels != 1 {
 						t.Fatal("Cursor CLI was not told once to cancel the turn")
 					}
 				case "disconnect":
@@ -1344,6 +1346,34 @@ func newCursorBridgeRig(mode string, card cursorApprovalCard) *cursorBridgeRig {
 		rig.mu.Unlock()
 	}
 	return rig
+}
+
+// A stop tells Cursor CLI before it answers what the CLI asked: the answer is one the CLI takes as a refusal, and a turn
+// that finished on it before the cancel came would settle as finished, not stopped. Whichever order the two come in, the
+// answer gets the time to go out first.
+func TestCursorStopTellsCursorCLIBeforeItAnswersWhatItAsked(t *testing.T) {
+	filed := make(chan struct{})
+	rig := newCursorBridgeRig("plan", func(ctx context.Context, _ string, _ interface{}, _ string) (*ApprovalDecisionResponse, error) {
+		close(filed)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	rig.bridge.begin("turn")
+	rig.bridge.plan(1, map[string]interface{}{"toolCallId": "call", "plan": "a plan"})
+	<-filed
+	var aheadOfTheCancel []map[string]interface{}
+	rig.bridge.stop(func() {
+		time.Sleep(50 * time.Millisecond)
+		rig.mu.Lock()
+		aheadOfTheCancel = rig.answers["1"]
+		rig.mu.Unlock()
+	})
+	if len(aheadOfTheCancel) != 0 {
+		t.Errorf("the request was answered %v before Cursor CLI was told to cancel the turn", aheadOfTheCancel)
+	}
+	if got := rig.answered("1"); !cursorJSONEqual(t, got, []string{"cancelled"}) {
+		t.Errorf("the request was answered %q, want cancelled once", got)
+	}
 }
 
 func (rig *cursorBridgeRig) answered(id string) []string {
