@@ -116,6 +116,48 @@ class KilledAfterClaim extends WatchEvaluatorService {
   }
 }
 
+/** A replica whose next pass fails, as a pass fails on a database that went away: it throws once `fail` is called. */
+class FailingPass extends WatchEvaluatorService {
+  /** When each pass began. */
+  readonly passes: number[] = [];
+  private throwNow: (() => void) | null = null;
+  private failNext = false;
+  private readonly entered: Promise<void>;
+  private enter!: () => void;
+
+  constructor(...args: ConstructorParameters<typeof WatchEvaluatorService>) {
+    super(...args);
+    this.entered = new Promise((resolve) => (this.enter = resolve));
+  }
+
+  /** The next pass starts and waits for `fail`; resolves once it is in flight. */
+  failNextPass(): Promise<void> {
+    this.failNext = true;
+    return this.entered;
+  }
+
+  /** The waiting pass throws. Its pass is over by the next timer: everything after the throw runs in microtasks. */
+  fail(): void {
+    this.throwNow?.();
+  }
+
+  override async drain(): Promise<number> {
+    this.passes.push(Date.now());
+    if (!this.failNext) return super.drain();
+    this.failNext = false;
+    await new Promise<void>((resolve) => {
+      this.throwNow = resolve;
+      this.enter();
+    });
+    throw new Error('the database went away mid-pass');
+  }
+
+  override async stop(): Promise<void> {
+    this.fail();
+    await super.stop();
+  }
+}
+
 let sql: Client;
 let ownerId: string;
 let otherOwnerId: string;
@@ -752,6 +794,104 @@ test('a burst of hints naming a watch whose landing is parked on a lock waits fo
     10_000,
   );
   assert.equal(again.state, 'ACTIVE');
+});
+
+test('a hint that finds its watch already due starts a pass for it: a watch whose row another ask held as the pass claimed is matched within seconds, not at the poll interval', { skip, timeout: 60_000 }, async () => {
+  const { evaluator } = replica(); // its poll interval is an hour
+  const task = await insertTask('OPEN');
+  const watchId = await insertWatch([{ kind: 'TASK', id: task }], all('TASK_TERMINAL'));
+  assert.equal((await evaluator.evaluate(watchId)).outcome, 'SCHEDULED');
+
+  // 1. Its task ends and the watch is made due, but its row is held when the pass claims, as an ask of a burst
+  //    holds it while it decides: one that read the watch before another ask made it due. The claim passes the
+  //    row over, and the pass ends with the watch still due.
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [task]);
+  await sql.query(`UPDATE "watch" SET "next_evaluate_at" = now() WHERE "id" = $1`, [watchId]);
+  const release = await holdRow(`SELECT 1 FROM "watch" WHERE "id" = '${watchId}' FOR UPDATE`);
+  const drain = evaluator.drain.bind(evaluator);
+  const firstPass = new Promise<number>((resolve, reject) => {
+    evaluator.drain = () => {
+      evaluator.drain = drain;
+      const evaluated = drain();
+      evaluated.then(resolve, reject);
+      return evaluated;
+    };
+  });
+  evaluator.start();
+  assert.equal(await firstPass, 0, 'the pass claimed a watch whose row was held');
+  await release();
+  assert.equal((await readWatch(watchId)).due, true);
+  assert.equal((await readMatches(watchId)).length, 0);
+
+  // 2. The next hint naming it finds it already due. It writes nothing, and the pass it starts matches it.
+  assert.equal(await evaluator.hint('TASK', [task]), 0, 'a hint wrote a watch that was already due');
+  await eventually('the Match of the pass the hint started', () => readMatches(watchId), (m) => m.length === 1, 10_000);
+});
+
+test('a hint that came during a failed pass is not left to the poll interval, and the failed pass is not retried for each of them: however many came, one pass follows, after a pause', { skip, timeout: 60_000 }, async () => {
+  const { evaluator } = replica({}, undefined, FailingPass); // its poll interval is an hour
+  const failing = evaluator as FailingPass;
+  const task = await insertTask('OPEN');
+  const watchId = await insertWatch([{ kind: 'TASK', id: task }], all('TASK_TERMINAL'));
+  assert.equal((await evaluator.evaluate(watchId)).outcome, 'SCHEDULED');
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [task]);
+
+  const inFlight = failing.failNextPass();
+  evaluator.start();
+  await inFlight;
+  // The first makes the watch due and the others find it so: three hints asking for another pass while this one runs.
+  assert.equal(await evaluator.hint('TASK', [task]), 1);
+  assert.equal(await evaluator.hint('TASK', [task]), 0);
+  assert.equal(await evaluator.hint('TASK', [task]), 0);
+  const failedAt = Date.now();
+  failing.fail();
+
+  await eventually('the Match of the pass that follows', () => readMatches(watchId), (m) => m.length === 1, 10_000);
+  assert.equal(failing.passes.length, 2, 'the failed pass was retried for each hint that came during it');
+  const pausedMs = failing.passes[1] - failedAt;
+  assert.ok(pausedMs >= 900, `the failed pass was retried after only ${pausedMs} ms`);
+});
+
+test('a hint that follows a failed pass is not left to the poll interval, and does not retry the failed pass itself: it brings the next pass forward to a pause, however many follow', { skip, timeout: 60_000 }, async () => {
+  const { evaluator } = replica({}, undefined, FailingPass); // its poll interval is an hour
+  const failing = evaluator as FailingPass;
+  const task = await insertTask('OPEN');
+  const watchId = await insertWatch([{ kind: 'TASK', id: task }], all('TASK_TERMINAL'));
+  assert.equal((await evaluator.evaluate(watchId)).outcome, 'SCHEDULED');
+
+  // The watch is due, and the pass that should take it fails with no hint beside it: the next look is the timer's.
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [task]);
+  await sql.query(`UPDATE "watch" SET "next_evaluate_at" = now() WHERE "id" = $1`, [watchId]);
+  const inFlight = failing.failNextPass();
+  evaluator.start();
+  await inFlight;
+  failing.fail();
+  await sleep(1);
+  assert.equal((await readWatch(watchId)).due, true);
+  assert.equal((await readMatches(watchId)).length, 0);
+
+  // Hints keep coming, and each reaches the database. The first finds the watch already due and writes nothing. None
+  // of them starts a pass: the pass that matches the watch comes after a pause, and later hints do not put it off.
+  const hintedAt = Date.now();
+  assert.equal(await evaluator.hint('TASK', [task]), 0, 'a hint wrote a watch that was already due');
+  await eventually('the Match of the pass that follows', async () => {
+    await evaluator.hint('TASK', [task]);
+    return readMatches(watchId);
+  }, (m) => m.length === 1, 10_000);
+  const pausedMs = failing.passes[1] - hintedAt;
+  assert.ok(pausedMs >= 900, `a hint retried the failed pass after only ${pausedMs} ms`);
+});
+
+test('a database that is failing is retried by the timer and not by a hint: a hint that cannot reach it starts no pass', { skip, timeout: 60_000 }, async () => {
+  // Nothing listens on port 1, so every statement fails as on a database that went away.
+  const unreachable = prismaClientFor('postgresql://nobody:nothing@127.0.0.1:1/gone');
+  const { evaluator } = replica({}, undefined, FailingPass, unreachable); // its poll interval is an hour
+  const { passes } = evaluator as FailingPass;
+  evaluator.start();
+  assert.equal(passes.length, 1, 'starting the loop did not start its first pass');
+  for (let i = 0; i < 5; i += 1) assert.equal(await evaluator.hint('TASK', [randomUUID()]), 0);
+  await sleep(1_500); // past the pause of the retry that a hint which did reach the database earns
+  assert.equal(passes.length, 1, 'a hint that could not reach the database started a pass');
 });
 
 test('a change whose hint meets a landing that read the rows before it is still matched within seconds, not at the reconciliation', { skip, timeout: 120_000 }, async () => {
