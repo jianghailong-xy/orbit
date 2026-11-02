@@ -111,6 +111,43 @@ switch, so ending, deleting, reassigning, or turning orchestration off revokes a
 expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
 agent-management surface to the CLI. Only a human can switch orchestration.
 
+### Permission modes, shell commands and background jobs
+
+A session's permission mode decides what runs without a person. It covers the engine's own shell tool and the
+background jobs a session starts with `bg_run`. A job runs under the runner's account, outside any sandbox the
+engine has, so the runner checks every job against the session's current mode before it starts, whichever engine
+asks and whichever way the request reaches the runner.
+
+| Mode | `bg_run` | Claude Code's `Bash` and `Monitor` |
+| --- | --- | --- |
+| Plan | Refused, with what to do instead | A card for each command; the Auto classifier is off in Plan |
+| Default, Accept Edits | A card showing what would run: allow once, always allow, or reject | A card for each command not already allowed |
+| Don't Ask | Refused, with what to do instead | Refused unless already allowed |
+| Auto | Started | Run without asking |
+| Bypass | Started | Run without asking |
+
+- **A person can take as long as they like.** A card answered within about 20 seconds is answered in the tool call.
+  After that the call returns with the job in status `waiting_for_owner`, under the id it will keep. Orbit wakes the
+  session when the owner answers: on a yes the job starts under that id, on anything else it never runs and ends as
+  `killed` with the reason `not_allowed`. `bg_list` and `bg_output` show where it stands, and `bg_kill` withdraws it.
+- **Always allow** on a job's card remembers the command's prefix, one rule per sub-command, as it does on a `Bash`
+  card, and the same rules answer both. DeepSeek Harness has no always allow, as on its other cards.
+- **Don't Ask refuses every job,** including one whose command a rule already allows.
+- **A mode change counts from the next call.** That includes Claude Code leaving Plan when a plan is approved.
+- **DeepSeek Harness:** its Auto keeps a file sandbox, so a job outside it needs what any escalation there needs: a
+  routine command that stays in the workspace starts, and anything else, or a job that sets its own variables, gets a
+  card. Plan, Accept Edits and Bypass do not exist on this engine.
+- **Other engines' own shell tools** follow each engine's own rules for the mode. Codex does not enforce Don't Ask on
+  its shell tool: it runs commands there without asking, although a job is refused.
+- **A question for a person is not a job.** A call that files a card and waits for the answer, such as `task_create`,
+  works in every mode, on the engines whose tool calls have a deadline too.
+
+An upgrade changes one thing people may notice: Claude Code in Default and Accept Edits now asks before each `Bash`
+command that is not already allowed, and Don't Ask refuses one. Before this change these modes did not.
+
+This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
+[Security notes](#security-notes).
+
 ### Installing an engine on a runner
 
 With orchestration on, `orbit runner list` (MCP `runner_list`) shows the account's runners: their ids, whether
@@ -495,6 +532,7 @@ yourself has no such mark.
 - `~/.orbit/user.json` holds a personal access token that acts as you. Run `orbit logout` (or revoke the token
   under Settings → Access tokens) when a machine no longer needs it.
 - The runner machine's OS account is the local trust boundary; sibling processes owned by that account are
-  not isolated from each other.
+  not isolated from each other. That includes permission modes: a process that can read this account's files can
+  act with what they hold, whatever mode the session it came from is in.
 - Capability output is contextual. Treat it as the source of truth after upgrades or credential changes.
 - Prefer `--message-file` for untrusted or multiline input so shell interpolation does not change the content.

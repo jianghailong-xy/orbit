@@ -68,7 +68,9 @@ conversation after a process or machine restart.
 - **Network:** Runners initiate connections to the server, so no inbound runner port is required. A public
   deployment still needs HTTPS and normal perimeter controls.
 - **Approvals:** Permission modes and allowlists decide which actions run immediately and which require a
-  human decision. They reduce accidental execution; they are not a substitute for runner-host isolation.
+  human decision, and the runner holds background jobs to the same modes
+  ([table](runner-cli.md#permission-modes-shell-commands-and-background-jobs)). They reduce accidental execution;
+  they are not a substitute for runner-host isolation.
 - **Orchestration:** Session-scoped proofs are short-lived and re-authorized against the live session,
   workspace, and runner assignment. Service tokens grant explicit scopes and can be revoked independently.
 
