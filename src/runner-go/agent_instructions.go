@@ -286,7 +286,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		}
 		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
 		// instructions send every agent here for its evidence.
-		for _, action := range []string{"upload", "fetch", "list"} {
+		for _, action := range []string{"upload", "fetch", "list", "pin"} {
 			rules = append(rules, "Bash("+command+" file "+action+" *)")
 		}
 		// import hands the server, for a space its owner named, files the owner asked for, and the

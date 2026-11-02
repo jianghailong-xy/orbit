@@ -31,6 +31,8 @@ export interface FileStore {
    * are not kept here.
    */
   open(sha256: string): Promise<Readable | null>;
+  /** Let the bytes named `sha256` go (file-retention.ts is the one caller). Bytes already gone are no error. */
+  remove(sha256: string): Promise<void>;
 }
 
 /** The S3-compatible bucket a deployment keeps files in (`ORBIT_FILES_BACKEND=s3`). */
@@ -55,6 +57,15 @@ export interface FilesConfig {
   storage: FileStorage;
   /** Set exactly when `storage` is `s3`. */
   s3?: S3FilesConfig;
+  /** The most one account may keep (ORBIT_FILES_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
+  quotaBytes?: number;
+  /**
+   * How far back a retained Postgres backup reaches: ORBIT_BASE_BACKUP_INTERVAL × (ORBIT_BASE_BACKUP_KEEP + 1), from the two
+   * values the backup sidecar keeps its base backups by. A backup stays until that many newer ones have finished, and each
+   * round takes a little longer than the interval (it waits for its poll, then runs), which the one more interval covers.
+   * A file's bytes outlast this (`fileGraceMs`), so that restoring any retained backup finds the bytes its rows name.
+   */
+  backupRetentionMs?: number;
 }
 
 export const DEFAULT_FILES_DIR = '/var/lib/orbit/files';
@@ -62,6 +73,26 @@ export const DEFAULT_FILES_DIR = '/var/lib/orbit/files';
 /** ORBIT_FILES_DIR, or its default. */
 export function filesDirFrom(env: NodeJS.ProcessEnv = process.env): string {
   return env.ORBIT_FILES_DIR?.trim() || DEFAULT_FILES_DIR;
+}
+
+/** A whole number above zero from the environment, or `fallback` when it is unset or blank. */
+function positiveIntegerFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): number;
+function positiveIntegerFrom(env: NodeJS.ProcessEnv, name: string): number | undefined;
+function positiveIntegerFrom(env: NodeJS.ProcessEnv, name: string, fallback?: number): number | undefined {
+  const value = env[name]?.trim();
+  if (!value) return fallback;
+  const parsed = /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(parsed)) throw new Error(`${name} must be a whole number above zero, not "${value}"`);
+  return parsed;
+}
+
+/** What the file limits read from the environment, whichever store is in use. */
+function fileLimitsFrom(env: NodeJS.ProcessEnv): Pick<FilesConfig, 'quotaBytes' | 'backupRetentionMs'> {
+  // The sidecar's own defaults (scripts/pg-backup.sh), so that the two agree when neither is set.
+  const interval = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_INTERVAL', 86_400);
+  const keep = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_KEEP', 2);
+  const quotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_QUOTA_BYTES');
+  return { ...(quotaBytes ? { quotaBytes } : {}), backupRetentionMs: interval * (keep + 1) * 1000 };
 }
 
 /** Where uploads are written while they arrive: inside the files directory, so that keeping one in the
@@ -77,8 +108,9 @@ export function uploadTempDir(dir: string): string {
  */
 export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConfig {
   const dir = filesDirFrom(env);
+  const limits = fileLimitsFrom(env);
   const backend = env.ORBIT_FILES_BACKEND?.trim() || 'local';
-  if (backend === 'local') return { dir, storage: 'local' };
+  if (backend === 'local') return { dir, storage: 'local', ...limits };
   if (backend !== 's3') {
     throw new Error(`ORBIT_FILES_BACKEND must be local or s3, not "${backend}"`);
   }
@@ -101,7 +133,7 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
   if (!/^https?:\/\//.test(s3.endpoint)) {
     throw new Error(`ORBIT_FILES_S3_ENDPOINT must be an http:// or https:// URL, not "${s3.endpoint}"`);
   }
-  return { dir, storage: 's3', s3 };
+  return { dir, storage: 's3', s3, ...limits };
 }
 
 /**
@@ -164,7 +196,7 @@ export async function writeHashedTempFile(
   return { path: tempPath, size, sha256: hash.digest('hex') };
 }
 
-/** Remove a temporary file; one that is already gone is no error. */
+/** Remove a file; one that is already gone is no error. */
 export async function removeTempFile(tempPath: string): Promise<void> {
   try {
     await unlink(tempPath);
@@ -267,5 +299,9 @@ export class LocalFileStore implements FileStore {
       throw error;
     }
     return closedWhenDropped(createReadStream(file, { fd }), fd);
+  }
+
+  async remove(sha256: string): Promise<void> {
+    await removeTempFile(this.pathOf(sha256));
   }
 }
