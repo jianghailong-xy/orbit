@@ -228,6 +228,21 @@ func TestALinkAtTheLastLevelIsRefusedEvenInsideARoot(t *testing.T) {
 	}
 }
 
+// The same below the root: a directory that has become a link is refused even though the link stays inside the root.
+func TestALinkBelowTheRootIsRefusedEvenInsideARoot(t *testing.T) {
+	host := newFileScopeHost(t)
+	linkForTest(t, ".orbit", filepath.Join(host.home, "notes"))
+	before, err := os.Lstat(host.home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file, err := openWorktreeArtifactFile(host.home, filepath.Join("notes", "config.json"), before); err == nil {
+		data, _ := io.ReadAll(file)
+		file.Close()
+		t.Errorf("read %q through a link below the root", data)
+	}
+}
+
 // A directory replaced by a named pipe fails at once, at the root and below it: this runs under a session's flush, and
 // nothing would ever write to that pipe.
 func TestANamedPipeInPlaceOfADirectoryDoesNotHang(t *testing.T) {
