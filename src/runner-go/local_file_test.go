@@ -408,6 +408,9 @@ func TestOrbitsDirectoryInAnotherCaseIsRefusedAtEveryDoor(t *testing.T) {
 	assertRefused(t, api, s, filepath.Join(folded, "config.json"), "Orbit's own directory")
 	chdirForTest(t, folded)
 	assertRefused(t, api, s, "config.json", "Orbit's own directory")
+	// A shell keeps the spelling that was typed.
+	t.Setenv("PWD", folded)
+	assertRefused(t, api, s, "config.json", "Orbit's own directory")
 	assertNothingSecretKept(t, api)
 
 	// A working directory that holds a home is no root in another case either.
