@@ -13,11 +13,11 @@
  *      materials; gated here and on the server, stored as the job's version; its rounds on the plan job, which is
  *      what the plan page reads; no task, no session;
  *   2. a catalogue outside the target is written again before any document of it, with the gate's own count error;
- *   3. a count still outside after two tries is the gate's, and three rounds end the plan job failed with the
- *      last errors and the last draft;
+ *   3. a count still outside after two tries is the gate's for three rounds, and the draft is stored all the same,
+ *      for the owner to confirm or redraft; a job fails only with no draft to show;
  *   4. every file, docs section and symbol is checked on the snapshot — a symbol the index does not name by the
  *      text a read at the sha brings — and only the document with errors is written again, told every one;
- *   5. what the server's gate finds goes back to the model the same way, and three rounds of it fail the job;
+ *   5. what the server's gate finds goes back to the model the same way, and what three rounds of it leave is settled;
  *   6. a revision keeps the protected document as it is, moves only a convention into the agents' category,
  *      holds the count, and names the projects it hands the model by title;
  *   7. a job taken over after its worker died, or replayed after its draft was stored, asks nothing twice and
@@ -44,7 +44,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { toUuid, uuidToBase62, WIKI_MODEL_QUEUE, WIKI_PLAN_SERVER_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { toUuid, uuidToBase62, WIKI_MODEL_QUEUE, WIKI_PLAN_NO_DRAFT, WIKI_PLAN_SERVER_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -738,7 +738,7 @@ test('a catalogue outside the target is written again with the gate\'s count bef
   assert.deepEqual(rows.filter((row) => row.step === 'plan_skeleton').map((row) => row.unit.split('@')[0]), ['a1/catalogue', 'a1/catalogue-count-1']);
 });
 
-test('a count still outside the target after two tries is the gate\'s, and three rounds end the job failed with its errors and its draft', { skip, timeout: 150_000 }, async () => {
+test('a count still outside the target after three rounds is stored all the same, and the owner can confirm or edit it', { skip, timeout: 150_000 }, async () => {
   const h = await boot();
   await reset(h);
   const o = await owner(h);
@@ -747,8 +747,7 @@ test('a count still outside the target after two tries is the gate\'s, and three
   const planJobId = await redraft(h, o);
   playRunner(h, o);
   const end = await drive(h, worker(h), planJobId, 90);
-  assert.equal(end.outcome, 'failed');
-  assert.ok(String(end.error).includes("did not pass the plan's gate in 3 rounds"), end.error);
+  assert.equal(end.outcome, 'succeeded', end.error);
   // Each round: the catalogue (round 1's skeleton, a later round's sent back with the gate's errors), then twice
   // more with the count before any document — wiki_plan_job_test.go's 9 and 8.
   assert.equal(asked(h, 'step 1').length, 9, 'the catalogue asked three times in each of three rounds');
@@ -758,18 +757,54 @@ test('a count still outside the target after two tries is the gate\'s, and three
     assert.ok(prompt.includes('[docCount] plan.docs: the plan has 3 documents; it must have 4 to 5: split the broadest documents, or add the ones the categories are missing — 1 too few'));
   }
   assert.equal(asked(h, 'step 2:').length + asked(h, 'write the outline of «').length, 5, 'the documents were written once: the catalogues sent back kept every one of them');
-  assert.equal((await versions(h, o.spaceId)).length, 1, 'nothing this job\'s gate refused reached the server\'s');
   assert.equal(end.attempt, 3);
-  assert.deepEqual(end.errors.map((e: { check: string }) => e.check), ['docCount']);
-  assert.equal(end.draft.docs.length, 3, 'the last draft is kept on the plan job for its owner to read');
+  assert.equal(end.version, 2);
+  assert.equal(end.errors, null);
+  assert.equal(end.draft, null, 'the draft is a version: nothing of it is kept on the plan job');
   for (const round of end.report.attempts) assert.equal(round.checks.docCount, 1);
+  const job = await wikiJobOf(h, planJobId);
+  assert.equal(job.state, 'succeeded');
+  assert.equal(job.report.outcome, 'succeeded');
+  const page = await call(h, { bearer: o.bearer }, 'GET', `/wiki/spaces/${o.spaceId}/plan`);
+  assert.equal(page.body.job.state, 'succeeded');
+  assert.equal(page.body.draft.version, 2);
+  assert.equal(page.body.draft.docs.length, 3);
+  assert.deepEqual(page.body.draft.target, { min: 4, max: 5 });
+  assert.equal(page.body.draft.gate.docs, 3, 'the report says the count, and the owner reads it against the target');
+  assert.equal(page.body.draft.gate.notes, undefined, 'no note repeats it');
+  const doc = page.body.draft.docs[0];
+  const edited = await call(h, { bearer: o.bearer }, 'POST', `/wiki/spaces/${o.spaceId}/plan/edits`, {
+    baseVersion: 2,
+    docSlug: doc.slug,
+    sectionKey: doc.sections[0].key,
+    section: { title: 'Another title', kind: doc.sections[0].kind, covers: doc.sections[0].covers, length: doc.sections[0].length, sources: {
+      docs: doc.sections[0].sources.docs, code: doc.sections[0].sources.code, contracts: doc.sections[0].sources.contracts, sessions: null,
+    } },
+  });
+  expectStatus(edited, 200, 'an edit leaves the count as it stands, so a draft outside its target can be edited');
+  const confirmed = await call(h, { bearer: o.bearer }, 'POST', `/wiki/spaces/${o.spaceId}/plan/versions/3/confirm`, {});
+  expectStatus(confirmed, 200, 'the owner may take a plan outside its target');
+  assert.equal(confirmed.body.status, 'confirmed');
+});
+
+test('a job with no draft to show has failed, and says why in a sentence: nothing of the model\'s reaches the owner', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const o = await owner(h);
+  await clearJobs(h, o.spaceId);
+  await baseVersion(h, o, { min: 3, max: 3 });
+  h.model.script.skeleton = () => 'No catalogue at all.';
+  const planJobId = await redraft(h, o);
+  playRunner(h, o);
+  const end = await drive(h, worker(h), planJobId, 60);
+  assert.equal(end.outcome, 'failed');
+  assert.equal(end.error, WIKI_PLAN_NO_DRAFT.catalogue);
+  assert.equal(end.errors, null);
+  assert.equal(end.draft, null);
+  assert.equal((await versions(h, o.spaceId)).length, 1, 'nothing was stored');
   const job = await wikiJobOf(h, planJobId);
   assert.equal(job.state, 'failed');
   assert.equal(job.failure_kind, 'content');
-  assert.equal(job.report.outcome, 'failed');
-  const page = await call(h, { bearer: o.bearer }, 'GET', `/wiki/spaces/${o.spaceId}/plan`);
-  assert.equal(page.body.job.state, 'failed');
-  assert.equal(page.body.job.errors[0].check, 'docCount');
 });
 
 // ── 4. references, and a round with the gate's errors ────────────────────────────────────────────────
@@ -825,7 +860,7 @@ test('every reference is checked on the snapshot — a symbol the index lacks by
 
 // ── 5. the server's gate ─────────────────────────────────────────────────────────────────────────────
 
-test('what the server\'s gate finds goes back to the model, and three rounds of it end the job with the last errors', { skip, timeout: 150_000 }, async () => {
+test('what the server\'s gate finds goes back to the model, and what three rounds of it leave is taken out and noted', { skip, timeout: 150_000 }, async () => {
   const h = await boot();
   await reset(h);
   const o = await owner(h);
@@ -840,19 +875,22 @@ test('what the server\'s gate finds goes back to the model, and three rounds of 
   const planJobId = await redraft(h, o);
   playRunner(h, o);
   const end = await drive(h, worker(h), planJobId, 90);
-  assert.equal(end.outcome, 'failed');
+  assert.equal(end.outcome, 'succeeded', end.error);
   assert.equal(end.attempt, 3);
-  assert.equal((await versions(h, o.spaceId)).length, 1, 'nothing was stored');
+  assert.equal((await versions(h, o.spaceId)).length, 2, 'the draft is stored');
   const redos = asked(h, '# Task: correct the document «Service overview»');
   assert.equal(redos.length, 2);
   for (const prompt of redos) {
     assert.ok(prompt.includes('[references] 1.1 «Service overview», section 3 «Known pitfalls» · sources.sessions.projects[0]: no project of this account is titled "App 项目"'),
       'the redo hands the server\'s error back');
   }
-  assert.equal(end.errors.length, 1);
-  assert.equal(end.errors[0].path, 'plan.docs[0].sections[2].sources.sessions.projects[0]');
-  assert.equal(end.draft.docs.length, 3);
   assert.deepEqual(end.report.attempts.map((a: { server: number; local: number }) => [a.local, a.server]), [[0, 1], [0, 1], [0, 1]]);
+  const page = await call(h, { bearer: o.bearer }, 'GET', `/wiki/spaces/${o.spaceId}/plan`);
+  const section = page.body.draft.docs[0].sections[2];
+  assert.equal(section.title, 'Known pitfalls');
+  assert.deepEqual(section.sources.sessions.projects, [], 'the name goes');
+  assert.ok(section.sources.sessions.keywords.length > 0, 'the rest of the condition stays');
+  assert.deepEqual(page.body.draft.gate.notes, [{ check: 'references', text: 'A project name couldn’t be matched and was left out: App 项目.' }]);
 });
 
 // ── 6. a revision ────────────────────────────────────────────────────────────────────────────────────

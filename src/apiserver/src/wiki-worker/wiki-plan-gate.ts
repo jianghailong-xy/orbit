@@ -5,6 +5,7 @@ import {
   WIKI_SLUG_PATTERN,
   type WikiPlanGateCheck,
   type WikiPlanGateError,
+  type WikiPlanGateNote,
   type WikiPlanRepoCheck,
 } from '@orbit/shared';
 import { cutRunes, goTrimSpace } from './wiki-import-extract';
@@ -12,10 +13,12 @@ import {
   WIKI_PLAN_IDS,
   WIKI_PLAN_SCOPE_OUT_REF,
   wikiPlanDocInput,
+  wikiPlanNewUnit,
   wikiPlanRange,
   wikiPlanRenumber,
   type WikiPlanCategory,
   type WikiPlanDoc,
+  type WikiPlanDocRead,
   type WikiPlanDraft,
   type WikiPlanSection,
   type WikiPlanSectionDraft,
@@ -45,6 +48,10 @@ import { shortWikiHash } from './wiki-plan-repo';
  *
  * Its errors carry the server's paths (`plan.docs[3].sections[1].sources.code[0].symbols[2]`), so one list of
  * errors — this gate's or the server's — is handed back to the model the same way.
+ *
+ * ITS ERRORS ARE THE MODEL'S. The gate tells the model, a round at a time, and it is by far the model that mends a
+ * draft. What its last round still leaves is settled by `wikiPlanSettle`: a stored draft is one the owner can always
+ * confirm and the documents can always be written from, and what is left to judge is theirs to read, as notes.
  */
 
 /** One round's draft: the plan as it would be submitted, which document each is, and what the gate found. */
@@ -56,6 +63,8 @@ export interface WikiPlanAssembled {
   sections: number;
   /** Each document's number now, by its slug. */
   slugIds: Map<string, string>;
+  /** What a settled draft says to look at (`wikiPlanSettle`). */
+  notes: WikiPlanGateNote[];
 }
 
 const SLUG = new RegExp(WIKI_SLUG_PATTERN, 'u');
@@ -153,6 +162,7 @@ export function wikiPlanAssemble(r: WikiPlanRunState): WikiPlanAssembled {
     repo: { sha: r.repo.sha, checked: 0, missing: [] },
     sections: 0,
     slugIds: new Map(),
+    notes: [],
   };
   const g = new Gate(r, a);
   for (const unit of r.units) if (!a.slugIds.has(unit.slug)) a.slugIds.set(unit.slug, unit.id);
@@ -194,6 +204,168 @@ export function wikiPlanAssemble(r: WikiPlanRunState): WikiPlanAssembled {
   g.whole(slugs, keys);
   if (a.repo.missing.length > WIKI_PLAN_RULES.repoMissingMax) a.repo.missing = a.repo.missing.slice(0, WIKI_PLAN_RULES.repoMissingMax);
   return a;
+}
+
+// ── What the last round leaves ─────────────────────────────────────────────────────────────────────
+
+/** A section that says nothing of its length: what the plan page gives a section the owner adds. */
+const SECTION_LENGTH = 500;
+/** Who a document is for when the model never said. */
+const AUDIENCE = 'A reader of this wiki';
+const NAMED_AT_MOST = 5;
+
+/**
+ * The last round's draft, made one that can be stored (contract `plan.jobs.server.settle`), when the rounds are out
+ * and it still has errors. Nothing here decides for the owner: a document that was never written is left out, what is
+ * protected stays as it is, and what cannot be stored goes, each with a note saying so. References the repository
+ * does not have at the sha stay where they are, as a protected document's do: `repoCheck.missing` says which, the page
+ * marks them, and the build looks for them again at its own sha. A count outside the target stays too, for the owner
+ * to confirm or redraft. The server's gate still has the last word, on what it can check.
+ */
+export function wikiPlanSettle(r: WikiPlanRunState): WikiPlanAssembled {
+  const notes: WikiPlanGateNote[] = [];
+  settleCatalogue(r, notes);
+  const a = wikiPlanAssemble(r);
+  wikiPlanSettleNames(a, a.errors, notes);
+  settleFields(a, notes);
+  if (!r.cats.some((cat) => cat.forAgents)) notes.push({ check: 'schema', text: 'No category for the agents’ conventions. Redraft to add one.' });
+  a.errors = [];
+  a.notes = notes.slice(0, WIKI_PLAN_RULES.notesMax);
+  return a;
+}
+
+/** What only the catalogue can settle: the documents never written, the moves that cannot be, what is protected. */
+function settleCatalogue(r: WikiPlanRunState, notes: WikiPlanGateNote[]): void {
+  r.units = r.units.filter((unit) => {
+    const written = unit.protectedDoc !== null || unit.kept !== null || unit.sections.length > 0;
+    if (!written) notes.push({ check: 'docCount', text: `${unit.title} was left out: nothing was written for it.` });
+    return written;
+  });
+  r.moves = r.moves.filter((move) => {
+    const slug = r.baseIds.get(move.from);
+    const base = slug === undefined ? undefined : r.baseDocs.get(slug);
+    const section = base?.sections[move.section - 1];
+    const target = move.target;
+    if (base && !base.protected && section?.kind === 'conventions' && target && r.units.includes(target) && r.cats[target.cat]?.forAgents) return true;
+    if (base && section) notes.push({ check: 'protected', text: `§${move.section} ${section.title} stays in ${base.title}: it can’t move to the agents’ category.` });
+    for (const unit of r.units) if (unit.sources[0] === move.from) unit.keptDrop?.delete(move.section);
+    return false;
+  });
+  // A document carried from the version revised whose every section moved out has nothing left of its own.
+  r.units = r.units.filter((unit) => !unit.kept || unit.keptDrop?.size !== unit.kept.sections.length);
+  const categoryOf = (key: string): number => {
+    const at = r.cats.findIndex((cat) => cat.key === key);
+    if (at >= 0) return at;
+    const cat = r.base!.categories.find((one) => one.key === key)!;
+    r.cats.push({ key, title: cat.title, question: cat.question, forAgents: cat.forAgents });
+    return r.cats.length - 1;
+  };
+  const carry = (doc: WikiPlanDocRead): void => {
+    const unit = wikiPlanNewUnit({ cat: categoryOf(doc.category), title: doc.title, slug: doc.slug, question: doc.question });
+    unit.hasBody = true;
+    if (doc.protected) {
+      unit.protectedDoc = wikiPlanDocInput(doc);
+    } else {
+      unit.kept = doc;
+      unit.keptDrop = new Set();
+      unit.refs = r.baseIds;
+    }
+    r.units.push(unit);
+  };
+  for (const slug of r.baseIds.values()) {
+    const base = r.baseDocs.get(slug)!;
+    if (!base.protected) continue;
+    const unit = r.units.find((one) => one.slug === slug);
+    if (unit) {
+      unit.cat = categoryOf(base.category);
+    } else {
+      carry(base);
+      notes.push({ check: 'protected', text: `${base.title} is protected, so it stays as it was.` });
+    }
+    for (const out of base.scopeOut) {
+      for (const target of out.docs) {
+        const doc = r.baseDocs.get(target);
+        if (!doc || r.units.some((one) => one.slug === target)) continue;
+        carry(doc);
+        notes.push({ check: 'protected', text: `${doc.title} stays: ${base.title} is protected and points at it.` });
+      }
+    }
+  }
+}
+
+const SESSION_NAME = /^plan\.docs\[(\d+)\]\.sections\[(\d+)\]\.sources\.sessions\.(projects|topics|entryKinds)\[(\d+)\]$/u;
+
+/**
+ * The names of a session condition no account or space has, taken out of a draft: nothing of them can be stored, and
+ * the rest of the condition still says what to look for. `errors` are this gate's, or the server's.
+ */
+export function wikiPlanSettleNames(a: WikiPlanAssembled, errors: readonly WikiPlanGateError[], notes: WikiPlanGateNote[]): void {
+  const left = { projects: new Set<string>(), topics: new Set<string>(), entryKinds: new Set<string>() };
+  // Last first, so that each index still names its value.
+  for (const error of [...errors].reverse()) {
+    const m = SESSION_NAME.exec(error.path);
+    if (!m) continue;
+    const sessions = a.plan.docs[Number(m[1])]?.sections[Number(m[2])]?.sources.sessions;
+    const list = m[3] as keyof typeof left;
+    const [value] = sessions?.[list].splice(Number(m[4]), 1) ?? [];
+    if (value !== undefined) left[list].add(value);
+  }
+  const say = (values: Set<string>, one: string, many: string): void => {
+    if (values.size === 0) return;
+    const names = [...values].sort();
+    const shown = names.slice(0, NAMED_AT_MOST).join(', ') + (names.length > NAMED_AT_MOST ? ` and ${names.length - NAMED_AT_MOST} more` : '');
+    notes.push({ check: 'references', text: `${names.length === 1 ? one : `${names.length} ${many}`}: ${shown}.` });
+  };
+  say(left.projects, 'A project name couldn’t be matched and was left out', 'project names couldn’t be matched and were left out');
+  say(left.topics, 'A topic isn’t this wiki’s and was left out', 'topics aren’t this wiki’s and were left out');
+  say(left.entryKinds, 'An entry kind doesn’t exist and was left out', 'entry kinds don’t exist and were left out');
+}
+
+/** Every field of every document the model wrote, within what the plan keeps; a document carried as it is stays so. */
+function settleFields(a: WikiPlanAssembled, notes: WikiPlanGateNote[]): void {
+  const R = WIKI_PLAN_RULES;
+  const text = (value: string, max: number, fallback: string): string => cutRunes(goTrimSpace(value) || fallback, max);
+  const items = (values: readonly string[]): string[] =>
+    values.map((value) => cutRunes(goTrimSpace(value), R.textMaxChars)).filter((value) => value !== '').slice(0, R.listMaxItems);
+  const slugs = new Set(a.plan.docs.map((doc) => doc.slug));
+  for (const cat of a.plan.categories) {
+    cat.title = text(cat.title, R.titleMaxChars, cat.key);
+    if (cat.question) cat.question = cutRunes(cat.question, R.questionMaxChars);
+  }
+  let kinds = 0;
+  a.plan.docs.forEach((doc, i) => {
+    if (a.units[i].protectedDoc) return;
+    doc.title = text(doc.title, R.titleMaxChars, doc.slug);
+    doc.question = text(doc.question, R.questionMaxChars, doc.title);
+    doc.audience = items(doc.audience);
+    if (doc.audience.length === 0) doc.audience = [AUDIENCE];
+    doc.scopeIn = items(doc.scopeIn);
+    if (doc.scopeIn.length === 0) doc.scopeIn = [cutRunes(doc.question, R.textMaxChars)];
+    doc.scopeOut = doc.scopeOut
+      .filter((out) => goTrimSpace(out.text) !== '')
+      .slice(0, R.listMaxItems)
+      .map((out) => ({ text: cutRunes(goTrimSpace(out.text), R.textMaxChars), docs: out.docs.filter((slug) => slugs.has(slug)) }));
+    doc.sections = doc.sections.slice(0, R.sectionsMax);
+    doc.sections.forEach((s, j) => {
+      s.title = text(s.title, R.titleMaxChars, `Section ${j + 1}`);
+      s.covers = text(s.covers, R.coversMaxChars, s.title);
+      if (!(WIKI_PLAN_SECTION_KINDS as readonly string[]).includes(s.kind)) {
+        s.kind = 'other';
+        kinds += 1;
+      }
+      s.length = s.length >= 1 ? Math.min(s.length, R.lengthMaxChars) : SECTION_LENGTH;
+      const c = s.sources.sessions;
+      if (!c) return;
+      if (c.since !== null && !DATE_ONLY.test(c.since)) c.since = null;
+      if (c.until !== null && !DATE_ONLY.test(c.until)) c.until = null;
+      if (c.since !== null && c.until !== null && c.until < c.since) c.until = null;
+    });
+    if (doc.length.min < 1 || doc.length.max < doc.length.min || doc.length.max > R.lengthMaxChars) {
+      const total = Math.min(doc.sections.reduce((sum, s) => sum + s.length, 0), R.lengthMaxChars);
+      doc.length = { min: total, max: Math.min(Math.round(total * 1.5), R.lengthMaxChars) };
+    }
+  });
+  if (kinds > 0) notes.push({ check: 'schema', text: `${kinds === 1 ? 'A section has' : `${kinds} sections have`} a type Orbit doesn’t know, now marked Other.` });
 }
 
 class Gate {

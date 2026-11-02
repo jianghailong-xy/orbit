@@ -339,7 +339,7 @@ export interface WikiPlanUnit {
   sources: string[];
 }
 
-function newUnit(fields: Pick<WikiPlanUnit, 'cat' | 'title' | 'slug' | 'question'>): WikiPlanUnit {
+export function wikiPlanNewUnit(fields: Pick<WikiPlanUnit, 'cat' | 'title' | 'slug' | 'question'>): WikiPlanUnit {
   return {
     id: '', cat: fields.cat, slug: fields.slug, title: fields.title, question: fields.question, cardScope: [],
     header: emptyWikiPlanHeader(), sections: [], stray: [], hasBody: false, refs: null, protectedDoc: null,
@@ -425,7 +425,7 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
     }
     const doc = submatch(DOC_LINE, line);
     if (doc && out.cats.length > 0) {
-      const unit = newUnit({ cat: out.cats.length - 1, title: goTrim(doc[2], '* '), slug: goTrimSpace(doc[3]), question: goTrimSpace(doc[4]) });
+      const unit = wikiPlanNewUnit({ cat: out.cats.length - 1, title: goTrim(doc[2], '* '), slug: goTrimSpace(doc[3]), question: goTrimSpace(doc[4]) });
       for (const part of wikiPlanSplitBar(doc[5])) {
         const [label, value] = wikiPlanLabel(part);
         const key = label.toLowerCase();
@@ -443,6 +443,16 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
   // The model's numbers of the new catalogue, in its list of moves, name the documents they move into.
   for (const move of out.moves) move.target = modelIds.get(move.to) ?? null;
   return out;
+}
+
+/**
+ * What a model wrote for a category's key or a document's slug, as one: the label of the answer's template taken off
+ * (`<slug: storage>` is storage), then lowercase letters and digits joined by single hyphens, 64 characters at most.
+ * '' when nothing of it is left.
+ */
+export function wikiPlanIdentifier(text: string): string {
+  const value = goFieldsFunc(text, (r) => r === ':' || r === '：').pop() ?? '';
+  return value.toLowerCase().replace(/[^a-z0-9]+/gu, '-').slice(0, 64).replace(/^-+|-+$/gu, '');
 }
 
 /** The parts of a line the model wrote with ｜ or | between them, none empty. */
