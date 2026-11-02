@@ -557,8 +557,10 @@ func TestLinkEventsKeptAcrossARestartAreSentFirst(t *testing.T) {
 	}
 }
 
-// Past what memory may hold for a session, its events wait on disk, in order, and go once the stream has room. The
-// emitter never waits for the disk or the network.
+// Past what memory may hold for a session, its events wait on disk, in order, and go once the stream has room. Handing
+// them over waits for nothing the network does: the ingest comes back only once the last of them is in, so the wait
+// below is for a hand-over that would never return, and nothing here says how fast one is. A hand-over does write the
+// spool, on the session's flush; its emitters never do (TestAnEmitterWaitsForNeitherTheSpoolNorTheConnection).
 func TestLinkEventsPastMemoryWaitOnDisk(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	r.useLink(t)
@@ -568,22 +570,22 @@ func TestLinkEventsPastMemoryWaitOnDisk(t *testing.T) {
 	const payload = 32 << 10
 	n := (linkSessionMemoryBytes / payload) * 2 // twice the session's memory, 50 at a time
 	n -= n % 50
-	var slowest time.Duration
-	for i := 0; i < n; i += 50 {
-		began := time.Now()
-		if err := s.submit(linkTestRunEvents(i+1, 50, payload)); err != nil {
-			t.Fatal(err)
+	var handed atomic.Bool
+	go func() {
+		defer handed.Store(true)
+		for i := 0; i < n; i += 50 {
+			if err := s.submit(linkTestRunEvents(i+1, 50, payload)); err != nil {
+				t.Error(err)
+				return
+			}
 		}
-		slowest = max(slowest, time.Since(began))
-	}
+	}()
+	linkWaitFor(t, time.Minute, "every event to be handed over with the ingest down", handed.Load)
 	s.mu.Lock()
 	onDisk, inMemory := s.disk.count(), s.memBytes
 	s.mu.Unlock()
 	if onDisk == 0 || inMemory > linkSessionMemoryBytes {
 		t.Fatalf("%d events on disk and %d bytes in memory, past the %d the session may hold", onDisk, inMemory, linkSessionMemoryBytes)
-	}
-	if slowest > time.Second {
-		t.Errorf("handing 50 events over took %s", slowest)
 	}
 	in.setDown(false)
 	linkWaitStored(t, s, 60*time.Second)
