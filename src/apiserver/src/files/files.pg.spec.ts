@@ -26,7 +26,7 @@
  *       it is copied, and is copied the same way from then on;
  *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
- *       multer has written the whole file: it is answered 400 on either upload door, with no file and no row, while the
+ *       multer has written the whole file: it is answered 400 on every upload door, with no file and no row, while the
  *       same upload with a well-formed id is kept.
  *
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
@@ -69,18 +69,19 @@ const b62 = (id: string) => uuidToBase62(id);
 // `../..` is the package root from either src/ or build/, as task-attachments.pg.spec.ts reads its sources.
 const source = (rel: string) => readFileSync(path.resolve(__dirname, '../..', 'src', rel), 'utf8');
 
-test('both upload doors stream to disk through FILE_UPLOAD_STORAGE, under the 25 MiB cap, and keep no buffer', () => {
-  for (const rel of ['attachments/attachments.controller.ts', 'runner-api/runner-api.controller.ts']) {
+test('every upload door streams to disk through FILE_UPLOAD_STORAGE, under the 25 MiB cap, and keeps no buffer', () => {
+  for (const [rel, doors] of [['attachments/attachments.controller.ts', 1], ['runner-api/runner-api.controller.ts', 2]] as const) {
     const code = source(rel);
-    assert.equal(code.split('FileInterceptor(').length - 1, 1, `${rel}: one upload door`);
-    assert.ok(
-      code.includes("FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } })"),
-      `${rel}: the upload door's multer storage is the disk engine; without \`storage\`, multer holds the file in memory`,
+    assert.equal(code.split('FileInterceptor(').length - 1, doors, `${rel}: the upload doors counted`);
+    assert.equal(
+      code.split("FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } })").length - 1,
+      doors,
+      `${rel}: every upload door's multer storage is the disk engine; without \`storage\`, multer holds the file in memory`,
     );
-    assert.match(
-      code,
-      /@UseInterceptors\(\s*FileUploadCleanupInterceptor,\s*FileInterceptor\('file'/,
-      `${rel}: the cleanup is declared before multer, so that the pipes and the handler end inside it`,
+    assert.equal(
+      code.match(/@UseInterceptors\(\s*FileUploadCleanupInterceptor,\s*FileInterceptor\('file'/g)?.length,
+      doors,
+      `${rel}: on every door the cleanup is declared before multer, so that the pipes and the handler end inside it`,
     );
     assert.doesNotMatch(code, /toBytes\(|\.buffer\)/, `${rel}: no upload's bytes are read out of a buffer`);
   }
@@ -289,6 +290,7 @@ function storeCases(leg: Leg) {
     const userDoor = `/api/attachments?sessionId=${b62(sessionId)}`;
     const taskDoor = `/api/attachments?taskId=${b62(taskId)}`;
     const runnerDoor = `/api/runner/sessions/${b62(sessionId)}/attachments`;
+    const fileDoor = `/api/runner/sessions/${b62(sessionId)}/files`;
 
     // Every byte value, then a megabyte of noise: what a text-only round trip would mangle.
     const bytes = Buffer.concat([Buffer.from(Array.from({ length: 256 }, (_, i) => i)), randomBytes(1024 * 1024)]);
@@ -503,6 +505,7 @@ function storeCases(leg: Leg) {
       ['POST /attachments with a malformed sessionId', '/api/attachments?sessionId=not-a-public-id!', bearer],
       ['POST /attachments with a malformed taskId', '/api/attachments?taskId=not-a-public-id!', bearer],
       ['POST /runner/sessions/:id/attachments with a malformed :id', '/api/runner/sessions/not-a-public-id!/attachments', machine.token],
+      ['POST /runner/sessions/:id/files with a malformed :id', '/api/runner/sessions/not-a-public-id!/files', machine.token],
     ] as const) {
       await t.test(`${leg.storage}: ${door} is refused before its handler, and leaves nothing behind`, async () => {
         const blobsBefore = await db.fileBlob.count();
@@ -524,6 +527,7 @@ function storeCases(leg: Leg) {
         ['POST /attachments?sessionId', userDoor, bearer],
         ['POST /attachments?taskId', taskDoor, bearer],
         ['POST /runner/sessions/:id/attachments', runnerDoor, machine.token],
+        ['POST /runner/sessions/:id/files', fileDoor, machine.token],
       ] as const) {
         idOf(await upload(server!, route, who, refused), door);
         assert.deepEqual(tempFiles(), [], `${door}: nothing is left in the temporary directory`);

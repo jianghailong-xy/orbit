@@ -2838,6 +2838,9 @@ model Attachment {
   pinnedAt  DateTime?         @map("pinned_at")
   fileBundleId String?        @map("file_bundle_id") @db.Uuid
   evidenceId   String?        @map("evidence_id") @db.Uuid
+  /// What `file_upload` was told this file is (0464, §2.3), in the caller's own words, beside
+  /// `fileName`, which only says what it was called. NULL on every other row.
+  label     String?
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])

@@ -237,6 +237,34 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 	}
 }
 
+// The evidence paragraph says the three things it is there for, and it is read after the reply paragraph, whose rule
+// stands: a path in a reply still has to be under the session's own directories, and the link file_upload returns is
+// not a path. Each form carries it, because an agent in no project and one in a task both produce evidence.
+func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
+	exe := "/usr/local/bin/orbit"
+	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		for _, phrase := range []string{
+			"cite a command's output by its tool call",
+			"rather than saving a log",
+			"keep screenshots and reports with file_upload rather than in the repository",
+			"it reads those same two directories",
+			"returns a link that also works in a reply",
+		} {
+			if !strings.Contains(got, phrase) {
+				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
+			}
+		}
+		reply, evidence := strings.Index(got, orbitReplyFileInstructions), strings.Index(got, orbitEvidenceFileInstructions)
+		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions) {
+			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
+		}
+	}
+	if strings.Contains(orbitEvidenceFileInstructions, "artifact") {
+		t.Error("file_* is the name: artifact already means three other things here")
+	}
+}
+
 // advertisedCapabilityFamilies is every family `orbit capabilities` composes, paired with whether
 // the document offers that family only where the orchestration grant exists. buildCLICapabilities
 // appends sessionCLICapabilities, agentCLICapabilities and runnerCLICapabilities inside its
@@ -265,6 +293,8 @@ var advertisedCapabilityFamilies = []struct {
 	// acts for the session it runs in, and needs no power over anybody else's session to do it.
 	{"wikiCLICapabilities", wikiCLICapabilities, false},
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
+	// Ungated, for the same reason: keeping and reading back your own files.
+	{"fileCLICapabilities", fileCLICapabilities, false},
 	// The person's own commands: every one HeadlessOnly, so no running agent is offered any of them.
 	{"userCLICapabilities", userCLICapabilities, false},
 	{"sessionCLICapabilities", sessionCLICapabilities, true},

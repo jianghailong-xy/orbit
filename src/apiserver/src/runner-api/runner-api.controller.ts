@@ -175,7 +175,8 @@ import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/sessi
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
-import { FilesService, streamable } from '../files/files.service';
+import { UploadFileDto } from '../files/file-tools.dto';
+import { FilesService, streamable, type FileView } from '../files/files.service';
 import {
   classifyTransactionFault,
   loggedRetry,
@@ -1376,7 +1377,7 @@ export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique', 
 export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique']; session: ['findMany'] }> & QuotaRetryTransaction;
 
 // The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
-// answered 426 UPGRADE_REQUIRED, but for the six marked StaysOnHttps (runner-link-required.ts).
+// answered 426 UPGRADE_REQUIRED, but for the seven marked StaysOnHttps (runner-link-required.ts).
 @MachineProtocol()
 @UseInterceptors(RunnerLinkRequiredInterceptor)
 @Controller('runner')
@@ -4679,6 +4680,30 @@ export class RunnerApiController {
     const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     assertValidUpload(file);
     return this.files.createAttachment(file as FileUpload, { ownerId: session.ownerId, sessionId });
+  }
+
+  /**
+   * A file an agent keeps with `file_upload` (docs/orbit-files-design.md §2.3). A route of its own rather than fields on
+   * the one above: an older server takes those fields, ignores them and answers 200, while this path answers it 404,
+   * which the runner reports. It streams and cleans up exactly as the one above does, and FilesService.uploadFile says
+   * what `taskId` may be.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
+  @Post('sessions/:id/files')
+  @UseInterceptors(
+    FileUploadCleanupInterceptor,
+    FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
+  async uploadFile(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @UploadedFileParam() file: FileUpload | undefined,
+    @Body() dto: UploadFileDto,
+  ): Promise<FileView> {
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    assertValidUpload(file);
+    return this.files.uploadFile(file as FileUpload, session, dto);
   }
 
   @UseGuards(RunnerAuthGuard)

@@ -6,6 +6,7 @@ import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerFilesController } from './runner-files.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
@@ -100,6 +101,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerDeleteController,
     RunnerProvidersController,
     RunnerNotifyController,
+    // What `file_list`, `file_fetch` and a folder's `file_upload` call (runner-files.controller.ts).
+    RunnerFilesController,
     RunnerProjectsController,
     RunnerWatchesController,
     // Which runner release each runner is to run (runner-release.ts).

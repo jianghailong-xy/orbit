@@ -285,6 +285,54 @@ off answers `404 WIKI_DISABLED` — which this binary reports as the wiki being 
 entry. A runner newer than the server it talks to says in words that the server has no wiki door
 rather than reporting a bare 404.
 
+## Files
+
+Screenshots and reports belong in Orbit rather than in the repository. A file stays with the session
+that uploads it, and arrives in that session's uploads directory, outside the checkout, so neither
+direction can put it in a commit.
+
+```bash
+orbit file upload shots/home.png --label "home page, dark" --json
+orbit file upload shots --label "viewport matrix" --json
+orbit file fetch <id> --json
+orbit file list --json
+orbit file list --task-id <task-id> --json
+orbit file list --evidence-id <evidence-id> --json
+```
+
+The three verbs are the three MCP tools of the same name (`file_upload`, `file_fetch`, `file_list`)
+with the same parameters. `upload` and `fetch` act for the session they run in (`ORBIT_SESSION_ID`),
+so they have no headless form; `list` runs anywhere the runner's credential does, as long as it names
+what to list. With nothing named it lists the session it runs in.
+
+`upload` reads only the session's checkout and its uploads directory, the same two directories a reply
+can link from. The check goes by a path's real location, with links resolved, so a link in a repository
+does not reach out of it; anywhere else is refused, and the refusal names the uploads directory to copy
+a file into. Inside the runner's own directory (`~/.orbit`) nothing but this session's directories is
+ever read. The checkout is the git repository of the working directory, so a session in a repository
+rooted at a home directory can reach the rest of that home.
+
+`upload` answers `id`, `sha256`, `sizeBytes` and `link`, an `orbit-attachment:` link to put in a reply:
+`![name](link)` for an image, `[name](link)` for anything else. A directory becomes one folder bundle:
+every file under it, each with its own id, and a manifest of their relative paths, which is what the
+bundle's id and sha256 name. A directory walk follows no symbolic link; links, empty files and
+anything else that cannot be kept are listed under `skipped`. One file may be 25 MiB and a folder 1000
+files, and a folder over either limit is refused before anything is sent. `--task-id` may only name
+the task the session is running, which is what a file counts as anyway; any other task is refused,
+and a file reaches another task as an input through `orbit task create --attachment-id`, a folder
+file by file.
+
+`fetch` saves the file under the uploads directory, checks it against the sha256 Orbit holds, and
+answers its absolute path as `path`. A session fetches only its own files. Given a bundle's id, it
+saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones you
+need. `list` answers one task's, one session's or one evidence version's files, newest first, and
+shows a bundle as one row of kind `bundle`; a task's files are its inputs and what the sessions that
+ran it kept with `upload`. An id that names nothing of the account's is refused rather than answered
+with an empty list.
+
+A runner newer than the server it talks to says in words that the server has no file door rather than
+reporting a bare 404, and nothing is uploaded.
+
 ## Headless runner-local access
 
 A process on a registered runner with no `ORBIT_SESSION_ID` can use the runner credential to inspect and send

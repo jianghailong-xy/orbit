@@ -723,8 +723,8 @@ const (
 // credential (@UseGuards(RunnerAuthGuard)), which the link gateway forwards and its internal listener serves
 // (runner-auth.guard.ts admitLinkCall). TestLinkDaemonRoutesAreTheControllersGuardedRoutes holds this list to the
 // controller. Registration and the device flow come before any link, and every other controller under /runner is the
-// agent tool API, which stays on HTTPS (D14). The attachments' two routes are listed because the controller serves
-// them, but their calls never pass doVia: they are multipart and raw bytes, and stay on HTTPS. So is the Claude region
+// agent tool API, which stays on HTTPS (D14). The attachments' two routes and the file upload's are listed because the
+// controller serves them, but their calls never pass doVia: they are multipart and raw bytes, and stay on HTTPS. So is the Claude region
 // check's: it is one request through the proxy Claude uses, on a transport of its own, and the apiserver answers it
 // unknown over the link (docs/claude-region-check-contract.md §3).
 var linkDaemonRoutes = []string{
@@ -759,6 +759,7 @@ var linkDaemonRoutes = []string{
 	linkRouteInbox,
 	"GET /runner/sessions/:id/attachments/:id",
 	"POST /runner/sessions/:id/attachments",
+	"POST /runner/sessions/:id/files",
 	"POST /runner/sessions/:id/artifacts/result",
 	"POST /runner/sessions/:id/approvals",
 	"GET /runner/sessions/:id/approvals/:id",

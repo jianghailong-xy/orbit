@@ -32,7 +32,7 @@
  * Not destructive: every row belongs to a user this run creates.
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -141,7 +141,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   const send = (who: Holder, as: RunnerCredential | 'none', route: string, request: TenantRequest): Promise<Reply> => {
     const { bearer, headers } = credentialed(who, as, request);
     return request.file
-      ? upload(server!, methodOf(route), pathOf(route, request), { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...headers }, request.file)
+      ? upload(server!, methodOf(route), pathOf(route, request), { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...headers }, request.file, request.fields)
       : call(server!, methodOf(route), pathOf(route, request), bearer, request.body, headers);
   };
 
@@ -172,6 +172,16 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       const id = randomUUID();
       await db.attachment.create({
         data: { id, ownerId, ...where, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
+      });
+      return id;
+    };
+    /** A `file_upload` of the session's, its bytes kept: what a folder bundle is made of. */
+    const uploadOf = async (sessionId: string) => {
+      const id = randomUUID();
+      const sha256 = createHash('sha256').update('census').digest('hex');
+      await db.fileBlob.upsert({ where: { sha256 }, create: { sha256, sizeBytes: 6, storage: 'local' }, update: {} });
+      await db.attachment.create({
+        data: { id, ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', sha256, retention: 'file_upload' },
       });
       return id;
     };
@@ -208,6 +218,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const finalizeSessionId = await open('finalize session', { status: 'RUNNING' });
     const completeSessionId = await open('complete session', { status: 'RUNNING' });
     const sessionAttachmentId = await fileOf({ sessionId: machineSessionId });
+    const uploadedFileId = await uploadOf(machineSessionId);
+    const { id: evidenceRevisionId } = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId: of.evidenceTaskId }, select: { id: true } });
+    const runningTaskId = await task('task the machine is running');
+    const runningTaskSessionId = await open('session running a task', { status: 'RUNNING', taskId: runningTaskId });
     const allowedApprovalId = randomUUID();
     await db.approval.create({ data: { id: allowedApprovalId, sessionId: machineSessionId, toolName: 'Bash', input: { command: 'true' }, status: 'ALLOWED' } });
     // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
@@ -378,7 +392,8 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
+      finalizeSessionId, completeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
+      artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,

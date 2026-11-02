@@ -13084,10 +13084,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!ids.length) return;
     const sources = await tx.attachment.findMany({
       where: { ownerId, id: { in: ids } },
-      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, sha256: true, data: true },
+      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, sha256: true, data: true, fileBundleId: true },
     });
     // Rechecked in the task's transaction: deletion after preflight must roll back the task too.
     if (sources.length !== ids.length) throw new NotFoundException('attachment not found');
+    // A folder bundle's row is its manifest, and a copy would be a list of files the new task cannot read.
+    if (sources.some((source) => source.fileBundleId === source.id)) {
+      throw new BadRequestException('a folder bundle cannot be a task input: pass the ids of the files in it, individually');
+    }
     const byId = new Map(sources.map((source) => [source.id, source]));
     for (const id of ids) {
       const source = byId.get(id)!;
