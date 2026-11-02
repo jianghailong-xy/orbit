@@ -97,6 +97,13 @@
 // design, whose §2.10 has the backup sidecar sync ./data/files; its coordinator filed this mount) gave pgbackup one
 // read-only bind mount of ./data/files, so that scripts/pg-backup.sh can copy attachment bytes off the host. No service,
 // port or environment is added, and with no ORBIT_BACKUP_SYNC_TARGET nothing reads the mount. (r) pins the line.
+//
+// On 2026-11-03 Orbit Files' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
+// whose §2.8 and §2.10 ask for a per-account quota and a grace period no shorter than the Postgres backup retention; its
+// coordinator approved this pin) added three lines to the apiserver's environment: the quota, empty unless the host's .env
+// sets it, and the two values pgbackup keeps base backups by, with pgbackup's own defaults, so that the grace period reads
+// the same numbers rather than a second one that could drift. No service, mount or port is added, and pgbackup's block is
+// unchanged. The block below pins them.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -104,6 +111,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE = 'docker-compose.yml';
@@ -366,6 +374,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
     '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
     '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+  ],
+  // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
+  // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
+  [
+    '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
+    '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
@@ -801,7 +816,8 @@ for last; do :; done
     const cutShort = path.join(scratch, 'archive/base/.staging-20260101T000000Z');
     mkdirSync(cutShort, { recursive: true });
     mkdirSync(path.join(scratch, 'archive/wal'));
-    if (wal) writeFileSync(path.join(scratch, 'archive/wal/000000010000000000000001.gz'), '');
+    // A segment of the cluster the psql stub answers for: the zeros it prints are also this header's system identifier.
+    if (wal) writeFileSync(path.join(scratch, 'archive/wal/000000010000000000000001.gz'), gzipSync(Buffer.alloc(32)));
     const round = spawnSync('sh', ['scripts/pg-backup.sh'], {
       cwd: repo,
       encoding: 'utf8',
@@ -815,7 +831,9 @@ for last; do :; done
     });
     let rsyncCalls = [];
     try {
-      rsyncCalls = readFileSync(calls, 'utf8').trim().split('\n');
+      // What it copies. It also reads the target first, which the stub answers as empty: test/pg-backup-offhost.test.mjs
+      // holds what it does with a real one.
+      rsyncCalls = readFileSync(calls, 'utf8').trim().split('\n').filter((call) => !call.includes('--list-only'));
     } catch (error) {
       assert.equal(error.code, 'ENOENT');
     }

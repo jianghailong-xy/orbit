@@ -193,20 +193,48 @@ base backups and archived WAL to `./data/pg-archive`.
 - Set `ORBIT_BACKUP_SYNC_TARGET` (plus `ORBIT_BACKUP_SYNC_SSH_PORT` when it is not 22) so the sidecar mirrors
   `./data/pg-archive` to another host over ssh; give it a directory of its own, since the mirror deletes
   anything else there. A same-disk backup does not protect against disk or host loss.
-- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/` and
-  never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
+- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/`.
+  With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
   in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- The sidecar reads the target before mirroring, and refuses one holding another cluster's archive, with the reason in
+  its log, rather than replace it: [The off-host mirror](postgres-backup-restore.md#the-off-host-mirror).
+- Files agents keep with `file_upload` expire, which is what stops `./data/files` growing without end:
+  [File retention and quota](#file-retention-and-quota).
 - Uploads pass through `./data/files/tmp`, with either store. A process killed during one leaves its file there. Each
   apiserver start removes regular files there that have not been written for a day, so that file stays on disk until the
   first start at least a day later, which on a deployment that rarely restarts can be weeks away.
 - A restore goes Postgres first, then the files, then the apiserver:
   [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
-  restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
+  restore the archive before the first `docker compose up -d`, or you have a new, empty cluster to move aside first:
   [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
+
+### File retention and quota
+
+Orbit deletes the bytes of files agents upload with `file_upload`, on these dates. Reply images, your own uploads and task
+attachments are not touched: they stay as long as their session or task.
+
+| A file agents uploaded | Expires |
+| --- | --- |
+| No evidence cites it | 14 days after the upload |
+| Cited by evidence still waiting for a decision | Does not expire |
+| Cited by a version that was sent back or replaced | 30 days after that |
+| Cited by a confirmed version | When the task is deleted, or 14 days after the upload if that is later |
+| Pinned (`file_pin`, `PUT /api/attachments/:id/pin`) | Does not expire |
+
+Where several apply, the latest wins. Expiring writes a tombstone and keeps the file's name, size, sha256 and test summary, so
+evidence stays complete and its cards show an expired placeholder. The bytes go a grace period later, once no row holds them:
+max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × `ORBIT_BASE_BACKUP_KEEP`). The apiserver reads those two values for this, so
+set them where the sidecar reads them, in `.env`, and recreate both services when they change. Pinning a file in its grace
+period brings it back. The sweep runs on one apiserver about once an hour, and says what it did in the apiserver's log.
+
+Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
+`.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
+self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
+counts, and uploads racing at the limit can pass it by at most 25 MiB each.
 
 ## Google sign-in
 
