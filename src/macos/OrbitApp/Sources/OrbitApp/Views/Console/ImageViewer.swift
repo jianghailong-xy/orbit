@@ -167,6 +167,9 @@ extension View {
 /// on the image opens the image menu: Save to Photos, Copy, Share.
 struct ImagePagerView: View {
     let images: [PreviewImage]
+    /// Told the page on screen, by a viewer that says for itself where it is (`EvidenceFileViewer`): the
+    /// counter and the status bar are then that viewer's to decide.
+    private let onPage: ((Int) -> Void)?
     /// Only `.attachment` pages need it, so it's read optionally: a pager over in-memory images is
     /// presented without a store in its environment.
     @Environment(AttachmentImageStore.self) private var store: AttachmentImageStore?
@@ -190,8 +193,9 @@ struct ImagePagerView: View {
     private enum DragMode { case idle, page, dismiss, pan, scroll }
     private static let gap: CGFloat = 24
 
-    init(images: [PreviewImage], startIndex: Int) {
+    init(images: [PreviewImage], startIndex: Int, onPage: ((Int) -> Void)? = nil) {
         self.images = images
+        self.onPage = onPage
         _index = State(initialValue: startIndex)
     }
 
@@ -330,14 +334,15 @@ struct ImagePagerView: View {
             }
         }
         .ignoresSafeArea()
-        .overlay(alignment: .bottom) { pageCounter }
+        .overlay(alignment: .bottom) { if onPage == nil { pageCounter } }
         .overlay { imageMenu }
         .overlay(alignment: .top) { noticeCard }
-        .statusBarHidden(true)
+        .statusBarHidden(onPage == nil)
         .presentationBackground(.clear)
         .onChange(of: notice) { _, new in
             if let new { AccessibilityNotification.Announcement(new.message).post() }
         }
+        .onChange(of: index) { _, new in onPage?(new) }
     }
 
     /// Commits a new zoom for the current page, keeping the point at the centre of the screen where
@@ -375,6 +380,9 @@ struct ImagePagerView: View {
             Group {
                 if let img = store.image(for: attachmentID) {
                     pageBody(img, isCurrent: isCurrent, size: size)
+                } else if store.isNotImage(attachmentID) {
+                    // The answer is in and there is no picture: a spinner would wait for ever.
+                    Image(systemName: "photo").font(.orbitHeroGlyph).foregroundStyle(.white.opacity(0.4))
                 } else {
                     ProgressView().tint(.white)
                 }

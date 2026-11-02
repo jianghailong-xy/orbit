@@ -59,14 +59,33 @@ public struct EvidenceDecisionCitation: Codable, Equatable, Sendable {
     /// The cited row in words when the server has better than the ref: the tool's name and the
     /// command it ran. Null for a citation that did not resolve, and for kinds whose ref reads.
     public let label: String?
+    /// What a report said, on a FILE citation of one (`EvidenceFiles.testReports`).
+    public let testReport: EvidenceTestReport?
 
     public init(kind: String, ref: String, resolved: Bool, reason: String? = nil,
-                label: String? = nil) {
+                label: String? = nil, testReport: EvidenceTestReport? = nil) {
         self.kind = kind
         self.ref = ref
         self.resolved = resolved
         self.reason = reason
         self.label = label
+        self.testReport = testReport
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind, ref, resolved, reason, label, testReport
+    }
+
+    // Tolerant about the report alone: it is a line on a card, and a summary this build cannot read must
+    // not fail the whole queue, which would take every pending card down with it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind)
+        ref = try c.decode(String.self, forKey: .ref)
+        resolved = try c.decode(Bool.self, forKey: .resolved)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        testReport = try? c.decodeIfPresent(EvidenceTestReport.self, forKey: .testReport)
     }
 }
 

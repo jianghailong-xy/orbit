@@ -66,7 +66,9 @@ struct WorktreeFilePreview: View {
         .fileExporter(isPresented: $exporting,
                       document: WorktreeFileDocument(data: data ?? Data()),
                       contentType: .data, defaultFilename: fileName) { result in
-            if case .failure(let error) = result {
+            do {
+                try DownloadMark.finishSaving(result)
+            } catch {
                 errorTitle = "Couldn't save file"
                 exportError = APIClient.failureReason(error)
             }
@@ -269,7 +271,7 @@ private struct WorktreeSharedFile: Transferable {
                 .appendingPathComponent("orbit-worktree-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent(item.name)
-            try item.data.write(to: url, options: .atomic)
+            try DownloadMark.write(item.data, to: url)
             return SentTransferredFile(url)
         }
     }
