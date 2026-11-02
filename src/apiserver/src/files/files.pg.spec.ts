@@ -179,6 +179,8 @@ function storeCases(leg: Leg) {
     let server: Apiserver | undefined;
     t.after(async () => {
       await server?.stop();
+      // An old row left waiting would be copied by the next leg's start, beside that leg's look at its temporary directory.
+      await db.attachment.deleteMany({ where: { sha256: null } }).catch(() => undefined);
       await db.$disconnect().catch(() => undefined);
       await sql.end().catch(() => undefined);
     });

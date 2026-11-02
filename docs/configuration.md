@@ -174,7 +174,7 @@ credential changes and the API connection rather than deleting or reinitializing
 | `ORBIT_BASE_BACKUP_INTERVAL` | Optional; `86400` seconds | Time between base backups. | No | Recreate `pgbackup` |
 | `ORBIT_BASE_BACKUP_KEEP` | Optional; `2` | Number of base backups retained; retention bounds available recovery history. | No | Recreate `pgbackup` |
 | `ORBIT_BACKUP_MIN_FREE_MB` | Optional; `2048` MiB | Minimum free space to leave; a backup that cannot meet it is skipped with an error. | No | Recreate `pgbackup` |
-| `ORBIT_BACKUP_SYNC_TARGET` | Optional; empty means local only | SSH rsync destination dedicated to the archive. The mirror deletes unrelated destination files. | No; redact private host/path | Recreate `pgbackup` |
+| `ORBIT_BACKUP_SYNC_TARGET` | Optional; empty means local only | SSH rsync destination dedicated to the archive. The mirror deletes unrelated destination files. `./data/files` is copied beside it, to `<target>-files`, so the SSH user must be able to create that directory too. | No; redact private host/path | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SYNC_SSH_PORT` | Optional; `22` | SSH port for the off-host mirror. | No | Recreate `pgbackup` |
 | `ORBIT_BACKUP_SSH_DIR` | Optional; `/root/.ssh` | Host directory mounted read-only at `/ssh`, containing `id_rsa` and `known_hosts` for the mirror. | Contents include a private key | Recreate `pgbackup`; keep host-key checking enabled |
 

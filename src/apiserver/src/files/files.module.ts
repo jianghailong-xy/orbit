@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AttachmentCopyAtBoot } from './attachment-copy-at-boot';
 import { FilesService } from './files.service';
 import { UserFileResponseInterceptor } from './user-file-response';
 
@@ -10,7 +11,7 @@ import { UserFileResponseInterceptor } from './user-file-response';
 // instance over the same PrismaService, which reads the same environment.
 @Global()
 @Module({
-  providers: [FilesService, { provide: APP_INTERCEPTOR, useClass: UserFileResponseInterceptor }],
+  providers: [FilesService, AttachmentCopyAtBoot, { provide: APP_INTERCEPTOR, useClass: UserFileResponseInterceptor }],
   exports: [FilesService],
 })
 export class FilesModule {}

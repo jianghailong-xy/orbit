@@ -1424,18 +1424,108 @@ docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
 
+### Moving old attachments out of Postgres
+
+Attachments uploaded before the `./data/files` mount existed keep their bytes in Postgres. They move to the file store
+(`./data/files`, or the bucket with `ORBIT_FILES_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
+and a clear that you run yourself and cannot undo. Attachments stay readable and uploads keep working during both, so
+neither needs downtime.
+
+**The copy.** After each start the apiserver copies those bytes to the file store in the background, at most 100
+attachments or 64 MiB at a time, with a pause of a second in between. The start does not wait for it. Identical bytes are
+stored once. Postgres keeps its copy, so `./data/files` or the bucket needs room for those bytes and nothing is freed
+yet. The copy waits while the disk under `./data/files` has less than 2 GiB free, logs that it is waiting, and carries on
+when there is room. You can stop the apiserver at any time, and the next start carries on from where it got to. If the
+store fails, the apiserver logs the failure and tries again a minute later.
+
+The apiserver logs its progress after each batch. With [several apiservers](#several-apiservers), each one that starts
+with attachments waiting copies them, which does the work more than once but changes nothing else:
+
+```text
+attachment copy: 300 (52428800 bytes) copied this run, 1180 (734003200 bytes) left
+```
+
+To confirm the copy has finished, ask where every attachment's bytes are. This writes nothing:
+
+```bash
+docker compose exec apiserver node src/apiserver/dist/files/attachment-migration.cli.js status
+```
+
+```text
+attachments waiting for the copy: 0 (0 bytes)
+attachments copied and still in Postgres: 1480 (786432000 bytes)
+attachments only in the file store: 2210 (1073741824 bytes)
+```
+
+The copy has finished when none are waiting. Any that an older apiserver wrote afterwards, during an upgrade of
+[several apiservers](#several-apiservers), wait for the next start.
+
+**The clear.** This removes the bytes from Postgres, which is the step you can't take back. Run it only when all of these
+are true:
+
+- `status` shows none waiting for the copy.
+- You will not need to go back to an older version: after the clear,
+  [an older version can't read any attachment](#going-back-to-an-older-version).
+- The file store is backed up. Once the bytes leave Postgres they leave every new backup of it too, so `./data/files` is
+  their only copy on this host. With `ORBIT_BACKUP_SYNC_TARGET` set, confirm that the sidecar has copied it to
+  `<target>-files` since the copy finished, as described in
+  [Attachment files](postgres-backup-restore.md#attachment-files). With a bucket, confirm its versioning or replication.
+  Bytes kept in `./data/files` before a move to a bucket stay there, so they need the sidecar's copy either way.
+- The disk has room for what the clear writes. It frees nothing at first: Postgres writes about as much WAL as the bytes
+  it removes, and `./data/pg-archive` keeps that WAL until newer base backups replace the old ones. Have free at least
+  what `status` shows as still in Postgres, plus 2 GiB.
+
+Then run:
+
+```bash
+docker compose exec apiserver node src/apiserver/dist/files/attachment-migration.cli.js clear
+```
+
+For each copied attachment, the command reads the bytes back from the file store and checks them against the sha256 the
+row names. It then checks that the bytes in Postgres are the same content, and only then removes them. It prints its
+progress, then the same counts as `status`. It exits 0 when no attachment has bytes left in Postgres, and 1 otherwise.
+You can stop it at any point and run it again: it carries on with the rows that still have bytes in Postgres, and changes
+nothing on the others. Any attachment it has already cleared stays cleared, so stopping it does not bring back the
+older version for those. It stops by itself, and says so, if the disk under `./data/files` falls below 2 GiB free, so
+that it cannot fill the disk under Postgres; run it again when there is room.
+
+An attachment that fails the check keeps its bytes in Postgres and is reported, and the command moves on to the next:
+
+```text
+refused 0198f6a2-7c3e-7a10-9d2b-5e1c4f0a8b37 (sha256 ab12…): the local file store does not hold these bytes
+```
+
+- **The store does not hold the bytes, or holds other bytes under that name.** Copy them again from Postgres. Remove
+  whatever is at `./data/files/ab/ab12…` (in a bucket, the object `files/ab/ab12…`), take the row back to before the copy,
+  restart the apiserver, and run the clear again once `status` shows none waiting:
+
+  ```bash
+  docker compose exec postgres psql -U orbit -d orbit \
+    -c "UPDATE attachment SET sha256 = NULL WHERE id = '0198f6a2-7c3e-7a10-9d2b-5e1c4f0a8b37'"
+  docker compose restart apiserver
+  ```
+
+- **The store could not be read.** Fix the store and run the clear again.
+- **Its data in Postgres does not hash to this sha256.** The two copies differ, and only you can say which is right. The
+  attachment stays as it is until you do.
+
+The clear leaves the database the same size on disk: Postgres keeps the freed space and reuses it. To give the space back
+to the host, run `VACUUM FULL attachment` in `psql` at a quiet time. Attachments can't be read or written while it runs.
+
 ### Going back to an older version
 
 An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
 `ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
-so going back to one after the upgraded version has accepted uploads has a limit:
+so what it can read after you go back depends on where the bytes are:
 
+- **Until the clear, attachments from before the upgrade work on both versions**, whether or not the copy has reached
+  them, because the copy leaves their bytes in Postgres. So do the ones uploaded while the older version runs.
 - **Attachments uploaded since the upgrade can't be read.** The older version fails on them: opening one, and anything
   else that needs its bytes, such as starting a run of a task that has one as an input.
-- **Their bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves
-  those attachments as before.
-- **Attachments from before the upgrade keep working** on both versions, because their bytes are still in Postgres. So
-  do the ones uploaded while the older version runs.
+- **After the clear, an older version can't read any attachment.** It fails on all of them in the same way, however old
+  they are. See [Moving old attachments out of Postgres](#moving-old-attachments-out-of-postgres).
+- **The bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves those
+  attachments as before.
 
 A Compose upgrade replaces the apiserver in one step, so in normal operation no older version serves these attachments.
 The exception is [several apiservers](#several-apiservers): the others run the old code until they are recreated, and
