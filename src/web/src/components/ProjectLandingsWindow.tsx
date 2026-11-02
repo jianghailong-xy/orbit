@@ -299,6 +299,13 @@ export function ProjectLandingsWindow({
             ? <div className="landing-page-note">{LANDING_PAGE_COPY.UPDATE_UNAVAILABLE}</div>
             : <div className="landings-window-loading"><Spinner size="small" /></div>
         ) : null}
+        {/* Only an address opens a window with nothing in it: the sessions page draws no Landings row
+            for a project that has never had a landing. */}
+        {loaded && mergedQ.isFetched && landings.days.length === 0 && cards.length === 0 ? (
+          <div className="landings-window-loading">
+            <span className="landing-page-note">{SESSION_LANDINGS_COPY.NO_LANDINGS_YET}</span>
+          </div>
+        ) : null}
         {landings.days.map((day) => (
           <section key={day.title} className="landings-window-day" aria-label={day.title}>
             <div className="landings-window-day-head">{day.title}</div>

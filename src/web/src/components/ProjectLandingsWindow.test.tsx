@@ -1003,6 +1003,35 @@ describe('the window', () => {
       .toBe('T3 sudo hints name the binary’s real path');
   });
 
+  it('says so when the project has had no landing, and only once it knows', async () => {
+    coordinatorStatus = { coordination: null, readAt: at(14, 58) };
+    let mergesAnswer: (rows: ProjectPromotionView[]) => void = () => {};
+    const merges = new Promise<ProjectPromotionView[]>((resolve) => { mergesAnswer = resolve; });
+    vi.mocked(api).mockImplementation(((path: string) => {
+      if (path.startsWith('/sessions?')) return Promise.resolve([]);
+      if (path === `/projects/${PROJECT}`) return Promise.resolve({ id: PROJECT, title: 'Wiki server' });
+      if (path === `/projects/${PROJECT}/coordinator/status`) return Promise.resolve(coordinatorStatus);
+      if (path === `/projects/${PROJECT}/promotions/merged`) return merges;
+      return Promise.resolve({});
+    }) as never);
+    await mount(windowOn(null));
+    const note = (): string | null => page().querySelector('.landings-window-body .landing-page-note')?.textContent ?? null;
+    // A merge older than landing sessions is a landing too, and that read has not answered yet.
+    expect(note()).toBeNull();
+    await act(async () => mergesAnswer([]));
+    await settle();
+    expect(note()).toBe('No landings yet');
+    // The window's own head and footer stand around it.
+    expect(page().querySelector('.landing-page-title')?.textContent).toBe('Landings');
+    expect(page().querySelector('.landing-page-foot-line')?.textContent).toBe('Orbit runs these landings — nothing to type here.');
+  });
+
+  it('draws no such note beside a landing', async () => {
+    await mount(windowOn(null));
+    expect(page().querySelector('[data-landing-entry]')).not.toBeNull();
+    expect(page().textContent).not.toContain('No landings yet');
+  });
+
   it('keeps the footer’s words with no door at all when the project has no coordinator', async () => {
     coordinatorStatus = { coordination: null, readAt: at(14, 58) };
     await mount();
