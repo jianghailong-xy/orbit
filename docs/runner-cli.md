@@ -146,9 +146,10 @@ asks and whichever way the request reaches the runner.
 - **A question for a person is not a job.** A call that files a card and waits for the answer, such as `task_create`,
   works in every mode, on the engines whose tool calls have a deadline too.
 
-An upgrade changes one thing people may notice: Claude Code in Default and Accept Edits now asks before each `Bash`
-command that is not already allowed, and Don't Ask refuses one. Before this change these modes did not, so a session
-that used Don't Ask to run commands unattended has to move to Auto.
+An upgrade changes two things people may notice. Background jobs now follow this table on every engine; before, a job
+started in nearly any mode. And Claude Code in Default and Accept Edits now asks before each `Bash` command that is not
+already allowed, and Don't Ask refuses one; before, these modes did not. A session that used Don't Ask to run commands
+unattended has to move to Auto.
 
 This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
 [Security notes](#security-notes).
