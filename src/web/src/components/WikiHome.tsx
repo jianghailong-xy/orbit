@@ -43,6 +43,7 @@ import {
   wikiBrowsePath,
   wikiDirectoryGroups,
   wikiIndexPath,
+  wikiPlainWords,
   type WikiDirectoryGroup,
 } from '../lib/wikiArticles';
 import {
@@ -231,7 +232,7 @@ function HomeCategory({ category, spaceSlug }: { category: WikiHomeCategory; spa
           number={doc.number}
           title={doc.title}
           fresh={doc.fresh}
-          line={doc.lead ?? undefined}
+          line={doc.lead ? wikiPlainWords(doc.lead) : undefined}
           lead
         />
       ))}

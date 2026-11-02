@@ -40,6 +40,9 @@ import {
   wikiIndexSummary,
   wikiMoreArticles,
   wikiNoteLabel,
+  wikiPlainWords,
+  wikiProsePunctuation,
+  wikiSentenceGap,
   wikiSentenceSegments,
   wikiSourceCounts,
   wikiSourcesLine,
@@ -250,6 +253,34 @@ describe('the A–Z index', () => {
 describe('one article', () => {
   it("reads a sentence's code and strong words, and leaves an unpaired mark as it is", () => {
     for (const row of fixture().segments) expect(wikiSentenceSegments(row.text)).toEqual(row.says);
+  });
+
+  it('writes the half-width , : ; that touch Chinese full width, in the run they are in', () => {
+    expect(wikiProsePunctuation('只有一件:为某个应用构建,这一天;运维')).toBe('只有一件：为某个应用构建，这一天；运维');
+    // Beside a code span the mark is the first or the last of its run.
+    expect(wikiProsePunctuation(':前者')).toBe('：前者');
+    expect(wikiProsePunctuation('必填参数:')).toBe('必填参数：');
+    // The space a half-width mark wants goes with it.
+    expect(wikiProsePunctuation('排队与次序, 不改动内容')).toBe('排队与次序，不改动内容');
+    // A quote that closes Chinese is Chinese, and the code after the mark is another run.
+    expect(wikiProsePunctuation('决定了“按天”,')).toBe('决定了“按天”，');
+  });
+
+  it('leaves English, numbers, and marks already full width as they are', () => {
+    for (const text of ['One thing: a build, per day; no more.', 'at 10:30, port 8080', 'a,b', 'He said “yes”, then left.', '只有一件：为某个应用，这一天；运维']) {
+      expect(wikiProsePunctuation(text)).toBe(text);
+    }
+  });
+
+  it('reads a title with its marks taken off, for a row too small to draw them', () => {
+    expect(wikiPlainWords('必填参数:`--app_id` 与 `--date`')).toBe('必填参数：--app_id 与 --date');
+    expect(wikiPlainWords('**总览**：`a,b`')).toBe('总览：a,b');
+    expect(wikiPlainWords('an unpaired ` stays')).toBe('an unpaired ` stays');
+  });
+
+  it('parts sentences as they read: a space after a Latin stop, none after a full-width one', () => {
+    for (const end of ['确定。', '确定！', '确定？', '“确定。”', '（确定。）']) expect(wikiSentenceGap(end)).toBe('');
+    for (const end of ['Done.', 'Done?', 'Done!', '例如：']) expect(wikiSentenceGap(end)).toBe(' ');
   });
 
   it('counts the kinds its entries hold, in the registry’s order', () => {
