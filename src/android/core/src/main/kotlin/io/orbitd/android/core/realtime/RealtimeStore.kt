@@ -56,6 +56,9 @@ class RealtimeStore(
     private val network = MutableStateFlow(Network())
     private val selection = MutableStateFlow(Selection(null, 0))
     private val directoryRevision = MutableStateFlow(0L)
+    /** Moved by every account event and connect. Nobody waits on the read behind one, so unlike [directoryRevision] it costs a
+     * read on the wire nothing: see [control]. */
+    private val directoryChanges = MutableStateFlow(0L)
     /** The revision the last directory read that landed left at: what [rereadDirectory] waits on. */
     private val directoryLanded = MutableStateFlow(0L)
     private val sessionRevision = MutableStateFlow(0L)
@@ -184,19 +187,31 @@ class RealtimeStore(
         cache: MutableStateFlow<RealtimeCache>, writes: Channel<Unit>) = coroutineScope {
         val refresh = Channel<Unit>(Channel.CONFLATED)
         launch { directoryRevision.collect { refresh.trySend(Unit) } }
+        launch { directoryChanges.collect { refresh.trySend(Unit) } }
         launch {
             val retry = ReconnectPolicy()
+            var asked: Long? = null
             for (ignored in refresh) {
                 val revision = directoryRevision.value
-                publish(handle) { it.copy(directoryRefreshing = true, directoryFresh = false) }
+                val connects = state.value.controlConnects
+                // An account with work running is never quiet for as long as its lists take to read, so an event costs neither
+                // the read on the wire nor the rows on screen: the read lands and this loop reads again behind it. Only an ask
+                // outranks a read, which may have left before the write the ask follows.
+                if (revision != asked || !state.value.directoryFresh) publish(handle) { it.copy(directoryRefreshing = true, directoryFresh = false) }
+                asked = revision
                 try {
                     // Rows the published directory already holds are kept, not read into a second tree beside it.
                     val snapshot = rest.directory(handle, state.value.directory)
                     currentCoroutineContext().ensureActive()
                     if (!active(handle, path)) return@launch
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
-                    publish(handle) { it.copy(directory = snapshot, directoryCached = false, directoryRefreshing = false,
-                        directoryFresh = true, directoryError = null) }
+                    // A read that left before the stream opened may lack what happened with no stream: its rows are the newest
+                    // there are, and the connection's own read is still to come.
+                    publish(handle) {
+                        val current = it.controlConnects == connects
+                        it.copy(directory = snapshot, directoryCached = false, directoryRefreshing = !current,
+                            directoryFresh = current, directoryError = null)
+                    }
                     directoryLanded.update { maxOf(it, revision) }
                     cache.update { it.copy(directory = snapshot) }
                     writes.trySend(Unit)
@@ -217,7 +232,7 @@ class RealtimeStore(
             try {
                 auth.stream(handle, ApiRequest(listOf("events")), onOpen = {
                     if (!active(handle, path)) throw CancellationException()
-                    publish(handle) { it.copy(controlConnects = it.controlConnects + 1) }
+                    publish(handle) { it.copy(controlConnects = it.controlConnects + 1, directoryFresh = false) }
                     invalidate(handle)
                     publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTED, controlError = null) }
                 }, onFrame = { frame ->
@@ -241,9 +256,8 @@ class RealtimeStore(
     }
 
     private fun invalidate(handle: SessionHandle) {
-        publish(handle) { it.copy(invalidationRevision = it.invalidationRevision + 1, directoryFresh = false,
-            session = it.session?.copy(fresh = false)) }
-        refreshDirectory()
+        publish(handle) { it.copy(invalidationRevision = it.invalidationRevision + 1, session = it.session?.copy(fresh = false)) }
+        directoryChanges.update { it + 1 }
         refreshSession()
     }
 

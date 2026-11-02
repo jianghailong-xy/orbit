@@ -77,8 +77,8 @@ class FeatureWrites(private val auth: AuthSession, private val handle: SessionHa
 
 /** The account stream decides whether a page may write: this handle, signed in, in the foreground
  * with a network and its control stream connected — the stream that brings another device's change
- * here. Not `directoryFresh`: every control event withdraws that for one directory read, which would
- * make each button blink off on an unrelated event. Offline, backgrounded or reconnecting: no write. */
+ * here. Not `directoryFresh`: every write's re-read withdraws that for one directory read, which would
+ * make each button blink off on an unrelated write. Offline, backgrounded or reconnecting: no write. */
 fun writable(state: RealtimeState, handle: SessionHandle, signedIn: SessionHandle?): Boolean =
     signedIn === handle && state.handle === handle && state.controlConnection == ConnectionState.CONNECTED
 

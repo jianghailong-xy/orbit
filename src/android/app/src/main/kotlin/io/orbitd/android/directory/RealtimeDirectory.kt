@@ -14,12 +14,15 @@ import io.orbitd.android.core.realtime.RealtimeState
 /** A04 owns disk/SSE/REST recovery. A05 only projects the current handle's complete snapshot. */
 @Composable
 fun rememberDirectoryData(app: OrbitApplication, handle: SessionHandle): State<DirectoryData> {
-    // A streaming delta cannot change the directory. Avoid decoding every session on each one.
-    val live by remember(app) { app.realtime.state.map { it.copy(session = null) }.distinctUntilChanged() }
+    val live by remember(app) { app.realtime.state.map { it.directoryFields() }.distinctUntilChanged() }
         .collectAsState(RealtimeState())
     val trashing by app.trashing.ids.collectAsState()
     return remember(live, handle, trashing) { mutableStateOf(if (live.handle !== handle) DirectoryData() else directoryData(live, trashing)) }
 }
+
+/** The state without what never changes the directory: a streaming delta, and an account event until the read behind it lands.
+ * Every row is decoded on the main thread, so neither may set that off. */
+internal fun RealtimeState.directoryFields() = copy(session = null, invalidationRevision = 0, accountEvents = emptyMap())
 
 /** One row that does not decode makes the whole directory unreadable. A session on its way to Trash ([trashing], keyed as
  * [TrashingSessions.key]) is in none of the views, whichever read the snapshot came from (A05-9). */
