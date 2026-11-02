@@ -25,14 +25,21 @@ const BYPASS = ['/login', '/enroll', '/setup', '/privacy'];
 // the splash or the setup-status check.
 const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
 
-type BootWindow = Window & {
-  __bootProgress?: (pct: number) => void;
-  __bootDone?: () => void;
+// Drive / dismiss the first-paint splash defined in index.html. The bar only ever moves forward as
+// the app reports real milestones; finishing snaps it to 100% and fades the splash out.
+let bootShown = 8;
+const setBootProgress = (pct: number) => {
+  if (pct > bootShown) bootShown = pct; // monotonic — never step backwards
+  const fill = document.getElementById('boot-fill');
+  if (fill) fill.style.width = `${bootShown}%`;
 };
-
-// Drive / dismiss the first-paint splash defined in index.html.
-const setBootProgress = (pct: number) => (window as BootWindow).__bootProgress?.(pct);
-const finishBoot = () => (window as BootWindow).__bootDone?.();
+const finishBoot = () => {
+  setBootProgress(100);
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  boot.classList.add('hide');
+  setTimeout(() => boot.remove(), 320);
+};
 
 // The console deep-links the splash must cover before revealing: opening one of these
 // straight from a reload lands in WorkspaceView, whose first screen needs the runner-scoped

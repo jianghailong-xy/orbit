@@ -30,7 +30,7 @@ function locationDirectives(prefix: string): string[] {
   }
   return code
     .slice(start, end - 1)
-    .split(';')
+    .split(/;(?=(?:[^"]*"[^"]*")*[^"]*$)/) // not at a `;` inside a quoted value
     .map((d) => d.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 }
@@ -83,5 +83,54 @@ describe('nginx: runner downloads', () => {
 
   it('is revalidated like the shell, so a cache never serves a release a deploy replaced', () => {
     expect(dl.filter((d) => d.startsWith('add_header '))).toEqual(['add_header Cache-Control "no-cache" always']);
+  });
+});
+
+describe('nginx: the pages\' Content-Security-Policy', () => {
+  const policyOf = (ds: string[]) => ds.filter((d) => d.startsWith('add_header Content-Security-Policy '));
+  const pages = policyOf(locationDirectives('/'));
+
+  /** One policy's directives, by name, read out of its `add_header` line. */
+  const directivesOf = (line: string | undefined) =>
+    new Map(
+      (/^add_header Content-Security-Policy "(.*)" always$/.exec(line ?? '')?.[1] ?? '').split(';').map((d): [string, string[]] => {
+        const [name, ...sources] = d.trim().split(/\s+/);
+        return [name, sources];
+      }),
+    );
+  const loads = directivesOf(pages[0]);
+  const scriptFiles = directivesOf(pages[1]);
+
+  it('is on every answer of both blocks that serve the shell, and says the same in each', () => {
+    expect(pages).toHaveLength(2);
+    expect(policyOf(locationDirectives('/s/'))).toEqual(pages);
+  });
+
+  it('runs this origin\'s script files and nothing else: no inline code, no evaluated strings', () => {
+    expect(loads.get('script-src')).toEqual(["'self'"]);
+    expect(loads.get('default-src')).toEqual(["'self'"]);
+    // A narrower directive would take over from script-src for what it names.
+    expect([...loads.keys()].filter((name) => name.startsWith('script-src-'))).toEqual([]);
+  });
+
+  it('of those, only the build\'s: nothing a route under /api/ answers', () => {
+    expect([...scriptFiles.keys()]).toEqual(['script-src']);
+    expect(scriptFiles.get('script-src')).toEqual(['*:*/assets/', '*:*/theme-boot.js']);
+  });
+
+  it('closes what default-src leaves open to a script or a form', () => {
+    expect(loads.get('object-src')).toEqual(["'none'"]);
+    expect(loads.get('base-uri')).toEqual(["'none'"]);
+    expect(loads.get('form-action')).toEqual(["'self'"]);
+  });
+
+  it('leaves every other answer as it was: nothing at server level, nothing in another block', () => {
+    // A server-level add_header would reach `location /api/`, which has none of its own, and put a
+    // second policy on the files the apiserver answers with `Content-Security-Policy: sandbox`.
+    const serverLevel = conf.replace(/#[^\n]*/g, '').replace(/location[^{]*\{[^}]*\}/g, '');
+    expect(serverLevel).not.toContain('add_header');
+    for (const block of ['/api/', '/assets/', '/dl/', '= /healthz']) {
+      expect(policyOf(locationDirectives(block))).toEqual([]);
+    }
   });
 });
