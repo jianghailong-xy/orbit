@@ -197,6 +197,9 @@ base backups and archived WAL to `./data/pg-archive`.
   never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
   in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- Uploads pass through `./data/files/tmp`, with either store. A process killed during one leaves its file there. Each
+  apiserver start removes regular files there that have not been written for a day, so that file stays on disk until the
+  first start at least a day later, which on a deployment that rarely restarts can be weeks away.
 - A restore goes Postgres first, then the files, then the apiserver:
   [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
   restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
@@ -1459,6 +1462,10 @@ attachments only in the file store: 2210 (1073741824 bytes)
 
 The copy has finished when none are waiting. Any that an older apiserver wrote afterwards, during an upgrade of
 [several apiservers](#several-apiservers), wait for the next start.
+
+While a copied attachment still has its bytes in Postgres, it stays readable if the file store fails or has lost them:
+the apiserver answers from Postgres and logs a warning naming the attachment, the store and the error, at most once a
+minute for each store. Fix the store when you see this, because the clear refuses those attachments.
 
 **The clear.** This removes the bytes from Postgres, which is the step you can't take back. Run it only when all of these
 are true:
