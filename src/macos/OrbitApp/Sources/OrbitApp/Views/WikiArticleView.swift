@@ -255,7 +255,7 @@ struct WikiArticlePage: View {
         }
         // A footnote is a link inside the text; its press opens the entry's card rather than a URL.
         .environment(\.openURL, OpenURLAction { url in
-            guard let note = Self.note(from: url) else { return .systemAction }
+            guard let note = Self.note(from: url) else { return .leaving(url) }
             open = note
             return .handled
         })

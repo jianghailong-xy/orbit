@@ -106,7 +106,7 @@ struct WikiDocPage: View {
                 openMark = mark
                 return .handled
             }
-            return .systemAction
+            return .leaving(url)
         })
         .sheet(item: $openNote) { opened in
             if let footnote = notes[opened.n] {
