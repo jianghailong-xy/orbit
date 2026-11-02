@@ -25,6 +25,12 @@ const SVG = 'image/svg+xml';
 
 const mediaType = (type: string): string => type.split(';', 1)[0].trim().toLowerCase();
 
+/** A picture a page may draw inline: a raster image on the list. Never an SVG, a PDF or a page. */
+export function isRasterImage(type: string): boolean {
+  const bare = mediaType(type);
+  return bare.startsWith('image/') && OPENS_IN_BROWSER.has(bare);
+}
+
 /**
  * An object URL for `blob`, which opens as what it is only when its type is on the list. Anything else is
  * labelled as bytes: a browser saves those rather than read them as a page, and an `<img>` still decodes a

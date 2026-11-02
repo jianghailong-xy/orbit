@@ -12,6 +12,7 @@ import {
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
 } from './CriteriaDecisionCard';
+import type { EvidenceTestReport } from '../lib/evidenceFiles';
 import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import './ui/Typography.css';
@@ -143,6 +144,8 @@ export interface PendingDecisionCitation {
    *  command it ran. Null for a citation that did not resolve — nothing was found to describe —
    *  and for the kinds whose ref is already readable. */
   label: string | null;
+  /** What a FILE citation of a test report says. Read off the row, so it outlives the file. */
+  testReport?: EvidenceTestReport;
 }
 
 export interface PendingDecisionIndependence {

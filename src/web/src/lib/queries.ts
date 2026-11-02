@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
   LinkPreviewRef,
@@ -42,6 +42,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { EvidenceFileCitation, EvidenceFilePage } from './evidenceFiles';
 import type {
   WikiArticleDirectory,
   WikiArticleIndex,
@@ -827,6 +828,8 @@ export interface TaskEvidenceRevision {
   revision: string;
   /** The envelope as it was submitted: `claim`, `gaps` and the rest. */
   evidence?: Record<string, unknown>;
+  /** What each cited row reads as now. The server says it of a revision that cites a file, and of no other. */
+  citations?: EvidenceFileCitation[] | null;
 }
 
 /**
@@ -839,6 +842,21 @@ export const taskEvidenceQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-evidence', taskId] as const,
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${encodeURIComponent(taskId)}/evidence`),
+  });
+
+/**
+ * The files one version of evidence cites, a page at a time: read from rows, so a file reads the same
+ * after it has expired. A card draws the first page, and only the page it opens asks for more.
+ */
+export const evidenceFilesQuery = (taskId: string, revision: string) =>
+  infiniteQueryOptions({
+    queryKey: ['task-evidence', taskId, 'files', revision] as const,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      api<EvidenceFilePage>(
+        `/tasks/${encodeURIComponent(taskId)}/evidence/${encodeURIComponent(revision)}/files${pageParam > 0 ? `?offset=${pageParam}` : ''}`,
+      ),
+    getNextPageParam: (page) => page.nextOffset,
   });
 
 /**
