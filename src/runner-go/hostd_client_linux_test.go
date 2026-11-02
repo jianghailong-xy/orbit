@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"net"
 	"os"
 	"os/user"
@@ -414,32 +413,4 @@ func recordCommands(t *testing.T) *[]string {
 	}
 	t.Cleanup(func() { run, runQuiet = prevRun, prevQuiet })
 	return &seen
-}
-
-// captureServiceOutput collects both streams fn writes to. The register path prints its
-// result to stdout and its reasons to stderr, and reading only one of them would miss
-// half of what the user actually sees.
-func captureServiceOutput(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	prevOut, prevErr := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = w, w
-	collected := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		collected <- string(b)
-	}()
-
-	fn()
-
-	os.Stdout, os.Stderr = prevOut, prevErr
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out := <-collected
-	r.Close()
-	return out
 }
