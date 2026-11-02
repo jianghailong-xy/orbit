@@ -55,6 +55,7 @@ import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presenc
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
+import { activeSessionsOn, engineHealthWithActiveSessions } from '../providers/active-sessions';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -195,7 +196,9 @@ export class RunnersService {
     // Each runner's engines as Orbit uses them (usedRunnerEngines): named, paused, and without a
     // Default removed from Orbit. null (not []) for a runner that has never reported: "we don't know
     // yet" and "nothing is installed" are different answers, and only one of them is ours to make up.
-    const used = runners.map((runner) => usedRunnerEngines(runner));
+    // Each account says how many sessions are at work on it, so that a client's "starts on" is the server's.
+    const atWork = await activeSessionsOn(this.prisma, runners, new Date(now));
+    const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
     return runners.map(({
       availableCommands,
       availableSkills,

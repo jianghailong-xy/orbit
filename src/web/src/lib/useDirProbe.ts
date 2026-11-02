@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { DirProbe } from '@orbit/shared';
 import { askDirProbe, readDirProbe } from '../api';
 
@@ -56,7 +56,7 @@ export function useDirProbe(
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const again = () => setAttempt((n) => n + 1);
+  const again = useCallback(() => setAttempt((n) => n + 1), []);
   if (!path) return { state: 'idle', again };
   if (q.isError) return { state: 'unanswered', again };
   if (!q.data) return { state: 'checking', again };

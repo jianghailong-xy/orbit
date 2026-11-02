@@ -75,10 +75,16 @@ class RunnerPageTest {
 
     @Test fun eachSelfUpdateStateSaysWhatOrbitKitSays() {
         val behind = "still on 0.1.190, latest is 0.1.197"
+        // sudo runs the binary by its path in that folder: it looks a bare `orbit` up only on its secure_path.
         val folder = card(case("selfUpdate dirNotWritable and behind"))
-        assertEquals("It can’t write to /usr/local/bin, so it can’t replace its own binary — $behind. On that machine, run sudo orbit upgrade once; " +
-            "after that it updates itself.", folder.detail)
-        assertEquals(AttentionAction("copyCommand", command = "sudo orbit upgrade"), folder.action)
+        assertEquals("It can’t write to /usr/local/bin, so it can’t replace its own binary — $behind. On that machine, run " +
+            "sudo /usr/local/bin/orbit upgrade once; after that it updates itself.", folder.detail)
+        assertEquals(AttentionAction("copyCommand", command = "sudo /usr/local/bin/orbit upgrade"), folder.action)
+        // An account's own copy, by its path the same way.
+        val own = buildJsonObject { put("state", "dirNotWritable"); put("installDir", "/home/lab/.orbit/bin") }
+        assertEquals(AttentionAction("copyCommand", command = "sudo /home/lab/.orbit/bin/orbit upgrade"),
+            card(reporting("selfUpdate dirNotWritable and behind", own)).action)
+        // A runner that didn't say which folder: the command as it always was.
         assertEquals("It can’t write to its install folder, so it can’t replace its own binary — $behind. On that machine, run sudo orbit upgrade " +
             "once; after that it updates itself.", card(reporting("selfUpdate dirNotWritable and behind", report("dirNotWritable"))).detail)
 

@@ -169,6 +169,9 @@ where it was installed from here. On a runner machine, have users script as an O
 runner service's: that service's agent sessions can read the account's saved login. See
 [CLI automation](runner-cli.md#personal-access-tokens), including when to use a service token instead.
 
+On a Linux machine where several accounts each run a runner of their own, set the machine up once and have each
+account register itself: [Multi-user Linux machines](#multi-user-linux-machines).
+
 ## 5. Back up and monitor
 
 The Compose stack writes Postgres data to `./data/postgres`. A sidecar writes base backups and archived WAL to
@@ -335,10 +338,10 @@ of the request:
 
 ## Wiki System model
 
-The `wiki-worker` service calls the wiki's System model: a model endpoint the deployment runs itself and that speaks
-the Anthropic Messages API, such as vLLM. It runs the apiserver image with another command, serves no port, and
-starts once the apiserver is healthy. It is the only service given the model's address and key; users' provider
-keys, subscriptions and account pools are not used for it.
+The `wiki-worker` service calls the wiki's System model: a model endpoint that speaks the Anthropic Messages API, such
+as vLLM run by the deployment itself, or DeepSeek's API. It runs the apiserver image with another command, serves no
+port, and starts once the apiserver is healthy. It is the only service given the model's address and key; users'
+provider keys, subscriptions and account pools are not used for it.
 
 To configure it, set all three in `.env` and recreate the worker:
 
@@ -347,6 +350,19 @@ ORBIT_WIKI_MODEL_BASE_URL="http://192.168.1.20:8000"
 ORBIT_WIKI_MODEL_API_KEY="the key the endpoint expects"
 ORBIT_WIKI_MODEL="the model name it serves"
 ```
+
+For DeepSeek, use its Anthropic-compatible endpoint, your DeepSeek API key, the model `deepseek-v4-pro` or
+`deepseek-flash`, and turn thinking off:
+
+```dotenv
+ORBIT_WIKI_MODEL_BASE_URL="https://api.deepseek.com/anthropic"
+ORBIT_WIKI_MODEL_API_KEY="your DeepSeek API key"
+ORBIT_WIKI_MODEL="deepseek-v4-pro"
+ORBIT_WIKI_MODEL_THINKING="disabled"
+```
+
+DeepSeek's V4 models think unless a request turns thinking off, which makes every wiki call slower, bills more output
+tokens, and can spend a small budget, such as a verification's 1,024 tokens, before any answer text arrives.
 
 ```bash
 docker compose up -d wiki-worker
@@ -1068,6 +1084,290 @@ Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's 
 above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
 volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
 [Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
+
+## Multi-user Linux machines
+
+A Linux machine that several people use can carry a runner for each of their accounts. Each runner is a process of
+its own account, with its own credential, heartbeat and sessions, and drains on its own when it stops. Root is needed
+once, to set the machine up. From then on, every account registers, checks and removes its own runner without sudo,
+and the machine's binary is updated for all of them. A machine that is not set up keeps the single-account flow of
+[Register a runner](#4-register-a-runner), and macOS is not affected.
+
+[scripts/hostd-e2e.sh](../scripts/hostd-e2e.sh) runs every command in this section, with the same arguments, on a
+real systemd with no sudo installed (root runs the ones shown with `sudo` itself), and marks each one with the
+heading it comes from.
+
+### Set up the machine once
+
+Every account's runner runs one binary, and the host broker runs it as root, so it has to be the machine's own: a
+regular file root owns and only root can write, in directories only root can write all the way up to `/`, such as
+`/usr/local/bin/orbit`. Every account has to be able to execute it, too: the file and each of those directories need
+execute permission for others. Setup writes the binary it runs from, links resolved, into the units, and refuses any
+other before it writes or runs anything (see below).
+
+[install.sh](../src/web/public/install.sh) does not put that copy in place: on a machine that is not set up, it
+installs into `~/.orbit/bin/orbit` of whichever account runs it, root included. An account's copy there is the
+account's to replace, and root's is in a home no other account can enter. So first, as the account that ran
+install.sh, put a machine-level copy in place:
+
+```bash
+sudo install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit
+```
+
+Then, once, set the machine up from that copy:
+
+```bash
+sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+`--server` is the deployment's `PUBLIC_ORIGIN`. After these two commands, no account needs root to register, check or
+remove its runner, or to have it updated. Setup writes five files, each one whole every time it runs, so running it
+again is safe:
+
+- `/etc/systemd/system/orbit-runner@.service`: the template every account's runner is an instance of,
+  `orbit-runner@<uid>.service`. An instance is named by its account's uid and runs as that account (`User=%i`), so no
+  user name ever has to become a unit name. `Restart=always` brings a runner back when it exits, and `KillMode=mixed`
+  with `TimeoutStopSec=180` lets it drain when it stops.
+- `/etc/systemd/system/orbit-hostd.socket`: the host broker's socket, `/run/orbit/host.sock`, mode 0666. Setup
+  enables and starts it.
+- `/etc/systemd/system/orbit-hostd.service`: the host broker, run as root. The socket starts it when an account's
+  `orbit` connects, and it exits after 30 quiet seconds.
+- `/usr/lib/tmpfiles.d/orbit-hostd.conf`: recreates `/run/orbit` at every boot, for the socket to listen in.
+- `/etc/orbit/config.json`: the control plane the machine belongs to, `{"server":"https://orbit.example.com"}`. The
+  broker installs updates from this server and from no other.
+
+It then creates `/run/orbit`, reloads systemd and starts the socket:
+
+```text
+Created symlink /etc/systemd/system/sockets.target.wants/orbit-hostd.socket → /etc/systemd/system/orbit-hostd.socket.
+
+✓ this host is set up for Orbit runners.
+  Broker:  orbit-hostd.socket (socket-activated; /run/orbit/host.sock)
+  Runners: orbit-runner@<uid>.service, one instance per Linux user
+  Server:  https://orbit.example.com
+
+  Every user on this host can now run `orbit register` without root.
+```
+
+Run without root, it changes nothing and says what to run instead:
+
+```text
+orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+In the same way, it refuses a binary that other accounts cannot execute, since each account's runner runs it as that
+account. Root's own copy is one: install.sh puts it in `/root/.orbit`, which it makes mode 0700, inside `/root`, which
+is normally 0700 too:
+
+```text
+orbit host: refusing to set this host up with /root/.orbit/bin/orbit: /root/.orbit, a directory above it, cannot be entered by others (mode 0700); /root, a directory above it, cannot be entered by others (mode 0700).
+Every account's runner would run this binary as that account, so every account has to be able to execute it: it needs execute permission for others, and so does every directory from its own up to /, or systemd cannot start their runners (status=203/EXEC).
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /root/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+It also refuses a binary that an account could change: every account's runner would run what that account put there,
+and the broker would run it as root. An account's own copy is one, which the account, or any agent it runs, can
+replace, whether setup runs from it or through the link to it that earlier releases of install.sh made
+`/usr/local/bin/orbit`:
+
+```text
+orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid 1000 rather than root.
+Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+In both, the first command puts a copy root owns at `/usr/local/bin/orbit`, in place of any link there, and leaves the
+copy it was made from as it was. A directory its group can write is refused too. Older Debian installs have
+`/usr/local` and `/usr/local/bin` owned by `root:staff` with mode 2775, which would let any member of `staff` put
+another binary in place, so setup names every such directory (the mode it reports leaves out the setgid bit):
+
+```text
+orbit host: refusing to set this host up with /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775).
+Every account's runner would run this binary, and the host broker would run it as root, so no account may be able to change it: it has to be a regular file root owns and only root can write, in directories only root can write, from its own up to /.
+Take that write access back, then set the host up again:
+  sudo chmod g-w /usr/local/bin /usr/local
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
+Members of `staff` then need root to install there too. Whatever setup refuses, it names what is wrong and the
+commands that put it right.
+
+### Register each account's runner
+
+Each account registers its own runner, as itself:
+
+```bash
+orbit register --server https://orbit.example.com --name build-01-alice
+```
+
+`--server` can be left off when the binary came from this deployment, whose origin is then its default. The name
+defaults to the machine's host name, the same for every account. Where one Orbit account registers runners for
+several of a machine's accounts, give each its own `--name`: registering under a name the Orbit account already has
+re-issues that runner's credential instead of adding a runner. Approval is as under
+[Register a runner](#4-register-a-runner), but run `orbit register` itself rather than the install command **Add a
+runner** generates: on a machine that is set up, that command replaces the machine's binary, which needs sudo. The
+broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
+
+```text
+    ✓ Approved — build-01-alice is now a runner.
+    ✓ Background service started as alice (runs at boot).
+      Stop or remove it later with `orbit unregister`.
+
+✓ Setup complete — build-01-alice is online.
+
+    Machine  build-01-alice (build-01)
+    Next     Start a session
+             https://orbit.example.com/runners/30tWePD4IYjCW1G8zmKpO/new
+    orbit status · orbit doctor · orbit unregister
+```
+
+The account reads its runner's state and log itself:
+
+```bash
+systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"
+journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"
+```
+
+`journalctl` shows an account what its own runner logged when the journal is persistent (`/var/log/journal`
+exists). systemd's own lines about the unit, and other accounts' runners, need root or the `adm` or
+`systemd-journal` group.
+
+To remove the runner:
+
+```bash
+orbit unregister --yes
+```
+
+Without `--yes` it asks first. The broker stops and disables the account's instance, the runner is deleted from the
+control plane and the account's runner config is removed. Every other account's runner keeps running:
+
+```text
+✓ removed the orbit-runner@1000.service runner service
+✓ deleted "build-01-alice" from the control plane
+✓ unregistered "build-01-alice"
+```
+
+### Migrating from per-user units
+
+An account that registered before the machine was set up has a unit of its own that root wrote:
+`orbit-runner-<user>.service`, or `orbit-runner.service` from older releases. Nothing has to be done about it by hand:
+
+- The account's next `orbit register` has the broker stop, disable and delete that unit before it starts
+  `orbit-runner@<uid>.service`, so the account never runs two runners.
+- `orbit unregister` has the broker take the same units down after the instance, so none is left behind on a
+  credential the control plane has deleted.
+
+A unit is the account's by its `User=`, never by its name, so another account's unit is left alone. Until an account
+registers again, its old unit keeps running as it did, and the broker's updates, which restart only
+`orbit-runner@<uid>` instances, do not restart it.
+
+### Updates
+
+Every instance runs the machine's binary, which no account can replace, so no runner updates itself. A runner offered
+a newer release asks the broker instead, and logs it once:
+
+```text
+[orbit-runner 2026-11-01T02:48:12.402Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it is installing orbit 0.1.250 for every runner on this machine
+```
+
+The request names nothing: no server, release or account. The broker reads the server from `/etc/orbit/config.json`
+and the release from its `/dl/version.json` as anybody reads it, without a runner's credential, and installs only a
+release newer than the binary on disk, checked as every install is: the manifest's SHA-256, then the version and
+write contract the download reports. It swaps the binary in place and restarts the machine's `orbit-runner@<uid>`
+instances one at a time, each draining as it stops. Its journal, `orbit-hostd.service`, records it:
+
+```text
+[orbit-runner 2026-11-01T02:48:43.188Z] installed orbit 0.1.250 at /usr/local/bin/orbit (verified as uid 1000); restarting this machine's runners
+```
+
+It runs one update per five minutes; runners asking meanwhile are told that one just ran. The broker installs only
+what `/dl` publishes to everyone and takes no part in staged rollouts or rollbacks, which are per runner
+([Runner rollout and rollback](release-process.md#runner-rollout-and-rollback)). A runner asks when its own
+assignment offers it another release, and the broker installs only a newer one: the machine moves when the first of
+its runners is offered a newer release, all its runners with it, and a rollback does not move it back.
+
+### Without the broker
+
+`orbit register` and `orbit unregister` use the broker only where `/run/orbit/host.sock` exists. Without it, on a
+machine that was never set up or whose socket is gone, they work as they did before the broker existed: on the
+account's own `orbit-runner-<user>.service`, written or removed through sudo
+([Register a runner](#4-register-a-runner)), with nothing said about a broker. A socket that is there with nothing
+answering it, or a broker that refuses, is reported before the same fallback:
+
+```text
+note: the machine broker at /run/orbit/host.sock did not answer "enable" (dial unix /run/orbit/host.sock: connect: connection refused) — falling back to the sudo path.
+```
+
+### Security model
+
+- **Anyone may connect, and nobody gains anything by it.** The socket is mode 0666, but every verb acts on the
+  caller's own runner: hostd takes the caller's uid from the kernel (`SO_PEERCRED`), never from the request, and
+  refuses a request that names a user or any other target.
+- **hostd never runs a download as root.** Checking a release means running it, to read its version and write
+  contract, and each of those runs is dropped to the uid of the account that asked.
+- **hostd never starts a runner as root.** Each instance runs as its account (`User=%i`) and hostd refuses to enable,
+  start or restart uid 0's, so every runner it starts heartbeats `runsAsRoot=false`. Root's own `orbit register` is
+  refused by the broker and falls back to the legacy path, which runs a root runner and warns that its agents have
+  root access.
+
+### Known limitations
+
+**`--proxy` is not carried into the template.** The legacy path writes the proxy into a unit of the account's own;
+the template is shared by every account and has no per-account environment. So on a machine that is set up,
+`orbit register` starts the runner without the proxy, announcing the proxy first and then saying it is not used:
+
+```text
+the runner will use HTTP proxy http://proxy.example.com:3128 for claude
+…
+note: --proxy is not carried into orbit-runner@1000.service — the machine's shared runner template has no per-user proxy environment.
+```
+
+The runner comes online, but its coding engines get no proxy settings: where the model APIs are reachable only
+through the proxy, they cannot reach them. Until a later release carries the proxy, do not set up a machine whose
+runners need one. Register its accounts the single-account way instead, whose sudo step writes the proxy into each
+account's own unit ([Register a runner](#4-register-a-runner)).
+
+**The binary and its directories must stay root's alone.** Setup refuses a binary that is not
+([Set up the machine once](#set-up-the-machine-once)), and the broker holds the binary to the same rule every time it
+replaces it: a regular file root owns and only root can write, in directories only root can write all the way up to
+`/`. A directory that its group can write after setup, such as `/usr/local/bin` changed to `root:staff` with mode 2775
+as older Debian installs have it, would let any member of the group replace what every account runs, so the broker
+refuses to update the binary there. It fails closed: the binary stays as it is, and each runner logs once why (the mode
+it reports leaves out the setgid bit):
+
+```text
+[orbit-runner 2026-11-01T02:54:42.491Z] orbit 0.1.250 available for /usr/local/bin, which only the host can replace; delegated to the host broker at /run/orbit/host.sock: it declined: refusing to update /usr/local/bin/orbit: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775), and root writes nothing it downloaded where another account can reach
+```
+
+An administrator does one of two things:
+
+- Makes the directory root's alone. Members of `staff` then need root to install there too. The runners' next update
+  check, within 10 minutes, goes through the broker:
+
+  ```bash
+  sudo chmod g-w /usr/local/bin
+  ```
+
+- Or installs each release as root. On such a machine `orbit upgrade` replaces the binary where it is, checks the
+  download by running it as root, and restarts no runner, so the runners are restarted after it:
+
+  ```bash
+  sudo /usr/local/bin/orbit upgrade
+  sudo systemctl restart 'orbit-runner@*'
+  ```
+
+  `orbit upgrade` says that it keeps the shared binary where it is:
+
+  ```text
+  checking https://orbit.example.com for updates...
+  updating 0.1.249 -> 0.1.250...
+  note: /usr/local/bin/orbit is run by services of more than one account (/etc/systemd/system/orbit-hostd.service as root, /etc/systemd/system/orbit-runner@.service as %i), so it stays where it is.
+  ✓ orbit is now 0.1.250
+  ```
 
 ## Upgrading
 

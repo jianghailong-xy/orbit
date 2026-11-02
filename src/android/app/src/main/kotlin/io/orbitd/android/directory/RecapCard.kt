@@ -17,13 +17,23 @@ data class RecapCard(val text: String, val whenWritten: String?) {
 
     companion object {
         /** The card for [s], or null while the conversation is not at rest for one ([rests]), in Trash, with no recap, or with
-         * the account's Session recaps switch off — the switch that governs the list row's recap governs this too. */
+         * the account's Session recaps switch off — the switch that governs the list row's recap governs this too — or when this
+         * device hid that very recap with the card's × ([hidden], the [hideKey] it stored). */
         internal fun make(s: DirectorySession, recaps: Boolean, now: Instant = Instant.now(),
-                          zone: ZoneId = ZoneId.systemDefault()): RecapCard? {
+                          zone: ZoneId = ZoneId.systemDefault(), hidden: String? = null): RecapCard? {
             if (!recaps || s.lifecycleState == "TRASH" || s.deletedAt != null || !rests(s)) return null
             val text = s.recapText?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            if (hidden == hideKey(s.recapAt, text)) return null
             return RecapCard(text, whenWritten(s.recapAt, now, zone))
         }
+
+        /** What a recap this device hid is remembered by (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide): when it
+         * was written, so the next one the server writes shows again — or its words, for a recap that came with no time. OrbitKit
+         * `RecapCard.hideKey`, web `recapHideKey`. */
+        internal fun hideKey(recapAt: String?, text: String): String = recapAt?.takeIf { it.isNotEmpty() } ?: "text:$text"
+
+        /** Where this device keeps the recap it hid in a session: one entry per session in the reader's preferences. */
+        internal fun hiddenPreferenceKey(sessionId: String): String = "recap.hidden.$sessionId"
 
         /** Whether a conversation is at rest for its card: nothing it is doing or asking outranks the summary of what it did.
          * The lines that outrank the recap on its row ([SessionLine.make]) and are work in hand — waiting on you, generating,
@@ -64,6 +74,8 @@ internal object RecapCardCopy {
     const val word = "Recap"
     /** The refresh button, as TalkBack reads it. */
     const val refresh = "Refresh recap"
+    /** The × that hides this recap in this conversation on this device, as TalkBack reads it. */
+    const val hide = "Hide recap"
     const val upToDate = "The recap is already up to date."
     const val tooLittle = "There's too little to recap yet."
     const val unavailable = "Recaps aren't available on this server."

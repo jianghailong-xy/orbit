@@ -1,0 +1,4 @@
+scope=controlled HTTP (MockWebServer in the instrumentation) on emulator-5554; no deployed server, account or runner
+before Night mode: no font_scale=1.0 stylus_handwriting_enabled=0
+restored Night mode: no font_scale=1.0 stylus_handwriting_enabled=0
+exit_code=0

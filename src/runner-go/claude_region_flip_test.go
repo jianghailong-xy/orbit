@@ -379,7 +379,7 @@ func TestClaudeRegionCheckOutsideTheRunLoopMakesNoRecheck(t *testing.T) {
 	isolateClaudeRegionEnv(t)
 	stub := newRegionStub(t, regionAnswerBlocked)
 	clock := newFakePoolClock()
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	check.clock = clock
 	check.check(context.Background())
 	clock.Advance(time.Hour)

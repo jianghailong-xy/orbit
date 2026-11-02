@@ -609,6 +609,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
   // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
   'opId',
+  // The folder bundle an attachment belongs to (migration 0462, docs/orbit-files-design.md §2.2): the
+  // bundle a reader opens to browse the upload it came with. An address, never a fence. Named for
+  // Orbit Files because `bundleId` on the wire is a push device's app bundle (`io.orbitd.app`).
+  'fileBundleId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

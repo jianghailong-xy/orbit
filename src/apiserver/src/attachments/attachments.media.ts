@@ -1,15 +1,16 @@
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 
 /**
- * Hard cap on a single upload. Bounds the in-DB blob (and the inbox payload that later
- * references it), the memory a multipart request buffers, and — for an uploaded file the
+ * Hard cap on a single upload. Bounds the stored file (and the inbox payload that later
+ * references it), the temporary file an upload is written to, and — for an uploaded file the
  * runner writes to the worktree — the disk it can consume. Kept in sync with the nginx
  * `client_max_body_size` in front of the API.
  */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
- * The subset of a multer file the upload path reads. Declared locally so we don't depend
+ * The subset of a multer memory-storage file an upload held in memory reads (the profile photo;
+ * attachments stream to disk, files/file-upload-storage.ts). Declared locally so we don't depend
  * on @types/multer (not installed) just for this shape.
  */
 export interface UploadedFile {

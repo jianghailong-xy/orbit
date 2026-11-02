@@ -85,6 +85,13 @@
 // environment: TRUSTED_PROXIES, the proxies in front of the gateway that a visitor's address is read through, empty
 // unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
 // every visitor's address exactly as before.
+//
+// On 2026-11-02 Orbit Files' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
+// account owner approved that day, docs/orbit-files-design.md §2.10) moved attachment bytes out of Postgres into a store
+// named by sha256, and added to the apiserver six lines of environment — the store (local unless the host's .env says s3)
+// and the S3-compatible bucket's endpoint, bucket, key pair and region, each empty unless .env sets it — and one bind
+// mount, ./data/files, the local store's directory, beside ./data/postgres as the design asks. No service or port is
+// added. The two blocks below pin those lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -119,10 +126,12 @@ const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 
 // e223d8ee adds exactly one postgres directive after CONFIGURATION_SHA, shm_size: "256m", and the six
 // comment lines that explain it: Docker's default 64MB /dev/shm made a manual VACUUM die with ENOSPC on
-// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. Postgres alone
-// is compared with this pin; every other service keeps the pin it had. New settings still require an
-// explicit review.
-const POSTGRES_CONFIGURATION_SHA = 'e223d8eede64cb71bb6efa5cf712b96f3b3af79b';
+// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. a2adab1d then
+// adds `-c jit=off` and the one comment line that explains it: production already ran jit = off for its
+// role and database, and the bundled Postgres JIT-compiled the dispatch sweep's scan.
+// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). Postgres alone is compared
+// with this pin; every other service keeps the pin it had. New settings still require an explicit review.
+const POSTGRES_CONFIGURATION_SHA = 'a2adab1d49ab991d4fcebe2b305ddc12d7c98f8e';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
@@ -290,7 +299,8 @@ function directivesNotInBaseline(block, baselineBlock) {
   return unaccounted;
 }
 
-// Unlike postgres and gateway, these three carry no relative bind mount to fence off, so the
+// Unlike postgres and gateway, these three carry no relative bind mount to fence off — but for the
+// apiserver's ./data/files, which is pinned line for line among its approved blocks below — so the
 // guarantee here is one-directional on purpose: nothing beyond the fixed configuration may be
 // added to a surviving service, while
 // a directive the repository has genuinely stopped needing is free to leave and the prose around
@@ -341,6 +351,17 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
+  // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
+  // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
+  // the file, and before the managed runners'.
+  [
+    '      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"',
+    '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
+    '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
+    '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
+    '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
+    '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
@@ -350,6 +371,12 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
+  ],
+  // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
+  // mount of ./data/files beside ./data/postgres. It is the next entry of the managed runners' `volumes:`, before the name
+  // every apiserver answers to.
+  [
+    '      - ./data/files:/var/lib/orbit/files',
   ],
   // The name every apiserver answers to (2026-10-28, the top of this file), which the web gateway's routes for several
   // apiservers reach them by. It comes after the managed runners' lines in the file, behind the port the service exposes.
@@ -439,7 +466,8 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here.
+// model's variables: the four of 2026-10-07, and ORBIT_WIKI_MODEL_THINKING, the opt-in thinking switch the
+// owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep). Changing any of it is a new decision, made here.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -454,6 +482,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
+    // Approved by the owner on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep): the opt-in thinking switch, empty by default.
+    '      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',
@@ -463,7 +493,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
 test('(l) the System model\'s address and key are given to the wiki worker and to no other service', () => {
   for (const [name, block] of currentServices) {
     const given = directives(block).join('\n').match(/\bORBIT_WIKI_MODEL(?:_[A-Z]+)*\b/g) ?? [];
-    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 4, `${name} lacks a System model variable`);
+    // Five: the four of 2026-10-07, and the thinking switch the owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep).
+    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 5, `${name} lacks a System model variable`);
     else assert.deepEqual(given, [], `${name} is given the System model's ${given.join(', ')}`);
   }
   // None of them is a name an agent session carries: Compose prefers the shell's environment to .env.

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,14 +41,42 @@ type hostdPeer struct {
 	PID int32
 }
 
-// unitForUid names a user's runner instance. The instance key is the uid, not the
-// username: unit names have to escape characters that usernames allow, and
-// systemdServiceFor's escaping is lossy — "alice.b" and "alice_b" both map to
-// orbit-runner-alice_b, so two real accounts (and real usernames do contain dots)
-// would fight over one unit. uids cannot collide, so keying on them removes the whole
-// class of problem rather than patching one escape table.
+// unitForAccount names a user's runner instance: orbit-runner@<user name>.service, the
+// name escaped by systemd's own rule (systemdEscape), which the template's User=%I
+// reverses. That rule is reversible, so two accounts never share an instance — unlike
+// systemdServiceFor's lossy mapping, which turns "alice.b" and "alice_b" into one unit and
+// is never used for instances.
+func unitForAccount(username string) string {
+	return "orbit-runner@" + systemdEscape(username) + ".service"
+}
+
+// unitForUid names a user's runner instance on a host set up before instances were named
+// after accounts, whose template still runs User=%i: orbit-runner@<uid>.service. hostd
+// keeps using it there until setup is run again (hostdSystem.namesInstances).
 func unitForUid(uid uint32) string {
 	return fmt.Sprintf("orbit-runner@%d.service", uid)
+}
+
+// systemdEscape is what `systemd-escape <s>` prints: systemd's reversible escaping of a
+// string into one unit-name component (unit_name_escape in systemd's unit-name.c). "/"
+// becomes "-"; "-", "\" and every byte outside [0-9A-Za-z:_.] become \xNN in lower-case
+// hex, byte by byte; and so does a leading ".", so no unit name starts with one.
+// Unescaping (%I) maps each of those back, so "test-user" is test\x2duser and runs as
+// test-user — the plain name would unescape to test/user.
+func systemdEscape(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '/':
+			b.WriteByte('-')
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c == ':', c == '_',
+			c == '.' && i > 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, `\x%02x`, c)
+		}
+	}
+	return b.String()
 }
 
 // hostdConfig is everything the daemon needs from its surroundings, injected so tests

@@ -1,0 +1,4 @@
+{
+  "written": "flowchart LR\n  APP[\"客户端\"] -->|\"HTTPS\"| API[\"apiserver\"]\n  API --> DB[(\"Postgres\")]\n  API --> GW[\"gateway\"]\n  GW -->|\"长连接\"| RN[\"runner\"]\n  RN --> EN[\"引擎 CLI\"]\n  subgraph S1[\"服务端\"]\n    API\n    DB\n    GW\n  end\n  subgraph S2[\"用户机器\"]\n    RN\n    EN\n  end",
+  "stored": "flowchart LR\n  n1[\"客户端\"]\n  n2[\"apiserver\"]\n  n3[(\"Postgres\")]\n  n4[\"gateway\"]\n  n5[\"runner\"]\n  n6[\"引擎 CLI\"]\n  subgraph s1[\"服务端\"]\n  end\n  subgraph s2[\"用户机器\"]\n  end\n  n1 -->|\"HTTPS\"| n2\n  n2 --> n3\n  n2 --> n4\n  n4 -->|\"长连接\"| n5\n  n5 --> n6"
+}

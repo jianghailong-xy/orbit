@@ -207,8 +207,9 @@ final class TaskRunHandoffWiringTests: XCTestCase {
     func testTheComposerSaysWhenAProviderPickTakesHold() throws {
         let model = try source(Self.consoleModel)
         let select = try section(model, from: "func selectProvider(", to: "func pickDraft(")
-        // Said by the credentials' own names: the engine stays, only the credential moves.
-        XCTAssertTrue(select.contains("TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive)"))
+        // Said by the credentials' own names: the engine stays, only the credential moves. A session held for
+        // the Claude region has no turn in flight (ClaudeRegionWiringTests).
+        XCTAssertTrue(select.contains("TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive && !regionHeld)"))
         XCTAssertTrue(select.contains("let from = provider"),
                       "read before the assignment, or the note describes a move from X to X")
 

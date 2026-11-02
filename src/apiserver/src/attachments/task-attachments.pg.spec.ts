@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -55,6 +55,14 @@ test('both dispatch paths copy the task inputs into the run', () => {
   // COPIES, never moves — the whole point. An implementation that reassigned `taskId` would empty
   // the task on its first run, so the template must never appear on the left of a write here.
   assert.doesNotMatch(TASKS_SERVICE, /data: \{ taskId: null \}/);
+  // And a copy is a ROW naming the template's stored bytes, never the bytes again (docs/orbit-files-design.md
+  // §2.1): the copy neither reads `data` nor writes it, and names what `referenceOf` answers.
+  const copy = TASKS_SERVICE.slice(
+    TASKS_SERVICE.indexOf('private async copyTaskAttachments('),
+    TASKS_SERVICE.indexOf('private async discardTaskAttachmentCopies('),
+  );
+  assert.match(copy, /sha256: await this\.files\.referenceOf\(a\)/);
+  assert.doesNotMatch(copy, /\ba\.data\b|data: true/);
 });
 
 /**
@@ -98,10 +106,16 @@ suite('a task keeps its inputs across runs, and a copy cannot also be a template
       creatorType: 'USER', creatorId: ownerId, completionCriterion: 'EVIDENCE_JUDGMENT',
     },
   });
+  // An input uploaded since Orbit Files (0462): its bytes in the file store under their sha256, which the
+  // row names, and none of them in the row.
+  const sha256 = createHash('sha256').update(new Uint8Array([1, 2, 3])).digest('hex');
+  await db.fileBlob.upsert({
+    where: { sha256 }, create: { sha256, sizeBytes: 3, storage: 'local' }, update: {},
+  });
   const template = await db.attachment.create({
     data: {
       ownerId, taskId, mimeType: 'image/png', sizeBytes: 3,
-      fileName: 'mock.png', data: new Uint8Array([1, 2, 3]),
+      fileName: 'mock.png', sha256,
     },
     select: { id: true },
   });
@@ -117,7 +131,7 @@ suite('a task keeps its inputs across runs, and a copy cannot also be a template
         const copy = await db.attachment.create({
           data: {
             ownerId: a.ownerId, sessionId: null, mimeType: a.mimeType,
-            sizeBytes: a.sizeBytes, fileName: a.fileName, data: a.data,
+            sizeBytes: a.sizeBytes, fileName: a.fileName, sha256: a.sha256,
           },
           select: { id: true },
         });
@@ -131,11 +145,13 @@ suite('a task keeps its inputs across runs, and a copy cannot also be a template
     assert.notDeepEqual(runs[0], runs[1], 'each run must get its own copies');
     const stillTemplates = await db.attachment.findMany({ where: { taskId }, select: { id: true } });
     assert.deepEqual(stillTemplates.map((a) => a.id), [template.id]);
-    // And the copies are NOT templates — nothing a runner receives is listed as the task's input.
+    // And the copies are NOT templates — nothing a runner receives is listed as the task's input. Each is a
+    // row naming the template's bytes, which are kept once however many runs there are.
     for (const id of [...runs[0], ...runs[1]]) {
-      const copy = await db.attachment.findUniqueOrThrow({ where: { id }, select: { taskId: true } });
-      assert.equal(copy.taskId, null);
+      const copy = await db.attachment.findUniqueOrThrow({ where: { id }, select: { taskId: true, sha256: true, data: true } });
+      assert.deepEqual(copy, { taskId: null, sha256, data: null });
     }
+    assert.equal(await db.fileBlob.count({ where: { sha256 } }), 1);
   });
 
   await t.test('a row cannot be a task template and a conversation blob at once', async () => {

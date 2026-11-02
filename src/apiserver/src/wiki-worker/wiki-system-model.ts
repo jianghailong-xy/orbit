@@ -1,21 +1,25 @@
 import { Logger } from '@nestjs/common';
-import { WIKI_SYSTEM_MODEL, WIKI_SYSTEM_MODEL_ENV } from '@orbit/shared';
+import { WIKI_SYSTEM_MODEL, WIKI_SYSTEM_MODEL_ENV, WIKI_SYSTEM_MODEL_THINKING, type WikiSystemModelThinking } from '@orbit/shared';
 
 /**
  * The System model as the wiki-worker's environment sets it (contract `systemModel.env`, design §2.1): an
- * endpoint speaking the Anthropic Messages API, the key it is sent as a Bearer, the model to name, and how
- * many requests the queue keeps in flight across every space. Shaped after `wiki/wiki-rollout.ts`: a pure
- * read of the environment that says what it could not take as written, and a log of that said once.
+ * endpoint speaking the Anthropic Messages API, the key it is sent as a Bearer, the model to name, how
+ * many requests the queue keeps in flight across every space, and whether every call says to think. Shaped
+ * after `wiki/wiki-rollout.ts`: a pure read of the environment that says what it could not take as written,
+ * and a log of that said once.
  *
  *   ORBIT_WIKI_MODEL_BASE_URL     the endpoint, an http(s) URL; calls go to `{base}/v1/messages`
  *   ORBIT_WIKI_MODEL_API_KEY      the key
  *   ORBIT_WIKI_MODEL              the model's name
  *   ORBIT_WIKI_MODEL_CONCURRENCY  requests in flight at once; 4 when unset
+ *   ORBIT_WIKI_MODEL_THINKING     `disabled` or `enabled`, sent as every call's `thinking`; unset, none is sent
  *
  * The first three are the System model: with any of them missing or unusable it is unconfigured, and the
- * worker probes and calls nothing. Only the worker reads these — the apiserver's environment has none of
- * them — and nothing read here leaves the worker except the model's name: no problem quotes the key or the
- * address, so the reason a state row gives can be built from them.
+ * worker probes and calls nothing. The thinking switch is not among them: it is for an endpoint that thinks
+ * unless told not to (DeepSeek's V4 models), and decides nothing about whether there is a model to call.
+ * Only the worker reads these — the apiserver's environment has none of them — and nothing read here leaves
+ * the worker except the model's name: no problem quotes the key or the address, so the reason a state row
+ * gives can be built from them.
  */
 export interface WikiSystemModelConfig {
   /** baseUrl, apiKey and model are all set and usable. */
@@ -27,6 +31,8 @@ export interface WikiSystemModelConfig {
   /** ORBIT_WIKI_MODEL as set, configured or not; null when it is not. */
   model: string | null;
   concurrency: number;
+  /** ORBIT_WIKI_MODEL_THINKING as set, configured or not: what every call's `thinking` says; null sends none. */
+  thinking: WikiSystemModelThinking | null;
   /** The variables of the first three that are missing or unusable: why the model is unconfigured. */
   missing: readonly string[];
   /** What the environment said that could not be taken as written, each with how it was read instead. */
@@ -81,6 +87,18 @@ export function readWikiSystemModel(env: NodeJS.ProcessEnv = process.env): WikiS
     }
   }
 
+  // Unset or empty is no setting: the body stays the one an endpoint that thinks only when asked always got.
+  let thinking: WikiSystemModelThinking | null = null;
+  const think = value(WIKI_SYSTEM_MODEL_ENV.thinking);
+  if (think !== '') {
+    if ((WIKI_SYSTEM_MODEL_THINKING as readonly string[]).includes(think)) {
+      thinking = think as WikiSystemModelThinking;
+    } else {
+      problems.push(`${WIKI_SYSTEM_MODEL_ENV.thinking}=${JSON.stringify(env[WIKI_SYSTEM_MODEL_ENV.thinking])} is not `
+        + `${WIKI_SYSTEM_MODEL_THINKING.join(' or ')}: no thinking field is sent`);
+    }
+  }
+
   const configured = missing.length === 0;
   return {
     configured,
@@ -88,6 +106,7 @@ export function readWikiSystemModel(env: NodeJS.ProcessEnv = process.env): WikiS
     apiKey: configured ? apiKey : null,
     model: model === '' ? null : model,
     concurrency,
+    thinking,
     missing,
     problems,
   };
@@ -100,7 +119,7 @@ let announced: string | undefined;
 export function currentWikiSystemModel(): WikiSystemModelConfig {
   const config = readWikiSystemModel(process.env);
   // Never the key: it is not part of what is said, nor of what decides whether to say it again.
-  const said = [config.baseUrl, config.model, config.concurrency, ...config.missing, ...config.problems].join('|');
+  const said = [config.baseUrl, config.model, config.concurrency, config.thinking, ...config.missing, ...config.problems].join('|');
   if (said !== announced) {
     announced = said;
     for (const problem of config.problems) log.warn(problem);
@@ -108,6 +127,7 @@ export function currentWikiSystemModel(): WikiSystemModelConfig {
       config.configured && config.baseUrl
         // The worker's own log may name where it calls: the origin, never a path's or a query's secrets.
         ? `System model ${config.model} at ${new URL(config.baseUrl).origin}; ${config.concurrency} request(s) in flight at once`
+          + (config.thinking ? `; thinking ${config.thinking} on every call` : '')
         : `No System model is configured (${config.missing.join(', ')}): the wiki worker probes and calls nothing`,
     );
   }

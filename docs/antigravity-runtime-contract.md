@@ -979,6 +979,8 @@ PTY 必须先完成首次主题设置/数据选项/空目录信任，看到普�
 
 `agy --gemini_dir=<gd> --print=/usage --output-format stream-json` 返回 `command_result.command` 和 `result.command`，`command.name=usage`；`data.groups[].buckets[]` 含 `id`、`window`、`remaining_fraction`、`reset_time`。Gemini 和 Claude/GPT 各有 weekly、5h bucket；`result.num_turns=0`、usage 全零、退出 0，见[查询](./evidence/antigravity-cli-1.2.16/google-auth-print-usage.json)。三会话九轮及续期实验后 Gemini weekly 约剩 99.39%、5h 约 98.90%，见[实验后](./evidence/antigravity-cli-1.2.16/google-auth-usage-after-concurrency.json)。比例不能反推出绝对请求/token 上限。
 
+【实测，1.4.12，2026-11-01】同一 Pro 账号的 `/usage` 多了第三组 `Gemini 4 Argon`，只有一个 weekly bucket `gemini-argon-wtu-weekly`；组描述说 Pro 计划的 Argon 额度单独计，Ultra 计划含在 Gemini 组里。当时它已用完（0%），Gemini 组两个 bucket 还剩 98%、94%，见[查询](./evidence/antigravity-cli-1.4.12/google-auth-print-usage.json)；模型目录里 Argon 是 `gemini-4-argon-{low,medium,high}`，见[模型](./evidence/antigravity-cli-1.4.12/google-auth-signedin-models.json)。runner 只上报 bucket id，组从 id 读（`<组>-<window>`）：`gemini-` 模型用 `gemini` 组，其他模型（Claude、GPT-OSS）用 `3p` 组，id 里带模型名的组（`argon` 对 `gemini-4-argon`）归那个模型；会话没指定模型（agy 自己的默认）时看全部 bucket。composer 的额度数字只看当前模型的组（`antigravityModelBuckets`，`src/shared/src/planUsage.ts`），弹层仍列全部 bucket。
+
 `--print=/credits` 同样返回结构化 `remaining_credits=0` 和升级链接，见[credits](./evidence/antigravity-cli-1.2.16/google-auth-print-credits.json)。所有推理设 `useG1Credits=false`。九轮无 429/重试提示，没有为了取得错误而耗尽近乎全部账号额度，因此真正限流时的错误内容、事件、退出码和自动重试仍【未确立】。API key 429 mock 不能替代此证据。
 
 runner 健康上报字段（第一版，每台 Linux runner 一个账号，不进入账号池）：

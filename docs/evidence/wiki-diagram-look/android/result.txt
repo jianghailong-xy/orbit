@@ -1,0 +1,5 @@
+scope=A15c device journeys over controlled HTTP fixtures (MockWebServer in each test); not a deployment
+classes=WikiDiagramDeviceTest
+started_utc=2026-11-01T18:52:04Z
+exit_code=0
+finished_utc=2026-11-01T18:52:49Z

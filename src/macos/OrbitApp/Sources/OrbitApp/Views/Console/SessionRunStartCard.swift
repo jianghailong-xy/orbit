@@ -10,7 +10,11 @@ import OrbitKit
 struct SessionRunStartCardView: View {
     let console: ConsoleModel
     let card: SessionRunStart.Card
+    /// Opens Move for this session, the console's own sheet: the region card's Move to another machine.
+    var onMove: (() -> Void)? = nil
     @Environment(AppModel.self) private var appModel
+    /// Use another provider's list of the credentials the session's Claude Code can move to.
+    @State private var choosingProvider = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -19,7 +23,7 @@ struct SessionRunStartCardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(card.why).font(.orbitLabel.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
-                Text(card.body).font(.orbitLabel).foregroundStyle(.secondary)
+                Text(bodyText).font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // The machine facts: the refusal's code and ref, the runner's own words. Monospaced
@@ -27,13 +31,17 @@ struct SessionRunStartCardView: View {
             if !card.lines.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(card.lines, id: \.self) { line in
+                        // Wrapped, never cut: the band squeezes the card when more stands under the composer.
                         Text(line).font(.orbitMeta.monospaced()).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
             }
-            HStack {
-                ForEach(card.actions, id: \.kind) { action in
+            // The presses wrap where a row can't hold them all — a phone holds two of the region
+            // card's three (board 03) — in the card's order, the order they are read in.
+            FlowLayout(spacing: 8) {
+                ForEach(card.actions.filter(drawable), id: \.kind) { action in
                     if action.primary {
                         Button(action.label) { press(action) }
                             .buttonStyle(.borderedProminent)
@@ -54,6 +62,44 @@ struct SessionRunStartCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .composerBandWash(.orange, opacity: 0.08)
         .accessibilityIdentifier("session-run-start")
+        .orbitConfirmation(ClaudeRegionCopy.CLAUDE_REGION_USE_ANOTHER_PROVIDER, isPresented: $choosingProvider) {
+            ForEach(otherProviders) { choice in
+                Button(SessionProviderChoices.providerName(on: console.engine, choice)) {
+                    Task { await console.selectProvider(choice.slug) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    /// The body, and after it the page it cites (the region check's Supported regions), in the link colour.
+    private var bodyText: AttributedString {
+        typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
+        var text = AttributedString(card.body)
+        if let link = card.link, let url = URL(string: link.url) {
+            var words = AttributedString(link.label)
+            words.link = url
+            words[Colour.self] = Color.accentColor
+            text += AttributedString(" ") + words
+        }
+        return text
+    }
+
+    /// The credentials the session's Claude Code can move to here, the same ones its Provider menu
+    /// offers: every one but its own that can run on this machine.
+    private var otherProviders: [ProviderChoice] {
+        console.providerSwitchChoices.filter { $0.slug != console.provider && $0.unavailable == nil }
+    }
+
+    /// Whether this console can make the press: a press that goes nowhere is not drawn (web parity).
+    private func drawable(_ action: SessionRunStart.Action) -> Bool {
+        switch action.kind {
+        case .startItAgain, .sendItAgain, .openRunner, .chatAboutThis: return true
+        case .otherProvider: return !otherProviders.isEmpty
+        case .moveSession: return onMove != nil
+        // Only where the runner checks at all (`region` is nil where it doesn't).
+        case .checkAgain: return console.runnerRegion != nil
+        }
     }
 
     private func press(_ action: SessionRunStart.Action) {
@@ -64,6 +110,9 @@ struct SessionRunStartCardView: View {
         case .chatAboutThis: console.chatAboutRunStart()
         case .openRunner:
             if let runnerID = console.runnerID { appModel.route(to: .runner(runnerID)) }
+        case .otherProvider: choosingProvider = true
+        case .moveSession: onMove?()
+        case .checkAgain: Task { await console.checkRegionAgain() }
         }
     }
 
@@ -72,7 +121,8 @@ struct SessionRunStartCardView: View {
         case .startItAgain: return console.startingRun || console.taskID == nil
         case .sendItAgain: return console.sending || console.retryInFlight
         case .openRunner: return console.runnerID == nil
-        case .chatAboutThis: return false
+        case .chatAboutThis, .otherProvider, .moveSession: return false
+        case .checkAgain: return console.regionChecking || console.runnerOnline == false
         }
     }
 }

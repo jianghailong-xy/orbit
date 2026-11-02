@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Wiki 文档里的图：换一套 Orbit 自己的样式</title>
+<style>
+  body { margin: 0; padding: 28px 32px 8px; background: #f0f0f3; color: #16161a; font: 15px/1.6 Inter, "Noto Sans SC", -apple-system, sans-serif; }
+  h1 { font-size: 27px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .b-lede { width: 1320px; margin: 0 0 26px; color: #2a2a30; }
+  .b-part { margin-bottom: 40px; padding: 4px 4px 8px; width: 1360px; }
+  .b-part h2 { font-size: 21px; letter-spacing: -.015em; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .b-sub { color: #4a4a52; margin: 0 0 18px; width: 1320px; }
+  .b-row { display: flex; gap: 30px; align-items: flex-start; }
+  .b-col { flex: none; }
+  .b-frame { margin: 0; flex: none; }
+  .b-frame figcaption { font-size: 14px; font-weight: 650; margin: 0 0 8px; line-height: 1.4; display: flex; gap: 8px; align-items: center; }
+  .b-frame figcaption .b-dim { font-weight: 500; color: #6a6a72; }
+  .b-shot { position: relative; border-radius: 12px; overflow: visible; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  .b-phone .b-shot { border-radius: 26px; padding: 10px 0; background: #fff; border: 1px solid #d9d9df; }
+  .b-phone .b-shot img { border-radius: 0; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 8px; pointer-events: none; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+             font: 600 12px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 13px; font-weight: 650; }
+  .tag.now { background: #e6e6ea; color: #3a3a40; } .tag.rec { background: #d7f2dd; color: #1d6b31; } .tag.alt { background: #e3ecff; color: #1f4fbf; }
+  ol.b-notes { margin: 14px 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.6; color: #2a2a30; }
+  ol.b-notes li { display: flex; gap: 8px; margin: 0 0 7px; }
+  ol.b-notes li .n { flex: none; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: #f5222d; color: #fff; font: 600 11.5px/20px Inter, sans-serif; text-align: center; }
+  ol.b-notes li .n.g { background: #52c41a; } ol.b-notes li .n.b { background: #3370ff; }
+  .b-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; width: 1320px; }
+  .b-opts h3 { font-size: 16px; margin: 0 0 10px; }
+  .b-opt { background: #fff; border-radius: 16px; padding: 14px 18px 8px; margin: 0 0 14px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+  .b-opt.b-recd { box-shadow: 0 0 0 2px #52c41a inset; }
+  .b-opt h4 { font-size: 15px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-opt p { margin: 4px 0 8px; font-size: 14px; color: #2a2a30; }
+  .b-pro::before { content: '＋ '; color: #1d6b31; font-weight: 700; }
+  .b-con::before { content: '－ '; color: #b42318; font-weight: 700; }
+  ol.b-land { margin: 0; padding-left: 22px; font-size: 14.5px; line-height: 1.65; width: 1300px; }
+  ol.b-land li { margin: 0 0 8px; }
+  code { font: 13px "DejaVu Sans Mono", ui-monospace, monospace; background: rgba(0,0,0,.06); padding: 0 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<section id="part-1" class="b-part">
+  <h1>Wiki 文档里的图：换一套 Orbit 自己的样式</h1>
+  <p class="b-lede">三端（Web、iOS/Mac、Android）今天都用 Mermaid 自带的 <code>neutral</code> / <code>dark</code> 主题来画图，配上 Mermaid 12 默认的 <code>neo</code> 外观。结果是灰底方框，Chrome 和 Android 上还带阴影；暗色下节点发光；横排的图在手机上只露出前两格。<b>建议</b>：用 <code>index.css</code> 里的色值配一套主题，三端用同一份；再加一条规则：横排放不下就改成竖排。<br>
+  下面每张图都是真的 Mermaid 12.2.0 画出来的（就是应用里打包的那一份构建），图框的 CSS 和色值都照 Web 文档页。样本是照写作规则（<code>wiki-docs-writer.ts</code> 的 Diagram 一节）造的中文图，并经过服务端的 <code>parseDiagram</code> 改写。</p>
+
+  <h2>浅色 · 一张竖排的流程图（9 个节点、1 个分组、1 个判断）</h2>
+  <div class="b-row">
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-today-light" data-marks="1:node1,2:title,3:wrapped,4:yes">
+        <figcaption><span class="tag now">① 今天</span><span class="b-dim">252 × 1196</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-today-light.png" alt=""></div>
+      </figure>
+    </div>
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-A-light">
+        <figcaption><span class="tag rec">② 方案 A · 素雅（推荐）</span><span class="b-dim">210 × 931</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-A-light.png" alt=""></div>
+      </figure>
+    </div>
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-B-light">
+        <figcaption><span class="tag alt">③ 方案 B · 品牌蓝</span><span class="b-dim">210 × 931</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-B-light.png" alt=""></div>
+      </figure>
+    </div>
+  </div>
+  <div class="b-row">
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n">1</span><span>节点是灰底 <code>#eee</code> 的直角框，深灰边。Chrome 和 Android 还给每个节点加一层灰色投影：这是 <code>neo</code> 外观的 <code>drop-shadow</code>。Safari 不画这层投影，所以 iOS 和 Mac 上看不到。</span></li>
+      <li><span class="n">2</span><span>标题放在分组正中，进分组的箭头从「Gateway」中间穿过去。</span></li>
+      <li><span class="n">3</span><span>字号 16px，比正文的 15px 还大。节点最小宽 120，到 120 就折行，中文按宽度硬折：「等 long-poll 重 / 连」把一个词拆在两行。</span></li>
+      <li><span class="n">4</span><span>连线标签「是」「否」压在灰色小方块上。</span></li>
+    </ol>
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n g">A</span><span>白底节点，1px 浅灰边，圆角 6，跟页面上的卡片一样。没有阴影，也没有渐变（Mermaid 的 <code>classic</code> 外观加 <code>base</code> 主题，色值取自 token）。</span></li>
+      <li><span class="n g">A</span><span>字号 13px，比正文小一号。节点宽度贴着文字，一行放得下的就不折（折行宽 200）。整张图从 1196 高降到 931。</span></li>
+      <li><span class="n g">A</span><span>分组是比图底深一档的浅灰区域，没有边框；标题小一号、加粗，放在左上角，进分组的箭头不再穿过它。</span></li>
+      <li><span class="n g">A</span><span>连线 1.2px，灰色 <code>#9aa0a8</code>，箭头更小。标签不加底块，直接写在线上（底色就是图框的底色）。</span></li>
+    </ol>
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n b">B</span><span>尺寸和排版同 A，只是节点换成品牌蓝浅底（<code>--brand-tint</code> <code>#eaf1ff</code>，边是 <code>--brand-border</code> <code>#bcd3ff</code>），在灰页面上更跳一些。</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="part-2" class="b-part">
+  <h2>暗色 · 同一张图</h2>
+  <div class="b-row">
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-today-dark" data-marks="5:node1,6:cluster,7:yes">
+        <figcaption><span class="tag now">① 今天</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-today-dark.png" alt=""></div>
+      </figure>
+    </div>
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-A-dark">
+        <figcaption><span class="tag rec">② 方案 A · 素雅（推荐）</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-A-dark.png" alt=""></div>
+      </figure>
+    </div>
+    <div class="b-col" style="width:400px">
+      <figure class="b-frame" data-shot="flow-B-dark">
+        <figcaption><span class="tag alt">③ 方案 B · 品牌蓝</span></figcaption>
+        <div class="b-shot"><img src="shots/flow-B-dark.png" alt=""></div>
+      </figure>
+    </div>
+  </div>
+  <div class="b-row">
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n">5</span><span>节点四周一圈白色光晕（还是那层投影，换到暗底上就成了发光），边框接近白色，很刺眼。</span></li>
+      <li><span class="n">6</span><span>分组是一整块灰板，比节点还亮，层级反了。</span></li>
+      <li><span class="n">7</span><span>连线标签是灰底白字的小方块。</span></li>
+    </ol>
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n g">A</span><span>节点底色 = <code>--bg-raised</code> <code>#2b2b2e</code>，边 <code>#45454a</code>，字 <code>--text-1</code>。跟暗色页面上的卡片同一层级，图框还是今天那块 <code>--fill-inset</code>。</span></li>
+      <li><span class="n g">A</span><span>分组只比图底亮一点点，标题用 <code>--text-2</code>。</span></li>
+    </ol>
+    <ol class="b-notes" style="width:400px">
+      <li><span class="n b">B</span><span>品牌蓝的暗色版底色 <code>#232c40</code>，边 <code>#34467a</code>。暗底上蓝色发闷，层次也不如 A 清楚。</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="part-3" class="b-part">
+  <h2>宽图：横排放不下，就改成竖排再画一次</h2>
+  <p class="b-sub">写作规则只允许 <code>flowchart LR</code> 和 <code>flowchart TB</code>，模型常写 LR。手机上图框的内宽大约 320px，而一条 7 个节点的横排流水线要 1000px 以上。今天只看得到前两格，剩下的要横着拖。<b>规则</b>：画完量一下宽度，横排（LR）比图框宽，就把同一张图按竖排（TB）再画一次。只改方向，节点和连线都不动。竖排的图不动。竖排也放不下（很少见）时，就用窄的那份，照旧横滑。下面都用方案 A。</p>
+  <div class="b-row">
+    <figure class="b-frame b-phone" style="width:300px" data-shot="phone-pipeline-today" data-marks="8:fig">
+      <figcaption><span class="tag now">① 今天</span><span class="b-dim">手机 · 横排 1207px</span></figcaption>
+      <div class="b-shot"><img src="shots/phone-pipeline-today.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-phone" style="width:300px" data-shot="phone-pipeline-A">
+      <figcaption><span class="tag now">只换样式</span><span class="b-dim">横排 1005px，还是放不下</span></figcaption>
+      <div class="b-shot"><img src="shots/phone-pipeline-A.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-phone" style="width:300px" data-shot="phone-pipeline-A-turned">
+      <figcaption><span class="tag rec">② 改竖排</span><span class="b-dim">233 × 595，一眼看全</span></figcaption>
+      <div class="b-shot"><img src="shots/phone-pipeline-A-turned.png" alt=""></div>
+    </figure>
+    <figure class="b-frame b-phone" style="width:300px" data-shot="phone-architecture-A-turned">
+      <figcaption><span class="tag rec">② 改竖排</span><span class="b-dim">架构图：两个分组上下排</span></figcaption>
+      <div class="b-shot"><img src="shots/phone-architecture-A-turned.png" alt=""></div>
+    </figure>
+  </div>
+  <ol class="b-notes" style="width:1300px">
+    <li><span class="n">8</span><span>今天：7 格只露出 2 格，判断和两个结果都在屏幕外面，读者多半不知道还能往右拖。只换样式能把横排从 1207px 缩到 1005px，在手机上照样放不下，所以要靠这条规则。</span></li>
+  </ol>
+</section>
+
+<section id="part-4" class="b-part">
+  <h2>Web 文档栏也一样（图框内宽约 760px）</h2>
+  <div class="b-row">
+    <figure class="b-frame" style="width:640px" data-shot="web-architecture-today" data-marks="9:title">
+      <figcaption><span class="tag now">① 今天</span><span class="b-dim">横排 1476px，右边一半要横拖</span></figcaption>
+      <div class="b-shot"><img src="shots/web-architecture-today.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:640px" data-shot="web-architecture-A">
+      <figcaption><span class="tag now">只换样式</span><span class="b-dim">横排 1042px，还是要横拖</span></figcaption>
+      <div class="b-shot"><img src="shots/web-architecture-A.png" alt=""></div>
+    </figure>
+  </div>
+  <div class="b-row" style="margin-top:22px">
+    <figure class="b-frame" style="width:640px" data-shot="web-architecture-A-turned">
+      <figcaption><span class="tag rec">② 改竖排 · 浅色</span><span class="b-dim">277 × 751</span></figcaption>
+      <div class="b-shot"><img src="shots/web-architecture-A-turned.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:640px" data-shot="web-architecture-A-dark-turned">
+      <figcaption><span class="tag rec">② 改竖排 · 暗色</span></figcaption>
+      <div class="b-shot"><img src="shots/web-architecture-A-dark-turned.png" alt=""></div>
+    </figure>
+  </div>
+  <ol class="b-notes" style="width:1300px">
+    <li><span class="n">9</span><span>图框里只露出左半张：「用户机器」整个分组在框外，「服务端」的标题被切到了边上。</span></li>
+  </ol>
+</section>
+
+<section id="part-5" class="b-part">
+  <h2>顺手发现：分组里的节点跑到了外面</h2>
+  <p class="b-sub">服务端会先把模型写的图规整一遍再存（<code>parseDiagram</code>），页面画的就是存下来的这份。它按节点<b>第一次出现</b>的位置决定节点属于哪个分组；Mermaid 自己的规则是<b>第一个列出它的分组</b>，分组外面提到它不算。模型很常先写连线、最后再写分组，这时规整出来的每个分组都是空的：节点全散在外面，分组只剩标题浮在左上角。下面两张都用方案 A 画，区别只在分组。</p>
+  <div class="b-row">
+    <figure class="b-frame" style="width:640px">
+      <figcaption><span class="tag rec">模型写的</span><span class="b-dim">Mermaid 照原文画：两个分组都在</span></figcaption>
+      <div class="b-shot"><img src="shots/groups-written.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" style="width:640px">
+      <figcaption><span class="tag now">存下来、页面上画的</span><span class="b-dim">两个分组都空了</span></figcaption>
+      <div class="b-shot"><img src="shots/groups-stored.png" alt=""></div>
+    </figure>
+  </div>
+  <ol class="b-notes" style="width:1300px">
+    <li><span class="n">10</span><span>右图：「用户机器」「服务端」两个空分组只剩标题，浮在左上角；所有节点都不在分组里。存下来的图源里已经没有分组信息了（<code>subgraph s1["服务端"]</code> 下面直接就是 <code>end</code>），只改客户端补不回来。</span></li>
+  </ol>
+</section>
+
+<section id="part-6" class="b-part">
+  <h2>待定 · 要你拍板</h2>
+  <div class="b-opts">
+    <div>
+      <h3>1. 配色</h3>
+      <div class="b-opt b-recd">
+        <h4><span class="tag rec">推荐</span>A · 素雅：白卡片、灰细边</h4>
+        <p class="b-pro">跟页面上的卡片、代码块用同一种语言，图读起来是插图，不像一排按钮。暗色下最稳。</p>
+        <p class="b-con">偏素。节点多的时候略显单调。</p>
+      </div>
+      <div class="b-opt">
+        <h4>B · 品牌蓝浅底</h4>
+        <p class="b-pro">更像一张图，在长文里更醒目。</p>
+        <p class="b-con">蓝色在 Orbit 里表示「可点」或「选中」（链接、选中的行），可图里的节点点不了，容易被误读。暗色下蓝底发闷。</p>
+      </div>
+    </div>
+    <div>
+      <h3>2. 放不下的横排图</h3>
+      <div class="b-opt b-recd">
+        <h4><span class="tag rec">推荐</span>改竖排再画一次</h4>
+        <p class="b-pro">手机上一眼看全，Web 上也不用横拖。只改方向，内容一点不变。</p>
+        <p class="b-con">方向跟模型写的不一样；竖排的图更长。</p>
+      </div>
+      <div class="b-opt">
+        <h4>照原样横滑（今天）</h4>
+        <p class="b-pro">原样照画。</p>
+        <p class="b-con">手机上基本只看得到前两格，后面的内容等于藏了起来。</p>
+      </div>
+    </div>
+  </div>
+  <div class="b-opts">
+    <div>
+      <h3>3. 分组 bug：已经存下的图</h3>
+      <div class="b-opt b-recd">
+        <h4><span class="tag rec">推荐</span>修好以后把 version 从 3 提到 4，带图的节全部重写一遍</h4>
+        <p class="b-pro">现有文档里散掉的分组都会回来。前两次改 <code>parseDiagram</code>（1→2、2→3）都是这么做的。</p>
+        <p class="b-con">overview、concepts、flow、data 这几类节全部重写，要花一轮 System model 的调用。</p>
+      </div>
+      <div class="b-opt">
+        <h4>只修以后写的</h4>
+        <p class="b-pro">不花模型调用。</p>
+        <p class="b-con">已经存下的图里分组信息已经没了，要等这些节因为来源变了被维护重写，才会恢复。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:18px">落地（按代价排）</h2>
+  <ol class="b-land">
+    <li><b>样式（一份常量，三端共用）</b>：Mermaid 选项（<code>classic</code> 外观、<code>base</code> 主题、浅色和暗色两套 <code>themeVariables</code>、<code>themeCSS</code>、flowchart 的间距与折行宽），再加「分组标题移到左上角」的那几行脚本。Web 的 <code>WikiDiagram.tsx</code> 直接用。<code>WikiDiagram.swift</code> 和 <code>WikiDiagram.kt</code> 各带一份，用现有的对照测试（<code>WikiDocsCopyParityTests</code>、<code>WikiDiagramTest</code>）钉住，保证跟 Web 一字不差。</li>
+    <li><b>宽图改竖排</b>：三端的绘制脚本里多一步，量一下宽度，必要时把第一行换成 <code>flowchart TB</code> 再画一次。宽度用各端自己图框的内宽（Web 的 figure、iOS/Mac 的列宽、Android 的 WebView 宽）。</li>
+    <li><b>分组 bug（服务端）</b>：<code>parseDiagram</code> 改用 Mermaid 的规则：一个节点归第一个列出它的分组，分组外面提到它不算。配上 spec（先写连线、后写分组的图要原样保留分组）。如果选了第 3 题的推荐，再把 <code>WIKI_DOC_DIAGRAM_RULES.version</code> 提到 4。</li>
+    <li><b>不动的</b>：Mermaid 版本不动；<code>securityLevel: 'strict'</code> 照旧。<code>themeCSS</code> 只是几条样式，不加载任何外部资源，各端的 CSP 不用改。样式这部分不碰服务端。</li>
+    <li><b>证据</b>：Web 用真页面截图（浅色、暗色，窄屏和宽屏各一张），iOS、Mac、Android 各给一张浅色和一张暗色。</li>
+  </ol>
+</section>
+
+<script>
+  // Numbered marks on the shots, at the boxes capture.mjs recorded (CSS px of the shot, scaled to the frame's width).
+  window.drawMarks = async () => {
+    const meta = window.SHOTS_META;
+    for (const fig of document.querySelectorAll('figure[data-marks]')) {
+      const m = meta[fig.dataset.shot];
+      const shot = fig.querySelector('.b-shot');
+      const img = shot.querySelector('img');
+      const scale = img.getBoundingClientRect().width / m.boxes.shotWidth;
+      const top0 = img.offsetTop;
+      for (const pair of fig.dataset.marks.split(',')) {
+        const [n, key] = pair.split(':');
+        const box = m.boxes[key];
+        if (!box) continue;
+        const [x, y, w, h] = box.map((v) => v * scale);
+        const ring = document.createElement('div');
+        ring.className = 'b-ring';
+        Object.assign(ring.style, { left: `${x - 4}px`, top: `${top0 + y - 4}px`, width: `${w + 8}px`, height: `${h + 8}px` });
+        const badge = document.createElement('div');
+        badge.className = 'b-badge';
+        badge.textContent = n;
+        Object.assign(badge.style, { left: `${Math.min(x + w + 2, img.getBoundingClientRect().width - 24)}px`, top: `${top0 + y - 14}px` });
+        shot.append(ring, badge);
+      }
+    }
+  };
+</script>
+<script src="shots/meta.js"></script>
+</body></html>

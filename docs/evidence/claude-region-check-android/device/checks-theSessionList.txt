@@ -1,0 +1,4 @@
+2026-11-01T02:15:24.852659Z fixture at http://localhost:36511/
+2026-11-01T02:15:25.542306Z signed in to the fixture
+2026-11-01T02:15:25.597301Z PASS the workspace
+2026-11-01T02:15:26.468918Z PASS the held row's words

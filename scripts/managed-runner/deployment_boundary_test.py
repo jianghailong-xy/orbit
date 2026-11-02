@@ -43,9 +43,11 @@ ENTRY_POINTS = [
     "scripts/ci/",
     "scripts/lib/",
 ]
-# Git's `*` also crosses `/`, so `scripts/*.sh` takes in the optional delivery's own scripts, which
-# are not entry points: they may name its paths and the single-machine lab.
-EXCLUDED = [":(exclude)scripts/managed-runner/"]
+# Git's `*` also crosses `/`, so `scripts/*.sh` takes in nested scripts. Two directories of them are not entry
+# points: the optional delivery's own scripts, which may name its paths and the single-machine lab, and the
+# long-running-loop drill, an isolated stack one starts by hand as root for an acceptance run, which runs the
+# lab's fake model (an Anthropic-dialect stand-in, nothing of Kubernetes).
+EXCLUDED = [":(exclude)scripts/managed-runner/", ":(exclude)scripts/long-running-loops/"]
 # The parts of deploy/managed-runner the Docker backend is made of, which an entry point may name.
 DOCKER_BACKEND_PARTS = {"docker-channel", "image", "firewall"}
 # What would wire the rest in: the delivery's tooling and lab, and the admission webhook.
@@ -130,9 +132,10 @@ class DeploymentBoundaryTest(unittest.TestCase):
         self.assertTrue(any(path.startswith(".claude/skills/upgrade/") for path in listed))
         self.assertTrue(any(path.startswith(".agents/skills/upgrade/") for path in listed))
         self.assertIn("src/web/public/install.sh", listed)
-        # The exclusion keeps the other nested scripts and drops only the delivery's own directory.
+        # The exclusions keep the other nested scripts and drop only the delivery's own directory and the drill's.
         self.assertTrue(any(path.startswith("scripts/ci/") for path in listed))
         self.assertFalse(any(path.startswith("scripts/managed-runner/") for path in listed))
+        self.assertFalse(any(path.startswith("scripts/long-running-loops/") for path in listed))
         self.assertNotEqual(self.git_grep("-F", "services:"), [], "git grep finds what is there")
         self.assertNotEqual(self.git_grep("-F", SWITCH, paths=["docker-compose.yml"]), [], "and finds the switch")
 

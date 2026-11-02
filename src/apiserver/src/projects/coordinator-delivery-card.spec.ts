@@ -46,7 +46,7 @@ const wakeOf = (fact: WakeFact) => ({
 });
 
 const card = (over: Partial<CoordinatorDeliveryCard> & Pick<CoordinatorDeliveryCard, 'kind'>): CoordinatorDeliveryCard => ({
-  task: null, revision: null, count: null, deliveredAt: BOUND.toISOString(), ...over,
+  task: null, revision: null, count: null, deliveredAt: BOUND.toISOString(), toCoordinator: true, ...over,
 });
 
 const evidence = (movedFromProjectId?: string): WakeFact => {
@@ -206,6 +206,29 @@ test('a batch of turns no server key names reads nothing at all', async () => {
   assert.deepEqual(await readCoordinatorDeliveryCards(untouchable as never, randomUUID(), turns), new Map());
 });
 
+/**
+ * The rows a reply's card is read off, as a fake: the proposal filed on `PROJECT` by the conversation
+ * read, the owner's APPROVE, the turn at `BOUND` — and the project the conversation coordinates, by
+ * the project's own pointer (`coordinates`), or none.
+ */
+function replyRows(intentId: string, coordinates: string | null) {
+  const reads: string[] = [];
+  const db = {
+    projectCoordinatorWake: { findMany: async () => { reads.push('wake'); return []; } },
+    projectRatifiedActionIntent: { findMany: async () => { reads.push('intent'); return [{ id: intentId, projectId: PROJECT }]; } },
+    project: { findUnique: async ({ where }: { where: { coordinatorSessionId: string } }) => {
+      reads.push(`project coordinated by ${where.coordinatorSessionId}`);
+      return coordinates === null ? null : { id: coordinates };
+    } },
+    projectCriteriaDecision: { findMany: async () => { reads.push('decision'); return [{ intentId, decision: 'APPROVE' }]; } },
+    conversationTurn: { findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
+      reads.push('turn');
+      return where.id.in.map((id) => ({ id, createdAt: BOUND }));
+    } },
+  };
+  return { db, reads };
+}
+
 test('a reply’s words are held to its key: copied under another key, they are no reply', async () => {
   const intentId = randomUUID();
   const sessionId = randomUUID();
@@ -213,16 +236,7 @@ test('a reply’s words are held to its key: copied under another key, they are 
     decision: 'APPROVE', intentId, projectId: PROJECT, projectTitle: 'Runner link v1', decidedAt: BOUND,
     note: null, clauses: [], endedSessionId: null,
   });
-  const reads: string[] = [];
-  const db = {
-    projectCoordinatorWake: { findMany: async () => { reads.push('wake'); return []; } },
-    projectRatifiedActionIntent: { findMany: async () => { reads.push('intent'); return [{ id: intentId }]; } },
-    projectCriteriaDecision: { findMany: async () => { reads.push('decision'); return [{ intentId, decision: 'APPROVE' }]; } },
-    conversationTurn: { findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
-      reads.push('turn');
-      return where.id.in.map((id) => ({ id, createdAt: BOUND }));
-    } },
-  };
+  const { db, reads } = replyRows(intentId, PROJECT);
   const copied = { id: randomUUID(), clientTurnId: derivedUuid('some-other-name'), content: words };
   assert.deepEqual(await readCoordinatorDeliveryCards(db as never, sessionId, [copied]), new Map());
   assert.deepEqual(reads, ['wake'], 'the words under a key not derived from their proposal are not looked up');
@@ -232,4 +246,42 @@ test('a reply’s words are held to its key: copied under another key, they are 
     await readCoordinatorDeliveryCards(db as never, sessionId, [reply]),
     new Map([[reply.id, card({ kind: 'CRITERIA_APPROVED' })]]),
   );
+});
+
+test('a reply says it went to the coordinator only where the project’s own pointer names this conversation', async () => {
+  const intentId = randomUUID();
+  const sessionId = randomUUID();
+  const words = criteriaDecisionReplyMessage({
+    decision: 'APPROVE', intentId, projectId: PROJECT, projectTitle: 'Runner link v1', decidedAt: BOUND,
+    note: null, clauses: [], endedSessionId: null,
+  });
+  const reply = { id: randomUUID(), clientTurnId: criteriaDecisionReplyTurnId(intentId), content: words };
+  const cases: Array<[string, string | null, boolean]> = [
+    ['the conversation coordinating the project the proposal was filed on', PROJECT, true],
+    // A task's run, or any conversation the owner opened: the pointer names it for no project.
+    ['a conversation that coordinates nothing', null, false],
+    ['the coordinator of another project', randomUUID(), false],
+  ];
+  for (const [what, coordinates, toCoordinator] of cases) {
+    const { db, reads } = replyRows(intentId, coordinates);
+    assert.deepEqual(
+      await readCoordinatorDeliveryCards(db as never, sessionId, [reply]),
+      new Map([[reply.id, card({ kind: 'CRITERIA_APPROVED', toCoordinator })]]),
+      what,
+    );
+    assert.ok(reads.includes(`project coordinated by ${sessionId}`), `${what}: the pointer was read for this conversation`);
+  }
+});
+
+test('every fact a coordinator is told says it was sent to the coordinator', () => {
+  const facts = [
+    evidence(),
+    dependentReadyFact({ projectId: PROJECT, taskId: TASK, title: 'Start me', dispatchEpoch: 4 }),
+    criterionUnlandedFact(PROJECT, 'k'.repeat(16), [{ taskId: TASK, status: 'DONE' }], 'ON_INTEGRATION_LINE')!,
+    LANDED_ONE,
+  ];
+  for (const fact of facts) {
+    const read = coordinatorDeliveryCardOf(wakeOf(fact), buildCoordinatorDeliveryMessage(fact, 'Runner link v1'));
+    assert.equal(read?.toCoordinator, true, fact.event);
+  }
 });

@@ -164,7 +164,8 @@ import {
   mergeStatusForResult,
 } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
-import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
+import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { FilesService } from '../files/files.service';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
@@ -185,6 +186,7 @@ import {
 } from './new-workspace';
 import {
   enqueueBeautifySession,
+  importPlaceholderTitle,
   MAX_KNOWN_TAGS_PROMPTED,
   makeBranchName,
   sanitizeTitle,
@@ -271,12 +273,12 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
   accountSwitchNotice,
-  accountBeforeDispatch,
   automaticAccount,
   reportedRunAccount,
   workspaceLeavesAccountToOrbit,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
+import { countedAccountBeforeDispatch, withActiveSessions } from '../providers/active-sessions';
 import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
@@ -793,7 +795,17 @@ export class SessionsService {
      * by hand, which is the same.
      */
     @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
-  ) {}
+    /**
+     * Where attachment bytes are kept and read (files/files.service.ts): a worktree file a runner sent
+     * for preview, a legacy artifact. Nest's one instance; the specs that build this service by hand get
+     * their own over the same prisma and the same environment, which behaves the same.
+     */
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
+
+  private readonly files: FilesService;
 
   /**
    * Work for `runnerId` has just been recorded — a session or a turn queued — or is about to be, as
@@ -1289,10 +1301,17 @@ export class SessionsService {
     // (docs/provider-engine-contract.md §8.2 4).
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
-    const automatic = (engine: AccountEngine) =>
-      signedInOn(engine) && targetRunner
-        ? automaticAccount(engine, { env: workspaceEnv, ...accountChoices }, targetRunner, new Date())
-        : null;
+    // Its runner's sessions are counted only when there is a pick to make, and the pick then keeps each
+    // account to its share of them.
+    const automatic = async (engine: AccountEngine) => {
+      if (!signedInOn(engine) || !targetRunner) return null;
+      const workspace = { env: workspaceEnv, ...accountChoices };
+      const now = new Date();
+      const pick = automaticAccount(engine, workspace, targetRunner, now);
+      return pick && assignedRunnerId
+        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, targetRunner, now), now)
+        : pick;
+    };
     const picked = (engine: AccountEngine, account: string | undefined) =>
       signedInOn(engine) ? account : undefined;
     const pickedCodexAccount = picked(AgentProvider.CODEX, dto.codexAccount);
@@ -1300,11 +1319,11 @@ export class SessionsService {
     const pickedAntigravityAccount = picked(AgentProvider.ANTIGRAVITY, dto.antigravityAccount);
     const pickedKimiAccount = picked(AgentProvider.KIMI, dto.kimiAccount);
     const pickedCursorAccount = picked(AgentProvider.CURSOR, dto.cursorAccount);
-    const codexAccount = pickedCodexAccount ?? automatic(AgentProvider.CODEX);
-    const claudeAccount = pickedClaudeAccount ?? automatic(AgentProvider.CLAUDE);
-    const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
-    const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
-    const cursorAccount = pickedCursorAccount ?? automatic(AgentProvider.CURSOR);
+    const codexAccount = pickedCodexAccount ?? (await automatic(AgentProvider.CODEX));
+    const claudeAccount = pickedClaudeAccount ?? (await automatic(AgentProvider.CLAUDE));
+    const antigravityAccount = pickedAntigravityAccount ?? (await automatic(AgentProvider.ANTIGRAVITY));
+    const kimiAccount = pickedKimiAccount ?? (await automatic(AgentProvider.KIMI));
+    const cursorAccount = pickedCursorAccount ?? (await automatic(AgentProvider.CURSOR));
     // Claude Code on a credential that talks to Anthropic (its own sign-in, an Anthropic key, a Claude pool), bound for
     // a runner whose Claude connection to Anthropic is in a region Anthropic does not offer Claude in: refused now with
     // the code (docs/claude-region-check-contract.md §12) rather than created to wait in the queue from its first
@@ -1731,7 +1750,7 @@ export class SessionsService {
       }),
     );
     const accountEffort = await this.resolveDefaultEffort(ownerId, dto.workspaceId);
-    const title = dto.title ?? `Imported session ${dto.claudeSessionId.slice(0, 8)}`;
+    const title = dto.title ?? importPlaceholderTitle(dto.claudeSessionId);
     const enableWorktree = workspace.enableWorktree;
     const branch = enableWorktree ? makeBranchName(title) : null;
     const sourceCwd = dto.sourceCwd ?? workspace.workDir;
@@ -1904,6 +1923,62 @@ export class SessionsService {
       }
     }
     return { removed, requested: sessions.length };
+  }
+
+  /**
+   * Name an imported session whose transcript carried no title of its own. Claude Code writes an
+   * `ai-title` record only for some interactive conversations — never for one run through
+   * `claude -p` or the Agent SDK — so without this such a session kept "Imported session 4e453ab7"
+   * for good: it has no prompt of its own, so neither naming path a new session gets ever runs.
+   *
+   * The import has already stored the conversation as run events, so its first real prompt is
+   * read from there and named the way a new session's is: the prompt's first line at once, then
+   * beautifySessionLater's cleaner title where a key allows. Text Claude Code itself put in the
+   * user's turn — `<command-name>`/`<local-command-stdout>` wrappers, the "Caveat:" line before
+   * them — is not what the person asked, so it is passed over. Every write is a CAS on the
+   * placeholder, so a rename made in the meantime stands. Fire-and-forget; errors are swallowed.
+   */
+  async nameUntitledImport(sessionId: string): Promise<void> {
+    try {
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: {
+          id: true,
+          ownerId: true,
+          provider: true,
+          providerBuiltin: true,
+          model: true,
+          title: true,
+          runtimeSessionId: true,
+        },
+      });
+      if (!session?.runtimeSessionId) return;
+      const placeholder = importPlaceholderTitle(session.runtimeSessionId);
+      if (session.title !== placeholder) return;
+      const userEvents = await this.prisma.runEvent.findMany({
+        where: { sessionId, type: 'user' },
+        orderBy: { seq: 'asc' },
+        select: { payload: true },
+        take: 20,
+      });
+      const prompt = userEvents
+        .map((e) => (e.payload as { text?: unknown } | null)?.text)
+        .find(
+          (t): t is string =>
+            typeof t === 'string' && t.trim() !== '' && !/^\s*(<|Caveat:)/.test(t),
+        );
+      if (!prompt) return;
+      const fallback = titleFromPrompt(prompt);
+      const res = await this.prisma.session.updateMany({
+        where: { id: sessionId, title: placeholder, titleManagedByProject: false },
+        data: { title: fallback },
+      });
+      if (res.count === 0) return;
+      this.realtime.publishSessionUpdated(sessionId);
+      await this.beautifySessionLater(session, prompt, fallback);
+    } catch {
+      // best-effort; the placeholder simply stays
+    }
   }
 
   /**
@@ -4874,7 +4949,7 @@ export class SessionsService {
           status: true, content: true,
           attachments: {
             where: { ownerId, sessionId: id }, take: 1,
-            select: { id: true, data: true, mimeType: true },
+            select: { id: true },
           },
         },
       });
@@ -4883,12 +4958,15 @@ export class SessionsService {
         const receipt = readWorktreeArtifactRequest(result.content)?.result;
         const attachment = result.attachments[0];
         if (receipt?.status === 'uploaded' && attachment) {
-          // Preview bytes are transient; do not retain a new blob for every file opening.
+          const uploaded = await this.files.read({ id: attachment.id });
+          // Preview bytes are transient; do not retain a new attachment for every file opening. The
+          // bytes stay in the file store, where the same content opened again is the same file.
           await this.prisma.attachment.deleteMany({
             where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
           });
+          if (!uploaded) throw new NotFoundException('File is no longer available.');
           return {
-            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
+            data: uploaded.data, mimeType: uploaded.mimeType,
             disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
           };
         }
@@ -5041,12 +5119,13 @@ export class SessionsService {
     const row = await this.prisma.attachment.findFirst({
       where: { sessionId, fileName: filename, turnId: null },
       orderBy: { createdAt: 'desc' },
-      select: { data: true, mimeType: true, fileName: true },
+      select: { id: true, fileName: true },
     });
-    if (!row) return null;
+    const stored = row && (await this.files.read({ id: row.id }));
+    if (!row || !stored) return null;
     return {
-      data: Buffer.from(row.data),
-      mimeType: row.mimeType,
+      data: stored.data,
+      mimeType: stored.mimeType,
       disposition: legacyArtifactDisposition(row.fileName ?? filename),
     };
   }
@@ -5059,6 +5138,7 @@ export class SessionsService {
   ): Promise<void> {
     const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ownerId: true } });
     if (!session) return;
+    const sha256 = await this.files.storeBytes(data);
     await this.prisma.attachment.create({
       data: {
         ownerId: session.ownerId,
@@ -5066,7 +5146,7 @@ export class SessionsService {
         mimeType,
         sizeBytes: data.length,
         fileName: filename,
-        data: toBytes(data),
+        sha256,
       },
     });
   }
@@ -5522,10 +5602,12 @@ export class SessionsService {
         .map((a) => [a.id, resentAttachmentId(sessionId, clientTurnId, a.id)] as const),
     );
     if (copyOf.size === 0) return ids;
-    // In the database, so the bytes are not carried through this process under the session lock.
+    // In the database, so the bytes are not carried through this process under the session lock. The
+    // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
+    // before Orbit Files.
     await tx.$executeRaw`
-      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
-      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.data
+      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
+      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data
         FROM unnest(ARRAY[${Prisma.join([...copyOf.keys()])}]::uuid[],
                     ARRAY[${Prisma.join([...copyOf.values()])}]::uuid[]) AS c(source_id, copy_id)
         JOIN "attachment" a ON a.id = c.source_id`;
@@ -5611,7 +5693,9 @@ export class SessionsService {
           },
         })
       : null;
-    const move = accountBeforeDispatch(
+    const move = await countedAccountBeforeDispatch(
+      tx,
+      session.assignedRunnerId,
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
@@ -7770,6 +7854,9 @@ export class SessionsService {
         // a DONE task's identity was waiting for (§10.5 O-L4 3).
         await settleDeliveredIdentityAfterFinish(tx, session);
         await retireSessionInboxGeneration(tx, sessionId);
+        // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
+        // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: now },
@@ -7784,6 +7871,10 @@ export class SessionsService {
             endReason: reason,
           },
         });
+        // A `bg-wake:` turn queued here is one of the messages retired below: the wakeups filed onto it are
+        // dropped with the session that is ending, and taken out of their loop's runs
+        // (runner-api/wake-turn-withdraw.ts).
+        await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         // Retire queued messages in place. This prevents replay while preserving target FKs,
         // attachments and clientTurnId receipts as durable audit evidence.
         await tx.conversationTurn.updateMany({

@@ -361,20 +361,9 @@ struct WikiDocPage: View {
                 .font(.headline)
                 .padding(.top, 6)
         case .code:
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(block.text ?? "")
-                    .font(.system(.footnote, design: .monospaced))
-                    .fixedSize()
-                    .padding(10)
-            }
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            WikiDocCode(text: block.text ?? "")
         case .diagram:
-            Label(WikiDocCopy.diagramOnWeb, systemImage: "flowchart")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            WikiDiagram(source: block.text ?? "")
         case .item:
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•")
@@ -604,6 +593,21 @@ struct WikiDocPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// A section's code block, and a diagram's source when it does not draw (`WikiDiagram`): monospaced, scrolling sideways.
+struct WikiDocCode: View {
+    let text: String
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            Text(text)
+                .font(.system(.footnote, design: .monospaced))
+                .fixedSize()
+                .padding(10)
+        }
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

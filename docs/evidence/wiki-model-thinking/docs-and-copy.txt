@@ -1,0 +1,12 @@
+# npm run docs:check, and the web copy-language guard
+# Run 2026-11-01T15:00:13Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+Linting: 32 files
+Summary: 0 issues in 0 files
+Checked 32 public Markdown files; 0 local link/anchor errors.
+exit=0
+
+## src/web/src/copyLanguage.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+exit=0

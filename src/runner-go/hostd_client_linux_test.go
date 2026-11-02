@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -253,14 +255,118 @@ func TestUnregisterReachesSystemdThroughTheRealBroker(t *testing.T) {
 		uninstallServiceLinux(path, func() { t.Error("fell back although the broker answered") })
 	})
 
-	assertArgv(t, f.ran, []string{"systemctl", "disable", "--now", unitForUid(uid)})
-	if !strings.Contains(out, "removed the "+unitForUid(uid)) {
+	unit := unitForAccount("tester")
+	assertArgv(t, f.ran, []string{"systemctl", "disable", "--now", unit})
+	if !strings.Contains(out, "removed the "+unit) {
 		t.Errorf("unregister output does not report the removal; got:\n%s", out)
 	}
 	// The systemctl above was hostd's, on the far side of the socket. This side ran
 	// nothing — that is the difference the whole change is about.
 	if len(*commands) != 0 {
 		t.Fatalf("the client shelled out to %v", *commands)
+	}
+}
+
+// hostd's enable refusing an account with no copy of its own to run is not a refusal to route
+// around: `orbit register` stops at it, prints the broker's reason and its one command, and
+// never reaches for the sudo path, whose unit would run another binary beside the template.
+// Each refusal is the real enable verb's, served over a real socket to the real client chain.
+func TestRegisterStopsAtTheBrokersOwnCopyRefusalWithoutSudo(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		arrange func(f *fakeSystem, sys *hostdSystem)
+		want    []string
+	}{{
+		name:    "no executable copy",
+		arrange: func(f *fakeSystem, _ *hostdSystem) { f.executable = false },
+		want: []string{
+			"✗ Could not start the background service: refusing to enable orbit-runner@alice.service: it runs alice's own ~/.orbit/bin/orbit, and /home/alice/.orbit/bin/orbit is missing or alice cannot execute it. Put a copy there, then run `orbit register` again:\n" +
+				"  mkdir -p -m 0700 ~/.orbit && install -D -m 0755 /usr/local/bin/orbit ~/.orbit/bin/orbit\n",
+		},
+	}, {
+		name: "no home",
+		arrange: func(_ *fakeSystem, sys *hostdSystem) {
+			sys.lookupUID = func(uid string) (*user.User, error) {
+				return &user.User{Uid: uid, Gid: uid, Username: testUser, HomeDir: "/nonexistent"}, nil
+			}
+		},
+		want: []string{`alice has no home directory to keep it in (the passwd database gives "/nonexistent"). Register from an account that has a home directory.`},
+	}, {
+		name:    "a copy that could not be checked",
+		arrange: func(f *fakeSystem, _ *hostdSystem) { f.checkErr = errors.New("no answer within 3s") },
+		want:    []string{"hostd could not check /home/alice/.orbit/bin/orbit as alice: no answer within 3s."},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, sys := newFakeSystem(t)
+			tc.arrange(f, &sys)
+			refusal := sys.verbs()["enable"](testPeer, hostdRequest{V: 1, Verb: "enable"})
+			if refusal.OK || refusal.Code != hostdRefusedOwnCopy {
+				t.Fatalf("fixture: enable = %+v, want the own-copy refusal", refusal)
+			}
+			path, stop := startHostd(t, map[string]hostdVerb{
+				"enable": func(hostdPeer, hostdRequest) hostdResponse { return refusal },
+			})
+			defer stop()
+			commands := recordCommands(t)
+
+			var err error
+			out := captureServiceOutput(t, func() {
+				err = setupServiceLinux(path, nil, func() error {
+					t.Error("the sudo path ran although the broker said the account has no copy of its own")
+					return nil
+				})
+				if err != nil {
+					printServiceFailure(os.Stderr, err)
+				}
+			})
+			var refused *hostdOwnCopyRefusal
+			if !errors.As(err, &refused) {
+				t.Fatalf("register's service step returned %v, want the broker's refusal", err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("register output must say %q; got:\n%s", want, out)
+				}
+			}
+			for _, never := range []string{"sudo", "falling back", "Start it in the foreground"} {
+				if strings.Contains(out, never) {
+					t.Errorf("register output says %q; got:\n%s", never, out)
+				}
+			}
+			if len(*commands) != 0 {
+				t.Fatalf("register shelled out to %v", *commands)
+			}
+		})
+	}
+}
+
+// uid 0's refusal is the one the sudo path still takes, as it always has: root's runner is a
+// legacy unit, never an instance, and the broker carries no code for it.
+func TestRootsRefusalStillFallsBackToTheSudoPath(t *testing.T) {
+	_, sys := newFakeSystem(t)
+	refusal := sys.verbs()["enable"](hostdPeer{UID: 0, PID: 7}, hostdRequest{V: 1, Verb: "enable"})
+	if refusal.OK || refusal.Code != "" {
+		t.Fatalf("fixture: root's enable = %+v, want a plain refusal", refusal)
+	}
+	path, stop := startHostd(t, map[string]hostdVerb{
+		"enable": func(hostdPeer, hostdRequest) hostdResponse { return refusal },
+	})
+	defer stop()
+
+	installed := false
+	out := captureServiceOutput(t, func() {
+		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+			t.Error(err)
+		}
+	})
+	if !installed {
+		t.Error("root's refused enable must still leave the runner installed the old way")
+	}
+	if want := `note: the machine broker refused "enable" (refusing to enable orbit-runner@root.service: the runner must not run as root`; !strings.Contains(out, want) {
+		t.Errorf("register output must say %q; got:\n%s", want, out)
+	}
+	if !strings.Contains(out, "falling back to the sudo path") {
+		t.Errorf("register output does not say it falls back; got:\n%s", out)
 	}
 }
 

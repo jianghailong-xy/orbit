@@ -91,6 +91,9 @@ object ManagementFixture {
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
+    /** Check again (POST runners/:id/region-check, docs/claude-region-check-contract.md §7): answered with when it was asked, after
+     * [onRegionCheck] — as the runner's next check lands in its `region`. */
+    @Volatile var onRegionCheck: () -> Unit = {}
     /** A Cursor key's Check Again (POST providers/mine/:id/key-check): what it answers, and what it does to GET providers/mine first —
      * as a runner's answer kept on the key would. */
     @Volatile var keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
@@ -113,7 +116,7 @@ object ManagementFixture {
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
-        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
+        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
         defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
@@ -235,6 +238,7 @@ object ManagementFixture {
             "runners/$RUNNER/login/code" -> { loginBodies += body(); loginRelay = codeSent; onCode(); ok(loginRelay) }
             "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
             "runners/$RUNNER/install" -> { installBodies += body(); ok("""{"status":"pending","engine":${body()["engine"]},"mode":"install"}""") }
+            "runners/$RUNNER/region-check" -> { onRegionCheck(); ok("""{"requestedAt":"$now"}""") }
             "runners/device/$DEVICE_CODE" -> ok(device())
             "runners/device/$DEVICE_CODE/approve" -> decide("APPROVED")
             "runners/device/$DEVICE_CODE/deny" -> decide("DENIED")

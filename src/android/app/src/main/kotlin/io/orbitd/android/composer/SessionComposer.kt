@@ -630,7 +630,9 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
             modifier = Modifier.testTag("composer-provider:${option.id}")) {
             // What a sign-in is (`opencode auth`, a Google account) goes under its name, as the boards' menus put it.
             Column {
-                Text(if (blocked) "${option.label} — ${option.unavailable}" + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
+                // The runner's Claude region names no fix: the press still opens the machine's Claude Code page, which explains.
+                Text(if (blocked) "${option.label} — ${option.unavailable}" + (option.fixEngine?.takeUnless { option.regionBlocked }
+                    ?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
                     else (if (here) "✓ " else "") + option.label)
                 option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
@@ -661,8 +663,8 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
             // another credential of this engine lands on the one picked.
             val here = option.id == provider
             // Cursor CLI's are listed for a session on any runner: one that has not talked moves between them (D5), and one that has lists
-            // them greyed.
-            val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null && !here) emptyList()
+            // them greyed. None under a sign-in the runner's Claude region blocks: no session starts on any of them there.
+            val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null && !here || option.regionBlocked) emptyList()
                 else catalog.accountChoices(engine).takeIf { it.size >= 2 &&
                     (draft || here && (catalog.movesAccounts(engine) || engine == CursorRuntime.ENGINE)) }.orEmpty()
             if (accounts.isEmpty()) { row(option); return@forEach }
@@ -725,7 +727,9 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                 val repair = option.fixEngine?.takeIf { openRunner != null }
                 val secondary = when {
                     connect -> "${EngineCopy.CONNECT_DEEPSEEK_KEY} →"
-                    option.unavailable != null -> option.unavailable + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
+                    // The runner's Claude region names no fix; the row still opens the machine's Claude Code page.
+                    option.unavailable != null -> option.unavailable + (option.fixEngine?.takeUnless { option.regionBlocked }
+                        ?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
                     landing != null -> catalog.modelLabel(option.engine, landing.id, catalog.defaultModel(option.engine, landing.id))
                     else -> ""
                 }

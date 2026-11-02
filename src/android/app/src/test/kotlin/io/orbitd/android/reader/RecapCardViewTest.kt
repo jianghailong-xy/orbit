@@ -34,7 +34,7 @@ class RecapCardViewTest {
 
     @Test fun theCardSaysTheRecapWholeAndWhenItWasWritten() {
         var asked = 0
-        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false) { asked++ } } }
+        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false, onRefresh = { asked++ }, onHide = {}) } }
         compose.onNodeWithTag("recap-card-text", useUnmergedTree = true)
             .assertTextEquals("Recap · Sat, Oct 17, 1:44 PM  Research done: integrate Copilot CLI first.")
         compose.onNodeWithContentDescription("Refresh recap").performClick()
@@ -42,13 +42,22 @@ class RecapCardViewTest {
     }
 
     @Test fun aRecapWithNoTimeSaysTheWordAloneAndARefreshInFlightCannotBePressedAgain() {
-        compose.setContent { OrbitTheme { RecapCardView(card.copy(whenWritten = null), refreshing = true) {} } }
+        compose.setContent { OrbitTheme { RecapCardView(card.copy(whenWritten = null), refreshing = true, onRefresh = {}, onHide = {}) } }
         compose.onNodeWithTag("recap-card-text", useUnmergedTree = true).assertTextEquals("Recap  Research done: integrate Copilot CLI first.")
         compose.onNodeWithTag("recap-refresh").assertIsNotEnabled()
     }
 
+    @Test fun theHideButtonIsNamedForTalkBackAndHandsTheHideBackWithoutRefreshing() {
+        var hid = 0
+        var asked = 0
+        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false, onRefresh = { asked++ }, onHide = { hid++ }) } }
+        compose.onNodeWithContentDescription("Hide recap").performClick()
+        assertEquals(1, hid)
+        assertEquals(0, asked)
+    }
+
     @Test fun theRefreshSitsBesideTheFirstLine() {
-        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false) {} } }
+        compose.setContent { OrbitTheme { RecapCardView(card, refreshing = false, onRefresh = {}, onHide = {}) } }
         val text = compose.onNodeWithTag("recap-card-text", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val refresh = compose.onNodeWithTag("recap-refresh").getUnclippedBoundsInRoot()
         // bodyMedium's line is 21sp: the first line's middle is the 48dp button's middle, 24dp down, so the paragraph starts 13.5dp down.

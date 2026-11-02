@@ -90,6 +90,7 @@ function makeService(f: Fixture) {
         where.slug === 'openai-proxy' ? { runtime: 'codex' } : null,
     },
     session: {
+      findMany: async () => [],
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);
         return { id: 'session-1', ...data, endReason: null, completedAt: null, archivedAt: null, deletedAt: null };

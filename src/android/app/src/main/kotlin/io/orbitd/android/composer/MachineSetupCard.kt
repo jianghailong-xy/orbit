@@ -69,7 +69,8 @@ internal fun MachineSetupCard(
     val engineName = ProviderEngines.cliName(engine)
 
     val notice = when {
-        offline -> MachineSetupCopy.setupOffline(machine)
+        // Never heard from is a machine still coming up, not one gone away, nor one too old to check folders.
+        offline -> if (MachineSetup.isConnecting(runner)) MachineSetupCopy.setupConnecting(machine) else MachineSetupCopy.setupOffline(machine)
         !probes -> if (MachineSetup.updatesItself(runner)) MachineSetupCopy.setupUpdating(machine)
             else MachineSetupCopy.setupNeedsUpdate(machine)
         else -> null
@@ -360,22 +361,28 @@ private fun FolderOptionsSection(
     var newName by remember(runnerId) { mutableStateOf("") }
     var typed by remember(runnerId) { mutableStateOf("") }
     var registered by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
+    var newAnswer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
     var typedAnswer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
+    // Check again, for each question. The register directory's is asked again by itself.
     var attempt by remember(runnerId) { mutableIntStateOf(0) }
+    var newAttempt by remember(runnerId) { mutableIntStateOf(0) }
+    var registerAttempt by remember(runnerId) { mutableIntStateOf(0) }
 
     val name = newName.trim()
     val path = typed.trim()
+    val reposRoot = runner.text("reposRoot").orEmpty()
 
     val suggested = (registered as? DirProbeRelay.Outcome.Answered)?.probe?.takeIf(MachineSetup::isOfferedFolder)
     val choice = touched ?: MachineSetup.defaultFolderChoice(suggested, offersNewFolder)
     val checked = (typedAnswer as? DirProbeRelay.Outcome.Answered)?.probe
+    val found = (newAnswer as? DirProbeRelay.Outcome.Answered)?.probe
 
     val candidate: PickedFolder? = when (choice) {
         FolderChoice.SUGGESTED -> suggested?.let {
             PickedFolder.Existing(it.path, MachineSetup.folderVerdict(it, machine).short)
         }
-        FolderChoice.NEW -> if (offersNewFolder && MachineSetup.isValidNewFolder(name)) {
-            PickedFolder.New(name, MachineSetup.newFolderPath(runner.text("reposRoot").orEmpty(), name))
+        FolderChoice.NEW -> if (offersNewFolder && MachineSetup.isValidNewFolder(name) && found != null) {
+            MachineSetup.newFolderPick(found, name, reposRoot, machine)
         } else null
         FolderChoice.OTHER -> checked?.let {
             val verdict = MachineSetup.folderVerdict(it, machine)
@@ -384,7 +391,7 @@ private fun FolderOptionsSection(
     }
 
     val registerDir = if (MachineSetup.answersDirProbe(runner)) MachineSetup.registerDirToProbe(runner.text("registerDir")) else null
-    LaunchedEffect(runnerId, registerDir, online) {
+    LaunchedEffect(runnerId, registerDir, online, registerAttempt) {
         registered = null
         if (registerDir == null) return@LaunchedEffect
         registered = try {
@@ -393,6 +400,23 @@ private fun FolderOptionsSection(
             throw cancel
         } catch (_: Exception) {
             null
+        }
+    }
+
+    // Where a new folder's name would go, asked about as it is typed: a folder, or a file, may be there already.
+    val newQuery = if (choice == FolderChoice.NEW && offersNewFolder && !disabled && MachineSetup.isValidNewFolder(name)) {
+        MachineSetup.newFolderPath(reposRoot, name)
+    } else null
+    LaunchedEffect(runnerId, newQuery, newAttempt) {
+        newAnswer = null
+        if (newQuery == null) return@LaunchedEffect
+        delay(300)
+        newAnswer = try {
+            probeDir(newQuery, true)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (e: Exception) {
+            DirProbeRelay.Outcome.Answered(DirProbe(path = newQuery, exists = false, isDir = false, isGit = false, isHome = false, error = e.message ?: "Request failed"))
         }
     }
 
@@ -409,6 +433,12 @@ private fun FolderOptionsSection(
             DirProbeRelay.Outcome.Answered(DirProbe(path = otherQuery, exists = false, isDir = false, isGit = false, isHome = false, error = e.message ?: "Request failed"))
         }
     }
+
+    // A path asked before the machine had answered about the register directory took that question's place (one question per
+    // machine, contract §2): it is asked again once nothing else here waits, so the suggestion still comes.
+    val waiting = (newQuery != null && newAnswer == null) || (otherQuery != null && typedAnswer == null)
+    val askRegisteredAgain = DirProbeRelay.asksAgain(registered, online, waiting)
+    LaunchedEffect(askRegisteredAgain) { if (askRegisteredAgain) registerAttempt++ }
 
     Text(MachineSetupCopy.SETUP_FOLDER, fontWeight = FontWeight.SemiBold)
     Text(
@@ -457,44 +487,55 @@ private fun FolderOptionsSection(
                     onClick = { touched = FolderChoice.NEW },
                 ) {
                     Text(MachineSetupCopy.SETUP_NEW_FOLDER, style = MaterialTheme.typography.bodyMedium)
-                    if (choice == FolderChoice.NEW && name.isNotEmpty() && !MachineSetup.isValidNewFolder(name)) {
-                        VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
-                    } else {
-                        Text(
-                            MachineSetupCopy.SETUP_NEW_FOLDER_META,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    // Chosen, what it says goes under its name, as the web's does, and as the name is checked.
+                    if (choice != FolderChoice.NEW) MetaText(MachineSetupCopy.SETUP_NEW_FOLDER_META)
                 }
                 if (choice == FolderChoice.NEW) {
-                    Row(
+                    Column(
                         Modifier.fillMaxWidth().padding(start = 36.dp, end = 10.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text(
-                            MachineSetup.newFolderPath(runner.text("reposRoot").orEmpty(), ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                        OutlinedTextField(
-                            value = newName,
-                            onValueChange = { touched = FolderChoice.NEW; newName = it },
-                            placeholder = { Text(MachineSetupCopy.SETUP_NEW_FOLDER_NAME) },
-                            singleLine = true,
-                            enabled = !disabled,
-                            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                autoCorrectEnabled = false,
-                                imeAction = ImeAction.Done,
-                            ),
-                            keyboardActions = KeyboardActions(onDone = { candidate?.let(onPick) }),
-                            modifier = Modifier.weight(1f).testTag("setup-new-folder-name"),
-                        )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                MachineSetup.newFolderPath(reposRoot, ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                            OutlinedTextField(
+                                value = newName,
+                                onValueChange = { touched = FolderChoice.NEW; newName = it },
+                                placeholder = { Text(MachineSetupCopy.SETUP_NEW_FOLDER_NAME) },
+                                singleLine = true,
+                                enabled = !disabled,
+                                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false,
+                                    imeAction = ImeAction.Done,
+                                ),
+                                keyboardActions = KeyboardActions(onDone = { candidate?.let(onPick) }),
+                                modifier = Modifier.weight(1f).testTag("setup-new-folder-name"),
+                            )
+                        }
+                        // What a new folder is while nothing is typed, then what the machine finds where it would go.
+                        when {
+                            name.isEmpty() -> MetaText(MachineSetupCopy.SETUP_NEW_FOLDER_META)
+                            !MachineSetup.isValidNewFolder(name) ->
+                                VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+                            found != null -> {
+                                val verdict = MachineSetup.newFolderVerdict(found, machine)
+                                // Nothing there yet reads as the board draws a new folder; anything there says what it means.
+                                if (verdict.tone == FolderVerdict.Tone.OK) MetaText(verdict.text) else VerdictText(verdict.text, verdict.tone)
+                            }
+                            newAnswer != null -> NoAnswerRow(machine) { newAttempt++ }
+                            else -> CheckingText(machine)
+                        }
                     }
                 }
             }
@@ -534,27 +575,8 @@ private fun FolderOptionsSection(
                                 val verdict = MachineSetup.folderVerdict(checked, machine)
                                 VerdictText(verdict.text, verdict.tone)
                             }
-                            typedAnswer != null -> {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    VerdictText(MachineSetupCopy.setupNoAnswer(machine), FolderVerdict.Tone.BAD)
-                                    Text(
-                                        MachineSetupCopy.SETUP_CHECK_AGAIN,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable(role = Role.Button) { attempt++ },
-                                    )
-                                }
-                            }
-                            else -> {
-                                Text(
-                                    MachineSetupCopy.setupChecking(machine),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            typedAnswer != null -> NoAnswerRow(machine) { attempt++ }
+                            else -> CheckingText(machine)
                         }
                     }
                 }
@@ -595,6 +617,28 @@ private fun FolderOptionRow(
             modifier = Modifier.width(18.dp),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp), content = content)
+    }
+}
+
+@Composable
+private fun MetaText(text: String) {
+    Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun CheckingText(machine: String) = MetaText(MachineSetupCopy.setupChecking(machine))
+
+/** A check the machine gave no answer to, and the way to ask it again. */
+@Composable
+private fun NoAnswerRow(machine: String, onAgain: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        VerdictText(MachineSetupCopy.setupNoAnswer(machine), FolderVerdict.Tone.BAD)
+        Text(
+            MachineSetupCopy.SETUP_CHECK_AGAIN,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(role = Role.Button, onClick = onAgain),
+        )
     }
 }
 

@@ -93,6 +93,9 @@ services:
       # read was fixed where it lives (9cad03c7d) instead of raising this for every connection:
       # work_mem multiplies hardest (per connection, per sort/hash node) on a host that is
       # already out of swap.
+      # JIT off, as production already runs it for its role and database: docs/postgres-runtime-settings.md §10.
+      - -c
+      - jit=off
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
@@ -244,6 +247,16 @@ services:
       # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
       # a minute, for at most 2 s; while it cannot be read, no release is stated and runners ask that route over HTTPS.
       RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"
+      # Orbit Files (docs/orbit-files-design.md §2.10): where attachment bytes are kept, one copy per content, named by
+      # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
+      # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;
+      # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either.
+      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"
+      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"
+      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"
+      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
+      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
+      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
       # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
       # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
@@ -254,6 +267,9 @@ services:
     volumes:
       # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
+      # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
+      # attachment the local store keeps, and the temporary files uploads arrive in.
+      - ./data/files:/var/lib/orbit/files
     depends_on:
       postgres:
         condition: service_healthy
@@ -297,6 +313,9 @@ services:
       ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
       # Model requests in flight at once, across every space.
       ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
+      # Optional: disabled or enabled is sent as every call's thinking; unset sends none, as before. DeepSeek's V4 models
+      # think unless told not to, so set disabled for them (docs/self-hosting.md, "Wiki System model").
+      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"
     depends_on:
       apiserver:
         condition: service_healthy

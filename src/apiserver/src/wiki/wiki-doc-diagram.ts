@@ -8,7 +8,7 @@ import { WIKI_DOC_DIAGRAM_RULES } from '@orbit/shared';
  * past the rules' sizes: the caller drops the block.
  *
  * What the diagram shows — each node's label (its id where it has none), each link's label and each subgraph's title —
- * comes back with it, for the check against the section's sourced sentences (wiki-docs.ts `keepSourcedDiagrams`).
+ * comes back with it, for the check against the document's verified text (wiki-docs.ts `keepSourcedDiagrams`).
  */
 export interface WikiDocDiagram {
   /** The flowchart written out again: the diagram block's text, which a page draws. */
@@ -112,8 +112,14 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
   const links: Link[] = [];
   const open: Group[] = [];
   const itemsHere = (): Array<Node | Group> => open[open.length - 1]?.items ?? top;
+  /** The nodes some subgraph has named: each stands in the first that did. */
+  const grouped = new Set<Node>();
 
-  /** One node of a statement, registered where it first appears, and where the statement goes on; null when there is none. */
+  /**
+   * One node of a statement, and where the statement goes on; null when there is none. A node stands where Mermaid puts
+   * it: in the first subgraph that names it, wherever it first appeared — a diagram that writes its links first and its
+   * subgraphs after keeps them — and outside every subgraph when none does.
+   */
   const readNode = (line: string, at: number): { id: string; next: number } | null => {
     const id = ID.exec(line.slice(at))?.[0];
     if (!id) return null;
@@ -141,11 +147,18 @@ export function parseDiagram(text: string): WikiDocDiagram | null {
     }
     const suffix = CLASS_SUFFIX.exec(line.slice(next));
     if (suffix) next += suffix[0].length;
+    const group = open[open.length - 1];
     let node = nodes.get(id);
     if (!node) {
       node = { kind: 'node', n: `n${nodes.size + 1}`, id, label: null, shape: SHAPES[5] };
       nodes.set(id, node);
       itemsHere().push(node);
+      if (group) grouped.add(node);
+    } else if (group && !grouped.has(node)) {
+      // Named outside every subgraph so far, so it stands at the top: it moves into this one.
+      top.splice(top.indexOf(node), 1);
+      group.items.push(node);
+      grouped.add(node);
     }
     if (shape) {
       node.shape = shape;

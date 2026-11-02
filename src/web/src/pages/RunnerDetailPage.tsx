@@ -51,6 +51,7 @@ import {
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
+import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../components/AutoCompactSelect';
 import { MachineEngines, accountsGroup, ownSignInPanel, useOpenAccounts } from '../components/RunnerEngines';
 import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
 import type { Runner } from '../components/TasksSidePanel';
@@ -1026,6 +1027,15 @@ export function RunnerDetailPage() {
                 setDirty(true);
               }}
               envDir={fEnv.find((r) => r.key.trim() === 'ORBIT_CURSOR_ACCOUNT_DIR')?.value}
+            />
+          )}
+          {runner?.engines?.some((entry) => entry.engine === 'claude' && entry.installed) && (
+            <AutoCompactSelect
+              value={fEnv.find((r) => r.key.trim() === AUTO_COMPACT_VARIABLE)?.value}
+              onChange={(size) => {
+                setFEnv(withAutoCompact(fEnv, size));
+                setDirty(true);
+              }}
             />
           )}
           <div className="rd-form-field">

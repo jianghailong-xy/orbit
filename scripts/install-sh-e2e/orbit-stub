@@ -1,0 +1,4 @@
+#!/bin/sh
+# What the stub in scripts/install-sh-e2e.sh serves as the orbit release, gzipped as
+# /dl/orbit-linux-<arch>.gz: install.sh runs `orbit version` once the binary is in place.
+echo "0.0.0-install-sh-e2e"

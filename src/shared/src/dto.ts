@@ -751,7 +751,7 @@ export interface RunnerHeartbeatRequest {
  *  - `disabledByEnv`: turned off — ORBIT_NO_SELFUPDATE, a development build, or a platform no
  *    release is published for; `reason` says which.
  *  - `dirNotWritable`: `installDir` is not writable by the runner's user, so no release can be
- *    swapped in until someone runs `sudo orbit upgrade` there.
+ *    swapped in until someone runs `sudo <installDir>/orbit upgrade`.
  *  - `waitingForIdle`: a release is waiting for the turns in flight to end.
  *  - `failed`: the release check or the install failed; `reason` is the runner's own words.
  *  - `heldByRollout`: a newer release exists, but its staged rollout has not reached this runner. */
@@ -1747,6 +1747,11 @@ export interface DshRuntimeHealth {
 export interface RunnerEngineAccount {
   /** Manual pause in Orbit. Sign-in and quota remain unchanged; expires automatically. */
   pausedUntil?: string | null;
+  /** How many sessions are at work on this account: running, on their way to it, waiting out a retry, or
+   *  with a turn in the last half hour. The server counts them (activeSessionsOn) and says so on what it
+   *  serves; no runner reports it. Absent from an older server, and read as nothing counted, which holds
+   *  no account back (accountToStartOn). */
+  activeSessions?: number;
   /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;

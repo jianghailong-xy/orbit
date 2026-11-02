@@ -1,0 +1,12 @@
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test0AMachineStillConnectingIsWaitedFor]' started.
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test0AMachineStillConnectingIsWaitedFor]' passed (19.790 seconds).
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test1ANewFolderNameThatIsAFolderIsUsedAsItIs]' started.
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test1ANewFolderNameThatIsAFolderIsUsedAsItIs]' passed (34.623 seconds).
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test2TheSuggestionComesBackAfterAnotherPathTookItsQuestion]' started.
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test2TheSuggestionComesBackAfterAnotherPathTookItsQuestion]' passed (16.763 seconds).
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test3ANewFolderNameThatIsAFileCantBe]' started.
+Test Case '-[FwMacProbeUITests.FirstWorkspaceFinishShotTests test3ANewFolderNameThatIsAFileCantBe]' passed (18.927 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.103 (90.107) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.103 (90.112) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.103 (90.114) seconds
+** TEST SUCCEEDED **

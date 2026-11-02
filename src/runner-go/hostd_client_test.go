@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"path/filepath"
 	"strings"
@@ -137,4 +138,23 @@ func serveRawHostd(t *testing.T, handle func(net.Conn)) string {
 		}
 	}()
 	return path
+}
+
+// What `orbit register` prints when its service step fails: the first line of the reason and
+// the foreground hint — except for the broker's own-copy refusal, which is printed whole, its
+// one command included, in place of the hint.
+func TestPrintServiceFailure(t *testing.T) {
+	var out strings.Builder
+	printServiceFailure(&out, errors.New("installing the systemd service needs root: write x\nmore detail"))
+	if want := "\n✗ Could not start the background service: installing the systemd service needs root: write x\n" +
+		"  Start it in the foreground instead:  orbit run\n"; out.String() != want {
+		t.Errorf("printed %q, want %q", out.String(), want)
+	}
+
+	out.Reset()
+	reason := "refusing to enable orbit-runner@alice.service: it runs alice's own ~/.orbit/bin/orbit, and ...:\n  " + hostdOwnCopyCommand
+	printServiceFailure(&out, &hostdOwnCopyRefusal{reason: reason})
+	if want := "\n✗ Could not start the background service: " + reason + "\n"; out.String() != want {
+		t.Errorf("printed %q, want %q", out.String(), want)
+	}
 }

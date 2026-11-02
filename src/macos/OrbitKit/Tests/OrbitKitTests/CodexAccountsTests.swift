@@ -16,6 +16,49 @@ final class CodexAccountsTests: XCTestCase {
     }
     private var both: [RunnerEngineAccount] { [account("default"), account(pro)] }
 
+    /// Mirrors shared `planUsage.spec.ts`: an account takes no more than its share of the active sessions.
+    func testANewSessionGoesPastAnAccountThatHasItsShare() {
+        let third = "3fa91c2e"
+        func spread(_ def: Int?, _ two: Int?, _ three: Int?) -> [RunnerEngineAccount] {
+            [RunnerEngineAccount(id: "default", auth: "yes", activeSessions: def),
+             RunnerEngineAccount(id: pro, auth: "yes", activeSessions: two),
+             RunnerEngineAccount(id: third, auth: "yes", activeSessions: three)]
+        }
+        func quota(_ def: Double, _ two: Double, _ three: Double) -> PlanUsageSnapshot {
+            PlanUsageSnapshot(provider: "codex", primary: win(def, 300, earlier), accounts: [
+                pro: PlanUsageSnapshot(provider: "codex", primary: win(two, 300, later)),
+                third: PlanUsageSnapshot(provider: "codex", primary: win(three, 300, "2026-08-10T00:00:00Z")),
+            ])
+        }
+        let room = quota(10, 20, 30)
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(2, 0, 0), usage: room, now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(3, 0, 0), usage: room, now: now), pro, "three stay, the next spreads")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(4, 4, 3), usage: room, now: now), third, "11 and this one make four each")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(3, 4, 4), usage: room, now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(4, 4, 4), usage: room, now: now), "default", "every one full: the order stands")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(0, 5, 5), usage: quota(85, 20, 30), now: now), pro,
+                       "a nearly spent account is no home for a session, its share or not")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(1, 6, 6), usage: quota(100, 20, 30), now: now), pro, "never a spent one")
+        XCTAssertEqual(CodexAccounts.toStartOn(spread(nil, nil, nil), usage: room, now: now), "default", "nothing counted, nothing held back")
+    }
+
+    func testAnAccountOutForDaysHasNoPlaceInTheSplit() {
+        let third = "3fa91c2e"
+        let accounts = [RunnerEngineAccount(id: "default", auth: "yes", activeSessions: 6),
+                        RunnerEngineAccount(id: pro, auth: "yes", activeSessions: 7),
+                        RunnerEngineAccount(id: third, auth: "yes", activeSessions: 6)]
+        func quota(_ defaultResets: String) -> PlanUsageSnapshot {
+            PlanUsageSnapshot(provider: "codex", primary: win(100, 300, defaultResets), accounts: [
+                pro: PlanUsageSnapshot(provider: "codex", primary: win(20, 300, later)),
+                third: PlanUsageSnapshot(provider: "codex", primary: win(30, 300, "2026-08-10T00:00:00Z")),
+            ])
+        }
+        // Back in two hours, Default keeps its place: 20 over three is seven each, and the first of the
+        // others is full. Out for days it has none: 20 over two is ten each, and the first takes it.
+        XCTAssertEqual(CodexAccounts.toStartOn(accounts, usage: quota("2026-08-03T15:00:00Z"), now: now), third)
+        XCTAssertEqual(CodexAccounts.toStartOn(accounts, usage: quota("2026-08-08T13:00:00Z"), now: now), pro)
+    }
+
     private func win(_ utilization: Double, _ mins: Int, _ resetsAt: String?) -> PlanUsageWindow {
         PlanUsageWindow(utilization: utilization, resetsAt: resetsAt, windowDurationMins: mins)
     }

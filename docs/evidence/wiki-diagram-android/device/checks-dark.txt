@@ -1,0 +1,28 @@
+2026-11-01T13:49:04.202697Z fixture at http://localhost:36621/
+2026-11-01T13:49:04.444127Z signed in to the fixture
+2026-11-01T13:49:04.633053Z PASS the drawer's Wiki row
+2026-11-01T13:49:04.900855Z PASS the wiki home lists the document
+2026-11-01T13:49:05.133241Z PASS the document's page
+2026-11-01T13:49:05.899797Z PASS wiki-doc-block:s1.1 is drawn, its WebView as high as the SVG and across the figure
+2026-11-01T13:49:05.900123Z wiki-doc-block:s1.1 drew {"width":188,"height":521,"left":84,"page":356,"scrollLeft":0,"labels":["in order","in order","live, or on return","live, or on return","Turn stored","Event written","Event stream","Shown in the app"],"text":"in orderlive, or on returnTurn storedEvent writtenEvent streamShown in the app","font":"sans-serif","fill":"rgb(31, 32, 32)","scripts":["https://appassets.androidplatform.net/mermaid/mermaid.min.js"]}
+2026-11-01T13:49:05.900208Z PASS wiki-doc-block:s1.1 shows Turn stored, Event written, Event stream, Shown in the app, in order, live, or on return (missing: )
+2026-11-01T13:49:05.900264Z PASS wiki-doc-block:s1.1 is set in the page's font
+2026-11-01T13:49:05.900320Z PASS wiki-doc-block:s1.1 loaded Mermaid from the app's assets alone
+2026-11-01T13:49:05.900586Z PASS wiki-doc-block:s1.1 is in the dark theme (first node rgb(31, 32, 32))
+2026-11-01T13:49:06.445739Z PASS it fits the column (188 dp in 355.42856 dp)
+2026-11-01T13:49:06.445901Z PASS its page centres it (left 84 of 356 dp)
+2026-11-01T13:49:06.462127Z PASS TalkBack names it Diagram
+2026-11-01T13:49:06.495718Z PASS it is wholly on screen
+2026-11-01T13:49:07.779177Z PASS wiki-doc-block:s2.1 is drawn, its WebView as high as the SVG and across the figure
+2026-11-01T13:49:07.779462Z wiki-doc-block:s2.1 drew {"width":1111,"height":372,"left":0,"page":356,"scrollLeft":0,"labels":["The server","The server","claims","claims","reads","reads","Plan confirmed","docs_build job","wiki-worker","Repository","Model queue","System model"],"text":"The serverclaimsreadsPlan confirmeddocs_build jobwiki-workerRepositoryModel queueSystem model","font":"sans-serif","fill":"rgb(31, 32, 32)","scripts":["https://appassets.androidplatform.net/mermaid/mermaid.min.js"]}
+2026-11-01T13:49:07.779542Z PASS wiki-doc-block:s2.1 shows Plan confirmed, docs_build job, wiki-worker, Repository, Model queue, The server, System model, claims, reads (missing: )
+2026-11-01T13:49:07.779602Z PASS wiki-doc-block:s2.1 is set in the page's font
+2026-11-01T13:49:07.779656Z PASS wiki-doc-block:s2.1 loaded Mermaid from the app's assets alone
+2026-11-01T13:49:07.779874Z PASS wiki-doc-block:s2.1 is in the dark theme (first node rgb(31, 32, 32))
+2026-11-01T13:49:08.278985Z PASS it is wider than the column (1111 dp against 355.42856 dp)
+2026-11-01T13:49:08.279189Z PASS it starts at its left edge
+2026-11-01T13:49:08.312169Z PASS it is wholly on screen
+2026-11-01T13:49:10.780962Z PASS a drag scrolls it sideways, well past the touch slop, and it comes to rest
+2026-11-01T13:49:10.781122Z scrolled sideways by 520 dp of 755
+2026-11-01T13:49:13.545506Z PASS a drag down over it scrolls the document (1211.0 from 823.0)
+2026-11-01T13:49:13.546087Z PASS the app fetched nothing for it

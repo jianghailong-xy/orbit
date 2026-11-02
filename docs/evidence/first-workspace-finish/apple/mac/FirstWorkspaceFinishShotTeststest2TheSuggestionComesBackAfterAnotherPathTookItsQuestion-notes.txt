@@ -1,0 +1,2 @@
+mac-re-ask: 1 window(s)
+re-ask-other-button: in view after 0 move(s) at (689.0, 331.0, 293.0, 32.0)

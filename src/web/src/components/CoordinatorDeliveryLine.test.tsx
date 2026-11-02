@@ -13,12 +13,14 @@ import {
 import {
   COORDINATOR_DELIVERY_ITS_TASK,
   COORDINATOR_DELIVERY_SENTENCES,
+  COORDINATOR_DELIVERY_SENT_TO_SESSION,
+  COORDINATOR_DELIVERY_SESSION_TOLD,
   COORDINATOR_DELIVERY_STICKY_LABEL,
   coordinatorDeliverySentence,
   parseCoordinatorDelivery,
 } from '../lib/coordinatorDelivery';
 import { encodeId } from '../lib/idCodec';
-import { sentToCoordinatorLine } from './EvidenceDecisionCard';
+import { decisionReceiptTime, sentToCoordinatorLine } from './EvidenceDecisionCard';
 import { OWNER_ANSWER_TOLD } from './OwnerAnswerLine';
 import { Transcript, UndeliveredCtx, type RunEvent } from './Transcript';
 
@@ -64,6 +66,7 @@ const CARD: CoordinatorDeliveryCard = {
   revision: 1,
   count: null,
   deliveredAt: '2026-10-31T11:30:00.000Z',
+  toCoordinator: true,
 };
 
 /** A `user` event as ingest stores one: the echo, and the card when there was one. */
@@ -240,6 +243,55 @@ describe('a fact told to this session', () => {
       expect(container.querySelector('.chat-undelivered-retry'), delivery).toBeNull();
     }
     expect(putBack).not.toHaveBeenCalled();
+  });
+
+  describe('the answer to a criteria proposal', () => {
+    /** What `criteriaDecisionReplyMessage` writes to the session that filed the proposal. */
+    const REPLY = 'From Orbit · criteria decision\n\nYour criteria proposal 34pX0YF3mJmoTBvNxc8Kt on project “Runner link v1” '
+      + '(34nmPkyh9pd8tVm1fCv2Q) was refused by the account owner at 2026-10-31T11:30:00.000Z. Nothing was applied: '
+      + 'criterion 2 stays at revision 1.';
+    const REJECTED: CoordinatorDeliveryCard = { ...CARD, kind: 'CRITERIA_REJECTED', task: null, revision: null };
+    const replied = (card: unknown): RunEvent => ({ ...told(card), payload: { text: REPLY, coordinatorDelivery: card } });
+
+    it('told to a task’s run, says it was sent to this session — and opens to what this session was told', async () => {
+      const run = { ...REJECTED, toCoordinator: false };
+      await mount([replied(run)]);
+
+      expect(said()).toBe('Criteria proposal rejected');
+      const sent = container.querySelector('.coordinator-delivery-sent')?.textContent;
+      expect(sent).toBe(`${COORDINATOR_DELIVERY_SENT_TO_SESSION} · ${decisionReceiptTime(run.deliveredAt)}`);
+      expect(COORDINATOR_DELIVERY_SENT_TO_SESSION).toBe('Sent to this session');
+      expect(container.textContent).not.toContain('Sent to the coordinator');
+
+      await act(async () => line()!.click());
+      expect(container.querySelector('.coordinator-delivery .owner-answer-told-head')?.textContent).toBe(COORDINATOR_DELIVERY_SESSION_TOLD);
+      expect(COORDINATOR_DELIVERY_SESSION_TOLD).toBe('What this session was told');
+      expect(container.textContent).not.toContain('What the coordinator was told');
+      expect(container.querySelector('.coordinator-delivery .owner-answer-told pre')?.textContent).toBe(REPLY);
+      // The sticky bar, the words and the rest of the line are what they were.
+      const anchor = container.querySelector<HTMLElement>('[data-sticky-label]');
+      expect(anchor?.getAttribute('data-sticky-label')).toBe('From Orbit');
+      expect(anchor?.getAttribute('data-sticky-text')).toBe('Criteria proposal rejected');
+      expect(container.querySelector('.chat-user'), 'drawn as the owner’s bubble').toBeNull();
+    });
+
+    it('told to the project’s coordinator, says what it said before', async () => {
+      await mount([replied(REJECTED)]);
+      expect(container.querySelector('.coordinator-delivery-sent')?.textContent).toBe(sentToCoordinatorLine(REJECTED.deliveredAt));
+      await act(async () => line()!.click());
+      expect(container.querySelector('.coordinator-delivery .owner-answer-told-head')?.textContent).toBe(OWNER_ANSWER_TOLD);
+      expect(container.textContent).not.toContain(COORDINATOR_DELIVERY_SENT_TO_SESSION);
+      expect(container.textContent).not.toContain(COORDINATOR_DELIVERY_SESSION_TOLD);
+    });
+
+    it('reads a card stored before the field as the coordinator’s, and only the server’s false as not', () => {
+      const { toCoordinator: _, ...stored } = REJECTED;
+      expect(parseCoordinatorDelivery({ coordinatorDelivery: stored })).toEqual(REJECTED);
+      expect(parseCoordinatorDelivery({ coordinatorDelivery: { ...REJECTED, toCoordinator: false } })?.toCoordinator).toBe(false);
+      for (const odd of ['false', 0, null, 'no']) {
+        expect(parseCoordinatorDelivery({ coordinatorDelivery: { ...REJECTED, toCoordinator: odd } })?.toCoordinator, String(odd)).toBe(true);
+      }
+    });
   });
 
   // The negative control: the same conversation and the same words, with nothing recorded beside them.

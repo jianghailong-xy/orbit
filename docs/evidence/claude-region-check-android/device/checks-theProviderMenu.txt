@@ -1,0 +1,7 @@
+2026-11-01T02:14:56.237376Z fixture at http://localhost:42397/
+2026-11-01T02:14:56.566920Z signed in to the fixture
+2026-11-01T02:14:57.898097Z PASS the held session's card
+2026-11-01T02:14:58.538704Z PASS the Provider part
+2026-11-01T02:14:58.548972Z PASS Work too
+2026-11-01T02:14:58.567624Z PASS no fix named
+2026-11-01T02:14:58.585077Z PASS no Claude accounts under the sign-in

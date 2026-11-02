@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage, planUsageRowSpent } from '../lib/planUsage';
 import {
   CodexResetConfirm,
   CodexResetCreditCard,
@@ -23,14 +23,17 @@ export interface PlanUsageAccount {
 }
 
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
-// The pill shows the binding/primary window; hover or press reveals every reported window, the account
-// they belong to and, for a session on the runner's own Codex sign-in, its earned reset credits.
+// The pill shows the binding/primary window of what `model` spends; hover or press reveals every
+// reported window, the account they belong to and, for a session on the runner's own Codex sign-in,
+// its earned reset credits.
 export function PlanUsageIndicator({
   usage,
+  model,
   reset,
   account,
 }: {
   usage: PlanUsageSnapshot;
+  model?: string;
   reset?: CodexResetContext;
   account?: PlanUsageAccount;
 }) {
@@ -39,8 +42,9 @@ export function PlanUsageIndicator({
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const credit = useCodexResetCredit(reset, open, () => panel.current);
-  // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first.
-  const primary = bindingPlanUsageRow(rows);
+  // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first —
+  // of the windows the model spends: an Antigravity Gemini Flash run is not stopped by Argon's bucket.
+  const primary = bindingPlanUsageRow(currentPlanUsageRows(modelPlanUsage(usage, model)));
   if (!primary) return null;
 
   const close = () => {
@@ -82,7 +86,9 @@ export function PlanUsageIndicator({
           {account.note && <div className="cu-reset">{account.note}</div>}
         </div>
       )}
-      {rows.map(({ key, label, groupLabel, window, percent, nearLimit, remaining }) => {
+      {rows.map((row) => {
+        const { key, label, groupLabel, window, percent, nearLimit, remaining } = row;
+        const spent = planUsageRowSpent(row);
         return (
           <div className="cu-row" key={key}>
             {groupLabel && <div className="cu-label">{groupLabel}</div>}
@@ -91,8 +97,8 @@ export function PlanUsageIndicator({
               {/* An Antigravity bucket counts what is left, as agy does: said so, or 100% reads spent. */}
               <span className="cu-pct">{percent}%{remaining ? ' remaining' : ''}</span>
             </div>
-            <div className={`runner-util ${nearLimit ? 'full' : ''}`}>
-              <span className="runner-util-fill" style={{ width: `${percent}%` }} />
+            <div className={`runner-util ${spent ? 'spent' : nearLimit ? 'full' : ''}`}>
+              <span className="runner-util-fill" style={{ width: `${spent ? 100 : percent}%` }} />
             </div>
             {window.resetsAt && (
               <div className="cu-reset">Resets {fmtReset(window.resetsAt)}</div>
@@ -126,11 +132,14 @@ export function PlanUsageIndicator({
           <button
             ref={trigger}
             type="button"
-            className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
+            className={`composer-pill composer-usage ${planUsageRowSpent(primary) ? 'spent' : primary.nearLimit ? 'full' : ''}`}
             aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
           >
             <span className="composer-usage-bar">
-              <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
+              <span
+                className="composer-usage-fill"
+                style={{ width: `${planUsageRowSpent(primary) ? 100 : primary.percent}%` }}
+              />
             </span>
             <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
             {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}

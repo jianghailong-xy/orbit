@@ -1,0 +1,234 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  /* 06 自己的东西一律 h- 开头（kit.css 里有 .tx .rcard .cap 等短类名） */
+  .h-grid2 { display: grid; grid-template-columns: repeat(2, 880px); gap: 26px 40px; align-items: start; }
+  .h-grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 26px 40px; align-items: start; }
+  .h-cap { margin-top: 12px; font-size: 14px; color: #4f4f58; line-height: 1.62; }
+  .h-cap b { color: #16161a; }
+  .h-cap ul { margin: 4px 0 0; padding-left: 18px; }
+  .h-cap li { margin: 4px 0; }
+
+  /* ── Mac 会话窗格（同 05：窗格 #202023、正文 #CACED4、次要色 rgb(140,144,152)） ── */
+  .h-mac { width: 880px; position: relative; background: #202023; border-radius: 12px; overflow: hidden;
+           box-shadow: 0 0 0 1px rgba(0,0,0,.28), 0 18px 40px rgba(0,0,0,.14); font-family: "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .h-mcol { padding: 18px 16px 0; }
+  .h-mfade { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: linear-gradient(#202023, rgba(32,32,35,0)); z-index: 3; }
+  .h-mtx { font: 14px/22px "Inter", "Noto Sans SC", sans-serif; color: #CACED4; }
+  .h-mtx p { margin: 0 0 10px; }
+  .h-mtx ul { margin: 0 0 10px; padding: 0; list-style: none; }
+  .h-mtx li { position: relative; padding-left: 18px; margin: 0 0 4px; }
+  .h-mtx li::before { content: "•"; position: absolute; left: 4px; top: 0; }
+  .h-mtx b { color: #ECEEF2; font-weight: 650; }
+  .h-mtx .last { margin-bottom: 0; }
+  .h-mnote { margin-top: 14px; display: flex; align-items: flex-start; gap: 6px; }
+  .h-mnote .t { flex: 1; min-width: 0; font: 13px/19px "Inter", "Noto Sans SC"; color: rgb(140,144,152); }
+  .h-mnote .lab { white-space: nowrap; margin-right: 7px; }
+  .h-mnote .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .h-mnote .lab b { font-weight: 600; }
+  .h-mnote .acts { flex: none; display: flex; gap: 2px; margin-right: -4px; visibility: hidden; }
+  .h-mnote.h-hover .acts { visibility: visible; }
+  .h-mnote .acts span { width: 22px; height: 19px; display: flex; align-items: center; justify-content: center; border-radius: 5px; position: relative; }
+  .h-mnote .acts span.on { background: rgba(255,255,255,.1); }
+  .h-ghost { margin-top: 14px; height: 19px; border: 1.5px dashed rgba(140,144,152,.45); border-radius: 6px; display: flex; align-items: center;
+             padding-left: 10px; font: 12px "Inter", "Noto Sans SC"; color: rgba(140,144,152,.8); }
+  .h-mcomp { margin: 14px 16px 16px; height: 78px; border-radius: 12px; background: #2A2A2E; border: 1px solid rgba(255,255,255,.07);
+             box-shadow: 0 1.5px 4px rgba(0,0,0,.3); position: relative; }
+  .h-mcomp .p1 { position: absolute; left: 12px; top: 10px; font: 14px "Inter"; color: rgba(235,235,245,.3); }
+  .h-mcomp .bt { position: absolute; left: 10px; right: 8px; bottom: 8px; height: 26px; display: flex; align-items: center; gap: 9px; font: 13px "Inter"; color: #E6E8EC; }
+  .h-mcomp .bt .a { color: rgb(140,144,152); }
+  .h-mcomp .bt .m { margin-left: auto; font-weight: 650; }
+  .h-mcomp .bt .e { color: rgb(140,144,152); }
+  .h-mcomp .bt .s { width: 24px; height: 24px; border-radius: 50%; background: rgba(142,142,147,.32); display: flex; align-items: center; justify-content: center; }
+  .h-cursor { position: absolute; z-index: 5; pointer-events: none; }
+  .h-tip { position: absolute; z-index: 6; padding: 3px 8px; border-radius: 6px; background: #3a3a3e; color: #e6e8ec; font: 12px "Inter";
+           box-shadow: 0 4px 12px rgba(0,0,0,.35); white-space: nowrap; }
+
+  /* ── iPhone：只画下半截 ── */
+  .ph.h-bot { border-radius: 0 0 56px 56px; }
+  .h-pcol { position: absolute; left: 0; right: 0; top: 0; height: 822px; padding: 0 16px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .h-pcol .tx { position: static; }
+  .h-pfade { position: absolute; left: 0; right: 0; height: 44px; z-index: 3; background: linear-gradient(#000, rgba(0,0,0,0)); }
+  .h-pnote { margin-top: 18px; display: flex; align-items: flex-start; gap: 4px; }
+  .h-pnote .t { flex: 1; min-width: 0; font: 15px/21px "Inter", "Noto Sans SC"; color: var(--l2); letter-spacing: -.003em; }
+  .h-pnote .lab { white-space: nowrap; margin-right: 8px; }
+  .h-pnote .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .h-pnote .lab b { font-weight: 600; }
+  .h-pnote .acts { flex: none; display: flex; gap: 0; margin-right: -8px; }
+  .h-pnote .acts span { width: 30px; height: 21px; display: flex; align-items: center; justify-content: center; }
+  .h-pghost { margin-top: 18px; height: 21px; border: 1.5px dashed rgba(141,141,147,.45); border-radius: 7px; display: flex; align-items: center;
+              padding-left: 10px; font: 13px "Inter", "Noto Sans SC"; color: rgba(141,141,147,.85); }
+
+  /* 列表行（照 kit 的 rowD 画一行，说明「列表不受影响」） */
+  .h-row { margin-top: 10px; }
+
+  table.h-tok { border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; width: 1800px; table-layout: fixed; }
+  table.h-tok th, table.h-tok td { padding: 8px 14px; text-align: left; border-bottom: 1px solid #ececf0; vertical-align: top; line-height: 1.55; }
+  table.h-tok th { background: #f4f4f7; font-weight: 650; color: #16161a; }
+  table.h-tok td { color: #3a3a40; }
+  table.h-tok td:first-child { font-weight: 650; color: #16161a; }
+  .h-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 1800px; }
+  .h-box { background: #fff; border-radius: 12px; padding: 16px 20px; font-size: 14px; color: #3a3a40; line-height: 1.62; }
+  .h-box h3 { font-size: 16px; margin: 0 0 8px; color: #16161a; }
+  .h-box ul { margin: 6px 0 0; padding-left: 18px; }
+  .h-box li { margin: 5px 0; }
+  .h-box b { color: #16161a; }
+  .h-rec { color: #14428f; font-weight: 650; }
+  .h-land { width: 1800px; font-size: 14px; color: #3a3a40; line-height: 1.65; }
+  .h-land ol { margin: 0; padding-left: 20px; }
+  .h-land li { margin: 6px 0; }
+  .h-land b { color: #16161a; }
+</style>
+<body>
+<h1>Recap 尾注 · 加 ×（06，待你定）</h1>
+<p class="lede">你 11-01 说「recap 应该支持关闭」，选的是<b>会话里加 ×</b>：点了以后，这个会话里<b>这一条</b> recap 不再显示，<b>直到服务端写出新的一条</b>才回来；<b>列表那一行不变</b>；<b>按设备记住</b>（Mac 上关了，iPhone 上还在）。
+下面照 05 上线后的样子（A 尾注，Mac 上 ↻ 悬停才出现）画四个状态：今天、鼠标移上去、点 × 之后、新的 recap 写出后。示例文字是样例，不是你会话里的原文。灰字 = 上线文案（英文），说明用中文。</p>
+
+<section id="part-1">
+<h2>① Mac · 会话窗格底部</h2>
+<div class="h-grid2">
+  <div><span class="tag now">今天（05 A 已上线）</span><div id="m1"></div><div class="h-cap" id="c-m1"></div></div>
+  <div><span class="tag rec">建议 · 鼠标移上去：↻ 旁边多一个 ×</span><div id="m2"></div><div class="h-cap" id="c-m2"></div></div>
+  <div><span class="tag rec">点 × 之后</span><div id="m3"></div><div class="h-cap" id="c-m3"></div></div>
+  <div><span class="tag rec">服务端写出新的一条之后</span><div id="m4"></div><div class="h-cap" id="c-m4"></div></div>
+</div>
+</section>
+
+<section id="part-2">
+<h2>② iPhone · 同一处（没有悬停：↻ 和 × 一直在）</h2>
+<div class="h-grid4">
+  <div><span class="tag now">今天</span><div id="p1"></div><div class="h-cap" id="c-p1"></div></div>
+  <div><span class="tag rec">建议</span><div id="p2"></div><div class="h-cap" id="c-p2"></div></div>
+  <div><span class="tag rec">点 × 之后</span><div id="p3"></div><div class="h-cap" id="c-p3"></div></div>
+  <div><span class="tag rec">新的一条之后</span><div id="p4"></div><div class="h-cap" id="c-p4"></div></div>
+</div>
+</section>
+
+<section id="part-3">
+<h2>③ 规格和规则</h2>
+<div id="spec"></div>
+<h2>④ 待定 · 要你拍板</h2>
+<div class="h-decide" id="decide"></div>
+<h2>⑤ 落地（按代价排）</h2>
+<div class="h-land" id="land"></div>
+</section>
+
+<script>
+// ── 样例 ────────────────────────────────────────────────
+const H_WHEN = '2:07 AM', H_TEXT = RECAP.disk;
+const H_WHEN2 = '9:12 AM', H_TEXT2 = '120个已完成任务的worktree已删，释放41G；剩下44个还在用，清单已发你确认。';
+const TAIL = `
+<ul><li>164 个 worktree 里有 120 个对应的任务早已完成，这一批还没动。</li></ul>
+<p class="last"><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p>`;
+const TAIL2 = `
+<ul><li>删掉 120 个 worktree，释放 41G；剩下 44 个都还有会话在用。</li></ul>
+<p class="last"><b>下一步：</b>这 44 个的清单在上面，哪些可以一起清，你定。</p>`;
+const M2 = 'rgb(140,144,152)';
+const XG = (size, color, sw = 2.2) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>`;
+const lab = (color, size, when) => `<span class="lab">${ic('align', size, color, 2.1)}<b>Recap</b> · ${when}</span>`;
+const CURSOR = `<svg class="h-cursor" width="17" height="24" viewBox="0 0 17 24"><path d="M1.5 1.5v18.2l4.6-4.4 3 6.9 3.1-1.3-3-6.8h6.3z" fill="#000" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+
+// Mac
+const mNote = ({ hover = false, on = '', when = H_WHEN, text = H_TEXT } = {}) => `<div class="h-mnote${hover ? ' h-hover' : ''}"><div class="t">${lab(M2, 13, when)}${text}</div>
+  <div class="acts"><span class="rf${on === 'rf' ? ' on' : ''}">${ic('refresh', 14, hover ? '#CACED4' : M2, 2.2)}</span><span class="x${on === 'x' ? ' on' : ''}">${XG(14, on === 'x' ? '#ECEEF2' : '#CACED4')}</span></div></div>`;
+const mComposer = () => `<div class="h-mcomp"><div class="p1">Message…</div><div class="bt">${ic('plus', 17, M2, 2)}<span class="a">Auto</span><span class="m">Opus 5.5</span><span class="e">Max</span><span class="s">${ic('up', 14, 'rgba(0,0,0,.75)', 2.6)}</span></div></div>`;
+const mPane = (tail, inner) => `<div class="h-mac"><div class="h-mfade"></div><div class="h-mcol"><div class="h-mtx">${tail}</div>${inner}</div>${mComposer()}</div>`;
+document.getElementById('m1').innerHTML = mPane(TAIL, mNote());
+document.getElementById('m2').innerHTML = mPane(TAIL, mNote({ hover: true, on: 'x' }) + CURSOR + '<div class="h-tip">Hide recap</div>');
+document.getElementById('m3').innerHTML = mPane(TAIL, '<div class="h-ghost">（这里原来是那条 recap：关掉了，下次进来也不回来）</div>');
+document.getElementById('m4').innerHTML = mPane(TAIL2, mNote({ when: H_WHEN2, text: H_TEXT2 }));
+
+// iPhone（kit 的手机、字和输入框；只画 y 640 → 956）
+const OFF = 640;
+const pNote = ({ when = H_WHEN, text = H_TEXT, withX = true } = {}) => `<div class="h-pnote"><div class="t">${lab('var(--l2)', 14, when)}${text}</div>
+  <div class="acts"><span>${ic('refresh', 17, 'var(--l2)', 2.1)}</span>${withX ? `<span class="x">${XG(17, 'var(--l2)', 2.1)}</span>` : ''}</div></div>`;
+const PTAIL = `<p class="last"><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p>`;
+const PTAIL2 = `<p class="last"><b>下一步：</b>这 44 个的清单在上面，哪些可以一起清，你定。</p>`;
+const pPhone = (tail, inner) => phone('dark', `<div class="h-pcol"><div class="tx">${tail}</div>${inner}</div><div class="h-pfade" style="top:${OFF}px"></div>${composer()}`, { h: 956 - OFF, off: OFF, cls: 'h-bot' });
+document.getElementById('p1').innerHTML = pPhone(PTAIL, pNote({ withX: false }));
+document.getElementById('p2').innerHTML = pPhone(PTAIL, pNote());
+document.getElementById('p3').innerHTML = pPhone(PTAIL, '<div class="h-pghost">（关掉了）</div>');
+document.getElementById('p4').innerHTML = pPhone(PTAIL2, pNote({ when: H_WHEN2, text: H_TEXT2 }));
+
+// ── 标注（排版之后再量）────────────────────────────────────
+function boxIn(frame, el) {
+  const f = frame.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: r.left - f.left, y: r.top - f.top, w: r.width, h: r.height };
+}
+function markIn(frame, el, n, { pad = 3, at = 'tl', cls = 'blue' } = {}) {
+  const inner = frame.classList.contains('ph') ? frame.firstElementChild : frame;
+  const r = boxIn(inner, el);
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const pos = { tl: [x0 - 9, y0 - 9], tr: [x1 - 11, y0 - 9], bl: [x0 - 9, y1 - 11], br: [x1 - 11, y1 - 11] }[at];
+  inner.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+}
+window.drawMarks = () => {
+  if (window.hDrawn) return;
+  window.hDrawn = true;
+  // ② 光标落在 ×，提示条在它上面
+  const m2 = document.querySelector('#m2 .h-mac'), x = m2.querySelector('.acts .x');
+  const xr = boxIn(m2, x);
+  const cur = m2.querySelector('.h-cursor'), tip = m2.querySelector('.h-tip');
+  cur.style.left = `${xr.x + xr.w - 6}px`; cur.style.top = `${xr.y + xr.h - 5}px`;
+  tip.style.left = `${xr.x + xr.w - tip.offsetWidth + 2}px`; tip.style.top = `${xr.y - 30}px`;
+  markIn(m2, m2.querySelector('.acts'), 1, { pad: 4, at: 'bl' });
+  const m3 = document.querySelector('#m3 .h-mac');
+  markIn(m3, m3.querySelector('.h-ghost'), 2, { pad: 3, at: 'tl' });
+  const m4 = document.querySelector('#m4 .h-mac');
+  markIn(m4, m4.querySelector('.h-mnote .lab'), 3, { pad: 2, at: 'tl' });
+  const p2 = document.querySelector('#p2 .ph');
+  markIn(p2, p2.querySelector('.h-pnote .acts'), 4, { pad: 3, at: 'tl' });
+};
+
+document.getElementById('c-m1').innerHTML = `静止时这一行只剩字；↻ 悬停才出现（10-27 定的）。现在没有办法让它走：只能等下一轮开始，或者 Settings 里把 Session recaps 整个关掉（列表那一行也一起没了）。`;
+document.getElementById('c-m2').innerHTML = `<ul>
+<li><span class="n blue">1</span>鼠标移上去，<b>↻ 旁边多一个 ×</b>，同一行、同样的灰，同样只在悬停（或键盘聚焦）时出现；静止时和今天一模一样。</li>
+<li>× 的提示和读屏名：<code>Hide recap</code>（新词，只有这一个）。</li></ul>`;
+document.getElementById('c-m3').innerHTML = `<ul>
+<li><span class="n blue">2</span>这一条没了：会话到回复就结束，输入框往上贴（虚线框只是标出原来的位置，实际什么都不画）。</li>
+<li>记在<b>这台设备</b>上：关掉的是「这个会话 + 这一条」。下次打开这个会话也不回来；列表那一行照旧显示这句。</li>
+<li>没有撤回（见 ④ 第 2 条）。</li></ul>`;
+document.getElementById('c-m4').innerHTML = `<ul>
+<li><span class="n blue">3</span>服务端为这个会话写出<b>新的一条</b>（时间变了），它就回来，正文是新写的那句。认的是 recap 的写入时间，不是正文。</li>
+<li>什么时候出现、什么时候让位的老规则都不变：会话静止才有；这次进来开始新一轮就让位，下次进来再出现。</li></ul>`;
+document.getElementById('c-p1').innerHTML = `今天：↻ 一直在（手机没有悬停）。`;
+document.getElementById('c-p2').innerHTML = `<span class="n blue">4</span>↻ 右边多一个 ×，一直在，同样的灰；两个点按区各 44。`;
+document.getElementById('c-p3').innerHTML = `关掉以后，回复下面直接是输入框。只在这台 iPhone 上：Mac 上那条还在。`;
+document.getElementById('c-p4').innerHTML = `新的一条写出后回来。`;
+
+// ── ③ 规格 ─────────────────────────────────────────────────
+document.getElementById('spec').innerHTML = `<table class="h-tok">
+<colgroup><col style="width:170px"><col><col><col><col></colgroup>
+<tr><th></th><th>Mac</th><th>iPhone / iPad</th><th>web</th><th>Android</th></tr>
+<tr><td>× 的样子</td><td><code>xmark</code>，和 ↻ 同色同大（15pt），紧挨在 ↻ 右边；悬停或键盘聚焦才出现</td><td><code>xmark</code>，和 ↻ 同色，一直在；点按区 44</td><td>同 Mac（CloseOutlined）</td><td>同 iPhone（IconButton 48dp）</td></tr>
+<tr><td>点了之后</td><td colspan="4">这一条立刻收起；本设备记下「会话 id → 这条 recap 的写入时间」。同一个会话再出现的 recap 只要写入时间一样就不画；写入时间变了（服务端写了新的一条）就照常画。老服务端发来的 recap 没有时间，就按正文认。</td></tr>
+<tr><td>不受影响</td><td colspan="4">列表那一行的 recap；别的会话的尾注；别的设备；Settings 的 Session recaps 开关（它照旧一次关掉列表和会话页）；↻ 刷新；什么时候出现 / 让位的规则。</td></tr>
+<tr><td>文案</td><td colspan="4">新词只有一个：× 的提示和读屏名 <code>Hide recap</code>。没有 toast，没有新的 Settings 行。</td></tr>
+<tr><td>记在哪</td><td>UserDefaults</td><td>UserDefaults</td><td>localStorage</td><td>SharedPreferences</td></tr>
+</table>`;
+
+// ── ④ 待定 ─────────────────────────────────────────────────
+document.getElementById('decide').innerHTML = `
+<div class="h-box"><h3>1 · × 在 Mac 和 web 上什么时候出现</h3>
+<ul>
+<li><span class="h-rec">和 ↻ 一起，悬停才出现（我建议）</span>：静止时这一行只剩字，和你 10-27 定的「悬停才出现」一致；想关的时候鼠标本来就在它上面。</li>
+<li><b>× 一直在</b>：一眼看得到能关，但这一行尾巴上多一个常驻的灰 ×，又往「挂件」那边走了一点。</li>
+</ul></div>
+<div class="h-box"><h3>2 · 关掉之后要不要能撤回</h3>
+<ul>
+<li><span class="h-rec">不要（我建议）</span>：关掉的只是这一条；同一句在列表那一行还看得到，服务端写出新的一条它就回来。</li>
+<li><b>要</b>：底部弹一条「Recap hidden · Undo」几秒后消失。多一个提示、多两个新词。</li>
+</ul></div>`;
+
+// ── ⑤ 落地 ─────────────────────────────────────────────────
+document.getElementById('land').innerHTML = `<ol>
+<li><b>四端各一处小改动</b>：卡片视图加 ×（web <code>SessionRecapCard</code>，Mac / iOS <code>RecapCardView</code>，Android <code>RecapCardView</code>）；判断「这条要不要画」的地方多认一个「这台设备关掉过的那条」（web <code>WorkspaceView</code> 的 <code>selectedRecap</code>，OrbitKit <code>RecapCard.make</code>，Android <code>RecapCard.make</code>），各自存在本机。</li>
+<li><b>文案</b>：<code>Hide recap</code> 进 web 的 <code>RECAP_CARD_COPY</code>，OrbitKit 和 Android 的 copy parity 测试跟着认。</li>
+<li><b>测试</b>：关掉后不画、换会话不受影响、新的一条回来、老服务端（没有时间）按正文认；web 真实页面截图，Android 单测，OrbitKit 在 Docker 里跑；Mac / iOS 编译照旧要手动触发 <code>client.yml</code>。</li>
+<li>如果 ④ 第 2 条选「要」：再加一个 Undo 提示条（四端），多两个词。</li>
+</ol>`;
+
+document.fonts.ready.then(() => window.drawMarks());
+</script>
+</body></html>

@@ -297,7 +297,9 @@ async function retryAtFor(
   claude?: { claudeAccount: string | null; text: string },
 ): Promise<Date | null | undefined> {
   const tx = transactionDouble<RetryPlanTransaction>({
+    runEvent: { findFirst: async () => null },
     session: {
+      findMany: async () => [],
       findUnique: async () => ({
         provider: claude ? AgentProvider.CLAUDE : AgentProvider.CODEX,
         taskId: null,
@@ -665,7 +667,9 @@ test("a usage limit no other account has room for is armed for the first account
   };
   const claude = async (claudeAccount: string, pinned = false, capabilities = [CLAUDE_ACCOUNT_MOVE_V1]) => {
     const tx = transactionDouble<RetryPlanTransaction>({
+      runEvent: { findFirst: async () => null },
       session: {
+        findMany: async () => [],
         findUnique: async () => ({
           ownerId: 'owner-1',
           provider: AgentProvider.CLAUDE,
@@ -697,6 +701,7 @@ test("a usage limit no other account has room for is armed for the first account
   const codexSpent: PlanUsage = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(100) } } };
   const codex = async (pinned: boolean) => {
     const tx = transactionDouble<UsageLimitTransaction>({
+      session: { findMany: async () => [] },
       workspace: { findUnique: async () => null },
       runner: { findUnique: async () => runner(codexSpent, [CODEX_ACCOUNT_MOVE_V1]) },
     });
@@ -751,7 +756,9 @@ test("a Claude session its 5-hour limit stopped moves to an account with room, i
     "You've hit your 5-hour limit · resets 1:30pm (America/Los_Angeles)",
   ]) {
     const tx = transactionDouble<RetryPlanTransaction>({
+      runEvent: { findFirst: async () => null },
       session: {
+        findMany: async () => [],
         findUnique: async () => ({
           ownerId: 'owner-1',
           provider: AgentProvider.CLAUDE,
@@ -857,7 +864,9 @@ test('a Claude session whose sign-in its runtime refused moves to a signed-in ac
   const refused = 'Failed to authenticate: OAuth session expired and could not be refreshed';
   const plan = async (pinned: boolean, engines: RunnerEngineHealth[] = ENGINES, capabilities = [CLAUDE_ACCOUNT_MOVE_V1]) => {
     const tx = transactionDouble<RetryPlanTransaction>({
+      runEvent: { findFirst: async () => null },
       session: {
+        findMany: async () => [],
         findUnique: async () => ({
           ownerId: 'owner-1',
           provider: AgentProvider.CLAUDE,

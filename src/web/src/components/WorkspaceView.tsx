@@ -124,6 +124,7 @@ import {
   projectDetailsQuery,
   projectSessionsQuery,
   PROJECT_SESSION_REFRESH_MS,
+  runnersQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectIntegrationQuery,
@@ -370,7 +371,7 @@ import { ProjectMergeStrip } from './ProjectMergeStrip';
 import { isMergeJob } from '../lib/projectMerge';
 import { LANDING_PAGE_COPY, isLandingSessionDetail } from '../lib/landingSession';
 import { Glyph, landingCard } from './ProjectPanoramaHeader';
-import { SessionRecapCard } from './SessionRecapCard';
+import { SessionRecapCard, readHiddenRecap, recapHideKey, rememberHiddenRecap } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
@@ -481,14 +482,22 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { failureFollowsAnsweredMessage, lastTypedUserMessage } from '../lib/deliveredMessage';
-import { firstEngineOn, machineDraftPath, machineName, newWorkspaceOf } from '../lib/machineSetup';
+import {
+  firstEngineOn,
+  isConnecting,
+  machineDraftPath,
+  machineName,
+  newWorkspaceOf,
+  SETUP_CONNECTING_POLL_MS,
+  SETUP_POLL_MS,
+} from '../lib/machineSetup';
 import {
   composerPlaceholderFor,
   HELD_ALREADY_WAITING,
   HELD_ALREADY_WAITING_DETAIL,
 } from '../lib/machineSetupCopy';
 import { useMachineSetup, type HeldMessage } from '../lib/useMachineSetup';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
 import { setSessionTags } from '../lib/sessionTags';
@@ -3250,11 +3259,23 @@ export function WorkspaceView({
   useEffect(() => {
     if (selectedId && !selectedRests) setRecapAsideFor(selectedId);
   }, [selectedId, selectedRests]);
+  // A recap this device hid with the card's × stays hidden in that conversation until the server
+  // writes a newer one (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide); the list
+  // row keeps it. Read from storage as the session opens; a hide in this view is held here too.
+  const storedHiddenRecap = useMemo(() => (selectedId ? readHiddenRecap(selectedId) : null), [selectedId]);
+  const [hiddenRecaps, setHiddenRecaps] = useState<Record<string, string>>({});
+  const selectedRecapText = typeof selectedSession?.recapText === 'string' ? selectedSession.recapText.trim() : '';
+  const selectedRecapKey = recapHideKey(selectedSession?.recapAt, selectedRecapText);
   const selectedRecap =
     selectedSession && recapsEnabled && !selectedTrashed && selectedRests && recapAsideFor !== selectedId
-      && typeof selectedSession.recapText === 'string'
-      ? selectedSession.recapText.trim()
+      && (selectedId ? hiddenRecaps[selectedId] ?? storedHiddenRecap : null) !== selectedRecapKey
+      ? selectedRecapText
       : '';
+  const hideSelectedRecap = () => {
+    if (!selectedId) return;
+    rememberHiddenRecap(selectedId, selectedRecapKey);
+    setHiddenRecaps((hidden) => ({ ...hidden, [selectedId]: selectedRecapKey }));
+  };
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
@@ -3691,6 +3712,17 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  // While the card is up its machine is read every few seconds, and more often while it is still connecting:
+  // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
+  const machineConnecting = bareMachine && isConnecting(runner);
+  useQuery({
+    ...runnersQuery(),
+    enabled: bareMachine,
+    refetchInterval: machineConnecting ? SETUP_CONNECTING_POLL_MS : SETUP_POLL_MS,
+  });
+  // A machine still connecting takes no work, but a message sent on its setup page only waits under the card
+  // (board rule 6), as both steps do: the composer stays open for it. An offline one says so (board 02).
+  const composerTakesWork = runnerTakesWork || machineConnecting;
   const lockedWorkspace = useMemo(
     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
     [workspacesForRunner, lockedWorkspaceId],
@@ -7443,7 +7475,9 @@ export function WorkspaceView({
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? bindingPlanUsageRow(currentPlanUsageRows(shownPlanUsage)) : undefined;
+    const planRow = shownPlanUsage
+      ? bindingPlanUsageRow(currentPlanUsageRows(modelPlanUsage(shownPlanUsage, shownModel)))
+      : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,
@@ -7740,7 +7774,7 @@ export function WorkspaceView({
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      runnerTakesWork &&
+      composerTakesWork &&
       !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
@@ -10148,7 +10182,7 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedDraftBlocked || !runnerTakesWork
+        : managedDraftBlocked || !composerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -11326,6 +11360,7 @@ export function WorkspaceView({
                   sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
+                  onHide={hideSelectedRecap}
                 />
               )}
               {/* The delivered card, in the conversation it was delivered to and scrolling with
@@ -12488,6 +12523,8 @@ export function WorkspaceView({
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
+                // The pill's number is the quota the model the control names spends, not another model's.
+                model={shownModel}
                 // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
                 // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
                 // an email. A draft names the one it would start on.

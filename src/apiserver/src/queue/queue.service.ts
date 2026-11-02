@@ -49,6 +49,7 @@ import {
 } from '../providers/shared-pool';
 import { PoolNotices } from '../providers/pool-notice';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { countedAccountBeforeDispatch } from '../providers/active-sessions';
 import {
   accountBeforeDispatch,
   accountSwitchNotice,
@@ -772,6 +773,7 @@ export class QueueService {
    */
   private async accountsForClaim(session: {
     id: string;
+    assignedRunnerId: string | null;
     provider: string | null;
     providerBuiltin: boolean;
     codexAccount: string | null;
@@ -800,7 +802,9 @@ export class QueueService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
-    const move = accountBeforeDispatch(
+    const move = await countedAccountBeforeDispatch(
+      this.prisma,
+      session.assignedRunnerId!,
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
