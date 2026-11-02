@@ -78,6 +78,10 @@ jobs:
         run: npm test -w @orbit/web
       - name: Test upgrade source SHA propagation
         run: npm run test:upgrade-source-sha
+      # The backup sidecar's rsync --delete is what can wipe the only off-host copy of the archive. Real rsync over local
+      # paths, in seconds; it fails, rather than skips, where rsync is not installed.
+      - name: Test what the backup sidecar does to its off-host target
+        run: npm run test:pg-backup-offhost
       - name: Test macOS runner signing
         run: npm run test:macos-runner-signing
 

@@ -228,6 +228,24 @@ export const meQuery = () =>
     queryFn: () => api<Me>('/users/me'),
   });
 
+/** What `GET /attachments/usage` answers: what the account keeps, where most of it is, and each week's arrivals. */
+export interface StorageUsage {
+  totalBytes: number;
+  fileCount: number;
+  /** Set on an instance that limits what one account keeps. */
+  quotaBytes: number | null;
+  projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
+  tasks: { taskId: string; title: string; bytes: number; fileCount: number }[];
+  /** Oldest first, ending with this week; `weekStart` is that week's Monday, YYYY-MM-DD. */
+  weeks: { weekStart: string; bytes: number }[];
+}
+
+export const storageUsageQuery = () =>
+  queryOptions({
+    queryKey: ['attachments', 'usage'] as const,
+    queryFn: () => api<StorageUsage>('/attachments/usage'),
+  });
+
 /** The account's profile photo as a data URL, by the version `me` names — a new photo is a new
  *  key, and nothing is fetched while there is none. */
 export const avatarQuery = (version: string | null | undefined) =>

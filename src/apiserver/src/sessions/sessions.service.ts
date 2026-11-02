@@ -5693,8 +5693,9 @@ export class SessionsService {
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
+    // No expired file: a copy holds the bytes it names, and those are on their way out, or gone.
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId },
+      where: { id: { in: ids }, ownerId, sessionId, expiredAt: null },
       select: { id: true, turnId: true },
     });
     if (found.length !== ids.length) {

@@ -294,7 +294,7 @@ test('readBack reads the bytes a store holds, and finds none it cannot reach', a
   assert.equal(await files.readBack({ sha256, storage: 'local' }), null, 'nothing there yet');
   const temp = path.join(dir, 'temp');
   writeFileSync(temp, bytes);
-  const prisma = { fileBlob: { findUnique: async () => null, upsert: async () => undefined } };
+  const prisma = { fileBlob: { updateMany: async () => ({ count: 0 }), findUnique: async () => null, upsert: async () => undefined } };
   await new FilesService(prisma as never, { dir, storage: 'local' }).store({ path: temp, size: bytes.length, sha256 });
   assert.deepEqual(await files.readBack({ sha256, storage: 'local' }), { sha256, sizeBytes: bytes.length });
   assert.equal(await files.readBack({ sha256, storage: 's3' }), null, 'a store this deployment does not have holds nothing');

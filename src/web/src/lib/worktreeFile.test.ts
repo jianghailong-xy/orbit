@@ -75,4 +75,9 @@ describe('formatFileSize', () => {
     expect(formatFileSize(88_064)).toBe('86 KB');
     expect(formatFileSize(2_256_476)).toBe('2.2 MB');
   });
+
+  it('states a size past a gigabyte in gigabytes', () => {
+    expect(formatFileSize(1024 ** 3)).toBe('1.0 GB');
+    expect(formatFileSize(1024 ** 3 - 1)).toBe('1024.0 MB');
+  });
 });
