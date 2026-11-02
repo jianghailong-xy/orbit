@@ -214,6 +214,33 @@ func hardenConfigStorage() error {
 	return f.Close()
 }
 
+// checkConfigStorage says why a credential could not be saved in machineHome now, creating the directory
+// as saveConfig would. Registering saves only what the control plane has already issued, so a home this
+// account cannot write, a root-owned one from an earlier `sudo` for one, is worth finding out first: found
+// afterwards, it leaves a runner on the server whose token is gone.
+func checkConfigStorage() error {
+	if err := os.MkdirAll(machineHome(), machineHomePerm); err != nil {
+		return err
+	}
+	if err := hardenMachineHomeDir(); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(machineHome(), ".config-check-")
+	if err != nil {
+		return err
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
+	f, err := os.OpenFile(configPath(), os.O_WRONLY, 0)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return f.Close()
+}
+
 func saveConfig(c *RunnerConfig) error {
 	if err := os.MkdirAll(machineHome(), machineHomePerm); err != nil {
 		return err

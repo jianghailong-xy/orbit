@@ -91,7 +91,7 @@ func TestRegisterReceiptNamesTheMachineAndTheNextStep(t *testing.T) {
 	}
 	cfg := &RunnerConfig{Name: name, ServerURL: "https://orbit.example/", RunnerID: registerTestRunnerID}
 	var out bytes.Buffer
-	printRegisterReceipt(&out, cfg, true, false)
+	printRegisterReceipt(&out, cfg, serviceOnline, false)
 	got := out.String()
 	for _, want := range []string{
 		"✓ Setup complete — " + name + " is online.",
@@ -116,7 +116,7 @@ func TestRegisterReceiptNamesTheMachineAndTheNextStep(t *testing.T) {
 func TestRegisterReceiptInTheForeground(t *testing.T) {
 	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example", RunnerID: registerTestRunnerID}
 	var out bytes.Buffer
-	printRegisterReceipt(&out, cfg, false, true)
+	printRegisterReceipt(&out, cfg, registeredOnly, true)
 	got := out.String()
 	for _, want := range []string{
 		"Next     Start a session; Ctrl-C stops the runner.",
@@ -131,7 +131,7 @@ func TestRegisterReceiptInTheForeground(t *testing.T) {
 func TestRegisterReceiptWhenTheServiceWasNotStarted(t *testing.T) {
 	cfg := &RunnerConfig{Name: "devbox", ServerURL: "https://orbit.example", RunnerID: registerTestRunnerID}
 	var out bytes.Buffer
-	printRegisterReceipt(&out, cfg, false, false)
+	printRegisterReceipt(&out, cfg, registeredOnly, false)
 	got := out.String()
 	for _, want := range []string{
 		"✓ Setup complete — devbox is registered.",

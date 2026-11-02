@@ -1,6 +1,7 @@
 // Command stubserver is the control plane scripts/hostd-e2e.sh runs inside its systemd
 // container. It answers the least of the runner API that `orbit register`, `orbit unregister` and
-// a registered `orbit run` need, and serves the /dl release directory hostd's update installs from.
+// a registered `orbit run` need — register waits until /runner/me reports a heartbeat from the
+// service it started — and serves the /dl release directory hostd's update installs from.
 //
 // It models nothing beyond that: every answer is the smallest one the runner accepts, there is
 // never a session to claim, and nothing survives a restart. What it does keep is what the
@@ -123,6 +124,7 @@ func (s *stub) routes() http.Handler {
 	mux.HandleFunc("POST /api/runner/device/start", s.deviceStart)
 	mux.HandleFunc("POST /api/runner/device/poll", s.devicePoll)
 	mux.HandleFunc("POST /api/runner/heartbeat", s.authed(s.heartbeat))
+	mux.HandleFunc("GET /api/runner/me", s.authed(s.me))
 	mux.HandleFunc("GET /api/runner/sessions/claim", s.authed(s.claim))
 	mux.HandleFunc("GET /api/runner/sessions/reclaim", s.authed(s.reclaim))
 	mux.HandleFunc("POST /api/runner/deregister", s.authed(s.deregister))
@@ -255,6 +257,23 @@ func (s *stub) heartbeat(w http.ResponseWriter, r *http.Request, rn *runner) {
 		log.Printf("%s (%s) reports orbit %s, %s is published: asking it to check for an update", rn.id, rn.name, req.Version, published)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"cancelSessionIds": []string{}, "checkSelfUpdate": checkUpdate})
+}
+
+// me is what the control plane last heard from the runner: `orbit register` asks it until the
+// service it started has beaten, and `orbit status` prints it. A runner that never beat has no
+// lastHeartbeatAt, as on the real control plane.
+func (s *stub) me(w http.ResponseWriter, _ *http.Request, rn *runner) {
+	s.mu.Lock()
+	var last any
+	if !rn.lastBeat.IsZero() {
+		last = rn.lastBeat.UTC().Format(time.RFC3339Nano)
+	}
+	resp := map[string]any{
+		"id": rn.id, "name": rn.name, "status": "ONLINE", "lastHeartbeatAt": last,
+		"online": !rn.lastBeat.IsZero() && time.Since(rn.lastBeat) < 90*time.Second, "workspaces": []any{},
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // published is the version /dl/version.json names right now, or "" when there is none.

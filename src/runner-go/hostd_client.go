@@ -84,20 +84,19 @@ type hostdOwnCopyRefusal struct{ reason string }
 func (e *hostdOwnCopyRefusal) Error() string { return e.reason }
 
 // registerViaHostd asks the broker to enable and start this user's runner instance, and
-// reports whether it did, or the refusal registration has to stop at. The credential the
-// instance will read was already written by `orbit register` itself, as this user, before
-// we got here — so there is nothing left that needs root, and nothing here shells out at
-// all.
-func registerViaHostd(socketPath string, proxyVars []envVar) (bool, error) {
+// returns the unit it started, or "" when it did not, with the refusal registration has to
+// stop at, if that was the reason. The credential the instance will read was already
+// written by `orbit register` itself, as this user, before we got here — so there is
+// nothing left that needs root, and nothing here shells out at all.
+func registerViaHostd(socketPath string, proxyVars []envVar) (string, error) {
 	resp, ok := hostdDo(socketPath, "enable")
 	if !ok {
 		if resp.Code == hostdRefusedOwnCopy {
-			return false, &hostdOwnCopyRefusal{reason: resp.Error}
+			return "", &hostdOwnCopyRefusal{reason: resp.Error}
 		}
-		return false, nil
+		return "", nil
 	}
 	unit := hostdUnit(resp)
-	printServiceStarted("runs at boot")
 	if len(proxyVars) > 0 {
 		// The legacy path bakes the proxy into a unit it writes for this one user. The
 		// broker's template is shared by every uid on the host and carries no per-user
@@ -105,7 +104,7 @@ func registerViaHostd(socketPath string, proxyVars []envVar) (bool, error) {
 		// leave the user to work out why nothing reaches the control plane.
 		fmt.Fprintf(os.Stderr, "note: --proxy is not carried into %s — the machine's shared runner template has no per-user proxy environment.\n", unit)
 	}
-	return true, nil
+	return unit, nil
 }
 
 // unregisterViaHostd asks the broker to stop and disable this user's runner instance.
