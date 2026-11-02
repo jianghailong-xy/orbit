@@ -98,6 +98,8 @@ data class RealtimeState(
     val handle: SessionHandle? = null,
     val directory: DirectorySnapshot? = null,
     val directoryRefreshing: Boolean = false,
+    /** A read that left on this connection has landed, none has failed since, and none asked for since is still out. An account
+     * event does not withdraw it: the directory is read again behind the rows it moves. */
     val directoryFresh: Boolean = false,
     /** [directory] is the copy this device's cache restored, and no read from the server has replaced it yet. */
     val directoryCached: Boolean = false,
