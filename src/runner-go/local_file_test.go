@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // What counts as a root of a session: the name a session's directory stands at, and not where that leads, and the same
@@ -118,6 +120,7 @@ func TestALinkAtASessionsDirectoryReadsNothingOfOrbits(t *testing.T) {
 
 			linkForTest(t, host.config, dir)
 			assertRefused(t, api, s, dir, "Orbit's own directory")
+			assertReplyLeftAlone(t, "see [config]("+dir+")", host.checkout, dir)
 			if err := os.Remove(dir); err != nil {
 				t.Fatal(err)
 			}
@@ -170,6 +173,121 @@ func TestASessionDirectoryReplacedAfterItsScopeWasMadeIsRefused(t *testing.T) {
 		data, _ := io.ReadAll(file)
 		t.Errorf("read %q through a replaced directory", data)
 	}
+}
+
+// A path can be the root itself. What is opened then is that directory, and not what stands at its name by the time it is
+// opened: the directory above it holds the other sessions'.
+func TestASessionDirectoryReplacedAfterItWasJudgedReadsNothingBesideIt(t *testing.T) {
+	newFileScopeHost(t)
+	uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+	writeTestFile(t, filepath.Join(uploadsRootDir(), "another-session", "private.txt"), "theirs")
+	before, err := os.Lstat(uploads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(uploads, uploads+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{filepath.Join("another-session", "private.txt"), "another-session"} {
+		linkForTest(t, target, uploads)
+		for _, path := range []string{".", "private.txt"} {
+			if file, err := openWorktreeArtifactFile(uploads, path, before); err == nil {
+				data, _ := io.ReadAll(file)
+				file.Close()
+				t.Errorf("%s through a link to %s read %q", path, target, data)
+			}
+		}
+		if err := os.Remove(uploads); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestAPathThatIsARootIsNoFile(t *testing.T) {
+	newFileScopeHost(t)
+	uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+	if file, _, err := newLocalFileScope(artifactRequestRoots(fileTestSession)).open(uploads); err == nil {
+		file.Close()
+		t.Error("opened a session's directory as a file")
+	}
+}
+
+// os.Root follows a link that stays inside it, so a link at the last level is caught by what stood at the name. It
+// matters most where a root holds Orbit's own directory, in a session running in a home directory.
+func TestALinkAtTheLastLevelIsRefusedEvenInsideARoot(t *testing.T) {
+	host := newFileScopeHost(t)
+	linkForTest(t, filepath.Join(".orbit", "config.json"), filepath.Join(host.home, "alias.txt"))
+	before, err := os.Lstat(host.home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file, err := openWorktreeArtifactFile(host.home, "alias.txt", before); err == nil {
+		data, _ := io.ReadAll(file)
+		file.Close()
+		t.Errorf("read %q through a link at the last level", data)
+	}
+}
+
+// A directory replaced by a named pipe fails at once, at the root and below it: this runs under a session's flush, and
+// nothing would ever write to that pipe.
+func TestANamedPipeInPlaceOfADirectoryDoesNotHang(t *testing.T) {
+	opensAtOnce := func(t *testing.T, root, path string, before os.FileInfo) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			file, err := openWorktreeArtifactFile(root, path, before)
+			if err == nil {
+				file.Close()
+			}
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Error("opened a file through a named pipe")
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("the open hung on a named pipe")
+		}
+	}
+	t.Run("root", func(t *testing.T) {
+		newFileScopeHost(t)
+		uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+		before, err := os.Lstat(uploads)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(uploads, uploads+"-moved"); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(uploads, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		opensAtOnce(t, uploads, "notes.txt", before)
+	})
+	t.Run("below it", func(t *testing.T) {
+		newFileScopeHost(t)
+		uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+		before, err := os.Lstat(uploads)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(uploads, "shots"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		opensAtOnce(t, uploads, filepath.Join("shots", "notes.txt"), before)
+	})
+}
+
+func TestRepliesFromASessionRunningAtTheRootDirectoryStillTravel(t *testing.T) {
+	host := newFileScopeHost(t)
+	uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+	shot := writeTestFile(t, filepath.Join(host.checkout, "shot.txt"), "a shot")
+	root := string(filepath.Separator)
+
+	assertReplySent(t, "see [shot]("+shot+")", "a shot", root, uploads)
+	assertReplySent(t, "see [shot]("+strings.TrimPrefix(shot, root)+")", "a shot", root, uploads)
+	assertReplyLeftAlone(t, "see [config]("+host.config+")", root, uploads)
 }
 
 // A working directory inside the worktree is covered by the worktree: it is where a reply's relative links start and no

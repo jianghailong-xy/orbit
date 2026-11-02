@@ -161,6 +161,11 @@ func realPath(path string) string {
 	return path
 }
 
+// asDirectory names a directory so that opening it refuses anything else at once. os.OpenRoot and os.Root's OpenRoot open
+// the last element of a path with no O_DIRECTORY, so a FIFO put at that name would hold the call until a writer came. A
+// trailing "." makes it the element before the last, which has to be a directory.
+func asDirectory(name string) string { return name + string(filepath.Separator) + "." }
+
 // pathInsideAny reports whether path is one of the roots or under one.
 func pathInsideAny(path string, roots ...string) bool {
 	for _, root := range roots {
