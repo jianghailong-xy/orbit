@@ -7,6 +7,7 @@ D-P8-1 收尾（`34iSsJHzTeI5uzhcGSmlI`，2026-10-19）按 P8、P5c 的录制改
 撤回的审批卡（`34iTwiTCaIxwfXdQlHvIR`，2026-10-19）：还没人应答、这一轮就结束的审批卡，它的调用按没有运行结算（§5.2），§3.3、§16.4 同步。
 macOS runner 支持（`34lk6zafdNyu67SiAD3q9`，2026-10-25）：runner 固定 darwin/arm64 的 tarball，macOS 上也保留 Default 以外的账号，登录按平台取路径，
 每个 CLI 进程都显式设凭据存储（§18.9）；§3.4、§11、§16.1–§16.3、§16.7、§17.1、§18 同步。
+停止的发送顺序（`34qTuW9ujxQ84S4ZF1Kss`，2026-11-02）：先发 `session/cancel`，再回 `cancelled`，写进了 §3.3。
 改这里的任何一条结论，要同时改依赖它的任务。已定的设计（作业指导里的所有者决定）不在这里重新论证。
 
 **实测版本**：**Cursor CLI `2026.10.14-941492e`**，linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。
@@ -292,8 +293,10 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 - 在 `sleep 47` 运行中发 `session/cancel`，4 ms 后得到 `{"stopReason":"cancelled"}`，sleep 进程被杀，文件没写出。
 - **被取消的工具卡停在 `pending → in_progress`，之后再没有 `tool_call_update`**。ACP 这里根本没有 `failed` 状态【源码 A@77469】。
   **P5b：取消、断开、崩溃后，Orbit 自己结算所有未终态的工具卡。**
-- **审批进行中（权限请求未答）时停止**【实测 `p5c/accept-edits-stop`，经 Orbit 的 runner】：Orbit 发 `session/cancel`，并对未答的请求回 `cancelled`，
+- **审批进行中（权限请求未答）时停止**【实测 `p5c/accept-edits-stop`，经 Orbit 的 runner】：Orbit 先发 `session/cancel`，再对未答的请求回 `cancelled`，
   审批卡撤回；prompt 以 `{"stopReason":"cancelled"}` 返回，命令没有执行，工具卡同样停在 `in_progress`。Orbit 把这张卡结算为没有运行（§5.2）。
+  这个顺序是约定（`cursorPermissionBridge.stop`），实测录到的也是这个顺序：CLI 把 `cancelled` 应答当作拒绝，这一轮继续往下走（§5.2），
+  先回应答的话，这一轮可能赶在取消之前走完，以 `end_turn` 结算成成功。
 - **请求未答时 CLI 被 SIGKILL**【实测 `p5c/accept-edits-disconnect`】：命令没有执行，什么回复都没有；Orbit 撤回审批卡，这一轮按「CLI 在这一轮中退出」失败，
   这张卡结算为没有运行（§5.2）。
 - 只发 `session/cancel`、不应答未答的请求时 CLI 自己怎么收尾【待验】：Orbit 总是应答（§4.2），不依赖它。

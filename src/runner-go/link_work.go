@@ -416,6 +416,9 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 		w.mu.Unlock()
 		return false
 	}
+	// Taken before the connection carries anything: a beat can go out on it the moment it is current, and has to find
+	// the release check the Welcome owes it (linkMode.afterHeartbeat).
+	w.m.assignRelease(welcome.GetRelease())
 	w.mu.Lock()
 	w.cur = conn
 	w.attempt, w.flaps, w.lastErr, w.loggedErr = 0, 0, nil, ""
@@ -432,7 +435,6 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	// sessions' event streams send everything they hold again on this connection, from how far the Welcome says each
 	// is stored (link_events.go).
 	w.m.gates.state(welcome.GetHints())
-	w.m.assignRelease(welcome.GetRelease())
 	w.m.events.welcomed(conn, welcome)
 	w.m.gates.markAll()
 	for _, s := range welcome.GetSessions() {
