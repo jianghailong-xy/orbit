@@ -1105,6 +1105,9 @@ private fun AddAccountRow(api: ManagementApi, model: RunnersModel, runner: JsonO
     }) { Text(AccountCopy.ADD_ACCOUNT) }
 }
 
+/** The page a sign-in may open, or null: only ever an https page, whatever the runner reported (web `signInPage`). */
+internal fun signInPage(url: String?): String? = url?.takeIf { runCatching { java.net.URI(it).scheme == "https" }.getOrDefault(false) }
+
 /** RunnerSignInModel: one engine/account's sign-in relay on a runner, read every 2s while it is in flight. */
 @Stable
 private class SignInRelay(private val api: ManagementApi, val runnerId: String, val engine: String, val account: String?, val adding: Boolean) {
@@ -1212,7 +1215,7 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
     val done = relay.status == "done"
     LaunchedEffect(done) { if (done) onSignedIn?.invoke() }
     fun open(url: String) { runCatching { uri.openUri(url) } }
-    val page = relay.url?.takeIf { runCatching { java.net.URI(it).scheme == "https" }.getOrDefault(false) }
+    val page = signInPage(relay.url)
     @Composable fun cancel() = TextButton(onClick = { scope.launch { if (relay.cancel(scope)) onClose?.invoke() } }, enabled = !relay.busy) {
         Text(AccountCopy.CANCEL)
     }

@@ -541,14 +541,16 @@ export class FilesService {
 /**
  * An opened file as a download route answers it: typed and sized, inline only when its type may be shown
  * (UserFileResponseInterceptor) and otherwise saved under its own name. With the route's response, a
- * stream from the store is ended when the response closes, so a client that leaves early does not hold a
- * file or a connection to the bucket open.
+ * stream from the store is ended when the response closes, or at once if it has closed already, while the
+ * row was read and the store opened: a client that leaves early, at any point, does not hold a file or a
+ * connection to the bucket open.
  */
-export function streamable(file: OpenedFile, response?: Pick<Response, 'once'>): StreamableFile {
+export function streamable(file: OpenedFile, response?: Pick<Response, 'once' | 'destroyed'>): StreamableFile {
   const { content } = file;
   const disposition = inlineType(file.mimeType) ? 'inline' : attachmentDisposition(file.fileName ?? 'attachment');
   const options = { type: file.mimeType, disposition, length: file.sizeBytes };
   if (Buffer.isBuffer(content)) return new StreamableFile(content, options);
-  response?.once('close', () => content.destroy());
+  if (response?.destroyed) content.destroy();
+  else response?.once('close', () => content.destroy());
   return new StreamableFile(content, options);
 }
