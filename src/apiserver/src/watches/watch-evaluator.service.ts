@@ -58,10 +58,10 @@ import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch
  * THE HINTS
  * An event this replica published about a session, or naming tasks, pulls the watches targeting
  * exactly those rows to due. That is all a hint can do: its payload is never read for a verdict, a
- * duplicate finds the watch already due, and one that arrives out of order only causes an
- * evaluation that re-reads the rows. A hint never waits in the database for a watch another
- * transaction holds — it passes the row over and asks again after a pause, holding no connection
- * in between (see `markDue`). A hint that never arrives costs latency and nothing else,
+ * duplicate finds the watch already due and only starts a pass for it, and one that arrives out of
+ * order only causes an evaluation that re-reads the rows. A hint never waits in the database for a
+ * watch another transaction holds — it passes the row over and asks again after a pause, holding no
+ * connection in between (see `markDue`). A hint that never arrives costs latency and nothing else,
  * because a live watch is never scheduled more than `reconcileIntervalMs` ahead — and for the
  * leaves no event covers at all (a session moved to Completed, an approval row) that sweep is the
  * mechanism, not a backstop.
@@ -261,11 +261,15 @@ interface WatchDecision {
   expirySnapshot: Record<string, unknown> | null;
 }
 
-/** One watch a hint's ask named: whether it moved, whether it was free to, and what a later ask compares (see `markDue`). */
+/**
+ * One watch a hint's ask named: whether it moved, whether it was free to, whether the ask found it already due, and
+ * what a later ask compares (see `markDue`).
+ */
 interface HintedWatch {
   id: string;
   pulled: boolean;
   free: boolean;
+  due: boolean;
   seen: string | null;
   at: string;
 }
@@ -282,10 +286,14 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   private loop: 'IDLE' | 'RUNNING' | 'STOPPED' = 'IDLE';
   private hints?: Subscription;
   private timer?: ReturnType<typeof setTimeout>;
+  /** When the armed timer fires. */
+  private timerAt = 0;
   /** The pass in flight. A replica never runs two. */
   private pass?: Promise<void>;
   /** Something became due during the pass: go round again instead of waiting for the timer. */
   private again = false;
+  /** The last pass failed: until one succeeds, a hint brings the timer forward instead of starting a pass. */
+  private failing = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -317,6 +325,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   start(): void {
     if (this.loop === 'RUNNING') return;
     this.loop = 'RUNNING';
+    this.failing = false;
     this.hints = this.realtime.localPublications().subscribe(({ runId, event }) => {
       const hint = watchHintFor(runId, event);
       if (hint) void this.hint(hint.kind, hint.ids, hint.owner);
@@ -334,19 +343,28 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     await this.pass;
   }
 
-  /** Start a pass now, or — when one is running — make it go round once more. */
+  /** Start a pass now, or — when one is running — make it go round once more, or — after one failed — soon. */
   kick(): void {
     if (this.loop !== 'RUNNING') return;
     if (this.pass) {
       this.again = true;
-      return;
+    } else if (this.failing) {
+      // A database that is failing is retried by the timer, not by every hint. Only a hint that reached the database
+      // gets here, and what it made due is not left for a whole poll interval: however many come, they bring the
+      // timer's next round forward to a pause and no further, and that round is the one retry.
+      this.arm(Math.min(WATCH_HINT_RETRY_MAX_MS, this.pollIntervalMs));
+    } else {
+      this.startPass();
     }
+  }
+
+  private startPass(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.pass = this.runPass().finally(() => {
       this.pass = undefined;
       if (this.again) this.kick();
-      else this.arm();
+      else this.arm(this.pollIntervalMs);
     });
   }
 
@@ -355,20 +373,26 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
       this.again = false;
       try {
         await this.drain();
+        this.failing = false;
       } catch (error) {
         this.log.error(`watch sweep failed: ${error instanceof Error ? error.message : error}`);
-        this.again = false; // a database that is failing is retried by the timer, not by every hint
+        this.failing = true; // and a hint that came during this pass is `again` for `kick` to weigh as it ends
         return;
       }
     } while (this.again && this.loop === 'RUNNING');
   }
 
-  private arm(): void {
+  /** The timer's next round in `delayMs`, unless it is already set to come sooner. */
+  private arm(delayMs: number): void {
     if (this.loop !== 'RUNNING') return;
+    const at = Date.now() + delayMs;
+    if (this.timer && this.timerAt <= at) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timerAt = at;
     this.timer = setTimeout(() => {
       this.timer = undefined;
-      this.kick();
-    }, this.pollIntervalMs);
+      this.startPass();
+    }, delayMs);
     this.timer.unref(); // never what keeps a process alive
   }
 
@@ -436,8 +460,19 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Make every ACTIVE watch with a target of this kind and one of these ids due now, and start a pass
-   * as soon as that moved anything; returns how many moved. A watch already due is not written again,
-   * and a terminal one has no schedule to move.
+   * as soon as that moved anything or found one already due; returns how many moved. A watch already
+   * due is not written again, and a terminal one has no schedule to move.
+   *
+   * A watch found already due still starts a pass, because the pass that made it due may have passed it
+   * over: a claim passes over a row somebody holds (`claimDue`), and an ask holds the watches it may
+   * move while it decides. When one ask of a burst makes a watch due and starts a pass, another ask can
+   * be holding that row at the moment the pass claims: one that read the watch before it came due, and
+   * found it due once it held it. The pass then ends with the watch still due and nothing to start the
+   * next one but the timer, a poll interval later. The ask that held it is the one that knows, so it
+   * starts a pass once its statement has let the row go. An ask that reads the watch as due already
+   * has nothing to hold it for: it starts a pass and is done. That also serves a watch a failed pass
+   * left due: the next hint naming it does not leave it to the poll interval (see `kick`), while a
+   * database that is failing altogether fails the hint's ask as well and starts nothing.
    *
    * A watch another transaction holds — a landing, a claim, a transition, another hint — is passed over
    * and asked about again after a pause, with no connection held in between, until it is found free.
@@ -464,36 +499,36 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     for (let pause = WATCH_HINT_RETRY_MS; ; pause = Math.min(pause * 2, WATCH_HINT_RETRY_MAX_MS)) {
       const hinted: HintedWatch[] = await this.prisma.$queryRaw<HintedWatch[]>`
         WITH "asked" AS (${asked}), "hinted" AS (
-          SELECT w."id", w."last_evaluated_at"::text AS "last", a."seen" FROM "watch" w JOIN "asked" a ON a."id" = w."id"
-          WHERE w."state" = 'ACTIVE' AND w."next_evaluate_at" > now()
+          SELECT w."id", w."last_evaluated_at"::text AS "last", a."seen", w."next_evaluate_at" <= now() AS "due"
+          FROM "watch" w JOIN "asked" a ON a."id" = w."id"
+          WHERE w."state" = 'ACTIVE' AND w."next_evaluate_at" IS NOT NULL
             ${owner === undefined
               ? Prisma.empty
               : 'ownerId' in owner
                 ? Prisma.sql`AND w."owner_id" = ${owner.ownerId}::uuid`
                 : Prisma.sql`AND w."owner_id" = (SELECT "owner_id" FROM "session" WHERE "id" = ${owner.sessionId}::uuid)`}
         ), "free" AS (
-          SELECT "id" FROM "watch"
-          WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
+          SELECT "id", "next_evaluate_at" <= now() AS "due" FROM "watch"
+          WHERE "id" IN (SELECT "id" FROM "hinted" WHERE NOT "due") AND "state" = 'ACTIVE' AND "next_evaluate_at" IS NOT NULL
           FOR UPDATE SKIP LOCKED
         ), "pulled" AS (
           UPDATE "watch" AS w
           SET "next_evaluate_at" = now()
           FROM "hinted" AS h
-          WHERE w."id" = h."id" AND w."id" IN (SELECT "id" FROM "free")
+          WHERE w."id" = h."id" AND w."id" IN (SELECT "id" FROM "free" WHERE NOT "due")
             AND (${firstAskAt}::timestamptz IS NULL OR (w."last_evaluated_at" IS DISTINCT FROM h."seen"::timestamptz
                                                         AND w."last_evaluated_at" <= ${firstAskAt}::timestamptz))
           RETURNING w."id"
         )
         SELECT h."id", h."id" IN (SELECT "id" FROM "pulled") AS "pulled", h."id" IN (SELECT "id" FROM "free") AS "free",
+               h."due" OR h."id" IN (SELECT "id" FROM "free" WHERE "due") AS "due",
                CASE WHEN ${firstAskAt}::text IS NULL THEN h."last" ELSE h."seen" END AS "seen",
                coalesce(${firstAskAt}::text, now()::text) AS "at"
         FROM "hinted" AS h`;
-      const held: HintedWatch[] = hinted.filter((watch) => !watch.free);
+      const held: HintedWatch[] = hinted.filter((watch) => !watch.free && !watch.due);
       const moved = hinted.filter((watch) => watch.pulled).length;
-      if (moved > 0) {
-        pulled += moved;
-        this.kick();
-      }
+      pulled += moved;
+      if (moved > 0 || hinted.some((watch) => watch.due)) this.kick();
       if (held.length === 0 || Date.now() - startedAt + pause > this.reconcileIntervalMs) return pulled;
       await new Promise((resolve) => setTimeout(resolve, pause).unref());
       if (this.loop === 'STOPPED') return pulled;
