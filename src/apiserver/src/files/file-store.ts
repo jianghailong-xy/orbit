@@ -60,9 +60,10 @@ export interface FilesConfig {
   /** The most one account may keep (ORBIT_FILES_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
   /**
-   * How far back a retained Postgres backup reaches: ORBIT_BASE_BACKUP_INTERVAL × ORBIT_BASE_BACKUP_KEEP, the two values the
-   * backup sidecar keeps its base backups by. A file's bytes outlast this (`fileGraceMs`), so that restoring any retained
-   * backup finds the bytes its rows name.
+   * How far back a retained Postgres backup reaches: ORBIT_BASE_BACKUP_INTERVAL × (ORBIT_BASE_BACKUP_KEEP + 1), from the two
+   * values the backup sidecar keeps its base backups by. A backup stays until that many newer ones have finished, and each
+   * round takes a little longer than the interval (it waits for its poll, then runs), which the one more interval covers.
+   * A file's bytes outlast this (`fileGraceMs`), so that restoring any retained backup finds the bytes its rows name.
    */
   backupRetentionMs?: number;
 }
@@ -91,7 +92,7 @@ function fileLimitsFrom(env: NodeJS.ProcessEnv): Pick<FilesConfig, 'quotaBytes' 
   const interval = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_INTERVAL', 86_400);
   const keep = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_KEEP', 2);
   const quotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_QUOTA_BYTES');
-  return { ...(quotaBytes ? { quotaBytes } : {}), backupRetentionMs: interval * keep * 1000 };
+  return { ...(quotaBytes ? { quotaBytes } : {}), backupRetentionMs: interval * (keep + 1) * 1000 };
 }
 
 /** Where uploads are written while they arrive: inside the files directory, so that keeping one in the

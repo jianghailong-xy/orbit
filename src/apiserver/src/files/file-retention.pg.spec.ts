@@ -23,7 +23,8 @@
  *       route still answers from their rows, with names, sizes and sha256;
  *  (11) a reply's image, a person's upload and a task's input have no date and never expire;
  *  (12) a row deleted outright lets its bytes go a grace period after the sweep first finds them unnamed;
- *  (13) an upload of bytes that went keeps them again, and one that finds them while they go waits and keeps them again;
+ *  (13) an upload of bytes that went keeps them again, and one or a pin arriving while the real delete is under way waits for
+ *       it: the upload keeps the bytes again, and the pin says they went;
  *  (14) a new version cannot cite an expired file, nor a new task take one as an input; a replay of a version that did is answered;
  *  (15) what expiry leaves: a real sweep takes a test report's bytes and leaves its summary, labels and citations as they
  *       were, with the digest untouched, in task_evidence_list and in what file_list and the card's route answer;
@@ -31,7 +32,10 @@
  *  (17) an account's usage: what it keeps counted once per content, the largest projects and tasks, each week's arrivals, and
  *       no other account's;
  *  (18) past its quota an upload is refused with a code and a sentence, at each door, and leaves nothing behind; bytes it
- *       already keeps are not refused, and expiry makes room.
+ *       already keeps are not refused, and expiry makes room;
+ *  (19) a session in Trash waits while evidence holds one of its files, and goes once its task is deleted and the sweep has
+ *       dated them;
+ *  (20) a pin after a delete cut short says the bytes went, and the next sweep finishes the delete.
  *
  * Not destructive: every row belongs to users this run creates. Each case uses bytes of its own, because a sweep looks at
  * every row in the database.
@@ -53,9 +57,10 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { upload } from '../auth/tenant-isolation-fixtures';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { ReaperService } from '../realtime/reaper.service';
 import { LET_GO_RETENTION_MS, UPLOAD_RETENTION_MS, citedFileExpiry, fileGraceMs } from './file-retention';
 import { FileRetentionSweep } from './file-retention-sweep';
-import { filesConfigFrom, writeHashedTempFile } from './file-store';
+import { filesConfigFrom, writeHashedTempFile, type FileStore } from './file-store';
 import { FILE_QUOTA_EXCEEDED, FilesService } from './files.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -251,9 +256,11 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
 
   await t.test('(3) the grace period is never shorter than a retained backup reaches back', async () => {
     assert.equal(fileGraceMs(filesConfigFrom({})), GRACE, 'the defaults, a day between backups and two kept, are under seven days');
-    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '7' })), GRACE);
-    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '10' })), 10 * DAY);
-    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_INTERVAL: '604800', ORBIT_BASE_BACKUP_KEEP: '4' })), 28 * DAY);
+    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '6' })), GRACE);
+    // A backup stays until that many newer ones have finished, each a little over the interval later: one more covers it.
+    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '7' })), 8 * DAY);
+    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: '10' })), 11 * DAY);
+    assert.equal(fileGraceMs(filesConfigFrom({ ORBIT_BASE_BACKUP_INTERVAL: '604800', ORBIT_BASE_BACKUP_KEEP: '4' })), 35 * DAY);
     assert.throws(() => filesConfigFrom({ ORBIT_BASE_BACKUP_KEEP: 'two' }), /ORBIT_BASE_BACKUP_KEEP must be a whole number/);
     assert.throws(() => filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: '-1' }), /ORBIT_FILES_QUOTA_BYTES must be a whole number/);
 
@@ -264,12 +271,12 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await longer.sweep(tombstone);
     const released = (await blob(file.sha256)).releasedAt!;
     await longer.sweep(later(released, GRACE));
-    assert.ok(onDisk(file.sha256), 'seven days is not enough while a backup reaches back ten');
-    await longer.sweep(later(released, 10 * DAY - 1));
-    assert.ok(onDisk(file.sha256), 'nor is a millisecond short of ten');
-    await longer.sweep(later(released, 10 * DAY));
-    assert.equal(onDisk(file.sha256), false, 'ten is');
-    assert.deepEqual((await blob(file.sha256)).offHostPruneAt, later(released, 20 * DAY), 'and the off-host copy waits as long again');
+    assert.ok(onDisk(file.sha256), 'seven days is not enough while a backup reaches back more than ten');
+    await longer.sweep(later(released, 11 * DAY - 1));
+    assert.ok(onDisk(file.sha256), 'nor is a millisecond short of eleven');
+    await longer.sweep(later(released, 11 * DAY));
+    assert.equal(onDisk(file.sha256), false, 'eleven is');
+    assert.deepEqual((await blob(file.sha256)).offHostPruneAt, later(released, 22 * DAY), 'and the off-host copy waits as long again');
   });
 
   await t.test('(4) a version sent back lets go of what it cites 30 days after the send-back', async () => {
@@ -582,25 +589,69 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     assert.equal(stored.releasedAt, null);
     assert.equal((await bytesOf(second, session)).text, content);
 
-    // An upload finding them while they go. The sweep's delete holds this lock from before it decides until the row says so.
+    // The real delete, stopped just before it removes the bytes, which it has by then decided to do. An upload of the same
+    // content, or a pin, arriving now finds the bytes still there, and either would be wrong to believe it.
+    const stoppedDelete = (target: string) => {
+      const stopped = new FilesService(db as never, config);
+      const realStoreOf = stopped.storeOf.bind(stopped);
+      let reached!: () => void;
+      let release!: () => void;
+      const atRemove = new Promise<void>((resolve) => { reached = resolve; });
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      stopped.storeOf = (storage: string) => {
+        const store = realStoreOf(storage);
+        if (!store) return store;
+        return Object.assign(Object.create(store) as FileStore, {
+          remove: async (sha256: string) => {
+            // Other cases' bytes are due by this clock too.
+            if (sha256 === target) {
+              reached();
+              await released;
+            }
+            await store.remove(sha256);
+          },
+        });
+      };
+      return { sweep: new FileRetentionSweep(db as never, stopped), atRemove, release };
+    };
+    const settledWithin = async (work: Promise<unknown>, ms: number) => {
+      let settled = false;
+      const watched = work.then(() => { settled = true; }, () => { settled = true; });
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      return { settled, watched };
+    };
+    const dueForDeleting = async (content: string) => {
+      const file = await kept(session, content);
+      await sweepAt((await row(file.id)).expiresAt!);
+      return { file, due: later((await blob(file.sha256)).releasedAt!, GRACE) };
+    };
+
     const racing = fresh('raced');
-    const raced = await kept(session, racing);
-    await sql.query('BEGIN');
-    await sql.query('SELECT sha256 FROM file_blob WHERE sha256 = $1 FOR UPDATE', [raced.sha256]);
-    rmSync(path.join(dir, raced.sha256.slice(0, 2), raced.sha256));
-    await sql.query('UPDATE file_blob SET bytes_deleted_at = now() WHERE sha256 = $1', [raced.sha256]);
+    const raced = await dueForDeleting(racing);
+    const uploadDuring = stoppedDelete(raced.file.sha256);
+    const sweeping = uploadDuring.sweep.sweep(raced.due);
+    await uploadDuring.atRemove;
     const temp = await writeHashedTempFile(Readable.from([Buffer.from(racing)]), path.join(dir, 'tmp'));
-    let stored2 = false;
-    const storing = files.store(temp).then(() => {
-      stored2 = true;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    assert.equal(stored2, false, 'it waits for the delete to finish, rather than trusting bytes it can still see going');
-    await sql.query('COMMIT');
-    await storing;
-    assert.ok(onDisk(raced.sha256), 'and then keeps them');
-    assert.equal(readFileSync(path.join(dir, raced.sha256.slice(0, 2), raced.sha256), 'utf8'), racing);
-    assert.equal((await blob(raced.sha256)).bytesDeletedAt, null);
+    const storing = await settledWithin(files.store(temp), 300);
+    assert.equal(storing.settled, false, 'the upload waits for the delete, rather than trusting bytes it can still see');
+    uploadDuring.release();
+    await sweeping;
+    await storing.watched;
+    assert.equal(readFileSync(path.join(dir, raced.file.sha256.slice(0, 2), raced.file.sha256), 'utf8'), racing, 'and then keeps them');
+    assert.equal((await blob(raced.file.sha256)).bytesDeletedAt, null);
+
+    const pinnedDuring = await dueForDeleting(fresh('pinned while going'));
+    const pinDuring = stoppedDelete(pinnedDuring.file.sha256);
+    const sweepingAgain = pinDuring.sweep.sweep(pinnedDuring.due);
+    await pinDuring.atRemove;
+    const pinning = await settledWithin(call(api, 'PUT', `/api/attachments/${pinnedDuring.file.publicId}/pin`, owner.bearer), 300);
+    assert.equal(pinning.settled, false, 'a pin waits for the delete too, rather than lifting a tombstone from bytes about to go');
+    pinDuring.release();
+    await sweepingAgain;
+    await pinning.watched;
+    assert.equal(onDisk(pinnedDuring.file.sha256), false);
+    assert.ok((await row(pinnedDuring.file.id)).expiredAt, 'and then says they went');
+    assert.equal((await row(pinnedDuring.file.id)).pinnedAt, null);
 
     // A blob an upload stamped within the grace period is not deleted, whatever else is true of it.
     const stamped = fresh('stamped');
@@ -650,6 +701,13 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await cite(racing, inFlight.publicId);
     await sweepAt(dueAt);
     assert.equal((await row(inFlight.id)).expiredAt, null, 'and next time the row is no longer due');
+
+    // Nor can a message send one again, or a retry carry a copy of it: a copy holds the bytes it names.
+    const resent = await call(api, 'POST', `/api/sessions/${b62(work.runId)}/turns`, owner.bearer, {
+      content: 'again', clientTurnId: randomUUID(), attachmentIds: [file.publicId],
+    });
+    assert.equal(resent.status, 400, resent.text.slice(0, 300));
+    assert.match(resent.text, /unknown or not yours/);
 
     // The same evidence again is its own replay, whatever has happened to the file since.
     const replayed = await call(api, 'POST', `/api/runner/tasks/${b62(work.taskId)}/evidence`, owner.token, { evidence: version.evidence }, asRun(work));
@@ -845,5 +903,49 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await db.attachment.updateMany({ where: { ownerId: who.ownerId, sha256: (await row(firstRow)).sha256 }, data: { expiredAt: new Date() } });
     const after = await upload(limited, 'POST', doors[0][1], doors[0][2], { name: 'after.txt', type: 'text/plain', content: sized(800) });
     assert.equal(after.status, 201, after.text.slice(0, 300));
+  });
+
+  await t.test('(19) a session in Trash waits while evidence holds one of its files', async () => {
+    const reaper = new ReaperService(db as never, {} as never);
+    const purgeTrash = () => (reaper as unknown as { purgeTrash(): Promise<void> }).purgeTrash();
+    const longAgo = later(new Date(), -40 * DAY);
+
+    const held = await workOf('its run went to Trash, and its evidence was confirmed');
+    const file = await kept(held.runId);
+    const version = await cite(held, file.publicId);
+    await decide(held, version.revision, 'CONFIRM');
+    await db.session.update({ where: { id: held.runId }, data: { deletedAt: longAgo } });
+    const loose = await sessionOf('nothing holds what is in this one');
+    const uncited = await kept(loose);
+    await db.session.update({ where: { id: loose }, data: { deletedAt: longAgo } });
+
+    await purgeTrash();
+    assert.equal(await db.session.count({ where: { id: loose } }), 0, 'past its 30 days a session goes');
+    assert.equal(await db.attachment.count({ where: { id: uncited.id } }), 0, 'and what is in it');
+    assert.equal(await db.session.count({ where: { id: held.runId } }), 1, 'but not one holding a file the evidence holds');
+    assert.equal((await row(file.id)).expiresAt, null);
+
+    assert.ok((await call(api, 'DELETE', `/api/tasks/${b62(held.taskId)}`, owner.bearer)).status < 300);
+    await purgeTrash();
+    assert.equal(await db.session.count({ where: { id: held.runId } }), 1, 'the row has no date yet, so it waits for the next sweep');
+    await sweepAt(new Date());
+    await purgeTrash();
+    assert.equal(await db.session.count({ where: { id: held.runId } }), 0, 'once the task has gone and the sweep has dated it, so does the session');
+  });
+
+  await t.test('(20) a pin after a delete cut short says the bytes went, and the next sweep finishes it', async () => {
+    const session = await sessionOf('a conversation');
+    const file = await kept(session);
+    await sweepAt((await row(file.id)).expiresAt!);
+    assert.ok((await row(file.id)).expiredAt);
+    // A process killed between removing the bytes and saying so.
+    rmSync(path.join(dir, file.sha256.slice(0, 2), file.sha256));
+    assert.equal((await blob(file.sha256)).bytesDeletedAt, null);
+    const pinned = await call(api, 'PUT', `/api/attachments/${file.publicId}/pin`, owner.bearer);
+    assert.equal(pinned.status, 410, pinned.text.slice(0, 300));
+    assert.ok((await row(file.id)).expiredAt, 'the tombstone stays');
+    assert.equal((await row(file.id)).pinnedAt, null);
+    await sweepAt(later((await blob(file.sha256)).releasedAt!, GRACE));
+    assert.ok((await blob(file.sha256)).bytesDeletedAt, 'the next sweep finishes what was cut short');
   });
 });

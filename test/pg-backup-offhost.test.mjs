@@ -104,7 +104,7 @@ esac`,
       ssh: ':',
       sleep: 'exit 7',
       ...(rsyncFailsOn ? {
-        rsync: `case "$*" in *${rsyncFailsOn}*) echo 'ssh: connect to host backup-host port 22: Connection refused' >&2; exit 255 ;; esac; exec '${realRsync}' "$@"`,
+        rsync: `case "$*" in *'${rsyncFailsOn}'*) echo 'ssh: connect to host backup-host port 22: Connection refused' >&2; exit 255 ;; esac; exec '${realRsync}' "$@"`,
       } : {}),
     })) writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
@@ -411,15 +411,29 @@ test('bytes uploaded again since stay, and what the database names that the copy
 });
 
 test('with no copy there yet there is nothing to prune', () => {
+  // This round's copy did not make it either, which leaves the target's directory missing when the prune looks.
   const result = round({
     due: [NAME('a')],
+    rsyncFailsOn: '--itemize-changes --exclude /tmp/',
     prepare: ({ archive, files }) => {
       archiveIn(archive);
       mkdirSync(path.join(files, 'bb'), { recursive: true });
     },
   });
-  assert.doesNotMatch(result.log, /ERROR/);
-  assert.doesNotMatch(result.log, /pruned/);
+  assert.equal(result.after.copy, null, result.log);
+  assert.match(result.log, /ERROR: off-host sync to .*-files failed/, 'that is the one thing said');
+  assert.doesNotMatch(result.log, /pruning .* failed|refusing to prune|pruned/);
+});
+
+test('a copy it cannot list is not pruned, and it says so', () => {
+  const name = NAME('a');
+  const result = round({
+    due: [name],
+    rsyncFailsOn: '-r --list-only',
+    prepare: prepareCopy([name], [NAME('b')]),
+  });
+  assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
+  assert.match(result.log, /ERROR: pruning .* failed: could not list it: ssh: connect to host backup-host/);
 });
 
 test('a name that is not a sha256 is not a name: a database cannot aim this anywhere else', () => {

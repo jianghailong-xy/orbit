@@ -486,7 +486,8 @@ export class FilesService implements OnApplicationBootstrap {
    * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
    * it is, which is kept on the citation so that no later read of it has to come here. Keyed by file. The citation
    * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold. An expired row has
-   * nothing to take: that transaction refuses a new version citing it, and answers a replay of the one that already did.
+   * nothing to take: that transaction refuses a new version citing it. It answers a retry of the version that already did,
+   * though one citing an image only while the digest still comes out the same, which it no longer does without this size.
    */
   async prepareCitedFiles(ownerId: string, ids: string[]): Promise<Map<string, ImageSize>> {
     const images = new Map<string, ImageSize>();
@@ -719,13 +720,15 @@ export class FilesService implements OnApplicationBootstrap {
    * its date, and within the grace period it brings an expired one back; once the bytes have gone it can only say so.
    *
    * The bytes' rows are held while it lifts a tombstone (FOR SHARE), so the sweep sees either the tombstone or the file
-   * brought back, and never deletes bytes under a pin it has not seen.
+   * brought back, and never deletes bytes under a pin it has not seen. The store is asked first as well, because a process
+   * killed in the middle of a delete leaves a row that does not yet say its bytes went.
    */
   async setPinned(where: Prisma.AttachmentWhereInput, pinned: boolean): Promise<FileView | null> {
     const row = await this.prisma.attachment.findFirst({ where, select: { id: true, ownerId: true, fileBundleId: true } });
     if (!row) return null;
     const { id, ownerId } = row;
     const scope: Prisma.AttachmentWhereInput = row.fileBundleId === id ? { ownerId, OR: [{ id }, { fileBundleId: id }] } : { id };
+    const notInStore = pinned ? await this.expiredBytesNotInStore(scope) : [];
     await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -740,7 +743,7 @@ export class FilesService implements OnApplicationBootstrap {
            WHERE sha256 = ANY(${[...new Set(names.map((name) => name.sha256 as string))]}::text[])
            ORDER BY sha256
            FOR SHARE`;
-        const gone = held.filter((blob) => blob.gone).map((blob) => blob.sha256);
+        const gone = [...held.filter((blob) => blob.gone).map((blob) => blob.sha256), ...notInStore];
         const named = await tx.attachment.findUniqueOrThrow({ where: { id }, select: { sha256: true } });
         if (named.sha256 && gone.includes(named.sha256)) {
           throw new GoneException('this file expired and its bytes have been deleted, so it cannot be pinned; upload it again');
@@ -754,6 +757,20 @@ export class FilesService implements OnApplicationBootstrap {
       loggedRetry(this.logger, 'files.setPinned'),
     );
     return fileView(await this.prisma.attachment.findUniqueOrThrow({ where: { id }, select: FILE_VIEW_SELECT }));
+  }
+
+  /** The sha256 of each expired row `scope` finds whose store no longer holds its bytes. */
+  private async expiredBytesNotInStore(scope: Prisma.AttachmentWhereInput): Promise<string[]> {
+    const rows = await this.prisma.attachment.findMany({
+      where: { AND: [scope, { expiredAt: { not: null } }, { sha256: { not: null } }] },
+      distinct: ['sha256'],
+      select: { sha256: true, blob: { select: { storage: true } } },
+    });
+    const missing: string[] = [];
+    for (const { sha256, blob } of rows) {
+      if (sha256 && blob && !(await this.storeOf(blob.storage)?.has(sha256))) missing.push(sha256);
+    }
+    return missing;
   }
 
   /**

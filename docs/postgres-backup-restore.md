@@ -126,7 +126,11 @@ commits: a round that finishes leaves the copy with the bytes of every row in th
 #### How the copy is pruned
 
 Files agents upload expire, and their bytes then go in steps, each a grace period after the last. The grace period is
-max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × `ORBIT_BASE_BACKUP_KEEP`), so at least as long as a retained backup reaches back.
+max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × (`ORBIT_BASE_BACKUP_KEEP` + 1)), so at least as long as a retained backup reaches
+back: a backup stays until `ORBIT_BASE_BACKUP_KEEP` newer ones have finished, and each round takes a little longer than the
+interval, which the one more covers. Base backups that stop being taken, for lack of disk or with the sidecar down, keep the
+old ones longer than that. Restoring one of those can find rows without their bytes, which the
+[check below](#restore-the-attachment-files) lists.
 
 | When | What happens |
 | --- | --- |

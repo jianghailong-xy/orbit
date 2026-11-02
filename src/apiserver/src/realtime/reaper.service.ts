@@ -46,6 +46,7 @@ import {
   type CellLosses,
   type RunnerBeats,
 } from '../runners/runner-presence';
+import { HELD_BY_EVIDENCE } from '../files/file-retention';
 import { ControlPlaneLeader } from './control-plane-leader';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -347,10 +348,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * window. The DB-level ON DELETE CASCADE drops each session's events, turns, tool calls,
    * usage, approvals, diff and session-scoped attachments along with it. This is the only
    * path that actually removes session data — soft-delete just hides it.
+   *
+   * A session holding a file evidence holds waits in Trash until that stops: the file stays until its task is deleted
+   * (docs/orbit-files-design.md §2.8), and its row would go with the session. A person who empties Trash by hand
+   * (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {
     const cutoff = new Date(Date.now() - TRASH_RETENTION_MS);
-    const res = await this.prisma.session.deleteMany({ where: { deletedAt: { lt: cutoff } } });
+    const res = await this.prisma.session.deleteMany({
+      where: { deletedAt: { lt: cutoff }, attachments: { none: HELD_BY_EVIDENCE } },
+    });
     if (res.count > 0) {
       this.log.log(`purged ${res.count} trashed session(s) past ${TRASH_RETENTION_DAYS}-day retention`);
     }

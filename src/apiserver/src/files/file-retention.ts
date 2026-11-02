@@ -51,6 +51,14 @@ export function fileGraceMs(config: Pick<FilesConfig, 'backupRetentionMs'>): num
   return Math.max(MIN_GRACE_MS, config.backupRetentionMs ?? 0);
 }
 
+/** A row evidence holds: an agent's file with no date and no tombstone, naming a version. */
+export const HELD_BY_EVIDENCE = {
+  retention: FILE_UPLOAD_RETENTION,
+  expiresAt: null,
+  expiredAt: null,
+  evidenceId: { not: null },
+} as const satisfies Prisma.AttachmentWhereInput;
+
 /** The date an upload starts with, for the rows `file_upload` writes. */
 export function uploadExpiry(createdAt: Date): Date {
   return new Date(createdAt.getTime() + UPLOAD_RETENTION_MS);

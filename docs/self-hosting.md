@@ -227,9 +227,13 @@ attachments are not touched: they stay as long as their session or task.
 
 Where several apply, the latest wins. Expiring writes a tombstone and keeps the file's name, size, sha256 and test summary, so
 evidence stays complete and its cards show an expired placeholder. The bytes go a grace period later, once no row holds them:
-max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × `ORBIT_BASE_BACKUP_KEEP`). The apiserver reads those two values for this, so
+max(7 days, `ORBIT_BASE_BACKUP_INTERVAL` × (`ORBIT_BASE_BACKUP_KEEP` + 1)). The apiserver reads those two values for this, so
 set them where the sidecar reads them, in `.env`, and recreate both services when they change. Pinning a file in its grace
 period brings it back. The sweep runs on one apiserver about once an hour, and says what it did in the apiserver's log.
+
+A session in Trash stays there past its 30 days while evidence holds one of its files, until the task is deleted. Deleting a
+session from Trash by hand takes its files with it, pinned or held. Evidence that cited them keeps only their sha256, and its
+card shows an expired placeholder.
 
 Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
 `.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
