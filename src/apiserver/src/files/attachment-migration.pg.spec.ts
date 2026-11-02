@@ -29,7 +29,13 @@
  *  (10) a store that fails stops nothing but the row at hand, a row that fails is tried again, and a row deleted under the
  *       copy is no failure; on a disk short of room the copy waits, and it never waits for a bucket, and the clear stops;
  *  (11) a read between `FilesService.open`'s two statements, as the row is copied and cleared, finds the bytes in the store;
- *  (12) a copied row whose store fails is read from `data` for as long as it has any.
+ *  (12) a copied row whose store fails is read from `data` for as long as it has any, and the log says which row, which
+ *       store and what failed;
+ *  (13) so too for one whose store has lost its bytes, through a door of the real server, at most once a minute;
+ *  (14) a process killed while writing a temporary file (stopped from outside partway, then SIGKILL) leaves that file; a
+ *       start the same day leaves it too, and a start a day later (its time moved back by hand), with no row waiting for
+ *       the copy, removes it, and leaves the stored bytes, a fresher file and a link;
+ *  (15) a start whose temporary directory cannot be read says so, and answers.
  *
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
  */
@@ -37,14 +43,29 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { once } from 'node:events';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lutimesSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { test } from 'node:test';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { setImmediate as nextTurn, setTimeout as sleep } from 'node:timers/promises';
 
+import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
@@ -477,7 +498,7 @@ function storeCases(leg: Leg) {
         assert.equal(await copiedCount(), stalledAt, 'and stops at the row it cannot write');
 
         // Rows in all three states: named, stored and not named yet, and waiting.
-        assert.ok(await store.has(rows[stalledAt].sha), 'the row it stopped at has its bytes in the store');
+        await until(() => store.has(rows[stalledAt].sha), 'the row it stopped at has its bytes in the store');
         assert.equal(await store.has(rows[stalledAt + 40].sha), false, 'and a later one does not');
         await assertDoors(server, 'with the copy partway');
         const bytes = randomBytes(4096);
@@ -827,8 +848,15 @@ function storeCases(leg: Leg) {
         dir: leg.dir, storage: 's3',
         s3: { endpoint: 'http://127.0.0.1:9', bucket: 'none', accessKeyId: 'none', secretAccessKey: 'none', region: 'none' },
       });
+      const warned: string[] = [];
+      const warn = t.mock.method(Logger.prototype, 'warn', (line: string) => {
+        warned.push(line);
+      });
       const opened = await failing.open({ id: row.id });
+      warn.mock.restore();
       assert.ok(Buffer.isBuffer(opened?.content) && opened.content.equals(row.bytes), 'answered from data');
+      assert.equal(warned.length, 1, warned.join('\n'));
+      assert.match(warned[0], new RegExp(`^attachment ${row.id} was answered from Postgres: the s3 file store could not be read: .*(ECONNREFUSED|connect)`));
       await db.fileBlob.update({ where: { sha256: sha }, data: { storage: before.storage } });
       await finish();
       await db.fileBlob.update({ where: { sha256: sha }, data: { storage: 's3' } });
@@ -853,6 +881,107 @@ function storeCases(leg: Leg) {
       assert.ok(opened && !Buffer.isBuffer(opened.content), 'answered from the store');
       assert.ok((await readAll(opened.content as Readable))?.equals(row.bytes));
       assert.equal(opened.sizeBytes, row.bytes.length);
+    });
+
+    await step(`${leg.storage}: a copied row whose store has lost its bytes is answered from data, and the log says so, once`, async () => {
+      const [lost, alsoLost] = await seed([2048, 2048]);
+      server = await boot();
+      await until(async () => (await copiedOf([lost, alsoLost])) === 2, 'the copy takes both');
+      for (const row of [lost, alsoLost]) await leg.drop(sha256(row.bytes));
+      for (const row of [lost, alsoLost, lost]) {
+        const answer = await get(server, `/api/attachments/${b62(row.id)}`, bearer);
+        assert.equal(answer.status, 200, answer.body.toString('utf8').slice(0, 300));
+        assert.ok(answer.body.equals(row.bytes), 'the same bytes, from data');
+      }
+      const warnings = server.output().split('\n').filter((line) => line.includes('was answered from Postgres'));
+      assert.equal(warnings.length, 1, warnings.join('\n'));
+      assert.ok(warnings[0].includes(`attachment ${lost.id} was answered from Postgres: the ${leg.storage} file store does not hold these bytes.`), warnings[0]);
+      for (const row of [lost, alsoLost]) await leg.put(sha256(row.bytes), row.bytes);
+      await server.stop();
+      await finish();
+    });
+
+    const tempDir = path.join(leg.dir, 'tmp');
+
+    await step(`${leg.storage}: what a process killed while writing a temporary file leaves stays for a day, and then a start removes it and nothing else`, async () => {
+      // One row for a lock to stop the copy at while the server comes up, and then rows large enough to catch it writing.
+      const [held, ...large] = await seed([100, ...Array.from({ length: 4 }, () => 20 * 1024 * 1024)]);
+      const release = await hold(held.id);
+      server = await boot();
+      await until(() => store.has(sha256(held.bytes)), 'the copy reaches the row held');
+      await release();
+
+      // Stopped from outside at a large file still in the directory, so that it cannot move the file on; killed once that
+      // has held. A file seen a moment before it moved is let go, and the next row's is caught.
+      let left: string | undefined;
+      let seenBytes = 0;
+      for (const deadline = Date.now() + 90_000; !left && Date.now() < deadline; await nextTurn()) {
+        for (const name of readdirSync(tempDir)) {
+          const file = path.join(tempDir, name);
+          seenBytes = statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+          if (seenBytes <= 1024 * 1024) continue;
+          server.child.kill('SIGSTOP');
+          await sleep(50);
+          if (existsSync(file)) left = file;
+          else server.child.kill('SIGCONT');
+          break;
+        }
+      }
+      assert.ok(left, 'the copy is caught writing a temporary file');
+      await kill(server);
+      const leftBytes = statSync(left).size;
+      // eslint-disable-next-line no-console
+      console.log(`${leg.storage}: killed with ${seenBytes} bytes seen in ${left}; ${leftBytes} there after the kill`);
+
+      // The next start takes that row again. It leaves the file: for all it can tell, another apiserver is writing it.
+      server = await boot();
+      await until(async () => (await copiedOf([held, ...large])) === large.length + 1, 'the copy finishes');
+      assert.equal(statSync(left).size, leftBytes, 'a start the same day leaves it');
+      assert.doesNotMatch(server.output(), /temporary files:/);
+      await server.stop();
+
+      // A day on, by hand, with what a start has to leave alone beside it.
+      const longAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+      utimesSync(left, longAgo, longAgo);
+      const fresh = path.join(tempDir, 'upload-under-way');
+      writeFileSync(fresh, 'an apiserver is writing this');
+      const outside = path.join(leg.dir, 'outside-the-temporary-directory');
+      writeFileSync(outside, 'not a temporary file');
+      utimesSync(outside, longAgo, longAgo);
+      const link = path.join(tempDir, 'a-link');
+      symlinkSync(outside, link);
+      lutimesSync(link, longAgo, longAgo);
+
+      // The usual start from now on: no copy to run, and it removes the file all the same.
+      assert.equal(await db.attachment.count({ where: { sha256: null } }), 0, 'no row waits for the copy');
+      server = await boot();
+      await until(async () => !existsSync(left), 'a start a day later removes it');
+      await until(async () => server!.output().includes(`temporary files: removed 1 (${leftBytes} bytes) not written for a day from ${tempDir}`), 'and says so');
+      assert.equal(existsSync(fresh), true, 'a fresher file stays');
+      assert.equal(readlinkSync(link), outside, 'a link stays');
+      assert.equal(readFileSync(outside, 'utf8'), 'not a temporary file', 'and what it points at');
+
+      for (const row of large) {
+        assert.ok((await readAll(await store.open(sha256(row.bytes))))?.equals(row.bytes), 'the stored bytes are intact');
+      }
+      await finish();
+      for (const row of large) {
+        const answer = await get(server, `/api/attachments/${b62(row.id)}`, bearer);
+        assert.equal(answer.status, 200);
+        assert.ok(answer.body.equals(row.bytes), 'and answered, with data cleared');
+      }
+      await server.stop();
+      for (const file of [fresh, link, outside]) unlinkSync(file);
+    });
+
+    await step(`${leg.storage}: a start whose temporary directory cannot be read says so, and answers`, async () => {
+      rmSync(tempDir, { recursive: true, force: true });
+      writeFileSync(tempDir, 'a file where the directory goes');
+      server = await boot();
+      await until(async () => server!.output().includes(`temporary files: could not read ${tempDir}: it is a link, or not a directory`), 'it says so');
+      await assertDoors(server, 'with its temporary directory unreadable', rows.slice(0, 5));
+      await server.stop();
+      unlinkSync(tempDir);
     });
   };
 }
