@@ -172,7 +172,9 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
-import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
+import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
+import { FilesService, streamable } from '../files/files.service';
 import {
   classifyTransactionFault,
   loggedRetry,
@@ -1502,7 +1504,18 @@ export class RunnerApiController {
      * same reason as the rest of this list: a control plane built without it refuses those two answers.
      */
     @Optional() private readonly providers?: ProvidersService,
-  ) {}
+    /**
+     * Where attachment bytes are kept and read (files/files.service.ts). `@Optional()` for the specs that
+     * build this controller by hand; without Nest's instance it keeps them through its own, over the same
+     * prisma and the same environment, so a directly-built controller stores and serves files as the
+     * injected one does.
+     */
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
+
+  private readonly files: FilesService;
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
   @StaysOnHttps()
@@ -4625,7 +4638,8 @@ export class RunnerApiController {
    * Fetch one of a turn's image attachments as raw bytes, for the runner to base64-encode
    * into a claude `image` content block (the ids/mimes arrive on the inbox). Runner-scoped
    * (not the user-JWT /api/attachments/:id): the attachment must belong to a session this
-   * runner owns, so a runner can't read another tenant's blobs.
+   * runner owns, so a runner can't read another tenant's blobs. Streamed from the file store,
+   * or from the row for one stored before it.
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -4634,50 +4648,37 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('attId', PublicIdPipe) attId: string,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<StreamableFile> {
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    const att = await this.prisma.attachment.findFirst({
-      where: { id: attId, sessionId },
-      select: { data: true, mimeType: true },
-    });
-    if (!att) throw new NotFoundException('attachment not found');
-    const data = Buffer.from(att.data);
-    return new StreamableFile(data, {
-      type: att.mimeType,
-      disposition: 'inline',
-      length: data.length,
-    });
+    const file = await this.files.open({ id: attId, sessionId });
+    if (!file) throw new NotFoundException('attachment not found');
+    return streamable(file, res);
   }
 
   /**
    * Persist a runner-produced artifact (currently assistant markdown images) as a normal
    * session attachment. The browser cannot read `/root/...` paths from the runner, so the
    * runner uploads bytes here and rewrites the transcript markdown to `orbit-attachment:<id>`.
+   * The upload streams to a temporary file (FILE_UPLOAD_STORAGE) and is kept in the file store
+   * once the session is this runner's; on any refusal the temporary file is removed.
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
   @Post('sessions/:id/attachments')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  @UseInterceptors(FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async uploadAttachment(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @UploadedFileParam() file: UploadedFile | undefined,
+    @UploadedFileParam() file: FileUpload | undefined,
   ): Promise<{ id: string }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    assertValidUpload(file);
-    const f = file as UploadedFile;
-    const row = await this.prisma.attachment.create({
-      data: {
-        ownerId: session.ownerId,
-        sessionId,
-        mimeType: f.mimetype,
-        sizeBytes: f.size,
-        fileName: f.originalname || null,
-        data: toBytes(f.buffer),
-      },
-      select: { id: true },
-    });
-    return { id: row.id };
+    try {
+      const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+      assertValidUpload(file);
+      return await this.files.createAttachment(file as FileUpload, { ownerId: session.ownerId, sessionId });
+    } finally {
+      await this.files.discard(file);
+    }
   }
 
   @UseGuards(RunnerAuthGuard)

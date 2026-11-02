@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
@@ -34,6 +34,7 @@ const skip = !URL;
 /** Emails are unique, and this database can outlive one run. */
 const RUN = randomUUID().slice(0, 8);
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+const PNG_SHA256 = createHash('sha256').update(PNG).digest('hex');
 
 interface Services {
   db: PrismaClient;
@@ -62,7 +63,11 @@ interface Fixture {
   screenshot: string;
 }
 
-async function fixture(db: PrismaClient, label: string, status: RunStatus): Promise<Fixture> {
+/**
+ * `stored`: the screenshot as an upload has been kept since Orbit Files (0462) — its bytes in the file
+ * store, named by sha256, and none in the row. Otherwise a row from before it, its bytes in `data`.
+ */
+async function fixture(db: PrismaClient, label: string, status: RunStatus, stored = false): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
@@ -116,6 +121,13 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus): Prom
       status: 'ANSWERED',
     },
   });
+  if (stored) {
+    await db.fileBlob.upsert({
+      where: { sha256: PNG_SHA256 },
+      create: { sha256: PNG_SHA256, sizeBytes: PNG.length, storage: 'local' },
+      update: {},
+    });
+  }
   const screenshot = await db.attachment.create({
     data: {
       ownerId,
@@ -124,7 +136,7 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus): Prom
       mimeType: 'image/png',
       sizeBytes: PNG.length,
       fileName: 'error.png',
-      data: PNG,
+      ...(stored ? { sha256: PNG_SHA256 } : { data: PNG }),
     },
   });
   return { ownerId, sessionId, firstTurnId: first.id, screenshot: screenshot.id };
@@ -133,7 +145,7 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus): Prom
 async function filesOf(db: PrismaClient, turnId: string) {
   return db.attachment.findMany({
     where: { turnId },
-    select: { id: true, sessionId: true, mimeType: true, sizeBytes: true, fileName: true, data: true },
+    select: { id: true, sessionId: true, mimeType: true, sizeBytes: true, fileName: true, sha256: true, data: true },
   });
 }
 
@@ -155,13 +167,14 @@ test('Retry of a failed run carries its screenshot, as a copy on the new turn',
       assert.equal(more.length, 0, 'the new turn carries the one file its message was sent with');
       assert.notEqual(copy.id, f.screenshot, 'a copy, not the original moved');
       assert.deepEqual(
-        { ...copy, id: undefined, data: Buffer.from(copy.data) },
+        { ...copy, id: undefined, data: copy.data && Buffer.from(copy.data) },
         {
           id: undefined,
           sessionId: f.sessionId,
           mimeType: 'image/png',
           sizeBytes: PNG.length,
           fileName: 'error.png',
+          sha256: null,
           data: PNG,
         },
       );
@@ -208,6 +221,33 @@ test('Retry of a live session carries its screenshot the same way',
       const replayed = await sessions.createTurn(f.ownerId, f.sessionId, retry);
       assert.equal(replayed.turnId, sent.turnId);
       assert.equal(await db.attachment.count({ where: { sessionId: f.sessionId } }), 2);
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+test('Retry of a stored file carries a copy that names the same bytes, and no bytes of its own',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    try {
+      const f = await fixture(db, 'resend-stored', RunStatus.AWAITING_INPUT, true);
+      const sent = await sessions.createTurn(f.ownerId, f.sessionId, {
+        clientTurnId: randomUUID(),
+        content: 'what is wrong here?',
+        attachmentIds: [f.screenshot],
+      });
+      const [copy, ...more] = await filesOf(db, sent.turnId);
+      assert.equal(more.length, 0);
+      assert.notEqual(copy.id, f.screenshot, 'a copy, not the original moved');
+      // The INSERT ... SELECT copies the reference: a copy that kept neither would be a row nothing can
+      // serve, which attachment_bytes_present refuses.
+      assert.deepEqual(
+        { sha256: copy.sha256, data: copy.data },
+        { sha256: PNG_SHA256, data: null },
+        'the copy names the stored bytes and carries none',
+      );
+      assert.equal(await db.fileBlob.count({ where: { sha256: PNG_SHA256 } }), 1, 'the bytes are kept once');
     } finally {
       await db.$disconnect();
     }

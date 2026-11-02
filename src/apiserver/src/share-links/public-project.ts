@@ -541,15 +541,16 @@ export async function readPublicProjectConversation(
 }
 
 /**
- * An attachment's bytes for a project link: one of its tasks' input files with Comments & files, or
- * one belonging to a conversation it opens with Conversations. Anything else is the one 404.
+ * Which attachment a project link may serve as `id`: one of its tasks' input files with Comments &
+ * files, or one belonging to a conversation it opens with Conversations. Anything else finds nothing,
+ * the one 404. The bytes are read through the file store (SharedController).
  */
-export async function readPublicProjectAttachment(
+export async function publicProjectAttachmentWhere(
   prisma: PrismaService,
   projectId: string,
   include: Required<ShareInclude>,
   id: string,
-): Promise<{ data: Buffer; mimeType: string }> {
+): Promise<Prisma.AttachmentWhereInput> {
   const within: Prisma.AttachmentWhereInput[] = [];
   if (include.commentsAndFiles) within.push({ task: { projectId } });
   if (include.conversations) {
@@ -558,9 +559,7 @@ export async function readPublicProjectAttachment(
     if (coordinator) within.push({ sessionId: coordinator });
   }
   if (within.length === 0) throw linkNotFound();
-  const row = await prisma.attachment.findFirst({ where: { id, OR: within }, select: { data: true, mimeType: true } });
-  if (!row) throw linkNotFound();
-  return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  return { id, OR: within };
 }
 
 /** How much a project link's layers hold — what the Share dialog counts for its owner. */

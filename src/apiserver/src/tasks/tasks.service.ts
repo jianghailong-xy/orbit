@@ -95,6 +95,7 @@ import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
@@ -2105,8 +2106,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * for the same reason as `queue`: a service built by hand ticks whenever it is asked to.
      */
     @Optional() leader?: ControlPlaneLeader,
+    /**
+     * Where attachment bytes are kept (files/files.service.ts), for the task inputs a dispatch copies.
+     * `@Optional()` and last for the places that build this service directly; like `handoffs`, they get
+     * one over THIS prisma and the same environment, so a copy is made exactly as the injected one makes it.
+     */
+    @Optional() files?: FilesService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
+    this.files = files ?? new FilesService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
     // instance that answers it has to be able to reach this one.
     this.handoffs.bindMoveApplier(this);
@@ -2127,6 +2135,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly queue?: QueueService;
   private readonly evidenceQueue?: CoordinatorEvidenceQueueService;
   private readonly leader?: ControlPlaneLeader;
+  private readonly files: FilesService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -13075,7 +13084,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!ids.length) return;
     const sources = await tx.attachment.findMany({
       where: { ownerId, id: { in: ids } },
-      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, data: true },
+      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, sha256: true, data: true },
     });
     // Rechecked in the task's transaction: deletion after preflight must roll back the task too.
     if (sources.length !== ids.length) throw new NotFoundException('attachment not found');
@@ -13088,6 +13097,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: source.mimeType,
           sizeBytes: source.sizeBytes,
           fileName: source.fileName,
+          // The same stored bytes as the source; only a row from before Orbit Files carries `data`.
+          sha256: source.sha256,
           data: source.data,
         },
         select: { id: true },
@@ -13107,11 +13118,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * `sessionId` null yields unscoped rows for `sessions.create` to adopt; a session id yields rows
    * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
    * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
+   *
+   * A copy is a ROW, never the bytes again (docs/orbit-files-design.md §2.1): it names the template's
+   * stored bytes by their sha256, and the bytes are read by neither. A template from before Orbit
+   * Files, whose bytes are still in `data`, has them kept in the file store the first time it is
+   * copied (`FilesService.referenceOf`), and is copied the same way from then on.
    */
   private async copyTaskAttachments(taskId: string, sessionId: string | null): Promise<string[]> {
     const inputs = await this.prisma.attachment.findMany({
       where: { taskId },
       orderBy: { createdAt: 'asc' },
+      select: { id: true, ownerId: true, mimeType: true, sizeBytes: true, fileName: true, sha256: true },
     });
     const copies: string[] = [];
     for (const a of inputs) {
@@ -13122,7 +13139,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: a.mimeType,
           sizeBytes: a.sizeBytes,
           fileName: a.fileName,
-          data: a.data,
+          sha256: await this.files.referenceOf(a),
         },
         select: { id: true },
       });

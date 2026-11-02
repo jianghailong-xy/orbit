@@ -1,16 +1,30 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import type { FileUpload } from '../files/file-upload-storage';
+import { FilesService, type OpenedFile } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertEngineSession } from '../sessions/engine-session';
-import { assertValidUpload, toBytes, UploadedFile } from './attachments.media';
+import { assertValidUpload } from './attachments.media';
 
 @Injectable()
 export class AttachmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly files: FilesService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    /** Nest's one instance (FilesModule); a service built by hand keeps bytes through its own, over the
+     *  same prisma and the same environment. */
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
 
   /**
    * Persist an uploaded file for `ownerId`, optionally scoped to a session OR a task. Validates
    * size, and — when a scope is given — that the row it names belongs to the caller, so an upload
-   * can't be parked on another tenant's session or task. Returns the new id.
+   * can't be parked on another tenant's session or task. Returns the new id. The bytes, already on
+   * disk (FILE_UPLOAD_STORAGE), are kept in the file store only once every check has passed, and the
+   * temporary file is removed on every way out.
    *
    * The two scopes mean different things and cannot be combined. A session scope is a blob in a
    * CONVERSATION: it cascade-deletes with the session and is handed to the runner as part of a
@@ -22,44 +36,39 @@ export class AttachmentsService {
   async create(
     ownerId: string,
     sessionId: string | undefined,
-    file: UploadedFile | undefined,
+    file: FileUpload | undefined,
     taskId?: string,
   ): Promise<{ id: string }> {
-    assertValidUpload(file);
-    const f = file as UploadedFile;
-    if (sessionId && taskId) {
-      throw new BadRequestException('an attachment is scoped to a session or a task, not both');
-    }
-    if (sessionId) {
-      const session = await this.prisma.session.findFirst({
-        where: { id: sessionId, ownerId },
-        select: { id: true, sessionKind: true },
-      });
-      if (!session) throw new NotFoundException('session not found');
-      // An upload scoped to a session is an input to an engine turn; a LANDING takes none
-      // (§2.9 LS6).
-      assertEngineSession(session);
-    }
-    if (taskId) {
-      const task = await this.prisma.task.findFirst({
-        where: { id: taskId, ownerId },
-        select: { id: true },
-      });
-      if (!task) throw new NotFoundException('task not found');
-    }
-    const row = await this.prisma.attachment.create({
-      data: {
+    try {
+      assertValidUpload(file);
+      if (sessionId && taskId) {
+        throw new BadRequestException('an attachment is scoped to a session or a task, not both');
+      }
+      if (sessionId) {
+        const session = await this.prisma.session.findFirst({
+          where: { id: sessionId, ownerId },
+          select: { id: true, sessionKind: true },
+        });
+        if (!session) throw new NotFoundException('session not found');
+        // An upload scoped to a session is an input to an engine turn; a LANDING takes none
+        // (§2.9 LS6).
+        assertEngineSession(session);
+      }
+      if (taskId) {
+        const task = await this.prisma.task.findFirst({
+          where: { id: taskId, ownerId },
+          select: { id: true },
+        });
+        if (!task) throw new NotFoundException('task not found');
+      }
+      return await this.files.createAttachment(file as FileUpload, {
         ownerId,
         sessionId: sessionId ?? null,
         taskId: taskId ?? null,
-        mimeType: f.mimetype,
-        sizeBytes: f.size,
-        fileName: f.originalname || null,
-        data: toBytes(f.buffer),
-      },
-      select: { id: true },
-    });
-    return { id: row.id };
+      });
+    } finally {
+      await this.files.discard(file);
+    }
   }
 
   /**
@@ -86,33 +95,18 @@ export class AttachmentsService {
    * Fetch an attachment's bytes for `ownerId`. Filtering by ownerId in the query means a
    * non-owner gets a 404 (no existence leak) — that is the tenant-isolation guarantee.
    */
-  async getForOwner(
-    ownerId: string,
-    id: string,
-  ): Promise<{ data: Buffer; mimeType: string }> {
-    const row = await this.prisma.attachment.findFirst({
-      where: { id, ownerId },
-      select: { data: true, mimeType: true },
-    });
-    if (!row) throw new NotFoundException('attachment not found');
-    return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  async getForOwner(ownerId: string, id: string): Promise<OpenedFile> {
+    const file = await this.files.open({ id, ownerId });
+    if (!file) throw new NotFoundException('attachment not found');
+    return file;
   }
 
   /**
-   * Serve an attachment's bytes for a public shared transcript: only if it belongs to the
-   * session a public link opens. The link — resolved from its token by ShareLinksService, the
-   * capability (no ownerId check) — names `sessionId`, so the read-only shared page can render
-   * inline images without the bearer-guarded download route.
+   * The bytes of the attachment `where` finds, or null — for a public link, whose scope
+   * (ShareLinksService resolving the token, the capability, with no ownerId check) is the `where`:
+   * the session a link opens, or what a task or project link's layers include.
    */
-  async getForSharedSession(
-    sessionId: string,
-    id: string,
-  ): Promise<{ data: Buffer; mimeType: string }> {
-    const row = await this.prisma.attachment.findFirst({
-      where: { id, sessionId },
-      select: { data: true, mimeType: true },
-    });
-    if (!row) throw new NotFoundException('attachment not found');
-    return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  open(where: Prisma.AttachmentWhereInput): Promise<OpenedFile | null> {
+    return this.files.open(where);
   }
 }
