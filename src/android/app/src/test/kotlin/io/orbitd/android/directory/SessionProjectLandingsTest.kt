@@ -58,6 +58,38 @@ class SessionProjectLandingsTest {
         assertEquals(emptyList<LandingsWindowCard>(), window.now)
     }
 
+    /** Settled landings Orbit reported close together read as one group of messages, one avatar (owner 2026-11-02,
+     *  docs/mocks/landings-chat-bubbles): each within ten minutes of the one before it, in the same day — a task's landing and the merge
+     *  into main that carried it. */
+    @Test fun groupsADaysRowsThatCameWithinTenMinutesOfTheOneBefore() {
+        val window = window(listOf(
+            row("T1", state = "SETTLED", settledAs = "LANDED", settledAt = local(26, 22, 11)),
+            row("round", title = "Merge project/p1 → main · #1", subject = "PROMOTION", state = "SETTLED", settledAs = "MERGED",
+                settledAt = local(26, 22, 13)),
+            row("T2", state = "SETTLED", settledAs = "LANDED", settledAt = local(26, 23, 7)),
+            row("T4", state = "SETTLED", settledAs = "LANDED", settledAt = local(26, 23, 17)),
+            row("T6", state = "SETTLED", settledAs = "NOTHING_TO_LAND", settledAt = local(26, 23, 28)),
+            row("T5", state = "SETTLED", settledAs = "LANDED", settledAt = local(26, 23, 55)),
+            row("T3", state = "SETTLED", settledAs = "LANDED", settledAt = local(27, 0, 1))))
+        assertEquals(listOf("Yesterday", "Today"), window.days.map { it.title })
+        fun ids(day: LandingsWindowDay) = SessionProjectLandings.groups(day.rows).map { group -> group.map { it.id } }
+        // Ten minutes exactly still joins (T2 → T4); eleven starts a group (T4 → T6); six minutes across midnight are two days, so two
+        // groups (T5 → T3).
+        assertEquals(listOf(listOf("T1", "round"), listOf("T2", "T4"), listOf("T6"), listOf("T5")), ids(window.days[0]))
+        assertEquals(listOf("T1", "T2", "T6", "T5"), SessionProjectLandings.groups(window.days[0].rows).map { it.first().id })
+        assertEquals(listOf(listOf("T3")), ids(window.days[1]))
+        assertEquals(600_000L, SessionProjectLandings.groupGapMs)
+    }
+
+    /** A row whose instant is unknown has no neighbour to be close to: it stands alone. */
+    @Test fun aRowWithNoInstantIsAGroupOfItsOwn() {
+        fun unknown(key: String) = LandingsWindowRow(key, key, "TASK", key, "Landed", LandingsWindowTone.OK, "", Long.MIN_VALUE)
+        val known = LandingsWindowRow("c", "c", "TASK", "c", "Landed", LandingsWindowTone.OK, "08:00", local(1, 8).toEpochMilli())
+        assertEquals(listOf(listOf("a"), listOf("b"), listOf("c")),
+            SessionProjectLandings.groups(listOf(unknown("a"), unknown("b"), known)).map { group -> group.map { it.key } })
+        assertEquals(emptyList<List<LandingsWindowRow>>(), SessionProjectLandings.groups(emptyList()))
+    }
+
     @Test fun putsWhatIsInHandUnderNowInTheOrderItStarted() {
         val window = window(listOf(
             row("Checks failed", state = "AWAITING_DECISION", createdAt = local(27, 10, 1)),
