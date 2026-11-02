@@ -1401,6 +1401,10 @@ starts once it is healthy. Keep Postgres running unless the release notes explic
 outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
 as it was.
 
+`pgbackup` keeps the `scripts/pg-backup.sh` it started on until it is recreated, and these steps recreate it only when
+its Compose definition changes. After a change to the script alone, run `docker compose up -d --no-deps --force-recreate
+pgbackup` in this checkout; `/upgrade`'s script does that by itself.
+
 These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
 `/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do
 its steps after the ones above:

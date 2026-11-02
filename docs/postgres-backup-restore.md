@@ -68,6 +68,7 @@ Restoring from the mirror is the same runbook — copy a base backup directory a
 (or point `restore_command` at a mount of the mirror):
 
 ```bash
+mkdir -p data
 rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
 ```
 
