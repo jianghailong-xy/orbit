@@ -173,7 +173,7 @@ struct WikiActivityPage: View {
                         actions.openSession(session)
                     }
                 default:
-                    return .systemAction
+                    return .leaving(url)
                 }
                 return .handled
             })

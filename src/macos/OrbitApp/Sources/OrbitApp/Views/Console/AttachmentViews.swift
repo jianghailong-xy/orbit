@@ -97,7 +97,7 @@ struct ChatAttachmentFile: View {
             title: name,
             isMarkdown: textPreview?.isMarkdown ?? false,
             onOpenFile: {
-                if let previewData, !FileHandoff.deliver(previewData, named: name) {
+                if let previewData, !FileHandoff.deliver(previewData, named: name, app: app) {
                     app?.showToast("Couldn't open that file", detail: name, tone: .error)
                 }
             }
@@ -105,7 +105,7 @@ struct ChatAttachmentFile: View {
     }
 
     /// Attachments and generated file links use the same text reader; other formats keep the
-    /// platform's share sheet on iOS and the file's own application on a Mac.
+    /// platform's share sheet on iOS and go through `FileHandoff`'s list on a Mac.
     private func fetch() {
         guard !fetching else { return }
         fetching = true
@@ -118,7 +118,7 @@ struct ChatAttachmentFile: View {
             if let preview = TextFilePreview(data: data, fileName: name) {
                 previewData = data
                 textPreview = preview
-            } else if !FileHandoff.deliver(data, named: name) {
+            } else if !FileHandoff.deliver(data, named: name, app: app) {
                 app?.showToast("Couldn't open that file", detail: name, tone: .error)
             }
         }
