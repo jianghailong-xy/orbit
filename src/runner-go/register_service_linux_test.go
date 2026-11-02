@@ -84,8 +84,15 @@ func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
-	prevEUID, prevLookup, prevExec := processEUID, lookupUser, execSudoHandOff
-	t.Cleanup(func() { processEUID, lookupUser, execSudoHandOff = prevEUID, prevLookup, prevExec })
+	sudo, err := exec.LookPath("sudo") // pretendRegisterHost's
+	if err != nil {
+		t.Fatal(err)
+	}
+	prevEUID, prevLookup, prevExec, prevDirs := processEUID, lookupUser, execSudoHandOff, sudoSearchDirs
+	t.Cleanup(func() {
+		processEUID, lookupUser, execSudoHandOff, sudoSearchDirs = prevEUID, prevLookup, prevExec, prevDirs
+	})
+	sudoSearchDirs = []string{filepath.Dir(sudo)}
 	processEUID = func() int { return 0 }
 	lookupUser = func(name string) (*user.User, error) {
 		if name == account.Username {

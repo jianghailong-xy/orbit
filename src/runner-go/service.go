@@ -364,12 +364,12 @@ func execStdout(name string, args ...string) (string, error) {
 }
 
 // registeringUser is the account the runner service should run as: the human who
-// ran `orbit register`. Under sudo that's $SUDO_USER; otherwise the current user.
+// ran `orbit register`. When sudo made this process root that's $SUDO_USER (sudoAccount);
+// otherwise the current user, `sudo -u svc` included: there $SUDO_USER is whoever typed it,
+// and the command and its config are svc's.
 func registeringUser() (*user.User, error) {
-	if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
-		if u, err := lookupUser(su); err == nil {
-			return u, nil
-		}
+	if u, ok := sudoAccount(); ok {
+		return u, nil
 	}
 	return currentUser()
 }

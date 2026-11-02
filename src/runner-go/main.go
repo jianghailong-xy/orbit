@@ -506,9 +506,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	// register cwd so a runner registered inside a repo operates on that repo.
 	workDir := flags["workdir"]
 	if workDir == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			workDir = cwd
-		}
+		workDir = registerCwd()
 	}
 	// The runner spawns claude -p, which on a proxied network must use the same
 	// HTTP proxy to reach the Anthropic API. Let the user opt in.

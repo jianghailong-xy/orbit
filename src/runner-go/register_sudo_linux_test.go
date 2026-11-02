@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"slices"
@@ -54,9 +55,14 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sudo, err := exec.LookPath("sudo") // pretendRegisterHost's
+	if err != nil {
+		t.Fatal(err)
+	}
 	var handedOff []string
-	prevExec := execSudoHandOff
-	t.Cleanup(func() { execSudoHandOff = prevExec })
+	prevExec, prevDirs := execSudoHandOff, sudoSearchDirs
+	t.Cleanup(func() { execSudoHandOff, sudoSearchDirs = prevExec, prevDirs })
+	sudoSearchDirs = []string{filepath.Dir(sudo)}
 	execSudoHandOff = func(argv []string) error {
 		handedOff = argv
 		at := slices.Index(argv, exe)

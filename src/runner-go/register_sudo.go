@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"slices"
@@ -35,8 +34,8 @@ var sudoHandOffEnv = []string{
 }
 
 // sudoAccount is the account a command run through sudo acts for: SUDO_USER, when this process is root
-// and that names an account of this machine other than root. Anything else, root's own login included,
-// is no hand-off: there the runner is root's.
+// and that names an account of this machine other than root. Anything else is no hand-off: on root's
+// own login the runner is root's, and `sudo -u svc` already runs the command as the account it asked for.
 func sudoAccount() (*user.User, bool) {
 	if processEUID() != 0 {
 		return nil, false
@@ -65,6 +64,23 @@ func sudoHandOffArgv(sudo, account, exe string, args []string) []string {
 	return append(argv, args...)
 }
 
+// sudoSearchDirs is where the hand-off looks for sudo: the system's own directories, the last of them
+// NixOS's, and not PATH. It runs what it finds as root, and where sudo keeps PATH (macOS, a sudoers with
+// no secure_path) PATH is the account's, with directories the account and its agents can write. A var so
+// a test can stand one in.
+var sudoSearchDirs = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/run/wrappers/bin"}
+
+// systemSudo is the sudo in sudoSearchDirs, which root may run.
+func systemSudo() (string, error) {
+	for _, dir := range sudoSearchDirs {
+		path := filepath.Join(dir, "sudo")
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("no sudo in %s", strings.Join(sudoSearchDirs, ", "))
+}
+
 // execSudoHandOff replaces this process with argv. A var so a test can play the account's side itself.
 var execSudoHandOff = func(argv []string) error {
 	return syscall.Exec(argv[0], argv, os.Environ())
@@ -79,19 +95,19 @@ func handOffUnderSudo(args []string) bool {
 	if !ok {
 		return false
 	}
-	fail := func(format string, a ...any) bool {
-		fmt.Fprintf(os.Stderr, "orbit %s: under sudo it runs as %s, the account that ran sudo, and ", args[0], account.Username)
-		fmt.Fprintf(os.Stderr, format+"\n", a...)
+	fail := func(why error) bool {
+		fmt.Fprintf(os.Stderr, "orbit %s: under sudo it runs as %s, the account that ran sudo, and this could not switch to it: %v\nRun it as %s instead: orbit %s\n",
+			args[0], account.Username, why, account.Username, args[0])
 		os.Exit(1)
 		return false
 	}
-	sudo, err := exec.LookPath("sudo")
+	sudo, err := systemSudo()
 	if err != nil {
-		return fail("cannot find sudo to switch to it: %v", err)
+		return fail(err)
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return fail("cannot locate its own executable: %v", err)
+		return fail(err)
 	}
 	home := os.Getenv("ORBIT_HOME")
 	if home == "" {
@@ -104,9 +120,23 @@ func handOffUnderSudo(args []string) bool {
 	// account's register would bake them into its service's PATH.
 	_ = os.Setenv("PATH", withoutPathDirs(os.Getenv("PATH"), engineInstallerDirs(userHome())))
 	if err := execSudoHandOff(sudoHandOffArgv(sudo, account.Username, exe, args)); err != nil {
-		return fail("could not switch to it: %v", err)
+		return fail(err)
 	}
 	return true
+}
+
+// registerCwd is the directory this registration says it ran in, or nothing when this account cannot
+// enter it: a register handed over from `sudo -i` (handOffUnderSudo) is still in /root. That directory
+// exists to the runner's directory probe, which only stats it, so the machine's setup card would offer a
+// folder no session of this runner can start in. access(2) rather than a look inside: on a Mac, a read
+// of ~/Desktop or ~/Downloads makes macOS ask the user for access.
+func registerCwd() string {
+	const readAndSearch = 0o4 | 0o1 // R_OK | X_OK
+	cwd, err := os.Getwd()
+	if err != nil || syscall.Access(cwd, readAndSearch) != nil {
+		return ""
+	}
+	return cwd
 }
 
 // withoutPathDirs is path with dirs left out.
