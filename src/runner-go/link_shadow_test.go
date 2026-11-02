@@ -230,7 +230,7 @@ func TestLinkShadowTapLeavesTheWorkPathAsItWas(t *testing.T) {
 		add(nil, tr.postEvents(context.Background(), "s1", linkTestEvents(1, 3, 10)))
 		data, err := tr.fetchAttachment(context.Background(), "s1", "a1")
 		add(data, err)
-		id, err := tr.uploadSessionAttachment(context.Background(), "s1", file, "text/plain")
+		id, err := uploadTestAttachment(tr, "s1", file, "text/plain")
 		add(id, err)
 		return out
 	}

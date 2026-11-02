@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
 import { streamable } from '../files/files.service';
 import { AttachmentsService } from './attachments.service';
@@ -32,10 +33,13 @@ export class AttachmentsController {
   // the app sets no raised body limit, so Express' ~100kb JSON cap would 413 real images;
   // multipart also avoids base64's ~33% inflation. The file streams to a temporary file on disk
   // and is hashed on the way (FILE_UPLOAD_STORAGE), never held in memory whole; `limits.fileSize`
-  // bounds what it may write.
+  // bounds what it may write, and FileUploadCleanupInterceptor removes it however the request ends.
   @PatScope('tasks:write', { workspaceConfinable: false })
   @Post()
-  @UseInterceptors(FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  @UseInterceptors(
+    FileUploadCleanupInterceptor,
+    FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
   upload(
     @CurrentUser() user: AuthUser,
     @UploadedFileParam() file: FileUpload | undefined,

@@ -166,6 +166,7 @@ import {
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FilesService } from '../files/files.service';
+import { attachmentDisposition } from '../files/user-file-response';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
@@ -519,11 +520,6 @@ function legacyArtifactMime(filePath: string): string {
     default:
       return 'application/octet-stream';
   }
-}
-
-function legacyArtifactDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7E]|["\\\r\n]/g, '_') || 'download';
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -4967,7 +4963,7 @@ export class SessionsService {
           if (!uploaded) throw new NotFoundException('File is no longer available.');
           return {
             data: uploaded.data, mimeType: uploaded.mimeType,
-            disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
+            disposition: attachmentDisposition(path.posix.basename(filePath)),
           };
         }
         if (receipt?.status === 'missing') throw new NotFoundException('File is no longer available.');
@@ -5051,7 +5047,7 @@ export class SessionsService {
     const local = {
       data,
       mimeType: legacyArtifactMime(localFile),
-      disposition: legacyArtifactDisposition(filename),
+      disposition: attachmentDisposition(filename),
     };
     await this.persistLegacyArtifactAttachment(sessionId, filename, local.mimeType, data).catch(() => undefined);
     return local;
@@ -5126,7 +5122,7 @@ export class SessionsService {
     return {
       data: stored.data,
       mimeType: stored.mimeType,
-      disposition: legacyArtifactDisposition(row.fileName ?? filename),
+      disposition: attachmentDisposition(row.fileName ?? filename),
     };
   }
 

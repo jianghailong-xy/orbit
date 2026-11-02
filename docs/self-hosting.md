@@ -1408,6 +1408,23 @@ docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
 
+### Going back to an older version
+
+An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
+`ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
+so going back to one after the upgraded version has accepted uploads has a limit:
+
+- **Attachments uploaded since the upgrade can't be read.** The older version fails on them: opening one, and anything
+  else that needs its bytes, such as starting a run of a task that has one as an input.
+- **Their bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves
+  those attachments as before.
+- **Attachments from before the upgrade keep working** on both versions, because their bytes are still in Postgres. So
+  do the ones uploaded while the older version runs.
+
+A Compose upgrade replaces the apiserver in one step, so in normal operation no older version serves these attachments.
+The exception is [several apiservers](#several-apiservers): the others run the old code until they are recreated, and
+until then they fail on an attachment uploaded through the first one.
+
 ## Production checklist
 
 - [ ] `JWT_SECRET` and `PROVIDER_SECRET_KEY` are unique, protected, and backed up.

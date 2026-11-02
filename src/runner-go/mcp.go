@@ -355,6 +355,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
 	}
+	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
+	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
 	}
@@ -4965,6 +4969,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// anybody else's session, so the wiki tools are offered to every agent, as the task tools are
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	tools = append(tools, wikiToolDescriptors(obj)...)
+	tools = append(tools, fileToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
