@@ -469,7 +469,7 @@ suite('a task\'s own run cannot rewrite the standard it is measured by', async (
   // A project-less EVIDENCE_JUDGMENT row is the shape that used to be a deadlock, and re-declaring
   // it EXECUTABLE is one of the two ways out. A wall that closed that path for everybody would
   // have replaced a bypass with a trap.
-  await t.test('a project-less EVIDENCE_JUDGMENT row is still rescuable — by anybody but its run',
+  await t.test('a project-less EVIDENCE_JUDGMENT row is still rescuable — by the coordinator or the owner',
     async () => {
       const stranded = await work({
         title: 'standalone work filed under no goal at all',
