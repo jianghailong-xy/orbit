@@ -125,9 +125,9 @@ list_target() {
   return 1
 }
 
-# The lines of a listing that are finished WAL segments: 24 hex digits, the timeline first, so that
-# their names sort in the order Postgres wrote them.
-segment_lines() { grep -E ' [0-9A-F]{24}\.gz$' || true; }
+# The lines of a listing, or of bare names, that are finished WAL segments: 24 hex digits, the timeline
+# first, so that their names sort in the order Postgres wrote them.
+segment_lines() { grep -E '(^| )[0-9A-F]{24}\.gz$' || true; }
 
 # The name of the newest segment in such lines.
 newest_segment() { awk '{print $NF}' | LC_ALL=C sort | tail -n1; }
@@ -147,6 +147,8 @@ replace_target_advice() {
 # `docker compose up -d` before a restore would replace the only copy of the old cluster's history.
 # Asked of what any mirror already holds, so it needs no marker there and works for one that predates it:
 #   - nothing Postgres wrote: a first install;
+#   - something in base/ and no segment: refused, whatever it is called, since nothing there says whose it is. This script
+#     does not leave that, because a round sends WAL first (sync_archive);
 #   - otherwise the system identifier in one of its segments, read every time, because a listing's name, size and time say
 #     nothing of whose a file is. The smallest costs the least to fetch. A torn copy sorts there too and holds no
 #     identifier, so the next is asked, three at most, rather than one bad file stopping the mirror for good.
@@ -159,17 +161,15 @@ target_is_ours() {
   fi
   remote_segments="$(printf '%s\n' "$remote_wal" | segment_lines)"
   if [ -z "$remote_segments" ]; then
-    # A first sync cut short has a base backup of ours there and no WAL yet. One of someone else's is not ours.
     if ! remote_base="$(list_target "$SYNC_TARGET/base/")"; then
       log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
       return 1
     fi
-    for stamp in $(printf '%s\n' "$remote_base" | awk '{print $NF}' | grep -E '^[0-9]{8}T[0-9]{6}Z$' || true); do
-      if ! list_backups | grep -qx "$stamp"; then
-        log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backup $stamp, which is not in $ARCHIVE_DIR, and no WAL to tell whose it is, and --delete would remove it. $(replace_target_advice)"
-        return 1
-      fi
-    done
+    held="$(printf '%s\n' "$remote_base" | awk 'NF && $NF != "." {print $NF}' | tr '\n' ' ' | tail -c 200)"
+    if [ -n "$held" ]; then
+      log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
+      return 1
+    fi
     return 0
   fi
 
@@ -218,16 +218,21 @@ sync_archive() {
   MIRRORED=no
   # A real archive holds a base backup and the WAL Postgres writes to it. Anything less is an
   # empty or wrong mount, say a recreate from another checkout, and --delete would clear the only
-  # off-host copy. WAL too because this loop has already taken a base backup by now, even there.
-  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then
+  # off-host copy. WAL too because this loop has already taken a base backup by now, even there, and a
+  # finished segment because that directory also holds temporary files and backup history files.
+  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then
     log "ERROR: refusing off-host sync to $SYNC_TARGET: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
     return 1
   fi
   target_is_ours || return 1
-  # --delete so the copy mirrors retention instead of growing forever; --timeout so a
+  # WAL first, on its own and deleting nothing. A target then holds a finished segment before it holds a base
+  # backup, and keeps one from then on wherever a round is cut short, even if everything it held has left this
+  # archive's retention, so the next poll can read whose it is and carry on.
+  # Then --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
-  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
+  if ! out="$(rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1 \
+       && rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
        -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1)"; then
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
     return 1

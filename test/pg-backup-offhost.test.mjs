@@ -6,10 +6,11 @@
 //
 // The mirror (a fresh cluster must not replace the old cluster's archive): an existing mirror of another cluster is refused
 // and left byte for byte as it was, whether or not its segment names overlap this archive's, and however alike its listing
-// reads, and so is one further on than this archive, or a base backup with no WAL to say whose it is; the log says why and
-// what to do. The same cluster, a restored one on a higher timeline, a first install to an empty or missing directory, and a
-// first sync cut short all go on. A segment holds the system identifier Postgres wrote into it, so none of this needs a marker
-// on the target, and one is read from the target before every --delete.
+// reads, and so is one further on than this archive, or a base backup with no WAL, whatever it is called; the log says why and
+// what to do. The same cluster, a restored one on a higher timeline and a first install to an empty or missing directory all
+// go on, and so does a first sync cut short, because a round sends WAL first and a segment is then there to read. A segment
+// holds the system identifier Postgres wrote into it, so none of this needs a marker on the target, and one is read from the
+// target before every --delete.
 //
 // The files copy (pruned after the bytes go, never by what the local directory lacks): only names the database says are due
 // go, and an empty or missing local directory, a database it cannot read, or a target the mirror refused removes nothing.
@@ -95,8 +96,10 @@ function fingerprint(dir) {
  * One round of the loop on scratch directories. Everything is real but Postgres: psql answers for the cluster `system` and
  * says which file names are due, or fails when `database` is 'down'; pg_basebackup makes a backup when one is due; sleep
  * fails, which ends the script under `set -e`, with 7 meaning the round finished. `prepare` is given the directories.
+ * With `cut`, a round runs first in which the rsync call naming `cut.on` sends all but what `cut.holdsBack` matches and then
+ * dies, as a dropped connection does. What that left is `cutShort`, and the next poll is the round this returns.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null }) {
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null }) {
   const scratch = mkdtempSync(path.join(tmpdir(), 'pg-backup-offhost-'));
   try {
     const dirs = {
@@ -114,6 +117,7 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
     mkdirSync(stubs);
     const queries = path.join(scratch, 'psql-queries');
     const rsyncCalls = path.join(scratch, 'rsync-calls');
+    const cutting = path.join(scratch, 'cutting');
     const realRsync = execFileSync('sh', ['-c', 'command -v rsync'], { encoding: 'utf8' }).trim();
     for (const [name, body] of Object.entries({
       psql: `printf '%s\\n' "$*" >> '${queries}'
@@ -130,26 +134,39 @@ esac`,
       // The real one, with each call written down.
       rsync: `printf '%s\\n' "$*" >> '${rsyncCalls}'
 ${rsyncFailsOn ? `case "$*" in *'${rsyncFailsOn}'*) echo 'ssh: connect to host backup-host port 22: Connection refused' >&2; exit 255 ;; esac` : ''}
+${cut ? `if [ -e '${cutting}' ]; then case "$*" in *'${cut.on}'*) '${realRsync}' '--exclude=${cut.holdsBack}' "$@"; echo 'rsync: connection unexpectedly closed' >&2; exit 12 ;; esac; fi` : ''}
 exec '${realRsync}' "$@"`,
     })) writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    const poll = () => {
+      const run = spawnSync('sh', ['scripts/pg-backup.sh'], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: {
+          PATH: `${stubs}:${process.env.PATH}`,
+          ORBIT_ARCHIVE_DIR: dirs.archive,
+          ORBIT_FILES_DIR: dirs.files,
+          ORBIT_BACKUP_SYNC_TARGET: dirs.target,
+          ORBIT_BACKUP_MIN_FREE_MB: '0',
+          ORBIT_BASE_BACKUP_INTERVAL: String(interval),
+        },
+        timeout: 30_000,
+      });
+      const log = run.stdout + run.stderr;
+      assert.equal(run.status, 7, `the round finished: ${log}`);
+      return log;
+    };
+    let cutShort = null;
+    if (cut) {
+      writeFileSync(cutting, '');
+      const log = poll();
+      rmSync(cutting);
+      cutShort = { log, mirror: fingerprint(dirs.target) };
+    }
     const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
-    const run = spawnSync('sh', ['scripts/pg-backup.sh'], {
-      cwd: repo,
-      encoding: 'utf8',
-      env: {
-        PATH: `${stubs}:${process.env.PATH}`,
-        ORBIT_ARCHIVE_DIR: dirs.archive,
-        ORBIT_FILES_DIR: dirs.files,
-        ORBIT_BACKUP_SYNC_TARGET: dirs.target,
-        ORBIT_BACKUP_MIN_FREE_MB: '0',
-        ORBIT_BASE_BACKUP_INTERVAL: String(interval),
-      },
-      timeout: 30_000,
-    });
-    const log = run.stdout + run.stderr;
-    assert.equal(run.status, 7, `the round finished: ${log}`);
+    const log = poll();
     return {
       log,
+      cutShort,
       before,
       after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) },
       archive: fingerprint(dirs.archive),
@@ -163,6 +180,11 @@ exec '${realRsync}' "$@"`,
 }
 
 const mirrored = (result) => assert.deepEqual(result.after.mirror, result.archive, `the mirror is now this archive: ${result.log}`);
+/** The file names in a fingerprint, without what they hold. */
+const namesIn = (mirror) => mirror.map((line) => line.split(' ')[0]);
+const segmentsAt = (...numbers) => numbers.map((number) => `wal/${walName(1, number)}.gz`);
+/** The calls of a round that write to the mirror, in order: neither a read of the target nor the files copy. */
+const writesToMirror = (result) => result.rsyncCalls.filter((call) => call.endsWith(`${path.basename(result.dirs.target)}/`) && !call.includes('--list-only'));
 /** The segments this round fetched from the target to read, in order: the one call that has it as source and scratch as destination. */
 const segmentsRead = (result) => result.rsyncCalls.flatMap((call) => call.match(/\/wal\/([0-9A-F]{24}\.gz) \S+\/segment$/)?.[1] ?? []);
 function refused(result, why) {
@@ -240,15 +262,40 @@ test('nor when the mirror holds WAL further on than this archive, even of this c
   refused(result, /it holds WAL newer than .*newest segment 000000010000000000000009\.gz there, 000000010000000000000003\.gz here/);
 });
 
+/** A target holding this in base/ and no WAL, with this archive beside it. */
+function baseOnlyTarget(entry, { wal = [] } = {}) {
+  return ({ archive, target }) => {
+    archiveIn(archive, { bases: ['20260301T000000Z'] });
+    mkdirSync(path.join(target, 'base', entry), { recursive: true });
+    writeFileSync(path.join(target, 'base', entry, 'base.tar.gz'), 'the only copy');
+    mkdirSync(path.join(target, 'wal'));
+    for (const name of wal) writeFileSync(path.join(target, 'wal', name), 'not a segment');
+  };
+}
+
 test('nor a mirror with a base backup of someone else\'s and no WAL to say whose', () => {
+  const result = round({ prepare: baseOnlyTarget('20260201T000000Z') });
+  refused(result, /it holds base backups and no WAL to tell whose they are \(20260201T000000Z\)/);
+});
+
+test('nor one under a name this archive also has, which says nothing of whose it is: an older script\'s first sync cut short is moved aside by hand', () => {
+  const result = round({ prepare: baseOnlyTarget('20260301T000000Z') });
+  refused(result, /it holds base backups and no WAL to tell whose they are \(20260301T000000Z\)/);
+  assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
+});
+
+test('nor when all that is beside it are files that are not finished segments', () => {
   const result = round({
-    prepare: ({ archive, target }) => {
-      archiveIn(archive, { bases: ['20260301T000000Z'] });
-      mkdirSync(path.join(target, 'base', '20260201T000000Z'), { recursive: true });
-      writeFileSync(path.join(target, 'base', '20260201T000000Z', 'base.tar.gz'), 'the only copy');
-    },
+    prepare: baseOnlyTarget('20260301T000000Z', {
+      wal: [`.${walName(1, 2)}.gz.AbCdEf`, `${walName(1, 2)}.00000028.backup.gz`, '00000002.history.gz', `${walName(1, 2)}.gz.partial`],
+    }),
   });
-  refused(result, /it holds base backup 20260201T000000Z, which is not in .*and no WAL to tell whose it is/);
+  refused(result, /it holds base backups and no WAL to tell whose they are/);
+});
+
+test('nor anything else in base/ with no WAL: what it is called does not come into it', () => {
+  const result = round({ prepare: baseOnlyTarget('latest') });
+  refused(result, /it holds base backups and no WAL to tell whose they are \(latest\)/);
 });
 
 test('the same cluster mirrors as ever, trimmed retention included', () => {
@@ -373,12 +420,22 @@ test('a cluster restored from the mirror goes on, on its higher timeline, with t
   }
 });
 
-test('a first install syncs, to a missing directory or an empty one', () => {
-  for (const make of [false, true]) {
+test('a first install syncs, to a missing directory or an empty one, or to one with what a cut left before its first segment landed', () => {
+  const empty = (target) => mkdirSync(target);
+  const bare = (target) => {
+    mkdirSync(path.join(target, 'base'), { recursive: true });
+    mkdirSync(path.join(target, 'wal'));
+  };
+  const firstSegmentCut = (target) => {
+    bare(target);
+    writeFileSync(path.join(target, 'wal', `.${walName(1, 1)}.gz.AbCdEf`), 'half a segment');
+    writeFileSync(path.join(target, 'wal', '00000002.history.gz'), 'a history file sorts first');
+  };
+  for (const make of [null, empty, bare, firstSegmentCut]) {
     const result = round({
       prepare: ({ archive, target }) => {
         archiveIn(archive);
-        if (make) mkdirSync(target);
+        make?.(target);
       },
     });
     mirrored(result);
@@ -386,15 +443,89 @@ test('a first install syncs, to a missing directory or an empty one', () => {
   }
 });
 
-test('a first sync cut short, which left our base backup there and no WAL yet, goes on', () => {
+test('WAL goes first, on its own and deleting nothing, and --delete comes after it', () => {
+  for (const held of [false, true]) {
+    const result = round({
+      prepare: ({ archive, target }) => {
+        archiveIn(archive);
+        if (held) archiveIn(target, { from: 1, to: 2 });
+      },
+    });
+    mirrored(result);
+    const writes = writesToMirror(result);
+    assert.equal(writes.length, 2, result.rsyncCalls.join('\n'));
+    assert.doesNotMatch(writes[0], /--delete/);
+    assert.ok(writes[0].includes('/archive/wal '), writes[0]);
+    assert.match(writes[1], /--delete/);
+  }
+});
+
+test('a first sync cut short in its WAL has left no base backup there, and the next poll finishes it with nobody acting', () => {
   const result = round({
+    cut: { on: '/archive/wal ', holdsBack: `${walName(1, 0).slice(0, -1)}[3-5].gz` },
+    prepare: ({ archive }) => archiveIn(archive, { from: 1, to: 5 }),
+  });
+  assert.deepEqual(namesIn(result.cutShort.mirror), segmentsAt(1, 2));
+  assert.match(result.cutShort.log, /ERROR: off-host sync to .* failed: .*connection unexpectedly closed/);
+  mirrored(result);
+  assert.doesNotMatch(result.log, /ERROR/);
+  assert.equal(segmentsRead(result).length, 1, 'that next poll read whose it is, like any other');
+});
+
+test('a first sync cut short in its base backups has its WAL there already, and goes on the same way', () => {
+  const result = round({
+    cut: { on: '--delete', holdsBack: 'base.tar.gz' },
+    prepare: ({ archive }) => archiveIn(archive),
+  });
+  assert.deepEqual(namesIn(result.cutShort.mirror), segmentsAt(1, 2, 3));
+  mirrored(result);
+  assert.doesNotMatch(result.log, /ERROR/);
+});
+
+test('on a mirror that has fallen behind, a cut costs it nothing: its segments stay until this archive\'s are there', () => {
+  // Every segment it holds has left this archive's retention. --delete alone would clear them before a new one landed.
+  const prepare = ({ archive, target }) => {
+    archiveIn(target, { from: 1, to: 5, bases: ['20260101T000000Z'] });
+    archiveIn(archive, { from: 50, to: 53, bases: ['20260301T000000Z'] });
+  };
+  const older = segmentsAt(1, 2, 3, 4, 5);
+  const inWal = round({ cut: { on: '/archive/wal ', holdsBack: `${walName(1, 0).slice(0, -2)}3[45].gz` }, prepare });
+  assert.deepEqual(namesIn(inWal.cutShort.mirror), ['base/20260101T000000Z/base.tar.gz', ...older, ...segmentsAt(50, 51)]);
+  mirrored(inWal);
+  assert.doesNotMatch(inWal.log, /ERROR/);
+
+  // And with no connection left for the --delete at all.
+  const beforeDelete = round({ rsyncFailsOn: '--delete', prepare });
+  assert.deepEqual(namesIn(beforeDelete.after.mirror), ['base/20260101T000000Z/base.tar.gz', ...older, ...segmentsAt(50, 51, 52, 53)]);
+  assert.match(beforeDelete.log, /ERROR: off-host sync to .* failed: .*ssh: connect to host backup-host/);
+});
+
+test('a WAL pass that fails stops the round before --delete', () => {
+  const result = round({
+    rsyncFailsOn: '/archive/wal ',
     prepare: ({ archive, target }) => {
       archiveIn(archive);
-      mkdirSync(path.join(target, 'base', '20260101T000000Z'), { recursive: true });
-      writeFileSync(path.join(target, 'base', '20260101T000000Z', 'base.tar.gz'), 'cut short');
+      archiveIn(target, { from: 1, to: 2 });
     },
   });
-  mirrored(result);
+  assert.deepEqual(result.after.mirror, result.before.mirror, result.log);
+  assert.match(result.log, /ERROR: off-host sync to .* failed: ssh: connect to host backup-host/);
+  assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
+});
+
+test('an archive with no finished segment is not mirrored, though its WAL directory holds other files', () => {
+  // Backup history files stay after their segments are trimmed, and the archive script's temporary file comes and goes.
+  const prepare = ({ archive, target }, held) => {
+    archiveIn(archive, { to: 0 });
+    for (const name of [`${walName(1, 1)}.00000028.backup.gz`, `.${walName(1, 2)}.gz.123.tmp`]) writeFileSync(path.join(archive, 'wal', name), 'not a segment');
+    if (held) archiveIn(target);
+  };
+  const first = round({ prepare: (dirs) => prepare(dirs, false) });
+  assert.equal(first.after.mirror, null, first.log);
+  assert.match(first.log, /ERROR: refusing off-host sync to .*holds no base backup or no WAL/);
+  const existing = round({ prepare: (dirs) => prepare(dirs, true) });
+  assert.deepEqual(existing.after.mirror, existing.before.mirror, existing.log);
+  assert.match(existing.log, /ERROR: refusing off-host sync to .*holds no base backup or no WAL/);
 });
 
 test('a target it cannot read, or a cluster it cannot name, leaves the mirror and the backups as they were', () => {
@@ -535,6 +666,15 @@ test('a target the mirror refused is not pruned on this cluster\'s word', () => 
   });
   assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
   assert.doesNotMatch(result.log, /pruned/);
+});
+
+test('a round cut short is not pruned on, whichever pass it died in', () => {
+  const name = NAME('a');
+  for (const rsyncFailsOn of ['/archive/wal ', '--delete']) {
+    const result = round({ due: [name], rsyncFailsOn, prepare: prepareCopy([name], [NAME('b')]) });
+    assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
+    assert.doesNotMatch(result.log, /pruned/);
+  }
 });
 
 test('bytes uploaded again since stay, and what the database names that the copy does not have is no error', () => {

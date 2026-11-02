@@ -233,9 +233,9 @@ const cases = [
     replace('ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"', 'ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-1073741824}"')],
   // The mirror's --delete on an empty or wrong mount, which would clear the only off-host copy.
   ['a mirror of an archive with no base backup', 'the mirror refuses an archive that cannot be the real one',
-    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(ls -A "$WAL_DIR")" ]; then')],
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then')],
   ['a mirror of an archive with no WAL', 'the mirror refuses an archive that cannot be the real one',
-    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(list_backups)" ]; then')],
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(list_backups)" ]; then')],
   ['a base backup cut short that stays', 'a base backup cut short by a stopped container does not outlive it',
     replaceScript('rm -rf "$BASE_DIR"/.staging-*\n', '')],
 ];
