@@ -342,10 +342,16 @@ import {
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
 import {
+  DAG_CHANGE_CARD_TOOL,
   TASK_BATCH_CARD_TOOL,
   TASK_CREATE_CARD_TOOL,
+  cardCoversDagOps,
   cardCoversVerifiers,
+  criterionKeyFromRunRefusalBody,
+  taskDeleteFromRunRefusalBody,
+  taskOfRunBehind,
   verifierCreateNeedsOwnerCardBody,
+  verifierDagNeedsOwnerCardBody,
   verifierWriteFromRunRefusalBody,
   verifiersNamedBy,
 } from './verifier-write-authority';
@@ -5602,7 +5608,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!actingSessionId) return;
     const verifiers = verifiersNamedBy(items);
     if (verifiers.length === 0) return;
-    if ((await this.taskOfRun(this.prisma, ownerId, actingSessionId)) === null) return;
+    if ((await taskOfRunBehind(this.prisma, ownerId, actingSessionId)) === null) return;
     const cards = await this.prisma.approval.findMany({
       where: { sessionId: actingSessionId, toolName, status: 'ALLOWED' },
       select: { input: true },
@@ -9455,8 +9461,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * sends it on every task write an agent makes. It answers the two questions on this path that
    * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and
    * the criterion-key bound on coordinator-opened work. Everything else about a task edit is
-   * authorised by the owner, not by which run happened to make it, except that a verifier is not
-   * another run's to write (`verifier-write-authority.ts`).
+   * authorised by the owner, not by which run happened to make it, except that neither a verifier
+   * nor the criterion a task serves is another run's to write (`verifier-write-authority.ts`).
    */
   async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     // Internal write planning must receive its own raw UUID-shaped object. A public GET response is
@@ -9489,7 +9495,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // like every refusal on this path: a peer whose write lands just as the coordinator attaches
     // the row has done no more than an edit made a moment earlier, which is its to make.
     if (actingSessionId && (before.verifiesTaskId != null || dto.verifiesTaskId != null)) {
-      const runsTask = await this.taskOfRun(this.prisma, ownerId, actingSessionId);
+      const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
       if (runsTask !== null && runsTask !== id) {
         throw new ForbiddenException(verifierWriteFromRunRefusalBody());
       }
@@ -9515,6 +9521,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId,
       );
       if (replayed) return replayed;
+    }
+    // Which criterion a task serves is what decides whether that criterion is satisfied: taking the
+    // unfinished work off it, or naming it on finished work, satisfies it with nothing done. So a
+    // run writes this for its own task and for no other. A request to move a task is not this write,
+    // and has gone above.
+    if (actingSessionId && dto.criterionKey !== undefined) {
+      const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
+      if (runsTask !== null && runsTask !== id) {
+        throw new ForbiddenException(criterionKeyFromRunRefusalBody());
+      }
     }
     const acceptanceCommand = dto.acceptanceCommand === undefined
       ? before.acceptanceCommand
@@ -12573,13 +12589,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * under the same owner-wide lock the single-edge paths take, so no dispatch decision is made
    * against a half-applied restructure — which is the reason this exists as a batch at all.
    */
-  async applyDag(ownerId: string, listId: string, ops: DagOp[]) {
+  async applyDag(ownerId: string, listId: string, ops: DagOp[], actingSessionId?: string) {
     const preview = await this.previewDag(ownerId, listId, ops);
     if (preview.cycle) {
       throw new BadRequestException(
         `These changes would create a cycle: ${preview.cycle.map((c) => c.title).join(' → ')}`,
       );
     }
+    await this.assertDagSparesVerifiers(ownerId, ops, actingSessionId);
     // Retried whole. Every decision this makes is re-derived inside the closure: the edge set is
     // re-read under the owner mutex and re-checked for cycles, and `effectiveOps` is computed from
     // that read — so a retry judges the graph the winning transaction left behind, not the one the
@@ -12641,10 +12658,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return { ...applied, preview };
   }
 
+  /**
+   * What a verifier waits for is part of what it is, and which its run starts after, so another run does not change it
+   * (`verifier-write-authority.ts`). Only the row the edge makes wait is asked about: a sibling waiting on a verifier is
+   * that sibling's edge, and a sibling is still a run's to edit.
+   */
+  private async assertEdgeSparesVerifier(ownerId: string, taskId: string, actingSessionId?: string): Promise<void> {
+    if (!actingSessionId) return;
+    const verifiers = await this.prisma.task.count({ where: { id: taskId, ownerId, verifiesTaskId: { not: null } } });
+    if (verifiers === 0) return;
+    const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
+    if (runsTask !== null && runsTask !== taskId) {
+      throw new ForbiddenException(verifierWriteFromRunRefusalBody('change what a task that is a verifier waits for'));
+    }
+  }
+
+  /**
+   * The batch of edits, whose MCP tool asks the owner before it applies and whose CLI door does not, since a terminal is
+   * usually the owner's. From a run, an edit of another task that is a verifier needs that answered card: the same one the
+   * tool files, naming the edit, in this session, as a create needs (`assertVerifierCreateHasCard`).
+   */
+  private async assertDagSparesVerifiers(ownerId: string, ops: readonly DagOp[], actingSessionId?: string): Promise<void> {
+    if (!actingSessionId) return;
+    const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
+    if (runsTask === null) return;
+    const verifiers = await this.prisma.task.findMany({
+      where: { ownerId, id: { in: [...new Set(ops.map((op) => op.taskId))], not: runsTask }, verifiesTaskId: { not: null } },
+      select: { id: true },
+    });
+    if (verifiers.length === 0) return;
+    const onVerifiers = ops.filter((op) => verifiers.some((verifier) => verifier.id === op.taskId));
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId: actingSessionId, toolName: DAG_CHANGE_CARD_TOOL, status: 'ALLOWED' },
+      select: { input: true },
+    });
+    if (cards.some((card) => cardCoversDagOps(card.input, onVerifiers))) return;
+    throw new ForbiddenException(verifierDagNeedsOwnerCardBody());
+  }
+
   /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */
-  async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
+  async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string, actingSessionId?: string) {
     if (taskId === dependsOnTaskId) throw new BadRequestException('A task cannot depend on itself');
     await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
+    await this.assertEdgeSparesVerifier(ownerId, taskId, actingSessionId);
     try {
       // Retried whole. The cycle check re-reads the whole edge set under the owner mutex on every
       // attempt, so a re-run cannot pass a check the winning graph would fail. A duplicate edge
@@ -12684,9 +12740,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Remove a prerequisite edge (no-op if it doesn't exist). */
-  async removeDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
+  async removeDependency(ownerId: string, taskId: string, dependsOnTaskId: string, actingSessionId?: string) {
     await this.assertOwnedTasks(ownerId, [taskId]);
     if (!UUID_RE.test(dependsOnTaskId)) throw new NotFoundException('task not found');
+    await this.assertEdgeSparesVerifier(ownerId, taskId, actingSessionId);
     // Retried whole: one DELETE and the revision it advances, both re-derived under the owner
     // mutex on every attempt. Removing an edge that is already gone is the same answer either way.
     await withTransactionRetry(this.prisma, async (tx) => {
@@ -12698,8 +12755,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return this.loadDetail(ownerId, taskId);
   }
 
-  async remove(ownerId: string, id: string) {
+  /**
+   * What a run may delete: a task it filed itself, that serves no acceptance criterion of its project, is not a verifier and
+   * has none. Deleting a task takes its checks with it (`verifiesTaskId` cascades), and deleting the last unfinished work of
+   * a criterion leaves that criterion served entirely by DONE, which is what a decision on its evidence would have had to
+   * earn. So nothing else is a run's to delete, the task it runs included; everybody else is as they were. Before the
+   * transaction, like the refusals on the edit door.
+   */
+  private async assertRunMayDelete(ownerId: string, id: string, actingSessionId?: string): Promise<void> {
+    if (!actingSessionId) return;
+    if ((await taskOfRunBehind(this.prisma, ownerId, actingSessionId)) === null) return;
+    const task = await this.prisma.task.findFirst({
+      where: { id, ownerId },
+      select: {
+        creatorSessionId: true,
+        criterionDefinitionId: true,
+        verifiesTaskId: true,
+        _count: { select: { verifiedBy: true } },
+      },
+    });
+    if (
+      task?.creatorSessionId === actingSessionId
+      && task.criterionDefinitionId === null
+      && task.verifiesTaskId === null
+      && task._count.verifiedBy === 0
+    ) {
+      return;
+    }
+    throw new ForbiddenException(taskDeleteFromRunRefusalBody());
+  }
+
+  async remove(ownerId: string, id: string, actingSessionId?: string) {
     await this.loadDetail(ownerId, id);
+    await this.assertRunMayDelete(ownerId, id, actingSessionId);
     const { survivingLinks, projectIds, deletedTaskIds } = await this.deleteAndStopRuns(ownerId, [id]);
     // §2.9 LS3 rule 2: the subject of a deleted task settles DELETED, in its own transaction after
     // the delete committed. History references keep naming the task that is gone.
@@ -15941,7 +16029,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * written around them: the caller is told, and can name what it means to pin.
    */
   private async assertPinSparesVerifiers(ownerId: string, selector: Prisma.Sql, actingSessionId?: string): Promise<void> {
-    const runsTask = await this.taskOfRun(this.prisma, ownerId, actingSessionId);
+    const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
     if (runsTask === null) return;
     const [{ verifiers }] = await this.prisma.$queryRaw<Array<{ verifiers: number }>>(Prisma.sql`
       SELECT count(*)::int AS "verifiers"

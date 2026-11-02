@@ -1001,10 +1001,20 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   },
   'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'POST /runner/tasks/:id/execute header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: {} })),
+  'DELETE /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.spare.taskId } })),
   'POST /runner/tasks/:id/dependencies body dependsOnTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { dependsOnTaskId: of.dependencyTaskId } }),
   },
+  'POST /runner/tasks/:id/dependencies header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { dependsOnTaskId: mine.dependencyTaskId },
+  })),
+  'DELETE /runner/tasks/:id/dependencies/:dependsOnTaskId header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId, dependsOnTaskId: mine.dependencyTaskId },
+  })),
+  'POST /runner/tasks/:id/progress header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.taskId }, body: { phase: 'census' },
+  })),
   'POST /runner/tasks/:id/comments body mentions[]': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { body: 'from the census', mentions: [of.workspaceId] } }),
@@ -1031,6 +1041,9 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: of.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] } }),
   },
+  'POST /runner/task-lists/:id/dag-apply header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] },
+  })),
   'POST /runner/task-lists/:id/dag-apply body ops[].dependsOnTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: mine.runner.listTaskId, dependsOnTaskId: of.dependencyTaskId }] } }),

@@ -83,7 +83,6 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
   const criterionId = randomUUID();
   const taskId = randomUUID();
   const sessionId = randomUUID();
-  const reviewTaskId = randomUUID();
   const reviewSessionId = randomUUID();
 
   await db.runner.create({
@@ -107,7 +106,6 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
   });
   for (const [id, title] of [
     [taskId, 'the work whose evidence is decided'],
-    [reviewTaskId, 'the run deciding it'],
   ] as const) {
     await db.task.create({
       data: {
@@ -130,7 +128,7 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
   }
   for (const [id, taskFor, title] of [
     [sessionId, taskId, 'the run that did the work'],
-    [reviewSessionId, reviewTaskId, 'the independent run'],
+    [reviewSessionId, undefined, 'the independent session'],
   ] as const) {
     await db.session.create({
       data: {
@@ -145,7 +143,7 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
         provider: 'claude',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        startsTaskWork: taskFor !== undefined,
       },
     });
   }

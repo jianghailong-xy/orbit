@@ -50,7 +50,7 @@ func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	description := mcpToolDescription(tools, "task_evidence_decide")
 	assertSaysAll(t, "the task_evidence_decide tool description", description,
-		"Five things are checked at decision time",
+		"Six things are checked at decision time",
 		"a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT",
 		"a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it",
 	)
@@ -68,7 +68,7 @@ func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
 		}
 	}
 	assertSaysAll(t, "`orbit capabilities` for task_evidence_decide", spec.Description,
-		"the deciding session must not have done the work, and a session acting for one project may not decide a task in another — a moved task's evidence is decided by the project it is in now",
+		"the deciding session must not have done the work, a session acting for one project may not decide a task in another — a moved task's evidence is decided by the project it is in now",
 	)
 
 	for where, text := range map[string]string{
@@ -80,6 +80,29 @@ func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
 			t.Errorf("%s still counts four checks:\n%s", where, text)
 		}
 	}
+}
+
+// A run decides another task's evidence only when it is addressed to that run
+// (EVIDENCE_JUDGMENT_FROM_RUN_REFUSED), and each place an agent reads what the door checks says so.
+func TestEvidenceDecideNamesTheRefusalForARunOfAnotherTask(t *testing.T) {
+	description := mcpToolDescription(toolDescriptors(false, false), "task_evidence_decide")
+	assertSaysAll(t, "the task_evidence_decide tool description", description,
+		"EVIDENCE_JUDGMENT_FROM_RUN_REFUSED",
+		"by the session that dispatched a task in no project, by a run of a task that verifies this one, or by the account owner in the app",
+	)
+	assertSaysAll(t, "`orbit task evidence-decide --help`", collapsedSpace(taskActionHelp["evidence-decide"]),
+		"A run of another task, or a conversation a run opened, is refused unless the evidence is addressed to that session",
+		"EVIDENCE_JUDGMENT_FROM_RUN_REFUSED",
+	)
+	var spec cliCapabilitySpec
+	for _, candidate := range baseCLICapabilities {
+		if candidate.Tool == "task_evidence_decide" {
+			spec = candidate
+		}
+	}
+	assertSaysAll(t, "`orbit capabilities` for task_evidence_decide", spec.Description,
+		"a run of another task may not decide evidence that is not addressed to it",
+	)
 }
 
 func TestTaskEvidenceCLIAndMCPUseTheSameWireStructure(t *testing.T) {

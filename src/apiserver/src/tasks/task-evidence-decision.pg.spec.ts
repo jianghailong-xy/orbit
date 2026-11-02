@@ -63,13 +63,14 @@ async function empty(client: Client): Promise<void> {
 }
 
 /**
- * One owner, one stated criterion, and two runs: the one that does the work and the one that
+ * One owner, one stated criterion, and two sessions: the run that does the work and the one that
  * judges it.
  *
- * The judging run is a session of ANOTHER task, which is what an independent decision looks like
- * in life — somebody else's run, reading this task's ledger. It is created here rather than in the
- * test so that the one thing separating it from the submitting session is the only thing the
- * independence check reads: which task it belongs to.
+ * The judging session belongs to no task, and nobody's run opened it: a run of another task is
+ * independent of this work and still refused, since the evidence is not addressed to it
+ * (`run-write-authority.pg.spec.ts`). It is created here rather than in the test so that the one
+ * thing separating it from the submitting session is the only thing the independence check reads:
+ * which task it belongs to.
  */
 async function fixture(db: PrismaClient) {
   const ownerId = randomUUID();
@@ -79,7 +80,6 @@ async function fixture(db: PrismaClient) {
   const criterionId = randomUUID();
   const taskId = randomUUID();
   const sessionId = randomUUID();
-  const reviewTaskId = randomUUID();
   const reviewSessionId = randomUUID();
 
   await db.user.create({
@@ -109,7 +109,6 @@ async function fixture(db: PrismaClient) {
 
   for (const [id, title] of [
     [taskId, 'the work being judged'],
-    [reviewTaskId, 'the run doing the judging'],
   ] as const) {
     await db.task.create({
       data: {
@@ -132,7 +131,7 @@ async function fixture(db: PrismaClient) {
   }
   for (const [id, taskFor, title] of [
     [sessionId, taskId, 'the run that did the work'],
-    [reviewSessionId, reviewTaskId, 'the independent run'],
+    [reviewSessionId, undefined, 'the independent session'],
   ] as const) {
     await db.session.create({
       data: {
@@ -147,7 +146,7 @@ async function fixture(db: PrismaClient) {
         provider: 'claude',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        startsTaskWork: taskFor !== undefined,
       },
     });
   }
@@ -177,7 +176,7 @@ async function fixture(db: PrismaClient) {
     ],
   });
 
-  return { ownerId, workspaceId, projectId, criterionId, taskId, sessionId, reviewTaskId, reviewSessionId };
+  return { ownerId, workspaceId, projectId, criterionId, taskId, sessionId, reviewSessionId };
 }
 
 /**

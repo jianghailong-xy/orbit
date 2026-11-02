@@ -19,6 +19,7 @@ import {
   assertCurrentEvidenceRevision,
   assertDecidingSessionInTaskProject,
   assertIndependentDecidingSession,
+  assertRunMayDecide,
   decisionNote,
 } from './task-evidence-decision';
 import {
@@ -696,7 +697,8 @@ export class TaskCompletionEvidenceService {
    * session can read why.
    *
    * The four checks run in the order authority, subject, standard: may this caller answer at all
-   * (independent of the work, and acting for the project the task is in), is it answering the
+   * (independent of the work, acting for the project the task is in, and no run the evidence is
+   * not addressed to), is it answering the
    * version that is actually open, and is the standard it is answering still the one stated. A
    * refusal at any of them writes nothing.
    */
@@ -758,6 +760,9 @@ export class TaskCompletionEvidenceService {
       // And it acts for the project the task is in NOW: a confirmed move takes the undecided
       // evidence with the task, and the project it left decides it no more.
       await assertDecidingSessionInTaskProject(tx, { ownerId, projectId: task.projectId }, decidingSession);
+      // And a run decides only what is addressed to it. The owner in the app decides whichever
+      // session the press names, so this is not asked of a press.
+      if (!ownerInTheApp) await assertRunMayDecide(tx, { ownerId, taskId }, decidingSession);
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
