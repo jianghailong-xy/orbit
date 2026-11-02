@@ -15,12 +15,18 @@ public struct ImageViewerGeometry: Equatable, Sendable {
     public let imageHeight: Double
     public let viewportWidth: Double
     public let viewportHeight: Double
+    /// Height over width past which an image counts as long, for a viewport that is not the screen: set
+    /// between a viewer's own bars it is shorter than a screenshot of a phone, which would all read as
+    /// long. Nil measures against the viewport, which is then the screen.
+    public let longerThan: Double?
 
-    public init(imageWidth: Double, imageHeight: Double, viewportWidth: Double, viewportHeight: Double) {
+    public init(imageWidth: Double, imageHeight: Double, viewportWidth: Double, viewportHeight: Double,
+                longerThan: Double? = nil) {
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
         self.viewportWidth = viewportWidth
         self.viewportHeight = viewportHeight
+        self.longerThan = longerThan
     }
 
     /// Longer, for its width, than the screen is — measured against the screen's long side over its
@@ -28,6 +34,7 @@ public struct ImageViewerGeometry: Equatable, Sendable {
     /// is taller than the viewport's shape too, and should still just fit.
     public var fillsWidth: Bool {
         guard imageWidth > 0, imageHeight > 0, viewportWidth > 0, viewportHeight > 0 else { return false }
+        if let longerThan { return imageHeight > longerThan * imageWidth }
         return imageHeight * min(viewportWidth, viewportHeight) > max(viewportWidth, viewportHeight) * imageWidth
     }
 

@@ -167,9 +167,15 @@ extension View {
 /// on the image opens the image menu: Save to Photos, Copy, Share.
 struct ImagePagerView: View {
     let images: [PreviewImage]
-    /// Told the page on screen, by a viewer that says for itself where it is (`EvidenceFileViewer`): the
-    /// counter and the status bar are then that viewer's to decide.
-    private let onPage: ((Int) -> Void)?
+    /// Set for a pager between a viewer's own bars rather than over the whole screen
+    /// (`EvidenceFileViewer`): the counter and the status bar are then that viewer's to decide.
+    struct Inset {
+        /// `ImageViewerGeometry.longerThan`: the viewport here is not the screen.
+        let longerThan: Double
+        /// Told the page on screen, so that viewer can say where it is.
+        let onPage: (Int) -> Void
+    }
+    private let inset: Inset?
     /// Only `.attachment` pages need it, so it's read optionally: a pager over in-memory images is
     /// presented without a store in its environment.
     @Environment(AttachmentImageStore.self) private var store: AttachmentImageStore?
@@ -193,9 +199,9 @@ struct ImagePagerView: View {
     private enum DragMode { case idle, page, dismiss, pan, scroll }
     private static let gap: CGFloat = 24
 
-    init(images: [PreviewImage], startIndex: Int, onPage: ((Int) -> Void)? = nil) {
+    init(images: [PreviewImage], startIndex: Int, inset: Inset? = nil) {
         self.images = images
-        self.onPage = onPage
+        self.inset = inset
         _index = State(initialValue: startIndex)
     }
 
@@ -215,7 +221,7 @@ struct ImagePagerView: View {
         GeometryReader { geo in
             let w = geo.size.width
             let stride = w + Self.gap
-            let fit = Self.geometry(currentImage, in: geo.size)
+            let fit = geometry(currentImage, in: geo.size)
 
             let drag = DragGesture()
                 .onChanged { v in
@@ -334,15 +340,15 @@ struct ImagePagerView: View {
             }
         }
         .ignoresSafeArea()
-        .overlay(alignment: .bottom) { if onPage == nil { pageCounter } }
+        .overlay(alignment: .bottom) { if inset == nil { pageCounter } }
         .overlay { imageMenu }
         .overlay(alignment: .top) { noticeCard }
-        .statusBarHidden(onPage == nil)
+        .statusBarHidden(inset == nil)
         .presentationBackground(.clear)
         .onChange(of: notice) { _, new in
             if let new { AccessibilityNotification.Announcement(new.message).post() }
         }
-        .onChange(of: index) { _, new in onPage?(new) }
+        .onChange(of: index) { _, new in inset?.onPage(new) }
     }
 
     /// Commits a new zoom for the current page, keeping the point at the centre of the screen where
@@ -354,11 +360,12 @@ struct ImagePagerView: View {
         scale = next
     }
 
-    private static func geometry(_ image: PlatformImage?, in size: CGSize) -> ImageViewerGeometry {
+    private func geometry(_ image: PlatformImage?, in size: CGSize) -> ImageViewerGeometry {
         ImageViewerGeometry(imageWidth: Double(image?.size.width ?? 0),
                             imageHeight: Double(image?.size.height ?? 0),
                             viewportWidth: Double(size.width),
-                            viewportHeight: Double(size.height))
+                            viewportHeight: Double(size.height),
+                            longerThan: inset?.longerThan)
     }
 
     @ViewBuilder
@@ -394,7 +401,7 @@ struct ImagePagerView: View {
     }
 
     private func pageBody(_ img: PlatformImage, isCurrent: Bool, size: CGSize) -> some View {
-        let fit = Self.geometry(img, in: size)
+        let fit = geometry(img, in: size)
         return Image(platformImage: img)
             .resizable()
             .frame(width: CGFloat(fit.restWidth), height: CGFloat(fit.restHeight))

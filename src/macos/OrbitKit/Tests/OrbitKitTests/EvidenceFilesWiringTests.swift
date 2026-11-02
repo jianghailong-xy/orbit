@@ -176,13 +176,24 @@ final class EvidenceFilesWiringTests: XCTestCase {
 
     // MARK: the pager
 
-    /// The viewer says where it is, so the pager's own counter gives way. Every other viewer keeps it.
-    func testThePagerReportsItsPageOnlyWhenAsked() throws {
+    /// The viewer says where it is, so the pager's own counter gives way. Every other viewer keeps it, and
+    /// the whole screen.
+    func testThePagerGivesWayOnlyWhenItIsSetBetweenBars() throws {
         let viewer = try source(Self.viewerPath)
-        XCTAssertTrue(viewer.contains("if onPage == nil { pageCounter }"))
-        XCTAssertTrue(viewer.contains(".statusBarHidden(onPage == nil)"))
-        XCTAssertTrue(viewer.contains(".onChange(of: index) { _, new in onPage?(new) }"))
-        XCTAssertTrue(viewer.contains("init(images: [PreviewImage], startIndex: Int, onPage: ((Int) -> Void)? = nil)"))
+        XCTAssertTrue(viewer.contains("if inset == nil { pageCounter }"))
+        XCTAssertTrue(viewer.contains(".statusBarHidden(inset == nil)"))
+        XCTAssertTrue(viewer.contains(".onChange(of: index) { _, new in inset?.onPage(new) }"))
+        XCTAssertTrue(viewer.contains("init(images: [PreviewImage], startIndex: Int, inset: Inset? = nil)"))
+        XCTAssertTrue(viewer.contains("longerThan: inset?.longerThan)"))
+    }
+
+    /// Between its bars the pager is held to its own frame, and a phone's screenshot opens whole there.
+    func testTheViewerHoldsThePagerBetweenItsBars() throws {
+        let views = try source(Self.viewsPath)
+        let viewer = try section(views, from: "private struct EvidenceFileViewer: View", to: "#if os(macOS)\n    private func arrow")
+        XCTAssertTrue(viewer.contains("pager.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()"),
+                      "a long picture runs under the caption and the dots")
+        XCTAssertTrue(viewer.contains("ImagePagerView.Inset(longerThan: Self.longerThan"))
     }
 
     /// A page whose bytes will never draw says so rather than spinning for as long as it is open.

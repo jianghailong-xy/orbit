@@ -300,10 +300,9 @@ struct EvidenceFilesArea: View {
 
     private func tiles(_ list: EvidenceFileList) -> some View {
         let onCard = EvidenceFiles.onCard(list)
-        return FlowLayout(spacing: 8) {
+        return EvidenceTileRow(side: Self.side) {
             ForEach(onCard.shown) { file in
                 EvidenceFileTile(file: file, store: console.attachments)
-                    .frame(width: Self.side, height: Self.side)
             }
             if onCard.rest > 0 {
                 RoundedRectangle(cornerRadius: 8).fill(.quaternary)
@@ -311,8 +310,34 @@ struct EvidenceFilesArea: View {
                         Text(EvidenceFiles.more(onCard.rest))
                             .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
                     }
-                    .frame(width: Self.side, height: Self.side)
             }
+        }
+    }
+}
+
+/// The card's one line of tiles: the thumbnails and what counts the rest, each `side` across until a
+/// narrow column runs out of room, and then all of them smaller rather than one on a line of its own.
+private struct EvidenceTileRow: Layout {
+    let side: CGFloat
+    private static let spacing: CGFloat = 8
+    private static let columns = CGFloat(EvidenceFiles.shownOnCard + 1)
+
+    private func edge(_ proposal: ProposedViewSize) -> CGFloat {
+        guard let width = proposal.width else { return side }
+        return max(0, min(side, (width - Self.spacing * (Self.columns - 1)) / Self.columns))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let edge = edge(proposal)
+        let count = CGFloat(subviews.count)
+        return CGSize(width: max(0, edge * count + Self.spacing * (count - 1)), height: edge)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let edge = edge(proposal)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(at: CGPoint(x: bounds.minX + CGFloat(index) * (edge + Self.spacing), y: bounds.minY),
+                          anchor: .topLeading, proposal: ProposedViewSize(width: edge, height: edge))
         }
     }
 }
@@ -563,6 +588,9 @@ private struct EvidenceFileViewer: View {
 
     /// A dot a picture while they fit a line and mean something. The position says it either way.
     private static let dotsUpTo = 12
+    /// A screenshot of a phone, at about 2.2, is a picture to see whole, as the board draws it. Longer than
+    /// any phone's screen it is a page, which opens at its top and scrolls.
+    private static let longerThan = 2.4
 
     init(pictures: [EvidenceFile], startIndex: Int, store: AttachmentImageStore) {
         self.pictures = pictures
@@ -576,7 +604,7 @@ private struct EvidenceFileViewer: View {
     var body: some View {
         VStack(spacing: 0) {
             bar
-            pager.frame(maxWidth: .infinity, maxHeight: .infinity)
+            pager.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             dots
             caption
         }
@@ -585,7 +613,11 @@ private struct EvidenceFileViewer: View {
         .alert(EvidenceFiles.downloadFailed, isPresented: $saveFailed) {
             Button("OK") { saveFailed = false }
         }
-        #if os(macOS)
+        #if os(iOS)
+        // What the status bar goes by, which the environment above does not reach: dark on black it
+        // cannot be read.
+        .preferredColorScheme(.dark)
+        #else
         .frame(minWidth: 720, minHeight: 560)
         #endif
     }
@@ -600,6 +632,7 @@ private struct EvidenceFileViewer: View {
                     .buttonStyle(.plain)
                     .font(.orbitProse)
                     .foregroundStyle(Color.accentColor)
+                    .keyboardShortcut(.cancelAction)
                 Spacer(minLength: 0)
             }
         }
@@ -609,7 +642,8 @@ private struct EvidenceFileViewer: View {
     @ViewBuilder private var pager: some View {
         #if os(iOS)
         ImagePagerView(images: pictures.map { .attachment(id: $0.id, attachmentID: $0.id) },
-                       startIndex: startIndex, onPage: { index = $0 })
+                       startIndex: startIndex,
+                       inset: ImagePagerView.Inset(longerThan: Self.longerThan, onPage: { index = $0 }))
             .environment(store)
         #else
         ZStack {
