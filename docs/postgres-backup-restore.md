@@ -86,9 +86,9 @@ before this check, and writes no marker on the target. A new `initdb` is a new c
 new major version by dump and restore or by `pg_upgrade` gives it a new identifier, and the old mirror has to be moved aside.
 
 The read happens on every poll, before every `--delete`, because a listing's name, size and time say nothing of whose a file
-is. It fetches that one segment whole, which costs what the segment weighs, at most its compressed size of up to 16 MB per
-poll, and a quiet segment is far less. A torn copy sorts first and holds no identifier, so the next smallest is read
-instead, three at most; if none of the three holds one the target is refused as `cluster unknown`.
+is. It fetches that one segment whole: about 17 KB for a segment closed nearly empty, and around 12 MB for a full one, so at
+most about 1 GB a day at one poll every 15 minutes. A torn copy sorts first and holds no identifier, so the next smallest is
+read instead, three at most; if none of the three holds one the target is refused as `cluster unknown`.
 
 A refusal is `ERROR: refusing off-host sync …`, every poll until it is dealt with, and says why. It costs nothing
 else: base backups carry on, and so does the [files copy](#attachment-files), which deletes nothing that way. To deal
