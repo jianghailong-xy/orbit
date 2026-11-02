@@ -208,7 +208,7 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
-			name: "runner-hosted background job", sites: []string{"background_job.go (*bgTailer).startJob"}, holds: inherited,
+			name: "runner-hosted background job", sites: []string{"background_job.go (*bgTailer).prepareJob"}, holds: inherited,
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				bg := newBgTailer(context.Background(), ignore, nil)
 				t.Cleanup(bg.stopAll)

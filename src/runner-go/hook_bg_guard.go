@@ -21,6 +21,11 @@ import (
 // correctness; what it does is route the agent to the tool that gets it a job
 // the engine's death cannot take. The refusal text is the whole mechanism: it
 // has to say what to use instead, because the model reads it and retries.
+//
+// Having no objection is not a yes. Claude Code reads a hook's "allow" as approval, ahead of the
+// session's own permission flow, so this hook says it only in the modes that do not ask anyway
+// (hookModeSkipsAsking). Anywhere else it stays silent and the call takes that flow: a card in
+// Default, Accept Edits and Plan, a refusal in Don't Ask.
 
 const bgGuardDenyReason = "Orbit hosts background work for this session. Bash's run_in_background is" +
 	" unavailable here: a shell started that way is a child of this coding-engine process, so" +
@@ -113,23 +118,34 @@ func bgGuardAwaitAdvice(reason string, watches bool) string {
 	return reason
 }
 
-// hookInput is the PreToolUse payload Claude Code writes on the hook's stdin.
+// hookInput is the PreToolUse payload Claude Code writes on the hook's stdin. PermissionMode is the mode
+// the CLI is in at this call, so a change of mode during the session counts from the next call.
 type hookInput struct {
-	HookEventName string                 `json:"hook_event_name"`
-	ToolName      string                 `json:"tool_name"`
-	ToolInput     map[string]interface{} `json:"tool_input"`
+	HookEventName  string                 `json:"hook_event_name"`
+	ToolName       string                 `json:"tool_name"`
+	ToolInput      map[string]interface{} `json:"tool_input"`
+	PermissionMode string                 `json:"permission_mode"`
+}
+
+// hookModeSkipsAsking reports whether a session's mode already lets a call run without asking anybody,
+// so that this hook's "allow" takes nothing away from it. In Auto it also keeps Claude Code's classifier
+// out of a call this hook has no objection to: a provider's endpoint that cannot give the classifier a
+// verdict would otherwise block every command. An unknown or missing mode is not one of them.
+func hookModeSkipsAsking(mode string) bool {
+	return mode == "auto" || mode == "bypassPermissions"
 }
 
 // cmdHookBgGuard reads one hook invocation and writes one decision.
 func cmdHookBgGuard(stdin io.Reader, stdout io.Writer) {
 	var in hookInput
-	// A hook that cannot parse its input must not block the session: allow, and
-	// let the fallback path in background.go record that an engine-owned shell
-	// happened.
+	// A hook that cannot parse its input must not block the session: it gives no verdict, and
+	// the fallback path in background.go records that an engine-owned shell happened.
 	_ = json.NewDecoder(io.LimitReader(stdin, 1<<20)).Decode(&in)
 	_ = json.NewEncoder(stdout).Encode(bgGuardDecision(in))
 }
 
+// bgGuardDecision is what the hook writes for one call: a refusal with its reason, an allow in a mode
+// that does not ask, or no verdict at all.
 func bgGuardDecision(in hookInput) map[string]interface{} {
 	decision, reason := "allow", ""
 	watches := watchesEnabledFromEnv()
@@ -150,6 +166,11 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 		if watches && pollsOrbitWork(in.ToolInput) {
 			decision, reason = "deny", bgGuardOrbitPollReason
 		}
+		// The runner's gate refuses it too (background_gate.go). Said here as well so that Claude Code's
+		// Plan does not first ask a person about a call that would then be refused.
+		if decision == "allow" && in.ToolName == "mcp__orbit__bg_run" && in.PermissionMode == "plan" {
+			decision, reason = "deny", bgGatePlanRefusal
+		}
 	// Every call, whatever it asks for: see bgGuardScheduleWakeupReason.
 	case "ScheduleWakeup":
 		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardScheduleWakeupReason, watches)
@@ -163,6 +184,9 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 		if strings.HasPrefix(bgGuardTaskID(in.ToolInput), "bgj_") {
 			decision, reason = "deny", bgGuardForeignJobReason
 		}
+	}
+	if decision == "allow" && !hookModeSkipsAsking(in.PermissionMode) {
+		return map[string]interface{}{}
 	}
 	out := map[string]interface{}{
 		"hookEventName":      "PreToolUse",

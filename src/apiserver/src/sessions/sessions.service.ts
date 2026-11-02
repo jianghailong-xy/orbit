@@ -1194,13 +1194,14 @@ export class SessionsService {
         throw new BadRequestException(
           `runner "${target.name}" runs as root, and Claude Code refuses "${dto.permissionMode}" ` +
             `under root — the session would exit before its first turn. Use ` +
-            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also never asks.`,
+            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also runs without stopping for a person.`,
         );
       }
       // Substituted into the stored column rather than only at dispatch, so the Mode pill reads
-      // what the session will really do. Narrowing only (Bypass -> Don't Ask, allow -> deny), which
-      // is why this is safe to persist where the general rule is to derive: the account's own
-      // default is untouched, and a session cannot move to a runner that would have honored it.
+      // what the session will really do. Narrowing only (Bypass -> Auto, or Default on a model with
+      // no Auto, which dispatch decides as for any Auto), which is why this is safe to persist where
+      // the general rule is to derive: the account's own default is untouched, and a session cannot
+      // move to a runner that would have honored it.
       if (target?.runsAsRoot) rootRefusedFallback = ROOT_FALLBACK_PERMISSION_MODE;
     }
     // Linking to a task: it must belong to the same user (no cross-tenant linking). The same read

@@ -55,7 +55,7 @@ import kotlinx.serialization.json.*
  */
 @Stable
 class SessionCardsModel internal constructor(val handle: SessionHandle, val sessionId: String, val actions: CardActions,
-    private val reviewKey: MutableState<String?>, private val scope: CoroutineScope) {
+    private val reviewKey: MutableState<String?>, private val scope: CoroutineScope, val evidenceFiles: EvidenceFilesStore) {
     var watches by mutableStateOf<List<InteractionCard>>(emptyList()); internal set
     var created by mutableStateOf<JsonObject?>(null); internal set
     var merged by mutableStateOf<List<JsonObject>>(emptyList()); internal set
@@ -118,12 +118,14 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
 @Composable
 fun rememberSessionCards(app: OrbitApplication, handle: SessionHandle, sessionId: String): SessionCardsModel {
     val review = rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
-    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review, app.processScope) }
+    val filesPage = rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
+    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review, app.processScope,
+        EvidenceFilesStore(app.session, handle, app.processScope, filesPage)) }
 }
 
 /** The signed-in session the cards belong to, or null while another account, another session or no access is showing. */
 @Composable
-private fun cardSession(): Pair<OrbitApplication, SessionState>? {
+internal fun cardSession(): Pair<OrbitApplication, SessionState>? {
     val resources = LocalReaderResources.current ?: return null
     val app = LocalContext.current.applicationContext as OrbitApplication
     val auth by resources.auth.state.collectAsState()
@@ -147,6 +149,7 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     val wantsPlan = current.any { it.family == CardFamily.START }
     LaunchedEffect(session.fresh, cards.handle, session.id, project, realtime.invalidationRevision, wantsPlan) {
         if (!session.fresh) return@LaunchedEffect
+        cards.evidenceFiles.readAgain()
         val api = CardAuthority(app.session, cards.handle)
         suspend fun read(path: List<String>, query: List<Pair<String, String>> = emptyList()): JsonElement? = try { api.get(path, query) }
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
@@ -237,7 +240,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
                         review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
-                    else -> BusinessCard(drawn, fresh, result, open, discuss, submit)
+                    else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(drawn, fresh, result, open, discuss, submit) }
                 }
             }
         } }

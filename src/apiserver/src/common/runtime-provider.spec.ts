@@ -120,7 +120,7 @@ test('dispatch takes Auto from the assigned runner\'s catalogue, not from the fa
       true,
       catalog,
     ),
-    PermissionMode.DONT_ASK,
+    PermissionMode.AUTO,
   );
 });
 
@@ -317,7 +317,7 @@ test('Antigravity effort is held to the levels the runner reports for that model
 // security reasons" and exited during startup, and the session finished FAILED in 5s with zero
 // turns and an empty error column. Substituting here is what keeps an account-level Bypass default
 // from doing that to every session on that machine.
-test('a root runner runs Don’t Ask in place of Bypass', () => {
+test('a root runner runs Auto in place of Bypass, so an unattended session can still run commands', () => {
   assert.equal(
     normalizeBuiltinPermissionMode(
       AgentProvider.CLAUDE,
@@ -326,7 +326,24 @@ test('a root runner runs Don’t Ask in place of Bypass', () => {
       false,
       true,
     ),
-    PermissionMode.DONT_ASK,
+    PermissionMode.AUTO,
+  );
+});
+
+test('on a model with no Auto, the root fallback lands on Default, as any Auto does there', () => {
+  const catalog = {
+    [AgentProvider.CLAUDE]: [{ value: 'a-model-with-no-auto', label: 'No Auto', permissionModes: [PermissionMode.DEFAULT, PermissionMode.PLAN] }],
+  };
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'a-model-with-no-auto',
+      PermissionMode.BYPASS,
+      false,
+      true,
+      catalog,
+    ),
+    PermissionMode.DEFAULT,
   );
 });
 

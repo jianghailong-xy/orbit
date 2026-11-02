@@ -1030,6 +1030,12 @@ func codexApprovalsReviewer(permissionMode string) string {
 // kimiAutomaticPermissionOption. The second result reports whether the mode decided at all;
 // otherwise the request goes to the user.
 func codexAutomaticApproval(permissionMode string, request codexApprovalRequest) (allowed, decided bool) {
+	// What bg_run may do is the runner's gate's to say, in every mode (background_gate.go). A consent here
+	// would be a second card about the same call, and Plan's refusal of the consent would hide what the
+	// gate says to do instead.
+	if request.mcpTool && request.server == codexOrbitMCPServer && request.tool == "bg_run" {
+		return true, true
+	}
 	// Codex asks for MCP tool-call consent on every call, including under the `never` policy the
 	// non-asking modes run on. Decide those here: a card in a mode that promises not to interrupt
 	// would be a new prompt, and the task runs that mode exists for would wait on a human forever.

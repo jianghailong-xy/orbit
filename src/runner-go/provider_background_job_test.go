@@ -76,11 +76,11 @@ func newProviderBgFixture(t *testing.T, executable, id string) *providerBgFixtur
 		SessionUUID: "11111111-1111-4111-8111-111111111111",
 		Agent: AgentExecConfig{
 			Model:          "model",
-			PermissionMode: "dontAsk",
+			PermissionMode: "auto",
 			Env:            map[string]string{"ORBIT_TEST_CAPTURE_FILE": capture},
 		},
 	}
-	stopService, err := startSessionBgJobService(context.Background(), h.bg, job, h.dir, h.dir)
+	stopService, err := startSessionBgJobService(context.Background(), nil, h.bg, job, h.dir, h.dir)
 	if err != nil {
 		t.Fatalf("background job service did not start: %v", err)
 	}
