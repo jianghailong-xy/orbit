@@ -94,8 +94,8 @@ commits: a round that finishes leaves the copy with the bytes of every row in th
   is not an error. Bytes left in the directory from before a move to a bucket are still copied.
 
 The sidecar gets its read-only mount of `./data/files` when its container is recreated, and until then
-it copies no files. `docker compose up -d --build` recreates it, and so does `/upgrade`, from the
-checkout the sidecar runs from; run from anywhere else, `/upgrade` leaves it and says so.
+it copies no files. `docker compose up -d --build` recreates it, and so does `/upgrade`, which runs only
+in the checkout the deployment runs from.
 `docker logs orbit-pgbackup | grep watching` then names both directories.
 
 ### Restore on a replacement host

@@ -51,7 +51,7 @@ FIREWALL_IMAGE = "orbit-managed-runner-firewall:local"
 # .env switches their profiles on, as Compose does, and `compose config docker-channel` then binds this checkout's
 # data/managed-runners into it as Compose prints a bind; a network exists once created; an image is found by any
 # name. The apiserver's container is replaced by a `compose up` that recreates it: one forced, or any naming it when
-# FAKE_APISERVER_IMAGE_CHANGED says its image changed. pgbackup runs from this checkout, on this checkout's script.
+# FAKE_APISERVER_IMAGE_CHANGED says its image changed. The deployment runs from this checkout, and pgbackup on its script.
 # Docker's own facts (FAKE_SECURITY, FAKE_FIREWALL_DRIVER, FAKE_IPV6) and the firewall program's answers
 # (FAKE_FIREWALL_BACKEND for its preflight, FAKE_DNS) are the test's to set. A call matching FAKE_FAIL fails.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
@@ -74,7 +74,8 @@ case "$*" in
       '        target: /var/lib/orbit-managed-runners' '        bind:' '          create_host_path: true' ;;
   "compose ps -q apiserver") cat "$FAKE_DOCKER_LOG.apiserver" 2>/dev/null || echo apiserver-0 ;;
   "compose ps -q pgbackup") echo pgbackup-0 ;;
-  "inspect --format {{range .Mounts}}"*" orbit-pgbackup") echo "$PWD/data/pg-archive" ;;
+  "compose config postgres") echo '    container_name: orbit-postgres' ;;
+  "inspect --format {{range .Mounts}}"*" orbit-postgres") echo "$PWD/data/pg-archive" ;;
   "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose up "*--force-recreate*apiserver*) apiserver_recreated ;;
   "compose up "*apiserver*) [ -n "${FAKE_APISERVER_IMAGE_CHANGED:-}" ] && apiserver_recreated ;;
@@ -298,10 +299,10 @@ class NewDeploymentTest(unittest.TestCase):
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
     # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
-    # what it asks about pgbackup, before building and after the other services (2026-11-02, Orbit Files' T10).
-    PGBACKUP_PREFLIGHT = [
-        "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-pgbackup",
-        "compose ps -q pgbackup",
+    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10).
+    DEPLOYMENT_PREFLIGHT = [
+        "compose config postgres",
+        "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-postgres",
     ]
     PGBACKUP_UP = [
         "compose ps -q pgbackup",
@@ -311,9 +312,9 @@ class NewDeploymentTest(unittest.TestCase):
     BEFORE_IMAGE_UPGRADES = {
         ".claude/skills/upgrade/upgrade.sh": [
             "compose version",
+            *DEPLOYMENT_PREFLIGHT,
             "inspect --format {{.Image}} orbit-web",
             "compose config --services",
-            *PGBACKUP_PREFLIGHT,
             "compose build apiserver wiki-worker web",
             "compose up -d --wait apiserver wiki-worker web gateway",
             *PGBACKUP_UP,
@@ -321,8 +322,8 @@ class NewDeploymentTest(unittest.TestCase):
         ],
         ".agents/skills/upgrade/scripts/upgrade.sh": [
             "compose version",
+            *DEPLOYMENT_PREFLIGHT,
             "compose config --services",
-            *PGBACKUP_PREFLIGHT,
             "compose build apiserver wiki-worker web",
             "compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "
             "\"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy",
