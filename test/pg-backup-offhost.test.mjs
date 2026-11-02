@@ -67,10 +67,7 @@ function sizedSegment(dir, { system = CLUSTER, timeline = 1, number, size, at = 
   return `${walName(timeline, number)}.gz`;
 }
 
-/**
- * Gives two archives' segment of this name the same size and time. Each keeps its own cluster's bytes, the shorter gzip padded
- * with the zeros gunzip ignores: real WAL, valid on both sides, that no listing can tell apart.
- */
+/** Makes two archives' segment of this name read the same in a listing, each still holding its own cluster's valid bytes. */
 function makeListingsMatch(name, ...archives) {
   const files = archives.map((dir) => path.join(dir, 'wal', name));
   const size = Math.max(...files.map((file) => statSync(file).size));
