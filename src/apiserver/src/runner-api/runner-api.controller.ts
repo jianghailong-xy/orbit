@@ -204,7 +204,7 @@ import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
-import { normalizeStoredRememberRules } from '../sessions/remember-rules';
+import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
@@ -5705,7 +5705,10 @@ export class RunnerApiController {
           toolName: stripNul(dto.toolName),
           input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
             dto.acceptsStartAfterCreate === true),
-          toolUseId: toolUseId ?? null,
+          // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
+          // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
+          // could not file with a refusal nobody gave.
+          toolUseId: toolUseId || null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
           ...(allowedMessage
@@ -5824,6 +5827,9 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // A card that names only a server may be about any of its tools, and a rule cannot have been
+    // given for a tool nobody named.
+    if (reachesPastOneMcpTool(dto.toolName)) return false;
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = await sessionEngine(this.prisma, session);

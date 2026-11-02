@@ -1764,8 +1764,9 @@ type codexApprovalRequest struct {
 	fileChange bool
 	legacy     bool
 	mcpTool    bool
-	// server is the MCP server behind an mcpTool request, for the card's name.
+	// server and tool are what an mcpTool request asks to run, for the card's name.
 	server string
+	tool   string
 	// toolUseID names the card of a request whose params carry no id of its call
 	// (mcpConsentToolUseID). Every other request is named by its itemId.
 	toolUseID string
@@ -1800,10 +1801,14 @@ func (r codexApprovalRequest) decision(allowed bool) string {
 }
 
 // toolName mirrors what codexEmitItem already calls these in the transcript, so an approval card
-// and the tool card it authorizes name the same thing. MCP consent names the server rather than
-// the tool, which is all the elicitation carries — its message names the tool.
+// and the tool card it authorizes name the same thing. An MCP consent is named as every other
+// runtime names the tool, because that name is what "always allow" on the card remembers. One whose
+// tool could not be read names only its server (codexMCPConsentTool), and the control plane keeps no
+// rule from a card like that: it would cover every tool of the server.
 func (r codexApprovalRequest) toolName() string {
 	switch {
+	case r.mcpTool && r.server != "" && r.tool != "":
+		return "mcp__" + r.server + "__" + r.tool
 	case r.mcpTool && r.server != "":
 		return "mcp__" + r.server
 	case r.mcpTool:
@@ -1820,6 +1825,28 @@ func (r codexApprovalRequest) toolName() string {
 // is, so this is the one elicitation Orbit can answer with the approval card it already has.
 func isCodexMCPToolConsent(params map[string]interface{}) bool {
 	return firstString(mapValue(params["_meta"]), "codex_approval_kind") == "mcp_tool_call"
+}
+
+// codexMCPConsentTool reads which tool a consent is about out of its message, the one place Codex
+// says: `Allow the orbit MCP server to run tool "bg_run"?`. It is the tool's own name even when the
+// tool declares a title, which goes in _meta.tool_title (measured on 0.166.0). Nothing else in the
+// request says it: item/started names the tool too, but parallel calls raise their consents in a
+// different order from their items, so an item cannot be paired with a consent by arrival.
+//
+// A message in any other wording reads as no name, and so does a name holding the wildcard of Orbit's
+// rule grammar, since a rule remembered from it would cover the whole server.
+func codexMCPConsentTool(params map[string]interface{}) string {
+	const opening, closing = ` to run tool "`, `"?`
+	message := firstString(params, "message")
+	at := strings.LastIndex(message, opening)
+	if at < 0 {
+		return ""
+	}
+	tool, closed := strings.CutSuffix(message[at+len(opening):], closing)
+	if !closed || strings.Contains(tool, "*") {
+		return ""
+	}
+	return tool
 }
 
 // codexElicitationResult is the McpServerElicitationRequestResponse Codex expects. An accepted
@@ -1856,7 +1883,10 @@ func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
 		_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
 		return
 	}
-	request := codexApprovalRequest{mcpTool: true, server: firstString(params, "serverName"), toolUseID: a.mcpConsentToolUseID(msg.ID)}
+	request := codexApprovalRequest{mcpTool: true, server: firstString(params, "serverName"), tool: codexMCPConsentTool(params), toolUseID: a.mcpConsentToolUseID(msg.ID)}
+	if request.tool == "" {
+		logln("codex MCP consent names no tool Orbit can read; its card names only the server:", firstString(params, "message"))
+	}
 	// Same reason approvals answer on a goroutine: this runs inline on the only reader of codex's
 	// stdout, and the card blocks on a human.
 	go func() {

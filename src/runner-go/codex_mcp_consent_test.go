@@ -27,11 +27,13 @@ type consentCard struct {
 // fakeApprovalTable answers the two approval routes the way the apiserver does
 // (RunnerApiController.createApproval): a non-empty toolUseId finds its row, and otherwise a row is
 // created under the constraint the real table has, approval_session_id_tool_use_id_key, for which
-// the empty string is a value like any other. Every card is decided ALLOWED, so a call that lands on another
-// call's row is answered yes, which is what a colliding id would do to a real one.
+// the empty string is a value like any other. A card is decided ALLOWED unless denied names it, so a
+// call that lands on another call's row is answered yes, which is what a colliding id would do to a
+// real one.
 type fakeApprovalTable struct {
-	mu    sync.Mutex
-	cards []consentCard
+	mu     sync.Mutex
+	cards  []consentCard
+	denied map[string]bool // by card id
 }
 
 func (f *fakeApprovalTable) serve(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +41,12 @@ func (f *fakeApprovalTable) serve(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	if r.Method == http.MethodGet {
 		parts := strings.Split(r.URL.Path, "/")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": parts[len(parts)-1], "status": "ALLOWED"})
+		id := parts[len(parts)-1]
+		status := "ALLOWED"
+		if f.denied[id] {
+			status = "DENIED"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": id, "status": status})
 		return
 	}
 	var body struct {
@@ -65,6 +72,16 @@ func (f *fakeApprovalTable) serve(w http.ResponseWriter, r *http.Request) {
 	card := consentCard{ID: fmt.Sprintf("approval-%d", len(f.cards)+1), ToolUseID: body.ToolUseID, ToolName: body.ToolName, Input: body.Input}
 	f.cards = append(f.cards, card)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": card.ID, "status": "PENDING"})
+}
+
+// deny has the card of this id answered with a refusal.
+func (f *fakeApprovalTable) deny(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.denied == nil {
+		f.denied = map[string]bool{}
+	}
+	f.denied[id] = true
 }
 
 func (f *fakeApprovalTable) snapshot() []consentCard {
@@ -197,6 +214,9 @@ func TestEveryMCPConsentOfACodexSessionGetsItsOwnCard(t *testing.T) {
 			if !strings.Contains(fmt.Sprint(cards[0].Input["message"]), "bg_run") || !strings.Contains(fmt.Sprint(cards[1].Input["message"]), "bg_output") {
 				t.Fatalf("cards ask about %#v and %#v", cards[0].Input, cards[1].Input)
 			}
+			if cards[0].ToolName != "mcp__orbit__bg_run" || cards[1].ToolName != "mcp__orbit__bg_output" {
+				t.Fatalf("cards are named %q and %q", cards[0].ToolName, cards[1].ToolName)
+			}
 		})
 	}
 }
@@ -211,8 +231,94 @@ func TestConcurrentMCPConsentsOfACodexSessionEachGetACard(t *testing.T) {
 	if replies[3]["action"] != "accept" || replies[4]["action"] != "accept" {
 		t.Fatalf("replies = %#v", replies)
 	}
-	if cards := session.table.snapshot(); len(cards) != 2 {
+	cards := session.table.snapshot()
+	if len(cards) != 2 {
 		t.Fatalf("cards = %#v, want one per request", cards)
+	}
+	names := map[string]bool{cards[0].ToolName: true, cards[1].ToolName: true}
+	if !names["mcp__orbit__alpha"] || !names["mcp__orbit__beta"] {
+		t.Fatalf("cards = %#v, want each named for the tool its own request asks about", cards)
+	}
+}
+
+// One call's answer says nothing about the next: three requests for one tool with the same arguments
+// are three questions, and a no in the middle is a no to that call alone.
+func TestEachAnswerReachesOnlyTheMCPConsentItWasGivenFor(t *testing.T) {
+	session := newConsentSession(t, "default")
+	session.table.deny("approval-2")
+	want := map[int]string{0: "accept", 1: "decline", 2: "accept"}
+	for id := 0; id < 3; id++ {
+		session.raise(t, id, codexMCPElicitationMethod, consentParams("bg_run"))
+		if got := session.answers(t, 1)[id]["action"]; got != want[id] {
+			t.Fatalf("request %d answered %v, want %s", id, got, want[id])
+		}
+	}
+	if cards := session.table.snapshot(); len(cards) != 3 {
+		t.Fatalf("cards = %#v, want one per request", cards)
+	}
+}
+
+// Answered out of order, each answer still goes back under its own request.
+func TestConcurrentMCPConsentsAreAnsweredUnderTheirOwnRequests(t *testing.T) {
+	session := newConsentSession(t, "default")
+	session.table.deny("approval-1")
+	session.raise(t, 3, codexMCPElicitationMethod, consentParams("beta"))
+	// Filed one at a time, so that approval-1 is known to be the first request's card.
+	for deadline := time.Now().Add(5 * time.Second); len(session.table.snapshot()) == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the first request filed no card")
+		}
+	}
+	session.raise(t, 4, codexMCPElicitationMethod, consentParams("alpha"))
+	replies := session.answers(t, 2)
+	if replies[3]["action"] != "decline" || replies[4]["action"] != "accept" {
+		t.Fatalf("replies = %#v, want the refused card's request declined and the other accepted", replies)
+	}
+}
+
+// What the card is named, from the message Codex 0.166 words it in. A wording this does not know, or a
+// name a rule would read as a wildcard, leaves the card naming the server alone: naming the wrong
+// tool would be worse than naming none.
+func TestCodexMCPConsentToolNamesOneToolOrNone(t *testing.T) {
+	for _, tc := range []struct {
+		message string
+		card    string
+	}{
+		{`Allow the acme MCP server to run tool "bg_run"?`, "mcp__acme__bg_run"},
+		// A tool with a title is still asked about by its name.
+		{`Allow the acme MCP server to run tool "titled_tool"?`, "mcp__acme__titled_tool"},
+		{`Allow the acme MCP server to run tool "dotted.tool"?`, "mcp__acme__dotted.tool"},
+		{`Allow this app to run tool "search"?`, "mcp__acme__search"},
+		{`Allow the acme MCP server to run tool "*"?`, "mcp__acme"},
+		{`Allow the acme MCP server to run tool "a*"?`, "mcp__acme"},
+		{`Allow the acme MCP server to run tool ""?`, "mcp__acme"},
+		{`Allow the acme MCP server to run tool "?`, "mcp__acme"},
+		{`Allow the acme MCP server to run tool "bg_run"`, "mcp__acme"},
+		{`Run bg_run on the acme MCP server?`, "mcp__acme"},
+		{``, "mcp__acme"},
+	} {
+		request := codexApprovalRequest{mcpTool: true, server: "acme", tool: codexMCPConsentTool(map[string]interface{}{"message": tc.message})}
+		if got := request.toolName(); got != tc.card {
+			t.Errorf("message %q files a card named %q, want %q", tc.message, got, tc.card)
+		}
+	}
+}
+
+// A card that cannot name its tool is still a card: the person is asked, and only the name is less
+// than it could be.
+func TestAnMCPConsentInAnUnknownWordingStillReachesAPerson(t *testing.T) {
+	session := newConsentSession(t, "default")
+	params := strings.Replace(consentParams("bg_run"), `Allow the orbit MCP server to run tool \"bg_run\"?`, `Run bg_run?`, 1)
+	if params == consentParams("bg_run") {
+		t.Fatal("the message was not replaced")
+	}
+	session.raise(t, 0, codexMCPElicitationMethod, params)
+	if got := session.answers(t, 1)[0]["action"]; got != "accept" {
+		t.Fatalf("reply = %v", got)
+	}
+	cards := session.table.snapshot()
+	if len(cards) != 1 || cards[0].ToolName != "mcp__orbit" || cards[0].ToolUseID == "" {
+		t.Fatalf("cards = %#v, want one card that names the server", cards)
 	}
 }
 
