@@ -135,6 +135,7 @@ import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorato
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
+import { reachesPastOneMcpTool } from './remember-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -8112,7 +8113,7 @@ export class SessionsService {
     approvalId: string,
     rules: PermissionRule[] | undefined,
   ): Promise<void> {
-    const stored = normalizePermissionRules(rules);
+    const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
     await this.prisma.workspacePermissionRule.createMany({
       data: stored.map((rule) => ({

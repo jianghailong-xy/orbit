@@ -296,3 +296,11 @@ test('a controller built without a tasks service files the card unchanged', asyn
   assert.equal(res.status, 'PENDING');
   assert.equal((created[0].input as Record<string, unknown>).preview, undefined);
 });
+
+test('a card filed with an empty id is stored with none', async () => {
+  const h = harness(async () => PREVIEW);
+  await h.controller.createApproval({ id: RUNNER_ID }, SESSION, {
+    toolName: 'mcp__orbit__bg_run', input: {}, toolUseId: '',
+  });
+  assert.equal(h.created[0].toolUseId, null);
+});

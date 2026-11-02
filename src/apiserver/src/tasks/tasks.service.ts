@@ -342,6 +342,14 @@ import {
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
 import {
+  TASK_BATCH_CARD_TOOL,
+  TASK_CREATE_CARD_TOOL,
+  cardCoversVerifiers,
+  verifierCreateNeedsOwnerCardBody,
+  verifierWriteFromRunRefusalBody,
+  verifiersNamedBy,
+} from './verifier-write-authority';
+import {
   normaliseCodelessReason,
   readTaskCommitEvidence,
   taskCodelessHasCommitsBody,
@@ -3790,6 +3798,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    await this.assertVerifierCreateHasCard(ownerId, TASK_CREATE_CARD_TOOL, [dto], creatorSessionId);
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
     // Task has — see `createWithVerifier`.
@@ -4236,7 +4245,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     credential?: AuthCredential,
   ) {
     const { verification, ...subject } = dto;
-    const [created, verifier] = await this.createMany(ownerId, {
+    // The batch's writer rather than `createMany`: this door has already asked for its own card.
+    const [created, verifier] = await this.writeBatch(ownerId, {
       tasks: [
         { ...subject, ref: VERIFICATION_PAIR_SUBJECT_REF },
         {
@@ -4865,6 +4875,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * `credential` is the user door's, as on `create`.
    */
   async createMany(
+    ownerId: string,
+    dto: CreateTasksBatchDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+    credential?: AuthCredential,
+  ) {
+    await this.assertVerifierCreateHasCard(ownerId, TASK_BATCH_CARD_TOOL, dto.tasks, creatorSessionId);
+    return this.writeBatch(ownerId, dto, creator, creatorSessionId, credential);
+  }
+
+  private async writeBatch(
     ownerId: string,
     dto: CreateTasksBatchDto,
     creator?: Creator,
@@ -5543,7 +5564,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     sessionId?: string,
   ): Promise<boolean> {
-    if (!sessionId) return false;
+    return (await this.taskOfRun(db, ownerId, sessionId)) !== null;
+  }
+
+  /** The task this session executes when it is a run, as `scopeFollowsTask` means it; otherwise null. */
+  private async taskOfRun(
+    db: ScopeReadClient,
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<string | null> {
+    if (!sessionId) return null;
     const session = await db.session.findFirst({
       where: { id: sessionId, ownerId },
       select: {
@@ -5552,8 +5582,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         coordinatorWakes: { where: { status: 'SESSION_OPENED' }, select: { projectId: true }, take: 1 },
       },
     });
-    return !!session?.taskId && !session.coordinatorForProject
-      && !session.coordinatorWakes?.length;
+    return session?.taskId && !session.coordinatorForProject && !session.coordinatorWakes?.length
+      ? session.taskId
+      : null;
+  }
+
+  /**
+   * A run files a verifier only on the owner's answered card (`verifier-write-authority.ts`). Asked before anything else
+   * about the write, and only of a create that names a verifier: every other create pays nothing. Any ALLOWED card counts,
+   * a workspace's standing grant included, since that is what the tools act on; the card is not spent, because a retried
+   * create is the same create.
+   */
+  private async assertVerifierCreateHasCard(
+    ownerId: string,
+    toolName: string,
+    items: readonly unknown[],
+    actingSessionId?: string,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const verifiers = verifiersNamedBy(items);
+    if (verifiers.length === 0) return;
+    if ((await this.taskOfRun(this.prisma, ownerId, actingSessionId)) === null) return;
+    const cards = await this.prisma.approval.findMany({
+      where: { sessionId: actingSessionId, toolName, status: 'ALLOWED' },
+      select: { input: true },
+    });
+    if (cards.some((card) => cardCoversVerifiers(toolName, card.input, verifiers))) return;
+    throw new ForbiddenException(verifierCreateNeedsOwnerCardBody());
   }
 
   /**
@@ -9400,7 +9455,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * sends it on every task write an agent makes. It answers the two questions on this path that
    * turn on WHO is writing rather than on what is being written: §13.2's independence rule, and
    * the criterion-key bound on coordinator-opened work. Everything else about a task edit is
-   * authorised by the owner, not by which run happened to make it.
+   * authorised by the owner, not by which run happened to make it, except that a verifier is not
+   * another run's to write (`verifier-write-authority.ts`).
    */
   async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     // Internal write planning must receive its own raw UUID-shaped object. A public GET response is
@@ -9426,6 +9482,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `written directly by a person, coordinator or execution session; ${remedy.instruction}. ` +
           'A task run may still write FAILED as its conservative outcome.',
       });
+    }
+    // Who may write the verification relation (`verifier-write-authority.ts`). Ahead of the move
+    // request below, which is a write of this row too, and read only when this row is a verifier or
+    // is about to become one, so an ordinary edit from a run pays nothing. Before the transaction,
+    // like every refusal on this path: a peer whose write lands just as the coordinator attaches
+    // the row has done no more than an edit made a moment earlier, which is its to make.
+    if (actingSessionId && (before.verifiesTaskId != null || dto.verifiesTaskId != null)) {
+      const runsTask = await this.taskOfRun(this.prisma, ownerId, actingSessionId);
+      if (runsTask !== null && runsTask !== id) {
+        throw new ForbiddenException(verifierWriteFromRunRefusalBody());
+      }
     }
     // Unit L4, the edit door's crossing: a session that sends another project WITH a `handoff` is
     // asking for this task to be moved, and a request is not a write — it files the question (or
@@ -11942,7 +12009,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `contentFilter / unattributed). Not one of these is fixed by changing the instructions — read the attribution first, then decide which lever to pull; ` +
       `do not start by suspecting the prompt is badly written.\n` +
       `2. Common causes: a prerequisite that will never finish, an assigned workspace with no runner bound, an exhausted provider quota, disk below the floor, a session from the last run still holding the task while making no progress.\n` +
-      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools.\n` +
+      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools. A verification task is not a run's to edit: report one that is stuck as in step 4.\n` +
       `4. If the cause lies outside the system (for example a person has to clean up disk, sign in again or top up quota), write the conclusion and the manual action needed with task_comment.\n\n` +
       `When you are done, submit an evidence envelope of your judgment and the changes you made with task_evidence_submit (claim / criterion / checks / gaps; `
       + `at least one check has to resolve to a row under this task's sessions). Do not use a comment in place of evidence, and do not write ` +
@@ -15770,7 +15837,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * rather than holding a project's rows — or the owner's writes — for the length of the whole
    * operation.
    */
-  async pinMany(ownerId: string, dto: BatchPinTasksDto) {
+  async pinMany(ownerId: string, dto: BatchPinTasksDto, actingSessionId?: string) {
     if (dto.engine === undefined && dto.provider === undefined && dto.model === undefined) {
       throw new BadRequestException({
         code: 'PIN_BATCH_NOTHING_TO_WRITE',
@@ -15798,6 +15865,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // task's provider pin, so every provider pin the selection holds is checked against it first.
     const pins = await this.resolvePins(ownerId, dto, null);
     const selector = Prisma.join(selectors, ' AND ');
+    await this.assertPinSparesVerifiers(ownerId, selector, actingSessionId);
     const keeps = dto.engine !== undefined && dto.provider === undefined && pins.engine
       ? await this.pinnedProvidersRunOn(ownerId, selector, pins.engine)
       : null;
@@ -15869,6 +15937,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // which is not a list this side ever held.
     if (changed > 0) this.publishTaskResync(ownerId);
     return { changed };
+  }
+
+  /**
+   * A batch pin writes a task's engine, provider and model as an edit does, so a run's selection may hold no verifier but
+   * its own task (`verifier-write-authority.ts`). The whole batch is refused, like every refusal on this door, rather than
+   * written around them: the caller is told, and can name what it means to pin.
+   */
+  private async assertPinSparesVerifiers(ownerId: string, selector: Prisma.Sql, actingSessionId?: string): Promise<void> {
+    const runsTask = await this.taskOfRun(this.prisma, ownerId, actingSessionId);
+    if (runsTask === null) return;
+    const [{ verifiers }] = await this.prisma.$queryRaw<Array<{ verifiers: number }>>(Prisma.sql`
+      SELECT count(*)::int AS "verifiers"
+        FROM "public"."task"
+       WHERE ${selector} AND "verifies_task_id" IS NOT NULL AND "id" <> ${runsTask}::uuid`);
+    if (verifiers > 0) throw new ForbiddenException(verifierWriteFromRunRefusalBody());
   }
 
   /**

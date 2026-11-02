@@ -986,6 +986,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/tasks/batch-pin body taskIds[]': { as: RUNNER, request: (of, mine) => ({ params: {}, body: { taskIds: [mine.taskId, of.taskId], model: 'census' } }) },
   'POST /runner/tasks/batch-pin body projectId': { as: RUNNER, request: (of) => ({ params: {}, body: { projectId: of.projectId, model: 'census' } }) },
   'POST /runner/tasks/batch-pin body listId': { as: RUNNER, request: (of) => ({ params: {}, body: { listId: of.listId, model: 'census' } }) },
+  'POST /runner/tasks/batch-pin header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: {}, body: { taskIds: [mine.taskId], model: 'census' } })),
   'PATCH /runner/tasks/:id body assigneeId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { assigneeId: of.workspaceId } }) },
   'PATCH /runner/tasks/:id body listId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { listId: of.listId } }) },
   'PATCH /runner/tasks/:id body projectId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { projectId: of.projectId } }) },
