@@ -23,25 +23,21 @@ struct RecapCardView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        // The ⋯ beside the paragraph, not an overlay on it: on macOS a selectable text is AppKit's own
-        // element, and what is laid over it never reaches the accessibility tree.
-        ZStack(alignment: Alignment(horizontal: .trailing, vertical: .lastTextBaseline)) {
-            (paragraph + room)
-                .opacity(refreshing ? 0.45 : 1)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .accessibilityLabel([RecapCard.word, card.when, card.text].compactMap { $0 }.joined(separator: ", "))
-            more
-        }
-        .font(.orbitSubtext)
-        .foregroundStyle(.secondary)
-        // One hover region over the whole row, as the message bubble's meta has: without it `.onHover`
-        // fires only over the drawn glyphs, and the reach for ⋯ would cross a dead gap.
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .accessibilityElement(children: .contain)
+        (paragraph + room)
+            .opacity(refreshing ? 0.45 : 1)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+            .accessibilityLabel([RecapCard.word, card.when, card.text].compactMap { $0 }.joined(separator: ", "))
+            .overlay(alignment: Alignment(horizontal: .trailing, vertical: .lastTextBaseline)) { more }
+            .font(.orbitSubtext)
+            .foregroundStyle(.secondary)
+            // One hover region over the whole row, as the message bubble's meta has: without it `.onHover`
+            // fires only over the drawn glyphs, and the reach for ⋯ would cross a dead gap.
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            .accessibilityElement(children: .contain)
     }
 
     /// The Settings row's own glyph (the switch that governs this line), the word and when the recap
@@ -63,40 +59,40 @@ struct RecapCardView: View {
 
     /// The ⋯ on the last line's baseline, hidden in place rather than removed, so the words never move
     /// when it appears. Touch has no hover, so on iOS it always shows (the message bubble's copy button
-    /// makes the same split). A Menu reports no baseline of its own, so it stands on a hidden ⋯ that
-    /// does, beside it rather than over it; while a refresh asks, a spinner takes its place.
+    /// makes the same split). A Menu reports no baseline of its own, so it lies over a hidden ⋯ that
+    /// does; while a refresh asks, a spinner takes its place.
     private var more: some View {
-        ZStack {
-            glyph.hidden()
-            Menu {
-                Button(action: refresh) { Label(RecapCard.refresh, systemImage: "arrow.clockwise") }
-                Button(action: onHide) { Label(RecapCard.hide, systemImage: "xmark") }
-            } label: {
-                // A line is shorter than a comfortable target: the target hangs over it both ways,
-                // and the row is laid out as if it didn't.
-                glyph
-                    .padding(.vertical, 7)
-                    .contentShape(Rectangle())
-                    .padding(.vertical, -7)
+        glyph.hidden()
+            .overlay {
+                Menu {
+                    Button(action: refresh) { Label(RecapCard.refresh, systemImage: "arrow.clockwise") }
+                    Button(action: onHide) { Label(RecapCard.hide, systemImage: "xmark") }
+                } label: {
+                    // A line is shorter than a comfortable target: the target hangs over it both ways,
+                    // and the row is laid out as if it didn't.
+                    glyph
+                        .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, -7)
+                }
+                #if os(macOS)
+                // `.button` + plain draws the label as it is, in the row's grey (the account menu's recipe).
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                #endif
+                .menuIndicator(.hidden)
+                .menuOrder(.fixed)
+                // iOS tints a menu's label with the accent; the ⋯ keeps the row's grey, as the composer's + does.
+                .neutralMenuTint(.secondary)
+                .opacity(refreshing ? 0 : 1)
+                .disabled(refreshing)
+                .accessibilityLabel(RecapCard.more)
+                .focused($focused)
             }
-            #if os(macOS)
-            // `.button` + plain draws the label as it is, in the row's grey (the account menu's recipe).
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            #endif
-            .menuIndicator(.hidden)
-            .menuOrder(.fixed)
-            // iOS tints a menu's label with the accent; the ⋯ keeps the row's grey, as the composer's + does.
-            .neutralMenuTint(.secondary)
-            .opacity(refreshing ? 0 : 1)
-            .disabled(refreshing)
-            .accessibilityLabel(RecapCard.more)
-            .focused($focused)
-            if refreshing { ProgressView().controlSize(.small) }
-        }
-        .opacity(controlsShown ? 1 : 0)
-        .allowsHitTesting(controlsShown)
-        .padding(.trailing, -8)
+            .overlay { if refreshing { ProgressView().controlSize(.small) } }
+            .opacity(controlsShown ? 1 : 0)
+            .allowsHitTesting(controlsShown)
+            .padding(.trailing, -8)
     }
 
     private var glyph: some View {
