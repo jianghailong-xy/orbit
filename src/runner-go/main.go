@@ -309,7 +309,7 @@ func main() {
 	if len(args) > 0 {
 		cmd = args[0]
 	}
-	flags, bools := parseFlags(args)
+	_, bools := parseFlags(args)
 
 	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
 	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
@@ -331,11 +331,11 @@ func main() {
 
 	switch cmd {
 	case "register":
-		cmdRegister(flags, bools)
+		registerCommand(args)
 	case "run":
 		cmdRun()
 	case "unregister":
-		cmdUnregister(bools)
+		unregisterCommand(args)
 	case "status":
 		cmdStatus()
 	case "doctor":
@@ -446,6 +446,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n%s", cmd, usage)
 		os.Exit(1)
 	}
+}
+
+// registerCommand is `orbit register` as typed: args is the command and its arguments.
+func registerCommand(args []string) {
+	flags, bools := parseFlags(args)
+	cmdRegister(flags, bools)
 }
 
 func cmdRegister(flags map[string]string, bools map[string]bool) {
@@ -710,6 +716,12 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, serviceStarted, foregr
 	}
 	fmt.Fprintf(w, "             %s/runners/%s/new\n", strings.TrimRight(cfg.ServerURL, "/"), publicID(cfg.RunnerID))
 	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
+}
+
+// unregisterCommand is `orbit unregister` as typed: args is the command and its arguments.
+func unregisterCommand(args []string) {
+	_, bools := parseFlags(args)
+	cmdUnregister(bools)
 }
 
 // cmdUnregister tears down this machine's runner: stops/removes the service,

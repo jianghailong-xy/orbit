@@ -23,6 +23,18 @@ const (
 	systemdUnitDir = "/etc/systemd/system"
 )
 
+// What `orbit register` and `orbit unregister` reach outside their own process, as vars so a
+// test can drive the real paths against a temporary unit directory, a broker socket that is
+// not there and an account the machine running it does not have: the unit directory the legacy
+// path writes, the broker socket it asks first, this process's effective uid (root writes a
+// unit itself, anyone else through sudo) and the account it runs as.
+var (
+	serviceUnitDir      = systemdUnitDir
+	serviceBrokerSocket = hostdSocketPath
+	processEUID         = os.Geteuid
+	currentUser         = user.Current
+)
+
 // setupService installs + starts a background service that runs `orbit run` (with
 // ORBIT_HOME=orbitHome) and restarts on failure. Linux uses systemd; macOS uses a
 // launchd LaunchAgent. Returns an error instead of exiting, so `orbit register` can
@@ -38,7 +50,7 @@ func setupService(orbitHome string, proxyVars []envVar) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		return setupServiceLinux(hostdSocketPath, proxyVars, func() error {
+		return setupServiceLinux(serviceBrokerSocket, proxyVars, func() error {
 			return installSystemd(exe, orbitHome, systemdService, proxyVars)
 		})
 	case "darwin":
@@ -68,7 +80,7 @@ func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func
 func uninstallService() {
 	switch runtime.GOOS {
 	case "linux":
-		uninstallServiceLinux(hostdSocketPath, uninstallSystemd)
+		uninstallServiceLinux(serviceBrokerSocket, uninstallSystemd)
 	case "darwin":
 		label := launchdLabel
 		home := os.Getenv("HOME")
@@ -109,16 +121,16 @@ func uninstallSystemd() {
 		username = u.Username
 		svc = systemdServiceFor(username)
 	}
-	if os.Geteuid() != 0 {
+	if processEUID() != 0 {
 		fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
 		return
 	}
 	runQuiet("systemctl", "disable", "--now", svc)
-	_ = os.Remove("/etc/systemd/system/" + svc + ".service")
+	_ = os.Remove(filepath.Join(serviceUnitDir, svc+".service"))
 	// Also drop a leftover legacy single-runner unit, but only if it's this user's.
 	if svc != systemdService && unitRunsAsUser(systemdService, username) {
 		runQuiet("systemctl", "disable", "--now", systemdService)
-		_ = os.Remove("/etc/systemd/system/" + systemdService + ".service")
+		_ = os.Remove(filepath.Join(serviceUnitDir, systemdService+".service"))
 	}
 	runQuiet("systemctl", "daemon-reload")
 	fmt.Printf("✓ removed the %s service\n", svc)
@@ -140,7 +152,7 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	// kept only to migrate an older single-runner install below.
 	legacySvc := svc
 	svc = systemdServiceFor(u.Username)
-	unitPath := "/etc/systemd/system/" + svc + ".service"
+	unitPath := filepath.Join(serviceUnitDir, svc+".service")
 
 	// systemd gives services a minimal PATH and does not source the user's shell,
 	// so coding CLIs installed below the user's home aren't found. Bake in the
@@ -151,7 +163,7 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	// Writing the unit + enabling it needs root. When we aren't root, run the install
 	// step and every systemctl call via sudo (prompts once) so `orbit register` ends
 	// with a live service without a separate command.
-	root := os.Geteuid() == 0
+	root := processEUID() == 0
 	var sudo string
 	if !root {
 		s, err := exec.LookPath("sudo")
@@ -171,7 +183,7 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 
 	// The unit runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
 	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
-	exe = adoptUserBin(exe, u, systemdServicesRunning(systemdUnitDir, exe), root, sudo)
+	exe = adoptUserBin(exe, u, systemdServicesRunning(serviceUnitDir, exe), root, sudo)
 	unit := renderSystemdUnit(u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, proxyVars)
 
 	// Write the unit file (root writes it directly; non-root installs it via sudo).
@@ -283,7 +295,7 @@ func migrateLegacyUnit(sctl func(...string) error, root bool, sudo, legacySvc, n
 		return
 	}
 	_ = sctl("disable", "--now", legacySvc)
-	legacyPath := "/etc/systemd/system/" + legacySvc + ".service"
+	legacyPath := filepath.Join(serviceUnitDir, legacySvc+".service")
 	if root {
 		_ = os.Remove(legacyPath)
 	} else {
@@ -295,7 +307,7 @@ func migrateLegacyUnit(sctl func(...string) error, root bool, sudo, legacySvc, n
 // Used to decide whether a legacy `orbit-runner` unit is safe to migrate/remove on behalf
 // of that user, without disturbing another user's runner.
 func unitRunsAsUser(svc, username string) bool {
-	return unitRunsAsUserIn(systemdUnitDir, execStdout, svc, username)
+	return unitRunsAsUserIn(serviceUnitDir, execStdout, svc, username)
 }
 
 // unitRunsAsUserIn is unitRunsAsUser with its two touchpoints — where unit files live and
@@ -338,11 +350,11 @@ func execStdout(name string, args ...string) (string, error) {
 // ran `orbit register`. Under sudo that's $SUDO_USER; otherwise the current user.
 func registeringUser() (*user.User, error) {
 	if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
-		if u, err := user.Lookup(su); err == nil {
+		if u, err := lookupUser(su); err == nil {
 			return u, nil
 		}
 	}
-	return user.Current()
+	return currentUser()
 }
 
 // primaryGroup resolves a user's primary group name, falling back to the username
@@ -464,7 +476,7 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 		if s, err := exec.LookPath("sudo"); err == nil && interactive() {
 			sudo = s
 		}
-		exe = adoptUserBin(exe, u, nil, os.Geteuid() == 0, sudo)
+		exe = adoptUserBin(exe, u, nil, processEUID() == 0, sudo)
 	}
 
 	// launchd starts agents with a minimal PATH and no HOME, so the `claude` CLI
