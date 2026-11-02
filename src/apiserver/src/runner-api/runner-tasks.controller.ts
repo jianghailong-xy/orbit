@@ -201,8 +201,12 @@ export class RunnerTasksController {
    * its `updated_at` (the project list's `lastActivityAt`) is not bumped for a no-op.
    */
   @Post('tasks/batch-pin')
-  pinTasks(@CurrentRunner() runner: Runner, @Body() dto: BatchPinTasksDto) {
-    return this.tasks.pinMany(runner.ownerId, dto);
+  pinTasks(
+    @CurrentRunner() runner: Runner,
+    @Body() dto: BatchPinTasksDto,
+    @Headers('x-orbit-session-id') sessionId?: string,
+  ) {
+    return this.tasks.pinMany(runner.ownerId, dto, sessionId);
   }
 
   /**
