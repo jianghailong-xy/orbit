@@ -2841,6 +2841,10 @@ model Attachment {
   /// What `file_upload` was told this file is (0464, §2.3), in the caller's own words, beside
   /// `fileName`, which only says what it was called. NULL on every other row.
   label     String?
+  /// What `file_upload --as test-report` read out of this file (0465, §2.5, files/test-report.ts): its
+  /// counts, duration and failed and skipped names. Metadata, so it outlives the bytes when they
+  /// expire (§2.8). NULL on every other row.
+  testReportSummary Json?   @map("test_report_summary")
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])

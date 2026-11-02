@@ -54,6 +54,9 @@ type fakeFileServer struct {
 	corrupt bool
 	// absent is a server from before these doors: every route but the attachments' answers Nest's 404.
 	absent bool
+	// report is what this server read out of an upload sent with `as`, and note what it says when it read nothing.
+	report map[string]interface{}
+	note   string
 	*httptest.Server
 }
 
@@ -183,6 +186,13 @@ func (f *fakeFileServer) upload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	view := f.view(file)
 	view["id"] = "00000000-0000-7000-8000-" + fmt.Sprintf("%012d", f.next) // the machine door's own spelling
+	view["testReport"] = nil
+	if fields["as"] != "" {
+		view["testReport"] = f.report
+		if f.note != "" {
+			view["note"] = f.note
+		}
+	}
 	_ = json.NewEncoder(w).Encode(view)
 }
 
@@ -328,6 +338,107 @@ func TestFileUploadKeepsOneFileAndSaysWhatItIs(t *testing.T) {
 	}
 	if got.MimeType != "application/json" {
 		t.Errorf("mimeType = %q", got.MimeType)
+	}
+}
+
+func TestFileUploadAsATestReportAnswersWhatTheServerRead(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.report = map[string]interface{}{"format": "playwright", "total": 3, "passed": 1, "failed": 1, "skipped": 1, "failedNames": []string{"a"}}
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), `{"suites":[]}`)
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"})
+
+	if sent := api.fields[0]["as"]; sent != "test-report" {
+		t.Errorf("as sent = %q", sent)
+	}
+	if got.TestReport["format"] != "playwright" || got.TestReport["failed"] != float64(1) {
+		t.Errorf("testReport = %v", got.TestReport)
+	}
+	if got.Note != "" {
+		t.Errorf("note = %q: a summary needs no explaining", got.Note)
+	}
+}
+
+func TestFileUploadAsATestReportPassesOnWhyThereIsNoSummary(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.note = "Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary."
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "notes.txt"), "all passed")
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"})
+
+	if got.Note != api.note || got.TestReport != nil || got.ID == "" {
+		t.Errorf("answer = %+v", got)
+	}
+}
+
+// A server from before `as` drops the field and answers as it always did. The file is kept, and an answer that said
+// nothing would read as a summary that went missing.
+func TestFileUploadAsATestReportOnAnOlderServerSaysSo(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), `{"suites":[]}`)
+
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path, "as": "test-report"}); got.Note != fileReportOldServerNote {
+		t.Errorf("note = %q", got.Note)
+	}
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": path}); got.Note != "" {
+		t.Errorf("an upload that asked for nothing owes no note: %q", got.Note)
+	}
+}
+
+func TestFileUploadOfAFolderAsATestReportKeepsAPlainBundleAndSaysSo(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	root := filepath.Join(inCheckout(t), "results")
+	writeTestFile(t, filepath.Join(root, "TEST-a.xml"), "<testsuite/>")
+
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": root, "as": "test-report"})
+
+	if got.Kind != "bundle" || got.Note != fileReportFolderNote {
+		t.Errorf("answer = %+v", got)
+	}
+	for _, sent := range api.fields {
+		if sent["as"] != "" {
+			t.Errorf("a file of the folder went as a report: %v", sent)
+		}
+	}
+}
+
+func TestFileUploadRefusesAnyOtherAsBeforeSendingAnything(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "report.json"), "{}")
+
+	text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": path, "as": "coverage"}, true)
+
+	if !strings.Contains(text, `as can only be "test-report"`) {
+		t.Errorf("refusal = %q", text)
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("sent %v", api.calls)
+	}
+}
+
+func TestFileListShowsAReportsSummaryAndNoEmptyOne(t *testing.T) {
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	api.listAnswer = `{"files":[{"id":"file1","publicId":"file1","kind":"file","sha256":"aa","testReport":{"format":"junit","total":1}},{"id":"file2","publicId":"file2","kind":"file","sha256":"bb","testReport":null}],"truncated":false}`
+
+	text := fileToolText(t, s, "file_list", map[string]interface{}{"sessionId": fileTestSession}, false)
+
+	var got struct {
+		Files []map[string]interface{} `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("%v in %s", err, text)
+	}
+	if report, _ := got.Files[0]["testReport"].(map[string]interface{}); report["format"] != "junit" {
+		t.Errorf("first row = %v", got.Files[0])
+	}
+	if _, present := got.Files[1]["testReport"]; present {
+		t.Errorf("a file with no summary shows a null one: %v", got.Files[1])
 	}
 }
 
@@ -768,6 +879,27 @@ func TestFileUploadAndFetchNeedASession(t *testing.T) {
 	}
 	if len(api.calls) != 0 {
 		t.Errorf("sent %v", api.calls)
+	}
+}
+
+func TestFileCLIUploadsAsATestReport(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.report = map[string]interface{}{"format": "junit", "total": 1}
+	configureCLITestRunner(t, api.URL)
+	t.Setenv("ORBIT_SESSION_ID", fileTestSession)
+	chdirForTest(t, t.TempDir())
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "junit.xml"), "<testsuite/>")
+
+	var out bytes.Buffer
+	if err := cmdFileCLI([]string{"upload", path, "--as", "test-report", "--json"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var uploaded fileAnswer
+	if err := json.Unmarshal(out.Bytes(), &uploaded); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	if api.fields[0]["as"] != "test-report" || uploaded.TestReport["format"] != "junit" {
+		t.Errorf("sent %v, answered %+v", api.fields[0], uploaded)
 	}
 }
 

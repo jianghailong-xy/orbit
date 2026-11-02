@@ -12,6 +12,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,6 +29,7 @@ import {
 } from './file-store';
 import type { FileUpload } from './file-upload-storage';
 import { S3FileStore } from './s3-file-store';
+import { parseTestReport, type TestReportSummary, type TEST_REPORT_UPLOAD } from './test-report';
 import { attachmentDisposition, inlineType } from './user-file-response';
 
 /** A FilesConfig to use instead of the environment's; nothing provides one but a spec. */
@@ -68,6 +70,9 @@ export const MAX_BUNDLE_PATH_CHARS = 1024;
 /** How many rows one `file_list` answers: a row per upload, so a folder of any size is one of them. */
 const FILE_LIST_LIMIT = 200;
 
+/** What `file_upload` says of a file it was told is a test report and could not read as one. */
+export const NOT_A_TEST_REPORT = 'Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary.';
+
 /** One file as the agents' doors describe it (`file_upload`, `file_fetch`, `file_list`). */
 export interface FileView {
   id: string;
@@ -84,6 +89,8 @@ export interface FileView {
   taskId: string | null;
   /** The bundle a file is in; on a bundle's manifest, its own id. */
   fileBundleId: string | null;
+  /** What `file_upload --as test-report` read out of this file; null on every other file. */
+  testReport: TestReportSummary | null;
   createdAt: Date;
 }
 
@@ -97,13 +104,19 @@ const FILE_VIEW_SELECT = {
   sessionId: true,
   taskId: true,
   fileBundleId: true,
+  testReportSummary: true,
   createdAt: true,
 } as const satisfies Prisma.AttachmentSelect;
 
 type FileViewRow = Prisma.AttachmentGetPayload<{ select: typeof FILE_VIEW_SELECT }>;
 
-function fileView({ fileName, ...row }: FileViewRow): FileView {
-  return { ...row, kind: row.fileBundleId === row.id ? 'bundle' : 'file', name: fileName };
+function fileView({ fileName, testReportSummary, ...row }: FileViewRow): FileView {
+  return {
+    ...row,
+    kind: row.fileBundleId === row.id ? 'bundle' : 'file',
+    name: fileName,
+    testReport: testReportSummary as unknown as TestReportSummary | null,
+  };
 }
 
 /** A folder bundle's manifest: what its bytes are (docs/orbit-files-design.md §2.2). Ids are public ids. */
@@ -209,6 +222,7 @@ export class FilesService {
       taskId?: string | null;
       label?: string | null;
       retention?: string | null;
+      testReport?: TestReportSummary | null;
     },
   ): Promise<{ id: string }> {
     const sha256 = await this.store(upload);
@@ -223,6 +237,7 @@ export class FilesService {
         sha256,
         label: scope.label ?? null,
         retention: scope.retention ?? null,
+        testReportSummary: (scope.testReport ?? undefined) as Prisma.InputJsonValue | undefined,
       },
       select: { id: true },
     });
@@ -293,25 +308,31 @@ export class FilesService {
    * task's own would be a template that every later run gets in its prompt (migration 0241,
    * tasks.service.ts#copyTaskAttachments). So `taskId` can only say which task the session believes it is running, and
    * anything else is refused before a row is written.
+   *
+   * `as` asks for a test report's summary, read here because the temporary file is gone once `store` has kept it. The
+   * upload never depends on it: a file that is no report is kept all the same, and the answer's `note` says so.
    */
   async uploadFile(
     upload: FileUpload,
     session: { id: string; ownerId: string; taskId: string | null },
-    options: { taskId?: string; label?: string },
-  ): Promise<FileView> {
+    options: { taskId?: string; label?: string; as?: typeof TEST_REPORT_UPLOAD },
+  ): Promise<FileView & { note?: string }> {
     if (options.taskId !== undefined && options.taskId !== session.taskId) {
       throw new BadRequestException(
         'taskId has to be the task this session is running, or left out: a file stays with the session that uploads it, '
           + "and counts as that session's task. To give a file to another task as an input, use task_create's attachmentIds.",
       );
     }
+    const testReport = options.as ? parseTestReport(await readFile(upload.path, 'utf8')) : null;
     const { id } = await this.createAttachment(upload, {
       ownerId: session.ownerId,
       sessionId: session.id,
       label: options.label?.trim() || null,
       retention: FILE_UPLOAD_RETENTION,
+      testReport,
     });
-    return fileView(await this.prisma.attachment.findUniqueOrThrow({ where: { id }, select: FILE_VIEW_SELECT }));
+    const view = fileView(await this.prisma.attachment.findUniqueOrThrow({ where: { id }, select: FILE_VIEW_SELECT }));
+    return options.as && !testReport ? { ...view, note: NOT_A_TEST_REPORT } : view;
   }
 
   /** The row `where` finds, as an agent is told of it; null when it finds none. `where` says whose it may be. */

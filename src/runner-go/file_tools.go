@@ -43,6 +43,18 @@ const (
 	fileLabelMaxChars      = 200
 )
 
+// fileAsTestReport is the one thing `as` can ask of an upload: to be read as a test report (apiserver files/test-report.ts).
+const fileAsTestReport = "test-report"
+
+// What file_upload says of an `as` that was not honoured, beside the file that was kept all the same. The third such
+// sentence is the server's own, for a file that is no report.
+const (
+	fileReportFolderNote = `A folder is kept as a plain bundle, with no test summary: as "test-report" reads one report ` +
+		`file, so upload the report itself to get one.`
+	fileReportOldServerNote = "This Orbit server does not read test reports, so this was kept as a plain file, with no " +
+		"test summary. Upgrade the Orbit server to get one."
+)
+
 // fileCallTimeout is how long one file may take to travel. Longer than the attachments' 35 seconds, which were chosen
 // for a screenshot: this one may be 25 MiB on a home connection.
 const fileCallTimeout = 2 * time.Minute
@@ -64,6 +76,9 @@ type sessionFile struct {
 	SizeBytes int64  `json:"sizeBytes"`
 	SHA256    string `json:"sha256"`
 	CreatedAt string `json:"createdAt"`
+	// What the server read out of a test report, passed on as it came: a binary can be older than the fields in it.
+	TestReport map[string]interface{} `json:"testReport"`
+	Note       string                 `json:"note"`
 }
 
 func (f sessionFile) id() string {
@@ -94,12 +109,17 @@ type fileAnswer struct {
 	Files []fileBundleFile `json:"files,omitempty"`
 	// What file_upload found in the folder and did not keep, so that nothing is left out without saying so.
 	Skipped []skippedFile `json:"skipped,omitempty"`
+	// What file_upload --as test-report read out of the file: on this file for good, so every tool shows it.
+	TestReport map[string]interface{} `json:"testReport,omitempty"`
+	// Why an upload told it was a test report has no summary. The file was kept all the same.
+	Note string `json:"note,omitempty"`
 }
 
 func answerFor(f sessionFile) fileAnswer {
 	return fileAnswer{
 		ID: f.id(), Kind: f.Kind, Name: f.Name, Label: f.Label, MimeType: f.MimeType,
 		SizeBytes: f.SizeBytes, SHA256: f.SHA256, Link: fileLink(f.id()), CreatedAt: f.CreatedAt,
+		TestReport: f.TestReport, Note: f.Note,
 	}
 }
 
@@ -299,7 +319,7 @@ func runFileTool(t *Transport, tool fileToolContext, name string, args map[strin
 	var err error
 	switch name {
 	case "file_upload":
-		answer, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"))
+		answer, err = uploadPath(t, tool, getString(args, "path"), getString(args, "taskId"), getString(args, "label"), getString(args, "as"))
 	case "file_fetch":
 		answer, err = fetchFile(t, tool, getString(args, "id"))
 	case "file_list":
@@ -361,8 +381,9 @@ func fileCallError(action string, err error) error {
 	return fmt.Errorf("%s: %w", action, err)
 }
 
-// uploadPath is file_upload: a file, or a directory as one bundle.
-func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) (fileAnswer, error) {
+// uploadPath is file_upload: a file, or a directory as one bundle. `as` never costs an upload: what cannot be read as it
+// asks is kept all the same, and the answer's note says so.
+func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as string) (fileAnswer, error) {
 	var out fileAnswer
 	sessionID, err := fileSessionOf(tool, "file_upload")
 	if err != nil {
@@ -374,6 +395,9 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	// Here rather than left to the server, which would say so only after a whole folder had been uploaded.
 	if utf8.RuneCountInString(label) > fileLabelMaxChars || strings.ContainsFunc(label, unicode.IsControl) {
 		return out, fmt.Errorf("file_upload: a label is at most %d characters, with no control characters", fileLabelMaxChars)
+	}
+	if as != "" && as != fileAsTestReport {
+		return out, fmt.Errorf("file_upload: as can only be %q, not %q", fileAsTestReport, as)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -398,10 +422,17 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 		fields["taskId"] = taskID
 	}
 	if info.IsDir() {
-		return uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
+		out, err = uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
+		if err == nil && as != "" {
+			out.Note = fileReportFolderNote
+		}
+		return out, err
 	}
 	if label != "" {
 		fields["label"] = label
+	}
+	if as != "" {
+		fields["as"] = as
 	}
 	file, opened, err := scope.open(real)
 	var refused *localFileRefused
@@ -427,7 +458,12 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	if err != nil {
 		return out, fileCallError("file_upload "+abs, err)
 	}
-	return answerFor(uploaded), nil
+	out = answerFor(uploaded)
+	// A server that reads reports answers a summary or a note. One from before them drops the field and answers neither.
+	if as != "" && out.TestReport == nil && out.Note == "" {
+		out.Note = fileReportOldServerNote
+	}
+	return out, nil
 }
 
 // newFileUploadScope is what file_upload may read: this session's own directories, and the working directory it was
@@ -766,6 +802,14 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type":        "string",
 					"maxLength":   fileLabelMaxChars,
 					"description": "What this is, in a few words, kept with the file. On a directory it is the bundle's.",
+				},
+				"as": map[string]interface{}{
+					"type": "string",
+					"enum": []string{fileAsTestReport},
+					"description": "test-report reads one Playwright JSON or JUnit XML report and keeps a summary with the " +
+						"file, answered as testReport: total, passed, failed, skipped, duration, and failed and skipped test " +
+						"names. It stays after the file expires, and evidence citing the file shows it. Anything else, a " +
+						"directory included, is kept as a plain file and note says so.",
 				},
 			}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
