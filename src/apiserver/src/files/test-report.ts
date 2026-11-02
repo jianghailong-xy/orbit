@@ -283,6 +283,9 @@ export function testReportLine(summary: TestReportSummary): string {
 
 /** What this text says about a test run, or null when it is neither report, or not a whole one. */
 export function parseTestReport(text: string): TestReportSummary | null {
+  // Neither format can hold a NUL, and a NUL is what makes the credential scan take a file for binary and leave it unread
+  // (file-secret-scan.ts). A name kept here reaches a card, so nothing is read here that was not scanned.
+  if (text.includes('\0')) return null;
   // A byte order mark is whitespace to trimStart.
   const body = text.trimStart();
   if (body.startsWith('{')) return readPlaywright(body);

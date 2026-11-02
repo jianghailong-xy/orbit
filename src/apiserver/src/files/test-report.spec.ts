@@ -248,6 +248,13 @@ test('a report cut short is not read as a whole run', () => {
   }
 });
 
+test('a NUL means the text is no report: the credential scan leaves such a file unread, so its names must stay unread', () => {
+  const nul = String.fromCharCode(0);
+  assert.equal(parseTestReport(`<testsuite><system-out>${nul}</system-out><testcase name="a"><failure/></testcase></testsuite>`), null);
+  assert.equal(parseTestReport(`<testsuite><!--${nul}--><testcase name="a"/></testsuite>`), null);
+  assert.equal(parseTestReport(`{"suites":[],"stats":{"expected":0,"unexpected":0,"skipped":0}}${nul}`), null);
+});
+
 test('a status Playwright does not have is no Playwright report', () => {
   assert.equal(parseTestReport(playwright([['a', 'mystery']])), null);
   assert.equal(parseTestReport(playwright([['a', '__proto__']])), null);

@@ -15,19 +15,22 @@
  *   (6) the summary is metadata: the file's bytes going does not take it with them;
  *   (7) a report cited as evidence shows its summary in `task_evidence_list`, in the label and as a field, on the read a card
  *       is drawn from, and in the message to the session that judges it, and it stays there once the file has expired. The
- *       summary is no part of the evidence digest, and a file that is no report shows none.
+ *       summary is no part of the evidence digest, and a file that is no report shows none;
+ *   (8) a report holding a credential is refused whole, before anything reads its names, which would reach a card: no row,
+ *       no summary, no stored bytes;
+ *   (9) a report the credential scan takes for binary is not read as a report, so what is read has always been scanned.
  *
  * Not destructive: every row belongs to users this run creates.
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -36,7 +39,10 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { evidenceReviewBlock } from '../tasks/evidence-review';
 import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
+import { issued } from './file-secret-samples.spec';
+import { FILE_HOLDS_SECRET } from './file-secret-scan';
 import { NOT_A_TEST_REPORT } from './files.service';
+import { parseTestReport } from './test-report';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -284,5 +290,48 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
     assert.deepEqual(afterwards.testReport, file.testReport, 'and the summary is still there');
     assert.equal(afterwards.label, cited.label);
     assert.deepEqual(await onTheCard(), file.testReport, 'on the card too');
+  });
+
+  // Put together when the case runs: the repository is scanned on push, and a fixture written out whole would be refused.
+  const key = issued('ghp_', 36);
+
+  await t.test('(8) a report holding a credential is refused whole, before anything reads its names', async () => {
+    const reports: Record<string, string> = {
+      'report.json': JSON.stringify({
+        suites: [{ title: 'a.spec.ts', specs: [{ title: `logs in with ${key}`, tests: [{ projectName: '', status: 'unexpected' }] }] }],
+        errors: [],
+        stats: { expected: 0, unexpected: 1, skipped: 0 },
+      }),
+      'junit.xml': `<testsuite><testcase name="logs in with ${key}"><failure/></testcase></testsuite>`,
+    };
+    const held = async () => ({
+      rows: await db.attachment.count({ where: { ownerId } }),
+      summaries: await db.attachment.count({ where: { ownerId, NOT: { testReportSummary: { equals: Prisma.DbNull } } } }),
+      blobs: await db.fileBlob.count(),
+    });
+    const before = await held();
+    for (const [name, content] of Object.entries(reports)) {
+      // Whole, readable reports: this name is what a card would show if the scan did not come first.
+      assert.ok(parseTestReport(content)?.failedNames[0].includes(key), `${name} would carry the credential onto a card`);
+      const refused = await send(content, name);
+      assert.equal(refused.status, 422, `${name} answered ${refused.status}: ${refused.text.slice(0, 300)}`);
+      assert.equal(refused.json.code, FILE_HOLDS_SECRET, name);
+      assert.equal(refused.json.testReport, undefined, `${name} answers no summary`);
+      assert.ok(!refused.text.includes(key), `the answer for ${name} does not repeat it`);
+      const hash = sha256(content);
+      assert.equal(existsSync(path.join(dir, hash.slice(0, 2), hash)), false, `the bytes of ${name} are not in the store`);
+    }
+    assert.deepEqual(readdirSync(path.join(dir, 'tmp')), [], 'no temporary file is left');
+    assert.deepEqual(await held(), before, 'no row, no summary and no stored bytes');
+  });
+
+  await t.test('(9) what the scan takes for binary is not read as a report', async () => {
+    const content = `<testsuite><system-out>${String.fromCharCode(0)}</system-out><testcase name="logs in with ${key}"><failure/></testcase></testsuite>`;
+    const reply = await send(content, 'junit.xml');
+    assert.equal(reply.status, 201, `a binary file is kept: ${reply.text.slice(0, 300)}`);
+    assert.equal(reply.json.testReport, null, 'and nothing of it reaches a card');
+    assert.equal(notes(reply), NOT_A_TEST_REPORT);
+    assert.equal(await summaryOnRow(reply.json.id), null);
+    assert.ok(!reply.text.includes(key));
   });
 });
