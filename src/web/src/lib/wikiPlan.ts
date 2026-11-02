@@ -15,7 +15,6 @@
 import {
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_JOB_RULES,
-  WIKI_PLAN_RULES,
   type WikiDocsDirectory,
   type WikiPlanCategoryInput,
   type WikiPlanDoc,

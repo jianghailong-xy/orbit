@@ -817,7 +817,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       plan: a.plan,
       repoCheck: a.repo,
     };
-    if (a.notes.length > 0) request.notes = a.notes;
+    if (a.notes.length > 0) request.notes = a.notes.slice(0, WIKI_PLAN_RULES.notesMax);
     if (this.deps.model) request.model = this.deps.model;
     request.idempotencyKey = wikiPlanServerDraftKey(this.planJobId, job.id, request);
     try {

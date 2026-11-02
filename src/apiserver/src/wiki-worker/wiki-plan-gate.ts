@@ -230,7 +230,7 @@ export function wikiPlanSettle(r: WikiPlanRunState): WikiPlanAssembled {
   settleFields(a, notes);
   if (!r.cats.some((cat) => cat.forAgents)) notes.push({ check: 'schema', text: 'No category for the agents’ conventions. Redraft to add one.' });
   a.errors = [];
-  a.notes = notes.slice(0, WIKI_PLAN_RULES.notesMax);
+  a.notes = notes;
   return a;
 }
 
