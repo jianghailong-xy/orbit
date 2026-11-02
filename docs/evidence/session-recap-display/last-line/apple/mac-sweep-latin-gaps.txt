@@ -1,0 +1,11 @@
+row 1: lines 2: words end at 629.0, ⋯ 663.0–676.0 pt, gap 34.0 pt
+row 2: lines 2: words end at 636.0, ⋯ 663.0–676.0 pt, gap 27.0 pt
+row 3: lines 2: words end at 642.0, ⋯ 663.0–676.0 pt, gap 21.0 pt
+row 4: lines 3: words end at 347.0, ⋯ 663.0–676.0 pt, gap 316.0 pt
+row 5: lines 3: words end at 354.0, ⋯ 663.0–676.0 pt, gap 309.0 pt
+row 6: lines 3: words end at 361.0, ⋯ 663.0–676.0 pt, gap 302.0 pt
+row 7: lines 3: words end at 368.0, ⋯ 663.0–676.0 pt, gap 295.0 pt
+row 8: lines 3: words end at 374.0, ⋯ 663.0–676.0 pt, gap 289.0 pt
+row 9: lines 3: words end at 381.0, ⋯ 663.0–676.0 pt, gap 282.0 pt
+row 10: lines 3: words end at 388.0, ⋯ 663.0–676.0 pt, gap 275.0 pt
+row 11: lines 3: words end at 395.0, ⋯ 663.0–676.0 pt, gap 268.0 pt

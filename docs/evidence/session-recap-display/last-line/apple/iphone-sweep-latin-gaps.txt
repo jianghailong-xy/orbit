@@ -1,0 +1,12 @@
+row 1: lines 2: words end at 368.3, ⋯ 406.0–419.7 pt, gap 37.7 pt
+row 2: lines 2: words end at 376.0, ⋯ 406.0–419.7 pt, gap 30.0 pt
+row 3: lines 2: words end at 383.7, ⋯ 406.0–419.7 pt, gap 22.3 pt
+row 4: lines 2: words end at 391.3, ⋯ 406.0–419.7 pt, gap 14.7 pt
+row 5: lines 3: words end at 57.3, ⋯ 406.0–419.7 pt, gap 348.7 pt
+row 6: lines 3: words end at 65.0, ⋯ 406.0–419.7 pt, gap 341.0 pt
+row 7: lines 3: words end at 72.7, ⋯ 406.0–419.7 pt, gap 333.3 pt
+row 8: lines 3: words end at 80.3, ⋯ 406.0–419.7 pt, gap 325.7 pt
+row 9: lines 3: words end at 88.0, ⋯ 406.0–419.7 pt, gap 318.0 pt
+row 10: lines 3: words end at 95.7, ⋯ 406.0–419.7 pt, gap 310.3 pt
+row 11: lines 3: words end at 103.0, ⋯ 406.0–419.7 pt, gap 303.0 pt
+smallest gap: 14.666666666666666

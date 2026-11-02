@@ -1,0 +1,107 @@
+[
+  {
+    "scene": "desktop-light-rest",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "0",
+    "hoverNone": false,
+    "lines": 2,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 689.5,
+    "items": []
+  },
+  {
+    "scene": "desktop-light-hover",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": false,
+    "lines": 2,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 689.5,
+    "items": []
+  },
+  {
+    "scene": "desktop-light-menu",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": false,
+    "lines": 2,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 689.5,
+    "items": [
+      "Refresh recap",
+      "Hide recap"
+    ]
+  },
+  {
+    "scene": "desktop-light-menu-pointer-in-menu",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": false,
+    "lines": 2,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 689.5,
+    "items": [
+      "Refresh recap",
+      "Hide recap"
+    ]
+  },
+  {
+    "scene": "desktop-dark-hover",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": false,
+    "lines": 2,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 689.5,
+    "items": []
+  },
+  {
+    "scene": "desktop-light-short-hover",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": false,
+    "lines": 1,
+    "paragraphWidth": 775,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 392.6,
+    "items": []
+  },
+  {
+    "scene": "phone-light",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": true,
+    "lines": 3,
+    "paragraphWidth": 338,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 204.7,
+    "items": []
+  },
+  {
+    "scene": "phone-light-menu",
+    "label": "Recap actions",
+    "buttons": 1,
+    "opacity": "1",
+    "hoverNone": true,
+    "lines": 3,
+    "paragraphWidth": 338,
+    "moreMiddleVsLastLineMiddle": 0.1,
+    "gapLastWordToMore": 204.7,
+    "items": [
+      "Refresh recap",
+      "Hide recap"
+    ]
+  }
+]
