@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { MAX_CASE_NAME_CHARS, MAX_LISTED_CASES, parseTestReport, type TestReportSummary } from './test-report';
+import { MAX_CASE_NAME_CHARS, MAX_LISTED_CASES, parseTestReport, testReportLine, type TestReportSummary } from './test-report';
 
 const SAMPLES = path.resolve(__dirname, '../../src/files/test-report-samples');
 const sample = (name: string) => readFileSync(path.join(SAMPLES, name), 'utf8');
@@ -288,6 +288,11 @@ test('a summary stays small however much the report holds', () => {
   // Cutting inside a surrogate pair leaves half of one, which is as unstorable as any other.
   const cut = parseTestReport(`<testsuite><testcase name="${'x'.repeat(MAX_CASE_NAME_CHARS - 2)}😀"><failure/></testcase></testsuite>`);
   assert.doesNotMatch(cut?.failedNames[0] ?? '', /\p{Cs}/u);
+});
+
+test('a summary reads as one line', () => {
+  assert.equal(testReportLine(parseTestReport(sample('playwright-orbit-web.json')) as TestReportSummary), 'Playwright · 83 passed · 9 failed · 4 skipped');
+  assert.equal(testReportLine(parseTestReport(sample('junit-gradle.xml')) as TestReportSummary), 'JUnit · 2 passed · 2 failed · 2 skipped');
 });
 
 test('how deep a report nests cannot overflow the stack', () => {

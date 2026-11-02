@@ -275,6 +275,12 @@ function readJunit(xml: string): TestReportSummary | null {
   return summaryOf('junit', cases, seconds === null ? null : Math.round(seconds * 1000));
 }
 
+/** A summary as one line: `Playwright · 46 passed · 0 failed · 2 skipped`. */
+export function testReportLine(summary: TestReportSummary): string {
+  const format = summary.format === 'playwright' ? 'Playwright' : 'JUnit';
+  return `${format} · ${summary.passed} passed · ${summary.failed} failed · ${summary.skipped} skipped`;
+}
+
 /** What this text says about a test run, or null when it is neither report, or not a whole one. */
 export function parseTestReport(text: string): TestReportSummary | null {
   // A byte order mark is whitespace to trimStart.

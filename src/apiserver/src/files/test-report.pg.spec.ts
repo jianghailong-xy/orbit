@@ -12,7 +12,10 @@
  *   (3) without `as` a report is a file like any other, and nothing reads it;
  *   (4) any other `as` is refused and leaves nothing behind;
  *   (5) whatever a report's names hold, the row can keep them;
- *   (6) the summary is metadata: the file's bytes going does not take it with them.
+ *   (6) the summary is metadata: the file's bytes going does not take it with them;
+ *   (7) a report cited as evidence shows its summary in `task_evidence_list`, in the label and as a field, on the read a card
+ *       is drawn from, and in the message to the session that judges it, and it stays there once the file has expired. The
+ *       summary is no part of the evidence digest, and a file that is no report shows none.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -23,7 +26,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { uuidToBase62 } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -31,6 +34,8 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { upload } from '../auth/tenant-isolation-fixtures';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { evidenceReviewBlock } from '../tasks/evidence-review';
+import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { NOT_A_TEST_REPORT } from './files.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -80,6 +85,22 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
       status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
     },
   });
+  const STANDARD = 'The report says the tests pass.';
+  const taskId = randomUUID();
+  await db.task.create({
+    data: {
+      id: taskId, title: 'a task with a report', ownerId, creatorType: 'AGENT', creatorId: ownerId, creatorSessionId: sessionId,
+      assigneeId: workspaceId, status: 'IN_PROGRESS', completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD,
+    },
+  });
+  const runId = randomUUID();
+  await db.session.create({
+    data: {
+      id: runId, title: 'a run of the task', prompt: 'a run of the task', ownerId, creatorId: ownerId, workspaceId,
+      assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${runId}`,
+      provider: 'claude', taskId, startsTaskWork: true,
+    },
+  });
 
   const door = `/api/runner/sessions/${b62(sessionId)}/files`;
   const send = (content: string, name: string, fields: Record<string, string> = { as: 'test-report' }): Promise<Reply> =>
@@ -91,10 +112,11 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   };
   const summaryOnRow = async (id: string) =>
     (await db.attachment.findUniqueOrThrow({ where: { id }, select: { testReportSummary: true } })).testReportSummary;
-  const bytesOf = (publicId: string) =>
-    fetch(`http://127.0.0.1:${api.port}/api/runner/sessions/${b62(sessionId)}/attachments/${publicId}`, {
+  const bytesOfSession = (session: string, publicId: string) =>
+    fetch(`http://127.0.0.1:${api.port}/api/runner/sessions/${b62(session)}/attachments/${publicId}`, {
       headers: { authorization: `Bearer ${token}` },
     });
+  const bytesOf = (publicId: string) => bytesOfSession(sessionId, publicId);
   const listed = async () =>
     (await call(api, 'GET', `/api/runner/files?sessionId=${b62(sessionId)}`, token)).json.files as { id: string; testReport: unknown }[];
   const notes = (reply: Reply) => reply.json.note as string | undefined;
@@ -194,5 +216,73 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
     assert.equal((await bytesOf(file.publicId)).status, 404, 'the bytes are gone');
     assert.deepEqual(await summaryOnRow(file.id), file.testReport, 'the summary is not');
     assert.deepEqual((await listed()).find((row) => row.id === file.publicId)?.testReport, file.testReport, 'and it is still answered');
+  });
+
+  await t.test('(7) evidence citing a report shows what it says, before and after the file expires', async () => {
+    const runDoor = `/api/runner/sessions/${b62(runId)}/files`;
+    const report = sample('playwright-retries.json');
+    const headers = { authorization: `Bearer ${token}` };
+    const uploaded = async (content: string, name: string, fields: Record<string, string>) => {
+      const reply = await upload(api, 'POST', runDoor, headers, { name, type: 'application/octet-stream', content }, fields);
+      assert.equal(reply.status, 201, `${name} answered ${reply.status}: ${reply.text.slice(0, 400)}`);
+      return reply.json;
+    };
+    const file = await uploaded(report, 'report.json', { as: 'test-report' });
+    const plain = await uploaded('all passed\n', 'notes.txt', { as: 'test-report' });
+    const asIs = await uploaded(sample('junit-vitest.xml'), 'junit.xml', {});
+    const submitted = await call(api, 'POST', `/api/runner/tasks/${b62(taskId)}/evidence`, token, {
+      evidence: {
+        claim: 'the report shows it',
+        criterion: { key: b62(taskId), text: STANDARD },
+        checks: [file, plain, asIs].map(({ publicId }) => ({ kind: 'FILE', ref: publicId })),
+        gaps: [],
+      },
+    }, { 'x-orbit-session-id': b62(runId) });
+    assert.equal(submitted.status, 201, submitted.text.slice(0, 400));
+
+    const line = 'Playwright · 6 passed · 2 failed · 6 skipped';
+    const citations = async () => {
+      const ledger = await call(api, 'GET', `/api/runner/tasks/${b62(taskId)}/evidence`, token);
+      assert.equal(ledger.status, 200, ledger.text.slice(0, 400));
+      return ledger.json.at(-1).citations as { ref: string; resolved: boolean; label: string; testReport?: unknown }[];
+    };
+    const [cited, notAReport, notAsked] = await citations();
+    assert.deepEqual(cited.testReport, file.testReport, 'task_evidence_list answers the whole summary');
+    assert.ok(cited.label.endsWith(line), `the label says it: ${cited.label}`);
+    assert.ok(cited.label.startsWith('report.json · '), cited.label);
+    for (const other of [notAReport, notAsked]) {
+      assert.equal(other.resolved, true);
+      assert.equal(other.testReport, undefined, 'a file with no summary shows none');
+      assert.ok(!other.label.includes('passed'), other.label);
+    }
+    assert.deepEqual(submitted.json.citations[0].testReport, file.testReport, 'and the receipt says the same');
+    const version = await call(api, 'GET', `/api/runner/files?evidenceId=${submitted.json.id}`, token);
+    assert.equal(version.status, 200, version.text.slice(0, 400));
+    const inVersion = (version.json.files as { publicId: string; testReport: unknown }[]).find((row) => row.publicId === file.publicId);
+    assert.deepEqual(inVersion?.testReport, file.testReport, 'and file_list of the evidence version');
+    // The owner's card for a task in no project is drawn once its dispatching session has held it for half an hour.
+    const onTheCard = async () => {
+      const queue = await readPendingEvidenceJudgments(db as never, ownerId, { id: sessionId, taskId: null }, new Date(Date.now() + 31 * 60_000));
+      const row = [...queue.pending, ...queue.waitingOnYou].find((judgment) => judgment.taskId === taskId);
+      assert.ok(row, `the card's read has the revision: ${JSON.stringify(queue).slice(0, 300)}`);
+      return row.citations[0].testReport;
+    };
+    assert.deepEqual(await onTheCard(), file.testReport, 'the read a card is drawn from says the same');
+    const review = await evidenceReviewBlock(db as never, toUuid(submitted.json.id));
+    assert.ok(review?.includes(`${line}: file_fetch (id: ${file.publicId})`), `the session that judges it is told: ${review}`);
+
+    const stored = await db.taskCompletionEvidence.findFirstOrThrow({ where: { taskId } });
+    assert.ok(!JSON.stringify(stored.evidence).includes('passed'), 'the summary is not in what the digest covers');
+
+    const pending = await db.attachment.update({
+      where: { id: file.id }, data: { expiresAt: new Date(), expiredAt: new Date() }, select: { sha256: true },
+    });
+    rmSync(path.join(dir, (pending.sha256 as string).slice(0, 2), pending.sha256 as string));
+    assert.equal((await bytesOfSession(runId, file.publicId)).status, 404, 'the bytes are gone');
+    const [afterwards] = await citations();
+    assert.equal(afterwards.resolved, true, 'the citation still resolves');
+    assert.deepEqual(afterwards.testReport, file.testReport, 'and the summary is still there');
+    assert.equal(afterwards.label, cited.label);
+    assert.deepEqual(await onTheCard(), file.testReport, 'on the card too');
   });
 });
