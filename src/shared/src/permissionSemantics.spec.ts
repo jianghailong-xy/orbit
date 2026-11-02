@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentProvider, PermissionMode } from './enums';
 import {
   ROOT_FALLBACK_PERMISSION_MODE,
+  ROOT_REFUSED_PERMISSION_MODES,
   autoAvailable,
   derivePermissionSemantics,
   permissionModeAvailableOnRunner,
@@ -39,17 +40,16 @@ describe('permissionModeAvailableOnRunner', () => {
     expect(permissionModeAvailableOnRunner(PermissionMode.BYPASS, undefined)).toBe(true);
   });
 
-  it("substitutes a mode that is narrower, never broader", () => {
-    // Don't Ask denies what Bypass would have allowed, and still never asks — so an unattended
-    // session neither parks on an approval card nor gains permissions it was denied.
-    expect(ROOT_FALLBACK_PERMISSION_MODE).toBe(PermissionMode.DONT_ASK);
-    const asked = derivePermissionSemantics(AgentProvider.CLAUDE, PermissionMode.BYPASS);
+  it('substitutes the mode that still runs unattended, and nothing wider', () => {
+    // A session that asked for Bypass has to go on running commands with nobody watching, which Don't
+    // Ask would refuse, without parking on an approval card nobody would answer.
+    expect(ROOT_FALLBACK_PERMISSION_MODE).toBe(PermissionMode.AUTO);
+    expect(ROOT_REFUSED_PERMISSION_MODES.has(ROOT_FALLBACK_PERMISSION_MODE)).toBe(false);
     const substituted = derivePermissionSemantics(
       AgentProvider.CLAUDE,
       ROOT_FALLBACK_PERMISSION_MODE,
     );
-    expect(asked.unapproved).toBe('allow');
-    expect(substituted.unapproved).toBe('deny');
+    expect(substituted.unapproved).toBe('allow');
   });
 });
 
@@ -62,8 +62,15 @@ describe('derivePermissionSemantics on a root runner', () => {
       true,
     );
     expect(s.honored).toBe(false);
-    expect(s.unapproved).toBe('deny');
-    expect(s.shortNote).toContain('root');
+    expect(s.unapproved).toBe('allow');
+    expect(s.shortNote).toBe('unavailable on a root runner, runs as Auto');
+  });
+
+  it('says Default for a model with no Auto, which is what it will run as', () => {
+    const s = derivePermissionSemantics(AgentProvider.CLAUDE, PermissionMode.BYPASS, 'a-model-with-no-auto', true);
+    expect(s.honored).toBe(false);
+    expect(s.unapproved).toBe('ask');
+    expect(s.shortNote).toBe('unavailable on a root runner, runs as Default');
   });
 
   it('leaves Bypass honored on a non-root runner', () => {

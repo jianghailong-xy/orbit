@@ -133,6 +133,10 @@ asks and whichever way the request reaches the runner.
 - **Always allow** on a job's card remembers the command's prefix, one rule per sub-command, as it does on a `Bash`
   card, and the same rules answer both. DeepSeek Harness has no always allow, as on its other cards.
 - **Don't Ask refuses every job,** including one whose command a rule already allows.
+- **Unattended work that has to run commands belongs in Auto.** Don't Ask asks nobody, but it refuses anything not
+  already approved, so a session in it cannot run a command nobody allowed, in a shell or as a job. On a runner
+  deployed as root, where Claude Code refuses Bypass, a session whose account default is Bypass runs as Auto, or as
+  Default on a model with no Auto.
 - **A mode change counts from the next call.** That includes Claude Code leaving Plan when a plan is approved.
 - **DeepSeek Harness:** its Auto keeps a file sandbox, so a job outside it needs what any escalation there needs: a
   routine command that stays in the workspace starts, and anything else, or a job that sets its own variables, gets a
@@ -143,7 +147,8 @@ asks and whichever way the request reaches the runner.
   works in every mode, on the engines whose tool calls have a deadline too.
 
 An upgrade changes one thing people may notice: Claude Code in Default and Accept Edits now asks before each `Bash`
-command that is not already allowed, and Don't Ask refuses one. Before this change these modes did not.
+command that is not already allowed, and Don't Ask refuses one. Before this change these modes did not, so a session
+that used Don't Ask to run commands unattended has to move to Auto.
 
 This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
 [Security notes](#security-notes).
