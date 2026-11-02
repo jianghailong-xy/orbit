@@ -314,9 +314,9 @@ directory. The worktree and the uploads directory count only as real directories
 and a directory inside the worktree counts as the worktree. A working directory that is `/` or holds
 the home directory does not count, and a session started there uploads from its uploads directory; a
 reply's links still reach such a working directory, where the engine can read anyway. Inside the
-runner's own directory (`~/.orbit`) nothing but this session's directories is ever read. A file is
-opened as it is sent, so one that changed after a directory was read is listed under `skipped` and
-not sent.
+runner's own directory (`~/.orbit`), by any name the filesystem takes for it, nothing but this session's
+directories is ever read. A file is opened as it is sent, so one that changed after a directory was
+read is listed under `skipped` and not sent.
 
 `upload` answers `id`, `sha256`, `sizeBytes` and `link`, an `orbit-attachment:` link to put in a reply:
 `![name](link)` for an image, `[name](link)` for anything else. A directory becomes one folder bundle:

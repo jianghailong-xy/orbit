@@ -506,6 +506,10 @@ func usableAsARoot(cwd string) bool {
 	if real == string(filepath.Separator) {
 		return false
 	}
+	here, err := os.Stat(real)
+	if err != nil {
+		return false
+	}
 	homes := []string{machineHome()}
 	if home, err := os.UserHomeDir(); err == nil {
 		homes = append(homes, home)
@@ -517,7 +521,7 @@ func usableAsARoot(cwd string) bool {
 		return false
 	}
 	for _, home := range homes {
-		if pathInsideAny(realPath(home), real) {
+		if insideDirectory(realPath(home), here) {
 			return false
 		}
 	}

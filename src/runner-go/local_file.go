@@ -19,10 +19,12 @@ import (
 // prompt in any permission mode, and they run outside the engine's sandbox.
 //
 // Orbit's own directory is refused first and whatever the roots say: it holds the machine's credentials, kept in a file
-// so that they stay out of the engine (cmdMcp), and a root can hold it.
+// so that they stay out of the engine (cmdMcp), and a root can hold it. It is known by what it is, not only by its name
+// (inOrbitsDirectory).
 type localFileScope struct {
-	// Orbit's own directory (machineHome).
-	home string
+	// Orbit's own directory (machineHome), and what stands there. Nil when nothing could be read of it.
+	home     string
+	homeInfo os.FileInfo
 	// The roots inside it, which are the session's own.
 	own []string
 	// Where a path may be.
@@ -49,6 +51,9 @@ func (e *localFileRefused) Error() string { return "the path is " + e.reason }
 func newLocalFileScope(sessionDirs []string, otherRoots ...string) localFileScope {
 	home := realPath(machineHome())
 	scope := localFileScope{home: home}
+	if info, err := os.Stat(home); err == nil {
+		scope.homeInfo = info
+	}
 	for _, dir := range sessionDirs {
 		root, ok := sessionRoot(dir, home)
 		if !ok {
@@ -94,13 +99,35 @@ func worktreeHolding(dir, home string) string {
 
 // refuses says why a path, with its links resolved, may not be read, and "" when it may.
 func (s localFileScope) refuses(real string) string {
-	if pathInsideAny(real, s.home) && !pathInsideAny(real, s.own...) {
+	if !pathInsideAny(real, s.own...) && s.inOrbitsDirectory(real) {
 		return localFileInOrbitsDirectory
 	}
 	if !pathInsideAny(real, s.roots...) {
 		return localFileOutsideTheSession
 	}
 	return ""
+}
+
+// inOrbitsDirectory reports whether a path is in Orbit's directory under any name for it. A filesystem can take one
+// directory under spellings nobody could list: another case on a Mac's by default, another Unicode form on APFS. So this
+// goes by what the directories above the path are. The name counts as well, for a scope that could not look at them.
+func (s localFileScope) inOrbitsDirectory(real string) bool {
+	return pathInsideAny(real, s.home) || insideDirectory(real, s.homeInfo)
+}
+
+// insideDirectory reports whether path is the directory dir describes or under it, going by what each directory on the
+// way up is.
+func insideDirectory(path string, dir os.FileInfo) bool {
+	for {
+		if info, err := os.Stat(path); err == nil && os.SameFile(info, dir) {
+			return true
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return false
+		}
+		path = parent
+	}
 }
 
 // open judges path and opens what it judged. The open goes down from the root a directory handle at a time and fails

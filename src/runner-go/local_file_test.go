@@ -303,6 +303,122 @@ func TestRepliesFromASessionRunningAtTheRootDirectoryStillTravel(t *testing.T) {
 	assertReplySent(t, "see [shot]("+shot+")", "a shot", root, uploads)
 	assertReplySent(t, "see [shot]("+strings.TrimPrefix(shot, root)+")", "a shot", root, uploads)
 	assertReplyLeftAlone(t, "see [config]("+host.config+")", root, uploads)
+
+	image := "\x89PNG\r\n\x1a\n a picture"
+	picture := writeTestFile(t, filepath.Join(host.checkout, "shot.png"), image)
+	assertReplySent(t, "![shot]("+picture+")", image, root, uploads)
+}
+
+func TestRepliesFromASessionRunningInAHomeDirectoryStillTravel(t *testing.T) {
+	host := newFileScopeHost(t)
+	uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+	image := "\x89PNG\r\n\x1a\n a picture"
+	picture := writeTestFile(t, filepath.Join(host.home, "shots", "home.png"), image)
+
+	assertReplySent(t, "![home](shots/home.png)", image, host.home, uploads)
+	assertReplySent(t, "![home]("+picture+")", image, host.home, uploads)
+	assertReplyLeftAlone(t, "see [config](.orbit/config.json)", host.home, uploads)
+}
+
+// Only the first root asked for is the working directory. With it gone the next that exists is where relative links
+// start and nothing more: it is still held to its name, as a session's own directory is.
+func TestAReplyTakesNoLaterRootForTheWorkingDirectory(t *testing.T) {
+	host := newFileScopeHost(t)
+	workDir := filepath.Join(host.home, "gone")
+	uploads := filepath.Join(uploadsRootDir(), "nothing-yet")
+	generated := filepath.Join(host.home, ".codex", "generated_images")
+	linkForTest(t, filepath.Dir(host.key), generated)
+
+	assertReplyLeftAlone(t, "see [key](id_rsa)", workDir, uploads, generated)
+	assertReplyLeftAlone(t, "see [key]("+filepath.Join(generated, "id_rsa")+")", workDir, uploads, generated)
+
+	if err := os.Remove(generated); err != nil {
+		t.Fatal(err)
+	}
+	image := "\x89PNG\r\n\x1a\n generated"
+	writeTestFile(t, filepath.Join(generated, "image.png"), image)
+	assertReplySent(t, "![generated image](image.png)", image, workDir, uploads, generated)
+}
+
+// Orbit's directory is known by what it is, so it is refused under a name no list of spellings would hold. /proc gives one
+// on Linux, where nothing folds case: this is what pins the rule wherever the next test skips.
+func TestOrbitsDirectoryIsRefusedUnderAnotherName(t *testing.T) {
+	host := newFileScopeHost(t)
+	neighbour := writeTestFile(t, filepath.Join(host.orbit, "uploads", "another-session", "deep", "a.txt"), "theirs")
+	scope := newLocalFileScope(nil, string(filepath.Separator))
+	for _, path := range []string{host.orbit, host.config, neighbour} {
+		name := "/proc/self/root" + path
+		if _, err := os.Stat(name); err != nil {
+			t.Skip("this system gives no second name for a path")
+		}
+		if reason := scope.refuses(name); reason != localFileInOrbitsDirectory {
+			t.Errorf("%s: refused for %q", name, reason)
+		}
+	}
+	if reason := scope.refuses("/proc/self/root" + filepath.Dir(host.checkout)); reason != "" {
+		t.Errorf("a directory that is not Orbit's: refused for %q", reason)
+	}
+}
+
+// Where the directory could not be looked at when the scope was made, its name still counts.
+func TestOrbitsDirectoryIsRefusedByNameWhenItCouldNotBeLookedAt(t *testing.T) {
+	host := newFileScopeHost(t)
+	if err := os.Rename(host.orbit, host.orbit+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	scope := newLocalFileScope(nil, host.home)
+	if err := os.Rename(host.orbit+"-moved", host.orbit); err != nil {
+		t.Fatal(err)
+	}
+	if reason := scope.refuses(host.config); reason != localFileInOrbitsDirectory {
+		t.Errorf("refused for %q", reason)
+	}
+}
+
+// Every door, where the filesystem folds case, as a Mac's does by default. It skips where the filesystem tells case
+// apart, which is everywhere CI runs: TestOrbitsDirectoryIsRefusedUnderAnotherName pins the rule there.
+func TestOrbitsDirectoryInAnotherCaseIsRefusedAtEveryDoor(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	folded := filepath.Join(host.home, ".ORBIT")
+	if _, err := os.Stat(filepath.Join(folded, "config.json")); err != nil {
+		t.Skip("this filesystem tells case apart")
+	}
+	uploads := mkdirForTest(t, uploadsDir(fileTestSession))
+	writeTestFile(t, filepath.Join(host.orbit, "uploads", "another-session", "a.txt"), "the-runner-credential")
+	writeTestFile(t, filepath.Join(host.orbit, "worktrees", "another-session", "a.txt"), "the-runner-credential")
+	root := string(filepath.Separator)
+
+	for _, text := range []string{
+		"see [config](.ORBIT/config.json)",
+		"see [config](" + filepath.Join(folded, "config.json") + ")",
+		"see [neighbour](.ORBIT/uploads/another-session/a.txt)",
+		"see [neighbour](.Orbit/worktrees/another-session/a.txt)",
+	} {
+		assertReplyLeftAlone(t, text, host.home, uploads)
+		assertReplyLeftAlone(t, text, root, uploads)
+	}
+	if status := legacyArtifactStatus(t, filepath.Join(folded, "config.json")); status != "missing" {
+		t.Errorf("a legacy request answered %q", status)
+	}
+
+	project := mkdirForTest(t, filepath.Join(host.home, "project"))
+	chdirForTest(t, project)
+	assertRefused(t, api, s, filepath.Join(folded, "config.json"), "Orbit's own directory")
+	chdirForTest(t, folded)
+	assertRefused(t, api, s, "config.json", "Orbit's own directory")
+	assertNothingSecretKept(t, api)
+
+	// A working directory that holds a home is no root in another case either.
+	parent := filepath.Dir(host.home)
+	shouted := filepath.Join(filepath.Dir(parent), strings.ToUpper(filepath.Base(parent)), filepath.Base(host.home))
+	if _, err := os.Stat(shouted); err != nil {
+		t.Fatal(err)
+	}
+	if usableAsARoot(shouted) {
+		t.Errorf("%s counts as a root", shouted)
+	}
 }
 
 // A working directory inside the worktree is covered by the worktree: it is where a reply's relative links start and no
