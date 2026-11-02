@@ -121,7 +121,8 @@ func rootWithheldPermissionModeNote() string {
 	}
 	return "This runner is deployed as root, so \"bypassPermissions\" is not offered: " +
 		"claude refuses it under root and the session would exit before its first turn. " +
-		"\"dontAsk\" also never asks."
+		"For unattended work that has to run commands, use \"auto\". " +
+		"\"dontAsk\" never asks either, but it refuses anything not already approved."
 }
 
 // rootWithheldPermissionModeNoteBlock is the same note as its own paragraph in `--help`, or nothing
