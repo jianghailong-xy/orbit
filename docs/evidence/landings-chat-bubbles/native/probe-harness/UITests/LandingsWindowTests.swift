@@ -127,6 +127,12 @@ final class LandingsWindowTests: ProbeCase {
         shot(app, "mac-window-focused")
         XCTAssertTrue(appears(app, Self.footer, timeout: 15), "the window's bar")
         XCTAssertTrue(appears(app, "T2 host setup refuses a binary it did not install", timeout: 10))
+        // The bar is inside the window: its minimum height never pushes the content past the screen.
+        let window = app.windows.firstMatch.frame
+        let open = app.buttons["Open coordinator"]
+        XCTAssertTrue(open.exists, "the bar's Open coordinator")
+        note("mac: window \(window), Open coordinator \(open.frame)")
+        XCTAssertLessThanOrEqual(open.frame.maxY, window.maxY, "the bar stands inside the window")
         write(app.debugDescription, "mac-window-tree.txt")
         settle(2)
         shot(app, "mac-window")

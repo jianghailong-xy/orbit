@@ -386,7 +386,10 @@ struct ProjectLandingsWindowView: View {
                 (Text("\(parts.first ?? "") — ").foregroundStyle(.secondary)
                     + Text(parts.dropFirst().joined(separator: " — ")).fontWeight(.semibold))
                     .font(.orbitSubtext)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // Capped, never `fixedSize`: a Mac window measures its minimum at zero width, where
+                    // a vertically fixed sentence stands one glyph to a line and the window's floor
+                    // grows past the screen, pushing this bar off its bottom edge (probe run 41370339640).
+                    .lineLimit(2)
                     .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
                 HStack(spacing: 8) {
                     Text(LandingPageCopy.decisionsTheCoordinator)

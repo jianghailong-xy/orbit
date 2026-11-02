@@ -100,6 +100,13 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(window.contains("messageLine(leads: leads, ends: ends) {"))
         XCTAssertFalse(window.contains("LandingsWindowRowHead"), "the list row's head is gone")
         XCTAssertFalse(window.contains("TextField("), "nothing to type here (LS6)")
+        // The bar stands below the scroller on the Mac, so it counts toward the window's minimum, which
+        // AppKit measures at zero width: a vertically fixed sentence there stands one glyph to a line and
+        // pushes the whole window past the screen's edge.
+        let footer = try XCTUnwrap(window.range(of: "private var footer: some View {"))
+        let bar = String(window[footer.lowerBound...].prefix(1_400))
+        XCTAssertTrue(bar.contains(".lineLimit(2)"), "the bar's sentence is capped")
+        XCTAssertFalse(bar.contains(".fixedSize("), "nothing in the bar is vertically fixed")
         // The avatar is the app icon the sign-in page draws, not a second drawing of it.
         let login = code(try appSource("Views/LoginView.swift"))
         XCTAssertTrue(login.contains("struct OrbitAppIcon: View {"))
