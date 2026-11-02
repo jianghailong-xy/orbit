@@ -224,6 +224,11 @@ final class ProjectLandingsModel {
 /// with the coordinator and the project, the read-only footer and no composer (LS6) — and each landing
 /// in it carries what that page drew: a card still in hand is its status card, a settled row opens in
 /// place to its timeline. The doors the page's ⋯ held are each landing's own: a long press on it.
+///
+/// It reads as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each settled
+/// landing is a message from Orbit in a bubble, with Orbit's avatar beside the first of each group
+/// sent close together (`LandingsWindowDay.groups`); the day sections are chips; the cards in hand are
+/// Orbit's last messages; and the footer stands in the composer's place and shape, read only.
 struct ProjectLandingsWindowView: View {
     /// The project whose landings these are; nil when the window was opened on a landing whose
     /// project this device has not read yet, which its own read names.
@@ -248,31 +253,8 @@ struct ProjectLandingsWindowView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if let model {
-                        content(model)
-                    } else {
-                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
-                    }
-                    Color.clear.frame(height: 1).id(Self.bottom)
-                }
-                .padding(.horizontal, 16)
-                .frame(maxWidth: 760, alignment: .leading)
-                .frame(maxWidth: .infinity)
-            }
-            .onChange(of: model?.loaded ?? false) { _, _ in place(proxy) }
-            .onChange(of: entryIDs) { _, _ in place(proxy) }
-            // Another landing of the same project opened over this one: the window stays, and is
-            // placed again on that landing.
-            .onChange(of: focusID) { _, _ in
-                placed = false
-                place(proxy)
-            }
-        }
+        windowAndBar
         .safeAreaInset(edge: .top, spacing: 0) { header }
-        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .task(id: "\(projectID ?? "")|\(focusID ?? "")") { await run() }
         .task(id: outlined) {
             // The landing it was opened on is outlined for a moment (board 03 f), then stays open.
@@ -293,6 +275,54 @@ struct ProjectLandingsWindowView: View {
     private var entryIDs: [String] {
         guard let window = model?.window else { return [] }
         return window.days.flatMap { $0.rows.map(\.id) } + window.now.map(\.id)
+    }
+
+    /// The window and the read-only bar in the composer's place under it. On iOS 26 the bar floats
+    /// over the window as the console's band floats over its transcript: the messages run on under its
+    /// glass, and the system's scroll-edge effect softens what passes beneath. Elsewhere it stands
+    /// under the window, which fades into it.
+    @ViewBuilder private var windowAndBar: some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            scroller.safeAreaBar(edge: .bottom, spacing: 0) { footer }
+        } else {
+            VStack(spacing: 0) {
+                scroller.fadesIntoComposerBand()
+                footer
+            }
+        }
+        #else
+        VStack(spacing: 0) {
+            scroller.fadesIntoComposerBand()
+            footer
+        }
+        #endif
+    }
+
+    private var scroller: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if let model {
+                        content(model)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 24)
+                    }
+                    Color.clear.frame(height: .composerBandFade).id(Self.bottom)
+                }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: model?.loaded ?? false) { _, _ in place(proxy) }
+            .onChange(of: entryIDs) { _, _ in place(proxy) }
+            // Another landing of the same project opened over this one: the window stays, and is
+            // placed again on that landing.
+            .onChange(of: focusID) { _, _ in
+                placed = false
+                place(proxy)
+            }
+        }
     }
 
     // MARK: - the shell
@@ -345,25 +375,43 @@ struct ProjectLandingsWindowView: View {
         .accessibilityLabel("More actions")
     }
 
-    /// What this window is, who decides, and the way to them: nothing to type here (LS6).
+    /// What this window is, who decides, and the way to them, in the composer's place and shape — read
+    /// only, nothing to type here (LS6). The board's bar (docs/mocks/landings-chat-bubbles, ① 5): the
+    /// sentence where the words would go, `Decisions: the coordinator` on the toolbar, and
+    /// `Open coordinator` where the send button stands.
     private var footer: some View {
         let parts = SessionLandingsCopy.orbitRunsTheseLandings.components(separatedBy: " — ")
-        return VStack(alignment: .leading, spacing: 2) {
-            (Text("\(parts.first ?? "") — ").foregroundStyle(.secondary)
-                + Text(parts.dropFirst().joined(separator: " — ")).fontWeight(.semibold))
-                .font(.orbitMeta)
-            HStack(spacing: 4) {
-                Text(LandingPageCopy.decisionsTheCoordinator).font(.orbitMeta).foregroundStyle(.secondary)
-                if let coordinator = model?.coordinatorID {
-                    Text("·").font(.orbitMeta).foregroundStyle(.secondary)
-                    Button("\(LandingPageCopy.openCoordinatorLink) ›") { open("orbit-session", coordinator) }
-                        .font(.orbitMeta).buttonStyle(.plain).foregroundStyle(Color.accentColor)
+        return ComposerBand {
+            VStack(alignment: .leading, spacing: 0) {
+                (Text("\(parts.first ?? "") — ").foregroundStyle(.secondary)
+                    + Text(parts.dropFirst().joined(separator: " — ")).fontWeight(.semibold))
+                    .font(.orbitListSubtitle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
+                HStack(spacing: 8) {
+                    Text(LandingPageCopy.decisionsTheCoordinator)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if let coordinator = model?.coordinatorID {
+                        Button { open("orbit-session", coordinator) } label: {
+                            Label(LandingPageCopy.openCoordinatorLink, systemImage: "person")
+                                .font(.orbitLabel.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("landings-open-coordinator")
+                    }
                 }
+                .frame(minHeight: 40)
+                .padding(.leading, 16).padding(.trailing, 8).padding(.bottom, 6)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .composerBandCard(cornerRadius: 24)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(.bar)
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
         .accessibilityIdentifier("landings-footer")
     }
 
@@ -376,77 +424,122 @@ struct ProjectLandingsWindowView: View {
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .padding(.vertical, 24)
         }
+        // Every message is its own child of the lazy stack — a group is drawn, not nested — so each
+        // keeps the id the placement scrolls to.
         ForEach(window.days) { day in
-            dayHead(day.title)
-            ForEach(day.rows) { row in rowView(row, model: model) }
+            dayChip(day.title)
+            ForEach(day.groups) { group in
+                ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                    rowView(row, leads: index == 0, ends: index == group.rows.count - 1, model: model)
+                }
+            }
         }
         if !window.now.isEmpty {
-            dayHead(SessionLandingsCopy.now, now: true)
-            ForEach(window.now) { card in cardView(card, model: model) }
+            dayChip(SessionLandingsCopy.now, now: true)
+            // What is still in hand is Orbit's last group of messages: one avatar beside the first card.
+            ForEach(Array(window.now.enumerated()), id: \.element.id) { index, card in
+                cardView(card, leads: index == 0, ends: index == window.now.count - 1, model: model)
+            }
         }
     }
 
-    private func dayHead(_ title: String, now: Bool = false) -> some View {
+    /// A day of the session list's sections, or `Now`, as a chat's day chip: the word on a capsule in
+    /// the middle of the window.
+    private func dayChip(_ title: String, now: Bool = false) -> some View {
         Text(title)
-            .font(.orbitMeta.weight(.semibold))
+            .font(.orbitLabel.weight(.semibold))
             .foregroundStyle(now ? Color.accentColor : Color.secondary)
+            .padding(.horizontal, 11).padding(.vertical, 4)
+            .background((now ? Color.accentColor : Color.secondary).opacity(0.12), in: Capsule())
             .frame(maxWidth: .infinity)
-            .padding(.top, 14).padding(.bottom, 6)
+            .padding(.top, 14).padding(.bottom, 10)
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// One settled landing: the merged line's head — the mark that says how it ended, the task's name,
-    /// the moment it settled and one line under them — that opens in place to its record.
-    @ViewBuilder private func rowView(_ row: LandingsWindowRow, model: ProjectLandingsModel) -> some View {
+    /// One message's line: Orbit's avatar beside the first message of a group — room for it beside the
+    /// rest — then the message, and the gap a group ends with.
+    private func messageLine<Content: View>(leads: Bool, ends: Bool,
+                                            @ViewBuilder _ message: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            ZStack(alignment: .top) {
+                if leads { OrbitAppIcon(size: 32) }
+            }
+            .frame(width: 32)
+            .accessibilityHidden(true)
+            message()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.bottom, ends ? 14 : 4)
+    }
+
+    /// One settled landing as Orbit's message: its bubble — the task's name, and a foot with the mark
+    /// that says how it ended, its line and the moment it settled — that opens to its record under it.
+    @ViewBuilder private func rowView(_ row: LandingsWindowRow, leads: Bool, ends: Bool,
+                                      model: ProjectLandingsModel) -> some View {
         let id = row.id
         let open = expanded.contains(id)
         let landing = row.sessionId.flatMap { model.details[$0] }
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                PlatformHaptics.tap()
-                toggle(id)
-            } label: {
-                LandingsWindowRowHead(row: row, open: open)
+        messageLine(leads: leads, ends: ends) {
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    PlatformHaptics.tap()
+                    toggle(id)
+                } label: {
+                    LandingsWindowBubble(row: row)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("landings-row:\(id)")
+                #if os(iOS)
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
+                #endif
+                .contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }
+                .overlay { outline(id, radius: 16) }
+                if open {
+                    record(row, landing: landing, model: model)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("landings-row:\(id)")
-            .contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }
-            if open {
-                record(row, landing: landing, model: model)
-            }
+            // An incoming message's gutter: a bubble never runs to the window's far edge.
+            .padding(.trailing, 44)
         }
-        .padding(.vertical, 8).padding(.horizontal, 6)
-        .background(open ? Color.secondary.opacity(0.06) : Color.clear, in: RoundedRectangle(cornerRadius: 12))
-        .overlay { outline(id) }
         .id(id)
         .task(id: row.sessionId ?? "") {
             if let sessionID = row.sessionId { await model.readOnce(sessionID) }
         }
     }
 
+    /// The quiet panel a message opens to, under it: the panel the person's own message opens what
+    /// Orbit attached to (`AttachedNoteBody`).
+    private func recordPanel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+    }
+
     /// What a settled row opens to: a merge's receipt first (board 03 e), then the landing's own
     /// timeline, and a task's two ways out.
     @ViewBuilder private func record(_ row: LandingsWindowRow, landing: SessionLandingView?,
                                      model: ProjectLandingsModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if row.tone == .merge {
-                receiptView(LandingPageCopy.mergeReceipt(promotion: row.promotion, landing: landing))
-            }
-            if let refusal = row.sessionId.flatMap({ model.refusals[$0] }) {
-                Text(refusal).font(.orbitMeta).foregroundStyle(.red)
-            }
-            if let sessionID = row.sessionId {
-                if let landing {
-                    LandingTimelineView(sessionID: sessionID, landing: landing, now: Date())
-                    entryLinks(landing)
-                } else {
-                    Text(model.readFailed.contains(sessionID)
-                         ? LandingPageCopy.updateUnavailable : LandingPageCopy.loadingLanding)
-                        .font(.orbitMeta).foregroundStyle(.secondary)
+        recordPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                if row.tone == .merge {
+                    receiptView(LandingPageCopy.mergeReceipt(promotion: row.promotion, landing: landing))
+                }
+                if let refusal = row.sessionId.flatMap({ model.refusals[$0] }) {
+                    Text(refusal).font(.orbitMeta).foregroundStyle(.red)
+                }
+                if let sessionID = row.sessionId {
+                    if let landing {
+                        LandingTimelineView(sessionID: sessionID, landing: landing, now: Date())
+                        entryLinks(landing)
+                    } else {
+                        Text(model.readFailed.contains(sessionID)
+                             ? LandingPageCopy.updateUnavailable : LandingPageCopy.loadingLanding)
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .padding(.leading, 41)
     }
 
     /// The receipt a merge row opens to: what is now on main, the check and the tree.
@@ -490,37 +583,44 @@ struct ProjectLandingsWindowView: View {
         }
     }
 
-    /// One landing still in hand, under `Now`: the old landing page's status card with the task's name
-    /// under its head. Pressing it opens its record under it; a long press holds its doors.
-    @ViewBuilder private func cardView(_ card: LandingsWindowCard, model: ProjectLandingsModel) -> some View {
+    /// One landing still in hand, under `Now`, as one of Orbit's last messages: the old landing page's
+    /// status card with the task's name under its head, across the whole column (a card is wider than
+    /// a bubble). Pressing it opens its record under it; a long press holds its doors.
+    @ViewBuilder private func cardView(_ card: LandingsWindowCard, leads: Bool, ends: Bool,
+                                       model: ProjectLandingsModel) -> some View {
         let id = card.sessionId
         let open = expanded.contains(id)
         let landing = model.details[id]
         let promotion = model.promotion(for: landing)
-        VStack(alignment: .leading, spacing: 10) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                LandingStatusCardView(
-                    sessionID: id, landing: landing, title: card.title, now: context.date,
-                    readAt: model.readAt[id], readFailed: model.readFailed.contains(id),
-                    facts: model.facts(landing), promotion: promotion,
-                    waitDoors: waitDoors(card, landing: landing, promotion: promotion, model: model),
-                    acting: model.acting.contains(id),
-                    act: { action in press(action, sessionID: id, landing: landing, row: nil, model: model) })
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { toggle(id) }
-            .contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }
-            .accessibilityIdentifier("landings-card:\(id)")
-            if let refusal = model.refusals[id] {
-                Text(refusal).font(.orbitMeta).foregroundStyle(.red)
-            }
-            if open, let landing {
-                LandingTimelineView(sessionID: id, landing: landing, now: Date())
-                entryLinks(landing)
+        messageLine(leads: leads, ends: ends) {
+            VStack(alignment: .leading, spacing: 8) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    LandingStatusCardView(
+                        sessionID: id, landing: landing, title: card.title, now: context.date,
+                        readAt: model.readAt[id], readFailed: model.readFailed.contains(id),
+                        facts: model.facts(landing), promotion: promotion,
+                        waitDoors: waitDoors(card, landing: landing, promotion: promotion, model: model),
+                        acting: model.acting.contains(id),
+                        act: { action in press(action, sessionID: id, landing: landing, row: nil, model: model) })
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { toggle(id) }
+                .contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }
+                .accessibilityIdentifier("landings-card:\(id)")
+                .overlay { outline(id) }
+                if let refusal = model.refusals[id] {
+                    Text(refusal).font(.orbitMeta).foregroundStyle(.red)
+                }
+                if open, let landing {
+                    recordPanel {
+                        VStack(alignment: .leading, spacing: 12) {
+                            LandingTimelineView(sessionID: id, landing: landing, now: Date())
+                            entryLinks(landing)
+                        }
+                    }
+                }
             }
         }
-        .padding(.vertical, 6)
-        .overlay { outline(id) }
         .id(id)
     }
 
@@ -626,8 +726,8 @@ struct ProjectLandingsWindowView: View {
     }
 
     /// The landing the window was opened on wears the accent outline for a moment (board 03 f).
-    private func outline(_ id: String) -> some View {
-        RoundedRectangle(cornerRadius: 12)
+    private func outline(_ id: String, radius: CGFloat = 12) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
             .strokeBorder(Color.accentColor, lineWidth: 2)
             .opacity(outlined == id ? 1 : 0)
             .allowsHitTesting(false)
@@ -673,11 +773,12 @@ struct ProjectLandingsWindowView: View {
     }
 }
 
-/// A settled row's head: the mark that says how it ended (✓ landed, ⇢ merged into main, ◌ nothing to
-/// land), its title, the moment it settled with the up arrow of an open row, and one line under them.
-private struct LandingsWindowRowHead: View {
+/// A settled landing as Orbit's message (owner 2026-11-02, docs/mocks/landings-chat-bubbles): the
+/// task's name, whole, as a message reads, and a foot with the mark that says how it ended (✓ landed,
+/// ⇢ merged into main, ◌ nothing to land and every other quiet ending), the row's own line and the
+/// moment it settled. The bubble is as wide as its widest line and no wider than the column.
+private struct LandingsWindowBubble: View {
     let row: LandingsWindowRow
-    let open: Bool
 
     private var mark: String {
         switch row.tone {
@@ -696,33 +797,60 @@ private struct LandingsWindowRowHead: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Text(mark)
-                .font(.orbitGlyph.weight(.semibold))
-                .foregroundStyle(ink)
-                .frame(width: 30, height: 30)
-                .background(ink.opacity(0.14), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text(row.title).fontWeight(.semibold).lineLimit(1)
-                    Spacer(minLength: 8)
-                    if !row.time.isEmpty {
-                        Text(row.time)
-                            .font(.orbitListSubtitle.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                    if open {
-                        Image(systemName: "chevron.up")
-                            .font(.orbitMeta.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
+        LandingsBubbleLayout(spacing: 4) {
+            Text(row.title)
+                .font(.orbitProse)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(mark).fontWeight(.semibold).foregroundStyle(ink)
+                Text(row.detail).foregroundStyle(.secondary).lineLimit(2)
+                Spacer(minLength: 14)
+                if !row.time.isEmpty {
+                    Text(row.time).monospacedDigit().foregroundStyle(.secondary)
                 }
-                Text(row.detail)
-                    .font(.orbitListSubtitle)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
+            .font(.orbitLabel)
         }
-        .contentShape(Rectangle())
+        .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 8)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// A bubble's lines: as wide as the widest of them — the words wrapped at the room there is, the foot
+/// at its natural width — and never wider than the room offered; every line then takes that width, so
+/// the foot's time stands at the bubble's trailing edge. A plain stack takes all the room the row
+/// offers, because the foot's spacer is flexible, and every bubble would be the column's width.
+private struct LandingsBubbleLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = width(for: proposal, subviews)
+        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for subview in subviews {
+            let height = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
+            subview.place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: bounds.width, height: height))
+            y += height + spacing
+        }
+    }
+
+    /// Each line at the room there is, or at its natural width where that is less: wrapped words
+    /// report the width they took, and a line with a spacer, which would take all of it, its own.
+    private func width(for proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
+        let room = proposal.width ?? .infinity
+        let widest = subviews.map { subview -> CGFloat in
+            let natural = subview.sizeThatFits(.unspecified).width
+            guard room.isFinite else { return natural }
+            return min(natural, subview.sizeThatFits(ProposedViewSize(width: room, height: nil)).width)
+        }.max() ?? 0
+        return room.isFinite ? min(widest, room) : widest
     }
 }

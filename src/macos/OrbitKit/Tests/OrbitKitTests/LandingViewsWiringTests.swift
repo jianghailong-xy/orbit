@@ -64,13 +64,46 @@ final class LandingViewsWiringTests: XCTestCase {
                      ".contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }",
                      "SessionLandingsCopy.orbitRunsTheseLandings",
                      "LandingPageCopy.decisionsTheCoordinator",
-                     "dayHead(SessionLandingsCopy.now, now: true)",
+                     "dayChip(SessionLandingsCopy.now, now: true)",
                      "Button(LandingPageCopy.openCoordinator) { open(\"orbit-session\", coordinator) }",
                      "Button(SessionProjectCopy.openProject) { open(\"orbit-project\", projectID) }"] {
             XCTAssertTrue(window.contains(part), "the Landings window keeps `\(part)`")
         }
         XCTAssertFalse(window.contains("ComposerView("), "the window has no composer (LS6)")
         XCTAssertFalse(window.contains("Copy Link"), "design §3: no Copy Link on a landing's menu")
+    }
+
+    /// The window reads as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each
+    /// settled landing is a bubble that hugs its words, Orbit's avatar beside the first message of each
+    /// group, the days as chips, the cards in hand as Orbit's last messages, and the footer in the
+    /// composer's place and shape with nothing to type in it.
+    func testTheWindowReadsAsAChat() throws {
+        let window = code(try appSource("Views/ProjectLandingsWindowView.swift"))
+        for part in ["ForEach(day.groups) { group in",
+                     "rowView(row, leads: index == 0, ends: index == group.rows.count - 1, model: model)",
+                     "cardView(card, leads: index == 0, ends: index == window.now.count - 1, model: model)",
+                     "if leads { OrbitAppIcon(size: 32) }",
+                     "dayChip(day.title)",
+                     ".background((now ? Color.accentColor : Color.secondary).opacity(0.12), in: Capsule())",
+                     "LandingsWindowBubble(row: row)",
+                     "LandingsBubbleLayout(spacing: 4) {",
+                     ".padding(.trailing, 44)",
+                     ".overlay { outline(id, radius: 16) }",
+                     "recordPanel {",
+                     "scroller.safeAreaBar(edge: .bottom, spacing: 0) { footer }",
+                     "return ComposerBand {",
+                     ".composerBandCard(cornerRadius: 24)",
+                     "Label(LandingPageCopy.openCoordinatorLink, systemImage: \"person\")"] {
+            XCTAssertTrue(window.contains(part), "the chat keeps `\(part)`")
+        }
+        // Every message is its own child of the lazy stack, so the placement still finds each id.
+        XCTAssertTrue(window.contains("messageLine(leads: leads, ends: ends) {"))
+        XCTAssertFalse(window.contains("LandingsWindowRowHead"), "the list row's head is gone")
+        XCTAssertFalse(window.contains("TextField("), "nothing to type here (LS6)")
+        // The avatar is the app icon the sign-in page draws, not a second drawing of it.
+        let login = code(try appSource("Views/LoginView.swift"))
+        XCTAssertTrue(login.contains("struct OrbitAppIcon: View {"))
+        XCTAssertFalse(login.contains("private struct OrbitAppIcon"))
     }
 
     /// Opened on a landing, the window scrolls to it, opens it and outlines it for a moment; opened
