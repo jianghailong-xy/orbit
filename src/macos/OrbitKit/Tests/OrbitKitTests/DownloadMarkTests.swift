@@ -25,10 +25,31 @@ final class DownloadMarkTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), Data("<script>".utf8))
     }
 
+    private struct Refused: Error {}
+
     /// A panel that failed wrote nothing to mark: the reader is told what it failed with.
     func testASavePanelsFailureIsThrownAsItCame() {
-        struct Refused: Error {}
         XCTAssertThrowsError(try DownloadMark.finishSaving(.failure(Refused()))) { XCTAssertTrue($0 is Refused) }
+    }
+
+    /// A file that cannot be marked goes no further: left where it was written, a double-click would run
+    /// it unchecked. The mark is refused by hand, because a real one takes on anything the owner can
+    /// write and on a read-only file too.
+    func testAFileThatCannotBeMarkedIsTakenBack() throws {
+        let file = try folder().appendingPathComponent("saved.html")
+        try Data("<script>".utf8).write(to: file)
+        XCTAssertThrowsError(try DownloadMark.markOrTakeBack(file, mark: { _ in throw Refused() })) {
+            XCTAssertTrue($0 is Refused, "the reader is told what stopped the mark")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the unmarked file was left behind")
+    }
+
+    /// And one that takes the mark stays.
+    func testAFileThatTakesTheMarkStays() throws {
+        let file = try folder().appendingPathComponent("saved.html")
+        try Data("<script>".utf8).write(to: file)
+        try DownloadMark.markOrTakeBack(file, mark: { _ in })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
     }
 
     #if os(macOS)
@@ -67,15 +88,10 @@ final class DownloadMarkTests: XCTestCase {
         XCTAssertNotNil(quarantine(file), "the saved file has no quarantine attribute")
     }
 
-    /// A file that cannot be marked goes no further: left where the panel wrote it, a double-click would
-    /// run it unchecked. A read-only file takes no attribute.
-    func testAFileThatCannotBeMarkedIsTakenBack() throws {
-        let file = try folder().appendingPathComponent("saved.html")
-        try Data("<script>".utf8).write(to: file)
-        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
-        try XCTSkipIf(geteuid() == 0, "root can mark a read-only file")
+    /// A panel that says it wrote a file that is not there gets no mark, and the reader hears of it.
+    func testMarkingAFileThatIsNotThereFails() throws {
+        let file = try folder().appendingPathComponent("never-written.html")
         XCTAssertThrowsError(try DownloadMark.finishSaving(.success(file)))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the unmarked file was left behind")
     }
     #endif
 }

@@ -37,9 +37,9 @@ public enum DownloadMark {
         try markOrTakeBack(saved.get())
     }
 
-    private static func markOrTakeBack(_ file: URL) throws {
+    static func markOrTakeBack(_ file: URL, mark: (URL) throws -> Void = apply(to:)) throws {
         do {
-            try apply(to: file)
+            try mark(file)
         } catch {
             try? FileManager.default.removeItem(at: file)
             throw error
