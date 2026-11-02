@@ -10,10 +10,9 @@ import Foundation
 // the web source; every reading is proved against the `plan` cases of `src/shared/src/wiki-docs.fixture.json`,
 // which the web's `lib/wikiPlan.test.ts` reads too.
 //
-// TWO SHAPES OF A PLAN, ONE PAGE, as on the web: a stored version is read back with ids, positions and its
-// projects resolved; the draft a job that failed the gate last had is kept as it was sent to the gate. Both
-// are read into `Shown` first. An owner's edit goes the other way, in the DRAFT's shape (no ids or
-// positions, a session condition's projects by id) — never as it was read back.
+// TWO SHAPES OF A PLAN, as on the web: a stored version is read back with ids, positions and its projects
+// resolved, and read into `Shown` for the page. An owner's edit goes the other way, in the DRAFT's shape (no
+// ids or positions, a session condition's projects by id) — never as it was read back.
 
 /// Every sentence the plan pages say. The web's constant each one mirrors is named beside it.
 public enum WikiPlanCopy {
@@ -38,11 +37,12 @@ public enum WikiPlanCopy {
     public static let queued = "Queued"                                     // WIKI_PLAN_QUEUED
     public static let drafting = "Drafting"                                 // WIKI_PLAN_DRAFTING
     public static let held = "Held"                                         // WIKI_PLAN_HELD
-    public static let failed = "Didn’t pass the plan check"                 // WIKI_PLAN_FAILED
+    public static let ready = "Ready for review"                            // WIKI_PLAN_READY
     public static let passed = "Passed the plan check"                      // WIKI_PLAN_PASSED
     public static let writing = "Writing documents"                         // WIKI_PLAN_WRITING
     public static let writingNow = "Writing now:"                           // WIKI_PLAN_WRITING_NOW
     public static let jobFailed = "The draft didn’t finish"                 // WIKI_PLAN_JOB_FAILED
+    public static let redraftFailed = "The redraft didn’t finish"           // WIKI_PLAN_REDRAFT_FAILED
     public static let buildFailed = "Writing documents didn’t finish"       // WIKI_PLAN_BUILD_FAILED
     public static let queuedText = "starts after the Wiki maintenance run that’s going now"   // WIKI_PLAN_QUEUED_TEXT
     public static let writingSoon = "waiting for its run to start"         // WIKI_PLAN_WRITING_SOON
@@ -94,12 +94,14 @@ public enum WikiPlanCopy {
     public static let addSection = "Add section"                            // WIKI_PLAN_ADD_SECTION
     public static let saveDraft = "Save draft"                              // WIKI_PLAN_SAVE_DRAFT
 
-    /// The references a failed draft's report lists on a phone before `Show N more` (`WIKI_PLAN_REFS_SHOWN_PHONE`).
+    /// The references not found a draft's report lists on a phone before `Show N more` (`WIKI_PLAN_REFS_SHOWN_PHONE`).
     public static let refsShownPhone = 3
     /// The facts a change's From lists before `and N more` (`WIKI_PLAN_FACTS_SHOWN`).
     public static let factsShown = 2
     /// The length a section added in Edit is written to until the owner says otherwise (`WIKI_PLAN_NEW_SECTION_LENGTH`).
     public static let newSectionLength = 500
+    /// What a reference not found was looked for in, by its kind: why the report lists it (`MISS_WHY`).
+    public static let missWhy = ["file": "no such file", "docSection": "no such heading", "symbol": "not in the file", "contract": "no such file"]
 
     private static func plural(_ n: Int, _ one: String, _ many: String) -> String {
         "\(WikiArticleCopy.count(n)) \(n == 1 ? one : many)"
@@ -122,18 +124,12 @@ public enum WikiPlanCopy {
     public static let noteServer = "System model · about 1–2 hours"         // WIKI_PLAN_NOTE_SERVER
     public static let emptyNoteServer = "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."   // WIKI_PLAN_EMPTY_NOTE_SERVER
 
-    /// The sentence under the head of a draft that failed the gate (`wikiPlanFailedHint`).
-    public static func failedHint(inForce: Int?) -> String {
-        "Confirm needs a passing check. Redraft with what to change — "
-            + (inForce.map { "v\($0) stays in force until you confirm" } ?? "until you confirm a plan, the Wiki shows its topic articles") + "."
-    }
-
     public static func chars(_ length: WikiPlanRange) -> String {                                  // wikiPlanChars
         length.min == length.max ? "\(WikiArticleCopy.count(length.min)) chars"
             : "\(WikiArticleCopy.count(length.min))–\(WikiArticleCopy.count(length.max)) chars"
     }
     public static func sectionChars(_ n: Int) -> String { "~\(WikiArticleCopy.count(n)) chars" }        // wikiPlanSectionChars
-    public static func errorCount(_ n: Int) -> String { plural(n, "error", "errors") }                  // wikiPlanErrorCount
+    public static func notFoundCount(_ n: Int) -> String { "\(WikiArticleCopy.count(n)) not found" }     // wikiPlanNotFoundCount
     public static func changeCount(_ n: Int) -> String { plural(n, "change", "changes") }               // wikiPlanChangeCount
     public static func andMore(_ n: Int) -> String { "and \(WikiArticleCopy.count(n)) more" }           // wikiPlanAndMore
     public static func saveNote(_ next: Int) -> String { "Saving makes draft v\(next); it goes through the plan check again." }   // wikiPlanSaveNote
@@ -149,18 +145,10 @@ public enum WikiPlanCopy {
         return "\(since ?? "the start") → \(until ?? "now")"
     }
 
-    /// The dialog's sentence (`wikiPlanRedraftNote`): what drafts it again, from which version, how often it retries.
+    /// The dialog's sentence (`wikiPlanRedraftNote`): what drafts it again, and from which version.
     public static func redraftNote(from: (version: Int, inForce: Bool)?) -> String {
         let base = from.map { $0.inForce ? " from v\($0.version), the plan in force," : " from draft v\($0.version)," } ?? ""
-        return "The \(drafterServer) drafts it again\(base) with what you write here. A draft that doesn’t pass the plan check is "
-            + "redrafted with its errors, up to 3 times."
-    }
-
-    /// A section lost from a protected document, in the draft's own rows: `v1 §7 已知的坑` (`wikiPlanLostLabel`).
-    public static func lostLabel(base: Int, number: Int, title: String) -> String { "v\(base) §\(number) \(title)" }
-    /// The same, on a phone, in one line: `Moved to 11.3 — 3.1 is protected` (`wikiPlanProtectedMovePhone`).
-    public static func protectedMovePhone(movedTo: String?, number: String) -> String {
-        "\(movedTo.map { "Moved to \($0)" } ?? "Moved out") — \(number) is protected"
+        return "The \(drafterServer) drafts it again\(base) with what you write here."
     }
 }
 
@@ -169,7 +157,7 @@ public enum WikiPlanLogic {
 
     /// The plan page's blocks, top to bottom — the web phone's order (`WIKI_PLAN_PAGE_SECTIONS`).
     public enum PageSection: String, CaseIterable, Sendable {
-        case crumb, title, meta, actions, hint, job, gate, changes, documents
+        case crumb, title, meta, actions, job, gate, changes, documents
     }
 
     /// A document's own page (`WIKI_PLAN_DOC_SECTIONS`).
@@ -268,21 +256,21 @@ public enum WikiPlanLogic {
         public var id: String { key }
     }
 
-    /// What the page shows: a stored version's status, or a failed draft's.
+    /// What the page shows: a stored version's status.
     public enum ShownStatus: String, Equatable, Sendable {
-        case draft, confirmed, superseded, failed
+        case draft, confirmed, superseded
 
-        /// The version menu's and the head's word (`WIKI_PLAN_STATUS_LABELS`): a failed draft is a Draft.
+        /// The version menu's and the head's word (`WIKI_PLAN_STATUS_LABELS`).
         public var label: String {
             switch self {
-            case .draft, .failed: return "Draft"
+            case .draft: return "Draft"
             case .confirmed: return "Confirmed"
             case .superseded: return "Superseded"
             }
         }
     }
 
-    /// A version, or the draft a failed job last had, read into one shape (`WikiPlanShown`).
+    /// A version, read into the shape the page draws (`WikiPlanShown`).
     public struct Shown: Equatable, Sendable {
         public let version: Int
         public let status: ShownStatus
@@ -298,8 +286,6 @@ public enum WikiPlanLogic {
         public let model: String?
         public let createdAt: String?
         public let confirmedAt: String?
-        /// A failed draft's: the gate's errors on its last round.
-        public let errors: [WikiPlanGateError]
     }
 
     private struct DocRow {
@@ -371,48 +357,14 @@ public enum WikiPlanLogic {
         return Shown(version: version.version, status: shownStatus(version.status), origin: version.origin ?? .maintenance,
                      baseVersion: version.baseVersion, proposalId: version.proposalId, categories: shownCategories, docs: docs,
                      target: version.target ?? WikiPlanRange(min: 20, max: 35), gate: version.gate, repoCheck: version.repoCheck,
-                     model: version.model, createdAt: version.createdAt, confirmedAt: version.confirmedAt, errors: [])
-    }
-
-    /// The draft a failed job last had, as the page draws it — numbered as the version it would have been
-    /// (`wikiPlanFromFailedJob`).
-    public static func fromFailedJob(_ job: WikiPlanJob, number: Int, baseVersion: Int?) -> Shown? {
-        guard let draft = job.draft else { return nil }
-        let report = job.kind != .build ? job.report : nil
-        let rows = draft.docs.enumerated().map { index, doc in
-            DocRow(index: index, slug: doc.slug, category: doc.category, title: doc.title, question: doc.question,
-                   audience: doc.audience, scopeIn: doc.scopeIn, scopeOut: doc.scopeOut.map { ($0.text, $0.docs ?? []) },
-                   length: doc.length, protected: doc.protected ?? false,
-                   sections: doc.sections.map { section in
-                       ShownSection(key: section.key, title: section.title, kind: section.kind, covers: section.covers,
-                                    length: section.length,
-                                    sources: ShownSources(
-                                        docs: (section.sources.docs ?? []).map { ($0.path, $0.section) },
-                                        code: (section.sources.code ?? []).map { ($0.path, $0.symbols ?? []) },
-                                        contracts: (section.sources.contracts ?? []).map(\.path),
-                                        sessions: section.sources.sessions.map { sessions in
-                                            ShownSessions(projects: (sessions.projects ?? []).map { (nil, $0) }, since: sessions.since,
-                                                          until: sessions.until, keywords: sessions.keywords ?? [],
-                                                          anchorPaths: sessions.anchorPaths ?? [], entryKinds: sessions.entryKinds ?? [],
-                                                          topics: sessions.topics ?? [], evidence: sessions.evidence ?? "")
-                                        }))
-                   },
-                   stored: nil)
-        }
-        let categories = draft.categories.map { (key: $0.key, title: $0.title ?? $0.key, question: $0.question ?? "", forAgents: $0.forAgents ?? false) }
-        let (shownCategories, docs) = numbered(categories, rows)
-        let target = report?.target ?? WikiPlanRange(min: 20, max: 35)
-        let repo = report?.repo.map { WikiPlanRepoCheck(sha: $0.sha, checked: $0.checked, missing: []) }
-        return Shown(version: number, status: .failed, origin: .maintenance, baseVersion: baseVersion, proposalId: nil,
-                     categories: shownCategories, docs: docs, target: target, gate: nil, repoCheck: repo,
-                     model: report?.model, createdAt: job.endedAt, confirmedAt: nil, errors: job.errors ?? [])
+                     model: version.model, createdAt: version.createdAt, confirmedAt: version.confirmedAt)
     }
 
     /// The newest version the space has stored, draft or confirmed (`wikiPlanNewest`).
     public static func newest(_ state: WikiPlanState) -> WikiPlanVersion? { state.draft ?? state.confirmed }
 
     /// The job whose failure the page and the home still show (`wikiPlanFailedJob`): a draft or a revision
-    /// that ended failed with no version stored since it was asked for.
+    /// that left no draft, with no version stored since it was asked for.
     public static func failedJob(_ state: WikiPlanState) -> WikiPlanJob? {
         guard let job = state.job, job.state == .failed, job.kind != .build else { return nil }
         if let newest = newest(state), let made = newest.createdAt.flatMap(RelativeTime.parse),
@@ -431,25 +383,18 @@ public enum WikiPlanLogic {
         max(state.confirmed?.version ?? 0, state.draft?.version ?? 0) + 1
     }
 
-    /// What the page shows with no version asked for (`wikiPlanDefault`): the failed draft, the draft waiting,
-    /// the version in force — or nothing, the empty page.
+    /// What the page shows with no version asked for (`wikiPlanDefault`): the draft waiting, the version in
+    /// force — or nothing, the empty page.
     public static func defaultShown(_ state: WikiPlanState) -> Shown? {
-        if let failed = failedJob(state), let shown = fromFailedJob(failed, number: nextVersion(state), baseVersion: newest(state)?.version) {
-            return shown
-        }
         if let draft = state.draft { return fromVersion(draft) }
         if let confirmed = state.confirmed { return fromVersion(confirmed) }
         return nil
     }
 
-    /// What the shown version is held against (the plan page's `base`): a failed draft against the newest
-    /// version, a draft against the version in force.
+    /// What the shown version is held against (the plan page's `base`): a draft against the version in force.
     public static func base(of shown: Shown, in state: WikiPlanState) -> Shown? {
-        switch shown.status {
-        case .failed: return newest(state).map(fromVersion)
-        case .draft: return state.confirmed.map(fromVersion)
-        default: return nil
-        }
+        guard shown.status == .draft else { return nil }
+        return state.confirmed.map(fromVersion)
     }
 
     // MARK: the head
@@ -473,7 +418,7 @@ public enum WikiPlanLogic {
             return parts
         case .superseded:
             return ["Superseded · made \(WikiDocCopy.monthDayTime(shown.createdAt, timeZone: timeZone) ?? "")", counts(shown)]
-        case .draft, .failed:
+        case .draft:
             var parts: [String] = []
             let asked = job?.trigger == .owner
             if shown.origin == .owner {
@@ -498,19 +443,14 @@ public enum WikiPlanLogic {
         public var id: Int { version }
     }
 
-    /// Every stored version, and a failed draft over them, newest first (`wikiPlanVersionRows`).
-    public static func versionRows(_ versions: [WikiPlanVersionSummary], failed: (version: Int, at: String?)?,
-                                   timeZone: TimeZone = .current) -> [VersionRow] {
-        var rows = versions.map { row -> VersionRow in
+    /// Every stored version, newest first (`wikiPlanVersionRows`).
+    public static func versionRows(_ versions: [WikiPlanVersionSummary], timeZone: TimeZone = .current) -> [VersionRow] {
+        let rows = versions.map { row -> VersionRow in
             let at = WikiDocCopy.monthDayTime(row.confirmedAt ?? row.createdAt, timeZone: timeZone) ?? ""
             let made = row.origin == .owner ? (row.proposalId != nil ? "Accepted change" : "Your edit") : row.baseVersion != nil ? "Redraft" : "First draft"
             let status = shownStatus(row.status)
             let note = status == .confirmed ? "\(at) · confirmed by you" : status == .draft ? "\(made) · \(at) · waiting for you" : "\(made) · \(at)"
             return VersionRow(version: row.version, status: status, note: note)
-        }
-        if let failed {
-            rows.insert(VersionRow(version: failed.version, status: .failed,
-                                   note: "Redraft · \(WikiDocCopy.monthDayTime(failed.at, timeZone: timeZone) ?? "") · didn’t pass the check"), at: 0)
         }
         return rows.sorted { $0.version > $1.version }
     }
@@ -620,11 +560,12 @@ public enum WikiPlanLogic {
         public let progress: Progress?
     }
 
-    /// How many of the gate's four checks a failed draft's errors fall under (`wikiPlanFailedChecks`).
-    public static func failedChecks(_ errors: [WikiPlanGateError]) -> Int { Set(errors.map(\.check)).count }
-
-    private static func attempts(_ job: WikiPlanJob) -> Int {
-        job.attempt ?? (job.kind != .build ? job.report?.attempts?.count : nil) ?? job.attemptsMax ?? 3
+    /// Why a job left no draft, and what stands (`wikiPlanFailedText`): its own words, then the version nothing
+    /// happened to.
+    public static func failedText(_ job: WikiPlanJob, state: WikiPlanState) -> String {
+        let why = job.error ?? "Its run ended without a draft."
+        if let draft = state.draft { return "\(why) Draft v\(draft.version) is unchanged." }
+        return "\(why) \(state.confirmed.map { "v\($0.version) stays in force." } ?? "Nothing was saved.")"
     }
 
     private static func runLink(_ sessionId: String?) -> JobCard.Link? {
@@ -632,9 +573,10 @@ public enum WikiPlanLogic {
     }
 
     /// The job's card (`wikiPlanJobCard`): queued, drafting with its round, held with why, failed with how —
-    /// and, on the version in force, its documents being written, or that the writing stopped short.
-    public static func jobCard(_ job: WikiPlanJob?, now: Date, runnerOnline: Bool?, failed: WikiPlanJob?, inForce: Bool,
-                               directory: WikiDocsDirectory?) -> JobCard? {
+    /// and, on the version in force, its documents being written, or that the writing stopped short. `failed`
+    /// is the job that left no draft, if the plan shows one, with the versions it left as they were.
+    public static func jobCard(_ job: WikiPlanJob?, now: Date, runnerOnline: Bool?, failed: (job: WikiPlanJob, state: WikiPlanState)?,
+                               inForce: Bool, directory: WikiDocsDirectory?) -> JobCard? {
         let open: [WikiPlanJobState] = [.queued, .held, .running]
         let draft = job.flatMap { $0.kind != .build && open.contains($0.state) ? $0 : nil }
         let build = inForce ? job.flatMap { $0.kind == .build && open.contains($0.state) ? $0 : nil } : nil
@@ -663,15 +605,9 @@ public enum WikiPlanLogic {
                            progress: counts.map { JobCard.Progress(done: $0.done, total: $0.total, now: writingDoc(build, directory: directory)) })
         }
         if let failed {
-            let errors = failed.errors ?? []
-            if errors.isEmpty {
-                return JobCard(look: .failed, title: WikiPlanCopy.jobFailed, text: failed.error ?? "Its run ended without a draft.",
-                               link: runLink(failed.sessionId), progress: nil)
-            }
-            return JobCard(look: .failed, title: WikiPlanCopy.failed,
-                           text: "\(failedChecks(errors)) of 4 checks failed · after \(plural(attempts(failed), "attempt", "attempts")) · "
-                               + "\(plural(errors.count, "error", "errors")) listed below",
-                           link: nil, progress: nil)
+            let title = failed.state.confirmed != nil || failed.state.draft != nil ? WikiPlanCopy.redraftFailed : WikiPlanCopy.jobFailed
+            return JobCard(look: .failed, title: title, text: failedText(failed.job, state: failed.state),
+                           link: runLink(failed.job.sessionId), progress: nil)
         }
         if inForce, let stopped = job, stopped.kind == .build, stopped.state == .failed {
             return JobCard(look: .failed, title: WikiPlanCopy.buildFailed, text: buildFailedText(stopped), link: runLink(stopped.sessionId), progress: nil)
@@ -699,12 +635,11 @@ public enum WikiPlanLogic {
         }
     }
 
-    public struct GateRow: Equatable, Sendable, Identifiable {
+    public struct GateRow: Equatable, Sendable {
         public let check: WikiPlanGateCheck
         public let ok: Bool
         public let title: String
         public let text: String
-        public var id: String { check.rawValue }
     }
 
     /// One reference the gate could not find: where, what kind, what, and why.
@@ -756,43 +691,12 @@ public enum WikiPlanLogic {
         return ("Reference", "references")
     }
 
-    /// The document and section a gate error's path names (`wikiPlanErrorWhere`): `plan.docs[12].sections[2]…` is `7.2 §3`.
+    /// The document and section a reference's path names (`wikiPlanErrorWhere`): `plan.docs[12].sections[2]…` is `7.2 §3`.
     public static func errorWhere(_ shown: Shown, path: String) -> (doc: ShownDoc?, where_: String) {
         guard let doc = firstMatch(#"(?:^|\.)docs\[(\d+)\]"#, in: path).flatMap({ Int($0[1]) }), doc < shown.docs.count else { return (nil, "—") }
         let row = shown.docs[doc]
         if let section = firstMatch(#"\.sections\[(\d+)\]"#, in: path).flatMap({ Int($0[1]) }) { return (row, "\(row.number) §\(section + 1)") }
         return (row, row.number)
-    }
-
-    /// The value at a gate error's path in the shown plan: the reference it could not find.
-    private static func valueAt(_ shown: Shown, path: String) -> String? {
-        guard let d = firstMatch(#"(?:^|\.)docs\[(\d+)\]"#, in: path).flatMap({ Int($0[1]) }), d < shown.docs.count,
-              let s = firstMatch(#"\.sections\[(\d+)\]"#, in: path).flatMap({ Int($0[1]) }), s < shown.docs[d].sections.count
-        else { return nil }
-        let section = shown.docs[d].sections[s]
-        func at(_ pattern: String) -> [Int]? { firstMatch(pattern, in: path).map { $0.dropFirst().compactMap { Int($0) } } }
-        if let m = at(#"\.sources\.code\[(\d+)\]\.symbols\[(\d+)\]$"#), m.count == 2 {
-            guard m[0] < section.sources.code.count else { return nil }
-            let code = section.sources.code[m[0]]
-            return "\(m[1] < code.symbols.count ? code.symbols[m[1]] : "") in \(code.path)"
-        }
-        if let m = at(#"\.sources\.code\[(\d+)\]"#), let i = m.first { return i < section.sources.code.count ? section.sources.code[i].path : nil }
-        if let m = at(#"\.sources\.docs\[(\d+)\]\.section$"#), let i = m.first {
-            guard i < section.sources.docs.count else { return nil }
-            return "\(section.sources.docs[i].path) § \(section.sources.docs[i].section ?? "")"
-        }
-        if let m = at(#"\.sources\.docs\[(\d+)\]"#), let i = m.first { return i < section.sources.docs.count ? section.sources.docs[i].path : nil }
-        if let m = at(#"\.sources\.contracts\[(\d+)\]"#), let i = m.first { return i < section.sources.contracts.count ? section.sources.contracts[i] : nil }
-        guard let sessions = section.sources.sessions else { return nil }
-        func pick(_ list: [String], _ pattern: String) -> String?? {
-            guard let i = at(pattern)?.first else { return .none }
-            return .some(i < list.count ? list[i] : nil)
-        }
-        if let v = pick(sessions.projects.map(\.title), #"\.projects\[(\d+)\]$"#) { return v }
-        if let v = pick(sessions.topics, #"\.topics\[(\d+)\]$"#) { return v }
-        if let v = pick(sessions.anchorPaths, #"\.anchorPaths\[(\d+)\]$"#) { return v }
-        if let v = pick(sessions.entryKinds, #"\.entryKinds\[(\d+)\]$"#) { return v }
-        return nil
     }
 
     /// The sections a protected document of the base lost in the shown draft, and where each went (`wikiPlanLostSections`).
@@ -840,69 +744,75 @@ public enum WikiPlanLogic {
         return "\(changed.joined(separator: "; ")).\(rest)"
     }
 
-    /// The gate's report for what the page shows (`wikiPlanGate`).
+    /// How many things a stored draft says to look at (`wikiPlanToLook`): its references not found, a count
+    /// outside its target, its notes.
+    public static func toLook(_ shown: Shown) -> Int {
+        let docs = shown.gate?.docs ?? shown.docs.count
+        let target = shown.gate?.target ?? shown.target
+        let outside = docs < target.min || docs > target.max
+        return (shown.repoCheck?.missing?.count ?? 0) + (shown.gate?.notes?.count ?? 0) + (outside ? 1 : 0)
+    }
+
+    /// The gate's report for what the page shows (`wikiPlanGate`): what was checked, and what the draft says to
+    /// look at — the references not found, each placed where it stands, a count outside the target, and the
+    /// notes of its last round under the check each belongs to. A stored draft can always be confirmed: the
+    /// amber look says read this, and nothing here stands in the way.
     public static func gate(_ shown: Shown, base: Shown?, job: WikiPlanJob?) -> Gate {
         let sha = shown.repoCheck.map { WikiLogic.shortSha($0.sha) }
         let at = sha.map { " · references checked at \($0)" } ?? ""
-        if shown.status != .failed {
-            let gate = shown.gate
-            let docs = gate?.docs ?? shown.docs.count
-            let target = gate?.target ?? shown.target
-            let skipped = gate?.checks?["protected"] == "skipped"
-            let newFields = gate?.needsNewFields ?? []
-            let attempt = job?.version == shown.version ? job?.attempt.map { "attempt \($0)" } : nil
-            let rows = gateOrder.map { check -> GateRow in
-                let text: String
-                switch check {
-                case .docCount: text = "\(plural(docs, "document", "documents")) — within \(target.min)–\(target.max)"
-                case .protected: text = skipped ? "Not checked — the version is your own edit" : protectedText(shown, base: base)
-                case .references:
-                    if let check = shown.repoCheck { text = "All \(WikiArticleCopy.count(check.checked ?? 0)) found at \(sha ?? "")" }
-                    else { text = "Every project and topic is this space’s" }
-                default:
-                    text = newFields.isEmpty ? "Every field is one the plan has"
-                        : "\(plural(newFields.count, "field", "fields")) to add: \(newFields.map { "\($0.name) (\($0.at))" }.joined(separator: ", "))"
-                }
-                return GateRow(check: check, ok: true, title: gateTitle(check), text: text)
-            }
-            return Gate(passed: true, title: WikiPlanCopy.passed, line: "4 checks\(at)", aside: attempt, rows: rows, refKinds: [], refs: [])
-        }
-
-        var byCheck: [WikiPlanGateCheck: [WikiPlanGateError]] = [:]
-        for error in shown.errors { byCheck[error.check, default: []].append(error) }
-        var kinds: [(many: String, one: String, count: Int)] = []
-        let refs = (byCheck[.references] ?? []).map { error -> RefRow in
-            let kind = refKind(error.path)
-            if let i = kinds.firstIndex(where: { $0.many == kind.many }) { kinds[i].count += 1 } else { kinds.append((kind.many, kind.one, 1)) }
-            return RefRow(where_: errorWhere(shown, path: error.path).where_, kind: kind.one, ref: valueAt(shown, path: error.path) ?? error.path,
-                          why: error.message)
-        }
-        let checked: Int? = job?.kind != .build ? job?.report?.repo?.checked : nil
-        let rows = gateOrder.map { check -> GateRow in
-            let errors = byCheck[check] ?? []
-            let ok = errors.isEmpty
-            let text: String
+        let gate = shown.gate
+        let docs = gate?.docs ?? shown.docs.count
+        let target = gate?.target ?? shown.target
+        let skipped = gate?.checks?["protected"] == "skipped"
+        let newFields = gate?.needsNewFields ?? []
+        let notes = gate?.notes ?? []
+        let missing = shown.repoCheck?.missing ?? []
+        let outside = docs < target.min || docs > target.max
+        let look = toLook(shown)
+        let attempt = job?.version == shown.version ? job?.attempt.map { "attempt \($0)" } : nil
+        func row(_ check: WikiPlanGateCheck) -> GateRow {
+            let title = gateTitle(check)
             switch check {
             case .docCount:
-                text = "\(plural(shown.docs.count, "document", "documents")) — \(ok ? "within" : "the plan asks for") \(shown.target.min)–\(shown.target.max)"
-            case .protected:
-                text = ok || base != nil ? protectedText(shown, base: base) : errors.map(\.message).joined(separator: " ")
-            case .references:
-                if ok {
-                    text = checked != nil && sha != nil ? "All \(WikiArticleCopy.count(checked ?? 0)) found at \(sha ?? "")" : "Every reference was found"
-                } else {
-                    text = "\(WikiArticleCopy.count(errors.count))\(checked.map { " of \(WikiArticleCopy.count($0))" } ?? "") not found"
-                        + "\(sha.map { " at \($0)" } ?? "") — files, symbols and headings on origin/main; projects and topics in this space"
+                if outside {
+                    return GateRow(check: check, ok: false, title: title,
+                                   text: "\(plural(docs, "document", "documents")) — the plan asks for \(target.min)–\(target.max). "
+                                       + "Confirm it as it is, or Redraft with what to merge or split.")
                 }
+                return GateRow(check: check, ok: true, title: title, text: "\(plural(docs, "document", "documents")) — within \(target.min)–\(target.max)")
+            case .protected:
+                return GateRow(check: check, ok: true, title: title,
+                               text: skipped ? "Not checked — the version is your own edit" : protectedText(shown, base: base))
+            case .references:
+                if !missing.isEmpty {
+                    let checked = shown.repoCheck?.checked ?? 0
+                    return GateRow(check: check, ok: false, title: title,
+                                   text: "\(WikiArticleCopy.count(max(0, checked - missing.count))) of \(WikiArticleCopy.count(checked)) found at \(sha ?? "")"
+                                       + " — the rest stay on their sections, and a document is written without any that’s still missing")
+                }
+                return GateRow(check: check, ok: true, title: title,
+                               text: shown.repoCheck.map { "All \(WikiArticleCopy.count($0.checked ?? 0)) found at \(sha ?? "")" }
+                                   ?? "Every project and topic is this space’s")
             default:
-                text = ok ? "Every field is one the plan has"
-                    : "\(plural(errors.count, "field isn’t", "fields aren’t")) the plan’s: \(errors.prefix(3).map { "\($0.path) \($0.message)" }.joined(separator: "; "))"
+                return GateRow(check: check, ok: true, title: title,
+                               text: newFields.isEmpty ? "Every field is one the plan has"
+                                   : "\(plural(newFields.count, "field", "fields")) to add: \(newFields.map { "\($0.name) (\($0.at))" }.joined(separator: ", "))")
             }
-            return GateRow(check: check, ok: ok, title: gateTitle(check), text: text)
+        }
+        var kinds: [(many: String, one: String, count: Int)] = []
+        let refs = missing.map { miss -> RefRow in
+            let path = miss.at ?? ""
+            let kind = refKind(path)
+            if let i = kinds.firstIndex(where: { $0.many == kind.many }) { kinds[i].count += 1 } else { kinds.append((kind.many, kind.one, 1)) }
+            return RefRow(where_: errorWhere(shown, path: path).where_, kind: kind.one, ref: miss.ref, why: WikiPlanCopy.missWhy[miss.kind] ?? "")
+        }
+        let rows = gateOrder.flatMap { check -> [GateRow] in
+            [row(check)] + notes.filter { $0.check == check }.map { GateRow(check: check, ok: false, title: gateTitle(check), text: $0.text) }
         }
         let order = kinds.enumerated().sorted { a, b in a.element.count != b.element.count ? a.element.count > b.element.count : a.offset < b.offset }
-        return Gate(passed: false, title: WikiPlanCopy.failed, line: "\(failedChecks(shown.errors)) of 4 checks failed\(at)",
-                    aside: job.map { "\(shown.model ?? WikiCopy.historyMaintenance) tried \(plural(attempts($0), "time", "times"))" },
+        return Gate(passed: look == 0, title: look == 0 ? WikiPlanCopy.passed : WikiPlanCopy.ready,
+                    line: look == 0 ? "4 checks\(at)" : "\(WikiArticleCopy.count(look)) to look at\(at)",
+                    aside: attempt,
                     rows: rows,
                     refKinds: order.map { "\(WikiArticleCopy.count($0.element.count)) \($0.element.count == 1 ? singular($0.element.many) : $0.element.many)" },
                     refs: refs)
@@ -918,9 +828,11 @@ public enum WikiPlanLogic {
         "\(plural(doc.sections.count, "section", "sections")) · \(WikiPlanCopy.chars(doc.length))"
     }
 
-    /// The failed draft's errors that fall in one document (`wikiPlanDocErrors`).
-    public static func docErrors(_ shown: Shown, doc: ShownDoc) -> [WikiPlanGateError] {
-        shown.errors.filter { firstMatch("(?:^|\\.)docs\\[\(doc.index)\\](?:\\.|$)", in: $0.path) != nil }
+    /// The references not found in one document (`wikiPlanDocMissing`).
+    public static func docMissing(_ shown: Shown, doc: ShownDoc) -> [WikiPlanRepoCheck.Miss] {
+        (shown.repoCheck?.missing ?? []).filter { miss in
+            miss.at.map { firstMatch("(?:^|\\.)docs\\[\(doc.index)\\](?:\\.|$)", in: $0) != nil } ?? false
+        }
     }
 
     /// What a document's sections draw on, together (`wikiPlanDrawsOn`).
@@ -974,12 +886,11 @@ public enum WikiPlanLogic {
         return parts.joined(separator: " · ")
     }
 
-    /// Whether a section's repository source was found (`wikiPlanSourceFound`); nil for a version no runner checked.
+    /// Whether a section's repository source was found (`wikiPlanSourceFound`); nil for a version no check reached.
     public static func sourceFound(_ shown: Shown, doc: ShownDoc, section: Int, kind: String, at: Int) -> Bool? {
         let tail = "docs[\(doc.index)].sections[\(section)].sources.\(kind)[\(at)]"
         let plain = "docs[\(doc.index)].sections[\(section)].\(kind)[\(at)]"
-        let missed = shown.errors.contains { $0.check == .references && ($0.path.contains(tail) || $0.path.contains(plain)) }
-            || (shown.repoCheck?.missing ?? []).contains { miss in miss.at.map { $0.contains(tail) || $0.contains(plain) } ?? false }
+        let missed = (shown.repoCheck?.missing ?? []).contains { miss in miss.at.map { $0.contains(tail) || $0.contains(plain) } ?? false }
         if missed { return false }
         return shown.repoCheck != nil ? true : nil
     }
@@ -1274,7 +1185,7 @@ public enum WikiPlanLogic {
             let what = job != nil ? "Plan draft held" : "Writing documents held"
             return why == .runnerOffline ? Banner(text: "\(what) — the runner is offline", tone: .amber, to: .plan)
                 : Banner(text: "\(what) — set up maintenance", tone: .amber, to: .settings)
-        case .draftFailed: return Banner(text: "Plan draft didn’t pass the check", tone: .amber, to: .plan)
+        case .draftFailed: return Banner(text: "Plan draft didn’t finish", tone: .amber, to: .plan)
         case .draftReady: return Banner(text: "Plan draft ready to confirm", tone: .amber, to: .plan)
         case .changes:
             return Banner(text: "\(plural((state.proposals ?? []).count, "plan change", "plan changes")) to review", tone: .amber, to: .plan)

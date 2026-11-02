@@ -9,8 +9,9 @@ import XCTest
 /// Three halves, each a failure — never an `XCTSkip` — when its counterpart goes missing:
 /// - the `plan` cases of `src/shared/src/wiki-docs.fixture.json`, which the web's `lib/wikiPlan.test.ts`
 ///   reads too: every state of the plan — no plan, queued, drafting, held (never for the daily limit), a draft
-///   waiting or failed, changes, the documents being written, held or stopped — with its banner, job card,
-///   head, gate report and documents; the version menu; a document's and a section's pages; the changes
+///   waiting with or without things to look at, a job that left no draft over whatever stands, changes, the
+///   documents being written, held or stopped — with its banner, job card, head, gate report and documents;
+///   the version menu; a document's and a section's pages; the changes
 ///   proposed and what Accept will do; an edit's request in the draft's shape;
 /// - every `WikiPlanCopy` constant looked up as a declaration in the web source it mirrors;
 /// - the orders of the plan page, a document's page, a section's page and a change's card.
@@ -82,11 +83,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
 
     private struct Fixture: Decodable {
         struct Plan: Decodable {
-            struct Versions: Decodable {
-                let v1: WikiPlanVersion
-                let v2: WikiPlanVersion
-            }
-
             struct State: Decodable {
                 struct Spec: Decodable {
                     let confirmed: String?
@@ -151,8 +147,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
                     struct Doc: Decodable {
                         let slug, number, title: String
                         let protected: Bool
-                        let errors: Int
-                        let errorLabel: String?
+                        let notFound: Int
+                        let notFoundLabel: String?
                         let line: String
                     }
 
@@ -172,7 +168,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
                 let shown: Shown?
                 let head: String?
                 let meta: [String]?
-                let hint: String?
                 let jobCard: JobCard?
                 let gate: Gate?
                 let categories: [Category]
@@ -180,11 +175,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
             }
 
             struct VersionRows: Decodable {
-                struct Failed: Decodable {
-                    let version: Int
-                    let at: String
-                }
-
                 struct Row: Decodable {
                     let version: Int
                     let status: String
@@ -192,7 +182,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
                 }
 
                 let versions: [WikiPlanVersionSummary]
-                let failed: Failed
                 let rows: [Row]
             }
 
@@ -239,12 +228,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
                     let sources: Sources
                 }
 
-                struct Lost: Decodable {
-                    let number: Int
-                    let label: String
-                    let why: String
-                }
-
                 let version: Int
                 let slug, title, number: String
                 let protected: Bool
@@ -252,7 +235,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
                 let length, protectedNote, drawsOn: String
                 let scopeOut: [ScopeOut]
                 let sections: [Section]
-                let lost: [Lost]
             }
 
             struct Change: Decodable {
@@ -312,7 +294,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
                 let section: SectionEdit
             }
 
-            let versions: Versions
+            let versions: [String: WikiPlanVersion]
             let proposals: [WikiPlanProposal]
             let jobs: [String: WikiPlanJob]
             let states: [String: State]
@@ -347,8 +329,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
     }
 
     private func state(_ spec: Fixture.Plan.State.Spec, _ plan: Fixture.Plan) -> WikiPlanState {
-        WikiPlanState(spaceId: "sp1", confirmed: spec.confirmed == "v1" ? plan.versions.v1 : nil,
-                      draft: spec.draft == "v2" ? plan.versions.v2 : nil,
+        WikiPlanState(spaceId: "sp1", confirmed: spec.confirmed.flatMap { plan.versions[$0] },
+                      draft: spec.draft.flatMap { plan.versions[$0] },
                       proposals: spec.proposals ? plan.proposals : [], job: spec.job.flatMap { plan.jobs[$0] })
     }
 
@@ -366,9 +348,9 @@ final class WikiPlanCopyParityTests: XCTestCase {
             (WikiPlanCopy.cancel, "cancel"), (WikiPlanCopy.viewRun, "viewRun"), (WikiPlanCopy.setUp, "setUp"),
             (WikiPlanCopy.viewRunners, "viewRunners"), (WikiPlanCopy.none, "none"), (WikiPlanCopy.emptyTitle, "emptyTitle"),
             (WikiPlanCopy.documents, "documents"), (WikiPlanCopy.inForce, "inForce"), (WikiPlanCopy.queued, "queued"),
-            (WikiPlanCopy.drafting, "drafting"), (WikiPlanCopy.held, "held"), (WikiPlanCopy.failed, "failed"), (WikiPlanCopy.passed, "passed"),
+            (WikiPlanCopy.drafting, "drafting"), (WikiPlanCopy.held, "held"), (WikiPlanCopy.ready, "ready"), (WikiPlanCopy.passed, "passed"),
             (WikiPlanCopy.writing, "writing"), (WikiPlanCopy.writingNow, "writingNow"), (WikiPlanCopy.jobFailed, "jobFailed"),
-            (WikiPlanCopy.buildFailed, "buildFailed"), (WikiPlanCopy.question, "question"), (WikiPlanCopy.writtenFor, "writtenFor"),
+            (WikiPlanCopy.redraftFailed, "redraftFailed"), (WikiPlanCopy.buildFailed, "buildFailed"), (WikiPlanCopy.question, "question"), (WikiPlanCopy.writtenFor, "writtenFor"),
             (WikiPlanCopy.covers, "covers"), (WikiPlanCopy.notCovered, "notCovered"), (WikiPlanCopy.length, "length"),
             (WikiPlanCopy.protected, "protected"), (WikiPlanCopy.drawsOn, "drawsOn"), (WikiPlanCopy.sections, "sections"),
             (WikiPlanCopy.sourceDocs, "sourceDocs"), (WikiPlanCopy.sourceCode, "sourceCode"), (WikiPlanCopy.sourceContracts, "sourceContracts"),
@@ -391,7 +373,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiPlanCopy.factsShown, words["factsShown"] as? Int)
         XCTAssertEqual(WikiPlanCopy.newSectionLength, words["newSectionLength"] as? Int)
         let statuses = try XCTUnwrap(words["statusLabels"] as? [String: String])
-        for status in [WikiPlanLogic.ShownStatus.draft, .confirmed, .superseded, .failed] {
+        for status in [WikiPlanLogic.ShownStatus.draft, .confirmed, .superseded] {
             XCTAssertEqual(status.label, statuses[status.rawValue], status.rawValue)
         }
         let ops = try XCTUnwrap(words["opLabels"] as? [String: String])
@@ -423,7 +405,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
             XCTAssertEqual(WikiPlanCopy.chars(WikiPlanRange(min: length["min"]!, max: length["max"]!)), row["says"] as? String)
         }
         for row in try rows("sectionChars") { XCTAssertEqual(WikiPlanCopy.sectionChars(row["n"] as! Int), row["says"] as? String) }
-        for row in try rows("errors") { XCTAssertEqual(WikiPlanCopy.errorCount(row["n"] as! Int), row["says"] as? String) }
+        for row in try rows("notFound") { XCTAssertEqual(WikiPlanCopy.notFoundCount(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("changesCount") { XCTAssertEqual(WikiPlanCopy.changeCount(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("time") {
             XCTAssertEqual(WikiPlanCopy.time(since: row["since"] as? String, until: row["until"] as? String), row["says"] as? String)
@@ -437,7 +419,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
         for row in try rows("changeAdded") { XCTAssertEqual(WikiPlanCopy.changeAdded(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("draftSaved") { XCTAssertEqual(WikiPlanCopy.draftSaved(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("andMore") { XCTAssertEqual(WikiPlanCopy.andMore(row["n"] as! Int), row["says"] as? String) }
-        for row in try rows("failedHint") { XCTAssertEqual(WikiPlanCopy.failedHint(inForce: row["inForce"] as? Int), row["says"] as? String) }
     }
 
     /// Every constant, as the web source declares it.
@@ -453,9 +434,10 @@ final class WikiPlanCopyParityTests: XCTestCase {
             ("WIKI_PLAN_DRAFTER_SERVER", WikiPlanCopy.drafterServer),
             ("WIKI_PLAN_NOTE_SERVER", WikiPlanCopy.noteServer), ("WIKI_PLAN_EMPTY_NOTE_SERVER", WikiPlanCopy.emptyNoteServer),
             ("WIKI_PLAN_IN_FORCE", WikiPlanCopy.inForce), ("WIKI_PLAN_QUEUED", WikiPlanCopy.queued), ("WIKI_PLAN_DRAFTING", WikiPlanCopy.drafting),
-            ("WIKI_PLAN_HELD", WikiPlanCopy.held), ("WIKI_PLAN_FAILED", WikiPlanCopy.failed), ("WIKI_PLAN_PASSED", WikiPlanCopy.passed),
+            ("WIKI_PLAN_HELD", WikiPlanCopy.held), ("WIKI_PLAN_READY", WikiPlanCopy.ready), ("WIKI_PLAN_PASSED", WikiPlanCopy.passed),
             ("WIKI_PLAN_WRITING", WikiPlanCopy.writing), ("WIKI_PLAN_WRITING_NOW", WikiPlanCopy.writingNow),
-            ("WIKI_PLAN_JOB_FAILED", WikiPlanCopy.jobFailed), ("WIKI_PLAN_BUILD_FAILED", WikiPlanCopy.buildFailed),
+            ("WIKI_PLAN_JOB_FAILED", WikiPlanCopy.jobFailed), ("WIKI_PLAN_REDRAFT_FAILED", WikiPlanCopy.redraftFailed),
+            ("WIKI_PLAN_BUILD_FAILED", WikiPlanCopy.buildFailed),
             ("WIKI_PLAN_QUEUED_TEXT", WikiPlanCopy.queuedText), ("WIKI_PLAN_WRITING_SOON", WikiPlanCopy.writingSoon),
             ("WIKI_PLAN_QUESTION", WikiPlanCopy.question), ("WIKI_PLAN_WRITTEN_FOR", WikiPlanCopy.writtenFor),
             ("WIKI_PLAN_COVERS", WikiPlanCopy.covers), ("WIKI_PLAN_NOT_COVERED", WikiPlanCopy.notCovered),
@@ -488,7 +470,12 @@ final class WikiPlanCopyParityTests: XCTestCase {
             let body = try slice(lib, from: "export const \(table)", to: "};")
             for reason in WikiPlanLogic.Held.allCases { assertSays(body, "\(reason.rawValue): '\(text(reason))'", in: Self.lib) }
         }
+        // Why a reference not found is listed: the table, key by key.
+        let misses = try slice(lib, from: "const MISS_WHY", to: "};")
+        for (kind, why) in WikiPlanCopy.missWhy { assertSays(misses, "\(kind): '\(why)'", in: Self.lib) }
         // The sentences built around a value.
+        assertSays(lib, "wikiPlanNotFoundCount = (count: number): string => `${wikiCount(count)} not found`", in: Self.lib)
+        assertSays(lib, "const why = job.error ?? 'Its run ended without a draft.';", in: Self.lib)
         assertSays(lib, "wikiPlanSaveNote = (next: number): string => `Saving makes draft v${next}; it goes through the plan check again.`", in: Self.lib)
         assertSays(lib, "wikiPlanConfirmed = (version: number): string => `Plan v${version} confirmed`", in: Self.lib)
         assertSays(lib, "wikiPlanChangeAdded = (version: number): string => `Change added to draft v${version}`", in: Self.lib)
@@ -511,7 +498,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
         let plan = shared.plan
         let tz = try XCTUnwrap(TimeZone(identifier: shared.timeZone))
         let now = try self.now(shared)
-        XCTAssertEqual(plan.states.count, 13)
+        XCTAssertEqual(plan.states.count, 17)
         for (name, expected) in plan.states.sorted(by: { $0.key < $1.key }) {
             let state = self.state(expected.spec, plan)
             let online = expected.spec.runnerOnline
@@ -535,12 +522,12 @@ final class WikiPlanCopyParityTests: XCTestCase {
             let open = WikiPlanLogic.openJob(state)
             let failed = WikiPlanLogic.failedJob(state)
             let inForce = shown?.status == .confirmed && state.confirmed?.version == shown?.version
-            XCTAssertEqual(shown == nil ? open.map { WikiPlanLogic.jobHead($0, timeZone: tz) } : nil, expected.head, name)
-            XCTAssertEqual(shown.map { WikiPlanLogic.meta($0, job: $0.status == .failed ? failed : (open ?? state.job), docs: inForce ? docs : nil, timeZone: tz) },
+            XCTAssertEqual(shown == nil ? (open ?? failed).map { WikiPlanLogic.jobHead($0, timeZone: tz) } : nil, expected.head, name)
+            XCTAssertEqual(shown.map { WikiPlanLogic.meta($0, job: open ?? state.job, docs: inForce ? docs : nil, timeZone: tz) },
                            expected.meta, name)
-            XCTAssertEqual(shown?.status == .failed ? WikiPlanCopy.failedHint(inForce: state.confirmed?.version) : nil, expected.hint, name)
 
-            let card = WikiPlanLogic.jobCard(state.job, now: now, runnerOnline: online, failed: shown?.status == .failed ? failed : nil,
+            let card = WikiPlanLogic.jobCard(state.job, now: now, runnerOnline: online,
+                                             failed: failed.map { job -> (job: WikiPlanJob, state: WikiPlanState) in (job, state) },
                                              inForce: inForce, directory: state.confirmed != nil ? shared.docs.directory.read : nil)
             XCTAssertEqual(card.map { "\($0.look.rawValue) | \($0.title) | \($0.text)" }, expected.jobCard.map { "\($0.look) | \($0.title) | \($0.text)" }, name)
             XCTAssertEqual(card?.link.map { "\($0.label) \($0.to.rawValue) \($0.sessionId ?? "-")" },
@@ -548,8 +535,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
             XCTAssertEqual(card?.progress.map { "\($0.done)/\($0.total) \($0.now ?? "-")" },
                            expected.jobCard?.progress.map { "\($0.done)/\($0.total) \($0.now ?? "-")" }, name)
 
-            if let shown, shown.status == .draft || shown.status == .failed {
-                let gate = WikiPlanLogic.gate(shown, base: WikiPlanLogic.base(of: shown, in: state), job: shown.status == .failed ? failed : state.job)
+            if let shown, shown.status == .draft {
+                let gate = WikiPlanLogic.gate(shown, base: WikiPlanLogic.base(of: shown, in: state), job: state.job)
                 let want = try XCTUnwrap(expected.gate, name)
                 XCTAssertEqual([gate.passed ? "passed" : "failed", gate.title, gate.line, gate.aside ?? "-"],
                                [want.passed ? "passed" : "failed", want.title, want.line, want.aside ?? "-"], name)
@@ -567,9 +554,9 @@ final class WikiPlanCopyParityTests: XCTestCase {
                            expected.categories.map { "\($0.key) \($0.number) \($0.title) \($0.line)" }, name)
             for (category, want) in zip(categories, expected.categories) {
                 XCTAssertEqual(category.docs.map { doc -> String in
-                    let errors = WikiPlanLogic.docErrors(shown!, doc: doc).count
-                    return "\(doc.slug) \(doc.number) \(doc.title) \(doc.protected) \(errors) \(errors > 0 ? WikiPlanCopy.errorCount(errors) : "-") \(WikiPlanLogic.docLine(doc))"
-                }, want.docs.map { "\($0.slug) \($0.number) \($0.title) \($0.protected) \($0.errors) \($0.errorLabel ?? "-") \($0.line)" }, name)
+                    let notFound = WikiPlanLogic.docMissing(shown!, doc: doc).count
+                    return "\(doc.slug) \(doc.number) \(doc.title) \(doc.protected) \(notFound) \(notFound > 0 ? WikiPlanCopy.notFoundCount(notFound) : "-") \(WikiPlanLogic.docLine(doc))"
+                }, want.docs.map { "\($0.slug) \($0.number) \($0.title) \($0.protected) \($0.notFound) \($0.notFoundLabel ?? "-") \($0.line)" }, name)
             }
         }
     }
@@ -577,24 +564,22 @@ final class WikiPlanCopyParityTests: XCTestCase {
     func testTheVersionMenuIsTheFixtures() throws {
         let shared = try fixture()
         let rows = shared.plan.versionRows
-        let ours = WikiPlanLogic.versionRows(rows.versions, failed: (rows.failed.version, rows.failed.at),
-                                             timeZone: try XCTUnwrap(TimeZone(identifier: shared.timeZone)))
+        let ours = WikiPlanLogic.versionRows(rows.versions, timeZone: try XCTUnwrap(TimeZone(identifier: shared.timeZone)))
         XCTAssertEqual(ours.map { "v\($0.version) \($0.status.rawValue) \($0.note)" }, rows.rows.map { "v\($0.version) \($0.status) \($0.note)" })
     }
 
-    /// A document's and a section's pages of the failed draft and of the version in force.
+    /// A document's and a section's pages of a draft with references not found and of the version in force.
     func testADocumentsAndASectionsPagesAreTheFixtures() throws {
         let shared = try fixture()
         let plan = shared.plan
         for expected in plan.docPages {
-            let state = self.state(expected.version == 1 ? try XCTUnwrap(plan.states["inForce"]).spec : try XCTUnwrap(plan.states["draftFailed"]).spec, plan)
+            let state = self.state(expected.version == 1 ? try XCTUnwrap(plan.states["inForce"]).spec : try XCTUnwrap(plan.states["draftNoted"]).spec, plan)
             let shown = try XCTUnwrap(WikiPlanLogic.defaultShown(state))
-            let base = WikiPlanLogic.base(of: shown, in: state)
             let doc = try XCTUnwrap(shown.docs.first { $0.slug == expected.slug })
             let at = "v\(expected.version) \(expected.slug)"
-            let errors = WikiPlanLogic.docErrors(shown, doc: doc).count
+            let notFound = WikiPlanLogic.docMissing(shown, doc: doc).count
             XCTAssertEqual([doc.title, doc.number, "\(doc.protected)"], [expected.title, expected.number, "\(expected.protected)"], at)
-            XCTAssertEqual(["\(WikiPlanCopy.versionLabel(shown.version)) · \(shown.status.label)"] + (errors > 0 ? [WikiPlanCopy.errorCount(errors)] : [])
+            XCTAssertEqual(["\(WikiPlanCopy.versionLabel(shown.version)) · \(shown.status.label)"] + (notFound > 0 ? [WikiPlanCopy.notFoundCount(notFound)] : [])
                             + [WikiPlanLogic.docLine(doc)], expected.head, at)
             XCTAssertEqual(WikiPlanCopy.chars(doc.length), expected.length, at)
             XCTAssertEqual(doc.protected ? WikiPlanCopy.protectedNote : WikiPlanCopy.notProtectedNote, expected.protectedNote, at)
@@ -624,16 +609,13 @@ final class WikiPlanCopyParityTests: XCTestCase {
                                                              $0.keywords.joined(separator: ","), $0.anchorPaths.joined(separator: ","),
                                                              $0.entryKinds, $0.topics, $0.evidence ] }, "\(at) §\(want.n)")
             }
-            XCTAssertEqual(WikiPlanLogic.lostSections(shown, base: base, slug: doc.slug).map {
-                "\($0.number) \(WikiPlanCopy.lostLabel(base: base?.version ?? 0, number: $0.number, title: $0.title)) | \(WikiPlanCopy.protectedMovePhone(movedTo: $0.movedTo, number: doc.number))"
-            }, expected.lost.map { "\($0.number) \($0.label) | \($0.why)" }, at)
         }
     }
 
     func testTheChangesProposedAreTheFixtures() throws {
         let shared = try fixture()
         let plan = shared.plan
-        let base = WikiPlanLogic.fromVersion(plan.versions.v1)
+        let base = WikiPlanLogic.fromVersion(try XCTUnwrap(plan.versions["v1"]))
         let titles = ["pr9": "Codex 账号代管"]
         for expected in plan.changes {
             let proposal = try XCTUnwrap(plan.proposals.first { $0.id == expected.proposal })
@@ -691,6 +673,26 @@ final class WikiPlanCopyParityTests: XCTestCase {
         XCTAssertNil(WikiPlanLogic.defaultShown(state))
     }
 
+    /// A job that failed before 2026-11-02 keeps the draft it had and the gate's errors, and the page draws neither:
+    /// no made-up version, one card in the job's own words. A job with no words says why there is no draft.
+    func testAnOlderFailedJobIsOneCardOverNoVersion() throws {
+        let json = #"""
+        {"spaceId":"sp1","confirmed":null,"draft":null,"proposals":[],
+         "job":{"id":"j","kind":"revise","state":"failed","error":"It didn’t pass the plan check.",
+                "errors":[{"check":"docCount","path":"plan.docs","message":"the plan has 40 documents"}],
+                "draft":{"categories":[{"key":"a","title":"A"}],"docs":[{"category":"a","slug":"s","title":"T","sections":[]}]}}}
+        """#
+        let state = try JSONDecoder().decode(WikiPlanState.self, from: Data(json.utf8))
+        XCTAssertEqual(state.job?.draft?.docs.map(\.slug), ["s"])
+        XCTAssertNil(WikiPlanLogic.defaultShown(state))
+        let failed = try XCTUnwrap(WikiPlanLogic.failedJob(state))
+        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: true, failed: (job: failed, state: state), inForce: false, directory: nil)
+        XCTAssertEqual(card?.title, WikiPlanCopy.jobFailed)
+        XCTAssertEqual(card?.text, "It didn’t pass the plan check. Nothing was saved.")
+        let silent = try JSONDecoder().decode(WikiPlanJob.self, from: Data(#"{"id":"j","kind":"draft","state":"failed"}"#.utf8))
+        XCTAssertEqual(WikiPlanLogic.failedText(silent, state: state), "Its run ended without a draft. Nothing was saved.")
+    }
+
     // MARK: the orders
 
     func testTheOrdersAreTheFixtures() throws {
@@ -701,7 +703,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiPlanLogic.ChangePart.allCases.map(\.rawValue), orders["change"])
         XCTAssertEqual(WikiPlanLogic.Look.allCases.map(\.rawValue), orders["looks"])
         let lib = try web(Self.lib)
-        assertSays(lib, "WIKI_PLAN_PAGE_SECTIONS = ['crumb', 'title', 'meta', 'actions', 'hint', 'job', 'gate', 'changes', 'documents'] as const",
+        assertSays(lib, "WIKI_PLAN_PAGE_SECTIONS = ['crumb', 'title', 'meta', 'actions', 'job', 'gate', 'changes', 'documents'] as const",
                    in: Self.lib)
         assertSays(lib, "WIKI_PLAN_DOC_SECTIONS = ['crumb', 'title', 'meta', 'fields', 'sections'] as const", in: Self.lib)
         assertSays(lib, "WIKI_PLAN_SECTION_SECTIONS = ['crumb', 'title', 'meta', 'covers', 'sources'] as const", in: Self.lib)
@@ -710,23 +712,32 @@ final class WikiPlanCopyParityTests: XCTestCase {
     }
     // MARK: the pages, block for block
 
-    /// The plan page: crumb, title and version, where it came from, Confirm plan and Redraft…, a failed
-    /// draft's hint, the job, the gate, the changes, the documents — the web page's order and the native arms.
+    /// The plan page: crumb, title and version, where it came from, Confirm plan and Redraft…, the job, the
+    /// gate, the changes, the documents — the web page's order and the native arms.
     func testThePlanPageIsTheWebPhonesInItsOrder() throws {
         let page = try web(Self.page)
         let webPage = try slice(page, from: "function WikiPlanPage({ page, spaceId, spaceSlug }", to: "function PlanVersionMenu(")
         assertOrder(webPage, ["<div className=\"wk-art-crumbrow\">", "<h1 className=\"t-title\">{WIKI_PLAN_TITLE}</h1>", "<div className=\"wk-pl-meta\">",
-                              "<div className=\"wk-pl-acts\">", "wikiPlanFailedHint(", "<PlanJobCard", "<PlanGateReport", "<PlanChanges",
+                              "<div className=\"wk-pl-acts\">", "<PlanJobCard", "<PlanGateReport", "<PlanChanges",
                               "<PlanDocuments"], "the web plan page")
-        assertSays(webPage, "disabled={shown.status === 'failed' || confirm.isPending}", in: Self.page)
+        // A stored draft can always be confirmed; a job that left no draft keeps Redraft…, and the job's head.
+        assertSays(webPage, "disabled={confirm.isPending}", in: Self.page)
+        assertSays(webPage, "failed: page.failed ? { job: page.failed, state: plan } : null,", in: Self.page)
+        assertSays(webPage, "wikiPlanJobHead(open ?? page.failed!)", in: Self.page)
+        assertOrder(webPage, ["{(shown || page.failed) && (", "{shown?.status === 'draft' && (", "{shown?.status !== 'superseded' && (",
+                              "{!shown && !open && !page.failed && ("], "the web page's three outcomes")
         let view = try native("Views/WikiPlanView.swift")
         let nativePage = try slice(view, from: "struct WikiPlanPage: View {", to: "struct WikiPlanJobCardView: View {")
         assertSays(nativePage, "ForEach(WikiPlanLogic.PageSection.allCases, id: \\.self) { section in", in: "WikiPlanView.swift")
         let arms = try slice(nativePage, from: "switch section {", to: "private var changesBase")
-        assertOrder(arms, ["case .crumb:", "case .title:", "case .meta:", "case .actions:", "case .hint:", "case .job:", "case .gate:",
+        assertOrder(arms, ["case .crumb:", "case .title:", "case .meta:", "case .actions:", "case .job:", "case .gate:",
                            "case .changes:", "case .documents:"], "the native plan page")
-        assertOrder(arms, ["Text(WikiPlanCopy.confirm)", "Label(WikiPlanCopy.redraft"], "Confirm plan, then Redraft…")
-        assertSays(arms, ".disabled(shown.status == .failed || busy)", in: "WikiPlanView.swift")
+        assertOrder(arms, ["Text(WikiPlanCopy.confirm)", ".disabled(busy)", "Label(WikiPlanCopy.redraft"], "Confirm plan, then Redraft…")
+        assertSays(nativePage, "if let job = open ?? failed { return WikiPlanLogic.jobHead(job) }", in: "WikiPlanView.swift")
+        assertOrder(arms, ["if shown != nil || failed != nil {", "if let shown, shown.status == .draft {", "if shown?.status != .superseded {",
+                           "} else if open == nil {", "empty"], "the native page's three outcomes")
+        assertSays(try native("Views/WikiDocScreens.swift"), "failed: failed.map { job -> (job: WikiPlanJob, state: WikiPlanState) in (job, state) },",
+                   in: "WikiDocScreens.swift")
         // The empty page: what a plan is, Draft plan, and where and how long it runs — the System model's
         // (`WIKI_PLAN_EMPTY_TEXT`, `WIKI_PLAN_EMPTY_NOTE_SERVER`, `WikiServerExecutionCopyParityTests`).
         let webEmpty = try slice(page, from: "function PlanEmpty(", to: "function PlanGateReport(")
@@ -750,9 +761,15 @@ final class WikiPlanCopyParityTests: XCTestCase {
         let webGate = try slice(page, from: "function PlanGateReport(", to: "function PlanChanges(")
         assertOrder(webGate, ["<b>{gate.title}</b>", "{gate.line}", "{row.title}", "{row.text}", "<span className=\"at\">{ref.where}</span>",
                               "wikiShowMore(hidden)"], "the web gate report")
+        // A note is a row of its check's, so a row's place names it, and the references stand under the check's own row.
+        assertSays(webGate, "const refsAt = gate.rows.findIndex((row) => row.check === 'references');", in: Self.page)
+        assertSays(webGate, "{at === refsAt && gate.refs.length > 0 && (", in: Self.page)
         let nativeGate = try slice(view, from: "struct WikiPlanGateView: View {", to: "struct WikiPlanChangeCard: View {")
         assertOrder(nativeGate, ["Label(gate.title", "Text(([gate.line]", "Text(row.title)", "Text(row.text)", "Text(ref.where_)",
                                  "WikiArticleCopy.showMore(gate.refs.count - shown.count)"], "the native gate report")
+        assertSays(nativeGate, "gate.rows.firstIndex { $0.check == .references }", in: "WikiPlanView.swift")
+        assertSays(nativeGate, "ForEach(Array(gate.rows.enumerated()), id: \\.offset) { at, row in", in: "WikiPlanView.swift")
+        assertSays(nativeGate, "if at == refsAt && !gate.refs.isEmpty { refs }", in: "WikiPlanView.swift")
 
         let webChange = try slice(page, from: "function PlanChangeCard(", to: "function PlanDocuments(")
         assertOrder(webChange, ["{WIKI_PLAN_OP_LABELS[change.op]}", "{change.title}", "{WIKI_PLAN_WHY}", "{WIKI_PLAN_CHANGE}", "{WIKI_PLAN_SOURCES}",
@@ -790,7 +807,6 @@ final class WikiPlanCopyParityTests: XCTestCase {
                                 "field(WikiPlanCopy.writtenFor)", "field(WikiPlanCopy.covers)", "field(WikiPlanCopy.notCovered)",
                                 "field(WikiPlanCopy.length)", "field(WikiPlanCopy.protected)", "field(WikiPlanCopy.drawsOn)", "case .sections:"],
                     "the native plan document page")
-        assertSays(nativeDoc, "WikiPlanCopy.protectedMovePhone(movedTo: row.movedTo, number: doc.number)", in: "WikiPlanView.swift")
         let nativeSection = try slice(view, from: "struct WikiPlanSectionPage: View {", to: "struct WikiPlanRedraftSheet: View {")
         assertSays(nativeSection, "ForEach(WikiPlanLogic.SectionSection.allCases, id: \\.self) { part in", in: "WikiPlanView.swift")
         assertOrder(nativeSection, ["case .crumb:", "case .title:", "case .meta:", "WikiPlanLogic.sectionMeta(shown, section: section)", "case .covers:",

@@ -173,8 +173,7 @@ struct WikiPlanScreen: View {
                                                    description: Text("That section is not in this document."))
                         }
                     } else {
-                        WikiPlanDocPage(shown: shown, doc: doc, base: WikiPlanLogic.base(of: shown, in: state), canEdit: canEdit,
-                                        actions: actions(wiki))
+                        WikiPlanDocPage(shown: shown, doc: doc, canEdit: canEdit, actions: actions(wiki))
                     }
                 } else if shown == nil {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -205,23 +204,18 @@ struct WikiPlanScreen: View {
         let inForce = shown?.status == .confirmed && state.confirmed?.version == shown?.version
         let online = model.wikiMaintenanceRunnerOnline
         let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online,
-                                         failed: shown?.status == .failed ? failed : nil,
+                                         failed: failed.map { job -> (job: WikiPlanJob, state: WikiPlanState) in (job, state) },
                                          inForce: inForce, directory: wiki.docsDirectory)
-        let rows = WikiPlanLogic.versionRows(wiki.planVersions, failed: failed.map { job -> (version: Int, at: String?) in
-            (WikiPlanLogic.nextVersion(state), job.endedAt)
-        })
+        let rows = WikiPlanLogic.versionRows(wiki.planVersions)
         return WikiPlanPage(state: state, shown: shown, base: shown.flatMap { WikiPlanLogic.base(of: $0, in: state) }, versions: rows,
                             jobCard: card, written: written(wiki),
                             busy: wiki.busy, refused: refused, actions: actions(wiki))
     }
 
-    /// The version asked for, as the web's page reads it: none is the one shown first; a failed draft's
-    /// number is its draft; the draft and the version in force are the read's own; any other is read whole.
+    /// The version asked for, as the web's page reads it: none is the one shown first; the draft and the
+    /// version in force are the read's own; any other is read whole.
     private func shown(_ state: WikiPlanState, _ wiki: WikiModel) -> WikiPlanLogic.Shown? {
         guard let asked = address.version else { return WikiPlanLogic.defaultShown(state) }
-        if let failed = WikiPlanLogic.failedJob(state), asked == WikiPlanLogic.nextVersion(state) {
-            return WikiPlanLogic.fromFailedJob(failed, number: asked, baseVersion: WikiPlanLogic.newest(state)?.version)
-        }
         if let draft = state.draft, draft.version == asked { return WikiPlanLogic.fromVersion(draft) }
         if let confirmed = state.confirmed, confirmed.version == asked { return WikiPlanLogic.fromVersion(confirmed) }
         return wiki.planVersionReads[asked].map(WikiPlanLogic.fromVersion)
