@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -179,31 +180,63 @@ func TestSystemdStateTellsARunningUnitFromOneThatKeepsExiting(t *testing.T) {
 	}
 }
 
-func TestLaunchdStateTellsARunningAgentFromOneThatExited(t *testing.T) {
+func TestLaunchdStateTellsARunningAgentFromOneThatKeepsExiting(t *testing.T) {
 	running := "{\n\t\"LimitLoadToSessionType\" = \"Aqua\";\n\t\"Label\" = \"com.orbit.runner\";\n\t\"LastExitStatus\" = 0;\n\t\"PID\" = 812;\n};\n"
 	exited := "{\n\t\"Label\" = \"com.orbit.runner\";\n\t\"LastExitStatus\" = 256;\n};\n"
-	for _, tc := range []struct {
-		name, out string
-		err       error
-		down      bool
-		summary   string
-	}{
-		{"running", running, nil, false, ""},
-		{"exited", exited, nil, true, "com.orbit.runner exited (status 256)"},
-		{"not loaded", "", errors.New("exit status 113"), true, "com.orbit.runner is not loaded"},
+	restarted := "{\n\t\"Label\" = \"com.orbit.runner\";\n\t\"LastExitStatus\" = 256;\n\t\"PID\" = 813;\n};\n"
+	answer, answerErr := running, error(nil)
+	answerServiceQueries(t, func(cmd string) (string, error) {
+		if cmd != "launchctl list com.orbit.runner" {
+			t.Fatalf("asked %q", cmd)
+		}
+		return answer, answerErr
+	})
+	gaps := 0
+	read := func() serviceState {
+		t.Helper()
+		st, ok := launchdState("com.orbit.runner", &gaps)
+		if !ok {
+			t.Fatal("launchdState could not read the agent")
+		}
+		return st
+	}
+	if st := read(); st.down {
+		t.Fatalf("a running agent is down: %+v", st)
+	}
+	// One exit is no verdict: KeepAlive starts it again within 10 s, and then it is running.
+	answer = exited
+	for i := 0; i < launchdExitGaps; i++ {
+		if st := read(); st.down {
+			t.Fatalf("down after %d polls of one exit's gap: %+v", i+1, st)
+		}
+	}
+	answer = restarted
+	if st := read(); st.down {
+		t.Fatalf("an agent started again is down: %+v", st)
+	}
+	// More gaps than one exit leaves: it exited again.
+	answer = exited
+	st := read()
+	if want := "com.orbit.runner exited with status 1 and keeps being started again"; !st.down || st.summary != want {
+		t.Fatalf("launchdState = %+v, want down with %q", st, want)
+	}
+
+	answer, answerErr = "", errors.New("exit status 113")
+	if st := read(); !st.down || st.summary != "com.orbit.runner is not loaded" {
+		t.Fatalf("launchdState not loaded = %+v", st)
+	}
+}
+
+func TestWaitStatusTextSaysWhatLaunchdsStatusMeans(t *testing.T) {
+	for status, want := range map[string]string{
+		"256":  "exited with status 1",
+		"768":  "exited with status 3",
+		"9":    "was killed by signal 9",
+		"oops": "exited (status oops)",
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			answerServiceQueries(t, func(cmd string) (string, error) {
-				if cmd != "launchctl list com.orbit.runner" {
-					t.Fatalf("asked %q", cmd)
-				}
-				return tc.out, tc.err
-			})
-			st, ok := launchdState("com.orbit.runner")
-			if !ok || st.down != tc.down || st.summary != tc.summary {
-				t.Fatalf("launchdState = %+v, %v; want down %v, %q", st, ok, tc.down, tc.summary)
-			}
-		})
+		if got := waitStatusText(status); got != want {
+			t.Errorf("waitStatusText(%s) = %q, want %q", status, got, want)
+		}
 	}
 }
 
@@ -290,6 +323,69 @@ func TestRegisterReceiptWhenTheServiceDidNotComeOnline(t *testing.T) {
 	}
 	if strings.Contains(got, "is online") || strings.Contains(got, "Setup complete") {
 		t.Errorf("receipt claims what did not happen:\n%s", got)
+	}
+}
+
+// A runner registered under sudo is the account's, and root's own `orbit status` knows nothing of it.
+func TestRegisterReceiptUnderSudoSaysWhoseCommandsTheyAre(t *testing.T) {
+	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", HomeDir: t.TempDir()}
+	prevEUID, prevCurrent := processEUID, currentUser
+	t.Cleanup(func() { processEUID, currentUser = prevEUID, prevCurrent })
+	processEUID = func() int { return 4242 }
+	currentUser = func() (*user.User, error) { return account, nil }
+	cfg := &RunnerConfig{Name: "c2b-load-2", ServerURL: "https://orbitd.io", RunnerID: registerTestRunnerID}
+	for sudoUser, want := range map[string]string{
+		"root": "orbit status · orbit doctor · orbit unregister (as c2b)\n",
+		"":     "orbit status · orbit doctor · orbit unregister\n",
+	} {
+		t.Setenv("SUDO_USER", sudoUser)
+		var out bytes.Buffer
+		printRegisterReceipt(&out, cfg, serviceOnline, false)
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("SUDO_USER=%q: receipt lacks %q:\n%s", sudoUser, want, out.String())
+		}
+	}
+}
+
+// Registering saves only what the control plane has already issued, so a home that cannot hold it is found
+// before anyone is asked anything. Root may write anywhere, so these are ones nobody can.
+func TestCheckConfigStorageFindsAHomeThatCannotHoldTheConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ORBIT_HOME", filepath.Join(dir, "new", ".orbit"))
+	if err := checkConfigStorage(); err != nil {
+		t.Fatalf("a home it can create: %v", err)
+	}
+	assertPrivateMode(t, machineHome(), machineHomePerm)
+	if entries, err := os.ReadDir(machineHome()); err != nil || len(entries) != 0 {
+		t.Fatalf("the check left %v (%v) in the home", entries, err)
+	}
+
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", filepath.Join(file, ".orbit"))
+	if err := checkConfigStorage(); err == nil {
+		t.Fatal("a home under a regular file passed")
+	}
+
+	t.Setenv("ORBIT_HOME", filepath.Join(dir, "blocked"))
+	if err := os.MkdirAll(filepath.Join(machineHome(), "config.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkConfigStorage(); err == nil {
+		t.Fatal("a config path that cannot be written passed")
+	}
+}
+
+// An account a release build cannot look up, as with LDAP, keeps its group by number, which systemd takes:
+// its name alone would be a group that does not exist.
+func TestPrimaryGroupFallsBackToItsNumber(t *testing.T) {
+	if got := primaryGroup(&user.User{Gid: "4242424", Username: "ldap-user"}); got != "4242424" {
+		t.Errorf("primaryGroup = %q, want the number", got)
+	}
+	if got := primaryGroup(&user.User{Username: "ldap-user"}); got != "ldap-user" {
+		t.Errorf("primaryGroup with no gid = %q, want the name", got)
 	}
 }
 

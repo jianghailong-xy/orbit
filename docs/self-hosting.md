@@ -156,11 +156,12 @@ installations or authentication.
 
 The runner works as the OS account that registers it. Under sudo — `curl … | sudo bash`, `sudo orbit register`,
 or `orbit register` in a `sudo -i` shell — registration runs as the account that ran sudo: the runner runs as
-that account and keeps its config in that account's `~/.orbit`, and sudo is used again only to install the
-system service. `orbit unregister` under sudo removes that same account's runner. Registration says the machine
-is online only once its service has reached the deployment. When that does not happen within a minute,
-`orbit register` says why, shows the end of the service's log and the commands to look further, and exits
-non-zero.
+that account and keeps its config in that account's `~/.orbit`. That account's own sudo installs the system
+service, so without a terminal it has to need no password. `orbit unregister` under sudo removes that same
+account's runner. For a runner of root's own from a sudo shell, name root: `sudo -i env -u SUDO_USER orbit
+register`. Registration says the machine is online only once its service has reached the deployment. When that
+does not happen within two minutes, `orbit register` says why, shows the end of the service's log and the
+commands to look further, and exits non-zero.
 
 Scripts can also act as a person rather than a machine. A user logs the `orbit` CLI in with a personal
 access token, on a runner or on any other machine. `orbit login` opens the deployment's `/cli-login` page to
@@ -1222,7 +1223,7 @@ broker enables and starts the account's instance, nothing asks for a password, a
 
 ```text
     ✓ Approved — build-01-alice is now a runner.
-    Waiting for the runner to reach https://orbit.example.com…
+    Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 

@@ -127,28 +127,51 @@ func uninstallSystemd() {
 		username = u.Username
 		svc = systemdServiceFor(username)
 	}
-	sctl := func(args ...string) { runQuiet("systemctl", args...) }
-	remove := func(path string) { _ = os.Remove(path) }
+	// Also a leftover legacy single-runner unit, but only if it's this user's.
+	legacy := svc != systemdService && unitRunsAsUser(systemdService, username)
 	if processEUID() != 0 {
-		sudo, err := exec.LookPath("sudo")
-		if err != nil || !sudoUsable(sudo) {
-			fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
+		removeUnitsThroughSudo(svc, legacy)
+		return
+	}
+	runQuiet("systemctl", "disable", "--now", svc)
+	_ = os.Remove(filepath.Join(serviceUnitDir, svc+".service"))
+	if legacy {
+		runQuiet("systemctl", "disable", "--now", systemdService)
+		_ = os.Remove(filepath.Join(serviceUnitDir, systemdService+".service"))
+	}
+	runQuiet("systemctl", "daemon-reload")
+	fmt.Printf("✓ removed the %s service\n", svc)
+}
+
+// removeUnitsThroughSudo is uninstallSystemd for an account: nothing at all when it has no unit
+// (--no-service, or one already gone), and it says it removed one only when sudo did.
+func removeUnitsThroughSudo(svc string, legacy bool) {
+	var units []string
+	if _, err := os.Stat(filepath.Join(serviceUnitDir, svc+".service")); err == nil {
+		units = append(units, svc)
+	}
+	if legacy {
+		units = append(units, systemdService)
+	}
+	if len(units) == 0 {
+		return
+	}
+	sudo, err := exec.LookPath("sudo")
+	if err != nil || !sudoUsable(sudo) {
+		fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", strings.Join(units, " "))
+		return
+	}
+	if interactive() {
+		fmt.Printf("\nRemoving the %s service needs root — you may be prompted for your password.\n", svc)
+	}
+	for _, unit := range units {
+		path := filepath.Join(serviceUnitDir, unit+".service")
+		if run(sudo, "systemctl", "disable", "--now", unit) != nil || run(sudo, "rm", "-f", path) != nil {
+			fmt.Fprintf(os.Stderr, "note: could not remove the %s service — run: sudo systemctl disable --now %s && sudo rm -f %s\n", unit, unit, path)
 			return
 		}
-		if interactive() {
-			fmt.Printf("\nRemoving the %s service needs root — you may be prompted for your password.\n", svc)
-		}
-		sctl = func(args ...string) { runQuiet(sudo, append([]string{"systemctl"}, args...)...) }
-		remove = func(path string) { runQuiet(sudo, "rm", "-f", path) }
 	}
-	sctl("disable", "--now", svc)
-	remove(filepath.Join(serviceUnitDir, svc+".service"))
-	// Also drop a leftover legacy single-runner unit, but only if it's this user's.
-	if svc != systemdService && unitRunsAsUser(systemdService, username) {
-		sctl("disable", "--now", systemdService)
-		remove(filepath.Join(serviceUnitDir, systemdService+".service"))
-	}
-	sctl("daemon-reload")
+	_ = run(sudo, "systemctl", "daemon-reload")
 	fmt.Printf("✓ removed the %s service\n", svc)
 }
 
@@ -191,8 +214,11 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) (*runnerServ
 	var sudo string
 	if !root {
 		s, err := exec.LookPath("sudo")
-		if err != nil || !sudoUsable(s) {
+		if err != nil {
 			return nil, fmt.Errorf("installing the systemd service needs root: write %s then run `systemctl enable %s && systemctl restart %s`", unitPath, svc, svc)
+		}
+		if !sudoUsable(s) {
+			return nil, fmt.Errorf("installing the systemd service needs root, and %s has no sudo that works without a terminal: run this at a terminal, give %s sudo that needs no password, or write %s then run `systemctl enable %s && systemctl restart %s`", u.Username, u.Username, unitPath, svc, svc)
 		}
 		sudo = s
 		if interactive() {
@@ -374,11 +400,15 @@ func registeringUser() (*user.User, error) {
 	return currentUser()
 }
 
-// primaryGroup resolves a user's primary group name, falling back to the username
-// (the common user-private-group convention) when the group can't be looked up.
+// primaryGroup resolves a user's primary group name, falling back to its number, which
+// systemd takes as well: a release build reads /etc/group alone, where an LDAP account's
+// group is not. With neither, the username (the common user-private-group convention).
 func primaryGroup(u *user.User) string {
 	if g, err := user.LookupGroupId(u.Gid); err == nil {
 		return g.Name
+	}
+	if u.Gid != "" {
+		return u.Gid
 	}
 	return u.Username
 }

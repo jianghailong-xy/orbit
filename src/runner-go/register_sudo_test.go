@@ -27,45 +27,61 @@ func TestSudoAccountIsTheAccountThatRanSudo(t *testing.T) {
 		return nil, errors.New("no such account")
 	}
 	for _, tc := range []struct {
-		name, sudoUser string
-		euid           int
-		want           *user.User
+		name, sudoUser, want string
+		euid                 int
 	}{
-		{"root under sudo from c2b", "c2b", 0, c2b},
-		{"c2b itself, as sudo -u c2b leaves it", "root", 4242, nil},
-		{"c2b, not under sudo", "", 4242, nil},
-		{"root's own login", "", 0, nil},
-		{"sudo run by root", "root", 0, nil},
-		{"an account this machine does not have", "ghost", 0, nil},
-		{"another name for root", "toor", 0, nil},
+		{"root under sudo from c2b", "c2b", "c2b", 0},
+		{"c2b itself, as sudo -u c2b leaves it", "root", "", 4242},
+		{"c2b, not under sudo", "", "", 4242},
+		{"root's own login", "", "", 0},
+		{"sudo run by root", "root", "", 0},
+		// An LDAP or SSSD account a release build cannot look up: sudo can switch to it by name.
+		{"an account only sudo can look up", "ldap-user", "ldap-user", 0},
+		{"another name for root", "toor", "", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("SUDO_USER", tc.sudoUser)
 			processEUID = func() int { return tc.euid }
 			got, ok := sudoAccount()
-			if ok != (tc.want != nil) || got != tc.want {
-				t.Fatalf("sudoAccount() = %v, %v; want %v", got, ok, tc.want)
+			if tc.want == "" {
+				if ok {
+					t.Fatalf("sudoAccount() = %v, want no hand-off", got)
+				}
+				return
+			}
+			if !ok || got.Username != tc.want {
+				t.Fatalf("sudoAccount() = %v, %v; want %s", got, ok, tc.want)
 			}
 		})
 	}
 }
 
-// sudo resets the environment it starts the account's command with; the hand-off carries over what
-// register still reads, and nothing else.
+// sudo resets the environment it starts the account's command with; the hand-off keeps what register still
+// reads, and nothing else. By name: a proxy's URL can hold a password, and sudo logs its command line.
 func TestSudoHandOffCarriesWhatRegisterReads(t *testing.T) {
 	for _, k := range sudoHandOffEnv {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
+	args := []string{"register", "--name", "c2b-load-2"}
+	got := sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", args)
+	want := []string{"/usr/bin/sudo", "-H", "-u", "c2b", "--", "/usr/local/bin/orbit", "register", "--name", "c2b-load-2"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("with nothing to keep, sudoHandOffArgv =\n  %q\nwant\n  %q", got, want)
+	}
+
 	t.Setenv("ORBIT_HOME", "/srv/orbit-c2b")
-	t.Setenv("https_proxy", "http://proxy.internal:3128")
+	t.Setenv("https_proxy", "http://user:secret@proxy.internal:3128")
+	t.Setenv("SSL_CERT_FILE", "/etc/orbit/ca.pem")
 	t.Setenv("ORBIT_SESSION_ID", "not-carried")
-	got := sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", []string{"register", "--name", "c2b-load-2"})
-	want := []string{"/usr/bin/sudo", "-H", "-u", "c2b", "--", "env",
-		"ORBIT_HOME=/srv/orbit-c2b", "https_proxy=http://proxy.internal:3128",
+	got = sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", args)
+	want = []string{"/usr/bin/sudo", "-H", "-u", "c2b", "--preserve-env=ORBIT_HOME,https_proxy,SSL_CERT_FILE", "--",
 		"/usr/local/bin/orbit", "register", "--name", "c2b-load-2"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("sudoHandOffArgv =\n  %q\nwant\n  %q", got, want)
+	}
+	if strings.Contains(strings.Join(got, " "), "secret") {
+		t.Fatalf("the proxy's password is on sudo's command line: %q", got)
 	}
 }
 
@@ -119,12 +135,13 @@ func TestHandOffRunsTheSystemsSudoNotOneOnPath(t *testing.T) {
 	t.Setenv("PATH", planted+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SUDO_USER", "c2b")
 	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", HomeDir: t.TempDir()}
-	prevEUID, prevLookup, prevExec, prevDirs := processEUID, lookupUser, execSudoHandOff, sudoSearchDirs
+	prevEUID, prevLookup, prevExec, prevDirs, prevCanRun := processEUID, lookupUser, execSudoHandOff, sudoSearchDirs, accountCanRun
 	t.Cleanup(func() {
-		processEUID, lookupUser, execSudoHandOff, sudoSearchDirs = prevEUID, prevLookup, prevExec, prevDirs
+		processEUID, lookupUser, execSudoHandOff, sudoSearchDirs, accountCanRun = prevEUID, prevLookup, prevExec, prevDirs, prevCanRun
 	})
 	processEUID = func() int { return 0 }
 	lookupUser = func(string) (*user.User, error) { return account, nil }
+	accountCanRun = func(*user.User, string) (bool, error) { return true, nil }
 	sudoSearchDirs = []string{filepath.Join(system, "absent"), system}
 	var ran string
 	execSudoHandOff = func(argv []string) error { ran = argv[0]; return nil }

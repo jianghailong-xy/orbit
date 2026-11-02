@@ -74,57 +74,133 @@ func TestRegisterReportsAServiceThatNeverCameOnline(t *testing.T) {
 	}
 }
 
+// fakeAccounts answers lookupUser for the accounts a test names, and nothing else, so that no real
+// account's home is read.
+func fakeAccounts(t *testing.T, accounts ...*user.User) {
+	t.Helper()
+	prev := lookupUser
+	t.Cleanup(func() { lookupUser = prev })
+	lookupUser = func(name string) (*user.User, error) {
+		for _, u := range accounts {
+			if u.Username == name {
+				return u, nil
+			}
+		}
+		return nil, errors.New("no such account")
+	}
+}
+
+// pretendSudoHandOff takes pretendRegisterHost's sudo for the system's, says every account can run this
+// binary, and records what a hand-off would have run.
+func pretendSudoHandOff(t *testing.T) *[]string {
+	t.Helper()
+	sudo, err := exec.LookPath("sudo") // pretendRegisterHost's
+	if err != nil {
+		t.Fatal(err)
+	}
+	var handedOff []string
+	prevExec, prevDirs, prevCanRun := execSudoHandOff, sudoSearchDirs, accountCanRun
+	t.Cleanup(func() { execSudoHandOff, sudoSearchDirs, accountCanRun = prevExec, prevDirs, prevCanRun })
+	sudoSearchDirs = []string{filepath.Dir(sudo)}
+	accountCanRun = func(*user.User, string) (bool, error) { return true, nil }
+	execSudoHandOff = func(argv []string) error { handedOff = argv; return nil }
+	return &handedOff
+}
+
 // unregister goes to the account under sudo too, so that it finds the config register wrote there and
 // removes that account's unit.
 func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", Name: "c2b", HomeDir: t.TempDir()}
+	root := &user.User{Uid: "0", Gid: "0", Username: "root", Name: "root", HomeDir: t.TempDir()}
 	pretendRegisterHost(t, func() {})
+	fakeAccounts(t, account, root)
 	t.Setenv("SUDO_USER", "c2b")
 	for _, k := range sudoHandOffEnvForTest {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
-	sudo, err := exec.LookPath("sudo") // pretendRegisterHost's
-	if err != nil {
-		t.Fatal(err)
-	}
-	prevEUID, prevLookup, prevExec, prevDirs := processEUID, lookupUser, execSudoHandOff, sudoSearchDirs
-	t.Cleanup(func() {
-		processEUID, lookupUser, execSudoHandOff, sudoSearchDirs = prevEUID, prevLookup, prevExec, prevDirs
-	})
-	sudoSearchDirs = []string{filepath.Dir(sudo)}
+	prevEUID := processEUID
+	t.Cleanup(func() { processEUID = prevEUID })
 	processEUID = func() int { return 0 }
-	lookupUser = func(name string) (*user.User, error) {
-		if name == account.Username {
-			return account, nil
-		}
-		return user.Lookup(name)
-	}
+	handedOff := pretendSudoHandOff(t)
 	// What main does for root's own commands under `sudo -i`: root's engine directories first on PATH.
-	rootHome := t.TempDir()
-	t.Setenv("HOME", rootHome)
-	t.Setenv("PATH", runnerEnginePath(rootHome, os.Getenv("PATH")))
-	var handedOff []string
+	t.Setenv("HOME", root.HomeDir)
+	t.Setenv("PATH", runnerEnginePath(root.HomeDir, os.Getenv("PATH")))
 	var handedPath string
-	execSudoHandOff = func(argv []string) error { handedOff, handedPath = argv, os.Getenv("PATH"); return nil }
+	record := execSudoHandOff
+	execSudoHandOff = func(argv []string) error { handedPath = os.Getenv("PATH"); return record(argv) }
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
-	if want := []string{"-H", "-u", "c2b", "--", "env", exe, "unregister", "--yes"}; len(handedOff) != len(want)+1 || !slices.Equal(handedOff[1:], want) {
-		t.Fatalf("unregister under sudo ran %q, want sudo %s", handedOff, strings.Join(want, " "))
+	if want := []string{"-H", "-u", "c2b", "--", exe, "unregister", "--yes"}; len(*handedOff) != len(want)+1 || !slices.Equal((*handedOff)[1:], want) {
+		t.Fatalf("unregister under sudo ran %q, want sudo %s", *handedOff, strings.Join(want, " "))
 	}
 	// Where sudo keeps PATH, root's engine directories would reach the account's command.
-	if strings.Contains(handedPath, rootHome) {
+	if strings.Contains(handedPath, root.HomeDir) {
 		t.Errorf("the hand-off kept root's own directories on PATH: %s", handedPath)
 	}
 }
 
+// A host the incident already happened to: the unit runs as the account with ORBIT_HOME in root's home,
+// where only root can reach the credential. Handed to the account, unregister would find no runner and
+// leave that unit restarting for good, so this one stays root's, and it deletes the runner, the unit and
+// the config.
+func TestUnregisterUnderSudoRemovesARunnerLeftInRootsHome(t *testing.T) {
+	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", Name: "c2b", HomeDir: t.TempDir()}
+	root := &user.User{Uid: "0", Gid: "0", Username: "root", Name: "root", HomeDir: t.TempDir()}
+	cp := newRegisterStub(t)
+	unitDir := pretendRegisterHost(t, func() {})
+	fakeAccounts(t, account, root)
+	t.Setenv("SUDO_USER", "c2b")
+	t.Setenv("HOME", root.HomeDir)
+	t.Setenv("ORBIT_HOME", "")
+	os.Unsetenv("ORBIT_HOME")
+	prevEUID := processEUID
+	t.Cleanup(func() { processEUID = prevEUID })
+	processEUID = func() int { return 0 }
+	handedOff := pretendSudoHandOff(t)
+
+	orbitHome := filepath.Join(root.HomeDir, ".orbit")
+	unitPath := filepath.Join(unitDir, "orbit-runner-c2b.service")
+	unit := renderSystemdUnit("c2b", "c2b", "/usr/local/bin/orbit", account.HomeDir, orbitHome, "/usr/bin:/bin", nil)
+	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", orbitHome)
+	if err := saveConfig(&RunnerConfig{ServerURL: cp.URL, RunnerID: registerTestRunnerID, RunnerToken: cp.token, Name: "c2b-load-2"}); err != nil {
+		t.Fatal(err)
+	}
+	os.Unsetenv("ORBIT_HOME")
+	commands := recordCommands(t)
+
+	out := captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
+	t.Logf("orbit unregister under sudo printed:\n%s", out)
+
+	if *handedOff != nil {
+		t.Errorf("unregister was handed to the account, which cannot reach the credential: %q", *handedOff)
+	}
+	if want := []string{"systemctl disable --now orbit-runner-c2b", "systemctl daemon-reload"}; !slices.Equal(*commands, want) {
+		t.Errorf("unregister ran %q, want %q", *commands, want)
+	}
+	if _, err := os.Stat(unitPath); !os.IsNotExist(err) {
+		t.Errorf("the unit is still there: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(orbitHome, "config.json")); !os.IsNotExist(err) {
+		t.Errorf("the config is still there: %v", err)
+	}
+	cp.mu.Lock()
+	with := cp.deregisteredWith
+	cp.mu.Unlock()
+	if with != "Bearer "+cp.token {
+		t.Errorf("the runner was deregistered with %q, want its own credential", with)
+	}
+}
+
 // An account's unregister takes down the unit register installed for it, through sudo as register
-// installed it — at a terminal, or without one when sudo needs no password — and otherwise says what
-// to run.
+// installed it, and says it did only when sudo did.
 func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", Name: "c2b", HomeDir: t.TempDir()}
 	unitDir := pretendRegisterHost(t, func() {})
@@ -137,25 +213,85 @@ func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	unitPath := filepath.Join(unitDir, "orbit-runner-c2b.service")
 	commands := recordCommands(t)
 
-	captureServiceOutput(t, uninstallSystemd)
+	// With no unit there is nothing to ask root for.
+	out := captureServiceOutput(t, uninstallSystemd)
+	if len(*commands) != 0 || strings.TrimSpace(out) != "" {
+		t.Fatalf("with no unit, unregister ran %q and printed:\n%s", *commands, out)
+	}
+
+	if err := os.WriteFile(unitPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = captureServiceOutput(t, uninstallSystemd)
 	want := []string{
 		sudo + " systemctl disable --now orbit-runner-c2b",
-		sudo + " rm -f " + filepath.Join(unitDir, "orbit-runner-c2b.service"),
+		sudo + " rm -f " + unitPath,
 		sudo + " systemctl daemon-reload",
 	}
 	if !slices.Equal(*commands, want) {
 		t.Fatalf("unregister ran %q, want %q", *commands, want)
 	}
+	if !strings.Contains(out, "✓ removed the orbit-runner-c2b service") {
+		t.Errorf("unregister printed:\n%s", out)
+	}
+
+	// A sudo that refuses: the password mistyped, sudoers that do not allow it.
+	recorded := run
+	run = func(name string, args ...string) error {
+		_ = recorded(name, args...)
+		return errors.New("exit status 1")
+	}
+	*commands = nil
+	out = captureServiceOutput(t, uninstallSystemd)
+	if strings.Contains(out, "✓ removed") || !strings.Contains(out, "note: could not remove the orbit-runner-c2b service — run: sudo systemctl disable --now orbit-runner-c2b && sudo rm -f "+unitPath) {
+		t.Errorf("unregister with a sudo that refuses printed:\n%s", out)
+	}
+	run = recorded
 
 	// A sudo that would ask for a password, with no terminal to ask at.
 	if err := os.WriteFile(sudo, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	*commands = nil
-	out := captureServiceOutput(t, uninstallSystemd)
+	out = captureServiceOutput(t, uninstallSystemd)
 	if len(*commands) != 0 || !strings.Contains(out, "note: removing the systemd service needs root — run: sudo systemctl disable --now orbit-runner-c2b") {
 		t.Fatalf("unregister without a usable sudo ran %q and printed:\n%s", *commands, out)
+	}
+}
+
+// Under sudo someone asked for a running service with root in hand. A service step that cannot get root
+// again, with no terminal and a sudo that wants a password, is no finished setup, and register says so
+// and exits 1. Nobody's sudo is involved in a plain account's registration, which ends as it did.
+func TestRegisterUnderSudoCountsAServiceItCouldNotInstallAsNotOnline(t *testing.T) {
+	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", Name: "c2b", HomeDir: t.TempDir()}
+	cp := newRegisterStub(t)
+	pretendRegisterHost(t, func() {})
+	sudo, err := exec.LookPath("sudo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sudo, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", account.HomeDir)
+	prevEUID, prevCurrent := processEUID, currentUser
+	t.Cleanup(func() { processEUID, currentUser = prevEUID, prevCurrent })
+	processEUID = func() int { return 4242 }
+	currentUser = func() (*user.User, error) { return account, nil }
+	cfg := &RunnerConfig{ServerURL: cp.URL, RunnerID: registerTestRunnerID, RunnerToken: cp.token, Name: "c2b-load-2"}
+
+	for sudoUser, want := range map[string]registerOutcome{"root": serviceNotOnline, "": registeredOnly} {
+		t.Setenv("SUDO_USER", sudoUser)
+		var outcome registerOutcome
+		out := captureServiceOutput(t, func() { outcome = startService(cfg, nil) })
+		if outcome != want {
+			t.Errorf("SUDO_USER=%q: outcome = %v, want %v", sudoUser, outcome, want)
+		}
+		if wantLine := "✗ Could not start the background service: installing the systemd service needs root, and c2b has no sudo that works without a terminal: run this at a terminal"; !strings.Contains(out, wantLine) {
+			t.Errorf("SUDO_USER=%q: output lacks %q:\n%s", sudoUser, wantLine, out)
+		}
 	}
 }

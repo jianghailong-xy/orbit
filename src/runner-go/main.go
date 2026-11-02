@@ -112,6 +112,10 @@ Approve the machine in the browser (device-login), or pass --token to skip appro
 This machine becomes one runner. Its name defaults to the machine hostname and
 can be changed with --name. Workspaces are configured separately after registration.
 
+The runner belongs to the OS account that registers it. Under sudo that is the account
+that ran sudo, and the command runs as that account. It says the machine is online once
+the service has reached the server; when that does not happen it says why and exits 1.
+
 Options:
   --server <url>           Control plane base URL (default: ` + defaultServer + `)
   --token <token>          Optional one-time enrollment token (skips browser approval)
@@ -145,7 +149,8 @@ Usage:
   orbit unregister [--yes]
 
 Stops the background service, deletes the runner (and its agents) from the control
-plane, and removes the local config.
+plane, and removes the local config. Under sudo it acts on the runner of the account
+that ran sudo, as that account.
 
 Options:
   --yes, --force           Skip the confirmation prompt
@@ -459,6 +464,12 @@ func registerCommand(args []string) {
 }
 
 func cmdRegister(flags map[string]string, bools map[string]bool) {
+	// Before anything is asked of the control plane or of a person (checkConfigStorage).
+	ensureOwnedByUser(machineHome())
+	if err := checkConfigStorage(); err != nil {
+		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered.\n", machineHome(), err)
+		os.Exit(1)
+	}
 	// One runner per machine. Re-registering re-issues its credential, so confirm
 	// before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
@@ -685,15 +696,20 @@ func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
 	svc, err := setupService(machineHome(), proxyVars)
 	if err != nil {
 		printServiceFailure(os.Stderr, err)
+		// Whoever registers under sudo asked for a running service, with root in hand.
+		if handedOffBySudo() {
+			return serviceNotOnline
+		}
 		return registeredOnly
 	}
-	state := func() (serviceState, bool) { return launchdState(svc.label) }
+	gaps := 0
+	state := func() (serviceState, bool) { return launchdState(svc.label, &gaps) }
 	if svc.unit != "" {
 		restarts := systemdRestarts(svc.unit)
 		state = func() (serviceState, bool) { return systemdState(svc.unit, restarts) }
 	}
 	server := strings.TrimRight(cfg.ServerURL, "/")
-	fmt.Printf("    Waiting for the runner to reach %s…\n", server)
+	fmt.Printf("    Waiting for the runner to reach %s (up to %s)…\n", server, onlineWait)
 	watch := onlineWatch{server: server, me: me, state: state, sleep: time.Sleep, now: time.Now, wait: onlineWait, poll: onlinePoll}
 	if err := watch.until(before); err != nil {
 		printNotOnline(os.Stderr, cfg.Name, svc, err, serviceLog(svc, started.Add(-time.Second), 15))
@@ -731,8 +747,8 @@ const (
 	registeredOnly registerOutcome = iota
 	// serviceOnline: the service started and the control plane heard from it.
 	serviceOnline
-	// serviceNotOnline: the service was installed and started, and the control plane did not hear
-	// from it (printNotOnline said why).
+	// serviceNotOnline: the service was installed and started and the control plane did not hear
+	// from it (printNotOnline said why), or under sudo it could not be installed (printServiceFailure).
 	serviceNotOnline
 )
 
@@ -765,13 +781,18 @@ func printRegisterReceipt(w io.Writer, cfg *RunnerConfig, outcome registerOutcom
 		fmt.Fprintln(w, "    Next     start it with `orbit run`, then Start a session")
 	}
 	fmt.Fprintf(w, "             %s/runners/%s/new\n", strings.TrimRight(cfg.ServerURL, "/"), publicID(cfg.RunnerID))
-	fmt.Fprintln(w, "    orbit status · orbit doctor · orbit unregister")
+	tools := "    orbit status · orbit doctor · orbit unregister"
+	// A runner registered under sudo is the account's, and root's own `orbit status` knows nothing of it.
+	if u, err := registeringUser(); err == nil && handedOffBySudo() {
+		tools += " (as " + u.Username + ")"
+	}
+	fmt.Fprintln(w, tools)
 }
 
 // unregisterCommand is `orbit unregister` as typed: args is the command and its arguments. Under
 // sudo it is the invoking account's to run, as register is (handOffUnderSudo).
 func unregisterCommand(args []string) {
-	if handOffUnderSudo(args) {
+	if !stayRootForRunnerLeftInRootsHome() && handOffUnderSudo(args) {
 		return
 	}
 	_, bools := parseFlags(args)

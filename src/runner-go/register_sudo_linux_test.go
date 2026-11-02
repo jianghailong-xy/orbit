@@ -60,21 +60,18 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	var handedOff []string
-	prevExec, prevDirs := execSudoHandOff, sudoSearchDirs
-	t.Cleanup(func() { execSudoHandOff, sudoSearchDirs = prevExec, prevDirs })
+	prevExec, prevDirs, prevCanRun := execSudoHandOff, sudoSearchDirs, accountCanRun
+	t.Cleanup(func() { execSudoHandOff, sudoSearchDirs, accountCanRun = prevExec, prevDirs, prevCanRun })
 	sudoSearchDirs = []string{filepath.Dir(sudo)}
+	accountCanRun = func(*user.User, string) (bool, error) { return true, nil }
 	execSudoHandOff = func(argv []string) error {
 		handedOff = argv
 		at := slices.Index(argv, exe)
 		if at < 0 {
 			t.Fatalf("the hand-off does not run this binary (%s): %q", exe, argv)
 		}
-		// What `sudo -H -u c2b -- env K=V… <exe> …` makes of this process: c2b, with c2b's
-		// HOME, SUDO_USER naming root, and the variables env sets.
-		for _, kv := range argv[slices.Index(argv, "env")+1 : at] {
-			k, v, _ := strings.Cut(kv, "=")
-			t.Setenv(k, v)
-		}
+		// What `sudo -H -u c2b -- <exe> …` makes of this process: c2b, with c2b's HOME, and
+		// SUDO_USER naming root.
 		processEUID = func() int { return 4242 }
 		currentUser = func() (*user.User, error) { return account, nil }
 		t.Setenv("HOME", accountHome)
@@ -87,9 +84,9 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 	out := captureServiceOutput(t, func() { registerCommand(args) })
 	t.Logf("orbit register under sudo printed:\n%s", out)
 
-	if want := []string{"sudo", "-H", "-u", "c2b", "--", "env", exe}; len(handedOff) < len(want) ||
+	if want := []string{"sudo", "-H", "-u", "c2b", "--", exe}; len(handedOff) < len(want) ||
 		filepath.Base(handedOff[0]) != want[0] || !slices.Equal(handedOff[1:len(want)], want[1:]) {
-		t.Errorf("register under sudo was not handed to c2b as `sudo -H -u c2b -- env %s register …`; it ran %q", exe, handedOff)
+		t.Errorf("register under sudo was not handed to c2b as `sudo -H -u c2b -- %s register …`; it ran %q", exe, handedOff)
 	} else if got := handedOff[len(want):]; !slices.Equal(got, args) {
 		t.Errorf("the hand-off runs `%s`, want the command as typed: `%s`", strings.Join(got, " "), strings.Join(args, " "))
 	}
@@ -130,6 +127,7 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 // builds holds only what the test sets.
 var sudoHandOffEnvForTest = []string{
 	"ORBIT_HOME", "ORBIT_INSTALL_PLAN", "https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY",
+	"SSL_CERT_FILE", "SSL_CERT_DIR",
 }
 
 // registerStub is the least of a control plane `orbit register --token` needs: it mints one runner
@@ -138,8 +136,9 @@ type registerStub struct {
 	*httptest.Server
 	token string
 
-	mu   sync.Mutex
-	last *time.Time
+	mu               sync.Mutex
+	last             *time.Time
+	deregisteredWith string
 }
 
 func newRegisterStub(t *testing.T) *registerStub {
@@ -150,6 +149,12 @@ func newRegisterStub(t *testing.T) *registerStub {
 		var req RegisterRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		_ = json.NewEncoder(w).Encode(RegisterResponse{RunnerID: registerTestRunnerID, RunnerToken: s.token, Name: req.Name})
+	})
+	mux.HandleFunc("POST /api/runner/deregister", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.deregisteredWith = r.Header.Get("Authorization")
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("GET /api/runner/me", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+s.token {

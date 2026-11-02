@@ -30,9 +30,10 @@ type runnerService struct {
 }
 
 // What register waits for. onlineWait bounds it: past it, a runner still not heard from is reported,
-// whatever it is doing. Vars so a test need not sit through them.
+// whatever it is doing. Long enough for one that first updates itself: a runner older than the release
+// downloads it before it beats (superviseSelfUpdates). Vars so a test need not sit through them.
 var (
-	onlineWait = 60 * time.Second
+	onlineWait = 2 * time.Minute
 	onlinePoll = time.Second
 )
 
@@ -173,18 +174,38 @@ func systemdProps(unit string) (map[string]string, bool) {
 	return props, props["ActiveState"] != ""
 }
 
-// launchdState reads the agent from launchd: not loaded, or not running after exiting with a failure,
-// is down. KeepAlive starts it again, at most every 10 s, so between two tries it has no PID.
-func launchdState(label string) (serviceState, bool) {
+// launchdExitGaps is how many polls may find the agent not running after a failed exit before that is a
+// verdict: KeepAlive starts it again, at most every 10 s, so one exit shows as up to 10 of them at a poll a
+// second, and more mean it exited again.
+const launchdExitGaps = 12
+
+// launchdState reads the agent from launchd: not loaded is down, and so is an agent that keeps exiting.
+// gaps counts the polls so far that found it not running after a failed exit.
+func launchdState(label string, gaps *int) (serviceState, bool) {
 	out, err := serviceQuery("launchctl", "list", label)
 	if err != nil {
 		return serviceState{down: true, summary: label + " is not loaded"}, true
 	}
 	pid, exit := plistValue(out, "PID"), plistValue(out, "LastExitStatus")
-	if pid == "" && exit != "" && exit != "0" {
-		return serviceState{down: true, summary: fmt.Sprintf("%s exited (status %s)", label, exit)}, true
+	if pid != "" || exit == "" || exit == "0" {
+		return serviceState{}, true
 	}
-	return serviceState{}, true
+	if *gaps++; *gaps <= launchdExitGaps {
+		return serviceState{}, true
+	}
+	return serviceState{down: true, summary: fmt.Sprintf("%s %s and keeps being started again", label, waitStatusText(exit))}, true
+}
+
+// waitStatusText says what launchd's LastExitStatus, a wait status, means: 256 is exit status 1.
+func waitStatusText(status string) string {
+	n, err := strconv.Atoi(status)
+	switch {
+	case err != nil:
+		return "exited (status " + status + ")"
+	case n&0x7f != 0:
+		return fmt.Sprintf("was killed by signal %d", n&0x7f)
+	}
+	return fmt.Sprintf("exited with status %d", n>>8)
 }
 
 // plistValue is key's value in `launchctl list <label>` output, whose lines read `"PID" = 501;`.
