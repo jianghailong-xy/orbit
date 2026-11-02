@@ -1440,7 +1440,7 @@ func TestFileUploadReadsTheSessionsOwnDirectories(t *testing.T) {
 	_ = host
 }
 
-// The root is the working directory itself, unless the session's own checkout is around it.
+// With no worktree the root is the working directory itself, and with one it is the worktree, wherever in it a call is made.
 func TestFileUploadFromASubdirectory(t *testing.T) {
 	api := newFakeFileServer(t)
 	host := newFileScopeHost(t)

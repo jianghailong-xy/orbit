@@ -25,6 +25,16 @@ func rewriteLocalMarkdownImages(ctx context.Context, t *Transport, sessionID, te
 	})
 }
 
+// replyFileScope is what a reply may link. The first root, where its relative links start, is the session's working
+// directory: named under Orbit's directory it is a session's own like the others, and anywhere else it is the owner's
+// project directory, which goes as any other root.
+func replyFileScope(roots []string) localFileScope {
+	if workDir := roots[0]; !pathInsideAny(workDir, absPath(machineHome()), realPath(machineHome())) {
+		return newLocalFileScope(roots[1:], workDir)
+	}
+	return newLocalFileScope(roots)
+}
+
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
 	if text == "" || upload == nil || len(roots) == 0 {
 		return text
@@ -33,7 +43,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 	if len(cleanRoots) == 0 {
 		return text
 	}
-	scope := newLocalFileScope(cleanRoots)
+	scope := replyFileScope(cleanRoots)
 	uploaded := map[string]string{}
 	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)

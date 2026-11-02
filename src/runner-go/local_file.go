@@ -11,8 +11,8 @@ import (
 
 // localFileScope is the one rule for a file of this machine on its way to the control plane, whichever door it leaves
 // by: file_upload, a file a reply links, a legacy artifact request or Codex's generated image. It goes by where a path
-// really is, with its links resolved, against roots resolved the same way, and open is the only way it hands a file on,
-// so that what was judged is what is read.
+// really is, with its links resolved, against the roots newLocalFileScope allows, and open is the only way it hands a
+// file on, so that what was judged is what is read.
 //
 // The doors need one rule because they share an end: file_list and file_fetch read back whatever a session's rows hold,
 // so a door that read further than the others would widen all of them. These tools are also always allowed, with no
@@ -42,20 +42,54 @@ func (e *localFileRefused) Error() string { return "the path is " + e.reason }
 
 // newLocalFileScope takes a session's own directories, which may be under Orbit's, and any other root, which never
 // makes anything there readable. Orbit's directory itself, or one that holds it, is nobody's own.
+//
+// A session's own directory goes by its name and not by where that leads (sessionRoot), so that what stands at the name
+// cannot move the boundary. Another root goes by where it leads: it is the owner's project directory, which is theirs to
+// link.
 func newLocalFileScope(sessionDirs []string, otherRoots ...string) localFileScope {
 	home := realPath(machineHome())
 	scope := localFileScope{home: home}
 	for _, dir := range sessionDirs {
-		real := realPath(dir)
-		scope.roots = append(scope.roots, real)
-		if real != home && pathInsideAny(real, home) {
-			scope.own = append(scope.own, real)
+		root, ok := sessionRoot(dir, home)
+		if !ok {
+			continue
+		}
+		scope.roots = append(scope.roots, root)
+		if root != home && pathInsideAny(root, home) {
+			scope.own = append(scope.own, root)
 		}
 	}
 	for _, dir := range otherRoots {
 		scope.roots = append(scope.roots, realPath(dir))
 	}
 	return scope
+}
+
+// sessionRoot is the root a session's own directory stands for, and false when it stands for none. Only a real directory
+// at its own name counts: a link there is no root, whatever it leads to, as saveLocalFile will not write through one. The
+// directories above it are the runner's and resolve as they will: a home can be a link, as /tmp is on macOS, and worktrees
+// can live on another disk. A directory inside a worktree stands for the worktree, which covers it: on its own it would
+// be a name the checkout itself can rewrite.
+func sessionRoot(dir, home string) (string, bool) {
+	entry := worktreeHolding(absPath(dir), home)
+	info, err := os.Lstat(entry)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	return filepath.Join(realPath(filepath.Dir(entry)), filepath.Base(entry)), true
+}
+
+// worktreeHolding is the checkout dir is named inside, or dir when it is in none, whichever way Orbit's directory is
+// spelled. This goes by name because a link inside the checkout must not change the answer.
+func worktreeHolding(dir, home string) string {
+	for _, orbit := range []string{absPath(machineHome()), home} {
+		worktrees := filepath.Join(orbit, "worktrees")
+		if pathInsideAny(dir, worktrees) {
+			rel, _ := filepath.Rel(worktrees, dir)
+			return filepath.Join(worktrees, strings.Split(rel, string(filepath.Separator))[0])
+		}
+	}
+	return dir
 }
 
 // refuses says why a path, with its links resolved, may not be read, and "" when it may.
@@ -110,15 +144,21 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 	return nil, nil, &localFileRefused{reason: localFileOutsideTheSession}
 }
 
+// absPath is the absolute path, its links left as they are.
+func absPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return filepath.Clean(path)
+}
+
 // realPath is the absolute path with its links resolved, or as it stands when it does not exist yet.
 func realPath(path string) string {
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
+	path = absPath(path)
 	if real, err := filepath.EvalSymlinks(path); err == nil {
 		return real
 	}
-	return filepath.Clean(path)
+	return path
 }
 
 // pathInsideAny reports whether path is one of the roots or under one.

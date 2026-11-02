@@ -466,21 +466,37 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope is what file_upload may read: this session's own directories, and the working directory it was
-// called from. Nothing the session can write decides it, so no repository's configuration does: git would read that from
-// the checkout. A working directory that is / or holds the home directory is no root, so the rule fails closed whatever
-// directory an engine starts this process in, and a refused path can still go through the uploads directory.
+// newFileUploadScope is what file_upload may read: this session's own directories and, in a session with no worktree,
+// the working directory it was called from, which is that session's checkout. Nothing the session can write decides it,
+// so no repository's configuration does: git would read that from the checkout. A working directory that is / or holds
+// the home directory is no root, so the rule fails closed whatever directory an engine starts this process in, and a
+// refused path can still go through the uploads directory.
 //
-// That last rule is where this is narrower than a reply's links. Those are held to the session's execDir however broad
-// it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session, and
-// refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
+// A session with a worktree has no use for its working directory, which could not be relied on anyway: a process sees
+// where a directory leads and not what it was called.
+//
+// The rule on / and homes is where this is narrower than a reply's links. Those are held to the session's execDir however
+// broad it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session,
+// and refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
 // reaches that directory and file_upload does not.
 func newFileUploadScope(sessionID string) localFileScope {
+	dirs := artifactRequestRoots(sessionID)
 	cwd, err := os.Getwd()
-	if err != nil || !usableAsARoot(cwd) {
-		return newLocalFileScope(artifactRequestRoots(sessionID))
+	if err != nil || hasOwnWorktree(sessionID) || !usableAsARoot(cwd) {
+		return newLocalFileScope(dirs)
 	}
-	return newLocalFileScope(artifactRequestRoots(sessionID), cwd)
+	return newLocalFileScope(dirs, cwd)
+}
+
+// hasOwnWorktree reports whether anything stands at this session's worktree, under any spelling of its id. Whatever it
+// is, the session is not one that runs in the owner's directory, even when sessionRoot takes no root from it.
+func hasOwnWorktree(sessionID string) bool {
+	for _, dir := range artifactRequestRoots(sessionID)[1:] {
+		if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+	}
+	return false
 }
 
 // usableAsARoot reports whether a working directory is narrower than the home it runs in. Both homes count, because the
