@@ -347,6 +347,7 @@ import {
   TASK_CREATE_CARD_TOOL,
   cardCoversDagOps,
   cardCoversVerifiers,
+  completionStandardFromRunRefusalBody,
   criterionKeyFromRunRefusalBody,
   taskDeleteFromRunRefusalBody,
   taskOfRunBehind,
@@ -9540,12 +9541,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Which criterion a task serves is what decides whether that criterion is satisfied: taking the
     // unfinished work off it, or naming it on finished work, satisfies it with nothing done. So a
-    // run writes this for its own task and for no other. A request to move a task is not this write,
-    // and has gone above.
-    if (actingSessionId && dto.criterionKey !== undefined) {
+    // run writes this for its own task and for no other. What settles a task is the same question:
+    // given another task's standard, a run could have it settle on a command of its own choosing with
+    // nobody judging anything, so those fields are not a run's to write either, on anything but a task
+    // it filed itself that serves no criterion. A request to move a task is not this write, and has
+    // gone above. Asked on the mention rather than on a change, and only when one is mentioned, so an
+    // ordinary edit from a run pays nothing.
+    const writesStandard = dto.completionCriterion !== undefined
+      || dto.acceptanceCommand !== undefined
+      || dto.acceptanceExpectedExitCode !== undefined
+      || dto.completionPolicy !== undefined
+      || dto.acceptanceCriteria !== undefined;
+    if (actingSessionId && (dto.criterionKey !== undefined || writesStandard)) {
       const runsTask = await taskOfRunBehind(this.prisma, ownerId, actingSessionId);
       if (runsTask !== null && runsTask !== id) {
-        throw new ForbiddenException(criterionKeyFromRunRefusalBody());
+        if (dto.criterionKey !== undefined) throw new ForbiddenException(criterionKeyFromRunRefusalBody());
+        if (before.creatorSessionId !== actingSessionId || before.criterionDefinitionId != null) {
+          throw new ForbiddenException(completionStandardFromRunRefusalBody());
+        }
       }
     }
     const acceptanceCommand = dto.acceptanceCommand === undefined
@@ -9700,7 +9713,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           where: { id: actingSessionId, ownerId },
           select: { taskId: true },
         });
-        if (actingSession?.taskId === id) {
+        // A conversation a run opened answers as that run, or the run could hand this edit to one.
+        if (actingSession?.taskId === id || await taskOfRunBehind(this.prisma, ownerId, actingSessionId) === id) {
           throw new ForbiddenException(taskSelfRewrittenStandardRefusalBody(rewritten));
         }
       }
@@ -12041,7 +12055,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `contentFilter / unattributed). Not one of these is fixed by changing the instructions — read the attribution first, then decide which lever to pull; ` +
       `do not start by suspecting the prompt is badly written.\n` +
       `2. Common causes: a prerequisite that will never finish, an assigned workspace with no runner bound, an exhausted provider quota, disk below the floor, a session from the last run still holding the task while making no progress.\n` +
-      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools. A verification task is not a run's to edit: report one that is stuck as in step 4.\n` +
+      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools. A verification task is not a run's to edit, and neither is what settles another task (its completion criterion, acceptance command or criteria, completion policy, or the project criterion it serves): report either as in step 4.\n` +
       `4. If the cause lies outside the system (for example a person has to clean up disk, sign in again or top up quota), write the conclusion and the manual action needed with task_comment.\n\n` +
       `When you are done, submit an evidence envelope of your judgment and the changes you made with task_evidence_submit (claim / criterion / checks / gaps; `
       + `at least one check has to resolve to a row under this task's sessions). Do not use a comment in place of evidence, and do not write ` +

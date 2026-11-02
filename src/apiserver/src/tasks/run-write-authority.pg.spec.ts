@@ -16,7 +16,8 @@
  *   (7) a run does not change what a verifier waits for: one edge at a time, or in a batch without the owner's card;
  *   (8) a run does not report a verifier's progress;
  *   (9) a run does not write which criterion another task serves;
- *  (10) cancelling or failing work serving a criterion does not satisfy it, and stays a run's to do.
+ *  (10) cancelling or failing work serving a criterion does not satisfy it, and stays a run's to do;
+ *  (11) a run does not write what settles another task, unless it filed that task itself and it serves no criterion.
  *
  * Refusals are asserted on literals rather than on the constants the change adds, so that this file compiles and fails
  * against code that has no such door. A request that names no session reads as the owner at each door, because that is every
@@ -52,6 +53,8 @@ const CARD_REQUIRED = 'VERIFIER_CREATE_NEEDS_OWNER_CARD';
 const DAG_CARD_REQUIRED = 'VERIFIER_DAG_NEEDS_OWNER_CARD';
 const DELETE_REFUSED = 'TASK_DELETE_FROM_RUN_REFUSED';
 const CRITERION_KEY_REFUSED = 'CRITERION_KEY_FROM_RUN_REFUSED';
+const STANDARD_REFUSED = 'COMPLETION_STANDARD_FROM_RUN_REFUSED';
+const SELF_REWRITE_REFUSED = 'TASK_COMPLETION_STANDARD_SELF_REWRITE_REFUSED';
 
 const b62 = (id: string) => uuidToBase62(id);
 
@@ -747,5 +750,100 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
     ok(await patch(peer.sessionId, plain, { title: 'renamed by a peer', status: 'CANCELLED' }), 'a plain sibling\'s fields and status');
     const serving = await taskOf('a serving sibling, edited', on);
     ok(await patch(peer.sessionId, serving, { description: 'by a peer', labels: ['peer'], priority: 3 }), 'a serving sibling\'s other fields');
+  });
+
+  await t.test('(11) a run does not write what settles another task', async (t) => {
+    const WRITES: Array<[string, Record<string, unknown>]> = [
+      ['completionCriterion, with a command of its choosing', { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, completionCriterionOverrideReason: 'asked' }],
+      ['the acceptance pair alone, which moves the criterion too', { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, completionCriterionOverrideReason: 'asked' }],
+      ['acceptanceExpectedExitCode', { acceptanceExpectedExitCode: 0 }],
+      ['completionPolicy', { completionPolicy: 'ALL_CHILDREN_DONE' }],
+      ['acceptanceCriteria', { acceptanceCriteria: 'another standard' }],
+      ['acceptanceCriteria cleared', { acceptanceCriteria: null }],
+      ['what it already says, restated', { completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD }],
+    ];
+    const refusedStandard = async (sessionId: string, taskId: string, what: string) => {
+      for (const [field, body] of WRITES) {
+        const before = await stands(taskId);
+        refused(await patch(sessionId, taskId, body), STANDARD_REFUSED, `${what}: ${field}`);
+        assert.equal(await stands(taskId), before, `${what}: ${field} left the row as it stood`);
+      }
+    };
+    const REDECLARE = { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, completionCriterionOverrideReason: 'asked' };
+    const redeclared = async (taskId: string, what: string) => assert.deepEqual(
+      [(await row(taskId)).completionCriterion, (await row(taskId)).acceptanceCommand], ['EXECUTABLE', 'true'], what,
+    );
+
+    for (const [place, on] of [['a project', project], ['no project', null]] as const) {
+      await t.test(`nothing of it, from a run or a conversation it opened, in ${place}`, async () => {
+        const run = await workOf(`a run in ${place}, rewriting`, on);
+        const conversation = await sessionOf(`its conversation, ${place}, rewriting`, undefined, run.sessionId);
+        const sibling = await taskOf(`a sibling in ${place}, to rewrite`, on);
+        await refusedStandard(run.sessionId, sibling, 'a run');
+        await refusedStandard(conversation, sibling, 'its conversation');
+      });
+    }
+    await t.test('the message says who can make the edit', async () => {
+      const run = await workOf('a run, reading the refusal', project);
+      const reply = await patch(run.sessionId, await taskOf('a sibling, for the refusal', project), { acceptanceCriteria: 'another standard' });
+      assert.equal(reply.json.requiredAction, 'ASK_THE_COORDINATOR_OR_THE_OWNER');
+      assert.match(reply.json.message, /The account owner can make this edit, and so can the project's coordinator or a judgment session/);
+      assert.match(reply.json.message, /filed itself that serves no acceptance criterion/);
+    });
+    await t.test('a task another session filed, or one it filed that serves a criterion', async () => {
+      const run = await workOf('a run, with filings', project);
+      const other = await workOf('another run, with filings', project);
+      await refusedStandard(run.sessionId, await taskOf('filed by another run, serving nothing', project, { ...plainExtra, ...filedBy(other.sessionId) }), 'filed by another run');
+      await refusedStandard(run.sessionId, await taskOf('filed by this run, serving a criterion', project, filedBy(run.sessionId)), 'filed by this run, serving a criterion');
+      const conversation = await sessionOf('its conversation, with filings', undefined, run.sessionId);
+      await refusedStandard(conversation, await taskOf('filed by the run, not by its conversation', null, filedBy(run.sessionId)), 'filed by the run it answers as');
+    });
+    await t.test('a task it filed itself that serves no criterion is its to restate', async () => {
+      const run = await workOf('a run, restating its own filing', project);
+      const inProject = await taskOf('its own filing, in the project', project, { ...plainExtra, ...filedBy(run.sessionId) });
+      ok(await patch(run.sessionId, inProject, REDECLARE), 'in the project');
+      await redeclared(inProject, 'in the project');
+      const inNone = await taskOf('its own filing, in no project', null, filedBy(run.sessionId));
+      ok(await patch(run.sessionId, inNone, { acceptanceCriteria: 'another standard' }), 'in no project');
+      assert.equal((await row(inNone)).acceptanceCriteria, 'another standard');
+      const conversation = await sessionOf('a conversation, restating its own filing', undefined, run.sessionId);
+      const its = await taskOf('filed by the conversation', null, filedBy(conversation));
+      ok(await patch(conversation, its, REDECLARE), 'a conversation, on what it filed itself');
+    });
+    await t.test('those who answer for the work, and a request that names no session', async () => {
+      const judgment = await judgmentOf(project, 'a judgment, rewriting');
+      for (const [who, send] of [
+        ['the coordinator', (id: string) => patch(project.coordinator, id, REDECLARE)],
+        ['a judgment session', (id: string) => patch(judgment, id, REDECLARE)],
+        ['a request that names no session', (id: string) => patch(undefined, id, REDECLARE)],
+        ['the owner', (id: string) => call(api, 'PATCH', `/api/tasks/${b62(id)}`, bearer, REDECLARE)],
+      ] as const) {
+        const sibling = await taskOf(`a sibling for ${who}, to rewrite`, project);
+        ok(await send(sibling), who);
+        await redeclared(sibling, who);
+      }
+      const conversation = await sessionOf('a conversation of no task, rewriting');
+      const lonely = await taskOf('a task in no project, for a conversation', null);
+      ok(await patch(conversation, lonely, REDECLARE), 'a conversation nobody\'s run opened');
+      await redeclared(lonely, 'a conversation nobody\'s run opened');
+    });
+    await t.test('its own task keeps the refusal it had, and a conversation it opened gets the same one', async () => {
+      for (const [place, on] of [['a project', project], ['no project', null]] as const) {
+        const run = await workOf(`a run of its own, ${place}, rewriting`, on);
+        const conversation = await sessionOf(`its conversation, ${place}, rewriting its task`, undefined, run.sessionId);
+        for (const [who, session] of [['the run', run.sessionId], ['its conversation', conversation]] as const) {
+          const before = await stands(run.taskId);
+          const reply = await patch(session, run.taskId, REDECLARE);
+          assert.deepEqual([reply.status, reply.json?.code], [403, SELF_REWRITE_REFUSED], `${who}, ${place}: ${reply.text.slice(0, 300)}`);
+          assert.equal(await stands(run.taskId), before, `${who}, ${place}`);
+        }
+      }
+    });
+    await t.test('the fields that do not say what settles a task stay as they were', async () => {
+      const run = await workOf('a run, editing the rest', project);
+      const sibling = await taskOf('a sibling, the rest', project, { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'npm test', acceptanceExpectedExitCode: 0 });
+      ok(await patch(run.sessionId, sibling, { title: 'renamed', description: 'by a peer', labels: ['peer'], priority: 3, acceptanceTimeoutSeconds: 60 }), 'the rest');
+      assert.equal((await row(sibling)).acceptanceTimeoutSeconds, 60);
+    });
   });
 });

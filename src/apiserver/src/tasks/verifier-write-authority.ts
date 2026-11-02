@@ -21,8 +21,10 @@ import type { Prisma } from '@prisma/client';
  * batch of dependency edits is the same: its tool raises a card, and on a verifier the door checks for that card.
  *
  * A project's acceptance criteria are held to the same people by what a task says it serves, so `criterionKey` is written the
- * same way: a run writes its own task's and no other's. And a delete does what a decision would have had to earn, so a run
- * deletes only ordinary work it filed itself (`TasksService.assertRunMayDelete`).
+ * same way: a run writes its own task's and no other's. What settles a task is as well: a run that could change another
+ * task's completion standard could have it settle on a command nobody judged, the same outcome as deciding its evidence.
+ * Only a task it filed itself, serving no criterion, is its to restate. And a delete does what a decision would have had to
+ * earn, so a run deletes only ordinary work it filed itself (`TasksService.assertRunMayDelete`).
  *
  * Every one of these reads the session a request names, so a request that names none reads as the owner, as it always did:
  * that is every runner older than the one that names it on these doors.
@@ -42,6 +44,9 @@ export const TASK_DELETE_FROM_RUN_REFUSED_ACTION = 'ASK_THE_COORDINATOR_OR_THE_O
 
 export const CRITERION_KEY_FROM_RUN_REFUSED_CODE = 'CRITERION_KEY_FROM_RUN_REFUSED';
 export const CRITERION_KEY_FROM_RUN_REFUSED_ACTION = 'ASK_THE_COORDINATOR_OR_THE_OWNER';
+
+export const COMPLETION_STANDARD_FROM_RUN_REFUSED_CODE = 'COMPLETION_STANDARD_FROM_RUN_REFUSED';
+export const COMPLETION_STANDARD_FROM_RUN_REFUSED_ACTION = 'ASK_THE_COORDINATOR_OR_THE_OWNER';
 
 /** The tool names runner-go files the two create cards under (`askBeforeTaskCreate`, `askBeforeBatch`). */
 export const TASK_CREATE_CARD_TOOL = 'orbit_task_create';
@@ -133,6 +138,19 @@ export function criterionKeyFromRunRefusalBody() {
       + 'criterion is satisfied. Nothing was written. The account owner can make this edit, and so can the project\'s '
       + 'coordinator or a judgment session; a task\'s own run writes its own, and asking to move a task to another project '
       + '(handoff) goes to the account owner. Ask one of them.',
+  };
+}
+
+export function completionStandardFromRunRefusalBody() {
+  return {
+    code: COMPLETION_STANDARD_FROM_RUN_REFUSED_CODE,
+    kind: 'REFUSAL',
+    requiredAction: COMPLETION_STANDARD_FROM_RUN_REFUSED_ACTION,
+    message:
+      `${A_RUN}, and a run may not change what settles another task: its completionCriterion, acceptanceCommand, `
+      + 'acceptanceExpectedExitCode, completionPolicy or acceptanceCriteria. Nothing was written. The account owner can make '
+      + 'this edit, and so can the project\'s coordinator or a judgment session; a run makes it only on a task it filed '
+      + 'itself that serves no acceptance criterion of its project. Ask one of them.',
   };
 }
 
