@@ -108,7 +108,7 @@ final class RunnerSignInModel {
     }
 
     /// The sign-in page to open in a browser, once the CLI has printed one.
-    var url: URL? { mine ? relay?.url.flatMap(URL.init(string:)) : nil }
+    var url: URL? { mine ? relay?.signInPage : nil }
     /// The one-time code to type on that page (device flow only).
     var userCode: String? { mine ? relay?.userCode : nil }
     /// The runner's own last word — a rejected code, or why an attempt failed.

@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { close, createReadStream, createWriteStream, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
 import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
 
 /**
  * Where the bytes of Orbit Files are kept (docs/orbit-files-design.md §2.1, §2.10): a store addressed by
@@ -23,7 +25,10 @@ export interface FileStore {
    * temporary file is gone afterwards, whether or not this succeeded.
    */
   put(sha256: string, tempPath: string, sizeBytes: number): Promise<void>;
-  /** The bytes named `sha256`, read as a stream; null when they are not kept here. */
+  /**
+   * The bytes named `sha256`, read as a stream that whoever takes it reads to the end or destroys; null when they
+   * are not kept here.
+   */
   open(sha256: string): Promise<Readable | null>;
 }
 
@@ -98,6 +103,25 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
   return { dir, storage: 's3', s3 };
 }
 
+/**
+ * `open`, answering with a plain descriptor. The streams here stand on one rather than on a FileHandle, which may
+ * not be left to be collected: a descriptor can be given back when it is (closedWhenDropped).
+ */
+const openDescriptor = promisify(openWithCallback);
+
+const droppedStreams = new FinalizationRegistry<number>((fd) => close(fd, () => undefined));
+
+/**
+ * `stream`, on the descriptor `fd`, with the descriptor given back if the stream is ever dropped unfinished. Every
+ * ending anyone meant closes a stream by itself (for a download, streamable()), so this is only what stands behind an
+ * ending nobody thought of: what that costs is one descriptor, until the stream is collected.
+ */
+function closedWhenDropped<S extends ReadStream | WriteStream>(stream: S, fd: number): S {
+  droppedStreams.register(stream, fd, stream);
+  stream.once('close', () => droppedStreams.unregister(stream));
+  return stream;
+}
+
 /** A file written under the temporary directory, with its length and sha256 as they were written. */
 export interface HashedTempFile {
   path: string;
@@ -119,7 +143,7 @@ export async function writeHashedTempFile(
   await mkdir(dir, { recursive: true });
   const tempPath = path.join(dir, `upload-${randomUUID()}`);
   // Opened before anything is written, so that the file a failure removes is never one still being created.
-  const handle = await open(tempPath, 'wx');
+  const fd = await openDescriptor(tempPath, 'wx');
   onPath?.(tempPath);
   const hash = createHash('sha256');
   let size = 0;
@@ -131,7 +155,7 @@ export async function writeHashedTempFile(
     },
   });
   try {
-    await pipeline(source, hashing, handle.createWriteStream({ flush: true }));
+    await pipeline(source, hashing, closedWhenDropped(createWriteStream(tempPath, { fd, flush: true }), fd));
   } catch (error) {
     await removeTempFile(tempPath);
     throw error;
@@ -188,12 +212,14 @@ export class LocalFileStore implements FileStore {
   }
 
   async open(sha256: string): Promise<Readable | null> {
+    const file = this.pathOf(sha256);
+    let fd: number;
     try {
-      const handle = await open(this.pathOf(sha256), 'r');
-      return handle.createReadStream();
+      fd = await openDescriptor(file, 'r');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+    return closedWhenDropped(createReadStream(file, { fd }), fd);
   }
 }

@@ -235,6 +235,16 @@ func (b *cursorPermissionBridge) close() {
 	b.mu.Unlock()
 }
 
+// stop is close for a turn Orbit stops: tell tells Cursor CLI, and only then is what it asked for answered cancelled.
+// Cursor CLI takes a cancelled answer as a refusal and goes on with the turn (§5.2): one that reached it first could
+// have it finish the turn before the cancel came, and a turn Orbit stopped would settle as one that finished
+// (cursorSettlementOutcome). The answers go out on goroutines of their own, once close has released them, so telling
+// it first is what keeps them behind the cancel.
+func (b *cursorPermissionBridge) stop(tell func()) {
+	tell()
+	b.close()
+}
+
 // wait returns once every card's answer has been sent.
 func (b *cursorPermissionBridge) wait() { b.wg.Wait() }
 

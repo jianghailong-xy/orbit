@@ -40,12 +40,18 @@ export class S3FileStore implements FileStore {
   }
 
   async put(sha256: string, tempPath: string, sizeBytes: number): Promise<void> {
+    const body = createReadStream(tempPath);
     try {
       // The payload's sha256 is the one signed, so the service checks the bytes it receives against it
       // and refuses a body that arrives changed.
-      const response = await this.send('PUT', this.keyOf(sha256), { body: createReadStream(tempPath), sizeBytes, sha256 });
+      const response = await this.send('PUT', this.keyOf(sha256), { body, sizeBytes, sha256 });
       if (response.statusCode !== 200) throw await failure(response, 'PUT', this.keyOf(sha256));
       response.resume();
+    } catch (error) {
+      // A service that refuses need not read the rest of the body. Only then: one that keeps it has answered with the
+      // body's last read still to come, and that read is what ends the request and frees the connection.
+      body.destroy();
+      throw error;
     } finally {
       await removeTempFile(tempPath);
     }
@@ -109,6 +115,10 @@ export class S3FileStore implements FileStore {
         return;
       }
       upload.body.on('error', (error) => request.destroy(error));
+      // A body given up before its end leaves a request that can never finish, holding its connection.
+      upload.body.once('close', () => {
+        if (!upload.body.readableEnded) request.destroy();
+      });
       upload.body.pipe(request);
     });
   }

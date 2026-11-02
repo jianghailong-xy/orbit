@@ -1338,11 +1338,12 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			return <-promptDone
 		}
 	}
-	// cancelTurn stops the running turn: what it asked for is answered cancelled first, then Cursor is told.
+	// cancelTurn stops the running turn: Cursor is told, then what it asked for is answered cancelled.
 	cancelTurn := func() {
-		bridge.close()
-		app.post(map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
-			"params": map[string]interface{}{"sessionId": sessionID}})
+		bridge.stop(func() {
+			app.post(map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
+				"params": map[string]interface{}{"sessionId": sessionID}})
+		})
 	}
 	start := func(resp *RunInboxResponse) bool {
 		if !p.waitTurnPermit(p.ctx) {

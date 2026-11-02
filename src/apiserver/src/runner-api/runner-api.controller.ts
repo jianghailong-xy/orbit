@@ -526,6 +526,23 @@ export function loginRelayTimeoutMs(engine: string | null | undefined): number {
 function reportedLoginUrl(url: unknown): string | null {
   return typeof url === 'string' ? url.split(/\p{Cc}/u)[0] : null;
 }
+
+/**
+ * Whether a reported sign-in link is an https page, the only thing a client is ever sent to for a
+ * sign-in. Every engine's is: the runner reads nothing else out of a CLI's output (runner-go login.go,
+ * antigravity_google_login.go, cursor_account_slot.go), so no other scheme has a real sign-in behind it.
+ */
+function isHttpsLoginUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** The failure of a sign-in whose link was not kept. Fixed words: it never repeats what was reported. */
+export const LOGIN_LINK_REFUSED = "This runner reported a sign-in link that isn't https, so it was not opened. Check the machine, then try again.";
+
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -3443,7 +3460,11 @@ export class RunnerApiController {
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the start this reports on');
     }
-    const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
+    const linked = status === 'awaiting_code' || status === 'awaiting_approval';
+    const link = linked ? reportedLoginUrl(body.url) : null;
+    // A link that is not an https page ends the sign-in here, unkept, whatever else the report says.
+    const refused = link !== null && !isHttpsLoginUrl(link);
+    const waiting = linked && !refused;
     // When the link stops working, and why a sign-in failed: only what each can be is kept — a real
     // instant, and a reason this control plane knows — and nothing else rides on them. A runner newer
     // than this has its report taken all the same, without them.
@@ -3452,14 +3473,14 @@ export class RunnerApiController {
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
-        loginStatus: status,
+        loginStatus: refused ? 'failed' : status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
         // what the runner reported (reportedLoginUrl); clear any code still queued behind it either way.
-        loginUrl: waiting ? reportedLoginUrl(body.url) : null,
+        loginUrl: waiting ? link : null,
         // Only the device flow carries one, and it dies with the attempt it belongs to.
-        loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
+        loginUserCode: waiting && status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
-        loginMessage: body.message ?? null,
+        loginMessage: refused ? LOGIN_LINK_REFUSED : (body.message ?? null),
         // How long the link at loginUrl lasts, kept while it waits and dropped with it.
         loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
         loginReason: status === 'failed' ? reason : null,

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -116,9 +117,12 @@ func TestSessionEventBufferKeepsSeqOrderUnderConcurrentEmitters(t *testing.T) {
 
 // Over the link, live events go in LiveBatches and noise pings nowhere, and neither takes a durable seq; a ping-shaped
 // coordinator-context boundary goes with "provider" at its own seq. What the ingest holds is every durable seq, without
-// a gap, a tombstone or a ping it acknowledged and did not store.
+// a gap, a tombstone or a ping it acknowledged and did not store. The ingest answers once the live events have gone: a
+// delta still unsent when the durable event ending it is stored never goes (link_events_live.go), so an ack that beat
+// the sender's live pass would leave four of the six unsent, as it should.
 func TestLinkModeKeepsLiveEventsAndPingsOffTheDurableSeqs(t *testing.T) {
 	r, in := newLinkEventsRig(t)
+	in.ackHold = make(chan struct{})
 	c := r.useLink(t)
 	s, buf := linkSessionBuffer(r, "session-k")
 	defer s.release()
@@ -160,6 +164,8 @@ func TestLinkModeKeepsLiveEventsAndPingsOffTheDurableSeqs(t *testing.T) {
 	if err := s.submit(taken); err != nil {
 		t.Fatal(err)
 	}
+	live := in.waitLive(t, "session-k", 6)
+	close(in.ackHold)
 	linkWaitStored(t, s, 10*time.Second)
 	in.assertContiguous(t, "session-k", 1, 7)
 	var boundary map[string]interface{}
@@ -170,7 +176,6 @@ func TestLinkModeKeepsLiveEventsAndPingsOffTheDurableSeqs(t *testing.T) {
 	if codes := in.refusalCodes(); len(codes) != 0 {
 		t.Errorf("batches refused: %v", codes)
 	}
-	live := in.waitLive(t, "session-k", 6)
 	var liveTypes []string
 	for i, e := range live {
 		liveTypes = append(liveTypes, e.event.GetType())
@@ -223,9 +228,11 @@ func TestEventsNumberedUnderHTTPModeCrossTheCutOverAsBarePings(t *testing.T) {
 }
 
 // While the connection's credit leaves no room, the session's emitters are never held up: every event is numbered and
-// handed over at once, whatever the link does. Progress reports merge into the unsent one before them, at its seq,
-// taking no seq of their own; the live stream is dropped. Once the credit comes back, every seq is stored, without a
-// gap.
+// handed over at once, whatever the link does. The credit comes back only once the last of them is in, so what shows
+// that is that the last of them gets in, with nothing sent meanwhile: the wait below is for an emitter that would never
+// return, and nothing here says how fast one is, which is the host's to say. Progress reports merge into the unsent one
+// before them, at its seq, taking no seq of their own; the live stream is dropped. Once the credit comes back, every
+// seq is stored, without a gap.
 func TestTheEngineIsNeverHeldUpWhileTheCreditIsSpent(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	in.credit = linkCredit{} // nothing may be in flight
@@ -239,30 +246,31 @@ func TestTheEngineIsNeverHeldUpWhileTheCreditIsSpent(t *testing.T) {
 	}
 	r.m.events.poke()
 	linkWaitFor(t, 5*time.Second, "the credit to hold the session back", r.m.events.creditBlocked.Load)
-	var slowestAdd, slowestSubmit time.Duration
 	lastTokens := 0
-	for i := 0; i < 20000; i++ {
-		began := time.Now()
-		switch i % 5 {
-		case 0:
-			buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "x"}, nil)
-		case 1, 2, 3:
-			lastTokens = 1000 + i
-			buf.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(lastTokens)}, nil)
-		case 4:
-			buf.add("turn-1", evToolResult, map[string]interface{}{"toolUseId": fmt.Sprint("toolu_", i), "content": "ok"}, nil)
-		}
-		slowestAdd = max(slowestAdd, time.Since(began))
-		if i%500 == 499 {
-			began = time.Now()
-			if err := s.submit(buf.take()); err != nil {
-				t.Fatal(err)
+	var emitted atomic.Bool
+	go func() {
+		defer emitted.Store(true)
+		for i := 0; i < 20000; i++ {
+			switch i % 5 {
+			case 0:
+				buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "x"}, nil)
+			case 1, 2, 3:
+				lastTokens = 1000 + i
+				buf.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(lastTokens)}, nil)
+			case 4:
+				buf.add("turn-1", evToolResult, map[string]interface{}{"toolUseId": fmt.Sprint("toolu_", i), "content": "ok"}, nil)
 			}
-			slowestSubmit = max(slowestSubmit, time.Since(began))
+			if i%500 == 499 {
+				if err := s.submit(buf.take()); err != nil {
+					t.Error(err)
+					return
+				}
+			}
 		}
-	}
-	if slowestAdd > 50*time.Millisecond || slowestSubmit > 500*time.Millisecond {
-		t.Errorf("an event took %s to number and buffer, a hand-over %s, while the credit was spent", slowestAdd, slowestSubmit)
+	}()
+	linkWaitFor(t, time.Minute, "every event to be numbered and handed over with the credit spent", emitted.Load)
+	if n := len(in.batchesOf("session-credit")); n != 0 {
+		t.Errorf("%d batches went while the credit was spent", n)
 	}
 	if n := len(in.liveOf("session-credit")); n != 0 {
 		t.Errorf("%d live events went while the credit was spent", n)
@@ -286,6 +294,33 @@ func TestTheEngineIsNeverHeldUpWhileTheCreditIsSpent(t *testing.T) {
 	if gauge["contextTokens"] != float64(lastTokens) {
 		t.Errorf("the last gauge holds %v, want the newest of its run, %d", gauge["contextTokens"], lastTokens)
 	}
+}
+
+// An emitter takes nothing the disk or the network can hold: a hand-over writing the spool, or the sender reading it
+// back, holds the stream's lock, and a write the network does not take holds the connection's. With both held, every
+// kind of event is still numbered and buffered, a progress report that finds the stream busy taking a seq of its own.
+func TestAnEmitterWaitsForNeitherTheSpoolNorTheConnection(t *testing.T) {
+	r, _ := newLinkEventsRig(t)
+	r.useLink(t)
+	s, buf := linkSessionBuffer(r, "session-busy")
+	defer s.release()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	conn := r.m.work.current()
+	conn.writeMu.Lock()
+	defer conn.writeMu.Unlock()
+	r.m.events.creditBlocked.Store(true) // what has a progress report look for an unsent one to merge into
+	var emitted atomic.Bool
+	go func() {
+		defer emitted.Store(true)
+		buf.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(1)}, nil)
+		buf.take() // so that the next one looks in the stream
+		buf.add("turn-1", evSystem, map[string]interface{}{"subtype": "context", "contextTokens": float64(2)}, nil)
+		buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "x"}, nil)
+		buf.add("turn-1", evAssistant, map[string]interface{}{"text": "x"}, nil)
+		buf.add("turn-1", evTurnEnd, map[string]interface{}{"status": "completed"}, nil)
+	}()
+	linkWaitFor(t, time.Minute, "the emitter, with the stream and the connection held", emitted.Load)
 }
 
 // Live events go only while somebody watches the session: a Hint{watchers: 0} stops them, and one with watchers starts

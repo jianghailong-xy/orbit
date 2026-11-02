@@ -1038,3 +1038,28 @@ func TestLinkAssignedReleaseFeedsTheSelfUpdate(t *testing.T) {
 		t.Errorf("a HeartbeatAck assigning nothing left %+v assigned", a)
 	}
 }
+
+// A beat can go out the moment a connection is current, so what its Welcome assigns is taken before that, however long
+// taking it lasts. Held at the log line between recording the release and owing the check, a connection published first
+// carries a beat that finds the release recorded and nothing owed, and asks for no check until the next beat.
+func TestABeatOnANewConnectionFindsTheReleaseItsWelcomeAssigned(t *testing.T) {
+	t.Cleanup(func() { setLinkAssignedRelease(nil) })
+	r := newLinkWorkRig(t)
+	assigned := &linkpb.AssignedRelease{Version: "999.0.0"}
+	r.g.welcome = func(c *fakeWorkConn, w *linkpb.Welcome) { w.Release = assigned }
+	r.g.ackRelease = assigned
+	r.m.log = func(args ...any) {
+		if strings.Contains(fmt.Sprint(args...), "assigns release") {
+			time.Sleep(100 * time.Millisecond)
+		}
+		r.logs.log(args...)
+	}
+	r.useLink(t)
+	resp, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.CheckSelfUpdate {
+		t.Fatal("the first beat on the connection did not ask for the release check its Welcome owes")
+	}
+}
