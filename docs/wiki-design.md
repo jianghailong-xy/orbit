@@ -96,10 +96,11 @@ owner 明确要求内容覆盖「用户开发的东西」本身。落法如下�
   - `git@github.com:a/b.git` 与 `https://github.com/a/b` 都归一成 `github.com/a/b`；
   - 来源是 `workspace.repo_url`（`schema.prisma:702`）和 `project_codebase.canonical_repo_url`（`:2057`）；
   - `root_commit_sha`（`:2062`，目前全为 NULL）等 runner 心跳补报后用来消歧，依据 `:2052-2062` 的注释「URL 加 root commit 才是身份」。
-- **绑定**：`wiki_space_workspace(space_id, workspace_id UNIQUE)`。
-  - 带 repo_url 的 workspace 在第一次使用时自动绑到对应 space；
-  - 没有 repo_url 的，由 owner 在 Wiki 设置里手动绑；
-  - 未绑定时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
+- **绑定**：`wiki_space_workspace(space_id, workspace_id UNIQUE, left_out_at)`，owner 在 Wiki 设置的 Workspaces 卡里看和改（效果图 38）。
+  - 仓库和 space 相同的 workspace 自动在这个 space 里：读取时按 repo_url 判定，不靠写入，所以不需要等 agent 调 wiki 工具；
+  - 没有 repo_url 的，由 owner 在 Wiki 设置里手动加入；别的仓库的不能加入，它们有自己的 space；
+  - owner 可以把 workspace 留在外面：它的会话不再进维护，调 wiki 工具被拒，已写进 wiki 的内容保留，也不会自己回来；
+  - 不在任何 space 里或被留在外面时，工具返回 `WIKI_SPACE_UNBOUND` 并附一句人话说明。
   - 项目通过其 codebase 的 URL 推导所属 space，不另外建表。
 - **为什么按代码库而不是按项目**：43% 的活跃会话既不挂任务，也不是协调会话，大量「为什么」恰恰在这些自由会话里。项目页只作为二级索引。
 
@@ -300,7 +301,9 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 ```
 GET    /wiki/spaces                                  列表 + 待审数（侧栏数字）
 POST   /wiki/spaces  |  PATCH /wiki/spaces/:id       设置：push / autoAccept / maintenance / embedding
-POST   /wiki/spaces/:id/workspaces                   绑定 workspace
+GET    /wiki/spaces/:id/workspaces                   列出 workspace 和可加入的 workspace
+POST   /wiki/spaces/:id/workspaces                   加入 workspace，或把留在外面的打开
+DELETE /wiki/spaces/:id/workspaces/:workspaceId      把 workspace 留在外面
 GET    /wiki/spaces/:id                              首页数据：principles、topics、recent decisions、health、usage
 GET    /wiki/spaces/:id/entries?kind&topic&status&q&cursor
 GET    /wiki/entries/:id?include=sources,history,exposure
@@ -324,7 +327,7 @@ GET    /runner/wiki/context         推送块预览（调试用；正式投递�
 原先只对维护作业会话开放的 dossiers、anchors、anchor-checks、cursor 四条路由已在 P11（2026-10-19）删除：维护运行是服务端的 `maintain` 作业，在进程内读案卷、推进游标，git 锚点由 runner 的 `anchors` 仓库操作检查。
 
 - **service token 一律拒绝。** 理由同 `session_search`（`runner-sessions.controller.ts:251-266`）：条目衍生自其他机器上的对话正文。
-- **读条目的边界**：只有绑定在该 space 的 workspace 里的会话能读。owner 把 workspace 绑进 space，就是同意在这些 workspace 之间共享**已确认**的条目。待审内容不跨会话可见。
+- **读条目的边界**：只有在该 space 里的 workspace 的会话能读。workspace 在 space 里，就是 owner 同意在这些 workspace 之间共享**已确认**的条目；把它留在外面就是收回。待审内容不跨会话可见。
 
 ### 5.2 MCP 工具（只加 3 个）
 
@@ -909,6 +912,7 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `31-home-states` | 首页往下、Activity 页、有原则时、换 space（一个时只有名字 / 两个以上的菜单）、多个 space 时四处同一个数、新 space、加载中 |
 | `32-ipad-entry` | iPad 三栏：中栏是目录，详情栏默认是内容首页 |
 | `33-desktop` | web 桌面（1920×1080、1440×900）：首页主区是内容；Activity 页沿用图 29 的卡片排法 |
+| `38-workspaces` | Wiki 设置的 Workspaces 卡（web、iOS）：谁在这个 wiki 里、开关、`Add workspace…`、没有仓库的 wiki，以及开和关的规则（owner 2026-11-02 定） |
 
 ## 附 B：Wikova 借鉴对照
 

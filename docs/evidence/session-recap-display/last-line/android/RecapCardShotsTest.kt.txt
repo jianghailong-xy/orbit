@@ -1,0 +1,75 @@
+// How android/*.png were taken: a temporary test, never committed as one. Copy it to
+// src/android/app/src/test/kotlin/io/orbitd/android/reader/RecapCardShotsTest.kt, change `out`, and run
+// :app:testDebugUnitTest --tests io.orbitd.android.reader.RecapCardShotsTest. The pictures are the page's top 570 px.
+package io.orbitd.android.reader
+
+import android.content.ComponentName
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
+import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.directory.RecapCard
+import io.orbitd.android.ui.OrbitTheme
+import java.io.File
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.ExternalResource
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** Pictures of the real RecapCardView between a reply and what follows it, as the reader lays them out. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w412dp-h640dp-xxhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class RecapCardShotsTest {
+    @get:Rule(order = 0) val host = object : ExternalResource() {
+        override fun before() {
+            val app = RuntimeEnvironment.getApplication()
+            shadowOf(app.packageManager).addActivityIfNotPresent(ComponentName(app, ComponentActivity::class.java))
+        }
+    }
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private val out = File("/tmp/recap-card-shots").also { it.mkdirs() }
+
+    private fun page(card: RecapCard, refreshing: Boolean = false) {
+        compose.setContent {
+            OrbitTheme {
+                // The reader's list: 16dp margins, 16dp between items.
+                Column(Modifier.width(412.dp).background(MaterialTheme.colorScheme.surface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("下一步：要不要我先把这 120 个 worktree 列个清单给你确认，再删？", Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyLarge)
+                    RecapCardView(card, refreshing, onRefresh = {}, onHide = {})
+                    Text("(the next item)", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+
+    private fun shot(name: String) {
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        File(out, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test fun long() { page(RecapCard("已删10个旧模型仓库，释放258G，剩余319G；保留的3个模型和vLLM服务复核正常，下一步清164个worktree。", "7:03 AM")); shot("long") }
+    @Test fun medium() { page(RecapCard("120 个已完成任务的 worktree 已删，释放 41G；剩下 44 个还在用，清单已发你确认。", "9:12 AM")); shot("medium") }
+    @Test fun short() { page(RecapCard("Fixed the login redirect; the tests pass.", "1:44 PM")); shot("short") }
+    @Test fun refreshing() { page(RecapCard("120 个已完成任务的 worktree 已删，释放 41G；剩下 44 个还在用，清单已发你确认。", "9:12 AM"), refreshing = true); shot("refreshing") }
+}

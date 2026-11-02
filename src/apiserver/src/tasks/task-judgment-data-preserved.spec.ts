@@ -2633,7 +2633,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
       // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every stored attachment keeps its bytes in `data`.
-      '0462_file_blob'],
+      '0462_file_blob',
+      // A workspace the owner left out of its wiki (0463, docs/mocks/wiki/38-workspaces; wiki/wiki-workspaces.ts): one
+      // nullable column `wiki_space_workspace.left_out_at`. Not a preserved relation: no `task`, `session`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no function,
+      // trigger, type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every binding stays in its space.
+      '0463_wiki_workspace_left_out'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -464,6 +464,31 @@ export function landingsWindow(
   return { days, now };
 }
 
+/** How far apart two settled landings may be and still read as one group of messages: ten minutes
+ *  (OrbitKit's `SessionProjectLandings.groupGap`). */
+export const LANDINGS_GROUP_GAP_MS = 10 * 60 * 1000;
+
+/**
+ * A day's rows, oldest first, as the runs Orbit reported close together (owner 2026-11-02,
+ * docs/mocks/landings-chat-bubbles): the window draws each run as one group of messages, Orbit's
+ * avatar once beside the first, so a task's landing and the merge into main that carried it read as
+ * one exchange. A row joins the group of the one before it when it settled at most
+ * `LANDINGS_GROUP_GAP_MS` after it, and starts a group of its own when it came later or either
+ * instant is unknown. The day sections already split at midnight.
+ */
+export function landingsWindowGroups(rows: readonly LandingsWindowRow[]): LandingsWindowRow[][] {
+  const runs: LandingsWindowRow[][] = [];
+  for (const row of rows) {
+    const last = runs.at(-1)?.at(-1);
+    if (last && Number.isFinite(last.at) && Number.isFinite(row.at) && row.at - last.at <= LANDINGS_GROUP_GAP_MS) {
+      runs[runs.length - 1].push(row);
+    } else {
+      runs.push([row]);
+    }
+  }
+  return runs;
+}
+
 /** The Landings row's three facts: the mark of the most urgent landing, how long it has waited (or
  *  how long ago the last one settled), and the counts under them. */
 export interface LandingsRowSummary {

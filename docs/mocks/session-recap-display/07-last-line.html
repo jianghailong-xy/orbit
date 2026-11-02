@@ -1,0 +1,342 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  /* 07 自己的东西一律 s7- 开头（kit.css 和 index.css 里有 .tx .rcard .cap .n 等短类名） */
+  section[id^=part-] { padding: 6px 14px 14px; margin: 0 -14px; }
+  .s7-grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 22px 40px; align-items: start; }
+  .s7-grid3 { display: grid; grid-template-columns: repeat(3, 600px); gap: 22px 40px; align-items: start; }
+  .s7-cap { margin-top: 12px; font-size: 14px; color: #4f4f58; line-height: 1.62; }
+  .s7-cap b { color: #16161a; }
+  .s7-cap ul { margin: 4px 0 0; padding-left: 18px; }
+  .s7-cap li { margin: 4px 0; }
+  .s7-rowlab { grid-column: 1 / -1; font-size: 15px; font-weight: 650; color: #16161a; margin: 6px 0 -8px; }
+  .s7-rowlab span { font-weight: 400; color: #4f4f58; }
+
+  /* ── iPhone（浅色，照 owner 11-02 那张 Pro Max 截图量：正文 15pt / 行高 20pt，灰 rgb(138,137,139)，
+        内容左右各 16pt；↻ × 各一个 30pt 宽的点按框，往右伸出内容边 8pt；字和框之间 6pt） ── */
+  .ph.s7-bot { border-radius: 0 0 56px 56px; }
+  .s7-col { position: absolute; left: 0; right: 0; top: 0; height: 736px; padding: 0 16px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .s7-col .tx { position: static; }
+  .s7-fade { position: absolute; left: 0; right: 0; height: 40px; z-index: 3; background: linear-gradient(#fff, rgba(255,255,255,0)); }
+  .s7-note { margin-top: 16px; font: 15px/20px "Inter", "Noto Sans SC"; color: var(--l2); letter-spacing: -.003em; }
+  .s7-note .lab { white-space: nowrap; margin-right: 8px; }
+  .s7-note .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .s7-note .lab b { font-weight: 600; }
+  .s7-acts { display: flex; }
+  .s7-acts span { width: 30px; height: 20px; display: flex; align-items: center; justify-content: center; }
+  /* 今天：两个按钮占右边一整列，正文在它左边折行 */
+  .s7-note.today { display: flex; align-items: flex-start; gap: 6px; }
+  .s7-note.today .t { flex: 1; min-width: 0; }
+  .s7-note.today .s7-acts { flex: none; margin-right: -8px; }
+  /* A / B：正文用满整宽；最后一行行尾留出按钮的位置（看不见），按钮叠在那里 */
+  .s7-note.end { position: relative; }
+  .s7-note.end .s7-acts { position: absolute; right: -8px; bottom: 0; }
+  .s7-rs { display: inline-block; height: 1px; }
+  .s7-note.busy .t { opacity: .45; }
+
+  /* 输入框上面那两条（Background processes、分支行），照截图：白底、浅灰边、30pt 高 */
+  .s7-band { position: absolute; left: 16px; right: 16px; height: 30px; border-radius: 15px; background: #fff; border: 1px solid #e6e6e8;
+             box-shadow: 0 1px 4px rgba(0,0,0,.04); display: flex; align-items: center; gap: 9px; padding: 0 12px; font: 15px "Inter"; color: #000; z-index: 20; }
+  .s7-band .g { color: var(--l2); }
+  .s7-band .chev { margin-left: auto; }
+  .s7-band .br { font: 13px "JetBrains Mono", monospace; color: #555; background: #f2f2f4; border: 1px solid #e1e1e4; border-radius: 6px; padding: 1px 6px; }
+  .s7-band .pl { color: #34a853; font-family: "JetBrains Mono", monospace; font-size: 13.5px; }
+  .s7-band .mi { color: #e5484d; font-family: "JetBrains Mono", monospace; font-size: 13.5px; }
+  .s7-band .ok { margin-left: auto; color: #34a853; font-weight: 650; }
+  .ph.light .comp { background: #fff; border-color: #e6e6e8; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .ph.light .comp .send { background: rgba(142,142,147,.45); }
+
+  /* 菜单（B 点 ⋯、C 长按）：iOS 26 浅色 */
+  .s7-dim { position: absolute; inset: 0; background: rgba(0,0,0,.14); z-index: 24; }
+  .s7-menu { position: absolute; z-index: 26; width: 236px; border-radius: 22px; background: rgba(250,250,252,.97); box-shadow: 0 10px 34px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.06); padding: 6px 0; }
+  .s7-menu .it { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font: 17px "Inter"; color: #000; }
+  .s7-menu .it + .it { border-top: .5px solid rgba(0,0,0,.08); }
+  .s7-menu .it.red { color: #ff3b30; }
+  .s7-lift { position: absolute; z-index: 25; background: #fff; border-radius: 16px; box-shadow: 0 8px 26px rgba(0,0,0,.16); padding: 10px 14px; }
+
+  /* ── Mac 会话窗格（同 05/06：窗格 #202023、正文 #CACED4、次要色 rgb(140,144,152)；字 13pt，↻ × 各 30pt 宽，伸出 8pt） ── */
+  .s7-mac { width: 600px; position: relative; background: #202023; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.28), 0 18px 40px rgba(0,0,0,.14); font-family: "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .s7-mcol { padding: 18px 16px 0; }
+  .s7-mfade { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: linear-gradient(#202023, rgba(32,32,35,0)); z-index: 3; }
+  .s7-mtx { font: 14px/22px "Inter", "Noto Sans SC", sans-serif; color: #CACED4; }
+  .s7-mtx p { margin: 0; }
+  .s7-mtx b { color: #ECEEF2; font-weight: 650; }
+  .s7-mnote { margin-top: 14px; font: 13px/19px "Inter", "Noto Sans SC"; color: rgb(140,144,152); }
+  .s7-mnote .lab { white-space: nowrap; margin-right: 7px; }
+  .s7-mnote .lab svg { display: inline-block !important; vertical-align: -2px; margin-right: 5px; }
+  .s7-mnote .lab b { font-weight: 600; }
+  .s7-mnote .s7-acts span { width: 30px; height: 19px; }
+  .s7-mnote.today { display: flex; align-items: flex-start; gap: 6px; }
+  .s7-mnote.today .t { flex: 1; min-width: 0; }
+  .s7-mnote.today .s7-acts { flex: none; margin-right: -8px; }
+  .s7-mnote.end { position: relative; }
+  .s7-mnote.end .s7-acts { position: absolute; right: -8px; bottom: 0; }
+  .s7-mnote.rest .s7-acts { visibility: hidden; }
+  .s7-col-guide { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(255,59,48,.16) 0 5px, rgba(255,59,48,0) 5px 10px); border-left: 1.5px dashed rgba(255,59,48,.7); z-index: 2; pointer-events: none; }
+  .s7-mcomp { margin: 14px 16px 16px; height: 78px; border-radius: 12px; background: #2A2A2E; border: 1px solid rgba(255,255,255,.07);
+              box-shadow: 0 1.5px 4px rgba(0,0,0,.3); position: relative; }
+  .s7-mcomp .p1 { position: absolute; left: 12px; top: 10px; font: 14px "Inter"; color: rgba(235,235,245,.3); }
+  .s7-mcomp .bt { position: absolute; left: 10px; right: 8px; bottom: 8px; height: 26px; display: flex; align-items: center; gap: 9px; font: 13px "Inter"; color: #E6E8EC; }
+  .s7-mcomp .bt .a { color: rgb(140,144,152); }
+  .s7-mcomp .bt .m { margin-left: auto; font-weight: 650; }
+  .s7-mcomp .bt .e { color: rgb(140,144,152); }
+  .s7-mcomp .bt .s { width: 24px; height: 24px; border-radius: 50%; background: rgba(142,142,147,.32); display: flex; align-items: center; justify-content: center; }
+  .s7-cursor { position: absolute; z-index: 5; pointer-events: none; }
+
+  table.s7-tok { border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; width: 1880px; table-layout: fixed; }
+  table.s7-tok th, table.s7-tok td { padding: 8px 14px; text-align: left; border-bottom: 1px solid #ececf0; vertical-align: top; line-height: 1.55; }
+  table.s7-tok th { background: #f4f4f7; font-weight: 650; color: #16161a; }
+  table.s7-tok td { color: #3a3a40; }
+  table.s7-tok td:first-child { font-weight: 650; color: #16161a; }
+  .s7-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 1880px; }
+  .s7-box { background: #fff; border-radius: 12px; padding: 16px 20px; font-size: 14px; color: #3a3a40; line-height: 1.62; }
+  .s7-box h3 { font-size: 16px; margin: 0 0 8px; color: #16161a; }
+  .s7-box ul { margin: 6px 0 0; padding-left: 18px; }
+  .s7-box li { margin: 5px 0; }
+  .s7-box b { color: #16161a; }
+  .s7-rec { color: #14428f; font-weight: 650; }
+  .s7-land { width: 1880px; font-size: 14px; color: #3a3a40; line-height: 1.65; }
+  .s7-land ol { margin: 0; padding-left: 20px; }
+  .s7-land li { margin: 6px 0; }
+  .s7-land b { color: #16161a; }
+</style>
+<body>
+<h1>Recap 尾注 · ↻ × 不再占一整列（07，待你定）</h1>
+<p class="lede">你 11-02 发的 iPhone 截图：「recap 两个按钮的展示占用了太多空间」。照截图量：↻ 和 × 摆在<b>第一行</b>旁边，手机上一直在。它们那一列（两个 30pt 点按框，往右伸出 8pt，再加 6pt 空隙，共 <b>58pt</b>）从第一行一直空到最后一行，正文只能在左边 <b>350pt</b> 里折行（整宽 408pt）。Android 更挤：两个 48dp 按钮，正文只剩约 263dp（整宽 380dp）。
+<br>下面是两条样例（不是你会话里的原文）：长的那条和截图里那句一样长，中等的那条更常见。灰字 = 上线文案（英文），说明用中文。</p>
+
+<section id="part-1">
+<h2>① iPhone · 会话底部（浅色，和截图同一处）</h2>
+<div class="s7-grid4">
+  <div class="s7-rowlab">长的 recap <span>（和截图那句一样长）</span></div>
+  <div><span class="tag now">今天</span><div id="p-today-1"></div><div class="s7-cap" id="c-today-1"></div></div>
+  <div><span class="tag rec">A · 建议：挪到最后一行行尾</span><div id="p-A-1"></div><div class="s7-cap" id="c-A-1"></div></div>
+  <div><span class="tag alt">B：合成一个 ⋯</span><div id="p-B-1"></div><div class="s7-cap" id="c-B-1"></div></div>
+  <div><span class="tag alt">C：平时不画，长按才有</span><div id="p-C-1"></div><div class="s7-cap" id="c-C-1"></div></div>
+  <div class="s7-rowlab">中等长度的 recap</div>
+  <div><span class="tag now">今天</span><div id="p-today-2"></div><div class="s7-cap" id="c-today-2"></div></div>
+  <div><span class="tag rec">A</span><div id="p-A-2"></div><div class="s7-cap" id="c-A-2"></div></div>
+  <div><span class="tag alt">B · 点 ⋯ 之后</span><div id="p-B-2"></div><div class="s7-cap" id="c-B-2"></div></div>
+  <div><span class="tag alt">C · 长按之后</span><div id="p-C-2"></div><div class="s7-cap" id="c-C-2"></div></div>
+</div>
+</section>
+
+<section id="part-2">
+<h2>② Mac · 窄一点的窗口（A 同样适用；web 同 Mac）</h2>
+<div class="s7-grid3">
+  <div><span class="tag now">今天 · 静止</span><div id="m-today"></div><div class="s7-cap" id="c-m-today"></div></div>
+  <div><span class="tag rec">A · 静止</span><div id="m-A"></div><div class="s7-cap" id="c-m-A"></div></div>
+  <div><span class="tag rec">A · 鼠标移上去</span><div id="m-A-hover"></div><div class="s7-cap" id="c-m-A-hover"></div></div>
+</div>
+</section>
+
+<section id="part-3">
+<h2>③ 规格（A）</h2>
+<div id="spec"></div>
+<h2>④ 待定 · 要你拍板</h2>
+<div class="s7-decide" id="decide"></div>
+<h2>⑤ 落地（按代价排）</h2>
+<div class="s7-land" id="land"></div>
+</section>
+
+<script>
+// ── 样例 ────────────────────────────────────────────────
+const S1 = { when: '7:03 AM', text: RECAP.disk,
+  tail: '<p class="last"><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p>' };
+const S2 = { when: '9:12 AM', text: '120 个已完成任务的 worktree 已删，释放 41G；剩下 44 个还在用，清单已发你确认。',
+  tail: '<p class="last"><b>下一步：</b>这 44 个的清单在上面，哪些可以一起清，你定。</p>' };
+
+// 图形：照截图的实际大小（↻ 约 13×16pt，× 约 12×12pt，SF Symbols medium）
+const L2 = 'var(--l2)';
+const XG = (size, color, sw) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>`;
+const COPY = (size, color, sw) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="12" rx="2.2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v8.5a2 2 0 0 0 2 2h2"/></svg>`;
+const DOTS = (size, color) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block"><circle cx="5" cy="12" r="1.9" fill="${color}"/><circle cx="12" cy="12" r="1.9" fill="${color}"/><circle cx="19" cy="12" r="1.9" fill="${color}"/></svg>`;
+const RF = (color = L2) => ic('refresh', 24, color, 1.7);
+const XX = (color = L2) => XG(25, color, 1.7);
+const lab = (when, color = L2, size = 14) => `<span class="lab">${ic('align', size, color, 2.1)}<b>Recap</b> · ${when}</span>`;
+
+// iPhone 笔记：mode = today | A | B | C
+const RESERVE = { A: 58, B: 28 };
+function pNote(s, mode) {
+  const acts = mode === 'B' ? `<div class="s7-acts"><span class="dots">${DOTS(24, L2)}</span></div>`
+    : `<div class="s7-acts"><span class="rf">${RF()}</span><span class="x">${XX()}</span></div>`;
+  if (mode === 'today') return `<div class="s7-note today"><div class="t">${lab(s.when)}${s.text}</div>${acts}</div>`;
+  if (mode === 'C') return `<div class="s7-note end"><div class="t">${lab(s.when)}${s.text}</div></div>`;
+  return `<div class="s7-note end"><div class="t">${lab(s.when)}${s.text}<span class="s7-rs" style="width:${RESERVE[mode]}px"></span></div>${acts}</div>`;
+}
+const BAND = `
+<div class="s7-band" style="top:760px">${ic('term', 18, L2, 1.8)}<b style="font-weight:650">Background processes</b><span class="g">5 total</span><span class="chev">${ic('chevr', 16, L2, 2.2)}</span></div>
+<div class="s7-band" style="top:798px"><span class="br">⑂ orbit/…-009032</span><span class="pl">+1,204</span><span class="mi">−87</span><span class="g">· 23 files</span><span class="ok">✓ Merged</span></div>`;
+const OFF = 590;
+const pPhone = (s, mode, extra = '') => phone('light', `<div class="s7-col"><div class="tx">${s.tail}</div>${pNote(s, mode)}</div><div class="s7-fade" style="top:${OFF}px"></div>${BAND}${composer()}${extra}`, { h: 956 - OFF, off: OFF, cls: 's7-bot' });
+
+const put = (id, html) => { document.getElementById(id).innerHTML = html; };
+put('p-today-1', pPhone(S1, 'today'));
+put('p-A-1', pPhone(S1, 'A'));
+put('p-B-1', pPhone(S1, 'B'));
+put('p-C-1', pPhone(S1, 'C'));
+put('p-today-2', pPhone(S2, 'today'));
+put('p-A-2', pPhone(S2, 'A'));
+put('p-B-2', pPhone(S2, 'B', '<div class="s7-menu" id="menu-B"><div class="it">Refresh recap' + ic('refresh', 20, '#000', 1.8) + '</div><div class="it">Hide recap' + XG(22, '#000', 1.8) + '</div></div>'));
+put('p-C-2', pPhone(S2, 'C', '<div class="s7-dim"></div><div class="s7-lift" id="lift-C"></div><div class="s7-menu" id="menu-C"><div class="it">Copy' + COPY(21, '#000', 1.7) + '</div><div class="it">Refresh recap' + ic('refresh', 20, '#000', 1.8) + '</div><div class="it">Hide recap' + XG(22, '#000', 1.8) + '</div></div>'));
+
+// Mac
+const M2 = 'rgb(140,144,152)';
+const MTAIL = '<p><b>下一步：</b>要不要我先把这 120 个 worktree 列个清单给你确认，再删？</p>';
+function mNote(mode, rest) {
+  const acts = `<div class="s7-acts"><span class="rf">${ic('refresh', 22, rest ? M2 : '#CACED4', 1.7)}</span><span class="x">${XG(23, rest ? M2 : '#CACED4', 1.7)}</span></div>`;
+  const cls = `s7-mnote ${mode === 'today' ? 'today' : 'end'}${rest ? ' rest' : ''}`;
+  return mode === 'today' ? `<div class="${cls}"><div class="t">${lab(S1.when, M2, 13)}${S1.text}</div>${acts}</div>`
+    : `<div class="${cls}"><div class="t">${lab(S1.when, M2, 13)}${S1.text}<span class="s7-rs" style="width:58px"></span></div>${acts}</div>`;
+}
+const mComposer = () => `<div class="s7-mcomp"><div class="p1">Message…</div><div class="bt">${ic('plus', 17, M2, 2)}<span class="a">Auto</span><span class="m">Opus 5.5</span><span class="e">Max</span><span class="s">${ic('up', 14, 'rgba(0,0,0,.75)', 2.6)}</span></div></div>`;
+const mPane = (inner, extra = '') => `<div class="s7-mac"><div class="s7-mfade"></div><div class="s7-mcol"><div class="s7-mtx">${MTAIL}</div>${inner}</div>${mComposer()}${extra}</div>`;
+const CURSOR = `<svg class="s7-cursor" width="17" height="24" viewBox="0 0 17 24"><path d="M1.5 1.5v18.2l4.6-4.4 3 6.9 3.1-1.3-3-6.8h6.3z" fill="#000" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+put('m-today', mPane(mNote('today', true)));
+put('m-A', mPane(mNote('A', true)));
+put('m-A-hover', mPane(mNote('A', false), CURSOR));
+
+// ── 排版之后再量、再标 ─────────────────────────────────────
+function boxIn(frame, el) {
+  const f = frame.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: r.left - f.left, y: r.top - f.top, w: r.width, h: r.height };
+}
+const phInner = (id) => document.querySelector(`#${id} .ph`).firstElementChild;
+const lines = (el, lh) => Math.round(el.getBoundingClientRect().height / lh);
+// 最后一行的字到右边内容边还剩多少 pt
+function lastLineSlack(note, contentRight) {
+  const t = note.querySelector('.t');
+  const range = document.createRange();
+  range.selectNodeContents(t);
+  const rects = [...range.getClientRects()].filter((r) => r.width > 0.5 && !(r.height <= 2));
+  const lastTop = Math.max(...rects.map((r) => r.top));
+  const ends = rects.filter((r) => Math.abs(r.top - lastTop) < 6).map((r) => r.right);
+  return Math.round(contentRight - Math.max(...ends));
+}
+function textWidth(note) { return Math.round(note.querySelector('.t').getBoundingClientRect().width); }
+const STATS = {};
+function markIn(inner, el, n, { pad = 3, at = 'tl', cls = 'blue' } = {}) {
+  const r = boxIn(inner, el);
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const pos = { tl: [x0 - 9, y0 - 9], tr: [x1 - 11, y0 - 9], bl: [x0 - 9, y1 - 11], br: [x1 - 11, y1 - 11], l: [x0 - 24, (y0 + y1) / 2 - 10], tri: [x1 - 34, y0 - 10] }[at];
+  inner.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+}
+window.drawMarks = () => {
+  if (window.s7Drawn) return;
+  window.s7Drawn = true;
+  for (const id of ['p-today-1', 'p-A-1', 'p-B-1', 'p-C-1', 'p-today-2', 'p-A-2', 'p-B-2', 'p-C-2']) {
+    const inner = phInner(id), note = inner.querySelector('.s7-note');
+    const right = inner.getBoundingClientRect().left + 424;
+    STATS[id] = { lines: lines(note.querySelector('.t'), 20), width: textWidth(note), slack: lastLineSlack(note, right), h: Math.round(note.getBoundingClientRect().height) };
+  }
+  // 今天：那一列（↻ × 下面空着的部分）用红斜纹标出来
+  for (const id of ['p-today-1', 'p-today-2']) {
+    const inner = phInner(id), note = inner.querySelector('.s7-note'), acts = note.querySelector('.s7-acts');
+    const n = boxIn(inner, note), a = boxIn(inner, acts);
+    const x0 = n.x + n.w - 52 - 6 + 2;
+    inner.insertAdjacentHTML('beforeend', `<div class="s7-col-guide" style="left:${x0}px;width:${424 - x0}px;top:${n.y + a.h + 2}px;height:${n.h - a.h - 2}px;bottom:auto"></div>`);
+    markIn(inner, acts, 1, { pad: 3, at: 'tl', cls: '' });
+  }
+  for (const id of ['p-A-1', 'p-A-2']) {
+    const inner = phInner(id);
+    markIn(inner, inner.querySelector('.s7-acts'), 2, { pad: 3, at: 'l' });
+  }
+  for (const id of ['p-B-1']) {
+    const inner = phInner(id);
+    markIn(inner, inner.querySelector('.s7-acts'), 3, { pad: 3, at: 'l' });
+  }
+  // B 的菜单挂在 ⋯ 上面，右边对齐
+  {
+    const inner = phInner('p-B-2'), dots = inner.querySelector('.s7-acts'), menu = inner.querySelector('#menu-B');
+    const d = boxIn(inner, dots);
+    menu.style.left = `${Math.min(424, d.x + d.w) - menu.offsetWidth}px`;
+    menu.style.top = `${d.y + d.h + 8}px`;
+    markIn(inner, dots, 3, { pad: 3, at: 'l' });
+  }
+  // C：recap 浮起来，菜单在它上面
+  {
+    const inner = phInner('p-C-2'), note = inner.querySelector('.s7-note'), lift = inner.querySelector('#lift-C'), menu = inner.querySelector('#menu-C');
+    const n = boxIn(inner, note);
+    lift.style.left = `${n.x - 14}px`; lift.style.top = `${n.y - 10}px`; lift.style.width = `${n.w + 28}px`;
+    lift.innerHTML = `<div class="s7-note end" style="margin:0"><div class="t">${lab(S2.when)}${S2.text}</div></div>`;
+    menu.style.left = `${n.x - 14}px`;
+    menu.style.top = `${n.y + n.h + 10 + 10}px`;
+    markIn(inner, lift, 4, { pad: 2, at: 'tri' });
+  }
+  for (const id of ['m-today', 'm-A', 'm-A-hover']) {
+    const frame = document.querySelector(`#${id} .s7-mac`), note = frame.querySelector('.s7-mnote');
+    const right = frame.getBoundingClientRect().left + 600 - 16;
+    STATS[id] = { lines: lines(note.querySelector('.t'), 19), width: textWidth(note), slack: lastLineSlack(note, right) };
+  }
+  {
+    const frame = document.querySelector('#m-today .s7-mac'), note = frame.querySelector('.s7-mnote');
+    const n = boxIn(frame, note);
+    const x0 = 600 - 16 - 58 + 2;
+    frame.insertAdjacentHTML('beforeend', `<div class="s7-col-guide" style="left:${x0}px;width:${600 - 16 - x0}px;top:${n.y - 2}px;height:${n.h + 4}px;bottom:auto"></div>`);
+  }
+  {
+    const frame = document.querySelector('#m-A-hover .s7-mac'), x = frame.querySelector('.s7-acts .x');
+    const xr = boxIn(frame, x), cur = frame.querySelector('.s7-cursor');
+    cur.style.left = `${xr.x + xr.w / 2 - 2}px`; cur.style.top = `${xr.y + xr.h / 2 - 1}px`;
+    markIn(frame, frame.querySelector('.s7-acts'), 5, { pad: 3, at: 'l' });
+  }
+  captions();
+};
+
+function captions() {
+  const s = STATS;
+  put('c-today-1', `<span class="n">1</span>↻ × 在第一行旁边。那一列 <b>58pt</b> 一直空到最后一行（红斜纹），正文只有 <b>${s['p-today-1'].width}pt</b> 宽，折成 <b>${s['p-today-1'].lines} 行</b>。`);
+  put('c-A-1', `<ul><li><span class="n blue">2</span>↻ × 挪到<b>最后一行的行尾</b>，同样的图形、大小、灰、点按框；手机上照旧一直在。</li>
+<li>正文用满整宽 <b>${s['p-A-1'].width}pt</b>。这条长，还是 <b>${s['p-A-1'].lines} 行</b>，但右边不再空一列。</li>
+<li>最后一行行尾一直留着 58pt（看不见）：字永远不会钻到按钮底下；最后一行放不下时，按钮自己换到下一行的行尾。</li></ul>`);
+  put('c-B-1', `<ul><li><span class="n blue">3</span>两个合成一个 <b>⋯</b>，同样在最后一行行尾，只留 28pt。</li>
+<li>代价：刷新、关掉都要多点一下；多一个菜单。这条也还是 <b>${s['p-B-1'].lines} 行</b>。</li></ul>`);
+  put('c-C-1', `<ul><li>平时一个按钮都不画，正文整宽、行尾也不留位置；还是 <b>${s['p-C-1'].lines} 行</b>。</li>
+<li>代价：看不出能刷新、能关（你 11-01 要的 × 就藏起来了）；要知道「长按」才行。</li></ul>`);
+  put('c-today-2', `正文 <b>${s['p-today-2'].width}pt</b> 宽，折成 <b>${s['p-today-2'].lines} 行</b>，最后一行只有几个字。`);
+  put('c-A-2', `<span class="n blue">2</span>同一条，整宽之后 <b>${s['p-A-2'].lines} 行</b>，少一行（${s['p-today-2'].h} → ${s['p-A-2'].h}pt）。中等长度的 recap 多数是这样。`);
+  put('c-B-2', `<span class="n blue">3</span>点 ⋯ 出菜单：<code>Refresh recap</code>、<code>Hide recap</code>（两个都是今天已有的词，只是从读屏名变成菜单项）。也是 <b>${s['p-B-2'].lines} 行</b>。`);
+  put('c-C-2', `<span class="n blue">4</span>长按 recap：它浮起来，菜单里 <code>Copy</code>、<code>Refresh recap</code>、<code>Hide recap</code>。<code>Copy</code> 是新词，因为长按原来是选字复制。`);
+  put('c-m-today', `今天 Mac 上 ↻ × 静止时不画，但那 58pt <b>一直留着</b>（红斜纹）：窗口一窄、recap 一折行，右边同样空一列。正文 <b>${s['m-today'].width}pt</b>，${s['m-today'].lines} 行。`);
+  put('c-m-A', `A：正文整宽 <b>${s['m-A'].width}pt</b>，${s['m-A'].lines} 行；只有最后一行行尾留着位置。一行放得下的 recap（宽窗口的常态）和今天<b>一模一样</b>。`);
+  put('c-m-A-hover', `<span class="n blue">5</span>鼠标移上去，↻ × 在最后一行行尾出现；悬停 / 键盘聚焦才出现的规则不变，字不动。`);
+}
+
+// ── ③ 规格 ─────────────────────────────────────────────────
+put('spec', `<table class="s7-tok">
+<colgroup><col style="width:170px"><col><col><col><col></colgroup>
+<tr><th></th><th>Mac</th><th>iPhone / iPad</th><th>web</th><th>Android</th></tr>
+<tr><td>今天那一列</td><td>58pt（悬停才画，位置一直留着）</td><td>58pt（一直在）</td><td>48px（悬停才画；触屏一直在）</td><td>两个 48dp 按钮 = 96dp；第一行还要对齐按钮的中线，上面多空约 13dp</td></tr>
+<tr><td>A：↻ × 在哪</td><td colspan="4">recap 那一段的<b>最后一行行尾</b>，和最后一行对齐（手机：同一条基线；Android：按钮中线对最后一行中线）。正文其余各行用满整宽。</td></tr>
+<tr><td>A：怎么不压字</td><td colspan="4">正文末尾跟一段看不见的空位，宽度 = 按钮占的宽（Mac / iPhone 58pt，web 48px，Android 96dp）。最后一行放得下就和字同一行；放不下，空位连同按钮一起换到下一行的行尾。字永远不会钻到按钮底下，悬停出现时也不动。</td></tr>
+<tr><td>不变</td><td colspan="4">图形、大小、颜色、点按框；Mac 和 web 悬停 / 键盘聚焦才出现，手机一直在；↻ 刷新、× 关掉的行为；文案（不加新词）；什么时候出现 / 让位的规则；列表那一行。</td></tr>
+<tr><td>一行放得下的 recap</td><td colspan="4">和今天一模一样：按钮本来就在这一行的行尾。</td></tr>
+</table>`);
+
+// ── ④ 待定 ─────────────────────────────────────────────────
+put('decide', `
+<div class="s7-box"><h3>1 · 两个按钮怎么放</h3>
+<ul>
+<li><span class="s7-rec">A 挪到最后一行行尾（我建议）</span>：不再占一整列，正文整宽；中等长度的 recap 常常少一行；还是一下就能刷新、关掉；一行放得下的 recap 和今天一样。</li>
+<li><b>B 合成一个 ⋯</b>：最后一行只留 28pt，比 A 再省 30pt；但两个动作都要多点一下，多一个菜单。</li>
+<li><b>C 平时不画，长按才有</b>：最省，什么都不留；但看不出能刷新、能关，× 等于藏起来了。</li>
+<li>不建议：只把两个点按框挤窄（58 → 约 44pt）。还是一整列空着，点按框更小、更难点中。</li>
+</ul></div>
+<div class="s7-box"><h3>2 · Mac 和 web 跟不跟</h3>
+<ul>
+<li><span class="s7-rec">跟（我建议）</span>：同一条规则四端一致。宽窗口里 recap 多半一行，看起来和今天一样；窗口窄、recap 折行时，右边也不再空一列。</li>
+<li><b>只改手机（iPhone、Android、触屏 web）</b>：Mac 和桌面 web 维持今天的样子，两套摆法。</li>
+</ul></div>`);
+
+// ── ⑤ 落地 ─────────────────────────────────────────────────
+put('land', `<ol>
+<li><b>三处卡片视图各一处小改动</b>（选 A）：web <code>SessionRecapCard</code>（CSS：正文末尾一段空位，按钮贴最后一行的右下角），Mac / iOS 共用的 <code>RecapCardView</code>（正文末尾跟一段看不见的空位，↻ × 叠在最后一行的基线上），Android <code>RecapCardView</code>（同样的空位，按钮在最后一行行尾）。不动数据、文案、规则。</li>
+<li><b>测试</b>：web 真实页面截图（一行 / 折行 / 悬停 / 触屏）；Android 单测改成「按钮对齐最后一行、正文整宽」；OrbitKit 不受影响；Mac / iOS 编译和截图要手动触发一次 <code>client.yml</code>（这台机器编不了 SwiftUI）。</li>
+<li>选 B：再加一个菜单（三端），两个已有的词当菜单项。选 C：去掉按钮，加长按菜单（三端），多一个 <code>Copy</code>。</li>
+</ol>`);
+
+document.fonts.ready.then(() => window.drawMarks());
+</script>
+</body></html>

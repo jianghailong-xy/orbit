@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
@@ -97,6 +97,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
 import { entryAppliedBy } from './wiki-run-reads';
+import { wikiSpaceWorkspaces, wikiWorkspacesOfSpaces } from './wiki-workspaces';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -227,6 +228,15 @@ export class WikiRefusalError extends HttpException {
   constructor(readonly refusal: WikiRefusal) {
     super(refusal, WIKI_HTTP_STATUS[refusal.code]);
   }
+}
+
+/** Who is in a space is who reads its entries, so it is the owner's to say, as a review mode is. */
+function refuseWorkspaceChange(): never {
+  return refuse(
+    'WIKI_OWNER_CHANNEL_ONLY',
+    'which workspaces are in a wiki is the account owner\'s to say, through an owner channel with no acting session: '
+      + 'report what should change, and let a person change it.',
+  );
 }
 
 function refuse(code: WikiRefusalCode, message: string, errors?: WikiFieldError[]): never {
@@ -802,8 +812,9 @@ export class WikiService {
       if (session.workspaceId) {
         const bound = await this.prisma.wikiSpaceWorkspace.findFirst({
           where: { workspaceId: session.workspaceId, ownerId },
-          select: { spaceId: true },
+          select: { spaceId: true, leftOutAt: true },
         });
+        if (bound?.leftOutAt) return refuse('WIKI_SPACE_UNBOUND', 'The owner left this workspace out of its wiki.');
         if (bound) return bound.spaceId;
         const workspace = await this.prisma.workspace.findFirst({
           where: { id: session.workspaceId, ownerId },
@@ -929,8 +940,8 @@ export class WikiService {
   /**
    * The owner's spaces, each with what the contract's `space.list` adds to a row: the ops waiting in
    * Review (`pendingOps`) and the things of its plan that wait on the owner (`planWaiting`) — the two the
-   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces bound
-   * to it (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
+   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces in it
+   * (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
    * `docs`, null while it has no confirmed plan.
    */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
@@ -957,13 +968,9 @@ export class WikiService {
       counts.set(op.changeset.spaceId, (counts.get(op.changeset.spaceId) ?? 0) + 1);
     }
     const ids = spaces.map((space) => space.id);
-    const [waiting, bindings, plans] = await Promise.all([
+    const [waiting, workspaces, plans] = await Promise.all([
       wikiPlanWaitingOfSpaces(this.prisma, ownerId, spaces),
-      this.prisma.wikiSpaceWorkspace.findMany({
-        where: { ownerId, spaceId: { in: ids }, workspace: { deletedAt: null } },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        select: { spaceId: true, workspaceId: true },
-      }),
+      wikiWorkspacesOfSpaces(this.prisma, ownerId, spaces, { live: true }),
       this.prisma.wikiPlan.findMany({
         where: { ownerId, spaceId: { in: ids }, status: 'confirmed' },
         select: { spaceId: true, docs: { select: { slug: true } } },
@@ -985,7 +992,7 @@ export class WikiService {
       updatedAt: space.updatedAt.toISOString(),
       pendingOps: counts.get(space.id) ?? 0,
       planWaiting: waiting.get(space.id) ?? 0,
-      workspaceIds: bindings.filter((binding) => binding.spaceId === space.id).map((binding) => binding.workspaceId),
+      workspaceIds: workspaces.get(space.id) ?? [],
       docs: docs.get(space.id) ?? null,
     }));
   }
@@ -1131,20 +1138,58 @@ export class WikiService {
     return this.requireSpace(ownerId, spaceId);
   }
 
-  /** Bind a workspace the owner named: the manual half of §2.1's binding. */
-  async bindWorkspace(ownerId: string, spaceId: string, workspaceId: string) {
+  /** Who is in a space and who can be added: Wiki settings' Workspaces card (contract `space.workspaces`). */
+  async spaceWorkspaces(ownerId: string, spaceId: string) {
+    return wikiSpaceWorkspaces(this.prisma, ownerId, await this.requireSpace(ownerId, spaceId));
+  }
+
+  /**
+   * Bring a workspace into a space: one with no repository, or one of the space's own that the owner left out. One on
+   * another repository is refused, because that repository has its own space and what its sessions teach would be
+   * dropped here as another repository's knowledge (`buildWikiMaintainOps`).
+   */
+  async bindWorkspace(ownerId: string, spaceId: string, workspaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseWorkspaceChange();
     const workspace = await this.prisma.workspace.findFirst({
       where: { id: workspaceId, ownerId },
-      select: { id: true },
+      select: { id: true, repoUrl: true },
     });
     if (!workspace) throw new NotFoundException('no such workspace');
-    await this.requireSpace(ownerId, spaceId);
+    const space = await this.requireSpace(ownerId, spaceId);
+    const repository = workspace.repoUrl ? normalizeRepoUrl(workspace.repoUrl) : null;
+    if (repository !== null && repository !== space.repoUrlNorm) {
+      throw new BadRequestException('this workspace is on another repository, which has its own wiki');
+    }
     await this.prisma.wikiSpaceWorkspace.upsert({
       where: { workspaceId },
       create: { spaceId, ownerId, workspaceId },
-      update: { spaceId },
+      update: { spaceId, leftOutAt: null },
       select: { id: true },
     });
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId, workspaceId };
+  }
+
+  /**
+   * Leave a workspace out of its space: its sessions stop feeding the space and reading it, what it already taught
+   * stays, and it does not rejoin by itself. The row is what says so, so a workspace that was in by its repository
+   * alone gets one. Leaving out one that is out changes nothing.
+   */
+  async leaveWorkspaceOut(ownerId: string, spaceId: string, workspaceId: string, actingSessionId: string | null = null) {
+    if (actingSessionId) return refuseWorkspaceChange();
+    const { workspaces } = await this.spaceWorkspaces(ownerId, spaceId);
+    const listed = workspaces.find((row) => row.id === workspaceId);
+    if (!listed) throw new NotFoundException('no such workspace in this wiki');
+    if (listed.inWiki) {
+      const leftOutAt = new Date();
+      await this.prisma.wikiSpaceWorkspace.upsert({
+        where: { workspaceId },
+        create: { spaceId, ownerId, workspaceId, leftOutAt },
+        update: { leftOutAt },
+        select: { id: true },
+      });
+      this.realtime?.publishWikiChanged(ownerId, spaceId);
+    }
     return { spaceId, workspaceId };
   }
 

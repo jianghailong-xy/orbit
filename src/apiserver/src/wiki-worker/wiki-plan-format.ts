@@ -339,7 +339,7 @@ export interface WikiPlanUnit {
   sources: string[];
 }
 
-function newUnit(fields: Pick<WikiPlanUnit, 'cat' | 'title' | 'slug' | 'question'>): WikiPlanUnit {
+export function wikiPlanNewUnit(fields: Pick<WikiPlanUnit, 'cat' | 'title' | 'slug' | 'question'>): WikiPlanUnit {
   return {
     id: '', cat: fields.cat, slug: fields.slug, title: fields.title, question: fields.question, cardScope: [],
     header: emptyWikiPlanHeader(), sections: [], stray: [], hasBody: false, refs: null, protectedDoc: null,
@@ -425,7 +425,7 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
     }
     const doc = submatch(DOC_LINE, line);
     if (doc && out.cats.length > 0) {
-      const unit = newUnit({ cat: out.cats.length - 1, title: goTrim(doc[2], '* '), slug: goTrimSpace(doc[3]), question: goTrimSpace(doc[4]) });
+      const unit = wikiPlanNewUnit({ cat: out.cats.length - 1, title: goTrim(doc[2], '* '), slug: goTrimSpace(doc[3]), question: goTrimSpace(doc[4]) });
       for (const part of wikiPlanSplitBar(doc[5])) {
         const [label, value] = wikiPlanLabel(part);
         const key = label.toLowerCase();
@@ -443,6 +443,16 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
   // The model's numbers of the new catalogue, in its list of moves, name the documents they move into.
   for (const move of out.moves) move.target = modelIds.get(move.to) ?? null;
   return out;
+}
+
+/**
+ * What a model wrote for a category's key or a document's slug, as one: the label of the answer's template taken off
+ * (`<slug: storage>` is storage), then lowercase letters and digits joined by single hyphens, 64 characters at most.
+ * '' when nothing of it is left.
+ */
+export function wikiPlanIdentifier(text: string): string {
+  const value = goFieldsFunc(text, (r) => r === ':' || r === '：').pop() ?? '';
+  return value.toLowerCase().replace(/[^a-z0-9]+/gu, '-').slice(0, 64).replace(/^-+|-+$/gu, '');
 }
 
 /** The parts of a line the model wrote with ｜ or | between them, none empty. */
@@ -638,8 +648,35 @@ export function wikiPlanPaths(input: string): string[] {
   return out;
 }
 
-/** `docs/x.md § heading` (or several `§` of one document). */
+/**
+ * Where another `path § heading` begins on the same line, after a separator: a path, then its `§`. A path is one run
+ * of letters, digits and `_ . / + @ -`, and only a `.md` file has headings for a `§` to name (`wikiPlanIsDoc`), so the
+ * words after a heading's own `、` or `,` do not read as one, and neither does a version or a protocol before a `§`.
+ */
+const DOC_GROUP = new RegExp(`^[ \\t　]*[\`「]?[\\p{L}\\p{M}\\p{N}_./+@-]+\\.md[\`」]?[ \\t　]*§`, 'iu');
+
+/** `docs/x.md § heading`, several `§` of one document, and several documents' on one line. */
 export function wikiPlanDocSourcesOf(text: string): WikiPlanDocSource[] {
+  const references: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const r = text[i];
+    if (r === '（' || r === '(') {
+      depth += 1;
+    } else if ((r === '）' || r === ')') && depth > 0) {
+      depth -= 1;
+    } else if (depth === 0 && '、,，;；'.includes(r) && DOC_GROUP.test(text.slice(i + 1))) {
+      references.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  references.push(text.slice(start));
+  return references.flatMap((reference) => wikiPlanDocReferenceOf(reference));
+}
+
+/** One `docs/x.md § heading` (or several `§` of that document). */
+function wikiPlanDocReferenceOf(text: string): WikiPlanDocSource[] {
   const [file, sections, has] = goCut(text, '§');
   const paths = wikiPlanPaths(file);
   if (paths.length === 0) return [];

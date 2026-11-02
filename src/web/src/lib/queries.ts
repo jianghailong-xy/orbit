@@ -56,6 +56,7 @@ import type {
   WikiJobsRead,
   WikiSearchRow,
   WikiSpaceHealth,
+  WikiSpaceWorkspaces,
   WikiSystemModelRead,
 } from '@orbit/shared';
 import type {
@@ -1114,6 +1115,13 @@ export const wikiSpaceQuery = (spaceId: string | null) =>
     queryKey: ['wiki', 'space', spaceId] as const,
     queryFn: () => api<WikiSpaceWithUsage>(`/wiki/spaces/${encodeURIComponent(spaceId!)}?include=usage`),
     enabled: spaceId !== null,
+  });
+
+/** Who is in a wiki and who can be added to it: Wiki settings' Workspaces card (contract `space.workspaces`). */
+export const wikiSpaceWorkspacesQuery = (spaceId: string) =>
+  queryOptions({
+    queryKey: ['wiki', 'space-workspaces', spaceId] as const,
+    queryFn: () => api<WikiSpaceWorkspaces>(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`),
   });
 
 /**

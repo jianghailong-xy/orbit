@@ -4249,6 +4249,10 @@ final class ConsoleModel {
     /// publishing a question once it is answered, and keeps at most its verdict, so this is the
     /// one copy of what was asked — kept as long as this console is.
     private(set) var answeredDecisions: [String: AnsweredDecision] = [:]
+    /// The coordinator's questions answered HERE, by item id. A question's record reads the same
+    /// whoever answered it, and the review sheet has to tell them apart: its own press leaves it a
+    /// moment later, and an answer from another end does not.
+    private(set) var questionsAnsweredHere: Set<String> = []
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -5446,6 +5450,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)

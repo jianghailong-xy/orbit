@@ -17,7 +17,7 @@ import OrbitKit
 struct LandingStatusCardView: View {
     let sessionID: String
     let landing: SessionLandingView?
-    /// The task's name (a round's own title): the one line the window adds under the head.
+    /// The task's name (a round's own title), whole: what the window adds under the head.
     let title: String?
     let now: Date
     /// When this device last got an answer, and whether that read failed.
@@ -47,7 +47,6 @@ struct LandingStatusCardView: View {
         if let title, !title.isEmpty {
             Text(title)
                 .font(.orbitLabel)
-                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

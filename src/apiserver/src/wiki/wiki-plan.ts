@@ -25,6 +25,7 @@ import {
   type WikiPlanFactKind,
   type WikiPlanGateCheck,
   type WikiPlanGateError,
+  type WikiPlanGateNote,
   type WikiPlanGateReport,
   type WikiPlanJob,
   type WikiPlanJobOutcome,
@@ -75,15 +76,18 @@ import { WikiRefusalError } from './wiki.service';
  * it is confirmed or superseded. So the version the owner confirmed is, byte for byte, the version the
  * documents are written from (`requireConfirmedPlan`), until the owner confirms another.
  *
- * THE GATE (contract `plan.gate`). The model drafts and revises; the gate decides what of that may be
- * stored, and answers everything it found at once, each with where it is and which check found it, so
- * the drafting job can hand the list back to the model and ask again:
+ * THE GATE (contract `plan.gate`). The model drafts and revises; the gate holds what is stored to the plan's
+ * rules, and answers everything it found at once, each with where it is and which check found it, so the
+ * drafting job can hand the list back to the model and ask again — and what its last round leaves, it settles
+ * before it submits (wiki-worker/wiki-plan-gate.ts `wikiPlanSettle`), so what this gate refuses of a job's last
+ * draft is a fault, not the draft's:
  *
  *   schema      every field is one the schema has (`WIKI_PLAN_SCHEMA`) — or one the draft declares in
  *               `newFields` as needing adding, whose values are kept apart as `extra` — of the right
  *               type, within its limits, and a section's kind one of the closed set;
- *   docCount    the draft has as many documents as its target: `rules.docsMin`–`rules.docsMax` unless
- *               the request names its own;
+ *   docCount    a plan has `rules.docsCeiling` documents at most. Its target (`rules.docsMin`–`rules.docsMax`
+ *               unless the request names its own) is what the job is held to, and it is the owner who may
+ *               take a draft outside it; a change to a version does not take it further out;
  *   protected   a document the version it revises protects is in the new one exactly as it was, and
  *               only the owner protects one;
  *   references  every project, topic and entry kind a section's session condition names exists, every
@@ -98,7 +102,7 @@ import { WikiRefusalError } from './wiki.service';
  * What it does NOT check is the repository: a file, a docs section or a symbol exists only in a
  * checkout, which the server has none of. The drafting job checks those on the space's snapshot, at a sha
  * (wiki-worker/wiki-plan-gate.ts), and the server keeps what it reported beside the version (`repoCheck`,
- * `repoSha`) for the owner to read.
+ * `repoSha`) for the owner to read: a version made from it carries it on, as far as its references are still there.
  *
  * WHO. A draft and a proposal come from the wiki worker's jobs — a plan job's draft (`submitServerDraft`) and a
  * maintenance run's proposal (`proposeServer`), each naming its wiki_job; everything else a person does — read,
@@ -635,10 +639,13 @@ function canonical(value: unknown): unknown {
   return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonical(record[key])]));
 }
 
-/** The document count a plan is held to: its target, and whether it is inside it. */
-function checkDocCount(walk: Walk, plan: PlanContent, target: { min: number; max: number }, path: string): void {
+/**
+ * A change to a version, against its target: it may not take the plan outside it, or further out than it stands. A
+ * draft outside its target stands, for the owner to confirm or redraft, so a change that leaves the count alone is fine.
+ */
+function checkDocCount(walk: Walk, plan: PlanContent, before: number, target: { min: number; max: number }, path: string): void {
   const count = plan.docs.length;
-  if (count < target.min || count > target.max) {
+  if ((count < target.min && count < before) || (count > target.max && count > before)) {
     walk.fail(
       'docCount',
       path,
@@ -726,7 +733,7 @@ function ownerChannel(actingSessionId: string | null, what: string): void {
   });
 }
 
-function report(plan: PlanContent, target: { min: number; max: number }, protectedCheck: boolean): WikiPlanGateReport {
+function report(plan: PlanContent, target: { min: number; max: number }, protectedCheck: boolean, notes: readonly WikiPlanGateNote[] = []): WikiPlanGateReport {
   const checks = Object.fromEntries(WIKI_PLAN_GATE_CHECKS.map((check) => [check, 'passed'])) as WikiPlanGateReport['checks'];
   if (!protectedCheck) checks.protected = 'skipped';
   const holders = (at: WikiPlanNewFieldLevel): Array<Record<string, unknown>> =>
@@ -737,7 +744,59 @@ function report(plan: PlanContent, target: { min: number; max: number }, protect
     docs: plan.docs.length,
     target,
     needsNewFields: plan.newFields.map((field) => ({ ...field, values: holders(field.at).filter((extra) => field.name in extra).length })),
+    ...(notes.length > 0 ? { notes: [...notes] } : {}),
   };
+}
+
+/** How many repository references a plan names, as the drafting job counts them. */
+function repoReferences(plan: PlanContent): number {
+  let n = 0;
+  for (const doc of plan.docs) {
+    for (const { sources } of doc.sections) {
+      for (const source of sources.docs) n += source.section ? 2 : 1;
+      for (const source of sources.code) n += 1 + source.symbols.length;
+      n += sources.contracts.length;
+    }
+  }
+  return n;
+}
+
+/**
+ * The drafting job's check as it stands on a version made from the one it checked (contract `plan.gate.repo`): an
+ * owner's edit or an accepted change is not checked again, and what was not found is still not found. Each miss goes
+ * with its document, to wherever that reference is now, and goes when the reference does.
+ */
+function carriedRepoCheck(check: WikiPlanRepoCheck | null, from: PlanContent, to: PlanContent): WikiPlanRepoCheck | null {
+  if (!check) return null;
+  const key = (slug: string, kind: WikiPlanRepoRefKind, ref: string): string => JSON.stringify([slug, kind, ref]);
+  const misses = new Set<string>();
+  for (const miss of check.missing) {
+    const at = miss.at === null ? null : /docs\[(\d+)\]/u.exec(miss.at);
+    const doc = at ? from.docs[Number(at[1])] : undefined;
+    if (doc) misses.add(key(doc.slug, miss.kind, miss.ref));
+  }
+  const missing: WikiPlanRepoCheck['missing'] = [];
+  to.docs.forEach((doc, i) => doc.sections.forEach((section, j) => {
+    const at = `plan.docs[${i}].sections[${j}].sources`;
+    const found = (kind: WikiPlanRepoRefKind, ref: string, where: string): void => {
+      if (misses.has(key(doc.slug, kind, ref))) missing.push({ kind, ref, at: `${at}.${where}` });
+    };
+    section.sources.docs.forEach((source, k) => {
+      found('file', source.path, `docs[${k}].path`);
+      if (source.section) found('docSection', `${source.path} § ${source.section}`, `docs[${k}].section`);
+    });
+    section.sources.code.forEach((source, k) => {
+      found('file', source.path, `code[${k}].path`);
+      source.symbols.forEach((symbol, m) => found('symbol', `${source.path}: ${symbol}`, `code[${k}].symbols[${m}]`));
+    });
+    section.sources.contracts.forEach((source, k) => found('contract', source.path, `contracts[${k}].path`));
+  }));
+  return { sha: check.sha, checked: Math.max(0, check.checked + repoReferences(to) - repoReferences(from)), missing };
+}
+
+/** What a stored version says to look at. */
+function notesOf(gate: unknown): WikiPlanGateNote[] {
+  return (gate as Partial<WikiPlanGateReport> | null)?.notes ?? [];
 }
 
 // ── What is read back ───────────────────────────────────────────────────────────────────────────
@@ -1372,11 +1431,12 @@ export class WikiPlans {
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model, idempotencyKey }' }], 'The draft');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of a draft: baseVersion, target, plan, repoCheck, model, idempotencyKey`);
+      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'notes', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of a draft: baseVersion, target, plan, repoCheck, notes, model, idempotencyKey`);
     }
     const baseVersion = raw.baseVersion === null || raw.baseVersion === undefined ? null : envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const target = targetOf(envelope, raw.target);
     const repoCheck = repoCheckOf(envelope, raw.repoCheck);
+    const notes = notesOfDraft(envelope, raw.notes);
     const model = raw.model === undefined || raw.model === null ? null : envelope.text(raw.model, 'model', 200, true);
     // The same draft landing again under its key is answered before the plan is read: the version it
     // stored is the newest now, so its base no longer is, and it is no STALE draft but the same one.
@@ -1387,7 +1447,11 @@ export class WikiPlans {
       if (earlier !== null) return { ...(await this.version(ownerId, spaceId, earlier)), replayed: true };
     }
 
-    const base = await this.latest(this.prisma, ownerId, spaceId);
+    const latest = await this.latest(this.prisma, ownerId, spaceId);
+    // A replay of a job its worker lost after it stored a later round's draft meets that draft here. The rounds before
+    // it are gated as they were, on what it revised, so the job goes on to the same draft and is answered with its version.
+    const own = latest !== null && latest.authorJobId === authorJobId && latest.baseVersion === baseVersion;
+    const base = !own ? latest : baseVersion === null ? null : await this.prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version: baseVersion }, select: VERSION_SELECT });
     if ((base?.version ?? null) !== baseVersion) {
       throw stale(
         `this draft revises ${baseVersion === null ? 'no version' : `version ${baseVersion}`}, and the plan stands at `
@@ -1398,7 +1462,7 @@ export class WikiPlans {
     const { plan, walk } = walkDraft(raw.plan);
     walk.errors.unshift(...envelope.errors);
     await this.resolve(walk, ownerId, spaceId, plan);
-    checkDocCount(walk, plan, target, 'plan.docs');
+    if (plan.docs.length > WIKI_PLAN_RULES.docsCeiling) walk.fail('docCount', 'plan.docs', `a plan has at most ${WIKI_PLAN_RULES.docsCeiling} documents`);
     checkProtected(walk, plan, baseContent, 'plan.');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The draft');
     assignKeys(plan, baseContent);
@@ -1408,7 +1472,7 @@ export class WikiPlans {
       proposalId: null,
       plan,
       target,
-      gate: report(plan, target, true),
+      gate: report(plan, target, true, notes),
       repoCheck,
       model,
       authorSessionId: null,
@@ -1469,7 +1533,6 @@ export class WikiPlans {
     checkWhole(walk, plan, 'plan.');
     await this.resolve(walk, ownerId, spaceId, plan);
     const target = { min: base.docsMin, max: base.docsMax };
-    checkDocCount(walk, plan, target, 'plan.docs');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The edit');
     assignKeys(plan, baseContent);
     const { version: number } = await this.store(ownerId, spaceId, base.version, {
@@ -1478,8 +1541,8 @@ export class WikiPlans {
       proposalId: null,
       plan,
       target,
-      gate: report(plan, target, false),
-      repoCheck: null,
+      gate: report(plan, target, false, notesOf(base.gate)),
+      repoCheck: carriedRepoCheck(base.repoCheck as unknown as WikiPlanRepoCheck | null, baseContent, plan),
       model: null,
       authorSessionId: null,
       authorUserId: ownerId,
@@ -1575,7 +1638,7 @@ export class WikiPlans {
     await this.resolve(walk, ownerId, spaceId, plan);
     await this.checkFacts(walk, ownerId, spaceId, facts);
     const target = { min: row.docsMin, max: row.docsMax };
-    checkDocCount(walk, plan, target, 'plan.docs');
+    checkDocCount(walk, plan, base.docs.length, target, 'plan.docs');
     checkProtected(walk, plan, base, 'plan.');
     if (walk.errors.length > 0 || !doc) throw gateRefusal(walk.errors, 'The proposal');
     const made = await this.prisma.wikiPlanProposal.create({
@@ -1703,7 +1766,7 @@ export class WikiPlans {
     checkWhole(check, plan, 'plan.');
     await this.resolve(check, ownerId, spaceId, plan);
     const target = { min: base.docsMin, max: base.docsMax };
-    checkDocCount(check, plan, target, 'plan.docs');
+    checkDocCount(check, plan, baseContent.docs.length, target, 'plan.docs');
     checkProtected(check, plan, baseContent, 'plan.');
     if (check.errors.length > 0 || !doc) throw gateRefusal(check.errors, `This proposal, applied to version ${base.version},`);
     assignKeys(plan, baseContent);
@@ -1717,8 +1780,8 @@ export class WikiPlans {
         proposalId,
         plan,
         target,
-        gate: report(plan, target, true),
-        repoCheck: null,
+        gate: report(plan, target, true, notesOf(base.gate)),
+        repoCheck: carriedRepoCheck(base.repoCheck as unknown as WikiPlanRepoCheck | null, baseContent, plan),
         model: null,
         authorSessionId: null,
         authorUserId: ownerId,
@@ -2012,6 +2075,24 @@ function targetOf(walk: Walk, value: unknown): { min: number; max: number } {
 }
 
 /** What the drafting job reported of the repository references it checked, as it is kept (contract `plan.gate.repo`). */
+/** What a drafting job's last round says to look at (contract `plan.gate.notes`). */
+function notesOfDraft(walk: Walk, value: unknown): WikiPlanGateNote[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    walk.fail('schema', 'notes', 'must be a list');
+    return [];
+  }
+  if (value.length > WIKI_PLAN_RULES.notesMax) walk.fail('schema', 'notes', `lists at most ${WIKI_PLAN_RULES.notesMax}`);
+  return value.slice(0, WIKI_PLAN_RULES.notesMax).flatMap((item, i) => {
+    const note = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
+    if (!note || !(WIKI_PLAN_GATE_CHECKS as readonly unknown[]).includes(note.check)) {
+      walk.fail('schema', `notes[${i}]`, `must be an object: { check, text }, its check one of ${WIKI_PLAN_GATE_CHECKS.join(', ')}`);
+      return [];
+    }
+    return [{ check: note.check as WikiPlanGateCheck, text: walk.text(note.text, `notes[${i}].text`, WIKI_PLAN_RULES.reasonMaxChars, true) }];
+  });
+}
+
 function repoCheckOf(walk: Walk, value: unknown): WikiPlanRepoCheck {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!raw) {

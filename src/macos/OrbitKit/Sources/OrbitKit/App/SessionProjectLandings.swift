@@ -110,6 +110,23 @@ public struct LandingsWindowDay: Equatable, Sendable, Identifiable {
         self.title = title
         self.rows = rows
     }
+
+    /// The day's rows as the window draws them: runs of messages Orbit sent close together.
+    public var groups: [LandingsWindowGroup] { SessionProjectLandings.groups(rows) }
+}
+
+/// A run of settled landings Orbit reported close together (owner 2026-11-02,
+/// docs/mocks/landings-chat-bubbles): the window draws it as one group of messages, Orbit's avatar
+/// once, beside the first — so a task's landing and the merge into main that carried it read as one
+/// exchange.
+public struct LandingsWindowGroup: Equatable, Sendable, Identifiable {
+    public let rows: [LandingsWindowRow]
+    /// The first row's id: the group is known by the message it starts with.
+    public var id: String { rows.first?.id ?? "" }
+
+    public init(rows: [LandingsWindowRow]) {
+        self.rows = rows
+    }
 }
 
 public struct LandingsWindow: Equatable, Sendable {
@@ -232,6 +249,25 @@ public enum SessionProjectLandings {
         }
         cards.sort { $0.at != $1.at ? $0.at < $1.at : $0.sessionId < $1.sessionId }
         return LandingsWindow(days: days, now: cards)
+    }
+
+    /// How far apart two settled landings may be and still read as one group of messages: ten
+    /// minutes (the web's `LANDINGS_GROUP_GAP_MS`).
+    public static let groupGap: TimeInterval = 10 * 60
+
+    /// A day's rows, oldest first, as runs Orbit sent close together: a row joins the group of the
+    /// one before it when it settled at most `groupGap` after it, and starts a group of its own when
+    /// it came later or either instant is unknown. The day sections already split at midnight.
+    public static func groups(_ rows: [LandingsWindowRow]) -> [LandingsWindowGroup] {
+        var runs: [[LandingsWindowRow]] = []
+        for row in rows {
+            if let last = runs.last?.last, last.at.isFinite, row.at.isFinite, row.at - last.at <= groupGap {
+                runs[runs.count - 1].append(row)
+            } else {
+                runs.append([row])
+            }
+        }
+        return runs.map(LandingsWindowGroup.init(rows:))
     }
 
     /// `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` — a count of 0

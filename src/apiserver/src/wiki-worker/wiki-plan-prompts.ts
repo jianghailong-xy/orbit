@@ -193,10 +193,11 @@ function guidanceBlock(r: WikiPlanRunState): string {
 }
 
 const CATALOGUE_FORMAT = '## Output format\nOutput only the Markdown below, with no preamble and no summary:\n'
-  + '## <category number>. <category title> `<category key: lowercase letters and hyphens>` — <what this category answers for the reader> '
+  + '## <category number>. <category title> `<category-key>` — <what this category answers for the reader> '
   + "(end the line of the agents' category with [agents])\n"
-  + '- <document id, such as 1.2> <title> `<slug: lowercase letters and hyphens>` | <the question the reader comes with, in one sentence> | '
-  + 'Includes: <point>; <point>; <point>\n';
+  + '- <document id, such as 1.2> <title> `<document-slug>` | <the question the reader comes with, in one sentence> | '
+  + 'Includes: <point>; <point>; <point>\n'
+  + 'Between the backticks write only the key or the slug itself, in lowercase letters and hyphens, such as `build-and-deploy`.\n';
 
 /** Step 1: the catalogue's skeleton. */
 export function wikiPlanSkeletonPrompt(r: WikiPlanRunState): string {

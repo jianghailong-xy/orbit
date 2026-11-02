@@ -4,10 +4,12 @@ import type { SessionFolder } from '../api';
 import { COORDINATOR_LEAD_COPY, type SidebarProject } from './projectAttention';
 import { sessionTimeSections } from './sessionGrouping';
 import {
+  LANDINGS_GROUP_GAP_MS,
   landingTaskName,
   landingsCountLine,
   landingsRowSummary,
   landingsWindow,
+  landingsWindowGroups,
   listShowsProjects,
   SESSION_PROJECT_COPY,
   SESSION_PROJECT_COORDINATOR_COPY,
@@ -353,6 +355,43 @@ describe('the Landings window and its row', () => {
     expect(window.days[0].rows[0]).toMatchObject({ title: 'Month-old fix', detail: 'Cancelled', tone: 'quiet' });
     // Nothing is in hand.
     expect(window.now).toEqual([]);
+  });
+
+  /** Settled landings Orbit reported close together read as one group of messages, one avatar
+   *  (owner 2026-11-02, docs/mocks/landings-chat-bubbles): each within ten minutes of the one before
+   *  it, in the same day — a task's landing and the merge into main that carried it. */
+  it('groups a day’s rows that came within ten minutes of the one before', () => {
+    const window = landingsWindow([
+      landing('T1', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 22, 11) }),
+      landing('round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: local(26, 22, 13) },
+        { title: 'Merge project/p1 → main · #1' }),
+      landing('T2', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 7) }),
+      landing('T4', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 17) }),
+      landing('T6', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: local(26, 23, 28) }),
+      landing('T5', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(26, 23, 55) }),
+      landing('T3', { state: 'SETTLED', settledAs: 'LANDED', settledAt: local(27, 0, 1) }),
+    ], [], { now: NOON });
+    expect(window.days.map((day) => day.title)).toEqual(['Yesterday', 'Today']);
+    // Ten minutes exactly still joins (T2 → T4); eleven starts a group (T4 → T6); six minutes across
+    // midnight are two days, so two groups (T5 → T3).
+    const keys = (rows: Parameters<typeof landingsWindowGroups>[0]) =>
+      landingsWindowGroups(rows).map((group) => group.map((row) => row.key));
+    expect(keys(window.days[0].rows)).toEqual([['T1', 'round'], ['T2', 'T4'], ['T6'], ['T5']]);
+    expect(keys(window.days[1].rows)).toEqual([['T3']]);
+    expect(LANDINGS_GROUP_GAP_MS).toBe(600_000);
+  });
+
+  /** A row whose instant is unknown has no neighbour to be close to: it stands alone. */
+  it('makes a row with no instant a group of its own', () => {
+    const row = (key: string, at: number, time: string) => ({
+      key, sessionId: key, subject: 'TASK' as const, title: key, detail: 'Landed', tone: 'ok' as const, time, at,
+      promotion: null,
+    });
+    const unknown = (key: string) => row(key, Number.NEGATIVE_INFINITY, '');
+    const known = row('c', Date.parse(local(1, 8)), '08:00');
+    expect(landingsWindowGroups([unknown('a'), unknown('b'), known]).map((group) => group.map((each) => each.key)))
+      .toEqual([['a'], ['b'], ['c']]);
+    expect(landingsWindowGroups([])).toEqual([]);
   });
 
   it('puts what is in hand under Now, in the order it started', () => {

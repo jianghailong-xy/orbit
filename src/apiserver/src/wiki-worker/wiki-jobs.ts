@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { WIKI_JOB, type WikiJobFailureKind } from '@orbit/shared';
+import { WIKI_JOB, WIKI_PLAN_NO_DRAFT, type WikiJobFailureKind } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { stripNul } from '../runner-api/strip-nul';
@@ -510,7 +510,8 @@ export async function settleWikiJobRows(tx: Prisma.TransactionClient, job: Ended
   if ((job.kind === 'plan_draft' || job.kind === 'plan_revise' || job.kind === 'docs_build') && typeof input.planJobId === 'string') {
     await tx.wikiPlanJob.updateMany({
       where: { id: input.planJobId, state: 'made' },
-      data: { state: 'ended', outcome: 'failed', endedAt: now, error: reason },
+      // A draft's end is the owner's to read (contract `plan.jobs.noDraft`): the attempts stay on the job's own row.
+      data: { state: 'ended', outcome: 'failed', endedAt: now, error: job.kind === 'docs_build' ? reason : WIKI_PLAN_NO_DRAFT.unreachable },
     });
   }
 }

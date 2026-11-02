@@ -205,6 +205,12 @@ final class LandingCopyParityTests: XCTestCase {
         for gone in ["landingGroup(", "LANDINGS_SETTLED_WINDOW_MS", "landingEarlierLine(", "EARLIER: 'Earlier'"] {
             XCTAssertFalse(web.contains(gone), "\(Self.sessionProjects) still has \(gone)")
         }
+        // The window drawn as a chat (owner 2026-11-02): a day's rows sent within ten minutes of the one
+        // before are one group of messages, one avatar — the web's gap and comparison, and the same here.
+        assertSays(web, "export const LANDINGS_GROUP_GAP_MS = 10 * 60 * 1000;", in: Self.sessionProjects)
+        assertSays(web, "if (last && Number.isFinite(last.at) && Number.isFinite(row.at) "
+                   + "&& row.at - last.at <= LANDINGS_GROUP_GAP_MS) {", in: Self.sessionProjects)
+        XCTAssertEqual(SessionProjectLandings.groupGap * 1000, 10 * 60 * 1000)
     }
 
     /// The entrances (owner 2026-10-19, 方案 A): `Open landing ›`, the grey sentence, `All jobs ›`,

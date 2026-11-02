@@ -256,7 +256,10 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
         verify("each settled landing once", count(hasTestTag("landing-row:$landingOld")) == 1 && count(hasTestTag("landing-row:$landingCancelled")) == 1)
         capture("02-landings-window")
         compose.onNodeWithTag("landing-row:$landingOld").performClick()
-        await("the row opens in place to its record") { calls.any { it == "GET sessions/$landingOld" } && exists(hasTestTag("landing:open-arrow"), unmerged = true) }
+        await("the row opens in place to its record") {
+            calls.any { it == "GET sessions/$landingOld" } &&
+                exists(hasTestTag("landing:record-panel") and hasAnyAncestor(hasTestTag("landing-entry:$landingOld")), unmerged = true)
+        }
         verify("read once", calls.count { it == "GET sessions/$landingOld" } == 1)
         capture("03-landing-opened-in-place")
     }

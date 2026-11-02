@@ -180,6 +180,16 @@ export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'PATCH', body });
 }
 
+/** `POST /api/wiki/spaces/:id/workspaces` — bring a workspace into the wiki, or back into it. */
+export function addWikiWorkspace(spaceId: string, workspaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces`, { method: 'POST', body: { workspaceId } });
+}
+
+/** `DELETE /api/wiki/spaces/:id/workspaces/:workspaceId` — leave a workspace out of the wiki. */
+export function leaveWikiWorkspaceOut(spaceId: string, workspaceId: string): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE' });
+}
+
 // ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────
 
 /**

@@ -1,0 +1,10 @@
+F0: at rest absent, under the pointer 16 label="Control F0" value="" frame=(648.0, 93.0, 14.0, 16.0) hittable=false
+F1: at rest absent, under the pointer 16 label="Control F1" value="" frame=(648.0, 133.0, 14.0, 16.0) hittable=false
+F2: at rest absent, under the pointer 16 label="Control F2" value="" frame=(648.0, 173.0, 14.0, 16.0) hittable=false
+F3: at rest absent, under the pointer 16 label="Control F3" value="" frame=(640.0, 206.0, 30.0, 30.0) hittable=false
+F4: at rest absent, under the pointer 16 label="Control F4" value="" frame=(656.0, 253.0, 14.0, 16.0) hittable=false
+F5: at rest absent, under the pointer 16 label="Control F5" value="" frame=(648.0, 293.0, 14.0, 16.0) hittable=false
+F6: at rest absent, under the pointer 16 label="Control F6" value="" frame=(648.0, 333.0, 14.0, 16.0) hittable=false
+F7: at rest absent, under the pointer 16 label="Control F7" value="" frame=(648.0, 373.0, 14.0, 16.0) hittable=false
+F8: at rest absent, under the pointer 16 label="Control F8" value="" frame=(648.0, 406.0, 30.0, 30.0) hittable=false
+real card: at rest in the tree, under the pointer 16 label="Recap actions" value="" frame=(648.0, 444.0, 30.0, 33.0) hittable=true

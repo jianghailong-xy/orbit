@@ -20,7 +20,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
@@ -29,18 +28,17 @@ import io.orbitd.android.ui.LocalOrbitColors
 
 // A document of the plan and a section of it (iOS `WikiPlanView.swift` § a document of the plan, and a section of it).
 
-/** A plan document's own page (mock 22 ③): its number, title and lock; its version, errors and length; its fields —
- * question, readers, what it covers and leaves out, length, protection, what it draws on — and its sections, a protected
- * document's lost ones in red where they were — `WikiPlanLogic.DocSection`'s order. Edit in the bar when [canEdit]. */
+/** A plan document's own page (mock 22 ③): its number, title and lock; its version, references not found and length; its
+ * fields — question, readers, what it covers and leaves out, length, protection, what it draws on — and its sections —
+ * `WikiPlanLogic.DocSection`'s order. Edit in the bar when [canEdit]. */
 @Composable
-internal fun WikiPlanDocPage(route: OrbitRoute, shown: WikiPlanLogic.Shown, doc: WikiPlanLogic.ShownDoc, base: WikiPlanLogic.Shown?,
+internal fun WikiPlanDocPage(route: OrbitRoute, shown: WikiPlanLogic.Shown, doc: WikiPlanLogic.ShownDoc,
     canEdit: Boolean = false, actions: WikiPlanActions = WikiPlanActions()) {
     var allCovers by rememberSaveable { mutableStateOf(false) }
     PageBar.Bind(route, title = "", actions = if (!canEdit) null else ({
         TextButton(onClick = { actions.editDoc(doc.slug) }, modifier = Modifier.testTag("wiki-plan-doc-edit")) { Text(WikiPlanCopy.edit) }
     }))
-    val error = MaterialTheme.colorScheme.error
-    val lost = WikiPlanLogic.lostSections(shown, base, doc.slug)
+    val amber = WikiPalette.amber
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-plan-doc-page"), contentPadding = PaddingValues(bottom = 24.dp)) {
         WikiPlanLogic.DocSection.entries.forEach { section ->
             when (section) {
@@ -55,11 +53,11 @@ internal fun WikiPlanDocPage(route: OrbitRoute, shown: WikiPlanLogic.Shown, doc:
                     }
                 }
                 WikiPlanLogic.DocSection.META -> item(key = "meta") {
-                    val errors = WikiPlanLogic.docErrors(shown, doc).size
+                    val missing = WikiPlanLogic.docMissing(shown, doc).size
                     Text(buildAnnotatedString {
                         append("${WikiPlanCopy.versionLabel(shown.version)} · ${shown.status.label} · ")
-                        if (errors > 0) {
-                            withStyle(SpanStyle(color = error, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.errorCount(errors)) }
+                        if (missing > 0) {
+                            withStyle(SpanStyle(color = amber, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.notFoundCount(missing)) }
                             append(" · ")
                         }
                         append(WikiPlanLogic.docLine(doc))
@@ -106,16 +104,10 @@ internal fun WikiPlanDocPage(route: OrbitRoute, shown: WikiPlanLogic.Shown, doc:
                 WikiPlanLogic.DocSection.SECTIONS -> {
                     item(key = "sections-header") { WikiPlanSectionHead(WikiPlanCopy.sections, "${doc.sections.size}") }
                     item(key = "sections") {
-                        // Each section, a lost one in red where it was, and those lost past the end after them.
-                        val rows: List<Pair<WikiPlanLogic.Lost?, Int>> = buildList {
-                            doc.sections.indices.forEach { index -> lost.filter { it.number - 1 == index }.forEach { add(it to -1) }; add(null to index) }
-                            lost.filter { it.number - 1 >= doc.sections.size }.forEach { add(it to -1) }
-                        }
                         WikiCard(Modifier.testTag("wiki-plan-sections")) {
-                            rows.forEachIndexed { i, (gone, index) ->
-                                if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
-                                if (gone != null) PlanLostRow(gone, base, doc)
-                                else PlanSectionRow(index, doc.sections[index]) { actions.openSection(doc.slug, index) }
+                            doc.sections.forEachIndexed { index, row ->
+                                if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                                PlanSectionRow(index, row) { actions.openSection(doc.slug, index) }
                             }
                         }
                     }
@@ -138,18 +130,6 @@ private fun PlanDocField(title: String, tag: String, divider: Boolean = true, co
 @Composable
 private fun PlanBullets(lines: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { lines.forEach { Text("• $it", style = WikiType.subtext) } }
-}
-
-/** A section a protected document lost in the draft, in red where it was: `v1 §7 已知的坑`. */
-@Composable
-private fun PlanLostRow(row: WikiPlanLogic.Lost, base: WikiPlanLogic.Shown?, doc: WikiPlanLogic.ShownDoc) {
-    val error = MaterialTheme.colorScheme.error
-    Column(Modifier.fillMaxWidth().background(error.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-plan-lost:${row.number}"),
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("− ${WikiPlanCopy.lostLabel(base?.version ?: 0, row.number, row.title)}", style = WikiType.prose,
-            textDecoration = TextDecoration.LineThrough, color = WikiPalette.secondary)
-        Text(WikiPlanCopy.protectedMovePhone(row.movedTo, doc.number), style = WikiType.label, color = error)
-    }
 }
 
 @Composable
@@ -250,11 +230,11 @@ private fun LazyListScope.planSources(shown: WikiPlanLogic.Shown, doc: WikiPlanL
 @Composable
 private fun PlanSourceRow(path: String, detail: String?, found: Boolean?, tag: String) {
     val green = LocalOrbitColors.current.success
-    val red = MaterialTheme.colorScheme.error
+    val amber = WikiPalette.amber
     Text(buildAnnotatedString {
         withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(path) }
         detail?.let { withStyle(SpanStyle(color = WikiPalette.secondary)) { append(" $it") } }
-        found?.let { withStyle(SpanStyle(color = if (it) green else red, fontWeight = FontWeight.Bold)) { append(" ${if (it) WikiPlanCopy.found else WikiPlanCopy.notFound}") } }
+        found?.let { withStyle(SpanStyle(color = if (it) green else amber, fontWeight = FontWeight.Bold)) { append(" ${if (it) WikiPlanCopy.found else WikiPlanCopy.notFound}") } }
     }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag), style = WikiType.subtext)
 }
 
