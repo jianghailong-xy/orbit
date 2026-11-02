@@ -4707,8 +4707,22 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('project not found');
 
+    // A coordinator opens in the account's default mode, so a session that may not start that may
+    // not open one. Refused rather than narrowed: the project's standing conversation would keep the
+    // narrower mode, and everything it starts after it.
+    const assertMayOpen = () => this.sessions.assertMayStartAtAccountDefault(
+      ownerId,
+      actingSessionId,
+      { workspaceId: project.coordinatorWorkspaceId },
+      "A project's coordinator opens in the account default. A person can open it from the project's " +
+        'page, or switch this session to Auto.',
+    );
+
     const standing = project.coordinatorSessionId;
-    if (standing == null) return this.coordinator(ownerId, id);
+    if (standing == null) {
+      await assertMayOpen();
+      return this.coordinator(ownerId, id);
+    }
 
     const blockedReason = await this.sessions.receiveBlockedReasonFor(ownerId, standing);
     if (blockedReason == null || standing === actingSessionId) {
@@ -4721,6 +4735,7 @@ export class ProjectsService {
       return { sessionId: standing, created: false, workspaceId: project.coordinatorWorkspaceId };
     }
 
+    await assertMayOpen();
     const replaced = await this.coordinator(ownerId, id, undefined, 'replace');
     // Only a rotation this call actually performed is reported as one. Losing the swap means
     // somebody else bound the next conversation, and naming the session they replaced as OURS would

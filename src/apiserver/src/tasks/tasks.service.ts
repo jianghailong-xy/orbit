@@ -9500,6 +9500,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new ForbiddenException(verifierWriteFromRunRefusalBody());
       }
     }
+    // A schedule, or auto-run switched on, starts the task in the account's default mode with no
+    // session in the way, so a session that may not start that with `task_start` may not arrange it.
+    if (actingSessionId && (dto.runAt != null || (dto.autoRunWhenReady === true && !before.autoRunWhenReady))) {
+      await this.sessions.assertMayStartAtAccountDefault(
+        ownerId,
+        actingSessionId,
+        {
+          engine: dto.engine ?? before.engine,
+          provider: dto.provider ?? before.provider,
+          model: dto.model ?? before.model,
+          workspaceId: dto.assigneeId ?? before.assigneeId,
+        },
+        'A schedule or auto-run would start this task in the account default, so nothing was written. ' +
+          'A person can press Start on the task page, or switch this session to Auto.',
+      );
+    }
     // Unit L4, the edit door's crossing: a session that sends another project WITH a `handoff` is
     // asking for this task to be moved, and a request is not a write — it files the question (or
     // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
@@ -14671,7 +14687,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * send again, so a repeat of it is a new request and is treated as one.
      */
     requestToken?: string,
-    /** The Session making an agent-side request; used only for canonical remediation evidence. */
+    /** The Session making an agent-side request, when the runner names it: `task_start` may not open a session wider than it. */
     actingSessionId?: string,
     /**
      * The runner's door — `task_start` and `orbit task start` — rather than the owner's own Run.
@@ -14708,7 +14724,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!lease.held) return recordAnswer(lease.result as TaskRunAnswer);
     try {
       return recordAnswer(
-        await this.executeLeased(ownerId, id, auto, runRequestToken, lease, runnerDoor),
+        await this.executeLeased(ownerId, id, auto, runRequestToken, lease, runnerDoor, actingSessionId),
       );
     } catch (e) {
       // A refused request is not a frozen one. Nothing about "prerequisites are not complete" or
@@ -14801,6 +14817,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     runRequestToken: string,
     lease: Extract<TaskRunLease, { held: true }>,
     runnerDoor: boolean,
+    actingSessionId: string | undefined,
   ): Promise<TaskRunAnswer> {
     // ALREADY DECIDED. Not one mutable check below this line may run again: the holder that passed
     // them wrote down what it decided with, and re-reading a world that has moved is how a repeat
@@ -15060,6 +15077,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         prompt,
       )
       : null;
+    // Only a fresh run decides a mode, and it is the account's default: a paused run keeps its own.
+    if (actingSessionId && planned.kind === 'CREATE') {
+      await this.sessions.assertMayStartAtAccountDefault(
+        ownerId,
+        actingSessionId,
+        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id },
+        'This task would start in the account default. A person can press Start on the task page, or ' +
+          'switch this session to Auto.',
+      );
+    }
     const frozen: TaskRunExecuteTarget = {
       v: 3,
       kind: 'RUN',
