@@ -20,10 +20,12 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	commands := recordCommands(t)
 	unit := unitForUid(uint32(os.Getuid()))
 
+	var svc *runnerService
 	out := captureServiceOutput(t, func() {
-		err := setupServiceLinux(path, nil, func() error {
+		var err error
+		svc, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
 			t.Error("the sudo path ran even though the broker enabled the runner")
-			return nil
+			return nil, nil
 		})
 		if err != nil {
 			t.Errorf("register: %v", err)
@@ -32,6 +34,16 @@ func TestRegisterAndUnregisterGoThroughTheBrokerWithoutRoot(t *testing.T) {
 	if got := *asked; len(got) != 1 || got[0] != "enable" {
 		t.Fatalf("broker was asked %v, want exactly [enable]", got)
 	}
+	// The service register waits on is the unit the broker says it started.
+	if svc == nil || svc.unit != unit || svc.how != "runs at boot" {
+		t.Fatalf("register's service step returned %+v, want unit %s that runs at boot", svc, unit)
+	}
+	// Started is said once the control plane has heard from the runner (startService), not
+	// when the broker answers.
+	if strings.Contains(out, "Background service started") {
+		t.Errorf("register said the service started before anything heard from it:\n%s", out)
+	}
+	out = captureServiceOutput(t, func() { printServiceStarted(svc.how) })
 	user := "this account"
 	if u, err := registeringUser(); err == nil {
 		user = u.Username
@@ -70,7 +82,7 @@ func TestNoBrokerFallsBackToSudoSilently(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(absent, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(absent, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -103,7 +115,7 @@ func TestABrokerThatRefusesSaysWhyAndStillFallsBack(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -139,7 +151,7 @@ func TestADeadSocketSaysWhyAndFallsBack(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -169,7 +181,7 @@ func TestASilentBrokerTimesOutAndStillFallsBack(t *testing.T) {
 	installed := make(chan struct{}, 1)
 	out := captureServiceOutput(t, func() {
 		mustGiveUp(t, "register", func() {
-			if err := setupServiceLinux(path, nil, func() error { installed <- struct{}{}; return nil }); err != nil {
+			if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed <- struct{}{}; return nil, nil }); err != nil {
 				t.Error(err)
 			}
 		})
@@ -209,7 +221,7 @@ func TestRegisterWarnsThatTheSharedTemplateDropsTheProxy(t *testing.T) {
 	proxy := proxyServiceEnv("http://proxy.internal:3128", "https://orbit.example", "")
 
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, proxy, func() error { t.Error("fell back"); return nil }); err != nil {
+		if _, err := setupServiceLinux(path, proxy, func() (*runnerService, error) { t.Error("fell back"); return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -311,9 +323,9 @@ func TestRegisterStopsAtTheBrokersOwnCopyRefusalWithoutSudo(t *testing.T) {
 
 			var err error
 			out := captureServiceOutput(t, func() {
-				err = setupServiceLinux(path, nil, func() error {
+				_, err = setupServiceLinux(path, nil, func() (*runnerService, error) {
 					t.Error("the sudo path ran although the broker said the account has no copy of its own")
-					return nil
+					return nil, nil
 				})
 				if err != nil {
 					printServiceFailure(os.Stderr, err)
@@ -355,7 +367,7 @@ func TestRootsRefusalStillFallsBackToTheSudoPath(t *testing.T) {
 
 	installed := false
 	out := captureServiceOutput(t, func() {
-		if err := setupServiceLinux(path, nil, func() error { installed = true; return nil }); err != nil {
+		if _, err := setupServiceLinux(path, nil, func() (*runnerService, error) { installed = true; return nil, nil }); err != nil {
 			t.Error(err)
 		}
 	})
