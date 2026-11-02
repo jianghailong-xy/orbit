@@ -827,7 +827,7 @@ private struct LandingsBubbleLayout: Layout {
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = width(for: proposal, subviews)
+        let width = bubbleWidth(for: proposal, subviews)
         let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
         return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0)))
     }
@@ -844,7 +844,7 @@ private struct LandingsBubbleLayout: Layout {
 
     /// Each line at the room there is, or at its natural width where that is less: wrapped words
     /// report the width they took, and a line with a spacer, which would take all of it, its own.
-    private func width(for proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
+    private func bubbleWidth(for proposal: ProposedViewSize, _ subviews: Subviews) -> CGFloat {
         let room = proposal.width ?? .infinity
         let widest = subviews.map { subview -> CGFloat in
             let natural = subview.sizeThatFits(.unspecified).width
