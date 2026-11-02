@@ -62,16 +62,70 @@ a directory of its own**, because anything else living there is deleted. Backups
 written (`.staging-*`) are excluded, host keys are checked against the mounted `known_hosts`, and
 a failure is logged (`ERROR: off-host sync … failed`) without interrupting local backups. The
 sidecar installs `rsync`/`openssh-client` at start, so it needs to reach an Alpine mirror once
-per container start; without that it says so and keeps backing up locally.
+per container start; without that it says so and keeps backing up locally. It refuses to mirror an
+archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so an empty or wrong mount
+cannot clear the target.
 
-Restoring from the mirror is the same runbook — copy a base backup directory and the WAL back
-(or point `restore_command` at a mount of the mirror):
+### Attachment files
 
-```bash
-rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
-```
+Postgres only names an attachment's bytes. They are in `./data/files`, which neither the WAL archive
+nor a base backup contains, so a restored database needs that directory back as well. With a target
+set, the sidecar copies it on every poll, right after the archive, to the directory beside the target
+with `-files` added to its name:
+
+| `ORBIT_BACKUP_SYNC_TARGET` | Where `./data/files` goes |
+| --- | --- |
+| `root@backup-host:/data/backup/orbit-pg-archive` | `root@backup-host:/data/backup/orbit-pg-archive-files` |
+
+It goes beside the target and not under it because the mirror's `--delete` would remove it there. There
+is nothing more to set, but the ssh user has to be able to create that directory: if it cannot write to
+the target's parent, create the directory by hand once.
+
+The copy is `rsync -a` with no `--delete`, so it only grows: a Postgres backup still retained may name
+bytes the live database has let go of. Uploads still arriving (`tmp/`) are excluded. A failure is logged
+like the mirror's (`ERROR: off-host sync … failed`), does not touch base backups or the mirror, and is
+retried on the next poll. The archive goes first, because bytes are stored before the row naming them
+commits: a round that finishes leaves the copy with the bytes of every row in the mirrored WAL.
+
+- **With no target,** `./data/files` is the only copy of those bytes. Postgres does not hold them and no
+  local backup does, so they are lost with the disk.
+- **With `ORBIT_FILES_BACKEND=s3`,** keeping the bytes is the bucket's job: use its versioning or
+  replication. Uploads only pass through `./data/files/tmp`, so the sidecar has nothing to copy, and that
+  is not an error. Bytes left in the directory from before a move to a bucket are still copied.
+
+The sidecar gets its read-only mount of `./data/files` when its container is recreated, and until then
+it copies no files. `docker compose up -d --build` recreates it, and so does `/upgrade`, which runs only
+in the checkout the deployment runs from.
+`docker logs orbit-pgbackup | grep watching` then names both directories.
+
+### Restore on a replacement host
+
+Restoring from the mirror is the same runbook with the archive copied back first (or `restore_command`
+pointed at a mount of the mirror). Follow these steps in order:
+
+1. Put `.env` back **without `ORBIT_BACKUP_SYNC_TARGET`**. With it unset the sidecar makes no off-host
+   copy, so nothing on this host can touch the mirror until the restore is done.
+2. Copy the archive back **before the first `docker compose up -d`**. A new cluster has a real archive
+   of its own, which the sidecar does not refuse, and with a target set the mirror's `--delete` would
+   replace the old archive with it.
+
+   ```bash
+   mkdir -p data
+   rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
+   ```
+
+3. Follow [Restore to the newest state](#restore-to-the-newest-state-diskcorruption-loss), then
+   [Restore the attachment files](#restore-the-attachment-files).
+4. Put `ORBIT_BACKUP_SYNC_TARGET` back in `.env` and recreate the sidecar:
+
+   ```bash
+   docker compose up -d --no-deps pgbackup
+   ```
 
 ## Restore
+
+On a replacement host, where nothing survived, start at
+[Restore on a replacement host](#restore-on-a-replacement-host).
 
 Both paths below replace the live database. Take the deployment down first and keep the damaged
 copy — it is evidence, and a second attempt may need it:
@@ -98,12 +152,12 @@ chown -R 70:70 data/postgres && chmod 700 data/postgres
 
 docker compose up -d postgres
 docker logs -f orbit-postgres     # wait for "archive recovery complete"
-docker compose up -d              # bring the rest back
 ```
 
 Postgres replays every segment it finds and promotes when the archive runs out (the
 "could not restore file … No such file" line at the end is how recovery notices it is done, not
-an error).
+an error). Then [restore the attachment files](#restore-the-attachment-files), which brings back the
+rest of the stack.
 
 ### Restore to a point in time (bad write, wrong migration)
 
@@ -125,6 +179,32 @@ attempt, which is why the first step keeps the broken data directory instead of 
 Both paths need the base backup to be *older* than the target time; `data/pg-archive/base/<stamp>/start-wal`
 records the first WAL segment each backup needs, and segments older than the oldest retained
 backup are pruned, so a target older than the oldest base backup is not recoverable here.
+
+### Restore the attachment files
+
+Both paths above continue here: **Postgres first, then the files, and only then the apiserver.** The
+restored database says which bytes have to exist, and nothing should serve its rows until they do.
+
+If `./data/files` was lost, copy it back from the [off-host copy](#attachment-files). If it survived,
+keep it: bytes no row names any more do no harm, and a row needs its bytes to stay readable.
+
+```bash
+rsync -a backup-host:/data/backup/orbit-pg-archive-files/ data/files/
+```
+
+Either way, check that every row finds its bytes. Nothing printed means they all do; a `missing` line
+is an attachment that was uploaded too shortly before the loss to reach the copy, and it cannot be
+read. Then bring back the rest:
+
+```bash
+docker exec orbit-postgres psql -U orbit -d orbit -Atc "select sha256 from file_blob where storage = 'local'" |
+  while read -r sha; do [ -f "data/files/${sha:0:2}/$sha" ] || echo "missing $sha"; done
+docker compose up -d              # bring the rest back
+```
+
+The copy has no `tmp/`, and the apiserver makes it again at the next upload. With
+`ORBIT_FILES_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose
+own versioning or replication is what brings back any object that was lost.
 
 ### Verify a backup without touching production
 
