@@ -121,3 +121,72 @@ Checks:
   `RecapCardViewTest` (4, where × reaches `onHide` and does not refresh), and `SessionRecapShotsTest` (2).
 - Mac and iOS views (`RecapCardView`, the `ConsoleView` wiring): `swiftc -parse` only. They compile on macOS through
   `client.yml`.
+
+## One ⋯ at the end of the last line (2026-11-02, board 07-last-line, option B)
+
+The owner, from an iPhone: the recap's two buttons took too much room. Beside the first line and always shown on a phone, ↻ and
+× held a column down the whole card: 58 pt of a 408 pt line on an iPhone Pro Max, 96 dp of 380 on Android. Board
+`docs/mocks/session-recap-display/07-last-line` offered three ways. The owner chose B, over the board's recommended A: one ⋯ at
+the end of the recap's last line, opening a menu. The board's other question, whether Mac and web follow, went unanswered; they
+do, as the board recommended, and the owner was told so.
+
+What changed on all four clients (web `SessionRecapCard` and `.chat-recap*`, Mac/iOS `RecapCardView`, Android `RecapCardView`):
+
+- **One ⋯** (⋮ on Android, as its other menus are), named `Recap actions`: the one new word, held across clients by the
+  copy-parity tests. Its menu holds `Refresh recap` and `Hide recap`, the words those two buttons were named by.
+- **The words run the full width.** The ⋯ takes its place at the end of the last line, centred on it. A last line with no room
+  for it gives it a line of its own on web and Android; on Mac and iOS the last word comes down with it.
+- **Shown** as before: under the pointer, on keyboard focus and while a refresh runs on Mac and web, plus while its menu is open
+  on web; always on a phone or a hover-less screen. While a refresh runs it spins and cannot be pressed.
+- **Android's card** loses the 13 dp it kept over its first line to centre that line on a 48 dp button. The button now hangs past
+  the card.
+- **Unchanged:** what Refresh and Hide do, when the card shows and steps aside, the list row, the Session recaps switch.
+
+Pictures (sample recaps, not the owner's):
+
+| Client | Picture | Shows |
+|---|---|---|
+| iPhone | `last-line/apple/iphone-long.png`, `-medium`, `-english`, `-long-dark` | The real `CompactShell` on a Pro Max (440 pt), against a stub. Words to the line's end, the ⋯ at the last line's end. |
+| iPhone | `last-line/apple/iphone-menu.png`, `iphone-hidden.png` | The ⋯ pressed; then Hide recap pressed, and the card gone. |
+| iPhone | `last-line/apple/iphone-sweep-cjk.png`, `-latin` | The real card at eleven lengths across a line's end. |
+| Mac | `last-line/apple/mac-before-hover.png` | Main's ↻ ×, under the pointer, in the same console (4 lines). |
+| Mac | `last-line/apple/mac-rest.png`, `mac-hover.png`, `mac-menu.png`, `mac-hidden.png` | The real `MainView`: at rest nothing beside the words (3 lines), under the pointer the ⋯, pressed its menu, then the card gone. |
+| Web | `last-line/web/*.png`, `report.json` | Two themes and a 390 px touch phone, from `vite build` over the ui-migration fixtures (`capture-last-line.mjs`; see `hide/` for the design before). |
+| Android | `last-line/android/*.png` | The real `RecapCardView` under Robolectric's native graphics, 412 dp wide: long, medium (⋮ on a line of its own), short, refreshing. How: `RecapCardShotsTest.kt.txt`. Android's menu is not pictured; it is a popup window, which that picture leaves out. |
+
+Measured:
+
+| | Result |
+|---|---|
+| The ⋯ on the last line, at its end | Asserted from the frames on iPhone and Mac; web's middle is 0.1 px from the last line's (`report.json`), for every scene. |
+| Words never under the ⋯ | Eleven lengths, ideographs and Latin, every row read off the pictures (`scripts/sweep_gaps.py`, `apple/*-gaps.txt`): smallest gap 14.7 pt on iPhone, 21 pt on Mac. Past the boundary the last word moves down with the ⋯. |
+| Mac at rest | The ⋯'s place has 0 pixels off the background (31 under the pointer), and no pixel of the words differs between rest and hover. Web: opacity 0 at rest, 1 under the pointer and while the pointer is in its open menu. |
+| Screen reader's view | On the iPhone and Mac the accessibility tree holds a control named `Recap actions`, on the Mac at rest and under the pointer, in the real console. Main's ↻ × were absent at rest. |
+| Tap target | iPhone (`apple/iphone-tap-distances.txt`): opens at 12 pt up, down, left and right of the ⋯'s middle, and at 15 pt up; 15 pt down and 20 pt up or down do not. Its frame is 30 by 32 pt. Android: real touches at each edge of the button, inside the reader's own list, open the menu. |
+
+Two wrong turns the probe caught, in `last-line/probe-harness/RECORD.md` with all ten rounds: the Mac's tree did not hold the ⋯ (fixed by
+0.001 opacity at rest; a first diagnosis was false, and reverted), and on the iPhone only 18 of the label's 32 pt answered a tap
+(fixed by removing a negative padding that iOS's `Menu` does not honour).
+
+Checks:
+
+- Client gates on the final code (run 41384415837): `macOS (build + test)` with OrbitKit 4338 tests and 0 failures, `iOS
+  (generate + build)`, the font-token audit and the navigation gate.
+- iPhone on the final code: run 41384415837, seven of eight tests green; `test5` (the menu and Hide) stopped on the probe's own note.
+  Run 41387638931 ran `test5` three times with that note fixed: twice green, once red before reaching the ⋯, on a cold
+  simulator's launch. Both runs read red on GitHub for those reasons.
+- Mac on the final code, run 41384415837: five tests green.
+- Android: `RecapCardViewTest` 6 + `RecapCardTest` 7, 13/13, local. Android CI green on the final code (41384415918).
+- Web: `SessionRecapCard`, `WorkspaceView.recapRow`, `indexCss` and `copyLanguage`, 22 tests under UTC and the first two under
+  Asia/Shanghai; `tsc` clean. Full CI (41364261886, web suite included) green on 06d2f6dda; web has not changed since.
+
+Not established:
+
+- No screen reader was run. That the tree holds the ⋯ is what is shown, not that VoiceOver or TalkBack reads and presses it. On
+  the Mac at rest it has `allowsHitTesting(false)`, and whether an accessibility press opens it then is untested.
+- Why the real console's list keeps a Menu at opacity 0 out of the tree under the pointer, when a plain list does not. At 0.001
+  the question no longer arises.
+- Android was not run on a device or emulator, and its pictures use Robolectric's graphics.
+- The Mac's tree reports the empty image a line above where it is drawn in one boundary row (`apple/mac-sweep-latin-row-4.png`); the
+  picture is right.
+
