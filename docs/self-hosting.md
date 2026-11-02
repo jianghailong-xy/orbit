@@ -154,6 +154,15 @@ The installer can create a systemd or launchd service. Use `--foreground` for an
 `ORBIT_NO_REGISTER=1` to install only the binary. Run `orbit doctor` on the runner to diagnose missing runtime
 installations or authentication.
 
+The runner works as the OS account that registers it. Under sudo — `curl … | sudo bash`, `sudo orbit register`,
+or `orbit register` in a `sudo -i` shell — registration runs as the account that ran sudo: the runner runs as
+that account and keeps its config in that account's `~/.orbit`. That account's own sudo installs the system
+service, so without a terminal it has to need no password. `orbit unregister` under sudo removes that same
+account's runner. For a runner of root's own from a sudo shell, name root: `sudo -i env -u SUDO_USER orbit
+register`. Registration says the machine is online only once its service has reached the deployment. When that
+does not happen within two minutes, `orbit register` says why, shows the end of the service's log and the
+commands to look further, and exits non-zero.
+
 Scripts can also act as a person rather than a machine. A user logs the `orbit` CLI in with a personal
 access token, on a runner or on any other machine. `orbit login` opens the deployment's `/cli-login` page to
 approve one, and `--with-token` takes one issued under **Settings → Access tokens**:
@@ -174,12 +183,20 @@ account register itself: [Multi-user Linux machines](#multi-user-linux-machines)
 
 ## 5. Back up and monitor
 
-The Compose stack writes Postgres data to `./data/postgres`. A sidecar writes base backups and archived WAL to
-`./data/pg-archive`.
+The Compose stack writes Postgres data to `./data/postgres` and attachment bytes to `./data/files`. A sidecar writes
+base backups and archived WAL to `./data/pg-archive`.
 
 - Set `ORBIT_BACKUP_SYNC_TARGET` (plus `ORBIT_BACKUP_SYNC_SSH_PORT` when it is not 22) so the sidecar mirrors
   `./data/pg-archive` to another host over ssh; give it a directory of its own, since the mirror deletes
   anything else there. A same-disk backup does not protect against disk or host loss.
+- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/` and
+  never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
+  in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
+  protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- A restore goes Postgres first, then the files, then the apiserver:
+  [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
+  restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
+  [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
@@ -1214,6 +1231,7 @@ broker enables and starts the account's instance, nothing asks for a password, a
 
 ```text
     ✓ Approved — build-01-alice is now a runner.
+    Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 
@@ -1384,6 +1402,10 @@ The control plane applies pending Prisma migrations on startup, and `wiki-worker
 starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
 outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
 as it was.
+
+`pgbackup` keeps the `scripts/pg-backup.sh` it started on until it is recreated, and these steps recreate it only when
+its Compose definition changes. After a change to the script alone, run `docker compose up -d --no-deps --force-recreate
+pgbackup` in this checkout; `/upgrade`'s script does that by itself.
 
 These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
 `/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do

@@ -95,6 +95,9 @@ type linkWork struct {
 type linkWorkConn struct {
 	*linkConn
 	ready chan struct{} // closed once linkConn is set: frames read before that wait for it
+	// dialed is when the runner began to open it: its Welcome states the mode its gateway gave it on taking the
+	// upgrade, which came after.
+	dialed time.Time
 
 	beatMu  sync.Mutex
 	acks    chan *linkpb.HeartbeatAck // the next HeartbeatAck, for the beat waiting on it
@@ -262,7 +265,10 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, nil, "") {
-				continue // the work stops: a Welcome said MODE_HTTP
+				// A Welcome said MODE_HTTP: the work stops, or, said too soon after HTTPS refused it, waits for the
+				// connection opened once the gateway can have read the switch.
+				retryAt = w.m.httpNewsAt()
+				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
 			continue
@@ -327,6 +333,9 @@ func (w *linkWork) loop(ctx context.Context) {
 				continue
 			}
 			if !w.adopt(conn, cur, why) {
+				if at := w.m.httpNewsAt(); at.After(renewAt) {
+					renewAt = at // cur carries the work meanwhile
+				}
 				continue
 			}
 			renewAt, drainAt = conn.token.renewAt(), time.Time{}
@@ -376,7 +385,7 @@ func (w *linkWork) setCurrent(prev, next *linkWorkConn) {
 
 // dial opens one connection, with a goroutine pinging it.
 func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
-	conn := &linkWorkConn{ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
+	conn := &linkWorkConn{ready: make(chan struct{}), dialed: time.Now(), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
 	lc, err := w.client.connect(ctx, func(_ *linkConn, f *linkpb.Frame) {
 		<-conn.ready
 		w.onFrame(conn, f)
@@ -392,10 +401,11 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 }
 
 // adopt makes conn, just welcomed, the connection calls go out on, in place of old (nil after a time without one). A
-// Welcome saying MODE_HTTP is not adopted: the control plane has sent the work back to HTTPS, and the work stops.
+// Welcome saying MODE_HTTP is not adopted: the control plane has sent the work back to HTTPS, and the work stops, unless
+// it came too soon after HTTPS refused a call for the gateway to have read the switch (linkMode.observeSince).
 func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	welcome := conn.welcome
-	w.m.observe(welcome.GetMode(), "the Welcome of "+conn.id)
+	w.m.observeSince(welcome.GetMode(), "the Welcome of "+conn.id, conn.dialed)
 	if welcome.GetMode() == linkpb.Mode_MODE_HTTP {
 		reason := "the Welcome said MODE_HTTP"
 		conn.retired.Store(&reason)

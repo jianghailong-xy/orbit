@@ -4639,9 +4639,10 @@ export class RunnerApiController {
   /**
    * Fetch one of a turn's image attachments as raw bytes, for the runner to base64-encode
    * into a claude `image` content block (the ids/mimes arrive on the inbox). Runner-scoped
-   * (not the user-JWT /api/attachments/:id): the attachment must belong to a session this
-   * runner owns, so a runner can't read another tenant's blobs. Streamed from the file store,
-   * or from the row for one stored before it.
+   * (not the user-JWT /api/attachments/:id): the session must be one this runner owns, and the
+   * file one that session may read (`FilesService.readableInSession`): its own, or one cited by
+   * evidence it judges. So a runner can't read another tenant's blobs. Streamed from the file
+   * store, or from the row for one stored before it.
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
@@ -4652,8 +4653,8 @@ export class RunnerApiController {
     @Param('attId', PublicIdPipe) attId: string,
     @Res({ passthrough: true }) res?: Response,
   ): Promise<StreamableFile> {
-    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    const file = await this.files.open({ id: attId, sessionId });
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const file = await this.files.open(await this.files.readableInSession(session, attId));
     if (!file) throw new NotFoundException('attachment not found');
     return streamable(file, res);
   }

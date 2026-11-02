@@ -16,6 +16,8 @@ import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionJudgesEvidence } from '../tasks/task-evidence-decision';
+import { citedFileIds, storedEvidenceEnvelope } from '../tasks/task-evidence-envelope';
 import {
   LocalFileStore,
   filesConfigFrom,
@@ -28,6 +30,7 @@ import {
   type HashedTempFile,
 } from './file-store';
 import type { FileUpload } from './file-upload-storage';
+import { IMAGE_HEADER_BYTES, imageSizeOf, type ImageSize } from './image-size';
 import { S3FileStore } from './s3-file-store';
 import { parseTestReport, type TestReportSummary, type TEST_REPORT_UPLOAD } from './test-report';
 import { attachmentDisposition, inlineType } from './user-file-response';
@@ -286,6 +289,43 @@ export class FilesService {
     return { data: Buffer.concat(chunks), mimeType: file.mimeType };
   }
 
+  /** The first `limit` bytes of an attachment, and no more of it than that is read: a stream leaves off at the `break`. */
+  private async head(where: Prisma.AttachmentWhereInput, limit: number): Promise<Buffer> {
+    const file = await this.open(where);
+    if (!file) return Buffer.alloc(0);
+    if (Buffer.isBuffer(file.content)) return file.content.subarray(0, limit);
+    const chunks: Buffer[] = [];
+    let length = 0;
+    for await (const chunk of file.content) {
+      chunks.push(chunk as Buffer);
+      length += (chunk as Buffer).length;
+      if (length >= limit) break;
+    }
+    return Buffer.concat(chunks).subarray(0, limit);
+  }
+
+  /**
+   * What citing these files as evidence takes from the file store (§2.4), before the transaction that saves it, which holds
+   * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
+   * it is, which is kept on the citation so that no later read of it has to come here. Keyed by file. The citation
+   * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold.
+   */
+  async prepareCitedFiles(ownerId: string, ids: string[]): Promise<Map<string, ImageSize>> {
+    const images = new Map<string, ImageSize>();
+    if (ids.length === 0) return images;
+    const rows = await this.prisma.attachment.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: { id: true, sha256: true, mimeType: true },
+    });
+    for (const row of rows) {
+      await this.referenceOf(row);
+      if (!row.mimeType.startsWith('image/')) continue;
+      const size = imageSizeOf(await this.head({ id: row.id }, IMAGE_HEADER_BYTES));
+      if (size) images.set(row.id, size);
+    }
+    return images;
+  }
+
   /**
    * The sha256 a copy of the attachment row `row` names, so that a copy is a row and never the bytes again:
    * the row's own, or — for a row whose bytes are still in `data` — that of those bytes once they are kept,
@@ -335,6 +375,32 @@ export class FilesService {
     return options.as && !testReport ? { ...view, note: NOT_A_TEST_REPORT } : view;
   }
 
+  /**
+   * Which row a session may read as `fileId` (§2.7), as the `where` for `open` and `describeFile`: a file of its own, or one
+   * an evidence revision cites when that task's evidence is this session's to judge (`sessionJudgesEvidence`). Anything
+   * else comes to the first, which finds nothing, so that a file a session may not read is a file that is not there.
+   *
+   * A bundle's files name the revision too, so a judge given the manifest can fetch what it lists. Nothing of another
+   * account's is found: every read here is under this session's owner.
+   */
+  async readableInSession(
+    session: { id: string; ownerId: string; taskId: string | null },
+    fileId: string,
+  ): Promise<Prisma.AttachmentWhereInput> {
+    const ownerId = session.ownerId;
+    const cited = await this.prisma.attachment.findFirst({
+      where: { id: fileId, ownerId, evidenceId: { not: null } },
+      select: { evidenceId: true },
+    });
+    const evidence = cited && await this.prisma.taskCompletionEvidence.findFirst({
+      where: { id: cited.evidenceId!, ownerId },
+      select: { taskId: true },
+    });
+    return evidence && (await sessionJudgesEvidence(this.prisma, { ownerId, taskId: evidence.taskId }, session))
+      ? { id: fileId, ownerId }
+      : { id: fileId, sessionId: session.id };
+  }
+
   /** The row `where` finds, as an agent is told of it; null when it finds none. `where` says whose it may be. */
   async describeFile(where: Prisma.AttachmentWhereInput): Promise<FileView | null> {
     const row = await this.prisma.attachment.findFirst({ where, select: FILE_VIEW_SELECT });
@@ -348,6 +414,9 @@ export class FilesService {
    * be listed once per run. A bundle is one row, not its files: its manifest lists them, and a folder of any size does
    * not crowd out everything else. An id that names nothing of the owner's is refused rather than answered empty, so
    * that a mistyped id is not read as "no files".
+   *
+   * An evidence version's are what it cites, read off the version itself because `attachment.evidence_id` names only the
+   * newest version citing a file. A file of a bundle cited by itself is listed, being what the version says.
    */
   async listFiles(
     ownerId: string,
@@ -367,16 +436,16 @@ export class FilesService {
       if (!session) throw new NotFoundException('session not found');
       scope = { sessionId };
     } else {
-      const evidence = await this.prisma.taskCompletionEvidence.findFirst({ where: { id: evidenceId, ownerId }, select: { id: true } });
-      if (!evidence) throw new NotFoundException('evidence not found');
-      scope = { evidenceId };
+      const version = await this.prisma.taskCompletionEvidence.findFirst({ where: { id: evidenceId, ownerId }, select: { evidence: true } });
+      if (!version) throw new NotFoundException('evidence not found');
+      scope = { id: { in: citedFileIds(storedEvidenceEnvelope(version.evidence)?.checks ?? []) } };
     }
     const rows = await this.prisma.attachment.findMany({
       where: {
         AND: [
           scope,
           { ownerId },
-          { OR: [{ fileBundleId: null }, { fileBundleId: { equals: this.prisma.attachment.fields.id } }] },
+          evidenceId ? {} : { OR: [{ fileBundleId: null }, { fileBundleId: { equals: this.prisma.attachment.fields.id } }] },
         ],
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

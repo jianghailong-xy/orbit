@@ -816,8 +816,9 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 		},
 		{
 			"name": "file_fetch",
-			"description": "Download one of this session's files into its uploads directory, outside the repository, and " +
-				"return its absolute path. The bytes are checked against the sha256 Orbit holds. Given a folder bundle's " +
+			"description": "Download a file into this session's uploads directory, outside the repository, and return its " +
+				"absolute path: one this session uploaded, or one cited by completion evidence this session judges. The " +
+				"bytes are checked against the sha256 Orbit holds. Given a folder bundle's " +
 				"id, it saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones " +
 				"you need.",
 			"inputSchema": obj(map[string]interface{}{
@@ -834,7 +835,8 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			"description": "List the files of one task, one session or one evidence version, newest first, each with id, " +
 				"sha256, sizeBytes and link. With none of the three it lists this session's. A task's files are its inputs " +
 				"and what the sessions that ran it kept with file_upload. A folder is one row of kind bundle: file_fetch it " +
-				"for the files inside. This says what exists; file_fetch reads only this session's own files.",
+				"for the files inside. This says what exists; file_fetch reads this session's own files and those cited by " +
+				"evidence it judges.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":     map[string]interface{}{"type": "string", "description": "List this task's files."},
 				"sessionId":  map[string]interface{}{"type": "string", "description": "List this session's files."},

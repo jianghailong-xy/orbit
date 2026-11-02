@@ -14,7 +14,8 @@
 #
 # That bind mount is on the same disk as the database, so with ORBIT_BACKUP_SYNC_TARGET
 # set the loop also mirrors it to another machine over ssh — the only copy that survives
-# losing this disk.
+# losing this disk. The attachment files go with it: Postgres only names their bytes, which
+# are in the files directory (docs/orbit-files-design.md §2.10), mounted here read-only.
 set -eu
 
 ARCHIVE_DIR="${ORBIT_ARCHIVE_DIR:-/archive}"
@@ -30,6 +31,10 @@ SYNC_TARGET="${ORBIT_BACKUP_SYNC_TARGET:-}"
 SYNC_SSH_PORT="${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
 SYNC_SSH_KEY="${ORBIT_BACKUP_SYNC_SSH_KEY:-/ssh/id_rsa}"
 SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
+# The attachment files, and where they go: beside the target, never under it, where the
+# archive mirror's --delete would remove them.
+FILES_DIR="${ORBIT_FILES_DIR:-/var/lib/orbit/files}"
+FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"
 # Backups are due on the interval; the loop wakes at least every 15 minutes so a run
 # skipped for disk space retries without waiting a whole day.
 if [ "$INTERVAL" -lt 900 ]; then POLL="$INTERVAL"; else POLL=900; fi
@@ -77,10 +82,9 @@ trim_wal() {
   pg_archivecleanup -x .gz "$WAL_DIR" "$start_wal"
 }
 
-# Mirror the archive to another machine. Runs every poll rather than only after a base
-# backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
-sync_archive() {
-  [ -n "$SYNC_TARGET" ] || return 0
+# What both off-host copies need. False with no target, or with no way to reach one.
+sync_ready() {
+  [ -n "$SYNC_TARGET" ] || return 1
   # postgres:16-alpine ships neither rsync nor an ssh client; pull them in once per
   # container start, and keep taking local backups if that is not possible.
   if ! command -v rsync >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1; then
@@ -95,6 +99,18 @@ sync_archive() {
   if [ -f "$SYNC_KNOWN_HOSTS" ]; then
     ssh_opts="$ssh_opts -o UserKnownHostsFile=$SYNC_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
   fi
+}
+
+# Mirror the archive to another machine. Runs every poll rather than only after a base
+# backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
+sync_archive() {
+  # A real archive holds a base backup and the WAL Postgres writes to it. Anything less is an
+  # empty or wrong mount, say a recreate from another checkout, and --delete would clear the only
+  # off-host copy. WAL too because this loop has already taken a base backup by now, even there.
+  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then
+    log "ERROR: refusing off-host sync to $SYNC_TARGET: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
+    return 1
+  fi
   # --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
@@ -105,6 +121,28 @@ sync_archive() {
   fi
   changed="$(printf '%s\n' "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
+}
+
+# Copy the attachment files to the same machine. A name is a sha256 and never changes its
+# bytes, so each poll carries only what is new.
+sync_files() {
+  # Nothing but tmp/: the bytes are in a bucket (ORBIT_FILES_BACKEND=s3), or nothing has been
+  # uploaded yet. Asked of the directory, not the setting: a deployment that moved to a bucket
+  # still has its older bytes here. A directory that is not there at all is not this case: it
+  # is a container not recreated since the mount was added, which rsync then reports below.
+  if [ -d "$FILES_DIR" ] && [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then
+    return 0
+  fi
+  # No --delete: a Postgres backup still retained may name bytes the live database has let go
+  # of, so this copy only ever grows (docs/postgres-backup-restore.md). tmp/ is uploads still
+  # arriving.
+  if ! out="$(rsync -a --timeout=600 --itemize-changes --exclude '/tmp/' \
+       -e "ssh $ssh_opts" "$FILES_DIR/" "$FILES_SYNC_TARGET/" 2>&1)"; then
+    log "ERROR: off-host sync to $FILES_SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+    return 1
+  fi
+  changed="$(printf '%s\n' "$out" | grep -c . || true)"
+  [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $FILES_SYNC_TARGET"
 }
 
 take_backup() {
@@ -163,12 +201,21 @@ check_archiver() {
 }
 
 mkdir -p "$BASE_DIR" "$WAL_DIR"
-log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET}"
+# A base backup cut short when this container stopped: an upgrade recreates it when this script
+# changes. Nothing is running yet, and no later run would come back for this one's disk space.
+rm -rf "$BASE_DIR"/.staging-*
+log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
 while :; do
   if backup_due; then
     take_backup || true
   fi
   check_archiver
-  sync_archive || true
+  # The archive first: bytes reach the files directory before the row naming them commits, so
+  # a round that finishes leaves the mirror with the bytes of every row in its WAL. Neither
+  # copy failing stops the other.
+  if sync_ready; then
+    sync_archive || true
+    sync_files || true
+  fi
   sleep "$POLL"
 done

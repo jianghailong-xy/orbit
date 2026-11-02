@@ -13,9 +13,9 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * tool API, so it speaks public ids and stays on HTTPS (D14). The upload of a file itself is
  * RunnerApiController's, beside the other upload, and a file's bytes are read from the attachment route.
  *
- * A session's file is read as the attachment route reads it: `{ id, sessionId }`, of a session this runner hosts. Which
- * other sessions may read a file is T4's rule (§2.7). Listing is the owner's: `file_list` says what exists, and hands
- * over no bytes.
+ * A file is read as the attachment route reads it, by a session this runner hosts, under the one rule for which files
+ * that session may read (`FilesService.readableInSession`, §2.7). Listing is the owner's: `file_list` says what exists,
+ * and hands over no bytes.
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
@@ -43,8 +43,8 @@ export class RunnerFilesController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('fileId', PublicIdPipe) fileId: string,
   ) {
-    await this.hostedSession(runner, sessionId);
-    const file = await this.files.describeFile({ id: fileId, sessionId });
+    const session = await this.hostedSession(runner, sessionId);
+    const file = await this.files.describeFile(await this.files.readableInSession(session, fileId));
     if (!file) throw new NotFoundException('file not found in this session');
     return file;
   }
@@ -63,7 +63,7 @@ export class RunnerFilesController {
   private async hostedSession(runner: Runner, sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId: runner.ownerId, deletedAt: null },
-      select: { id: true, ownerId: true, assignedRunnerId: true, sessionKind: true },
+      select: { id: true, ownerId: true, taskId: true, assignedRunnerId: true, sessionKind: true },
     });
     if (session) assertEngineSession(session);
     if (session?.assignedRunnerId !== runner.id) throw new ForbiddenException('session does not belong to this runner');
