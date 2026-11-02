@@ -4,7 +4,12 @@ import { uuidToBase62 } from '@orbit/shared';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX, EVIDENCE_SEND_BACK_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import { criterionStandingRefusal, decidingSessionDisqualification } from './task-evidence-decision';
-import { describeEvidenceCitations, parseEvidenceEnvelope, type EvidenceEnvelope } from './task-evidence-envelope';
+import {
+  citedFileLines,
+  citedFilesBlock,
+  describeEvidenceCitations,
+  storedEvidenceEnvelope,
+} from './task-evidence-envelope';
 
 /**
  * Outside a project, the session that dispatched a task settles it on its run's evidence
@@ -350,14 +355,6 @@ function isoSeconds(at: Date): string {
   return `${at.toISOString().slice(0, 19)}Z`;
 }
 
-function storedEnvelope(evidence: unknown): EvidenceEnvelope | null {
-  try {
-    return parseEvidenceEnvelope(evidence);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The block an evidence-review turn is handed to its reviewer with, rendered from the rows as they
  * stand when it is handed out — so a revision that was decided, or replaced, while the turn waited
@@ -434,10 +431,11 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
     return nothingToDecide(`The task “${task.title}” is ${task.status} now.`);
   }
 
-  const envelope = storedEnvelope(evidence.evidence);
+  const envelope = storedEvidenceEnvelope(evidence.evidence);
   const citations = envelope
     ? await describeEvidenceCitations(db, { ownerId: evidence.ownerId, taskId: evidence.taskId }, envelope.checks)
     : [];
+  const files = citedFileLines(citations);
   const lines = [
     open,
     `A run of the task “${task.title}”, which this session filed outside any project, submitted evidence that`,
@@ -453,6 +451,7 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
       ? ['- (none)']
       : citations.map((citation) => `- ${citation.kind} ${citation.ref}: ${
         citation.resolved ? oneLine(citation.label ?? 'resolved') : `not resolved (${citation.reason ?? 'unknown'})`}`)),
+    ...(files.length > 0 ? ['', citedFilesBlock(files)] : []),
     '',
     'Check the work against those criteria yourself — the cited rows, the run’s branch, a test you run — and',
     `then decide with task_evidence_decide (taskId "${taskKey}", evidenceRevision "${revision}"):`,

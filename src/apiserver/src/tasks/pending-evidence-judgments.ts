@@ -13,9 +13,8 @@ import {
 } from './task-evidence-decision';
 import {
   describeEvidenceCitations,
-  parseEvidenceEnvelope,
+  storedEvidenceEnvelope,
   type EvidenceCitation,
-  type EvidenceEnvelope,
 } from './task-evidence-envelope';
 
 /**
@@ -259,21 +258,6 @@ export interface RecordedEvidenceDecision {
   decidedByType: CreatorType;
 }
 
-/**
- * The stored envelope, or null when this evidence predates it.
- *
- * Layer 1 is reused rather than re-implemented: what a card may show is exactly what a submission
- * had to be for it to be accepted. The catch is not a shrug — a legacy import is deliberately
- * exempt from the envelope, so its row still belongs in the queue and simply has less to render.
- */
-function storedEnvelope(evidence: unknown): EvidenceEnvelope | null {
-  try {
-    return parseEvidenceEnvelope(evidence);
-  } catch {
-    return null;
-  }
-}
-
 function ageSeconds(readAt: Date, submittedAt: Date): number {
   return Math.max(0, Math.floor((readAt.getTime() - submittedAt.getTime()) / 1000));
 }
@@ -434,7 +418,7 @@ export async function readPendingEvidenceJudgments(
   for (const {
     task, latest, heldByCoordinator, coordinatorPlace, dispatching, heldByReviewer, ownerCard,
   } of unanswered) {
-    const envelope = storedEnvelope(latest.evidence);
+    const envelope = storedEvidenceEnvelope(latest.evidence);
     const disqualification = await decidingSessionDisqualification(
       tx,
       { ownerId, taskId: task.id },

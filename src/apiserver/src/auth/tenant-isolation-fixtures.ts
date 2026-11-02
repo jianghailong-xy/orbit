@@ -81,10 +81,14 @@ export function upload(
   path: string,
   headers: Record<string, string>,
   file: NonNullable<TenantRequest['file']>,
+  fields: Record<string, string> = {},
 ): Promise<Reply> {
   const boundary = `census-${randomUUID()}`;
+  const textParts = Object.entries(fields).map(
+    ([name, value]) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+  );
   const payload = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\n`
+    `${textParts.join('')}--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\n`
       + `Content-Type: ${file.type}\r\n\r\n${file.content}\r\n--${boundary}--\r\n`,
   );
   return new Promise((resolve, reject) => {

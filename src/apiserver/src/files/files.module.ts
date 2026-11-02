@@ -1,5 +1,7 @@
 import { Global, Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { FilesService } from './files.service';
+import { UserFileResponseInterceptor } from './user-file-response';
 
 // Global, like PrismaModule: the attachment doors, the runner door, sessions and tasks all read and keep
 // attachment bytes through the one FilesService, built once from the environment at boot (where a
@@ -8,7 +10,7 @@ import { FilesService } from './files.service';
 // instance over the same PrismaService, which reads the same environment.
 @Global()
 @Module({
-  providers: [FilesService],
+  providers: [FilesService, { provide: APP_INTERCEPTOR, useClass: UserFileResponseInterceptor }],
   exports: [FilesService],
 })
 export class FilesModule {}

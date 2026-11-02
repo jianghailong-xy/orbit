@@ -322,6 +322,43 @@ describe('a task link’s public page', { timeout: 60_000 }, () => {
   });
 });
 
+describe('opening a task link’s input file', { timeout: 60_000 }, () => {
+  /** The page's one input as a file of `mimeType`: the anchor pressing Open this file presses, and what it read. */
+  async function press(fileName: string, mimeType: string) {
+    const answer = taskRoot({ commentsAndFiles: true, conversations: true });
+    (answer.root as SharedTask).inputs = [{ id: INPUT, fileName, mimeType, sizeBytes: 2048, createdAt: '2026-09-05T08:00:00.000Z' }];
+    rootAnswer = answer;
+    const pressed: { href: string; target: string; download: string }[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      pressed.push({ href: this.getAttribute('href') ?? '', target: this.target, download: this.download });
+    });
+    await mount(`/s/${TOKEN}`);
+    requests = [];
+    await act(async () => container.querySelector<HTMLButtonElement>('button[title="Open this file"]')!.click());
+    await settle();
+    click.mockRestore();
+    return { pressed, requests };
+  }
+
+  it('opens a PDF in a new tab at its own address, with nothing fetched first', async () => {
+    expect(await press('spec.pdf', 'application/pdf')).toEqual({
+      pressed: [{ href: `${SHARE}/attachments/${INPUT}`, target: '_blank', download: '' }],
+      requests: [],
+    });
+  });
+
+  it.each([
+    ['report.html', 'text/html'],
+    ['drawing.svg', 'image/svg+xml'],
+    ['notes.txt', 'text/plain'],
+  ])('saves %s under its own name and opens no tab', async (fileName, mimeType) => {
+    expect(await press(fileName, mimeType)).toEqual({
+      pressed: [{ href: `${SHARE}/attachments/${INPUT}`, target: '', download: fileName }],
+      requests: [],
+    });
+  });
+});
+
 describe('a run of a shared task (/s/<token>/c/<run>)', { timeout: 60_000 }, () => {
   it('reads the run under the link, with the task › Run · date breadcrumb and the task’s scope', async () => {
     await mount(`/s/${TOKEN}/c/${RUN}`);

@@ -23,7 +23,12 @@
  *       refused upload — too large, or another runner's session — leaves nothing behind, on disk or in the database;
  *   (6) a dispatch copies a task's inputs as rows naming the same bytes (tasks.service.ts#copyTaskAttachments): no
  *       bytes copied and no file_blob row added; an input from before Orbit Files has its bytes kept the first time
- *       it is copied, and is copied the same way from then on.
+ *       it is copied, and is copied the same way from then on;
+ *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
+ *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
+ *       multer has written the whole file: it is answered 400 on every upload door, with no file and no row, while the
+ *       same upload with a well-formed id is kept;
+ *   (9) evidence citing an image reads its size off the head of whichever store holds it, leaving the rest unread.
  *
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
  */
@@ -50,6 +55,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { TasksService } from '../tasks/tasks.service';
 import { LocalFileStore, type FilesConfig, type S3FilesConfig } from './file-store';
 import { FilesService } from './files.service';
+import { IMAGE_HEADER_BYTES } from './image-size';
 import { S3FileStore, sigV4Authorization } from './s3-file-store';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -65,13 +71,19 @@ const b62 = (id: string) => uuidToBase62(id);
 // `../..` is the package root from either src/ or build/, as task-attachments.pg.spec.ts reads its sources.
 const source = (rel: string) => readFileSync(path.resolve(__dirname, '../..', 'src', rel), 'utf8');
 
-test('both upload doors stream to disk through FILE_UPLOAD_STORAGE, under the 25 MiB cap, and keep no buffer', () => {
-  for (const rel of ['attachments/attachments.controller.ts', 'runner-api/runner-api.controller.ts']) {
+test('every upload door streams to disk through FILE_UPLOAD_STORAGE, under the 25 MiB cap, and keeps no buffer', () => {
+  for (const [rel, doors] of [['attachments/attachments.controller.ts', 1], ['runner-api/runner-api.controller.ts', 2]] as const) {
     const code = source(rel);
-    assert.equal(code.split('FileInterceptor(').length - 1, 1, `${rel}: one upload door`);
-    assert.ok(
-      code.includes("FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } })"),
-      `${rel}: the upload door's multer storage is the disk engine; without \`storage\`, multer holds the file in memory`,
+    assert.equal(code.split('FileInterceptor(').length - 1, doors, `${rel}: the upload doors counted`);
+    assert.equal(
+      code.split("FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } })").length - 1,
+      doors,
+      `${rel}: every upload door's multer storage is the disk engine; without \`storage\`, multer holds the file in memory`,
+    );
+    assert.equal(
+      code.match(/@UseInterceptors\(\s*FileUploadCleanupInterceptor,\s*FileInterceptor\('file'/g)?.length,
+      doors,
+      `${rel}: on every door the cleanup is declared before multer, so that the pipes and the handler end inside it`,
     );
     assert.doesNotMatch(code, /toBytes\(|\.buffer\)/, `${rel}: no upload's bytes are read out of a buffer`);
   }
@@ -199,6 +211,13 @@ interface Leg {
   env: Record<string, string>;
 }
 
+async function until(condition: () => boolean, what: string): Promise<void> {
+  for (const deadline = Date.now() + 30_000; Date.now() < deadline; await sleep(20)) {
+    if (condition()) return;
+  }
+  assert.fail(`${what}: not within 30 s`);
+}
+
 async function readAll(stream: NodeJS.ReadableStream | null): Promise<Buffer | null> {
   if (!stream) return null;
   const chunks: Buffer[] = [];
@@ -273,6 +292,7 @@ function storeCases(leg: Leg) {
     const userDoor = `/api/attachments?sessionId=${b62(sessionId)}`;
     const taskDoor = `/api/attachments?taskId=${b62(taskId)}`;
     const runnerDoor = `/api/runner/sessions/${b62(sessionId)}/attachments`;
+    const fileDoor = `/api/runner/sessions/${b62(sessionId)}/files`;
 
     // Every byte value, then a megabyte of noise: what a text-only round trip would mangle.
     const bytes = Buffer.concat([Buffer.from(Array.from({ length: 256 }, (_, i) => i)), randomBytes(1024 * 1024)]);
@@ -455,6 +475,104 @@ function storeCases(leg: Leg) {
       const answer = await get(server!, `/api/attachments/${b62(first[1])}`, bearer);
       assert.equal(answer.status, 200);
       assert.ok(answer.body.equals(old));
+    });
+
+    await t.test(`${leg.storage}: a client that hangs up in the middle of an upload leaves nothing behind`, async () => {
+      const dropped = randomBytes(2 * 1024 * 1024);
+      const blobsBefore = await db.fileBlob.count();
+      const attachmentsBefore = await db.attachment.count({ where: { ownerId } });
+      for (const [door, route, who] of [
+        ['POST /attachments', userDoor, bearer],
+        ['POST /runner/sessions/:id/attachments', runnerDoor, machine.token],
+      ] as const) {
+        const body = multipart(dropped, 'dropped.bin', 'application/octet-stream');
+        const req = open(server!, 'POST', route, {
+          authorization: `Bearer ${who}`, 'content-type': body.contentType, 'content-length': body.length,
+        });
+        req.on('error', () => undefined); // The hang-up below.
+        req.write(body.head);
+        req.write(dropped.subarray(0, dropped.length / 2));
+        await until(() => tempFiles().length === 1, `${door}: half an upload was sent and no temporary file holds it`);
+        req.destroy();
+        await until(() => tempFiles().length === 0, `${door}: the client left and its temporary file is still there`);
+      }
+      assert.equal(await db.fileBlob.count(), blobsBefore, 'no file_blob row');
+      assert.equal(await db.attachment.count({ where: { ownerId } }), attachmentsBefore, 'no attachment row');
+      assert.equal(await stored(sha256(dropped)), null, 'and nothing in the store');
+    });
+
+    const refused = randomBytes(1024 * 1024);
+
+    for (const [door, route, who] of [
+      ['POST /attachments with a malformed sessionId', '/api/attachments?sessionId=not-a-public-id!', bearer],
+      ['POST /attachments with a malformed taskId', '/api/attachments?taskId=not-a-public-id!', bearer],
+      ['POST /runner/sessions/:id/attachments with a malformed :id', '/api/runner/sessions/not-a-public-id!/attachments', machine.token],
+      ['POST /runner/sessions/:id/files with a malformed :id', '/api/runner/sessions/not-a-public-id!/files', machine.token],
+    ] as const) {
+      await t.test(`${leg.storage}: ${door} is refused before its handler, and leaves nothing behind`, async () => {
+        const blobsBefore = await db.fileBlob.count();
+        const attachmentsBefore = await db.attachment.count({ where: { ownerId } });
+        const answer = await upload(server!, route, who, refused);
+        const left = tempFiles();
+        // So that a file this door leaves is not read as the next door's.
+        for (const name of left) rmSync(path.join(tempDir, name));
+        assert.equal(answer.status, 400, `answered ${answer.status}: ${answer.body.toString('utf8').slice(0, 300)}`);
+        assert.deepEqual(left, [], 'by the time it is answered, the refused upload\'s temporary file is gone');
+        assert.equal(await db.fileBlob.count(), blobsBefore, 'no file_blob row');
+        assert.equal(await db.attachment.count({ where: { ownerId } }), attachmentsBefore, 'no attachment row');
+        assert.equal(await stored(sha256(refused)), null, 'and nothing in the store');
+      });
+    }
+
+    await t.test(`${leg.storage}: the same upload with well-formed ids is kept, and leaves the temporary directory empty`, async () => {
+      for (const [door, route, who] of [
+        ['POST /attachments?sessionId', userDoor, bearer],
+        ['POST /attachments?taskId', taskDoor, bearer],
+        ['POST /runner/sessions/:id/attachments', runnerDoor, machine.token],
+        ['POST /runner/sessions/:id/files', fileDoor, machine.token],
+      ] as const) {
+        idOf(await upload(server!, route, who, refused), door);
+        assert.deepEqual(tempFiles(), [], `${door}: nothing is left in the temporary directory`);
+      }
+      assert.ok((await stored(sha256(refused)))?.equals(refused), 'the store holds the bytes');
+    });
+
+    await t.test(`${leg.storage}: evidence citing an image reads its size off the head of the store's bytes`, async () => {
+      const standard = 'the image shows it';
+      const citingTask = randomUUID();
+      await db.task.create({
+        data: {
+          id: citingTask, title: 'cite an image', ownerId, creatorType: 'USER', creatorId: ownerId, status: 'IN_PROGRESS',
+          completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: standard,
+        },
+      });
+      const run = randomUUID();
+      await db.session.create({
+        data: {
+          id: run, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, taskId: citingTask,
+          startsTaskWork: true, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
+        },
+      });
+      const head = Buffer.alloc(24);
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(head);
+      head.writeUInt32BE(13, 8);
+      head.write('IHDR', 12, 'latin1');
+      head.writeUInt32BE(1280, 16);
+      head.writeUInt32BE(800, 20);
+      // Past what is read of it, so that the stream is left part way, which a bucket's connection has to survive.
+      const image = Buffer.concat([head, randomBytes(2 * IMAGE_HEADER_BYTES)]);
+      const file = idOf(await upload(server!, `/api/runner/sessions/${b62(run)}/files`, machine.token, image, 'large.png'), 'the upload');
+      const answer = await fetch(`http://127.0.0.1:${server!.port}/api/runner/tasks/${b62(citingTask)}/evidence`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${machine.token}`, 'content-type': 'application/json', 'x-orbit-session-id': run },
+        body: JSON.stringify({
+          evidence: { claim: 'it does', criterion: { key: b62(citingTask), text: standard }, checks: [{ kind: 'FILE', ref: file }], gaps: [] },
+        }),
+      });
+      const receipt = await answer.json() as { evidence: { checks: unknown[] } };
+      assert.equal(answer.status, 201, JSON.stringify(receipt));
+      assert.deepEqual(receipt.evidence.checks, [{ kind: 'FILE', ref: b62(toUuid(file)), sha256: sha256(image), width: 1280, height: 800 }]);
+      assert.ok((await stored(sha256(image)))?.equals(image), 'and the store answers the whole of it after that');
     });
   };
 }

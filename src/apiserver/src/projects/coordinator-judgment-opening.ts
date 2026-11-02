@@ -1,6 +1,7 @@
 import { uuidToBase62 } from '@orbit/shared';
 
 import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
+import { citedFilesBlock, type CitedFileLine } from '../tasks/task-evidence-envelope';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 import type { CriterionLandingReason } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
@@ -636,6 +637,7 @@ export function buildCoordinatorDeliveryMessage(
       criterion?: { key?: unknown; text?: unknown } | null;
       escalationSeconds?: unknown;
       waited?: { submittedAt?: unknown } | null;
+      files?: CitedFileLine[];
     };
     const taskId = uuidToBase62(fact.subjectId);
     const revision = String(detail.evidenceRevision ?? '');
@@ -660,6 +662,7 @@ export function buildCoordinatorDeliveryMessage(
         ? `The criterion this evidence quotes (key ${String(criterion.key)}), word for word:\n`
           + `“${String(criterion.text)}”\n\n`
         : '')
+      + (detail.files?.length ? `${citedFilesBlock(detail.files)}\n\n` : '')
       + 'This project has Automatic on: whether a task is done is yours to decide from its evidence, and it is '
       + 'not handed to the account owner first. '
       + `First read revision ${revision} of the evidence with task_evidence_list (taskId: ${taskId}) — what it `

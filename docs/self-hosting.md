@@ -183,12 +183,20 @@ account register itself: [Multi-user Linux machines](#multi-user-linux-machines)
 
 ## 5. Back up and monitor
 
-The Compose stack writes Postgres data to `./data/postgres`. A sidecar writes base backups and archived WAL to
-`./data/pg-archive`.
+The Compose stack writes Postgres data to `./data/postgres` and attachment bytes to `./data/files`. A sidecar writes
+base backups and archived WAL to `./data/pg-archive`.
 
 - Set `ORBIT_BACKUP_SYNC_TARGET` (plus `ORBIT_BACKUP_SYNC_SSH_PORT` when it is not 22) so the sidecar mirrors
   `./data/pg-archive` to another host over ssh; give it a directory of its own, since the mirror deletes
   anything else there. A same-disk backup does not protect against disk or host loss.
+- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/` and
+  never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
+  in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
+  protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- A restore goes Postgres first, then the files, then the apiserver:
+  [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
+  restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
+  [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
@@ -1395,6 +1403,10 @@ starts once it is healthy. Keep Postgres running unless the release notes explic
 outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
 as it was.
 
+`pgbackup` keeps the `scripts/pg-backup.sh` it started on until it is recreated, and these steps recreate it only when
+its Compose definition changes. After a change to the script alone, run `docker compose up -d --no-deps --force-recreate
+pgbackup` in this checkout; `/upgrade`'s script does that by itself.
+
 These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
 `/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do
 its steps after the ones above:
@@ -1407,6 +1419,23 @@ docker image inspect -f '{{.Id}}' orbit-managed-runner:local
 docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel
 ```
+
+### Going back to an older version
+
+An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
+`ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
+so going back to one after the upgraded version has accepted uploads has a limit:
+
+- **Attachments uploaded since the upgrade can't be read.** The older version fails on them: opening one, and anything
+  else that needs its bytes, such as starting a run of a task that has one as an input.
+- **Their bytes stay safe.** Going back changes nothing in `./data/files` or the bucket, and upgrading again serves
+  those attachments as before.
+- **Attachments from before the upgrade keep working** on both versions, because their bytes are still in Postgres. So
+  do the ones uploaded while the older version runs.
+
+A Compose upgrade replaces the apiserver in one step, so in normal operation no older version serves these attachments.
+The exception is [several apiservers](#several-apiservers): the others run the old code until they are recreated, and
+until then they fail on an attachment uploaded through the first one.
 
 ## Production checklist
 

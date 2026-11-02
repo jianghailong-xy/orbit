@@ -215,13 +215,13 @@ func TestUploadSessionAttachmentEnforcesSizeLimit(t *testing.T) {
 	if err := file.Truncate(maxSessionAttachmentBytes); err != nil {
 		t.Fatal(err)
 	}
-	if id, err := transport.uploadSessionAttachment(context.Background(), artifactTestSessionID, path, "image/png"); err != nil || id != "att" {
+	if id, err := uploadTestAttachment(transport, artifactTestSessionID, path, "image/png"); err != nil || id != "att" {
 		t.Fatalf("exactly 25 MiB = %q, %v", id, err)
 	}
 	if err := file.Truncate(maxSessionAttachmentBytes + 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := transport.uploadSessionAttachment(context.Background(), artifactTestSessionID, path, "image/png"); err != errAttachmentTooLarge {
+	if _, err := uploadTestAttachment(transport, artifactTestSessionID, path, "image/png"); err != errAttachmentTooLarge {
 		t.Fatalf("over 25 MiB = %v", err)
 	}
 	mu.Lock()

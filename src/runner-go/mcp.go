@@ -355,6 +355,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
 	}
+	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
+	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
 	}
@@ -3346,7 +3350,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"taskId": taskIDProp,
 				"evidence": map[string]interface{}{
 					"type":        "object",
-					"description": "The envelope, exactly four fields: `claim` (what you assert you completed), `criterion` ({key, text} copied from the project's stated criteria), `checks` (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT, ref naming a row recorded under this task — a TOOL_CALL may also carry `command` and `succeeded`, which are checked against the cited row), and `gaps` (what this evidence does NOT establish; [] says nothing is missing). Do not copy command output in: it is part of the evidence digest, where whitespace is significant, and Orbit already stores it on the cited row. Work whose answer is only an exit code belongs to EXECUTABLE acceptance, not here. Object-key order is not significant; array order and string whitespace are.",
+					"description": "The envelope, exactly four fields: `claim` (what you assert you completed), `criterion` ({key, text} copied from the project's stated criteria), `checks` (each {kind, ref}, kind one of TOOL_CALL / COMMIT / ARTIFACT / FILE, ref naming a row recorded under this task — a TOOL_CALL may also carry `command` and `succeeded`, which are checked against the cited row; a FILE ref is the id file_upload returned for a file or folder bundle of this task, and one that names none refuses the whole submission; Orbit writes the file's sha256 into the check, so the digest binds those bytes and you leave it out), and `gaps` (what this evidence does NOT establish; [] says nothing is missing). Do not copy command output in: it is part of the evidence digest, where whitespace is significant, and Orbit already stores it on the cited row. Work whose answer is only an exit code belongs to EXECUTABLE acceptance, not here. Object-key order is not significant; array order and string whitespace are.",
 				},
 				"idempotencyKey": map[string]interface{}{
 					"type":        "string",
@@ -4965,6 +4969,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// anybody else's session, so the wiki tools are offered to every agent, as the task tools are
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	tools = append(tools, wikiToolDescriptors(obj)...)
+	tools = append(tools, fileToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.

@@ -160,6 +160,12 @@ defaults to ORBIT_SESSION_ID and must execute this task; its lifecycle state is 
 --idempotency-key makes transport retries return the same revision. Equivalent object-key order,
 Unicode composition and line endings share one stable digest; changed evidence makes a new revision.
 This command does not change task status and does not add a comment.
+
+Each entry of checks is {"kind": ..., "ref": ...}, kind one of TOOL_CALL, COMMIT, ARTIFACT or FILE.
+A screenshot or a report goes in as {"kind": "FILE", "ref": "<id>"}, the id 'orbit file upload'
+printed for a file or a folder bundle kept in one of this task's sessions, or attached to the task.
+A FILE that names none is refused whole. Orbit writes its sha256 into the check, so the evidence
+digest binds those bytes; leave it out yourself. Whoever judges the evidence can fetch the file.
 `,
 	"evidence-decide": `orbit task evidence-decide — decide one version of a task's completion evidence
 
@@ -3345,6 +3351,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		specs = append(specs, wikiCLICapabilities...)
 		specs = append(specs, wikiImportCLICapabilities...)
 	}
+	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
+	// are SessionOnly, because a file stays with the session that uploads it.
+	specs = append(specs, fileCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
