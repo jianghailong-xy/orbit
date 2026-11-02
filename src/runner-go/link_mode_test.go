@@ -570,6 +570,57 @@ func TestTheShadowGivesWayToTheWorkConnection(t *testing.T) {
 	})
 }
 
+// While a refused runner waits for the gateway's read of the switch, the link stays in use, so the shadow stays down: it
+// stood down once, for the refusal, and does not connect again for a moment on HTTPS that never comes.
+func TestTheShadowStaysDownWhileARefusedRunnerWaitsForTheGateway(t *testing.T) {
+	r := newLinkWorkRig(t)
+	var on atomic.Bool // the switch, at the apiserver
+	r.cp.status = func(string) int {
+		if on.Load() {
+			return http.StatusUpgradeRequired
+		}
+		return 0
+	}
+	r.g.setMode(linkpb.Mode_MODE_HTTP)
+	var welcomes atomic.Int32
+	r.g.welcome = func(*fakeWorkConn, *linkpb.Welcome) {
+		// The shadow's, and then the work's first: the gateway reads the switch a moment after that one.
+		if welcomes.Add(1) == 2 {
+			time.AfterFunc(200*time.Millisecond, func() { r.g.setMode(linkpb.Mode_MODE_LINK) })
+		}
+	}
+	logs := &linkTestLog{}
+	s := newLinkShadow(newLinkTestClient(r.cp, r.t.leaseOwner, r.g.roots(), nil), logs.log)
+	s.pingEvery = 200 * time.Millisecond
+	s.coord = r.m
+	if err := installLinkShadowTap(r.t, s); err != nil {
+		t.Fatal(err)
+	}
+	stop := s.start()
+	defer stop()
+	r.g.waitWelcomed(t, 1)
+	on.Store(true)
+	if _, err := r.t.me(); err != nil {
+		t.Errorf("GET /runner/me, refused over HTTPS before the gateway read the switch: %v", err)
+	}
+	// Long enough for a shadow let back on to have connected.
+	linkWaitFor(t, 5*time.Second, "the shadow to stand down", func() bool {
+		return strings.Contains(strings.Join(logs.all(), "\n"), "the shadow stands down")
+	})
+	time.Sleep(500 * time.Millisecond)
+	shadowLog := strings.Join(logs.all(), "\n")
+	if n := strings.Count(shadowLog, "link shadow: connected"); n != 1 {
+		t.Errorf("the shadow connected %d times, want 1:\n%s", n, shadowLog)
+	}
+	if n := strings.Count(shadowLog, "the shadow stands down"); n != 1 {
+		t.Errorf("the shadow stood down %d times, want 1:\n%s", n, shadowLog)
+	}
+	if len(r.g.welcomed()) != 3 || !r.m.inUse() {
+		t.Errorf("%d connections welcomed, link in use %v; want 3, the shadow's, the one welcomed in MODE_HTTP and the work's, and in use",
+			len(r.g.welcomed()), r.m.inUse())
+	}
+}
+
 // With the link mode off, a shadow whose gateway says MODE_LINK mirrors nothing there: in MODE_LINK the gateway
 // forwards a Heartbeat and stores an EventBatch, and a mirror is neither. Each one is counted as dropped.
 func TestTheShadowMirrorsNothingOnAConnectionInModeLink(t *testing.T) {
