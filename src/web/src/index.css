@@ -24523,6 +24523,18 @@ button.project-open-item-action:disabled {
 .wk-maint-rows .dim { color: var(--text-3); }
 .wk-maint-rows .wk-dot { margin-right: 2px; }
 .wk-maint-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+/* The Workspaces card (mock 38). */
+.wk-ws-list { display: flex; flex-direction: column; }
+.wk-ws-row { display: flex; align-items: center; gap: 16px; min-height: 42px; padding: 7px 0; }
+.wk-ws-row + .wk-ws-row { border-top: 1px solid var(--border-subtle); }
+.wk-ws-tx { flex: 1; min-width: 0; }
+.wk-ws-t { font-size: 13.5px; line-height: 1.5; color: var(--text-1); overflow-wrap: anywhere; }
+.wk-ws-t .dim { color: var(--text-3); }
+.wk-ws-d { margin-top: 1px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-ws-row.off .wk-ws-t { color: var(--text-3); }
+.wk-ws-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; align-items: center; margin-top: 7px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.wk-ws-note { flex: 1 1 260px; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-ws-empty { padding: 10px 0 4px; font-size: 13.5px; line-height: 1.5; color: var(--text-3); }
 .wk-setup { display: flex; flex-direction: column; }
 .wk-setup-k { margin: 12px 0 6px; font-size: 13px; font-weight: 500; color: var(--text-1); }
 .wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

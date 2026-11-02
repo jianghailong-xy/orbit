@@ -73,6 +73,14 @@ data class WikiUsageEntry(val entryId: String, val title: String? = null, val to
 data class WikiUsage(val days: Int? = null, val sessionsPushed: Int? = null, val searches: Int? = null, val gets: Int? = null,
     val entries: List<WikiUsageEntry>? = null)
 
+/** One row of Wiki settings' Workspaces section, or of what Add workspace offers (contract `space.workspaces`). */
+@Serializable
+data class WikiSpaceWorkspaceRow(val id: String, val name: String, val runner: String? = null, val inWiki: Boolean = false)
+
+/** `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it. */
+@Serializable
+data class WikiSpaceWorkspaces(val workspaces: List<WikiSpaceWorkspaceRow> = emptyList(), val addable: List<WikiSpaceWorkspaceRow> = emptyList())
+
 @Serializable
 data class WikiSpace(
     val id: String, val slug: String, val title: String? = null, val repoUrlNorm: String? = null, val rootCommitSha: String? = null,

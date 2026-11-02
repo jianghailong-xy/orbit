@@ -165,6 +165,16 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             let title: String
             let crumb: String
             let sections: [String]
+            struct Workspaces: Decodable {
+                let lead: String
+                let leftOut: String
+                let join: String
+                let joinNoRepository: String
+                let empty: String
+                let add: String
+                let addGroup: String
+            }
+            let workspaces: Workspaces
             let reviewModeHint: String
             let lead: String
             let defaultTag: String
@@ -291,6 +301,13 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiModeCopy.settingsTitle, settings.title)
         XCTAssertEqual(WikiModeCopy.settings, settings.crumb)
         XCTAssertEqual(WikiModeLogic.SettingsSection.allCases.map(\.title), settings.sections)
+        XCTAssertEqual(WikiModeCopy.workspacesLead, settings.workspaces.lead)
+        XCTAssertEqual(WikiModeCopy.workspaceLeftOut, settings.workspaces.leftOut)
+        XCTAssertEqual(WikiModeCopy.workspacesJoin, settings.workspaces.join)
+        XCTAssertEqual(WikiModeCopy.workspacesJoinNoRepository, settings.workspaces.joinNoRepository)
+        XCTAssertEqual(WikiModeCopy.workspacesEmpty, settings.workspaces.empty)
+        XCTAssertEqual(WikiModeCopy.addWorkspace, settings.workspaces.add)
+        XCTAssertEqual(WikiModeCopy.addWorkspaceGroup, settings.workspaces.addGroup)
         XCTAssertEqual(WikiModeCopy.reviewModeHint, settings.reviewModeHint)
         XCTAssertEqual(WikiModeCopy.reviewModeLead, settings.lead)
         XCTAssertEqual(WikiModeCopy.modeDefault, settings.defaultTag)
@@ -547,7 +564,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             assertSays(origins, "\(origin.rawValue): '\(WikiModeCopy.originWord(origin))'", in: Self.lib)
         }
         assertSays(origins, "maintenance: WIKI_HISTORY_MAINTENANCE", in: Self.lib)
-        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_MAINTENANCE] as const;", in: Self.lib)
+        assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_WORKSPACES, WIKI_MAINTENANCE] as const;", in: Self.lib)
         // The sentences built around a value.
         assertSays(lib, "(runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`)", in: Self.lib)
         assertSays(lib, "days === null ? WIKI_LOOKBACK_ALL : days === 0 ? WIKI_LOOKBACK_NOW : days === 1 ? 'Last 1 day' : `Last ${days} ${WIKI_LOOKBACK_UNIT}`",
@@ -605,8 +622,15 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertOrder(nativePage, ["WikiModeLogic.modeFallback(space.settings)", "ForEach(WikiModeLogic.SettingsSection.allCases"],
                     "the fallback leads the native page")
         let arms = try slice(nativePage, from: "switch section {", to: "private func modeRow(")
+        // A row's Toggle and Add workspace's menu both say which workspace, and whether it is to be in the wiki.
+        let members = try slice(nativePage, from: "private func workspaceRow(", to: "private func fallbackBanner(")
+        assertOrder(members, ["actions.setWorkspace(row.id, $0)", "Text(WikiModeCopy.workspaceLeftOut)",
+                              "Section(WikiModeCopy.addWorkspaceGroup)", "actions.setWorkspace(row.id, true)", "Text(WikiModeCopy.addWorkspace)"],
+                    "the native section writes each row and each addition")
         assertOrder(arms, ["case .reviewMode:", "ForEach(WikiModeLogic.modes, id: \\.self)", "Text(WikiModeCopy.spotCheck)",
                            "Text(WikiModeCopy.spotCheckNote)", ".disabled(mode != .automatic)", "Text(WikiModeCopy.floorsLead)",
+                           "case .workspaces:", "Text(WikiModeCopy.workspacesEmpty)", "workspaceRow(row)", "addWorkspaceMenu(workspaces.addable)",
+                           "Text(WikiModeCopy.workspacesLead)",
                            "case .maintenance:", "WikiModeCopy.status",
                            "LabeledContent(WikiModeCopy.repoFrom, value: place)", "if let server {",
                            "LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }",

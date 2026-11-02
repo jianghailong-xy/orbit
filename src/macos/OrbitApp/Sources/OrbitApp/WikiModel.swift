@@ -40,6 +40,8 @@ final class WikiModel {
     private(set) var failed: Set<String> = []
     /// A write in flight, so its controls do not take a second press.
     private(set) var busy = false
+    /// Wiki settings' Workspaces section, by space id.
+    private(set) var spaceWorkspaces: [String: WikiSpaceWorkspaces] = [:]
     /// The space on screen's articles (criterion 10): its category directory, its A–Z index, the
     /// articles read so far and the ones it has none of yet, and each read topic's entries — all of
     /// the space `articlesSpaceID` names, and dropped when another space is picked.
@@ -804,6 +806,31 @@ final class WikiModel {
             return nil
         } catch {
             await loadSpaces()
+            return Self.refusal(error)
+        }
+    }
+
+    /// Who is in a space and who can be added: Wiki settings' Workspaces section.
+    func loadSpaceWorkspaces(_ space: WikiSpace) async {
+        guard let listed = try? await api.wikiSpaceWorkspaces(space.id) else { return }
+        spaceWorkspaces[space.id] = listed
+    }
+
+    /// Bring a workspace into a space or leave it out, written at once. Nil on success, else the sentence to show.
+    func setWorkspace(_ space: WikiSpace, workspaceID: String, inWiki: Bool) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            if inWiki {
+                try await api.addWikiWorkspace(spaceID: space.id, workspaceID: workspaceID)
+            } else {
+                try await api.leaveWikiWorkspaceOut(spaceID: space.id, workspaceID: workspaceID)
+            }
+            await loadSpaceWorkspaces(space)
+            await reloadAfterWrite()
+            return nil
+        } catch {
+            await loadSpaceWorkspaces(space)
             return Self.refusal(error)
         }
     }

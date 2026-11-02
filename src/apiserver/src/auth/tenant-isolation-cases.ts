@@ -684,8 +684,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
       body: { ops: [{ op: 'add_note', topic: of.wikiTopicSlug, body: 'from the census' }], rationale: 'the census', dryRun: true },
     }),
   },
+  'GET /wiki/spaces/:id/workspaces': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'POST /wiki/spaces/:id/workspaces': {
     request: (of, mine) => ({ params: { id: of.wikiSpaceId }, body: { workspaceId: mine.workspaceId } }),
+  },
+  'DELETE /wiki/spaces/:id/workspaces/:workspaceId': {
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId, workspaceId: mine.workspaceId } }),
   },
   'POST /wiki/spaces/:id/verifications/reopen': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/articles': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },

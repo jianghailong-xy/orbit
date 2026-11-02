@@ -1265,6 +1265,18 @@ public final class APIClient: @unchecked Sendable {
     public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
         try await patch("wiki/spaces/\(id)", body: req)
     }
+    /// `GET /wiki/spaces/:id/workspaces`: who is in the wiki, and who can be added to it.
+    public func wikiSpaceWorkspaces(_ spaceID: String) async throws -> WikiSpaceWorkspaces {
+        try await get("wiki/spaces/\(spaceID)/workspaces")
+    }
+    /// `POST /wiki/spaces/:id/workspaces`: bring a workspace into the wiki, or back into it. Refused to every session.
+    public func addWikiWorkspace(spaceID: String, workspaceID: String) async throws {
+        _ = try await postRaw("wiki/spaces/\(spaceID)/workspaces", body: WikiWorkspaceAddRequest(workspaceId: workspaceID))
+    }
+    /// `DELETE /wiki/spaces/:id/workspaces/:workspaceId`: leave a workspace out of the wiki. Refused to every session.
+    public func leaveWikiWorkspaceOut(spaceID: String, workspaceID: String) async throws {
+        try await deleteRaw("wiki/spaces/\(spaceID)/workspaces/\(workspaceID)")
+    }
     /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
     /// becomes Confirmed and is pushed from then on.
     public func confirmWikiEntry(_ id: String) async throws {

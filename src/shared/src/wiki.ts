@@ -903,6 +903,21 @@ export interface WikiSearchRowAdditions {
 
 export type WikiSearchRow = WikiSearchHit & WikiSearchRowAdditions;
 
+/** One row of Wiki settings' Workspaces card, or of what `Add workspace…` offers (contract `space.workspaces`). */
+export interface WikiSpaceWorkspaceRow {
+  id: string;
+  name: string;
+  /** The machine it is on, as the app names it; null for a workspace no runner holds. */
+  runner: string | null;
+  inWiki: boolean;
+}
+
+/** `GET /api/wiki/spaces/:id/workspaces`: who is on the card, and who can be added to it. */
+export interface WikiSpaceWorkspaces {
+  workspaces: WikiSpaceWorkspaceRow[];
+  addable: WikiSpaceWorkspaceRow[];
+}
+
 export interface WikiSpaceSettings {
   push: boolean;
   autoAcceptReinforce: boolean;
