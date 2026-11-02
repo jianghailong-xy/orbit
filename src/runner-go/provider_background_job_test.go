@@ -154,6 +154,7 @@ func (f *providerBgFixture) engineOwnedShell(t *testing.T, toolUseID string) int
 	if err := os.WriteFile(output, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	f.bg.noteToolUse(toolUseID, "Bash", map[string]interface{}{"run_in_background": true})
 	f.bg.onToolResult(toolUseID, "Command running in background with ID: "+toolUseID+
 		". Output is being written to: "+output+". You will be notified when it completes.")
 	return cmd.Process.Pid
