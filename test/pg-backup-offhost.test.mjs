@@ -8,7 +8,7 @@
 // and left byte for byte as it was, whether or not its segment names overlap this archive's, and however alike its listing
 // reads, and so is one further on than this archive, or a base backup with no WAL, whatever it is called; the log says why and
 // what to do. The same cluster, a restored one on a higher timeline and a first install to an empty or missing directory all
-// go on, and so does a first sync cut short, because a round sends WAL first and a segment is then there to read. A segment
+// go on, and so does a first sync cut short, because a target gets WAL first and a segment is then there to read. A segment
 // holds the system identifier Postgres wrote into it, so none of this needs a marker on the target, and one is read from the
 // target before every --delete.
 //
@@ -443,11 +443,11 @@ test('a first install syncs, to a missing directory or an empty one, or to one w
   }
 });
 
-test('WAL goes first, on its own and deleting nothing, and --delete comes after it', () => {
+test('WAL goes first, on its own and deleting nothing, to a target that shares no segment with this archive', () => {
   for (const held of [false, true]) {
     const result = round({
       prepare: ({ archive, target }) => {
-        archiveIn(archive);
+        archiveIn(archive, { from: 50, to: 52 });
         if (held) archiveIn(target, { from: 1, to: 2 });
       },
     });
@@ -458,6 +458,32 @@ test('WAL goes first, on its own and deleting nothing, and --delete comes after 
     assert.ok(writes[0].includes('/archive/wal '), writes[0]);
     assert.match(writes[1], /--delete/);
   }
+});
+
+test('a target that shares a segment has the one pass it always had, so that --delete still makes room on a full disk', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(target, { from: 1, to: 3, bases: ['20260101T000000Z'] });
+      archiveIn(archive, { from: 3, to: 5, bases: ['20260301T000000Z'] });
+    },
+  });
+  mirrored(result);
+  const writes = writesToMirror(result);
+  assert.equal(writes.length, 1, result.rsyncCalls.join('\n'));
+  assert.match(writes[0], /--delete/);
+});
+
+test('and keeps that segment wherever the pass is cut, so the next poll has it to read', () => {
+  const result = round({
+    cut: { on: '--delete', holdsBack: `${walName(1, 0).slice(0, -1)}[45].gz` },
+    prepare: ({ archive, target }) => {
+      archiveIn(target, { from: 1, to: 3, bases: ['20260101T000000Z'] });
+      archiveIn(archive, { from: 3, to: 5, bases: ['20260301T000000Z'] });
+    },
+  });
+  assert.deepEqual(namesIn(result.cutShort.mirror), ['base/20260301T000000Z/base.tar.gz', ...segmentsAt(3)]);
+  mirrored(result);
+  assert.doesNotMatch(result.log, /ERROR/);
 });
 
 test('a first sync cut short in its WAL has left no base backup there, and the next poll finishes it with nobody acting', () => {
@@ -504,7 +530,7 @@ test('a WAL pass that fails stops the round before --delete', () => {
   const result = round({
     rsyncFailsOn: '/archive/wal ',
     prepare: ({ archive, target }) => {
-      archiveIn(archive);
+      archiveIn(archive, { from: 50, to: 52 });
       archiveIn(target, { from: 1, to: 2 });
     },
   });
@@ -671,7 +697,14 @@ test('a target the mirror refused is not pruned on this cluster\'s word', () => 
 test('a round cut short is not pruned on, whichever pass it died in', () => {
   const name = NAME('a');
   for (const rsyncFailsOn of ['/archive/wal ', '--delete']) {
-    const result = round({ due: [name], rsyncFailsOn, prepare: prepareCopy([name], [NAME('b')]) });
+    const result = round({
+      due: [name],
+      rsyncFailsOn,
+      prepare: (dirs) => {
+        prepareCopy([name], [NAME('b')])(dirs);
+        rmSync(dirs.target, { recursive: true });
+      },
+    });
     assert.equal(onCopy(result).includes(inCopy(name)), true, result.log);
     assert.doesNotMatch(result.log, /pruned/);
   }

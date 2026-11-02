@@ -66,10 +66,10 @@ per container start; without that it says so and keeps backing up locally. It re
 archive with no base backup or no finished WAL segment (`ERROR: refusing off-host sync …`), so an empty or
 wrong mount cannot clear the target.
 
-Each round sends `wal/` first, on its own and deleting nothing, and only then runs that mirror, which costs one more
-listing of `wal/` on each poll. A target therefore holds a finished segment before it holds a base backup, and keeps one
-from then on, even if everything it held has left retention here. A sync cut short at any point is carried on by the next
-poll with nobody acting, and a base backup that is slow to send does not hold up the WAL written meanwhile.
+A target sharing a segment with this archive keeps it through `--delete`. One sharing none, on a first sync or fallen behind
+past retention, is sent `wal/` first, on its own and deleting nothing, and only then gets that mirror. A target therefore
+holds a finished segment before it holds a base backup, and keeps one from then on, so a sync cut short at any point is
+carried on by the next poll with nobody acting.
 
 **It also reads the target first, and leaves another cluster's archive alone.** A new cluster has a real
 base backup and real WAL of its own, so one started before a restore would otherwise replace the only copy
