@@ -21,6 +21,10 @@ coordinator); T6 is checking (6m 12s of 30m, usually ~9m).
 | `light-e-focused.png` / `dark-e-focused.png` | 03 f ③ | `/sessions/<T2's id>`, the address every `Open landing ›` opens: the window scrolled to T2, opened to its record, and T2's bubble outlined in the brand's blue (the outline lasts about 1.5 s; the picture is taken 0.45 s after the window is placed). |
 | `light-f-phone.png` / `dark-f-phone.png` | not a board frame | The same window on a 390 px phone, scrolled up: the long names wrap whole inside their bubbles (`T1 install.sh: keep one orbit binary per` / `account`), and the bubbles stop at the 44 px gutter. On this width the footer's first line and `Decisions: the coordinator` take two lines each beside the button. |
 
+A card's task name wraps now, on all three clients: the column beside the avatar is narrower, and the board draws a long name wrapping
+(02 d). At desktop width nothing moves; `f-phone`'s cards are taller for it (`report.json`: T5's and T6's names went from `cut: true` to
+`cut: false`).
+
 ## What `report.json` measured
 
 `report.json` holds, per frame, what the window drew: the chips (text, ink, fill, centred), each

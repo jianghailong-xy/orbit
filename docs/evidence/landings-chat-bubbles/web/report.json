@@ -1494,7 +1494,7 @@
                 "id": "2zwQZ2hd93IvLb59t6pYX",
                 "words": "T5 orbit doctor reports the runner’s own binary",
                 "foot": null,
-                "cut": true,
+                "cut": false,
                 "bubble": null,
                 "gutter": null
               },
@@ -1502,7 +1502,7 @@
                 "id": "2zwQZ2hd93IvLb59t6pYe",
                 "words": "T6 upgrade keeps each account’s service running",
                 "foot": null,
-                "cut": true,
+                "cut": false,
                 "bubble": null,
                 "gutter": null
               }
@@ -1538,7 +1538,7 @@
     "composer": false,
     "bodyScroll": {
       "top": 0,
-      "height": 1089,
+      "height": 1130,
       "client": 637
     },
     "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
@@ -3038,7 +3038,7 @@
                 "id": "2zwQZ2hd93IvLb59t6pYX",
                 "words": "T5 orbit doctor reports the runner’s own binary",
                 "foot": null,
-                "cut": true,
+                "cut": false,
                 "bubble": null,
                 "gutter": null
               },
@@ -3046,7 +3046,7 @@
                 "id": "2zwQZ2hd93IvLb59t6pYe",
                 "words": "T6 upgrade keeps each account’s service running",
                 "foot": null,
-                "cut": true,
+                "cut": false,
                 "bubble": null,
                 "gutter": null
               }
@@ -3082,7 +3082,7 @@
     "composer": false,
     "bodyScroll": {
       "top": 0,
-      "height": 1089,
+      "height": 1130,
       "client": 637
     },
     "url": "/projects/2zwQZ2hd93IvLb59t6p9d/landings?project=2zwQZ2hd93IvLb59t6p9d"
