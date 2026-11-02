@@ -26,19 +26,23 @@
 #       root's file, and alice's copy is left as it was
 #   S7  /usr/local/bin/orbit is running; alice installs: it is replaced, not written into
 # Not set up (no template):
-#   N1  bob installs: his own ~/.orbit/bin/orbit, the release, without sudo; no /usr/local/bin/orbit
-#   N2  root installs: /root/.orbit/bin/orbit, root's; no /usr/local/bin/orbit
-#   N3  alice installs through sudo (sudo env … bash install.sh): her ~/.orbit/bin/orbit and rc files,
-#       all hers; no /usr/local/bin/orbit
+#   N1  bob installs: his own ~/.orbit/bin/orbit and ~/.local/bin/orbit, the release, without sudo;
+#       no /usr/local/bin/orbit, and his rc files are left as they were
+#   N2  root installs: /root/.orbit/bin/orbit and /root/.local/bin/orbit, root's; no
+#       /usr/local/bin/orbit, rc files untouched
+#   N3  alice installs through sudo (sudo env … bash install.sh): her ~/.orbit/bin/orbit and
+#       ~/.local/bin/orbit, all hers; no /usr/local/bin/orbit, and her rc files are left as they were
 #   N4  /usr/local/bin/orbit is there already, a root-owned file or a link; alice, alice through
 #       sudo, and root install: it is left as it was
 #   N5  bob installs with ORBIT_BIN_DIR=/home/bob/bin, a directory of his: the binary there, his, no
-#       PATH block, no /usr/local/bin/orbit; its mode is printed, to compare runs of two versions
-#   N6  N1, N2 and N3 install a second time: ~/.bashrc and ~/.zshrc hold the PATH block once, as the
-#       first run left them, and are the account's; new interactive bash and zsh find the account's
-#       own copy; both runs print the closing hint and name the binary by its absolute path
+#       launcher, no /usr/local/bin/orbit, rc files untouched; its mode is printed, to compare runs
+#       of two versions
+#   N6  N1, N2 and N3 install a second time: the launcher is still the account's symlink to its own
+#       copy, ~/.bashrc and ~/.zshrc are as the first run left them (install.sh edits neither), a
+#       shell with ~/.local/bin on PATH finds the account's own copy, and both runs print the
+#       closing hint and name the binary by its absolute path
 #   N7  alice installs with ORBIT_BIN_DIR=/usr/local/bin/: that is the machine's file all the same,
-#       written as on a set-up machine (as S1), with no PATH block
+#       written as on a set-up machine (as S1), with no launcher
 #   N8  alice's ~/.orbit/bin/orbit is running (a copy of sleep); alice installs through sudo (curl … |
 #       sudo env … bash): it is replaced, not written into, by a file of hers with mode 0755
 # Not set up, with a link alice planted in her home; she installs through sudo, as in N8:
@@ -72,7 +76,6 @@ BASE="http://127.0.0.1:8000"
 ENVS="ORBIT_NO_REGISTER=1 ORBIT_BASE_URL=$BASE"
 BIN="/usr/local/bin/orbit"
 TEMPLATE="/etc/systemd/system/orbit-runner@.service"
-BLOCK="# >>> orbit >>>" # the line install.sh's PATH block in ~/.bashrc and ~/.zshrc opens with
 SUDO_LOG="/var/log/install-sh-e2e-sudo.log"
 PLAIN_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 CTR=""
@@ -189,18 +192,34 @@ what_is() {
   cx sh -c 'if [ -L "$1" ]; then printf -- "-> %s, " "$(readlink "$1")"; fi
     if [ -e "$1" ]; then printf "mode %s, sha256 %s" "$(stat -L -c %a "$1")" "$(sha256sum <"$1" | cut -d" " -f1)"; else printf absent; fi' sh "$1"
 }
-# blocks ACCOUNT RC — how many lines of the account's RC file open install.sh's PATH block.
-blocks() {
-  cx sh -c 'if [ -e "$1" ]; then grep -cxF -- "$2" "$1"; else echo 0; fi' sh "$(home_of "$1")/$2" "$BLOCK"
+# launcher_of ACCOUNT — where the account's launcher lives.
+launcher_of() { echo "$(home_of "$1")/.local/bin/orbit"; }
+# launcher ID ACCOUNT — ~/.local/bin/orbit is a link, the account's, to the account's own copy.
+launcher() {
+  local link target
+  link=$(launcher_of "$2")
+  target="$(home_of "$2")/.orbit/bin/orbit"
+  expect "$1" "$link type" "$(st %F "$link")" "symbolic link"
+  expect "$1" "$link owner" "$(st '%u (%U)' "$link")" "$(uid_of "$2") ($2)"
+  expect "$1" "$link target" "$(cx readlink "$link")" "$target"
 }
-# found_by ACCOUNT SHELL — what `command -v orbit` prints in a new interactive SHELL of ACCOUNT,
-# started with nothing but HOME, USER and a PATH that holds no ~/.orbit/bin: only the account's own
-# rc files can put it there.
-found_by() {
+# no_launcher ID ACCOUNT — the account has no ~/.local/bin/orbit.
+no_launcher() { expect "$1" "$(launcher_of "$2")" "$(st %F "$(launcher_of "$2")")" absent; }
+# rc_sums ACCOUNT — the sha256 of the account's two rc files, or absent for one that is not there.
+rc_sums() {
   local home
   home=$(home_of "$1")
-  docker exec -u "$1" -w "$home" "$CTR" env -i HOME="$home" USER="$1" LOGNAME="$1" PATH="$PLAIN_PATH" TERM=dumb \
-    timeout 30 "$2" -ic 'command -v orbit' </dev/null 2>/dev/null
+  echo "$(sha_of "$home/.bashrc") $(sha_of "$home/.zshrc")"
+}
+# rcs_kept ID ACCOUNT BEFORE — install.sh left the account's rc files exactly as BEFORE.
+rcs_kept() { expect "$1" "sha256 of $(home_of "$2")/.bashrc and .zshrc, as it left them" "$(rc_sums "$2")" "$3"; }
+# found_from ACCOUNT SHELL MODE PATH — what `command -v orbit` prints in a new SHELL of ACCOUNT run
+# with just PATH in the environment, so what that PATH holds, not a startup file, decides.
+found_from() {
+  local home
+  home=$(home_of "$1")
+  docker exec -u "$1" -w "$home" "$CTR" env -i HOME="$home" USER="$1" LOGNAME="$1" PATH="$4" TERM=dumb \
+    timeout 30 "$2" "$3" 'command -v orbit' </dev/null 2>/dev/null
 }
 
 # --- the checks ----------------------------------------------------------------------------------
@@ -247,15 +266,17 @@ cannot() {
   fi
 }
 
-# closing ID RUN ACCOUNT OUTPUT — the closing words of a home install: this terminal needs a new login
-# or `source ~/.bashrc` / `source ~/.zshrc`, non-interactive use (ssh, cron) the absolute path, and
-# the Next: line names the binary by that path.
+# closing ID RUN ACCOUNT OUTPUT — the closing words of a home install: the launcher, the line that
+# adds ~/.local/bin to PATH when it is not there, non-interactive use (ssh, cron) the absolute path,
+# and the Next: line names the binary by that path.
 closing() {
-  local target next missing=""
+  local target link next missing=""
   target="$(home_of "$3")/.orbit/bin/orbit"
-  grep -qiE 'log ?in' <<<"$4" || missing="$missing [a new login]"
-  grep -qF 'source ~/.bashrc' <<<"$4" || missing="$missing [source ~/.bashrc]"
-  grep -qF 'source ~/.zshrc' <<<"$4" || missing="$missing [source ~/.zshrc]"
+  link="$(launcher_of "$3")"
+  grep -qF "Launcher: $link -> $target" <<<"$4" || missing="$missing [launcher line]"
+  grep -qF 'export PATH="$HOME/.local/bin:$PATH"' <<<"$4" || missing="$missing [PATH line]"
+  grep -qF '>> ~/.zshrc' <<<"$4" || missing="$missing [~/.zshrc]"
+  grep -qF '>> ~/.bashrc' <<<"$4" || missing="$missing [~/.bashrc]"
   grep -F 'ssh' <<<"$4" | grep -F 'cron' | grep -qF "$target" || missing="$missing [ssh and cron: $target]"
   if [ -z "$missing" ]; then
     pass "$1" "run $2 printed the closing hint: $(grep -F 'cron' <<<"$4" | sed 's/^ *//')"
@@ -266,25 +287,26 @@ closing() {
   expect "$1" "run $2's Next: line" "${next:-nothing}" "Next:  $target register"
 }
 
-# again ACCOUNT HOW — N6: install.sh run a second time as the first run was, then the PATH block in
-# the account's rc files, what new interactive shells find, and the closing words of both runs.
+# again ACCOUNT HOW — N6: install.sh run a second time as the first run was, then the launcher, the
+# account's rc files, what shells with ~/.local/bin on PATH find, and the closing words of both runs.
 again() {
-  local acct=$1 home first=$OUT rc sums found sh
+  local acct=$1 home first=$OUT link link_before rc_before found sh
   home=$(home_of "$acct")
-  sums="$(sha_of "$home/.bashrc") $(sha_of "$home/.zshrc")"
+  link="$home/.local/bin/orbit"
+  link_before="$(what_is "$link")"
+  rc_before="$(rc_sums "$acct")"
   echo ""
   echo "==> N6 $acct installs a second time"
   install_as "$acct" "$2"
   exited N6
-  for rc in .bashrc .zshrc; do
-    expect N6 "$home/$rc PATH blocks" "$(blocks "$acct" "$rc")" 1
-    expect N6 "$home/$rc owner" "$(st '%U:%G' "$home/$rc")" "$acct:$(cx id -gn "$acct")"
-  done
-  expect N6 "sha256 of $home/.bashrc and .zshrc, as the first run left them" \
-    "$(sha_of "$home/.bashrc") $(sha_of "$home/.zshrc")" "$sums"
+  launcher N6 "$acct"
+  expect N6 "$link as the first run left it" "$(what_is "$link")" "$link_before"
+  expect N6 "sha256 of $home/.bashrc and .zshrc, as the first run left them" "$(rc_sums "$acct")" "$rc_before"
   for sh in bash zsh; do
-    found=$(found_by "$acct" "$sh")
-    expect N6 "orbit in a new interactive $sh of $acct" "${found:-nothing}" "$home/.orbit/bin/orbit"
+    found=$(found_from "$acct" "$sh" -c "$home/.local/bin:$PLAIN_PATH")
+    expect N6 "orbit in a new non-interactive $sh of $acct, ~/.local/bin on PATH" "${found:-nothing}" "$link"
+    found=$(found_from "$acct" "$sh" -ic "$home/.local/bin:$PLAIN_PATH")
+    expect N6 "orbit in a new interactive $sh of $acct, ~/.local/bin on PATH" "${found:-nothing}" "$link"
   done
   closing N6 1 "$acct" "$first"
   closing N6 2 "$acct" "$OUT"
@@ -441,28 +463,34 @@ expect S7 "the process that was running $BIN (pid $pid) runs" "$(cx readlink "/p
 # --- not set up: no template --------------------------------------------------------------------
 
 fresh "N1 not set up; bob runs curl … | bash"
+rc_before=$(rc_sums bob)
 install_as bob pipe
 exited N1
 own_binary N1 bob
+launcher N1 bob
+rcs_kept N1 bob "$rc_before"
 no_sudo N1 bob
 no_machine_binary N1
 again bob pipe
 
 fresh "N2 not set up; root runs curl … | bash"
+rc_before=$(rc_sums root)
 install_as root pipe
 exited N2
 own_binary N2 root
+launcher N2 root
+rcs_kept N2 root "$rc_before"
 no_machine_binary N2
 again root pipe
 
 fresh "N3 not set up; alice runs sudo env … bash install.sh"
+rc_before=$(rc_sums alice)
 install_as alice sudo-file
 exited N3
 own_binary N3 alice
 expect N3 "/home/alice/.orbit/bin owner" "$(st %U /home/alice/.orbit/bin)" alice
-for rc in .bashrc .zshrc; do
-  expect N3 "/home/alice/$rc owner" "$(st '%U:%G' "/home/alice/$rc")" "alice:alice"
-done
+launcher N3 alice
+rcs_kept N3 alice "$rc_before"
 no_machine_binary N3
 again alice sudo-file
 
@@ -489,26 +517,26 @@ for kind in file link; do
 done
 
 fresh "N5 not set up; bob runs curl … | ORBIT_BIN_DIR=/home/bob/bin bash, a directory of his"
+rc_before=$(rc_sums bob)
 cx install -d -o bob -g bob /home/bob/bin || harness_fail "cannot create /home/bob/bin"
 install_as bob pipe ORBIT_BIN_DIR=/home/bob/bin
 exited N5
 expect N5 "/home/bob/bin/orbit type" "$(st %F /home/bob/bin/orbit)" "regular file"
 expect N5 "/home/bob/bin/orbit owner" "$(st '%u (%U)' /home/bob/bin/orbit)" "$(uid_of bob) (bob)"
 expect N5 "/home/bob/bin/orbit sha256" "$(sha_of /home/bob/bin/orbit)" "$SHA"
-for rc in .bashrc .zshrc; do
-  expect N5 "/home/bob/$rc PATH blocks" "$(blocks bob "$rc")" 0
-done
+no_launcher N5 bob
+rcs_kept N5 bob "$rc_before"
 no_machine_binary N5
 no_sudo N5 bob
 echo "INFO N5 /home/bob/bin/orbit mode $(st %a /home/bob/bin/orbit), printed to compare runs before and after a change"
 
 fresh "N7 not set up; alice runs curl … | ORBIT_BIN_DIR=/usr/local/bin/ bash, the machine's directory"
+rc_before=$(rc_sums alice)
 install_as alice pipe ORBIT_BIN_DIR=/usr/local/bin/
 exited N7
 machine_binary N7
-for rc in .bashrc .zshrc; do
-  expect N7 "/home/alice/$rc PATH blocks" "$(blocks alice "$rc")" 0
-done
+no_launcher N7 alice
+rcs_kept N7 alice "$rc_before"
 
 fresh "N8 not set up, alice's ~/.orbit/bin/orbit running (a copy of sleep); alice runs curl … | sudo env … bash"
 own=/home/alice/.orbit/bin/orbit
@@ -527,9 +555,12 @@ if out=$(cx cp /opt/install-sh-e2e/orbit-stub "$own" 2>&1); then
 else
   pass N8 "control: writing into the running $own fails: $out"
 fi
+rc_before=$(rc_sums alice)
 install_as alice sudo-pipe
 exited N8
 own_binary N8 alice
+launcher N8 alice
+rcs_kept N8 alice "$rc_before"
 expect N8 "$own mode" "$(st %a "$own")" 755
 expect N8 "the process that was running $own (pid $pid) runs" "$(docker exec -u alice "$CTR" readlink "/proc/$pid/exe" 2>/dev/null || echo nothing)" "$own (deleted)"
 

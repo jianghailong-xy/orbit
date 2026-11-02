@@ -119,7 +119,7 @@ own home, as the account. The credential flow and the register receipt do not ch
 ### 3.6 install.sh
 
 On a set-up host, every account installs the way it does on a host that is not set up: into its own
-`~/.orbit/bin/orbit`, plus the PATH block, with no sudo. install.sh never writes `/usr/local/bin/orbit`. Only the
+`~/.orbit/bin/orbit`, plus the `~/.local/bin/orbit` launcher, with no sudo. install.sh never writes `/usr/local/bin/orbit`. Only the
 admin puts that file in place, before setup as documented, and hostd's update replaces it. The branch that
 installs the machine binary through sudo (`MACHINE_DIR`, `TEMPLATE`) goes away. The `curl … | sudo bash`
 hand-off to `orbit register` as the account (task 34q8KOQYHUWSI89y6Gw3W) stays as it is.
