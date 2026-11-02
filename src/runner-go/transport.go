@@ -1176,6 +1176,14 @@ func sessionHeader(sessionID string) map[string]string {
 
 // taskCreateHeaders attributes a created task to the acting agent and records the
 // session it was created from, so the task detail page can link back to that run.
+// callingSessionHeader names the Orbit session this process runs in, on the task writes whose callers hold
+// no session of their own to pass: `orbit mcp` and the CLI both run inside it, under ORBIT_SESSION_ID. The
+// control plane reads it to tell a run from the account owner, and a process in no session sends nothing,
+// which reads as the owner: that is the owner's own terminal, and every runner older than this header.
+func callingSessionHeader() map[string]string {
+	return sessionHeader(strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")))
+}
+
 func taskCreateHeaders(agentID, sessionID string) map[string]string {
 	h := agentHeader(agentID)
 	if sessionID != "" {
@@ -1569,8 +1577,8 @@ func (t *Transport) getTaskAttribution(id string) (json.RawMessage, error) {
 }
 
 // getTaskProgress and reportTaskProgress are the runner's progress door (docs/watch-contract.md §12.1),
-// behind task_progress_report and `orbit task progress`. Owner-scoped like every task route here, and
-// with no session header: a report is a statement about the task, which needs no session to make.
+// behind task_progress_report and `orbit task progress`. Owner-scoped like every task route here. A read
+// needs no session; a report names the one it comes from, since a verifier's progress is its own run's.
 func (t *Transport) getTaskProgress(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
@@ -1586,7 +1594,7 @@ func (t *Transport) reportTaskProgress(id string, body map[string]interface{}) (
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/progress", body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/progress", body, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 
@@ -1987,8 +1995,8 @@ func (t *Transport) addTaskDependency(id, dependsOnTaskID string) (json.RawMessa
 		return nil, fmt.Errorf("prerequisite task id: %w", err)
 	}
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/dependencies",
-		map[string]string{"dependsOnTaskId": dependsOnTaskID}, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/dependencies",
+		map[string]string{"dependsOnTaskId": dependsOnTaskID}, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 
@@ -2000,7 +2008,7 @@ func (t *Transport) removeTaskDependency(id, dependsOnTaskID string) (json.RawMe
 		return nil, fmt.Errorf("prerequisite task id: %w", err)
 	}
 	var out json.RawMessage
-	err := t.do(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id)+"/dependencies/"+url.PathEscape(dependsOnTaskID), nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id)+"/dependencies/"+url.PathEscape(dependsOnTaskID), nil, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 
@@ -2046,7 +2054,7 @@ func (t *Transport) deleteTask(id string) (json.RawMessage, error) {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id), nil, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 
@@ -2366,7 +2374,7 @@ func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMe
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 

@@ -537,8 +537,8 @@ test('a task in no project derives no fact at all, and is still asked about',
         asked(queue, [unfiled, filed]), [filed],
         'the evidence of a task in no project is broadcast to a reader that draws no card for it',
       );
-      // (The sibling, a project's task, is on the run's read as on any reader's that may answer it:
-      // a project's row is drawn only in its coordinator conversation, by `projectId`.)
+      // (The sibling, a project's task, is not on the run's read: a run is not asked what the door
+      // would refuse it, and a project's row is drawn only in its coordinator conversation.)
       const inRun = await stack.evidence.pending(w.ownerId, unfiledRun);
       assert.deepEqual(asked(inRun, [unfiled]), [unfiled],
         'the evidence of a task in no project fell off the read of the run its card is drawn in');

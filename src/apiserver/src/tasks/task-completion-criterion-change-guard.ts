@@ -160,11 +160,11 @@ export const TASK_SELF_REWRITTEN_STANDARD_ACTION =
  *
  * So this refusal is a wall and not a price. The criterion-change door beside it deliberately is a
  * price — a mis-declared criterion is ordinary and has to stay repairable — and the two compose:
- * anybody who could rewrite this standard before still can, at the cost of saying why, EXCEPT the
- * one run whose own completion the answer decides. What the refusal has to carry, therefore, is
- * who that leaves: any session that is not this task's run, and the account owner acting through
- * the user API with no run at all; for a verifier, not another task's run either
- * (`verifier-write-authority.ts`).
+ * those who may rewrite this standard still can, at the cost of saying why, EXCEPT the one run
+ * whose own completion the answer decides, and a conversation that run opened. What the refusal has
+ * to carry, therefore, is who that leaves: the project's coordinator, a judgment session and the
+ * account owner acting through the user API with no run at all. The run of another task is not
+ * among them, which is its own door (`verifier-write-authority.ts`).
  */
 export function taskSelfRewrittenStandardRefusalBody(
   rewritten: readonly TaskCompletionStandardField[],
@@ -178,12 +178,10 @@ export function taskSelfRewrittenStandardRefusalBody(
       `This edit changes ${rewritten.join(', ')}, and it is being made from the run of the very `
       + 'task those fields decide, so it would let this run choose the standard it is about to be '
       + 'measured against — a task is completed by a judgement its own work did not make. The '
-      + 'edit itself is not the problem and is not refused to anybody else: any session other '
-      + 'than this task\'s run, and the account owner acting with no run at all, can make exactly '
-      + 'this request (a change of completionCriterion additionally needs '
-      + `${TASK_CRITERION_OVERRIDE_REASON_FIELD}, which is a separate door). If this task is a `
-      + 'verifier, or the edit would make it one, that excludes the run of any other task: it takes '
-      + 'the project\'s coordinator, a judgment session or the owner. This run may still '
+      + 'edit itself is not the problem: the project\'s coordinator, a judgment session and the '
+      + 'account owner acting with no run at all can make exactly this request (a change of '
+      + `completionCriterion additionally needs ${TASK_CRITERION_OVERRIDE_REASON_FIELD}, which is a `
+      + 'separate door). The run of another task cannot. This run may still '
       + 'say what it found — it can write status FAILED as its own conservative outcome, and it '
       + 'can still raise acceptanceTimeoutSeconds, which bounds how long the declared command may '
       + 'run without changing what that command has to report.',

@@ -117,8 +117,8 @@ export function ownerConfirmationReasonRequiredBody(itemIndex: number | null, in
   const settled = inProject
     ? 'declare EVIDENCE_JUDGMENT, and its run submits evidence quoting the project criterion it '
       + 'serves. This project’s Automatic is off, so that evidence waits on the owner’s card in the '
-      + 'project’s conversation, and the session that dispatched the work — or any session that did '
-      + 'not do it — can settle it first with task_evidence_decide.'
+      + 'project’s conversation, and the project’s coordinator can settle it first with '
+      + 'task_evidence_decide; a run of another task cannot.'
     : 'declare EVIDENCE_JUDGMENT, state in acceptanceCriteria what would settle it, and its run '
       + 'submits evidence quoting them. Outside a project that evidence is delivered to the session '
       + 'that dispatched the work — this one — to decide with task_evidence_decide, and the owner is '

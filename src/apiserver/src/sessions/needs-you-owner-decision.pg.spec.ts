@@ -718,14 +718,14 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
       assert.deepEqual(log, [],
         'refused inside its transaction: nothing committed, and no row was asked to re-draw');
 
-      // Answered from a third run, neither the coordinator nor the one that submitted: the row asked
-      // for is still the coordinator's, because that is the row counting the question.
+      // Answered by the owner naming a third run, neither the coordinator nor the one that submitted:
+      // the row asked for is still the coordinator's, because that is the row counting the question.
       await observed.decide(f.ownerId, later.taskId, { type: CreatorType.USER, id: f.ownerId }, {
         decidingSessionId: moved.sourceSessionId,
         evidenceRevision: '1',
         decision: 'SEND_BACK',
         note: 'cite the run that produced dist/server.js',
-      });
+      }, { door: 'USER', userId: f.ownerId });
       assert.deepEqual(log, redrawn,
         'the accepted answer asks once, after it committed, for the coordinator and not the run that gave it');
     });

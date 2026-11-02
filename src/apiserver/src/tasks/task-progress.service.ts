@@ -1,4 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import {
   RunEventType,
   TASK_PROGRESS_LIMITS,
@@ -10,6 +18,7 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { taskOfRunBehind, verifierWriteFromRunRefusalBody } from './verifier-write-authority';
 
 /**
  * A Task's structured progress (docs/watch-contract.md §12): the one door that writes `task_progress`,
@@ -77,17 +86,30 @@ export class TaskProgressService {
    * Apply one report. Each field it names replaces that field, `null` clears one, an absent one is kept;
    * what results must still be a position. A report that changes nothing writes nothing.
    */
-  async report(ownerId: string, taskId: string, report: TaskProgressReport): Promise<TaskProgressReportResult> {
+  async report(
+    ownerId: string,
+    taskId: string,
+    report: TaskProgressReport,
+    /** The session reporting, on the runner's door. A verifier's progress is its own run's to report. */
+    actingSessionId?: string,
+  ): Promise<TaskProgressReportResult> {
     const fields = reportedFields(report);
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
-        const [task] = await tx.$queryRaw<Array<{ status: string; createdAt: Date }>>`
-          SELECT "status"::text AS "status", "created_at" AT TIME ZONE 'UTC' AS "createdAt"
+        const [task] = await tx.$queryRaw<Array<{ status: string; createdAt: Date; verifiesTaskId: string | null }>>`
+          SELECT "status"::text AS "status", "created_at" AT TIME ZONE 'UTC' AS "createdAt",
+                 "verifies_task_id" AS "verifiesTaskId"
           FROM "task"
           WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
           FOR KEY SHARE`;
         if (!task) throw new NotFoundException('task not found');
+        if (actingSessionId && task.verifiesTaskId != null) {
+          const runsTask = await taskOfRunBehind(tx, ownerId, actingSessionId);
+          if (runsTask !== null && runsTask !== taskId) {
+            throw new ForbiddenException(verifierWriteFromRunRefusalBody('report the progress of a task that is a verifier'));
+          }
+        }
         if (!OPEN_STATUSES.includes(task.status)) {
           throw new ConflictException({
             code: 'TASK_NOT_OPEN',
