@@ -315,8 +315,8 @@ class LandingEntriesShellTest {
         await { ProjectShell.calls.contains("GET tasks/t-landing") }
     }
 
-    /** F″ · a settled row opens in place to its record — read once, when it is opened — with an up arrow, and folds again; the task's
-     *  two ways in end it. */
+    /** F″ · a settled landing's bubble opens its record under it — read once, when it is opened — on a quiet panel, and folds again;
+     *  the task's two ways in end it. */
     @Test fun aSettledRowOpensInPlaceToItsRecordAndFolds() {
         project()
         openPage()
@@ -324,7 +324,8 @@ class LandingEntriesShellTest {
         val row = "landing-row:l-settled"
         compose.onNodeWithTag(row).performClick()
         await { exists(hasTestTag("landing:link:task") and hasAnyAncestor(hasTestTag("landing-entry:l-settled"))) }
-        assertTrue(exists(hasTestTag("landing:open-arrow") and hasAnyAncestor(hasTestTag("landing-entry:l-settled")), unmerged = true))
+        assertTrue(exists(hasTestTag("landing:link:task") and hasAnyAncestor(hasTestTag("landing:record-panel"))))
+        assertTrue("the record opens under the bubble", bounds("landing:record-panel").top >= bounds(row).bottom)
         assertTrue(exists(hasTestTag("landing:link:source") and hasAnyAncestor(hasTestTag("landing-entry:l-settled"))))
         assertEquals(1, ProjectShell.calls.count { it == "GET sessions/l-settled" })
         compose.onNodeWithTag(row).performClick()
@@ -391,6 +392,48 @@ class LandingEntriesShellTest {
         await { ProjectShell.calls.count { it.startsWith("GET sessions?view=completed") } > lists }
         await { exists(hasTestTag("landing-row:l-flight")) }
         assertFalse(exists(hasTestTag("landing-status-card") and hasAnyAncestor(hasTestTag("landing-entry:l-flight"))))
+    }
+
+    /** F⁵′ · the window drawn as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles): the day and `Now` are centred chips; the
+     *  landings Orbit reported close together are one group with its avatar once, top-aligned beside the first — today's task and the
+     *  merge into main that carried it, a minute apart — and `Now`'s cards are the last group. A bubble's column leaves an end gutter, a
+     *  card takes the whole column; the footer is a bar with the way to the coordinator in Send's place, and no field to type in. */
+    @Test fun theWindowIsDrawnAsAChatOfOrbitsMessages() {
+        project()
+        openPage()
+        openWindow()
+        await { exists(hasTestTag("landing-status-card") and hasAnyAncestor(hasTestTag("landing-entry:l-await"))) }
+        assertTrue(exists(hasTestTag("landings:day:Today") and isHeading()) && exists(hasTestTag("landings:day:Now") and isHeading()))
+        val avatars = compose.onAllNodesWithTag("landings:avatar", useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+            .sortedBy { it.top }
+        assertEquals("one avatar for Today's group, one for Now's", 2, avatars.size)
+        assertEquals(bounds("landing-row:l-settled").top, avatars[0].top, 0.5f)
+        assertEquals(bounds("landing-entry:l-await").top, avatars[1].top, 0.5f)
+        // The merge into main sits under its task's bubble, in the same column, beside no avatar of its own.
+        assertEquals(bounds("landing-row:l-settled").left, bounds("landing-row:l-round").left, 0.5f)
+        assertTrue(bounds("landing-row:l-round").top > bounds("landing-row:l-settled").bottom)
+        val dp = compose.density.density
+        val list = bounds("landings-window-list")
+        assertEquals("a card takes the column to the list's edge", list.right - 12 * dp, bounds("landing-entry:l-await").right, 0.5f)
+        compose.onNodeWithTag("landing-row:l-settled").performClick()
+        await { exists(hasTestTag("landing:record-panel")) }
+        assertEquals("a bubble's record stops at its column's end gutter", list.right - (12 + 44) * dp, bounds("landing:record-panel").right, 0.5f)
+        assertTrue(bounds("landing-row:l-settled").right <= bounds("landing:record-panel").right + 0.5f)
+        // The footer: what the window is, who decides, and the coordinator's door — no text field.
+        assertEquals("Decisions: the coordinator", text("landings:footer-decisions"))
+        assertFalse(exists(hasSetTextAction() and hasAnyAncestor(hasTestTag("landings:footer")), unmerged = true))
+        compose.onNodeWithTag("landings:open-coordinator").assert(hasText("Open coordinator")).performClick()
+        await { exists(hasTestTag("transcript-list")) }
+    }
+
+    /** F⁵″ · with no coordinator to open, the footer says who decides and draws no door. */
+    @Test fun theFooterHasNoDoorWithoutACoordinator() {
+        project()
+        ProjectShell.coordinatorStatus = """{"state":"NEVER_OPENED"}"""
+        openPage()
+        openWindow()
+        await { text("landings:footer-decisions") == "Decisions: the coordinator" }
+        assertFalse(exists(hasTestTag("landings:open-coordinator")))
     }
 
     /** F⁶ · a project that has never had a landing draws no Landings row at all — no heading over nothing. */
@@ -465,6 +508,8 @@ class LandingEntriesShellTest {
     private fun texts(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .sortedBy { it.positionInRoot.y }.mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { t -> t.text } }
     private fun top(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().first().positionInRoot.y
+    /** The first node's bounds under [tag], in pixels of the root. */
+    private fun bounds(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
     private fun hasTestTagPrefix(prefix: String) = SemanticsMatcher("tag starts with $prefix") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true
     }
