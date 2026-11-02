@@ -46,6 +46,8 @@ type fakeFileServer struct {
 	calls  []string
 	fields []map[string]string
 	bundle map[string]interface{}
+	// refuse is what the server says of a file it finds a credential in, by the file's name.
+	refuse map[string]string
 	// Names of file parts as busboy would read them: the raw Content-Disposition.
 	dispositions []string
 	listQueries  []string
@@ -179,6 +181,11 @@ func (f *fakeFileServer) upload(w http.ResponseWriter, r *http.Request) {
 		f.dispositions = append(f.dispositions, part.Header.Get("Content-Disposition"))
 	}
 	f.fields = append(f.fields, fields)
+	if message, refused := f.refuse[name]; refused {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"code": "FILE_HOLDS_SECRET", "message": message})
+		return
+	}
 	file := f.keep(name, mimeType, fields["label"], "file", data)
 	w.WriteHeader(http.StatusCreated)
 	view := f.view(file)
@@ -541,6 +548,137 @@ func TestFileUploadOfAFolderStopsAtTheFirstRefusal(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Errorf("%d calls: the folder should have stopped at the refusal", calls)
+	}
+}
+
+// secretRefusalFor is the sentence the apiserver refuses name with (files/file-secret-scan.ts).
+func secretRefusalFor(name string) string {
+	return name + " holds what looks like a GitHub token on line 2, so it was not kept. Orbit does not edit a file it " +
+		"keeps: take the credential out of the file and upload it again. Do not commit the file instead."
+}
+
+// A file refused for a credential is that file's problem: the folder goes on without it, the bundle names the rest, and
+// the answer says which file and why, in the server's words.
+func TestFileUploadOfAFolderListsAFileRefusedForASecretAndKeepsTheRest(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.refuse = map[string]string{"run.log": secretRefusalFor("run.log")}
+	s := api.mcp(t)
+	root := filepath.Join(inCheckout(t), "evidence")
+	writeTestFile(t, filepath.Join(root, "a.txt"), "first")
+	writeTestFile(t, filepath.Join(root, "logs", "run.log"), "one\nthe key is sensitive-bytes-of-the-file\n")
+	writeTestFile(t, filepath.Join(root, "z.txt"), "last")
+
+	text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": root}, false)
+
+	var got fileAnswer
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != "bundle" {
+		t.Errorf("the answer = %+v", got)
+	}
+	want := []string{"a.txt", "z.txt"}
+	var paths []string
+	for _, file := range got.Files {
+		paths = append(paths, file.Path)
+	}
+	if !equalStrings(paths, want) {
+		t.Errorf("files = %v, want %v", paths, want)
+	}
+	if !equalStrings(api.bundle["paths"].([]string), want) {
+		t.Errorf("the manifest was asked for %v", api.bundle["paths"])
+	}
+	if len(got.Skipped) != 1 || got.Skipped[0].Path != "logs/run.log" || got.Skipped[0].Reason != secretRefusalFor("run.log") {
+		t.Errorf("skipped = %+v", got.Skipped)
+	}
+	for _, kept := range api.files {
+		if kept.name == "run.log" || kept.name == "logs/run.log" {
+			t.Errorf("the refused file was kept: %+v", kept)
+		}
+	}
+	if strings.Contains(text, "sensitive-bytes-of-the-file") {
+		t.Errorf("the answer repeats what the file holds: %s", text)
+	}
+}
+
+// Nothing left to bundle ends the way any other folder with nothing to keep does, and makes no bundle.
+func TestFileUploadOfAFolderOfOnlyRefusedFilesSaysNoFileCouldBeKept(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.refuse = map[string]string{"a.log": secretRefusalFor("a.log"), "b.log": secretRefusalFor("b.log")}
+	s := api.mcp(t)
+	root := inCheckout(t)
+	writeTestFile(t, filepath.Join(root, "a.log"), "sensitive-bytes-of-the-file")
+	writeTestFile(t, filepath.Join(root, "b.log"), "sensitive-bytes-of-the-file")
+
+	text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": root}, true)
+
+	for _, want := range []string{"no file of this folder could be kept", "a.log", "b.log", "a GitHub token on line 2"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("error does not say %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "sensitive-bytes-of-the-file") {
+		t.Errorf("the error repeats what the file holds: %s", text)
+	}
+	for _, call := range api.calls {
+		if strings.HasSuffix(call, "/file-bundles") {
+			t.Errorf("a bundle of nothing was asked for: %v", api.calls)
+		}
+	}
+}
+
+// One file has no folder to go on with: the refusal is the answer.
+func TestFileUploadOfOneFileRefusedForASecretSaysWhy(t *testing.T) {
+	api := newFakeFileServer(t)
+	api.refuse = map[string]string{"run.log": secretRefusalFor("run.log")}
+	s := api.mcp(t)
+	path := writeTestFile(t, filepath.Join(inCheckout(t), "run.log"), "sensitive-bytes-of-the-file")
+
+	text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": path}, true)
+
+	if !strings.Contains(text, "FILE_HOLDS_SECRET") || !strings.Contains(text, secretRefusalFor("run.log")) {
+		t.Errorf("error = %s", text)
+	}
+	if strings.Contains(text, "sensitive-bytes-of-the-file") {
+		t.Errorf("the error repeats what the file holds: %s", text)
+	}
+}
+
+// Only the code says a refusal is about one file. The same status, any other code, or none, stops the folder as it did.
+func TestFileUploadOfAFolderStopsAtAnyOtherRefusalWhateverItsStatus(t *testing.T) {
+	for _, body := range []string{
+		`{"code":"SOMETHING_ELSE","message":"not about one file","statusCode":422}`,
+		`{"message":"not about one file","statusCode":422}`,
+		`not json at all`,
+	} {
+		calls := 0
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.Header().Set("content-type", "application/json")
+			if calls == 2 {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = w.Write([]byte(body))
+				return
+			}
+			_, _ = w.Write([]byte(`{"id":"f1","publicId":"f1","kind":"file","sha256":"aa","sizeBytes":1}`))
+		}))
+		t.Setenv("ORBIT_HOME", t.TempDir())
+		s := &mcpServer{t: newCallerTransport(api.URL, "runner-secret", runnerCallerMCP), sessionID: fileTestSession}
+		chdirForTest(t, t.TempDir())
+		root := inCheckout(t)
+		for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+			writeTestFile(t, filepath.Join(root, name), "x")
+		}
+		text := fileToolText(t, s, "file_upload", map[string]interface{}{"path": root}, true)
+		for _, want := range []string{"b.txt", "1 of 3 files", "no bundle"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s: error does not say %q: %s", body, want, text)
+			}
+		}
+		if calls != 2 {
+			t.Errorf("%s: %d calls: the folder should have stopped at the refusal", body, calls)
+		}
+		api.Close()
 	}
 }
 
