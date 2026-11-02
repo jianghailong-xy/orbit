@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -3263,23 +3264,24 @@ func startupRefusal(exitCode int, sawOutput bool) bool {
 	return !sawOutput && exitCode >= 0
 }
 
+// uploadFileName is the name a file from the server is written under: reduced to its base (no path traversal), and the
+// attachment id when that leaves nothing usable.
+func uploadFileName(name, id string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	if base == "." || base == ".." || base == string(filepath.Separator) || base == "" {
+		return id
+	}
+	return base
+}
+
 // writeUpload saves a non-image/-PDF attachment into the session's uploads dir, which lives
 // OUTSIDE the git worktree (see uploadsDir) so attachments are never swept into the session's
 // auto-commit, surfaced in the live diff, or merged to main. Returns the ABSOLUTE path to hand
 // to claude. The name is reduced to its base (no path traversal) and falls back to the
 // attachment id when unusable.
 func writeUpload(sessionID, name, id string, data []byte) (string, error) {
-	base := filepath.Base(strings.TrimSpace(name))
-	if base == "." || base == ".." || base == string(filepath.Separator) || base == "" {
-		base = id
-	}
-	dir := uploadsDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	p := filepath.Join(dir, base)
-	if err := os.WriteFile(p, data, 0o644); err != nil {
-		return "", err
-	}
-	return p, nil
+	return saveLocalFile(uploadsRootDir(), []string{decodeSessionID(sessionID)}, uploadFileName(name, id), func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
 }

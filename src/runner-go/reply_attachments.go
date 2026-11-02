@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -28,10 +30,10 @@ const replyAttachmentBudget = 20 * time.Second
 // this session's ordered async poster, so a batch is rewritten in order, off the engine's back, and
 // the run_event row the control plane stores carries the attachment ref.
 //
-// `roots` is what keeps this to files the reply owns: only a path inside the session's own checkout
-// or its uploads dir is eligible, and only if the file is really there (pathWithinRoots stats it).
-// A path that fails either test, and an upload that fails, leave the text exactly as written — a
-// chip the user can ask about beats a silently dropped line.
+// `roots` is what keeps this to files the reply owns: only a file really inside the session's own
+// checkout or its uploads dir is eligible, links resolved, and it is sent as it was opened
+// (localFileScope). A path that fails that, and an upload that fails, leave the text exactly as
+// written — a chip the user can ask about beats a silently dropped line.
 func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, events []RunEvent, roots []string, memo *replyAttachmentIDs) {
 	if t == nil || memo == nil || len(events) == 0 || len(roots) == 0 {
 		return
@@ -66,14 +68,14 @@ func newReplyAttachmentIDs() *replyAttachmentIDs {
 }
 
 func (a *replyAttachmentIDs) uploader(t *Transport, sessionID string) artifactUploader {
-	return func(ctx context.Context, path, mimeType string) (string, error) {
+	return func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 		a.mu.Lock()
 		id, cached := a.ids[path]
 		a.mu.Unlock()
 		if cached {
 			return id, nil
 		}
-		id, err := t.uploadSessionAttachment(ctx, sessionID, path, mimeType)
+		id, err := t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
 		if err != nil {
 			return "", err
 		}

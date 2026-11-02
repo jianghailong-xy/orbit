@@ -2324,12 +2324,14 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 		return out
 	}
 	clean := filepath.Clean(req.Path)
-	if !pathWithinRoots(clean, artifactRequestRoots(req.SessionID)) {
+	file, _, err := newLocalFileScope(artifactRequestRoots(req.SessionID)).open(clean)
+	if err != nil {
 		out.Status = "missing"
 		out.Message = "artifact is outside the session's own directories or missing"
 		return out
 	}
-	id, err := t.uploadSessionAttachment(ctx, req.SessionID, clean, attachmentMime(clean))
+	defer file.Close()
+	id, err := t.uploadSessionAttachmentFile(ctx, req.SessionID, file, attachmentMimeOf(file, clean), filepath.Base(clean))
 	if err != nil {
 		out.Status = "error"
 		out.Message = err.Error()

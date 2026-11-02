@@ -150,6 +150,8 @@ export interface TenantRequest {
   body?: unknown;
   /** Sent as the one file of a multipart/form-data body, instead of a JSON one. */
   file?: { name: string; type: string; content: string };
+  /** The text parts sent beside that file. */
+  fields?: Record<string, string>;
 }
 
 export interface TenantCase {

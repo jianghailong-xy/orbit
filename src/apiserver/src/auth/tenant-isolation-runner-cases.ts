@@ -85,6 +85,13 @@ export interface RunnerObjects {
   completeSessionId: string;
   /** Of `machineSessionId`: a file it holds, an approval already allowed, a file request waiting on it. */
   sessionAttachmentId: string;
+  /** Of `machineSessionId`: a `file_upload` in no bundle yet, which is what a bundle is made of. */
+  uploadedFileId: string;
+  /** The evidence revision of `evidenceTaskId`: what `file_list` can be asked about. */
+  evidenceRevisionId: string;
+  /** A task the machine is running, in `runningTaskSessionId`: the one task that session's uploads may name. */
+  runningTaskId: string;
+  runningTaskSessionId: string;
   allowedApprovalId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
@@ -310,6 +317,22 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   'POST /runner/sessions/:id/attachments': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, file: { name: 'census.txt', type: 'text/plain', content: 'census' } }),
+  },
+  'POST /runner/sessions/:id/files': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, file: { name: 'census.txt', type: 'text/plain', content: 'census' } }),
+  },
+  'GET /runner/sessions/:id/files/:fileId': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
+  'POST /runner/sessions/:id/file-bundles': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { name: 'census', files: [{ path: 'census.txt', id: of.runner.uploadedFileId }] },
+    }),
   },
   'POST /runner/sessions/:id/artifacts/result': {
     as: RUNNER,
@@ -899,6 +922,28 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'GET /runner/sessions query parentSessionId': {
     as: ['runner', 'service', 'session'],
     request: (of) => ({ params: {}, query: { parentSessionId: of.sessionId } }),
+  },
+  // `file_list`: what the owner has under one task, one session or one evidence version. An id of another account's
+  // is refused as one that names nothing, not answered as an empty list of it.
+  'GET /runner/files query taskId': { as: RUNNER, request: (of) => ({ params: {}, query: { taskId: of.taskId } }) },
+  'GET /runner/files query sessionId': { as: RUNNER, request: (of) => ({ params: {}, query: { sessionId: of.sessionId } }) },
+  'GET /runner/files query evidenceId': { as: RUNNER, request: (of) => ({ params: {}, query: { evidenceId: of.runner.evidenceRevisionId } }) },
+  // The only task an upload may name is the one its session is running: anyone else's is the same refusal as nothing.
+  'POST /runner/sessions/:id/files body taskId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.runningTaskSessionId },
+      file: { name: 'census.txt', type: 'text/plain', content: 'census' },
+      fields: { taskId: of.runner.runningTaskId },
+    }),
+  },
+  // A file of another account's is refused as a file that is not there, whatever session names it.
+  'POST /runner/sessions/:id/file-bundles body files[].id': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: { name: 'census', files: [{ path: 'census.txt', id: of.runner.uploadedFileId }] },
+    }),
   },
   // A message's key, as the platform's own keys spell an object of the account's in it: the key of the
   // turn that hands an open item to its coordinator is `open-item:v1:<item id>:<generation>`.

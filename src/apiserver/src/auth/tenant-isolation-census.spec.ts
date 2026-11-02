@@ -224,6 +224,8 @@ function leavesOf(request: TenantRequest): Array<[string, unknown]> {
     ...walk(request.query ?? {}, 'query '),
     ...walk(request.headers ?? {}, 'header '),
     ...walk(request.body ?? {}, 'body '),
+    // A multipart request's text parts are its body, as the route reads them.
+    ...walk(request.fields ?? {}, 'body '),
   ];
 }
 

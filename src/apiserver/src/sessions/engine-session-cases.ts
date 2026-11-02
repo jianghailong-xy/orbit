@@ -42,7 +42,7 @@ export function routesNamingSession(
  *  did not have). */
 export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_CASES, '/sessions');
 
-/** The runner door: 30 routes today (naming, a turn suggestion, the Cursor key check and a job's alert included). */
+/** The runner door: 32 routes today (naming, a turn suggestion, the Cursor key check, a job's alert and the two file doors included). */
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
@@ -251,6 +251,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// Before the ownership answer, but only for a row of this runner\'s own account: another',
     note: 'POST /runner/sessions/:id/cursor-key-check (RunnerApiController, which leaves the check to the service)',
   },
+  'RunnerFilesController.hostedSession': {
+    file: 'runner-api/runner-files.controller.ts',
+    snippet: 'if (session) assertEngineSession(session);',
+    note: 'a folder bundle is written into a session the way an upload is',
+  },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
@@ -305,13 +310,15 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
 
-  // ── the runner door (30) ──────────────────────────────────────────────────────────────────────
+  // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/takeover-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/activate-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/release-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/orchestration-credential': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/attachments': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/files': 'RunnerApiController.assertSessionOwnership',
+  'POST /runner/sessions/:id/file-bundles': 'RunnerFilesController.hostedSession',
   'POST /runner/sessions/:id/artifacts/result': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/approvals': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/background-wake': 'RunnerApiController.assertSessionOwnership',

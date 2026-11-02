@@ -144,7 +144,7 @@ func exerciseCredentialedRequests(t *testing.T, srv *httptest.Server) {
 	if err := os.WriteFile(upload, []byte("png"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tr.uploadSessionAttachment(context.Background(), "s-1", upload, "image/png"); err != nil {
+	if _, err := uploadTestAttachment(tr, "s-1", upload, "image/png"); err != nil {
 		t.Fatalf("attachment upload: %v", err)
 	}
 }

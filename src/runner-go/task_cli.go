@@ -3345,6 +3345,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		specs = append(specs, wikiCLICapabilities...)
 		specs = append(specs, wikiImportCLICapabilities...)
 	}
+	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
+	// are SessionOnly, because a file stays with the session that uploads it.
+	specs = append(specs, fileCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:

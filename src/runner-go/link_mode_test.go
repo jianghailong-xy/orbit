@@ -484,7 +484,7 @@ func TestEveryOtherCallerSaysWhoItIs(t *testing.T) {
 			if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, _ = tr.uploadSessionAttachment(context.Background(), "session-a", file, "text/plain")
+			_, _ = uploadTestAttachment(tr, "session-a", file, "text/plain")
 			requests := cp.requests()
 			if len(requests) < 12 {
 				t.Fatalf("%d requests", len(requests))
@@ -598,9 +598,10 @@ func TestLinkDaemonRoutesAreTheControllersGuardedRoutes(t *testing.T) {
 	// 49 counted on 2026-10-25, the daemon's three calls that went beside the agent tool API until 2026-10-28 (a
 	// Cursor key check's answer, a session's own key check and a background job's alert), since 2026-10-31 the
 	// directory probe's answer (docs/first-workspace-contract.md §2.4), and since 2026-11-01 the Claude region check
-	// (docs/claude-region-check-contract.md §3).
-	if n := len(guarded) + len(open); n != 54 {
-		t.Errorf("the controller has %d routes; 54 since 2026-11-01", n)
+	// (docs/claude-region-check-contract.md §3), and since 2026-11-02 the upload of a file an agent keeps
+	// (docs/orbit-files-design.md §2.3).
+	if n := len(guarded) + len(open); n != 55 {
+		t.Errorf("the controller has %d routes; 55 since 2026-11-02", n)
 	}
 }
 

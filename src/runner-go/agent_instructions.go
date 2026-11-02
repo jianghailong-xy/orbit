@@ -96,6 +96,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"Cite a wiki entry the same way, as `[title](orbit-wiki:<id>)`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitReplyFileInstructions +
+		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
@@ -121,6 +122,15 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 	"uploads directory; from anywhere else, /tmp included, the user cannot open it, so copy the file there first and " +
 	"link the copy. Whatever git does not ignore in your working directory can end up in a commit, so a file that " +
 	"does not belong in the repository goes in the uploads directory or a git-ignored path.\n\n"
+
+// orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
+// until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
+// orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
+// (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
+// because the tool call that printed it is already stored. ASCII like the rest.
+const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
+	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
+	"directories and returns a link that also works in a reply.\n\n"
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
@@ -272,6 +282,11 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// more of a power.
 		for _, action := range []string{"search", "get", "propose", "verify"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
+		}
+		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
+		// instructions send every agent here for its evidence.
+		for _, action := range []string{"upload", "fetch", "list"} {
+			rules = append(rules, "Bash("+command+" file "+action+" *)")
 		}
 		// import hands the server, for a space its owner named, files the owner asked for, and the
 		// server's model reads them: no more of a power than propose, and the server holds what it

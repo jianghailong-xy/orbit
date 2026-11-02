@@ -31,7 +31,7 @@ import { PrismaService } from '../prisma/prisma.service';
  *     verbs share some of the daemon's routes (the approvals, the orchestration credential, `me`, a session's meta)
  *     and hold no link of their own. The daemon never sends the header, so a daemon too old to know the link is
  *     refused like any other;
- *   - the six routes marked StaysOnHttps: registration and the device flow, the attachments (D14), and the Claude region
+ *   - the seven routes marked StaysOnHttps: registration and the device flow, the uploads and downloads (D14), and the Claude region
  *     check, which has to leave through Claude's proxy (docs/claude-region-check-contract.md §3);
  *   - every other controller under /runner: the agent tool API, the link token, the release check (D14).
  *
