@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
-import { FilesService } from '../files/files.service';
+import { FilesService, type EvidenceFileList } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -959,5 +959,12 @@ export class TaskCompletionEvidenceService {
         : undefined));
     }
     return revisions;
+  }
+
+  /** What one version cites, read from rows: `FilesService.evidenceFiles` says how. */
+  citedFiles(ownerId: string, taskId: string, revision: string, offset = '0'): Promise<EvidenceFileList> {
+    const start = /^\d{1,9}$/.test(offset) ? Number(offset) : null;
+    if (start === null) throw new BadRequestException('offset must be a whole number of files');
+    return this.files.evidenceFiles(ownerId, taskId, revision, start);
   }
 }

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
@@ -21,6 +21,7 @@ import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
@@ -116,6 +117,11 @@ function DefaultLanding() {
 
 export function App() {
   const authed = !!getToken();
+  const notFound = (
+    <DocView>
+      <NotFoundPage />
+    </DocView>
+  );
   return (
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
@@ -161,9 +167,9 @@ export function App() {
           )
         }
       />
-      {!authed ? (
-        <Route path="*" element={<LoginRedirect />} />
-      ) : (
+      {/* The app's own addresses, one table signed in or out: signed out, every one of them is sent to log
+          in first, and an address that is none of them is said not to exist. */}
+      <Route element={authed ? <Outlet /> : <LoginRedirect />}>
         <>
           {/* The app shell hosts one routed view at a time. The default landing is the first
               workspace's session list — the bare root resolves it via <DefaultLanding>, and login
@@ -473,11 +479,13 @@ export function App() {
               {/* A project's Landings window (owner 2026-10-27): the console's right pane. */}
               <Route path="projects/:id/landings" />
             </Route>
+            {authed && <Route path="*" element={notFound} />}
           </Route>
           <Route path="/workspaces/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
           <Route path="/agents/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
         </>
-      )}
+      </Route>
+      {!authed && <Route path="*" element={notFound} />}
     </Routes>
   );
 }

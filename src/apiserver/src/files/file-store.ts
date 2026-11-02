@@ -1,6 +1,7 @@
+import type { Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { close, createReadStream, createWriteStream, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -170,6 +171,51 @@ export async function removeTempFile(tempPath: string): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
+}
+
+/** How long a temporary file goes unwritten before a start removes it: far longer than an upload takes, on any apiserver. */
+const STALE_TEMP_FILE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Remove the regular files in the temporary directory `dir` that have not been written for a day: what a process killed
+ * while writing one leaves, because its cleanup died with it and nothing else ever names that file. An upload under way
+ * on another apiserver sharing the volume has written more recently than that. A link or a directory stays as it is, and
+ * none is followed, `dir` itself included.
+ *
+ * It never throws, so a start goes on whatever it finds here. What it could not do, it logs.
+ */
+export async function removeStaleTempFiles(dir: string, log: Pick<Logger, 'log' | 'warn'>): Promise<void> {
+  let names: string[];
+  try {
+    if (!(await lstat(dir)).isDirectory()) throw new Error('it is a link, or not a directory');
+    names = await readdir(dir);
+  } catch (error) {
+    // No upload has made it yet.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log.warn(`temporary files: could not read ${dir}: ${messageOf(error)}`);
+    return;
+  }
+  const writtenBefore = Date.now() - STALE_TEMP_FILE_MS;
+  const removed = { files: 0, bytes: 0 };
+  const failures: unknown[] = [];
+  for (const name of names) {
+    const file = path.join(dir, name);
+    try {
+      const entry = await lstat(file);
+      if (!entry.isFile() || entry.mtimeMs >= writtenBefore) continue;
+      await removeTempFile(file);
+      removed.files += 1;
+      removed.bytes += entry.size;
+    } catch (error) {
+      // Gone since the directory was read: its upload ended, or another apiserver removed it.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') failures.push(error);
+    }
+  }
+  if (removed.files > 0) log.log(`temporary files: removed ${removed.files} (${removed.bytes} bytes) not written for a day from ${dir}`);
+  if (failures.length > 0) log.warn(`temporary files: could not remove ${failures.length} from ${dir}: ${messageOf(failures[0])}`);
+}
+
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** The files directory as a store: `<dir>/<sha256[0:2]>/<sha256>`. */

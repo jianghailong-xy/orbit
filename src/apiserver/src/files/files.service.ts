@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Optional,
   StreamableFile,
+  type OnApplicationBootstrap,
 } from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
@@ -17,10 +18,12 @@ import { Readable } from 'node:stream';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionJudgesEvidence } from '../tasks/task-evidence-decision';
-import { citedFileIds, storedEvidenceEnvelope } from '../tasks/task-evidence-envelope';
+import { citedFileIds, storedEvidenceEnvelope, type EvidenceCheck } from '../tasks/task-evidence-envelope';
 import {
   LocalFileStore,
   filesConfigFrom,
+  messageOf,
+  removeStaleTempFiles,
   removeTempFile,
   uploadTempDir,
   writeHashedTempFile,
@@ -74,6 +77,9 @@ export const MAX_BUNDLE_PATH_CHARS = 1024;
 /** How many rows one `file_list` answers: a row per upload, so a folder of any size is one of them. */
 const FILE_LIST_LIMIT = 200;
 
+/** How often `open` says that one store made it answer from `data`: a store gone bad does that on every read. */
+const STORE_FALLBACK_WARNING_MS = 60_000;
+
 /** What `file_upload` says of a file it was told is a test report and could not read as one. */
 export const NOT_A_TEST_REPORT = 'Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary.';
 
@@ -123,6 +129,57 @@ function fileView({ fileName, testReportSummary, ...row }: FileViewRow): FileVie
   };
 }
 
+/**
+ * How many files one page of `evidenceFiles` holds: a whole folder, so most versions are one read. A version cites at most
+ * 50 things and each can be a folder of 1000, so the whole list can be 50,000 files, and only a page of it is answered at a
+ * time. The largest page, with every path and label at its limit, measures 1.7 MB of JSON.
+ */
+export const EVIDENCE_FILES_PAGE = MAX_BUNDLE_FILES;
+
+/** The largest revision a `bigint` column holds. */
+const MAX_REVISION = 9_223_372_036_854_775_807n;
+
+const EVIDENCE_FILE_SELECT = { ...FILE_VIEW_SELECT, expiredAt: true } as const satisfies Prisma.AttachmentSelect;
+
+type EvidenceFileRow = Prisma.AttachmentGetPayload<{ select: typeof EVIDENCE_FILE_SELECT }>;
+
+/**
+ * One file of a version of evidence, as an evidence card reads it: `FileView`, and what a card wants beside it. The id is
+ * the public id, the one the citation's `ref` holds, and `name` is a file of a folder's path in that folder.
+ *
+ * When `gone` is true the cited row itself no longer exists, as when its session was deleted. All that is left is what the
+ * version recorded: `id`, `sha256` and the image's size. Everything the row held is null.
+ */
+export interface EvidenceFileView extends Omit<FileView, 'mimeType' | 'sizeBytes' | 'createdAt'> {
+  mimeType: string | null;
+  sizeBytes: number | null;
+  createdAt: Date | null;
+  /** The folder it was uploaded in; null on a file cited by itself. */
+  folder: string | null;
+  /** An image's size in pixels, known only for an image cited by itself. */
+  width: number | null;
+  height: number | null;
+  /** When its bytes expired (§2.8). The row stays, so everything else here still reads. */
+  expiredAt: Date | null;
+  gone: boolean;
+}
+
+/** One page of a version's files. `fileCount` and `totalBytes` are the whole list's, whichever page this is. */
+export interface EvidenceFileList {
+  revision: string;
+  submittedAt: Date;
+  fileCount: number;
+  totalBytes: number;
+  files: EvidenceFileView[];
+  /** The `offset` of the next page, or null when this is the last. */
+  nextOffset: number | null;
+}
+
+/** A cited row, or a folder's rows, in the order of the version's citations. */
+type EvidenceFileSection =
+  | { fileCount: 1; totalBytes: number; file: EvidenceFileView }
+  | { fileCount: number; totalBytes: number; folder: EvidenceFileRow };
+
 /** A folder bundle's manifest: what its bytes are (docs/orbit-files-design.md §2.2). Ids are public ids. */
 export interface FileBundleManifest {
   kind: 'orbit-file-bundle';
@@ -151,11 +208,13 @@ function assertBundlePath(filePath: string): void {
  * `file_upload` and find with `file_list` is the same rows, with the doors at the end of this class.
  */
 @Injectable()
-export class FilesService {
+export class FilesService implements OnApplicationBootstrap {
   private readonly logger = new Logger(FilesService.name);
   readonly config: FilesConfig;
   private readonly local: LocalFileStore;
   private readonly s3: S3FileStore | null;
+  /** When each store last made `open` say so, and how many reads it has made it answer from `data` since. */
+  private readonly storeFallbacks = new Map<string, { warnedAt: number; readsSince: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -164,6 +223,14 @@ export class FilesService {
     this.config = config ?? filesConfigFrom();
     this.local = new LocalFileStore(this.config.dir);
     this.s3 = this.config.s3 ? new S3FileStore(this.config.s3) : null;
+  }
+
+  /**
+   * A start removes what a killed process left in the temporary directory, whichever store is in use, since every upload
+   * is written there first. The start does not wait for it: a disk that hangs holds up nothing else.
+   */
+  onApplicationBootstrap(): void {
+    void removeStaleTempFiles(uploadTempDir(this.config.dir), this.logger);
   }
 
   /** The store new bytes go to. */
@@ -277,6 +344,7 @@ export class FilesService {
     }
     const legacy = await this.prisma.attachment.findUnique({ where: { id: row.id }, select: { data: true, sha256: true } });
     if (legacy?.data) {
+      if (row.blob) this.warnOfStoreFallback(row.id, row.blob.storage, storeFailure);
       const data = Buffer.from(legacy.data);
       return { content: data, mimeType, fileName, sizeBytes: data.length };
     }
@@ -287,6 +355,24 @@ export class FilesService {
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
     );
     throw new NotFoundException('attachment bytes are missing');
+  }
+
+  /**
+   * Say that a copied row was answered from `data` because its store failed or no longer holds the bytes. The reader
+   * cannot tell, so without this a store gone bad stays unseen until the clear refuses its rows. At most once a minute for
+   * each store, with how many reads went the same way in between.
+   */
+  private warnOfStoreFallback(id: string, storage: string, failure: unknown): void {
+    const now = Date.now();
+    const last = this.storeFallbacks.get(storage);
+    if (last && now - last.warnedAt < STORE_FALLBACK_WARNING_MS) {
+      last.readsSince += 1;
+      return;
+    }
+    this.storeFallbacks.set(storage, { warnedAt: now, readsSince: 0 });
+    const why = failure ? `could not be read: ${messageOf(failure)}` : 'does not hold these bytes';
+    const since = last?.readsSince ? ` ${last.readsSince} more reads went the same way since the last warning.` : '';
+    this.logger.warn(`attachment ${id} was answered from Postgres: the ${storage} file store ${why}.${since}`);
   }
 
   /** The whole of an attachment's bytes, for a caller that hands them on in one piece. */
@@ -492,6 +578,84 @@ export class FilesService {
   }
 
   /**
+   * The files one version of a task's evidence cites, for the card that shows them (§2.6): each cited file and each file of
+   * a cited folder, in the order the version cites them, and a folder's by path. A file cited twice, or cited beside its
+   * folder, is one entry. A task of another account is the same 404 as a task that does not exist.
+   *
+   * Everything here is read from rows and none of it from the store, a folder's manifest included: expiry takes the bytes
+   * and leaves the rows (§2.8), so an expired file reads as it always did. `listFiles` answers the agents' doors, which want
+   * a folder as one row; a card wants what is in it.
+   */
+  async evidenceFiles(ownerId: string, taskId: string, revision: string, offset = 0): Promise<EvidenceFileList> {
+    const task = await this.prisma.task.findFirst({ where: { id: taskId, ownerId }, select: { id: true } });
+    if (!task) throw new NotFoundException('task not found');
+    const number = /^[1-9]\d{0,18}$/.test(revision) ? BigInt(revision) : null;
+    const version = number === null || number > MAX_REVISION
+      ? null
+      : await this.prisma.taskCompletionEvidence.findFirst({
+        where: { taskId, ownerId, revision: number },
+        select: { revision: true, submittedAt: true, evidence: true },
+      });
+    if (!version) throw new NotFoundException('evidence not found');
+    const checks = new Map((storedEvidenceEnvelope(version.evidence)?.checks ?? []).flatMap((check) => {
+      const [id] = citedFileIds([check]);
+      return id ? [[id, check] as const] : [];
+    }));
+    const rows = await this.prisma.attachment.findMany({
+      where: { id: { in: [...checks.keys()] }, ownerId },
+      select: EVIDENCE_FILE_SELECT,
+    });
+    const found = new Map(rows.map((row) => [row.id, row]));
+    const folders = rows.filter((row) => row.fileBundleId === row.id);
+    const held = new Map(await Promise.all(folders.map(async (folder) => {
+      const { _count, _sum } = await this.prisma.attachment.aggregate({
+        where: membersOf(ownerId, folder),
+        _count: { _all: true },
+        _sum: { sizeBytes: true },
+      });
+      return [folder.id, { fileCount: _count._all, totalBytes: _sum.sizeBytes ?? 0 }] as const;
+    })));
+    const sections = [...checks].flatMap(([id, check]): EvidenceFileSection[] => {
+      const row = found.get(id);
+      if (!row) return [{ fileCount: 1, totalBytes: 0, file: goneFile(check) }];
+      if (row.fileBundleId !== null && row.fileBundleId !== id && held.has(row.fileBundleId)) return [];
+      const folder = held.get(id);
+      return folder ? [{ ...folder, folder: row }] : [{ fileCount: 1, totalBytes: row.sizeBytes, file: evidenceFile(row, null, check) }];
+    });
+    const files: EvidenceFileView[] = [];
+    let skip = offset;
+    for (const section of sections) {
+      if (files.length === EVIDENCE_FILES_PAGE) break;
+      if (skip >= section.fileCount) {
+        skip -= section.fileCount;
+      } else if ('file' in section) {
+        files.push(section.file);
+        skip = 0;
+      } else {
+        const members = await this.prisma.attachment.findMany({
+          where: membersOf(ownerId, section.folder),
+          orderBy: [{ fileName: 'asc' }, { id: 'asc' }],
+          skip,
+          take: EVIDENCE_FILES_PAGE - files.length,
+          select: EVIDENCE_FILE_SELECT,
+        });
+        for (const member of members) files.push(evidenceFile(member, section.folder, checks.get(member.id)));
+        skip = 0;
+      }
+    }
+    const fileCount = sections.reduce((sum, section) => sum + section.fileCount, 0);
+    const next = offset + files.length;
+    return {
+      revision: version.revision.toString(),
+      submittedAt: version.submittedAt,
+      fileCount,
+      totalBytes: sections.reduce((sum, section) => sum + section.totalBytes, 0),
+      files,
+      nextOffset: files.length > 0 && next < fileCount ? next : null,
+    };
+  }
+
+  /**
    * A folder bundle (§2.2): a manifest, kept like any file, that says which path of the folder each of these uploaded
    * files is. All or nothing: the manifest's row and the files' claim on it commit together, and a file already in a
    * bundle, or claimed by another bundle meanwhile, refuses the whole of it. Only a session's own `file_upload`s can be
@@ -570,6 +734,51 @@ export class FilesService {
     );
     return fileView(await this.prisma.attachment.findUniqueOrThrow({ where: { id }, select: FILE_VIEW_SELECT }));
   }
+}
+
+/** The rows of a folder's files: every one is a row of the session that bundled them, and the manifest is not one of them. */
+function membersOf(ownerId: string, folder: EvidenceFileRow): Prisma.AttachmentWhereInput {
+  return { ownerId, sessionId: folder.sessionId, fileBundleId: folder.id, id: { not: folder.id } };
+}
+
+/** A row as `evidenceFiles` answers it. A manifest's name is the folder's with `.json` after it (`createBundle`). */
+function evidenceFile(
+  { expiredAt, ...row }: EvidenceFileRow,
+  folder: EvidenceFileRow | null,
+  check?: Pick<EvidenceCheck, 'width' | 'height'>,
+): EvidenceFileView {
+  return {
+    ...fileView(row),
+    id: uuidToBase62(row.id),
+    folder: folder?.fileName?.replace(/\.json$/, '') ?? null,
+    width: check?.width ?? null,
+    height: check?.height ?? null,
+    expiredAt,
+    gone: false,
+  };
+}
+
+/** A cited row that no longer exists, from what the version itself recorded of it. */
+function goneFile({ ref, sha256, width, height }: EvidenceCheck): EvidenceFileView {
+  return {
+    id: ref,
+    kind: 'file',
+    name: null,
+    label: null,
+    mimeType: null,
+    sizeBytes: null,
+    sha256: sha256 ?? null,
+    sessionId: null,
+    taskId: null,
+    fileBundleId: null,
+    testReport: null,
+    createdAt: null,
+    folder: null,
+    width: width ?? null,
+    height: height ?? null,
+    expiredAt: null,
+    gone: true,
+  };
 }
 
 /**

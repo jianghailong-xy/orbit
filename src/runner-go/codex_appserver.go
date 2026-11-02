@@ -90,6 +90,8 @@ type codexAppServer struct {
 	// orbitMCP is whether this process was started with Orbit's own MCP server
 	// (codexOrbitMCPServer), which a side thread turns off for itself.
 	orbitMCP bool
+	// consentScope tells this process's JSON-RPC ids from another's (mcpConsentToolUseID).
+	consentScope string
 
 	orbitExecutable     string
 	instructionMode     codexInstructionMode
@@ -1098,7 +1100,7 @@ func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *Clai
 	approvalID, err := t.createApproval(ctx, job.SessionID, map[string]interface{}{
 		"toolName":  request.toolName(),
 		"input":     input,
-		"toolUseId": firstString(params, "itemId", "item_id"),
+		"toolUseId": firstNonEmpty(request.toolUseID, firstString(params, "itemId", "item_id")),
 	})
 	if err != nil {
 		return false
@@ -1159,6 +1161,10 @@ func startReadyCodexAppServer(ctx context.Context, state codexStateSelection, in
 }
 
 func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stateDir string, processEnv []string, emit emitFn, approve codexApprovalFn) (*codexAppServer, error) {
+	consentScope, err := randomUUID()
+	if err != nil {
+		return nil, err
+	}
 	procCtx, cancel := context.WithCancel(ctx)
 	exe, err := os.Executable()
 	if err != nil {
@@ -1226,6 +1232,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		done:            make(chan struct{}),
 		orbitExecutable: orbitCLIExecutable(),
 		orbitMCP:        exe != "",
+		consentScope:    consentScope,
 	}
 	if err := startSessionProcess(cmd); err != nil {
 		cancel()
@@ -1757,8 +1764,12 @@ type codexApprovalRequest struct {
 	fileChange bool
 	legacy     bool
 	mcpTool    bool
-	// server is the MCP server behind an mcpTool request, for the card's name.
+	// server and tool are what an mcpTool request asks to run, for the card's name.
 	server string
+	tool   string
+	// toolUseID names the card of a request whose params carry no id of its call
+	// (mcpConsentToolUseID). Every other request is named by its itemId.
+	toolUseID string
 }
 
 func classifyCodexApproval(method string) (codexApprovalRequest, bool) {
@@ -1790,10 +1801,14 @@ func (r codexApprovalRequest) decision(allowed bool) string {
 }
 
 // toolName mirrors what codexEmitItem already calls these in the transcript, so an approval card
-// and the tool card it authorizes name the same thing. MCP consent names the server rather than
-// the tool, which is all the elicitation carries — its message names the tool.
+// and the tool card it authorizes name the same thing. An MCP consent is named as every other
+// runtime names the tool, because that name is what "always allow" on the card remembers. One whose
+// tool could not be read names only its server (codexMCPConsentTool), and the control plane keeps no
+// rule from a card like that: it would cover every tool of the server.
 func (r codexApprovalRequest) toolName() string {
 	switch {
+	case r.mcpTool && r.server != "" && r.tool != "":
+		return "mcp__" + r.server + "__" + r.tool
 	case r.mcpTool && r.server != "":
 		return "mcp__" + r.server
 	case r.mcpTool:
@@ -1812,6 +1827,28 @@ func isCodexMCPToolConsent(params map[string]interface{}) bool {
 	return firstString(mapValue(params["_meta"]), "codex_approval_kind") == "mcp_tool_call"
 }
 
+// codexMCPConsentTool reads which tool a consent is about out of its message, the one place Codex
+// says: `Allow the orbit MCP server to run tool "bg_run"?`. It is the tool's own name even when the
+// tool declares a title, which goes in _meta.tool_title (measured on 0.166.0). Nothing else in the
+// request says it: item/started names the tool too, but parallel calls raise their consents in a
+// different order from their items, so an item cannot be paired with a consent by arrival.
+//
+// A message in any other wording reads as no name, and so does a name holding the wildcard of Orbit's
+// rule grammar, since a rule remembered from it would cover the whole server.
+func codexMCPConsentTool(params map[string]interface{}) string {
+	const opening, closing = ` to run tool "`, `"?`
+	message := firstString(params, "message")
+	at := strings.LastIndex(message, opening)
+	if at < 0 {
+		return ""
+	}
+	tool, closed := strings.CutSuffix(message[at+len(opening):], closing)
+	if !closed || strings.Contains(tool, "*") {
+		return ""
+	}
+	return tool
+}
+
 // codexElicitationResult is the McpServerElicitationRequestResponse Codex expects. An accepted
 // consent form answers with an empty object because its schema asked for no fields; content is
 // null only for decline.
@@ -1820,6 +1857,19 @@ func codexElicitationResult(allowed bool) map[string]interface{} {
 		return map[string]interface{}{"action": "accept", "content": map[string]interface{}{}}
 	}
 	return map[string]interface{}{"action": "decline", "content": nil}
+}
+
+// mcpConsentToolUseID names one tool-call consent for the approval table, which holds one card per
+// name in a session. Consent carries no id of its call (Codex 0.166 sends the tool's description and
+// arguments in _meta, and nothing else that could tell two calls apart), so its identity is the
+// request's own JSON-RPC id. That survives a resend: thread/resume replays a consent still open under
+// the same id, which then finds the card already filed. But the id is a counter that starts at 0 in
+// each process, and the next process resumes the same thread, so the process has to be in the name:
+// otherwise its first call finds the last process's card and takes that card's yes, for a call nobody
+// was asked about. A process that has gone takes its open requests with it, so nothing needs the
+// name to outlive it.
+func (a *codexAppServer) mcpConsentToolUseID(rpcID interface{}) string {
+	return fmt.Sprintf("%s:mcp_consent:%s", a.consentScope, rpcIDKey(rpcID))
 }
 
 // answerElicitation replies to an MCP elicitation. Tool-call consent goes to the same approval
@@ -1833,7 +1883,10 @@ func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
 		_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
 		return
 	}
-	request := codexApprovalRequest{mcpTool: true, server: firstString(params, "serverName")}
+	request := codexApprovalRequest{mcpTool: true, server: firstString(params, "serverName"), tool: codexMCPConsentTool(params), toolUseID: a.mcpConsentToolUseID(msg.ID)}
+	if request.tool == "" {
+		logln("codex MCP consent names no tool Orbit can read; its card names only the server:", firstString(params, "message"))
+	}
 	// Same reason approvals answer on a goroutine: this runs inline on the only reader of codex's
 	// stdout, and the card blocks on a human.
 	go func() {

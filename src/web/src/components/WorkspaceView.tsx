@@ -3322,7 +3322,14 @@ export function WorkspaceView({
   // list lands, and the case where no workspace resolves at all.
   const resolvedWorkspaceId =
     lockedWorkspaceId ?? selected?.workspace?.id ?? detailForSelected?.workspace?.id ?? null;
-  useEffect(() => setScopeWorkspaceId(resolvedWorkspaceId), [resolvedWorkspaceId]);
+  // Until the open session's detail answers, a workspace nothing names is not "no workspace": the scope
+  // stays as it is. Narrowing to the workspace the session's row named swaps the list for one still
+  // loading, so the row is gone for a moment. Widening again would find it again, and the two would
+  // trade places without ever yielding to the reads that end this: React's update limit, on the page.
+  const workspaceUnknown = !!selectedId && !resolvedWorkspaceId && !detailForSelected;
+  useEffect(() => {
+    if (!workspaceUnknown) setScopeWorkspaceId(resolvedWorkspaceId);
+  }, [resolvedWorkspaceId, workspaceUnknown]);
   const visibleSessions = useMemo(() => {
     let list = resolvedWorkspaceId ? sessions.filter((s) => s.workspace?.id === resolvedWorkspaceId) : sessions;
     // The tag filter is the query's too; re-applying it here keeps arrow-nav, auto-select and
@@ -3628,11 +3635,12 @@ export function WorkspaceView({
   // opens a session so the right pane is never blank. Prefer the one the user last had open
   // for this workspace (remembered above) — reopening where they left off — and fall back to the
   // most recent when there's no memory (or it's since been completed/trashed out of view).
-  // replace() keeps it out of history; Completed/Trash never auto-open.
+  // replace() keeps it out of history; Completed/Trash never auto-open. A project's Landings window
+  // is the right pane already, and its own address must not leave for a conversation.
   useEffect(() => {
     // On mobile the list is its own full screen — auto-opening would trap the back
     // button (it returns here, which would immediately redirect into a session again).
-    if (openProjectId || isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
+    if (openProjectId || landingsProjectId || isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
     // Not before the folders are known: the session opened is one the list shows, and until then a
     // session filed in a folder could be picked from under it. A server without folders answers
@@ -3644,6 +3652,7 @@ export function WorkspaceView({
   }, [
     isMobile,
     openProjectId,
+    landingsProjectId,
     selectedId,
     composingRoute,
     view,

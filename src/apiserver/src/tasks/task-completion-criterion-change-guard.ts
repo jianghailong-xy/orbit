@@ -163,7 +163,8 @@ export const TASK_SELF_REWRITTEN_STANDARD_ACTION =
  * anybody who could rewrite this standard before still can, at the cost of saying why, EXCEPT the
  * one run whose own completion the answer decides. What the refusal has to carry, therefore, is
  * who that leaves: any session that is not this task's run, and the account owner acting through
- * the user API with no run at all.
+ * the user API with no run at all; for a verifier, not another task's run either
+ * (`verifier-write-authority.ts`).
  */
 export function taskSelfRewrittenStandardRefusalBody(
   rewritten: readonly TaskCompletionStandardField[],
@@ -180,7 +181,9 @@ export function taskSelfRewrittenStandardRefusalBody(
       + 'edit itself is not the problem and is not refused to anybody else: any session other '
       + 'than this task\'s run, and the account owner acting with no run at all, can make exactly '
       + 'this request (a change of completionCriterion additionally needs '
-      + `${TASK_CRITERION_OVERRIDE_REASON_FIELD}, which is a separate door). This run may still `
+      + `${TASK_CRITERION_OVERRIDE_REASON_FIELD}, which is a separate door). If this task is a `
+      + 'verifier, or the edit would make it one, that excludes the run of any other task: it takes '
+      + 'the project\'s coordinator, a judgment session or the owner. This run may still '
       + 'say what it found — it can write status FAILED as its own conservative outcome, and it '
       + 'can still raise acceptanceTimeoutSeconds, which bounds how long the declared command may '
       + 'run without changing what that command has to report.',

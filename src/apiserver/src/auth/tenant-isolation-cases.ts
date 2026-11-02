@@ -635,6 +635,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'PUT /tasks/:id/share': { request: (of) => ({ params: { id: of.taskId }, body: {} }) },
   'DELETE /tasks/:id/share': { request: (of) => ({ params: { id: of.taskId } }) },
   'GET /tasks/:taskId/evidence': { request: (of) => ({ params: { taskId: of.evidenceTaskId } }) },
+  'GET /tasks/:taskId/evidence/:revision/files': { request: (of) => ({ params: { taskId: of.evidenceTaskId, revision: '1' } }) },
   'POST /tasks/:taskId/evidence': {
     request: (of) => ({
       params: { taskId: of.evidenceTaskId },
