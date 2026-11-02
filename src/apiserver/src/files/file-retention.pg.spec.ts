@@ -33,9 +33,13 @@
  *       no other account's;
  *  (18) past its quota an upload is refused with a code and a sentence, at each door, and leaves nothing behind; bytes it
  *       already keeps are not refused, and expiry makes room;
- *  (19) a session in Trash waits while evidence holds one of its files, and goes once its task is deleted and the sweep has
- *       dated them;
- *  (20) a pin after a delete cut short says the bytes went, and the next sweep finishes the delete.
+ *  (19) a session in Trash waits while evidence holds one of its files, and one holding nothing goes;
+ *  (20) a pin after a delete cut short says the bytes went, and the next sweep finishes the delete;
+ *  (21) a pin keeps its session in Trash, on any kind of row, with everything else in it, until the pin is taken away;
+ *  (22) a date ahead of a cited file keeps its session in Trash too, until the tombstone: then the purge takes the row, and
+ *       evidence is left with the sha256 it recorded;
+ *  (23) a person's act takes the file all the same: emptying Trash by hand, pinned or held, and deleting a task, once the
+ *       sweep has dated and tombstoned its rows, though a pin outlasts the task as it outlasts any date.
  *
  * Not destructive: every row belongs to users this run creates. Each case uses bytes of its own, because a sweep looks at
  * every row in the database.
@@ -189,6 +193,26 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
   const row = (id: string) => db.attachment.findUniqueOrThrow({ where: { id } });
   const blob = (sha256: string) => db.fileBlob.findUniqueOrThrow({ where: { sha256 } });
   const onDisk = (sha256: string) => existsSync(path.join(dir, sha256.slice(0, 2), sha256));
+  const pin = async (file: Pick<Kept, 'publicId'>) => {
+    const reply = await call(api, 'PUT', `/api/attachments/${file.publicId}/pin`, owner.bearer);
+    assert.equal(reply.status, 200, reply.text.slice(0, 300));
+  };
+  const unpin = async (file: Pick<Kept, 'publicId'>) => {
+    const reply = await call(api, 'DELETE', `/api/attachments/${file.publicId}/pin`, owner.bearer);
+    assert.equal(reply.status, 200, reply.text.slice(0, 300));
+  };
+  const reaper = new ReaperService(db as never, {} as never);
+  /** The real hourly purge. It reads the real clock, so a session's 30 days are in the row `toTrash` writes. */
+  const purgeTrash = () => (reaper as unknown as { purgeTrash(): Promise<void> }).purgeTrash();
+  const toTrash = (sessionId: string) => db.session.update({ where: { id: sessionId }, data: { deletedAt: later(new Date(), -40 * DAY) } });
+  const sessionStays = async (sessionId: string) => (await db.session.count({ where: { id: sessionId } })) === 1;
+  const rowStays = async (id: string) => (await db.attachment.count({ where: { id } })) === 1;
+  /** The evidence card's route, for one version. */
+  const cardOf = async (work: Work, revision: string) => {
+    const card = await call(api, 'GET', `/api/tasks/${b62(work.taskId)}/evidence/${revision}/files`, owner.bearer);
+    assert.equal(card.status, 200, card.text.slice(0, 300));
+    return card.json;
+  };
   /** Answered at the door `file_fetch` calls, with a status that says whether the bytes are there. */
   const bytesOf = async (file: Kept, sessionId: string, who: Account = owner) => {
     const response = await fetch(`http://127.0.0.1:${api.port}/api/runner/sessions/${b62(sessionId)}/attachments/${file.publicId}`, {
@@ -906,31 +930,32 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
   });
 
   await t.test('(19) a session in Trash waits while evidence holds one of its files', async () => {
-    const reaper = new ReaperService(db as never, {} as never);
-    const purgeTrash = () => (reaper as unknown as { purgeTrash(): Promise<void> }).purgeTrash();
-    const longAgo = later(new Date(), -40 * DAY);
-
     const held = await workOf('its run went to Trash, and its evidence was confirmed');
     const file = await kept(held.runId);
     const version = await cite(held, file.publicId);
     await decide(held, version.revision, 'CONFIRM');
-    await db.session.update({ where: { id: held.runId }, data: { deletedAt: longAgo } });
+    await toTrash(held.runId);
     const loose = await sessionOf('nothing holds what is in this one');
     const uncited = await kept(loose);
-    await db.session.update({ where: { id: loose }, data: { deletedAt: longAgo } });
+    await toTrash(loose);
 
     await purgeTrash();
-    assert.equal(await db.session.count({ where: { id: loose } }), 0, 'past its 30 days a session goes');
-    assert.equal(await db.attachment.count({ where: { id: uncited.id } }), 0, 'and what is in it');
-    assert.equal(await db.session.count({ where: { id: held.runId } }), 1, 'but not one holding a file the evidence holds');
+    assert.equal(await sessionStays(loose), false, 'past its 30 days a session goes');
+    assert.equal(await rowStays(uncited.id), false, 'and what is in it, a date ahead of it or not');
+    assert.equal(await sessionStays(held.runId), true, 'but not one holding a file the evidence holds');
     assert.equal((await row(file.id)).expiresAt, null);
 
-    assert.ok((await call(api, 'DELETE', `/api/tasks/${b62(held.taskId)}`, owner.bearer)).status < 300);
+    // A reply's image follows its session, cited or not: only what `file_upload` kept has a fate of its own.
+    const replied = await workOf('its run went to Trash, and its evidence cites a reply\'s image');
+    const image = await upload(api, 'POST', `/api/runner/sessions/${b62(replied.runId)}/attachments`, { authorization: `Bearer ${owner.token}` }, { name: 'shot.txt', type: 'text/plain', content: fresh('a reply') });
+    assert.equal(image.status, 201, image.text.slice(0, 300));
+    await cite(replied, image.json.id);
+    const imageRow = await row(toUuid(image.json.id));
+    assert.ok(imageRow.evidenceId, 'evidence cites it');
+    assert.equal(imageRow.retention, null);
+    await toTrash(replied.runId);
     await purgeTrash();
-    assert.equal(await db.session.count({ where: { id: held.runId } }), 1, 'the row has no date yet, so it waits for the next sweep');
-    await sweepAt(new Date());
-    await purgeTrash();
-    assert.equal(await db.session.count({ where: { id: held.runId } }), 0, 'once the task has gone and the sweep has dated it, so does the session');
+    assert.equal(await sessionStays(replied.runId), false);
   });
 
   await t.test('(20) a pin after a delete cut short says the bytes went, and the next sweep finishes it', async () => {
@@ -947,5 +972,278 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     assert.equal((await row(file.id)).pinnedAt, null);
     await sweepAt(later((await blob(file.sha256)).releasedAt!, GRACE));
     assert.ok((await blob(file.sha256)).bytesDeletedAt, 'the next sweep finishes what was cut short');
+  });
+
+  await t.test('(21) a pin keeps its session in Trash, on any kind of row, with everything else in it, until the pin is taken away', async () => {
+    // Cited, pinned, replaced, and the replacement sent back: every date has passed, and only the pin is left holding.
+    const work = await workOf('pinned, replaced, and the replacement sent back');
+    const file = await kept(work.runId);
+    const version = await cite(work, file.publicId);
+    await pin(file);
+    const replacement = await kept(work.runId);
+    const newer = await cite(work, replacement.publicId);
+    const decidedAt = await decide(work, newer.revision, 'SEND_BACK');
+    const date = (await row(file.id)).expiresAt!;
+    assert.ok(date, 'there is a date under the pin');
+    const uncited = await kept(work.runId);
+    const toolUseId = `toolu_${randomUUID()}`;
+    await db.toolCall.create({ data: { sessionId: work.runId, name: 'Bash', toolUseId, input: { command: 'true' }, isError: false } });
+    await toTrash(work.runId);
+
+    const pastAll = later(decidedAt, LET_GO_RETENTION_MS + 1);
+    await sweepAt(pastAll);
+    assert.ok((await row(replacement.id)).expiredAt, 'the replacement has its tombstone, so it holds nothing');
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), true, 'the session waits for the pin');
+    assert.ok((await row(file.id)).pinnedAt);
+    assert.equal(await db.toolCall.count({ where: { sessionId: work.runId, toolUseId } }), 1, 'with what else is in it');
+
+    await sweepAt(later(pastAll, 2 * GRACE));
+    assert.ok(onDisk(file.sha256), 'and the bytes stay, past any grace period');
+    assert.equal((await bytesOf(file, work.runId)).text, file.content);
+    assert.equal(onDisk(replacement.sha256), false, 'but a file nothing keeps still goes on its own date, though its session stays');
+    assert.equal(onDisk(uncited.sha256), false);
+    assert.equal(await rowStays(replacement.id), true, 'and keeps its row, with the session');
+    const card = await cardOf(work, version.revision);
+    assert.deepEqual(card.files.map((listed: { id: string; gone: boolean; expiredAt: string | null }) => [listed.id, listed.gone, listed.expiredAt]), [[file.publicId, false, null]]);
+
+    // Taken away, its date applies at the next sweep, and then the hour's purge has nothing to wait for.
+    await unpin(file);
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), true, 'cited, and with no tombstone yet, it still holds');
+    const tombstone = later(pastAll, 2 * GRACE + 1);
+    await sweepAt(tombstone);
+    assert.deepEqual((await row(file.id)).expiredAt, tombstone);
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), false, 'then the session goes');
+    assert.equal(await rowStays(file.id), false);
+    assert.ok(onDisk(file.sha256), 'and the bytes have their grace period from the tombstone');
+    await sweepAt(later(tombstone, GRACE - 1));
+    assert.ok(onDisk(file.sha256));
+    await sweepAt(later(tombstone, GRACE));
+    assert.equal(onDisk(file.sha256), false);
+
+    // Nothing has to cite it: an upload in a conversation, whose date is ahead of it or behind it.
+    const conversation = await sessionOf('a conversation');
+    const note = await kept(conversation);
+    await pin(note);
+    await toTrash(conversation);
+    await purgeTrash();
+    assert.equal(await sessionStays(conversation), true, 'a pinned upload no evidence cites');
+    await unpin(note);
+    await purgeTrash();
+    assert.equal(await sessionStays(conversation), false, 'and without the pin nothing keeps it');
+
+    // A row with no date to pass: a reply's image, and a person's own upload.
+    for (const door of ['attachments', 'person'] as const) {
+      const replied = await sessionOf('a conversation with a file that never expires');
+      const uploaded = door === 'attachments'
+        ? await upload(api, 'POST', `/api/runner/sessions/${b62(replied)}/attachments`, { authorization: `Bearer ${owner.token}` }, { name: 'shot.txt', type: 'text/plain', content: fresh('a reply') })
+        : await upload(api, 'POST', `/api/attachments?sessionId=${b62(replied)}`, { authorization: `Bearer ${owner.bearer}` }, { name: 'mine.txt', type: 'text/plain', content: fresh('a person') });
+      assert.equal(uploaded.status, 201, uploaded.text.slice(0, 300));
+      const stored = await row(toUuid(uploaded.json.id));
+      assert.equal(stored.retention, null);
+      await pin({ publicId: b62(stored.id) });
+      await toTrash(replied);
+      await purgeTrash();
+      assert.equal(await sessionStays(replied), true, door);
+      await unpin({ publicId: b62(stored.id) });
+      await purgeTrash();
+      assert.equal(await sessionStays(replied), false, door);
+    }
+
+    // A pin on a folder is on each file in it, and one on a single file in it is enough.
+    const foldered = await sessionOf('a conversation with a folder');
+    const a = await kept(foldered, fresh('a'), 'a.txt');
+    const b = await kept(foldered, fresh('b'), 'b.txt');
+    const made = await call(api, 'POST', `/api/runner/sessions/${b62(foldered)}/file-bundles`, owner.token, { name: 'kept', files: [{ path: 'a.txt', id: a.publicId }, { path: 'b.txt', id: b.publicId }] });
+    assert.equal(made.status, 201, made.text.slice(0, 300));
+    await pin({ publicId: made.json.id });
+    await toTrash(foldered);
+    await purgeTrash();
+    assert.equal(await sessionStays(foldered), true, 'a pinned folder');
+    await unpin({ publicId: made.json.id });
+    await pin(b);
+    await purgeTrash();
+    assert.equal(await sessionStays(foldered), true, 'a pinned file of it');
+    await unpin(b);
+    await purgeTrash();
+    assert.equal(await sessionStays(foldered), false);
+  });
+
+  await t.test('(22) a date ahead of a cited file keeps its session in Trash until the tombstone, and then the row goes with it', async () => {
+    const report = readFileSync(path.join(SAMPLES, 'playwright-retries.json'), 'utf8');
+    const cases: Array<[string, (work: Work, revision: string) => Promise<void>]> = [
+      ['sent back', async (work, revision) => { await decide(work, revision, 'SEND_BACK'); }],
+      // By a version citing no file, so that nothing else in this session holds it.
+      ['replaced', async (work) => {
+        const toolUseId = `toolu_${randomUUID()}`;
+        await db.toolCall.create({ data: { sessionId: work.runId, name: 'Bash', toolUseId, input: { command: 'true' }, isError: false } });
+        const reply = await call(api, 'POST', `/api/runner/tasks/${b62(work.taskId)}/evidence`, owner.token, {
+          evidence: { claim: 'no file', criterion: { key: b62(work.taskId), text: STANDARD }, checks: [{ kind: 'TOOL_CALL', ref: toolUseId }], gaps: [] },
+        }, asRun(work));
+        assert.equal(reply.status, 201, reply.text.slice(0, 300));
+      }],
+    ];
+    for (const [how, letGo] of cases) {
+      const work = await workOf(`a session in Trash, whose file was ${how}`);
+      // Bytes of its own: the same JSON, and a different number of newlines after it.
+      const file = await kept(work.runId, report + '\n'.repeat(1 + cases.findIndex(([name]) => name === how)), 'report.json', owner, { as: 'test-report', label: 'the suite' });
+      assert.ok(file.testReport, how);
+      const version = await cite(work, file.publicId);
+      const before = await call(api, 'GET', `/api/runner/tasks/${b62(work.taskId)}/evidence`, owner.token);
+      const digest = before.json.find((entry: { revision: string }) => entry.revision === version.revision).evidenceDigest;
+      await letGo(work, version.revision);
+      const date = (await row(file.id)).expiresAt!;
+      assert.ok(date.getTime() > Date.now() + 29 * DAY, `${how}: it has its 30 days`);
+      await toTrash(work.runId);
+
+      await purgeTrash();
+      assert.equal(await sessionStays(work.runId), true, `${how}: the 30 days are the file's, though the session's 30 are up`);
+      await sweepAt(later(date, -1));
+      await purgeTrash();
+      assert.equal(await sessionStays(work.runId), true, `${how}: to the last millisecond`);
+      assert.equal((await cardOf(work, version.revision)).files[0].gone, false);
+
+      await sweepAt(date);
+      assert.deepEqual((await row(file.id)).expiredAt, date, `${how}: a tombstone on its date`);
+      const released = (await blob(file.sha256)).releasedAt!;
+      await purgeTrash();
+      assert.equal(await sessionStays(work.runId), false, `${how}: then the session goes`);
+      assert.equal(await rowStays(file.id), false, `${how}: and the row with it, its name and test summary too`);
+
+      // What that leaves evidence that cited it: the version as it was, and the sha256 it recorded.
+      const after = await call(api, 'GET', `/api/runner/tasks/${b62(work.taskId)}/evidence`, owner.token);
+      const stored = after.json.find((entry: { revision: string }) => entry.revision === version.revision);
+      assert.equal(stored.evidenceDigest, digest, how);
+      assert.equal(stored.evidence.checks[0].sha256, file.sha256, how);
+      assert.equal(stored.citations[0].resolved, false, how);
+      const [gone] = (await cardOf(work, version.revision)).files;
+      assert.deepEqual([gone.id, gone.gone, gone.sha256, gone.name, gone.testReport], [file.publicId, true, file.sha256, null, null], how);
+
+      await sweepAt(later(released, GRACE - 1));
+      assert.ok(onDisk(file.sha256), `${how}: the bytes keep their grace period, though no row names them`);
+      await sweepAt(later(released, GRACE));
+      assert.equal(onDisk(file.sha256), false, how);
+      assert.ok((await blob(file.sha256)).bytesDeletedAt, how);
+    }
+
+    // A cited folder holds it the same way.
+    const work = await workOf('a session in Trash, with a cited folder');
+    const member = await kept(work.runId, fresh('a member'), 'member.txt');
+    const made = await call(api, 'POST', `/api/runner/sessions/${b62(work.runId)}/file-bundles`, owner.token, { name: 'shots', files: [{ path: 'member.txt', id: member.publicId }] });
+    assert.equal(made.status, 201, made.text.slice(0, 300));
+    const version = await cite(work, made.json.id);
+    await decide(work, version.revision, 'SEND_BACK');
+    await toTrash(work.runId);
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), true, 'a cited folder');
+    await sweepAt((await row(member.id)).expiresAt!);
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), false);
+  });
+
+  await t.test('(23) a person\'s act takes the file: emptying Trash by hand, and deleting a task', async () => {
+    const byHand = async (sessionId: string) => {
+      const reply = await call(api, 'DELETE', `/api/sessions/${b62(sessionId)}/purge`, owner.bearer);
+      assert.ok(reply.status < 300, `the purge answered ${reply.status}: ${reply.text.slice(0, 300)}`);
+    };
+    const shows = async (work: Work, revision: string, file: Kept) => {
+      const [gone] = (await cardOf(work, revision)).files;
+      assert.deepEqual([gone.id, gone.gone, gone.sha256], [file.publicId, true, file.sha256]);
+    };
+    const bytesGoAfterGrace = async (file: Kept) => {
+      const noticed = new Date();
+      await sweepAt(noticed);
+      const released = (await blob(file.sha256)).releasedAt!;
+      assert.ok(released, 'the next sweep starts their grace period');
+      await sweepAt(later(released, GRACE - 1));
+      assert.ok(onDisk(file.sha256));
+      await sweepAt(later(released, GRACE));
+      assert.equal(onDisk(file.sha256), false);
+    };
+
+    const pinned = await workOf('emptied by hand, a pinned file');
+    const pinnedFile = await kept(pinned.runId);
+    const pinnedVersion = await cite(pinned, pinnedFile.publicId);
+    await pin(pinnedFile);
+    const dated = await workOf('emptied by hand, a date ahead');
+    const datedFile = await kept(dated.runId);
+    const datedVersion = await cite(dated, datedFile.publicId);
+    await decide(dated, datedVersion.revision, 'SEND_BACK');
+    const confirmed = await workOf('emptied by hand, a confirmed version');
+    const confirmedFile = await kept(confirmed.runId);
+    const confirmedVersion = await cite(confirmed, confirmedFile.publicId);
+    await decide(confirmed, confirmedVersion.revision, 'CONFIRM');
+    for (const [work, version, file] of [[pinned, pinnedVersion, pinnedFile], [dated, datedVersion, datedFile], [confirmed, confirmedVersion, confirmedFile]] as const) {
+      await toTrash(work.runId);
+      await purgeTrash();
+      assert.equal(await sessionStays(work.runId), true, 'the hour\'s purge leaves it');
+      await byHand(work.runId);
+      assert.equal(await sessionStays(work.runId), false, 'and a person does not');
+      assert.equal(await rowStays(file.id), false, 'with the file');
+      await shows(work, version.revision, file);
+      await bytesGoAfterGrace(file);
+    }
+
+    // Deleting a task: an old file's date is the deletion, so the first sweep tombstones it and the next purge takes it.
+    const aged = await workOf('a task deleted, its old file in Trash');
+    const agedFile = await kept(aged.runId);
+    await db.attachment.update({ where: { id: agedFile.id }, data: { createdAt: later(new Date(), -60 * DAY) } });
+    const agedVersion = await cite(aged, agedFile.publicId);
+    await decide(aged, agedVersion.revision, 'CONFIRM');
+    await toTrash(aged.runId);
+    await purgeTrash();
+    assert.equal(await sessionStays(aged.runId), true, 'until the task is deleted');
+    const removeTask = async (work: Work) => {
+      const removed = await call(api, 'DELETE', `/api/tasks/${b62(work.taskId)}`, owner.bearer);
+      assert.ok(removed.status < 300, `the delete answered ${removed.status}: ${removed.text.slice(0, 300)}`);
+    };
+    await removeTask(aged);
+    await purgeTrash();
+    assert.equal(await sessionStays(aged.runId), true, 'the sweep has not seen it yet');
+    const deletedAt = new Date();
+    await sweepAt(deletedAt);
+    assert.deepEqual((await row(agedFile.id)).expiredAt, deletedAt, 'the sweep dates it and gives it a tombstone at once');
+    await purgeTrash();
+    assert.equal(await sessionStays(aged.runId), false, 'and then the session goes');
+    assert.equal(await rowStays(agedFile.id), false);
+    await sweepAt(later(deletedAt, GRACE));
+    assert.equal(onDisk(agedFile.sha256), false, 'and the bytes a grace period on');
+
+    // A file younger than 14 days keeps what is left of them first, as it does outside Trash.
+    const young = await workOf('a task deleted, its young file in Trash');
+    const youngFile = await kept(young.runId);
+    const youngVersion = await cite(young, youngFile.publicId);
+    await decide(young, youngVersion.revision, 'CONFIRM');
+    await toTrash(young.runId);
+    await removeTask(young);
+    await sweepAt(new Date());
+    const youngDate = (await row(youngFile.id)).expiresAt!;
+    assert.deepEqual(youngDate, later((await row(youngFile.id)).createdAt, UPLOAD_RETENTION_MS));
+    await purgeTrash();
+    assert.equal(await sessionStays(young.runId), true, 'a date ahead of it');
+    await sweepAt(youngDate);
+    await purgeTrash();
+    assert.equal(await sessionStays(young.runId), false);
+
+    // A pin outlasts its task, as it outlasts any date: it takes the person who put it there, or who empties Trash.
+    const kept2 = await workOf('a task deleted, its file pinned');
+    const keptFile = await kept(kept2.runId);
+    const keptVersion = await cite(kept2, keptFile.publicId);
+    await decide(kept2, keptVersion.revision, 'CONFIRM');
+    await pin(keptFile);
+    await toTrash(kept2.runId);
+    await removeTask(kept2);
+    const decades = later(new Date(), 3650 * DAY);
+    await sweepAt(decades);
+    await purgeTrash();
+    assert.equal(await sessionStays(kept2.runId), true);
+    assert.equal((await row(keptFile.id)).expiredAt, null);
+    assert.ok(onDisk(keptFile.sha256));
+    await unpin(keptFile);
+    await sweepAt(later(decades, 1));
+    await purgeTrash();
+    assert.equal(await sessionStays(kept2.runId), false);
   });
 });
