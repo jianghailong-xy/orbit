@@ -21,7 +21,8 @@ volume.
 
 ## How to use
 
-Run the script from anywhere (it `cd`s to the repo root itself):
+Run the script of the checkout the deployment runs from (see [Where to run it](#where-to-run-it)). Your
+working directory does not matter: it `cd`s to its own repo root.
 
 ```bash
 .claude/skills/upgrade/upgrade.sh
@@ -64,7 +65,11 @@ It will, in order:
    docs/self-hosting.md, "Several apiservers"), and only once `apiserver` is healthy
    and has applied the migrations, so they find none to apply. They run the
    `apiserver` image, so a new one recreates them.
-5. Print `docker compose ps`.
+5. Bring `pgbackup` up to date, last (see [pgbackup](#pgbackup)): `docker compose up -d --wait --no-deps --force-recreate
+   pgbackup` if the script it runs is not this checkout's, otherwise the same without
+   `--force-recreate`, which recreates it for a change of configuration, such as a new
+   mount, and leaves it running if there is none.
+6. Print `docker compose ps`.
 
 On a deployment whose `.env` turns on the `managed-runners-docker` profile, steps
 2 and 3 also cover managed runners: `docker-channel` is built with the rest, the
@@ -101,11 +106,58 @@ which follows the apiserver as above.
 .claude/skills/upgrade/upgrade.sh --prune
 ```
 
+## Where to run it
+
+Run it in the installed checkout, the one the deployment runs from, and never from a worktree. A
+deployment's bind mounts are relative (`./data/postgres`, `./data/pg-archive`, `./data/files`), so from
+any other directory Compose would bind that directory's empty `./data`: the database, the archive the
+off-host mirror reads, and every attachment's bytes.
+
+So the script stops first, before it pulls, builds, tags or recreates anything, if the postgres
+container this checkout's Compose names has its `/archive` anywhere else. The refusal names the checkout
+to run from and says nothing was changed. With no such container there is no deployment yet, and a first
+install goes ahead. A separate deployment on the same Docker passes on its own `/archive` if its containers
+have names of their own, set in its `docker-compose.override.yml`: the check goes by the name Compose
+renders, so one with the same names cannot be told from that deployment and is refused.
+
+## pgbackup
+
+The backup sidecar needs a step of its own. Compose bind-mounts `scripts/pg-backup.sh` into it
+as a single file, so a new checkout replaces the file under a running container, which keeps the
+one it started on, and Compose sees no change. The script compares what the container has with
+the checkout. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup
+in progress, which it takes again as it starts.
+
+A sidecar that is not running is left as it is, and the run says `pgbackup was NOT updated` as its
+last lines, with the command to run.
+
+The step is in the script, so it runs once the script on disk has it. A run from an older version
+pulls the new script from inside itself and finishes as the old one, reporting success with
+`pgbackup` unchanged. Put the new version on disk first and pass `--no-pull`, or run it a second time.
+
+After an upgrade, confirm it took effect:
+
+```bash
+# The mount, read-only: prints "/var/lib/orbit/files false".
+docker inspect orbit-pgbackup --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' | grep /var/lib/orbit/files
+# The script is this checkout's: prints nothing, and exits 0.
+docker exec orbit-pgbackup cat /usr/local/bin/pg-backup.sh | cmp - scripts/pg-backup.sh
+# Both copies are named and working: "watching" names <target> and <target>-files, with no ERROR after it.
+docker logs orbit-pgbackup 2>&1 | grep -E 'watching|mirrored|ERROR' | tail
+# A file from ./data/files reached the target, within a poll (15 minutes) of the sidecar starting. With
+# ORBIT_BACKUP_SYNC_TARGET=root@backup-host:/data/backup/orbit-pg-archive:
+f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
+ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
+```
+
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to
+show: see the [backup and restore runbook](../../../docs/postgres-backup-restore.md#attachment-files).
+
 ## Requirements
 
 - Docker with the Compose v2 plugin (`docker compose`). The legacy
   `docker-compose` v1 binary is used as a fallback, but `--wait` requires v2.
-- Run from a checkout of the repo (the script resolves the repo root relative
+- Run the script of the checkout the deployment runs from (it resolves the repo root relative
   to its own location).
 - The same environment the stack normally uses (e.g. `JWT_SECRET`) should be
   present in the shell or repo-root `.env`.

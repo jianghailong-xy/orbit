@@ -18,6 +18,7 @@ import { WikiEmpty } from './WikiCards';
 import { WikiDiagram } from './WikiDiagram';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
+import { WikiWords } from './WikiWords';
 import { Button, LinkButton } from './ui/Button';
 import { Drawer } from './ui/Drawer';
 import { Popover } from './ui/Popover';
@@ -36,7 +37,7 @@ import {
   type WikiEntry,
   type WikiTrust,
 } from '../lib/wiki';
-import { wikiBrowsePath, wikiSentenceSegments } from '../lib/wikiArticles';
+import { wikiBrowsePath, wikiSentenceGap } from '../lib/wikiArticles';
 import {
   WIKI_DOC_COVERS,
   WIKI_DOC_ENTRIES,
@@ -435,7 +436,7 @@ function WikiDocSectionText({
     <section className="wk-dc-sec" id={wikiDocSectionAnchor(section.key)} data-section={section.key}>
       <h2>
         <span className="no">{section.number}</span>
-        {section.title}
+        <WikiWords text={section.title} />
         {section.stale && (
           <span className="wk-dc-tag">
             <SyncOutlined className="ic" />
@@ -454,7 +455,9 @@ function WikiDocSectionText({
               ))}
             </ul>
           ) : run.kind === 'heading' ? (
-            <h3 key={run.at[0]}>{section.blocks[run.at[0]].text}</h3>
+            <h3 key={run.at[0]}>
+              <WikiWords text={section.blocks[run.at[0]].text ?? ''} />
+            </h3>
           ) : run.kind === 'code' ? (
             <pre key={run.at[0]} className="wk-dc-code">
               <code>{section.blocks[run.at[0]].text}</code>
@@ -502,15 +505,7 @@ function WikiDocSentence({
   const navigate = useNavigate();
   const mark = wikiSentenceMark(sentence);
   const lit = open?.at === at;
-  const words = wikiSentenceSegments(sentence.text).map((segment, i) =>
-    segment.kind === 'code' ? (
-      <code key={i}>{segment.text}</code>
-    ) : segment.kind === 'strong' ? (
-      <strong key={i}>{segment.text}</strong>
-    ) : (
-      <Fragment key={i}>{segment.text}</Fragment>
-    ),
-  );
+  const words = <WikiWords text={sentence.text} />;
   const note = mark ? wikiMarkNote(sentence, section, doc) : null;
   const explained: ReactNode = note ? (
     <div className="wk-dc-tip">
@@ -581,7 +576,8 @@ function WikiDocSentence({
           })}
         </sup>
       )}
-      {mark && <span className={`wk-s-lab ${LAB_CLASS[mark]}`}>{WIKI_MARK_LABELS[mark]}</span>}{' '}
+      {mark && <span className={`wk-s-lab ${LAB_CLASS[mark]}`}>{WIKI_MARK_LABELS[mark]}</span>}
+      {wikiSentenceGap(sentence.text)}
     </>
   );
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -12,13 +13,15 @@ import (
 	"strings"
 )
 
-type artifactUploader func(ctx context.Context, path, mimeType string) (string, error)
+// artifactUploader sends a file already opened and judged (localFileScope.open). path is what the reply called it, for
+// its name; nothing reads it again.
+type artifactUploader func(ctx context.Context, file *os.File, path, mimeType string) (string, error)
 
 var markdownAttachmentRE = regexp.MustCompile(`(!?)\[([^\]]*)\]\((<?[^)\s]+>?)(\s+(?:"[^"]*"|'[^']*'))?\)`)
 
 func rewriteLocalMarkdownImages(ctx context.Context, t *Transport, sessionID, text string, roots []string) string {
-	return rewriteLocalMarkdownImagesWithUploader(ctx, text, roots, func(ctx context.Context, path, mimeType string) (string, error) {
-		return t.uploadSessionAttachment(ctx, sessionID, path, mimeType)
+	return rewriteLocalMarkdownImagesWithUploader(ctx, text, roots, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+		return t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
 	})
 }
 
@@ -30,6 +33,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 	if len(cleanRoots) == 0 {
 		return text
 	}
+	scope := newLocalFileScope(cleanRoots)
 	uploaded := map[string]string{}
 	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)
@@ -41,18 +45,23 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 			return match
 		}
 		path := localMarkdownImagePath(raw, cleanRoots[0])
-		if path == "" || !pathWithinRoots(path, cleanRoots) {
+		if path == "" {
 			return match
 		}
+		file, _, err := scope.open(path)
+		if err != nil {
+			return match
+		}
+		defer file.Close()
 		isImage := parts[1] == "!"
-		mimeType := attachmentMime(path)
+		mimeType := attachmentMimeOf(file, path)
 		if isImage && !strings.HasPrefix(mimeType, "image/") {
 			return match
 		}
 		id := uploaded[path]
 		if id == "" {
 			var err error
-			id, err = upload(ctx, path, mimeType)
+			id, err = upload(ctx, file, path, mimeType)
 			if err != nil {
 				logln("assistant attachment upload failed for", path+":", err)
 				return match
@@ -88,18 +97,19 @@ func stageCodexGeneratedImage(path, generatedRoot, uploadRoot string) string {
 	if path == "" || generatedRoot == "" || uploadRoot == "" {
 		return ""
 	}
-	if !pathWithinRoots(path, []string{generatedRoot}) || !strings.HasPrefix(attachmentMime(path), "image/") {
-		return ""
-	}
-	if err := os.MkdirAll(uploadRoot, 0o755); err != nil {
-		return ""
-	}
-	destination := filepath.Join(uploadRoot, filepath.Base(path))
-	data, err := os.ReadFile(path)
+	file, _, err := newLocalFileScope([]string{generatedRoot}).open(path)
 	if err != nil {
 		return ""
 	}
-	if err := os.WriteFile(destination, data, 0o644); err != nil {
+	defer file.Close()
+	if !strings.HasPrefix(attachmentMimeOf(file, path), "image/") {
+		return ""
+	}
+	destination, err := saveLocalFile(filepath.Dir(uploadRoot), []string{filepath.Base(uploadRoot)}, filepath.Base(path), func(w io.Writer) error {
+		_, err := io.Copy(w, file)
+		return err
+	})
+	if err != nil {
 		return ""
 	}
 	return destination
@@ -150,35 +160,14 @@ func cleanExistingRoots(roots []string) []string {
 	return out
 }
 
-func pathWithinRoots(path string, roots []string) bool {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = filepath.Clean(path)
-	}
-	st, err := os.Stat(abs)
-	if err != nil || st.IsDir() {
-		return false
-	}
-	for _, root := range roots {
-		rel, err := filepath.Rel(root, abs)
-		if err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
-			return true
-		}
-	}
-	return false
-}
-
-func attachmentMime(path string) string {
-	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); typ != "" {
+// attachmentMimeOf says what an opened file is: by its name, or by sniffing the handle, which moves no offset. A sniff
+// never opens by path, which may mean something else by now.
+func attachmentMimeOf(file *os.File, name string) string {
+	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(name))); typ != "" {
 		return typ
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "application/octet-stream"
-	}
-	defer f.Close()
 	buf := make([]byte, 512)
-	n, _ := f.Read(buf)
+	n, _ := file.ReadAt(buf, 0)
 	if n == 0 {
 		return "application/octet-stream"
 	}

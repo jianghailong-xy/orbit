@@ -7,6 +7,7 @@ import {
   decidingSessionDisqualification,
   quotedCriterion,
 } from '../tasks/task-evidence-decision';
+import { describeCitedFiles } from '../tasks/task-evidence-envelope';
 import { completionEvidenceWakeKey } from './completion-input';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import {
@@ -146,8 +147,8 @@ export class CompletionEvidenceProducer {
 
   /**
    * The fact as the coordinator is told it — with the task's title, the criterion the evidence
-   * quotes and the project's escalation clock in its `detail`, for the message and nothing else —
-   * or null when the standing conversation is not the one to decide it.
+   * quotes, the files it cites and the project's escalation clock in its `detail`, for the message
+   * and nothing else — or null when the standing conversation is not the one to decide it.
    */
   private async decidedByCoordinator(fact: WakeFact): Promise<WakeFact | null> {
     const project = await this.prisma.project.findUnique({
@@ -208,12 +209,13 @@ export class CompletionEvidenceProducer {
 
     if ((await criterionStandingRefusal(this.prisma, task, latest.evidence)) !== null) return null;
     const standing = project.coordinatorSession;
+    const scope = { ownerId: project.ownerId, taskId: task.id };
     if (standing) {
-      const scope = { ownerId: project.ownerId, taskId: task.id };
       const disqualified = await decidingSessionDisqualification(this.prisma, scope, standing);
       if (disqualified !== null) return null;
     }
 
+    const files = await describeCitedFiles(this.prisma, scope, latest.evidence);
     return {
       ...fact,
       detail: {
@@ -221,6 +223,7 @@ export class CompletionEvidenceProducer {
         title: task.title,
         criterion: quotedCriterion(latest.evidence),
         escalationSeconds: project.exceptionEscalationSeconds,
+        ...(files.length > 0 ? { files } : {}),
       },
     };
   }

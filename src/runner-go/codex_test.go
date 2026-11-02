@@ -1095,7 +1095,7 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedImage(t *testing.T) {
 		context.Background(),
 		"preview ![mock]("+path+" \"full\")",
 		[]string{dir},
-		func(ctx context.Context, path, mimeType string) (string, error) {
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 			uploadedPath = path
 			uploadedMime = mimeType
 			return "att-1", nil
@@ -1123,7 +1123,7 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedFileLink(t *testing.T) {
 		context.Background(),
 		"files: [SVG source]("+path+")",
 		[]string{dir},
-		func(ctx context.Context, path, mimeType string) (string, error) {
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 			uploadedPath = path
 			uploadedMime = mimeType
 			return "att-1", nil
@@ -1171,7 +1171,7 @@ func TestRewriteLocalMarkdownImagesUploadsGeneratedImage(t *testing.T) {
 		context.Background(),
 		"[download PNG]("+path+")",
 		roots,
-		func(ctx context.Context, path, mimeType string) (string, error) { return "att-1", nil },
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) { return "att-1", nil },
 	)
 	if got != `[download PNG](orbit-attachment:att-1 "exec-1.png")` {
 		t.Fatalf("rewritten = %q", got)
@@ -1211,7 +1211,7 @@ func TestHandleCodexItemImageGenerationThroughRealRewrite(t *testing.T) {
 			uploaded := 0
 			rewrite := func(text string) string {
 				return rewriteLocalMarkdownImagesWithUploader(context.Background(), text, roots,
-					func(ctx context.Context, path, mimeType string) (string, error) {
+					func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 						uploaded++
 						if mimeType != "image/png" {
 							t.Fatalf("mime = %q, want image/png", mimeType)
@@ -1358,7 +1358,7 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRoot(t *testing.T) {
 	}
 	called := false
 	text := "preview ![mock](" + outside + ")"
-	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, path, mimeType string) (string, error) {
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 		called = true
 		return "att-1", nil
 	})
@@ -1378,7 +1378,7 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRootFileLink(t *testing.T) {
 	}
 	called := false
 	text := "files: [SVG](" + outside + ")"
-	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, path, mimeType string) (string, error) {
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
 		called = true
 		return "att-1", nil
 	})

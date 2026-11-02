@@ -13,7 +13,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1043,22 +1042,6 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 const maxSessionAttachmentBytes = 25 << 20
 
 var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
-
-func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path, mimeType string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() {
-		return "", errors.New("File is not a regular file")
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	return t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
-}
 
 func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
 	if ctx == nil {

@@ -15644,7 +15644,7 @@ button.chat-jump-start:hover {
   margin-top: 16px;
 }
 .share-wiki-doc {
-  max-width: 880px;
+  max-width: 760px;
   margin: 0 auto;
 }
 .wk-dc-scope > .v .see.off {
@@ -24829,17 +24829,24 @@ button.project-open-item-action:disabled {
 .wk-art-page .t-meta .ic { font-size: 12px; color: var(--text-3); }
 .wk-art-page .wk-art-updated { display: block; line-height: 1.6; }
 .wk-art-page .wk-art-updated .ic { margin-right: 6px; }
-.wk-art { margin-top: 20px; font-size: 15px; line-height: 1.85; color: var(--text-1); }
-.wk-art p { margin: 0 0 12px; }
-.wk-art h2 { margin: 26px 0 10px; padding-bottom: 6px; font-size: 18px; font-weight: 650; line-height: 1.4;
+.wk-art { margin-top: 20px; font-size: 16px; line-height: 1.8; color: var(--text-1); }
+.wk-art p { margin: 0 0 16px; }
+.wk-art h2 { margin: 36px 0 12px; padding-bottom: 8px; font-size: 20px; font-weight: 650; line-height: 1.4;
              border-bottom: 1px solid var(--border-subtle); }
 .wk-art code, .wk-fncard code, .wk-fnlist code {
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: .86em;
   background: var(--fill-inset); border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
-.wk-fn { font-size: 11px; line-height: 0; vertical-align: super; margin-left: 1px; white-space: nowrap; }
+/* WikiWords: a word of code stays whole, and a line may end before the code. */
+.wk-code-word { white-space: nowrap; }
+.wk-code-break::before { content: '\200B'; }
+.wk-fn { font-size: 11px; line-height: 0; vertical-align: 5px; margin: 0 2px 0 -2px; white-space: nowrap; }
+/* A word joiner, so no line starts with a marker: drawn here, because in the text a reader would copy it. */
+.wk-fn::before { content: '\2060'; }
+/* After nearly every sentence, so no colour of its own until it is pointed at, and dark enough to read at this size.
+   One that failed its check is red (`.x`): that is the one to see. */
 .wk-fn-n { display: inline-block; padding: 0 1px; border: 0; border-radius: 3px; background: transparent; font: inherit;
-            line-height: 1.15; color: var(--brand); cursor: pointer; }
-.wk-fn-n:hover { text-decoration: underline; }
+            line-height: 1.15; color: var(--text-2); cursor: pointer; }
+.wk-fn-n:hover { color: var(--brand); text-decoration: underline; }
 .wk-fn-n.on { background: var(--brand); color: #fff; text-decoration: none; }
 .wk-art .hl { background: color-mix(in srgb, var(--brand-tint) 80%, transparent); border-radius: 3px;
               box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-tint) 80%, transparent); }
@@ -24945,6 +24952,8 @@ button.project-open-item-action:disabled {
 @media (min-width: 961px) {
   .wk-page { max-width: none; }
   .wk-page--reading > .wk-layout > .wk-main > * { max-width: 880px; margin-inline: auto; }
+  /* Prose: 47 Chinese characters to the line at .wk-art's size, where 880px is 55. */
+  .wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
                              overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
@@ -25059,7 +25068,7 @@ button.project-open-item-action:disabled {
   .wk-calls td.n { display: none; }
   .wk-calls td.line { display: block; color: var(--text-3); font-size: 12px; }
   .wk-art-page .t-title, .wk-browse-page .t-title, .wk-az-page .t-title { margin-top: 10px; font-size: 24px; line-height: 1.35; letter-spacing: -.015em; }
-  .wk-art { margin-top: 14px; font-size: 16px; line-height: 1.8; }
+  .wk-art { margin-top: 14px; }
   .wk-art h2 { margin: 22px 0 8px; font-size: 17px; }
   .wk-fn { font-size: 11.5px; }
   .wk-fnlist li { grid-template-columns: 24px minmax(0, 1fr); padding: 9px 2px 10px; border-bottom: 1px solid var(--border-subtle); }
@@ -25344,12 +25353,14 @@ button.project-open-item-action:disabled {
 .wk-dc-banner .lg .go { margin-left: auto; padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
 .wk-dc-body h2 .no { color: var(--text-3); font-weight: 600; margin-right: 6px; font-variant-numeric: tabular-nums; }
 .wk-dc-sec { scroll-margin-top: 12px; }
-.wk-dc-body h3 { margin: 16px 0 6px; font-size: 15px; font-weight: 650; }
-.wk-dc-body ul { margin: 0 0 12px; padding-left: 20px; }
-.wk-dc-code { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto;
-              font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+.wk-dc-body h3 { margin: 20px 0 8px; font-size: 16px; font-weight: 650; }
+.wk-dc-body ul { margin: 0 0 16px; padding-left: 20px; }
+.wk-dc-code { margin: 0 0 16px; padding: 12px 14px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto;
+              font: 13.5px/1.6 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+/* The block's own code, which `.wk-art code` would shrink and tint a second time. */
+.wk-dc-code code { padding: 0; background: none; font-size: inherit; overflow-wrap: normal; }
 /* a section's diagram (WikiDiagram): at its own size, centred, scrolling when it is wider than the text */
-.wk-dc-diagram { margin: 0 0 12px; padding: 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto; }
+.wk-dc-diagram { margin: 0 0 16px; padding: 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto; }
 .wk-dc-diagram[aria-busy="true"] { min-height: 120px; }
 .wk-dc-diagram svg { display: block; margin: 0 auto; }
 .wk-dc-unwritten { color: var(--text-3); font-size: 14px; }

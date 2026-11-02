@@ -43,10 +43,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-# Compose otherwise derives its project from the checkout directory. Orbit upgrades commonly run
-# from UUID-named worktrees, while the installed stack is the stable `orbit` project; letting that
-# name drift creates a second network and then collides with the intentionally fixed container
-# names. Operators may still override the project explicitly for an isolated deployment.
+# Compose otherwise derives its project from the checkout directory, while the installed stack is
+# the stable `orbit` project; letting that name drift creates a second network and then collides
+# with the intentionally fixed container names. An upgrade runs in the installed checkout, and
+# deployment_preflight stops one anywhere else, a worktree included. A separate deployment exports
+# its own project name here, and gives its containers names of their own.
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-orbit}"
 
 if docker compose version >/dev/null 2>&1; then
@@ -182,6 +183,53 @@ managed_runner_services_up() {
 }
 # ── end of the managed runners' section ─────────────────────────────────────────────────────────────
 
+# A deployment runs from one checkout, because its bind mounts are relative: ./data/postgres, ./data/pg-archive,
+# ./data/files. From any other directory, a worktree included, Compose would bind that directory's empty ./data: that has
+# served production an empty database, it empties the off-host mirror's source, and every attachment stops reading. So a
+# run anywhere else stops here, before anything is pulled, built, tagged or recreated. Which deployment this run would
+# act on is the postgres container Compose renders here, by its name, stopped or not: with container names of its own, a
+# separate deployment is checked against its own /archive, and one with the same names is those containers, whatever its
+# project is called. With no such container there is no deployment yet, and a first install goes ahead. Where Compose
+# cannot render this checkout, as with no .env here, the default name is what it would have said.
+deployment_preflight() {
+  local name archive installed
+  name="$($DC config postgres 2>/dev/null | awk '/^[[:space:]]*container_name:/ { found = $2 } END { print found }' || true)"
+  name="${name:-orbit-postgres}"
+  archive="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/archive"}}{{.Source}}{{end}}{{end}}' "$name" 2>/dev/null || true)"
+  if [ -n "$archive" ] && [ "$archive" != "$PWD/data/pg-archive" ]; then
+    installed="${archive%/data/pg-archive}"
+    echo "error: this deployment runs from $installed, not from this checkout ($PWD): $name has /archive at $archive." >&2
+    echo "       Its mounts are relative, so upgrading from here would bind them to this checkout's ./data." >&2
+    echo "       Nothing was pulled, built, tagged or recreated. Run the upgrade in $installed." >&2
+    echo "       A separate deployment on this Docker needs container names of its own, or it cannot be told from that one." >&2
+    exit 1
+  fi
+}
+deployment_preflight
+
+# pgbackup is in neither list of services below, and `up` alone would not do for it: Compose bind-mounts its script as a
+# single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and
+# Compose sees no change. So its script is compared with this checkout's: a difference recreates it, and otherwise `up`
+# does so for a change of configuration, such as a new mount, and leaves it running if there is none. --no-deps, or `up`
+# would recreate postgres with it. One that is not running is left as it is, and the run says so as its last words.
+PGBACKUP_NOTICE=""
+pgbackup_up() {
+  local running
+  running="$($DC ps -q pgbackup 2>/dev/null || true)"
+  if [ -z "$running" ]; then
+    PGBACKUP_NOTICE="!!  pgbackup was NOT updated: it is not running in this Compose project, so its script and mounts stay
+!!  as they were. To update it, run this in $PWD: docker compose up -d --no-deps --force-recreate pgbackup"
+    return 0
+  fi
+  if ! docker exec "$running" cat /usr/local/bin/pg-backup.sh | cmp -s - scripts/pg-backup.sh; then
+    echo "==> Recreating pgbackup to run this checkout's scripts/pg-backup.sh"
+    $DC up -d --wait --no-deps --force-recreate pgbackup
+  else
+    echo "==> Recreating pgbackup if it changed"
+    $DC up -d --wait --no-deps pgbackup
+  fi
+}
+
 LOCK_FILE="/tmp/orbit-upgrade.lock"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -290,9 +338,9 @@ if [ "$PULL_BASE" -eq 1 ]; then
   $DC up -d --wait postgres pgbackup
 fi
 
-# --no-deps is deliberate: an upgrade launched from a worktree must not recreate postgres, whose
-# relative bind-mount path differs from the installed checkout — that has already once served
-# production an empty database.
+# --no-deps is deliberate: this path never recreates postgres. Its data is a relative bind mount,
+# and a recreate from outside the installed checkout has already once served production an empty
+# database, which is what deployment_preflight now stops.
 echo "==> Recreating apiserver, wiki-worker and presentation services"
 $DC up -d --wait --no-deps $SERVICES gateway
 if [ -n "$APISERVERS" ]; then
@@ -304,6 +352,9 @@ fi
 if [ -n "$CHANNEL" ]; then
   managed_runner_services_up
 fi
+if printf '%s\n' "$COMPOSE_SERVICES" | grep -x pgbackup >/dev/null; then
+  pgbackup_up
+fi
 
 echo "==> Stack status"
 $DC ps
@@ -314,3 +365,4 @@ if [ "$PRUNE" -eq 1 ]; then
 fi
 
 echo "✓ Upgrade complete — all services healthy."
+[ -z "$PGBACKUP_NOTICE" ] || printf '%s\n' "$PGBACKUP_NOTICE" >&2

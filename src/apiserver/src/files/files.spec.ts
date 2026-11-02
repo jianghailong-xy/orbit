@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import test from 'node:test';
+import { BadRequestException, type ExecutionContext } from '@nestjs/common';
+import { lastValueFrom, of, throwError, type Observable } from 'rxjs';
 import {
   DEFAULT_FILES_DIR,
   LocalFileStore,
@@ -12,6 +14,7 @@ import {
   uploadTempDir,
   writeHashedTempFile,
 } from './file-store';
+import { FileUploadCleanupInterceptor } from './file-upload-cleanup.interceptor';
 import { fileUploadStorage } from './file-upload-storage';
 import { sigV4Authorization, sigV4Encode } from './s3-file-store';
 
@@ -162,6 +165,31 @@ test('the routes\' multer engine hands on a file on disk with its sha256, never 
   assert.deepEqual(readdirSync(path.join(dir, 'tmp')), []);
   // Removing one already gone is no error: multer and the route may both try.
   await new Promise<void>((resolve, reject) => engine._removeFile({}, { path: info.path as string }, (error) => (error ? reject(error) : resolve())));
+});
+
+// ── The end of an upload's request ─────────────────────────────────────────────────────────────
+test('an upload\'s temporary file is gone once its request has ended, and the answer is the route\'s own', async (t) => {
+  const dir = scratch(t);
+  const temp = (name: string) => {
+    const file = path.join(dir, name);
+    writeFileSync(file, 'bytes');
+    return file;
+  };
+  const through = async (file: { path: string } | undefined, route: () => Observable<unknown>) => {
+    const context = { switchToHttp: () => ({ getRequest: () => ({ file }) }) } as unknown as ExecutionContext;
+    return lastValueFrom(await new FileUploadCleanupInterceptor().intercept(context, { handle: route }));
+  };
+
+  const refusal = new BadRequestException('invalid id');
+  await assert.rejects(through({ path: temp('refused') }, () => throwError(() => refusal)), (error) => error === refusal);
+  assert.deepEqual(readdirSync(dir), [], 'a refusal removes the file');
+
+  assert.deepEqual(await through({ path: temp('answered') }, () => of({ id: 'a' })), { id: 'a' });
+  assert.deepEqual(readdirSync(dir), [], 'so does an answer that left the file where it was');
+
+  // A kept upload's file has already moved into the store, and a request with no file has none to remove.
+  assert.deepEqual(await through({ path: path.join(dir, 'kept') }, () => of({ id: 'b' })), { id: 'b' });
+  assert.deepEqual(await through(undefined, () => of({ id: 'c' })), { id: 'c' });
 });
 
 // ── The files directory as a store ─────────────────────────────────────────────────────────────

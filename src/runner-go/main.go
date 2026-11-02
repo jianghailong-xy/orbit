@@ -76,6 +76,7 @@ Usage:
   orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
+  orbit file <command>              Keep files in Orbit instead of in the repository
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
@@ -216,6 +217,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"notify":    notifyHelp,
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
+	"file":      fileHelp,
 	"token":     tokenHelp,
 	"login":     loginHelp,
 	"logout":    logoutHelp,
@@ -272,6 +274,7 @@ var leafHelpFamilies = map[string]bool{
 	"project":   true,
 	"watch":     true,
 	"wiki":      true,
+	"file":      true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
@@ -395,6 +398,11 @@ func main() {
 	case "wiki":
 		if err := cmdWikiCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit wiki:", err)
+			os.Exit(1)
+		}
+	case "file":
+		if err := cmdFileCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit file:", err)
 			os.Exit(1)
 		}
 	case "token":

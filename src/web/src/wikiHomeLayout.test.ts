@@ -28,8 +28,31 @@ describe('the desktop Wiki', () => {
     expect(block).toContain('.wk-page--reading > .wk-layout > .wk-main > * { max-width: 880px; margin-inline: auto; }');
   });
 
+  it('reads a document or an article at a narrower measure than the other reading pages', () => {
+    expect(block).toContain('.wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }');
+  });
+
   it('keeps the directory beside every page, scrolling on its own', () => {
     expect(block).toMatch(/\.wk-layout > \.wk-dir-col \{ position: sticky; top: 0; max-height: [^;]+; overflow-y: auto;/);
+  });
+});
+
+/**
+ * A document's words, which jsdom cannot lay out. A code block's <code> is not a sentence's: `.wk-art code` shrinks and
+ * tints it, so a block drew below the size of the words around it, with a second tint inside its own.
+ */
+describe('a document\u2019s words', () => {
+  it('draws a code block at its own size and tint', () => {
+    expect(css).toContain('.wk-dc-code code { padding: 0; background: none; font-size: inherit;');
+    expect(css.indexOf('.wk-dc-code code {')).toBeGreaterThan(css.indexOf('.wk-art code, .wk-fncard code'));
+  });
+
+  it('lets a line end before code by the stylesheet, so nothing is copied with it', () => {
+    expect(css).toContain(".wk-code-break::before { content: '\\200B'; }");
+  });
+
+  it('keeps a footnote marker on the line of the sentence it ends', () => {
+    expect(css).toContain(".wk-fn::before { content: '\\2060'; }");
   });
 });
 

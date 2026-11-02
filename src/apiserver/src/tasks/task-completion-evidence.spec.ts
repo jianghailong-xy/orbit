@@ -6,6 +6,7 @@ import {
   completionDigest,
   normalizeCompletionEvidence,
 } from './task-completion-evidence.service';
+import { bindCitedFiles, parseEvidenceEnvelope, storedEvidenceEnvelope } from './task-evidence-envelope';
 
 test('canonical evidence ignores object order, Unicode composition and line-ending representation', () => {
   const first = normalizeCompletionEvidence({
@@ -81,4 +82,31 @@ test('the evidence service is state-orthogonal and only the explicit legacy door
   // judgment request and superseded the previous one; both went with the request table.
   assert.doesNotMatch(source, /taskJudgmentRequest/);
   assert.doesNotMatch(source, /TaskJudgmentRequestStatus/);
+});
+
+test('evidence with no FILE check is stored and digested exactly as it was submitted', () => {
+  const evidence = {
+    claim: 'done',
+    criterion: { key: 'k', text: 't' },
+    checks: [{ kind: 'TOOL_CALL', ref: 'toolu_1' }],
+    gaps: [],
+  };
+  const citations = [{ kind: 'TOOL_CALL' as const, ref: 'toolu_1', resolved: true, reason: null, label: 'Bash' }];
+  assert.equal(bindCitedFiles(evidence, citations), evidence, 'the same object, so nothing about it can differ');
+});
+
+test('a stored FILE check holds what the server wrote, and a submission may not', () => {
+  const evidence = {
+    claim: 'done',
+    criterion: { key: 'k', text: 't' },
+    checks: [{ kind: 'FILE', ref: 'file', sha256: 'a'.repeat(64), width: 2, height: 1 }],
+    gaps: [],
+  };
+  assert.deepEqual(storedEvidenceEnvelope(evidence)?.checks, evidence.checks);
+  assert.throws(() => parseEvidenceEnvelope(evidence), /carries height, sha256, width/);
+  assert.equal(
+    storedEvidenceEnvelope({ ...evidence, checks: [{ kind: 'COMMIT', ref: 'abc', sha256: 'a'.repeat(64) }] }),
+    null,
+    'and only on a FILE check',
+  );
 });
