@@ -1862,42 +1862,10 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 	if socket == "" || token == "" {
 		return refuse("this session has no runner-hosted background job service to hand the wait to")
 	}
-	exe := orbitCLIExecutable()
-	if exe == "" {
-		return refuse("the orbit executable could not be resolved")
-	}
-	params, err := json.Marshal(map[string]interface{}{"name": name, "arguments": args})
+	// Its own operation, not `run`: the gate on `run` is about commands, and this is a question put to a
+	// person, which Plan and Don't Ask may do (bgJobService.startOwnerWait).
+	raw, err := bgSocketCall(socket, token, "owner_wait", map[string]interface{}{"tool": name, "arguments": args})
 	if err != nil {
-		return refuse(err.Error())
-	}
-	request, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call", Params: params})
-	file, err := os.CreateTemp("", "orbit-mcp-handoff-*.json")
-	if err != nil {
-		return refuse(err.Error())
-	}
-	_, err = file.Write(append(request, '\n'))
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(file.Name())
-		return refuse(err.Error())
-	}
-	// The job's environment is the runner's, which carries this session and the job's own id but not
-	// the rest of who is asking: the agent the write is attributed to, the current task, the
-	// orchestration switch. They are this server's own, put back as it was started with them. The
-	// timeout is cleared so the job waits as long as the owner takes, and only this tool is served.
-	// The request file is unlinked once open, so nothing is left behind however the job ends.
-	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
-		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
-		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
-		shellQuote(exe), shellQuote(file.Name()))
-	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
-		"command": command, "kind": bgKindWatch, "wakeOnExit": true,
-		"description": "Orbit " + name + ": waiting for the owner's confirmation",
-	})
-	if err != nil {
-		_ = os.Remove(file.Name())
 		return refuse("handing the wait to a runner-hosted job failed: " + err.Error())
 	}
 	var job struct {
@@ -4714,7 +4682,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"permissionMode": map[string]interface{}{
 						"type":        "string",
 						"enum":        offeredPermissionModes(),
-						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
+						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask and is the mode for unattended work that has to run commands, \"dontAsk\" never asks but refuses anything not already approved, commands and background jobs included, \"bypassPermissions\" never asks and allows everything. Omit to use the owner's account default. It can never be wider than this session's own mode: a wider mode is refused, and when the default is wider the sub-session runs in this session's own mode. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
 					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. If the server does not record the watch, the result says no server-held watch backs the wait, and a refused watch returns at once. Default false: returns immediately."},
 				}, "prompt"),

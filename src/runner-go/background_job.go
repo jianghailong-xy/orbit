@@ -194,6 +194,8 @@ type bgJobStatus struct {
 	WakeOnExit    bool           `json:"wakeOnExit,omitempty"`
 	WakeOnOutput  bool           `json:"wakeOnOutput,omitempty"`
 	WakeOnStall   *bgStallConfig `json:"wakeOnStall,omitempty"`
+	// Note says what to do about a job that is waiting for its card (bgGateWaitingNote).
+	Note string `json:"note,omitempty"`
 }
 
 // bgJobOutput is one incremental read of a job's output file.
@@ -271,6 +273,12 @@ type bgJob struct {
 	reaping     bool
 	exited      bool
 	adoptedExit *int
+	// awaitingOwner marks a job the gate sent to a person, whose process has not started
+	// (background_gate.go). Its status stays bgStatusRunning, so that everything that ends or reports a job
+	// treats it as one. ownerWaitAnnounced records that a call has told the agent it is waiting, which
+	// makes the answer owe the session a wake. Both are read and written under bgTailer.mu.
+	awaitingOwner      bool
+	ownerWaitAnnounced bool
 	// kill ends the job's process group, and reap waits for its exited process and returns the exit
 	// code: through the exec.Cmd that started it, or by pid for a job adopted from its record.
 	kill func()
@@ -302,6 +310,10 @@ func (j *bgJob) statusLocked() bgJobStatus {
 	if !j.endedAt.IsZero() {
 		st.EndedAt = j.endedAt.UTC().Format(time.RFC3339)
 	}
+	if j.awaitingOwner {
+		st.Status = bgStatusWaitingForOwner
+		st.Note = bgGateWaitingNote
+	}
 	return st
 }
 
@@ -316,18 +328,53 @@ func newBgJobID() (string, error) {
 	return "bgj_" + hex.EncodeToString(b[:]), nil
 }
 
+// validateBgJobSpec is what makes a request one that could start at all. The gate reads it first, so that
+// nobody is asked about a job that would then be refused anyway.
+func validateBgJobSpec(spec bgJobSpec) error {
+	if spec.Kind != bgKindService && spec.Kind != bgKindJob && spec.Kind != bgKindWatch {
+		return fmt.Errorf("kind must be %q, %q or %q, got %q", bgKindService, bgKindJob, bgKindWatch, spec.Kind)
+	}
+	if strings.TrimSpace(spec.Command) == "" {
+		return errors.New("command is required")
+	}
+	return nil
+}
+
 // startJob spawns one runner-hosted background job and returns as soon as it is
 // running.
 func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
-	if spec.Kind != bgKindService && spec.Kind != bgKindJob && spec.Kind != bgKindWatch {
-		return bgJobStatus{}, fmt.Errorf("kind must be %q, %q or %q, got %q", bgKindService, bgKindJob, bgKindWatch, spec.Kind)
+	prepared, err := b.prepareJob(spec)
+	if err != nil {
+		return bgJobStatus{}, err
 	}
-	if strings.TrimSpace(spec.Command) == "" {
-		return bgJobStatus{}, errors.New("command is required")
+	status, err := b.launchJob(prepared)
+	if err != nil {
+		b.wg.Done()
+		return bgJobStatus{}, err
+	}
+	return status, nil
+}
+
+// bgPreparedJob is a job with everything but its process: its id, its output file and the command that
+// will run, under the context that ends it.
+type bgPreparedJob struct {
+	job    *bgJob
+	cmd    *exec.Cmd
+	output *os.File
+	ctx    context.Context
+	cancel context.CancelFunc
+	spec   bgJobSpec
+}
+
+// prepareJob reserves the job's place in the tailer's WaitGroup, for the waiter launchJob starts. Whoever
+// does not get as far as starting one gives it back.
+func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
+	if err := validateBgJobSpec(spec); err != nil {
+		return nil, err
 	}
 	jobID, err := newBgJobID()
 	if err != nil {
-		return bgJobStatus{}, err
+		return nil, err
 	}
 	outputPath := filepath.Join(spec.ScratchDir, jobID+".output")
 
@@ -336,27 +383,23 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
-		return bgJobStatus{}, context.Canceled
+		return nil, context.Canceled
 	}
 	if b.runnerStoppingLocked() {
 		b.mu.Unlock()
-		return bgJobStatus{}, errRunnerShuttingDown
+		return nil, errRunnerShuttingDown
 	}
 	b.wg.Add(1)
 	b.mu.Unlock()
-	waiterStarted := false
-	defer func() {
-		if !waiterStarted {
-			b.wg.Done()
-		}
-	}()
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return bgJobStatus{}, err
+		b.wg.Done()
+		return nil, err
 	}
 	f, err := os.Create(outputPath)
 	if err != nil {
-		return bgJobStatus{}, err
+		b.wg.Done()
+		return nil, err
 	}
 	// A child of the tailer's context (the session), never the engine's — and its
 	// own child at that, so one job can be killed without touching the others.
@@ -421,19 +464,27 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	cmd.Env = append(cmd.Env, envBgJobID+"="+jobID)
 	cmd.Stdout = f
 	cmd.Stderr = f
+	return &bgPreparedJob{job: job, cmd: cmd, output: f, ctx: jobCtx, cancel: cancel, spec: spec}, nil
+}
+
+// launchJob starts a prepared job's process, and hands the place prepareJob reserved to the goroutine that
+// waits for it. On an error the job has not joined the registry on this call's account, and the caller still
+// holds that place.
+func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
+	job, cmd, f, cancel, spec := p.job, p.cmd, p.output, p.cancel, p.spec
+	jobID, outputPath := job.id, job.outputPath
 	if err := cmd.Start(); err != nil {
 		cancel()
 		f.Close()
 		return bgJobStatus{}, err
 	}
+	b.mu.Lock()
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()
 	// A job that has produced nothing yet has produced nothing since it existed: its first report
 	// says its age, not an instant. See bgJob.lastOutputAt.
 	job.lastOutputAt = job.startedAt
 	job.recorded = b.recordJob(job)
-
-	b.mu.Lock()
 	if b.stopping || b.runnerStoppingLocked() {
 		// stopAll ran, or the runner began to stop, while we were starting: this
 		// process belongs to an epoch that is already being torn down, so it does not
@@ -484,7 +535,6 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		b.startStallWakes(job)
 	}
 
-	waiterStarted = true
 	go func() {
 		defer job.releaseWaiter(&b.wg)
 		// Waits without reaping, so that a job handed on meanwhile stays unreaped for its next host.
@@ -523,7 +573,7 @@ func exitCodeFromWait(cmd *exec.Cmd, waitErr error) int {
 // runner that predates the field sends none, which the control plane reads as unknown rather than
 // as silent.
 func (j *bgJob) runningPayload(at time.Time) map[string]interface{} {
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"shellId":    j.id,
 		"toolUseId":  j.id,
 		"status":     bgStatusRunning,
@@ -532,6 +582,12 @@ func (j *bgJob) runningPayload(at time.Time) map[string]interface{} {
 		"outputPath": j.outputPath,
 		"idleMs":     j.idleMillis(at),
 	}
+	// `running` is what keeps a card that names this job alive; this says its command has not started,
+	// for the engine that is told about it on resume (apiserver background-jobs-context.ts).
+	if j.awaitingOwner {
+		payload["waitingForOwner"] = true
+	}
+	return payload
 }
 
 // idleMillis is how long this job has produced nothing as of `at`, never negative: a clock that
@@ -1185,7 +1241,8 @@ func (b *bgTailer) drainJobs(budget time.Duration) {
 		if job.status != bgStatusRunning {
 			continue
 		}
-		if job.kind == bgKindService {
+		// A job still waiting for its card has nothing to land, so waiting for it would only hold the drain.
+		if job.kind == bgKindService || job.awaitingOwner {
 			job.killReason = serviceReason
 			services = append(services, job)
 			continue

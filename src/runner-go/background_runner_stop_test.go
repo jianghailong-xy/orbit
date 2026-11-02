@@ -396,6 +396,9 @@ func runnerStopJob(t *testing.T, id string) *ClaimedSession {
 	// Credentials of the session's own, so the spawn's auth preflight never asks this machine's
 	// login about a CLI that is not the real one.
 	job.Agent.Env = map[string]string{"ANTHROPIC_API_KEY": "test"}
+	// What these cases are about is what becomes of a job once it runs, so a mode whose gate starts it
+	// (background_gate.go).
+	job.Agent.PermissionMode = "auto"
 	return job
 }
 

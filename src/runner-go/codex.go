@@ -253,6 +253,7 @@ func applyRuntimeReload(job *ClaimedSession, content string) {
 	}
 	if cfg.PermissionMode != "" {
 		job.Agent.PermissionMode = cfg.PermissionMode
+		job.notePermissionMode(cfg.PermissionMode)
 	}
 	if cfg.Effort != nil {
 		job.Agent.Effort = *cfg.Effort

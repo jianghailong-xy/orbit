@@ -23,7 +23,7 @@ func newTestBgJobService(t *testing.T) (*bgJobService, *bgTailer, func()) {
 	bg := newBgTailer(ctx, events.emit, nil)
 	dir := t.TempDir()
 	svc := &bgJobService{
-		bg: bg, token: "test-token", execDir: dir, scratchDir: dir,
+		bg: bg, token: "test-token", execDir: dir, scratchDir: dir, mode: func() string { return "auto" },
 	}
 	stop := func() {
 		for _, job := range bg.listJobs(false) {
@@ -397,55 +397,105 @@ func TestBgGuardHookDecisions(t *testing.T) {
 		}
 		cmdHookBgGuard(bytes.NewReader(body), &out)
 		var decoded struct {
-			HookSpecificOutput struct {
+			HookSpecificOutput *struct {
 				HookEventName string `json:"hookEventName"`
 				Decision      string `json:"permissionDecision"`
 				Reason        string `json:"permissionDecisionReason"`
 			} `json:"hookSpecificOutput"`
 		}
 		if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
-			t.Fatalf("hook output %q is not a PreToolUse decision: %v", out.String(), err)
+			t.Fatalf("hook output %q is not JSON: %v", out.String(), err)
+		}
+		if decoded.HookSpecificOutput == nil {
+			return "", "" // no verdict: the call takes the session's own permission flow
 		}
 		if decoded.HookSpecificOutput.HookEventName != "PreToolUse" {
 			t.Fatalf("hookEventName = %q", decoded.HookSpecificOutput.HookEventName)
 		}
 		return decoded.HookSpecificOutput.Decision, decoded.HookSpecificOutput.Reason
 	}
-
-	decision, reason := decisionFor(hookInput{ToolName: "Bash", ToolInput: map[string]interface{}{
-		"command": "npm run build 2>&1 | tee build.log", "run_in_background": true,
-	}})
-	if decision != "deny" {
-		t.Fatalf("Bash(run_in_background) decision = %q, want deny", decision)
-	}
-	if !strings.Contains(reason, "mcp__orbit__bg_run") {
-		t.Fatalf("deny reason = %q, want it to name the tool to use instead", reason)
-	}
-
-	// The paired positive, twice over: an ordinary Bash call, and a background
-	// sub-agent — engine-internal work the runner cannot host and must not block.
-	if decision, _ := decisionFor(hookInput{ToolName: "Bash", ToolInput: map[string]interface{}{
-		"command": "npm run build",
-	}}); decision != "allow" {
-		t.Fatalf("foreground Bash decision = %q, want allow", decision)
-	}
-	if decision, _ := decisionFor(hookInput{ToolName: "Agent", ToolInput: map[string]interface{}{
-		"run_in_background": true,
-	}}); decision != "allow" {
-		t.Fatalf("background sub-agent decision = %q, want allow", decision)
+	const noVerdict = ""
+	everyMode := []string{"default", "acceptEdits", "plan", "dontAsk", "auto", "bypassPermissions", "", "a-mode-from-later"}
+	// What the hook has no objection to: approved in the modes that do not ask, and left to the session's
+	// own permission flow in every other, because Claude Code reads an allow as a person's approval.
+	noObjection := func(mode string) string {
+		if mode == "auto" || mode == "bypassPermissions" {
+			return "allow"
+		}
+		return noVerdict
 	}
 
-	// A reader asked about a runner-hosted job: the id says whose it is, because
-	// the runner issued that prefix itself.
-	if decision, reason := decisionFor(hookInput{ToolName: "TaskOutput", ToolInput: map[string]interface{}{
-		"task_id": "bgj_0123456789ab",
-	}}); decision != "deny" || !strings.Contains(reason, "mcp__orbit__bg_output") {
-		t.Fatalf("TaskOutput on a bgj_ id = %q/%q, want deny naming bg_output", decision, reason)
+	for _, mode := range everyMode {
+		decision, reason := decisionFor(hookInput{ToolName: "Bash", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"command": "npm run build 2>&1 | tee build.log", "run_in_background": true,
+		}})
+		if decision != "deny" {
+			t.Fatalf("%q: Bash(run_in_background) decision = %q, want deny", mode, decision)
+		}
+		if !strings.Contains(reason, "mcp__orbit__bg_run") {
+			t.Fatalf("%q: deny reason = %q, want it to name the tool to use instead", mode, reason)
+		}
+
+		// An ordinary Bash call, the same path's Monitor, and a background sub-agent: engine-internal
+		// work the runner cannot host and must not block.
+		if decision, _ := decisionFor(hookInput{ToolName: "Bash", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"command": "npm run build",
+		}}); decision != noObjection(mode) {
+			t.Fatalf("%q: foreground Bash decision = %q, want %q", mode, decision, noObjection(mode))
+		}
+		if decision, _ := decisionFor(hookInput{ToolName: "Monitor", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"command": "tail -f build.log",
+		}}); decision != noObjection(mode) {
+			t.Fatalf("%q: Monitor decision = %q, want %q", mode, decision, noObjection(mode))
+		}
+		if decision, _ := decisionFor(hookInput{ToolName: "Agent", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"run_in_background": true,
+		}}); decision != noObjection(mode) {
+			t.Fatalf("%q: background sub-agent decision = %q, want %q", mode, decision, noObjection(mode))
+		}
+
+		// A reader asked about a runner-hosted job: the id says whose it is, because
+		// the runner issued that prefix itself.
+		if decision, reason := decisionFor(hookInput{ToolName: "TaskOutput", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"task_id": "bgj_0123456789ab",
+		}}); decision != "deny" || !strings.Contains(reason, "mcp__orbit__bg_output") {
+			t.Fatalf("%q: TaskOutput on a bgj_ id = %q/%q, want deny naming bg_output", mode, decision, reason)
+		}
+		if decision, _ := decisionFor(hookInput{ToolName: "TaskOutput", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"task_id": "bei75180m",
+		}}); decision != noObjection(mode) {
+			t.Fatalf("%q: TaskOutput on the engine's own shell = %q, want %q", mode, decision, noObjection(mode))
+		}
+
+		// bg_run itself: refused here in Plan, so no pointless card comes first, and otherwise the
+		// runner's gate decides.
+		decision, reason = decisionFor(hookInput{ToolName: "mcp__orbit__bg_run", PermissionMode: mode, ToolInput: map[string]interface{}{
+			"command": "npm run build", "kind": "job",
+		}})
+		if mode == "plan" {
+			if decision != "deny" || reason != bgGatePlanRefusal {
+				t.Fatalf("bg_run in Plan = %q/%q, want the gate's refusal", decision, reason)
+			}
+		} else if decision != noObjection(mode) {
+			t.Fatalf("%q: bg_run decision = %q, want %q", mode, decision, noObjection(mode))
+		}
+
+		// The two timers keep being refused whatever the mode.
+		for _, tool := range []string{"ScheduleWakeup", "CronCreate"} {
+			if decision, _ := decisionFor(hookInput{ToolName: tool, PermissionMode: mode}); decision != "deny" {
+				t.Fatalf("%q: %s = %q, want deny", mode, tool, decision)
+			}
+		}
 	}
-	if decision, _ := decisionFor(hookInput{ToolName: "TaskOutput", ToolInput: map[string]interface{}{
-		"task_id": "bei75180m",
-	}}); decision != "allow" {
-		t.Fatalf("TaskOutput on the engine's own shell = %q, want allow", decision)
+}
+
+// A hook that could not read its payload gives no verdict either: nothing is approved on its account, and
+// nothing is blocked.
+func TestBgGuardHookUnreadablePayloadGivesNoVerdict(t *testing.T) {
+	var out bytes.Buffer
+	cmdHookBgGuard(strings.NewReader("not json"), &out)
+	if strings.TrimSpace(out.String()) != "{}" {
+		t.Fatalf("hook output = %q, want an empty object", out.String())
 	}
 }
 

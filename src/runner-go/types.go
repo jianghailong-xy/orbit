@@ -1227,6 +1227,9 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
+	// liveMode is the session's permission mode as the goroutines serving its socket read it
+	// (background_gate.go); nil until that service starts.
+	liveMode *sessionLiveMode
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`

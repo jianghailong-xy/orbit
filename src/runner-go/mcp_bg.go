@@ -79,7 +79,10 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" recycled in the meantime — so a wait for CI or a deploy can end your turn instead of holding it" +
 				" open. News that comes while you are idle opens a new turn. A job that exits while you are still" +
 				" working in a turn is written into that turn, read at your next tool call, where this engine" +
-				" accepts a message mid-turn; new output and silence always wait for your next turn.",
+				" accepts a message mid-turn; new output and silence always wait for your next turn. Whether a job" +
+				" may start follows this session's permission mode: Plan and Don't Ask refuse it, Default and Accept" +
+				" Edits show the owner a card first, in which case this may answer that the job is waiting for them" +
+				" (status waiting_for_owner), and Auto and Bypass start it.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
