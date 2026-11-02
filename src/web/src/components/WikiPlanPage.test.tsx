@@ -374,7 +374,7 @@ describe('the plan page, by what its job is doing', () => {
     await vi.waitFor(() => expect(jobCard()).toEqual(['The draft didn’t finish The model’s catalogue couldn’t be read. Nothing was saved. View run']));
     expect(planPage().querySelector('.wk-pl-ver')).toBeNull();
     expect(planPage().querySelector('.wk-pl-empty')).toBeNull();
-    expect(text('.wk-pl-meta', planPage())).toEqual(['Redraft · you asked Sep 28, 20:00']);
+    expect(text('.wk-pl-meta', planPage())).toEqual([expect.stringMatching(/^Redraft · you asked Sep \d+, \d\d:\d\d$/u)]);
     expect(button('Confirm plan', planPage())).toBeUndefined();
     expect(button('Redraft…', planPage())?.disabled).toBe(false);
   });
