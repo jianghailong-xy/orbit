@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -344,6 +345,150 @@ func TestTheControlPlaneSendsTheWorkBackToHTTPS(t *testing.T) {
 		}
 		if r.m.inUse() {
 			t.Error("still in link mode after LINK_MODE_HTTP")
+		}
+	})
+}
+
+// The cut-over's race (task 34mBMr1Oe3xzjTGfM92t0). The apiserver refuses HTTPS daemon calls the moment
+// RUNNER_LINK_REQUIRED goes on, while the gateway tells runners MODE_LINK only from its next read of the switch, up to
+// a second later (src/link-gateway/mode.go). A runner refused in between is welcomed in MODE_HTTP. It does not go back
+// to HTTPS, which refuses it: its work waits for the link, its next connection opens once the gateway can have read the
+// switch, and the refused call is answered over that one.
+func TestARunnerRefusedBeforeTheGatewayReadsTheSwitchStaysOnTheLink(t *testing.T) {
+	r := newLinkWorkRig(t)
+	r.cp.status = func(string) int { return http.StatusUpgradeRequired } // the switch is on
+	r.g.setMode(linkpb.Mode_MODE_HTTP)                                   // and the gateway has not read it yet
+	var read sync.Once
+	r.g.welcome = func(*fakeWorkConn, *linkpb.Welcome) {
+		// It reads the switch a moment after its first Welcome, within the second its reads are apart.
+		read.Do(func() { time.AfterFunc(200*time.Millisecond, func() { r.g.setMode(linkpb.Mode_MODE_LINK) }) })
+	}
+	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
+		return fakeWorkAnswer(rpc, 200, `{"id":"runner-1","name":"over-the-link"}`)
+	}
+	start := time.Now()
+	me, err := r.t.me()
+	logs := strings.Join(r.logs.all(), "\n")
+	if err != nil {
+		t.Fatalf("GET /runner/me, refused over HTTPS before the gateway read the switch: %v\n%s", err, logs)
+	}
+	if me.Name != "over-the-link" {
+		t.Errorf("answered %+v", me)
+	}
+	if n := len(r.cp.requests("/api/runner/me")); n != 1 {
+		t.Errorf("GET /runner/me went over HTTPS %d times, want 1: the refusal", n)
+	}
+	if n := len(r.g.rpcsTo("/runner/me")); n != 1 {
+		t.Errorf("GET /runner/me went over the link %d times, want 1", n)
+	}
+	if !r.m.inUse() {
+		t.Error("the link is not in use")
+	}
+	if strings.Contains(logs, "runner link mode: off") {
+		t.Errorf("the work went back to HTTPS, which refuses it:\n%s", logs)
+	}
+	welcomed := r.g.welcomed()
+	if len(welcomed) != 2 {
+		t.Fatalf("%d connections welcomed, want 2: the one welcomed in MODE_HTTP, then the work's\n%s", len(welcomed), logs)
+	}
+	if !strings.Contains(logs, welcomed[0].id) {
+		t.Errorf("the log does not say what the Welcome of %s said and what came of it:\n%s", welcomed[0].id, logs)
+	}
+	if after := welcomed[1].welcomed.Sub(start); after < time.Second {
+		t.Errorf("the next connection was welcomed %s after the refused call began: sooner than a gateway that reads the switch every second can have read it", after)
+	}
+	linkWaitFor(t, 5*time.Second, "the connection welcomed in MODE_HTTP to close", func() bool {
+		open := r.g.open()
+		return len(open) == 1 && open[0] == welcomed[1]
+	})
+}
+
+// A real switch-off is obeyed as §11.4 and §15.1 say: the runner goes back to HTTPS at the first MODE_HTTP its link
+// states once the gateway has read the switch, at its next heartbeat or call, and does not wait because HTTPS refused it
+// a moment before, once a gateway has told it MODE_LINK since. Only a switch that went off again before any gateway said
+// MODE_LINK, on and off within the gateway's one-second read, keeps the work on the link for longer: two seconds after
+// the refusal, when its next connection is welcomed in MODE_HTTP.
+func TestASwitchOffIsObeyedAfterARefusal(t *testing.T) {
+	// refused has HTTPS refuse daemon calls while on is set, and moves the work onto the link with one, welcomed in
+	// MODE_LINK by a gateway that has read the switch.
+	refused := func(t *testing.T) (*linkWorkRig, *atomic.Bool) {
+		t.Helper()
+		r := newLinkWorkRig(t)
+		on := &atomic.Bool{}
+		on.Store(true)
+		r.cp.status = func(string) int {
+			if on.Load() {
+				return http.StatusUpgradeRequired
+			}
+			return 0
+		}
+		if _, err := r.t.me(); err != nil {
+			t.Fatal(err)
+		}
+		if !r.m.inUse() || len(r.g.rpcsTo("/runner/me")) != 1 {
+			t.Fatal("the refused call did not move the work onto the link")
+		}
+		return r, on
+	}
+	t.Run("HeartbeatAck", func(t *testing.T) {
+		r, on := refused(t)
+		// Off, a moment after the refusal: HTTPS serves again, and the gateway, having read it, says MODE_HTTP.
+		on.Store(false)
+		r.g.setMode(linkpb.Mode_MODE_HTTP)
+		if _, err := r.t.heartbeat(linkTestHeartbeat(r.t.leaseOwner)); err != nil {
+			t.Fatalf("the beat answered MODE_HTTP: %v", err)
+		}
+		if n := len(r.cp.requests("/api/runner/heartbeat")); n != 1 {
+			t.Errorf("the beat answered MODE_HTTP went over HTTPS %d times, want 1", n)
+		}
+		if r.m.inUse() {
+			t.Error("still in link mode after the HeartbeatAck said MODE_HTTP")
+		}
+	})
+	t.Run("LINK_MODE_HTTP", func(t *testing.T) {
+		r, on := refused(t)
+		on.Store(false)
+		r.g.setMode(linkpb.Mode_MODE_HTTP) // its calls are refused LINK_MODE_HTTP from now on
+		if _, err := r.t.me(); err != nil {
+			t.Fatalf("GET /runner/me refused LINK_MODE_HTTP: %v", err)
+		}
+		if n := len(r.cp.requests("/api/runner/me")); n != 2 {
+			t.Errorf("GET /runner/me went over HTTPS %d times, want 2: the refusal, then the call refused LINK_MODE_HTTP", n)
+		}
+		if r.m.inUse() {
+			t.Error("still in link mode after LINK_MODE_HTTP")
+		}
+	})
+	t.Run("on and off before the gateway read it", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		var once atomic.Bool
+		r.cp.status = func(string) int {
+			if once.CompareAndSwap(false, true) {
+				return http.StatusUpgradeRequired // the one call made while the switch was on
+			}
+			return 0
+		}
+		r.g.setMode(linkpb.Mode_MODE_HTTP) // the gateway never read it on
+		start := time.Now()
+		if _, err := r.t.me(); err == nil || !isRetryableTransportError(err) {
+			t.Errorf("GET /runner/me, refused while the link said MODE_HTTP: %v; want a failure its caller retries", err)
+		}
+		// Back on HTTPS at the first connection opened two seconds or more after the refusal (linkModeReadLag), which a
+		// gateway that reads the switch every second welcomes as the switch is: sooner than the next heartbeat, by which
+		// §15.1 has a connected runner hear it.
+		linkWaitFor(t, heartbeatInterval, "the work to go back to HTTPS", func() bool { return !r.m.inUse() })
+		welcomed := r.g.welcomed()
+		if len(welcomed) > 2 {
+			t.Errorf("%d connections welcomed, want at most 2: one opened too soon after the refusal, then one opened once the gateway can have read the switch", len(welcomed))
+		}
+		if len(welcomed) == 2 && welcomed[1].welcomed.Sub(start) < 2*time.Second {
+			t.Errorf("the second connection was welcomed %s after the refusal, sooner than the gateway can have read the switch", welcomed[1].welcomed.Sub(start))
+		}
+		if _, err := r.t.me(); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(r.cp.requests("/api/runner/me")); n != 2 {
+			t.Errorf("GET /runner/me went over HTTPS %d times, want 2: the refusal, then the call once the switch was off", n)
 		}
 	})
 }

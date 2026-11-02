@@ -24,7 +24,8 @@ import (
 //   - an HTTPS call to a daemon route answered UPGRADE_REQUIRED (the server's RUNNER_LINK_REQUIRED switch, task D0); or
 //   - a Welcome or HeartbeatAck saying MODE_LINK, on the work connection or on the shadow's (link_shadow.go).
 //
-// It goes back to HTTPS when one of them says MODE_HTTP. While nothing has asked, the link is not in use: doVia runs
+// It goes back to HTTPS when one of them says MODE_HTTP, save one said too soon after HTTPS refused a call for the
+// gateway to have read the switch since (linkModeReadLag). While nothing has asked, the link is not in use: doVia runs
 // doHTTP exactly as before, and no work connection is opened. ORBIT_LINK_MODE=off, or "linkMode": "off" in
 // config.json, keeps it that way whatever the control plane says.
 //
@@ -72,6 +73,12 @@ var (
 	// the call depends only on what the control plane has acknowledged storing: an event batch the session gave up
 	// on is never stored, and a turn completion must not wait for it forever.
 	linkAfterSeqWait = 30 * time.Second
+	// linkModeReadLag is how long after HTTPS refused a daemon call a MODE_HTTP may come from a gateway that has not
+	// read RUNNER_LINK_REQUIRED since it went on: the apiserver refuses from the moment it is switched on, and the
+	// gateway tells runners MODE_LINK from its next read, a second apart (src/link-gateway/mode.go), plus the read's own
+	// time. Until a gateway says MODE_LINK, a MODE_HTTP its gateway decided within it is not taken as the switch
+	// (observeSince: a Welcome's counts from when its connection was opened), and the work waits for the link.
+	linkModeReadLag = 2 * time.Second
 )
 
 // errLinkModeHTTP is the link refusing a call because the control plane said MODE_HTTP: the call reached no backend,
@@ -130,11 +137,12 @@ type linkMode struct {
 	// server is the transport the control plane last said the daemon's work goes over, in a Welcome or a HeartbeatAck
 	// of the work connection or the shadow's; MODE_UNSPECIFIED until one says.
 	server linkpb.Mode
-	// refused is set by an HTTPS daemon call answered UPGRADE_REQUIRED and cleared by MODE_HTTP: while it is set, the
-	// work waits for the link rather than going back to HTTPS.
-	refused bool
-	why     string // what put the link in use, for the log
-	closed  bool
+	// refused is set by an HTTPS daemon call answered UPGRADE_REQUIRED, at refusedAt, and cleared by a MODE_HTTP
+	// observe takes as the switch: while it is set, the work waits for the link rather than going back to HTTPS.
+	refused   bool
+	refusedAt time.Time
+	why       string // what put the link in use, for the log
+	closed    bool
 	// changed is closed, and replaced, whenever whether the link is in use changes: the shadow waits on it.
 	changed chan struct{}
 
@@ -189,11 +197,24 @@ func (m *linkMode) standDown() (bool, <-chan struct{}) {
 
 // observe takes a mode the control plane stated, in a Welcome or a HeartbeatAck, and what said it.
 func (m *linkMode) observe(mode linkpb.Mode, source string) {
+	m.observeSince(mode, source, time.Now())
+}
+
+// observeSince is observe for a mode its gateway decided no sooner than since: a Welcome states the mode the gateway
+// gave its connection on taking the upgrade, which came after the runner began to open it.
+func (m *linkMode) observeSince(mode linkpb.Mode, source string, since time.Time) {
 	if mode == linkpb.Mode_MODE_UNSPECIFIED {
 		return // not stated: the runner keeps the transport it is using
 	}
 	m.mu.Lock()
 	if m.server == mode && (mode == linkpb.Mode_MODE_LINK || !m.refused) {
+		m.mu.Unlock()
+		return
+	}
+	if at := m.httpNewsAtLocked(); mode == linkpb.Mode_MODE_HTTP && since.Before(at) {
+		// HTTPS still refuses: the work stays on the link, and its next connection opens at `at` (linkWork.loop).
+		m.log(fmt.Sprintf("runner link: %s said MODE_HTTP less than %s after %s, so its gateway, which reads RUNNER_LINK_REQUIRED every second, may not have read it yet; daemon calls stay on the runner link, and its next connection opens in %s",
+			source, linkModeReadLag, m.why, max(time.Until(at), 0).Round(time.Millisecond)))
 		m.mu.Unlock()
 		return
 	}
@@ -207,6 +228,21 @@ func (m *linkMode) observe(mode linkpb.Mode, source string) {
 	m.mu.Unlock()
 }
 
+// httpNewsAt is when a MODE_HTTP will be taken as the switch while HTTPS refuses the work: linkModeReadLag after the
+// refusal, unless a gateway has said MODE_LINK since, after which every MODE_HTTP is. Zero while HTTPS does not refuse.
+func (m *linkMode) httpNewsAt() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.httpNewsAtLocked()
+}
+
+func (m *linkMode) httpNewsAtLocked() time.Time {
+	if !m.refused || m.server == linkpb.Mode_MODE_LINK {
+		return time.Time{}
+	}
+	return m.refusedAt.Add(linkModeReadLag)
+}
+
 // upgradeRequired takes an HTTPS daemon call answered UPGRADE_REQUIRED: the control plane serves daemon routes only
 // over the link now.
 func (m *linkMode) upgradeRequired(call string) {
@@ -215,7 +251,7 @@ func (m *linkMode) upgradeRequired(call string) {
 	if m.refused {
 		return
 	}
-	m.refused = true
+	m.refused, m.refusedAt = true, time.Now()
 	m.why = "the control plane answered " + call + " with UPGRADE_REQUIRED"
 	m.updateLocked("")
 }
