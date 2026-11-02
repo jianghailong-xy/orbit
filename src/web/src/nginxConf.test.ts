@@ -73,6 +73,12 @@ describe('nginx: hashed assets', () => {
   });
 });
 
+describe('nginx: the script a page waits for', () => {
+  it('is kept for a day, so that no load waits on asking again, and says nothing of a file it does not have', () => {
+    expect(locationDirectives('= /theme-boot.js')).toEqual(['add_header Cache-Control "public, max-age=86400"']);
+  });
+});
+
 describe('nginx: runner downloads', () => {
   const dl = locationDirectives('/dl/');
 
@@ -129,7 +135,7 @@ describe('nginx: the pages\' Content-Security-Policy', () => {
     // second policy on the files the apiserver answers with `Content-Security-Policy: sandbox`.
     const serverLevel = conf.replace(/#[^\n]*/g, '').replace(/location[^{]*\{[^}]*\}/g, '');
     expect(serverLevel).not.toContain('add_header');
-    for (const block of ['/api/', '/assets/', '/dl/', '= /healthz']) {
+    for (const block of ['/api/', '/assets/', '= /theme-boot.js', '/dl/', '= /healthz']) {
       expect(policyOf(locationDirectives(block))).toEqual([]);
     }
   });
