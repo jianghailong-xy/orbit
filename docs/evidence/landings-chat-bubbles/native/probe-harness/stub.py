@@ -90,7 +90,7 @@ T3_AT = today(0.6)
 SETTLED = [
     ("LY4", "Land · T1 install.sh: keep one orbit binary per account", "TASK", "LANDED", yesterday(22, 11), yesterday(22, 2), "T1", None),
     ("LM1", "Merge project/P1 → main · #1", "PROMOTION", "MERGED", yesterday(22, 13), yesterday(22, 11), None, "PM1"),
-    ("LY1", "Land · T2 host setup refuses a binary it did not install", "TASK", "LANDED", yesterday(23, 7), yesterday(22, 40), "T2", None),
+    ("LY1", "Land · T2 host setup refuses a binary it did not install", "TASK", "LANDED", yesterday(23, 7), yesterday(21, 40), "T2", None),
     ("LM2", "Merge project/P1 → main · #2", "PROMOTION", "MERGED", yesterday(23, 9), yesterday(23, 7), None, "PM2"),
     ("LY3", "Land · T4 install.sh under sudo writes the unit file once", "TASK", "LANDED", yesterday(23, 25), yesterday(23, 15), "T7", None),
     ("LM3", "Merge project/P1 → main · #3", "PROMOTION", "MERGED", yesterday(23, 29), yesterday(23, 25), None, "PM3"),

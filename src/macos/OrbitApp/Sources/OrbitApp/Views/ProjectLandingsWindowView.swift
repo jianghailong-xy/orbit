@@ -385,7 +385,7 @@ struct ProjectLandingsWindowView: View {
             VStack(alignment: .leading, spacing: 0) {
                 (Text("\(parts.first ?? "") — ").foregroundStyle(.secondary)
                     + Text(parts.dropFirst().joined(separator: " — ")).fontWeight(.semibold))
-                    .font(.orbitListSubtitle)
+                    .font(.orbitSubtext)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
                 HStack(spacing: 8) {
@@ -814,8 +814,20 @@ private struct LandingsWindowBubble: View {
             .font(.orbitLabel)
         }
         .padding(.horizontal, 13).padding(.top, 9).padding(.bottom, 8)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background { fill }
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    /// The bubble's quiet grey. On iOS it stands on the window's own colour: a long press lifts the
+    /// bubble out of the window, and a bare tint would show the dimmed screen through it.
+    private var fill: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return ZStack {
+            #if os(iOS)
+            shape.fill(Color(uiColor: .systemBackground))
+            #endif
+            shape.fill(Color.primary.opacity(0.055))
+        }
     }
 }
 
