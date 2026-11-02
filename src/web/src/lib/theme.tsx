@@ -19,8 +19,8 @@ function resolve(mode: ThemeMode): Resolved {
   return mode;
 }
 
-// Mirrors --bg-base in index.css (and the boot script in index.html, which has to inline
-// them to beat first paint). The canvas every view ends on, so Safari's toolbars — the
+// Mirrors --bg-base in index.css (and public/theme-boot.js, which has to spell them out to
+// beat first paint). The canvas every view ends on, so Safari's toolbars — the
 // bottom address bar on an iPhone — read as part of the page rather than a separate strip.
 const THEME_COLOR: Record<Resolved, string> = { light: '#ffffff', dark: '#202023' };
 
