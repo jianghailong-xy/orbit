@@ -15,7 +15,7 @@ import (
 const fileHelp = `orbit file — keep files in Orbit instead of in the repository
 
 Usage:
-  orbit file upload <path> [--task-id ID] [--label TEXT] [--json]
+  orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--json]
   orbit file fetch <id> [--json]
   orbit file list [--task-id ID | --session-id ID | --evidence-id ID] [--json]
 
@@ -30,7 +30,7 @@ var fileActionHelp = map[string]string{
 	"upload": `orbit file upload — keep a file or a folder in Orbit
 
 Usage:
-  orbit file upload <path> [--task-id ID] [--label TEXT] [--json]
+  orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--json]
 
 Options:
   [path]                   The file or directory, absolute or relative to here. Required. Its real
@@ -43,6 +43,11 @@ Options:
                            input, use task_create's attachmentIds; a folder goes file by file
   --label TEXT             What this is, in a few words (up to ` + strconv.Itoa(fileLabelMaxChars) + ` characters). On a directory
                            it is the bundle's
+  --as test-report         Read one Playwright JSON or JUnit XML report and keep a summary with the
+                           file, answered as "testReport": total, passed, failed, skipped, duration,
+                           and failed and skipped test names. It stays after the file expires, and
+                           evidence citing the file shows it. Anything else, a directory included,
+                           is kept as a plain file and "note" says so
   --json
 
 The answer has the id, sha256, sizeBytes and an orbit-attachment: link to put in a reply. A directory
@@ -90,11 +95,12 @@ var fileCLICapabilities = []cliCapabilitySpec{
 	{
 		Tool:  "file_upload",
 		Argv:  []string{"orbit", "file", "upload"},
-		Usage: "orbit file upload <path> [--task-id ID] [--label TEXT] [--json]",
+		Usage: "orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--json]",
 		Arguments: []string{
 			"[path] (required; a file or a directory)",
 			"--task-id <id> (this session's own task; any other is refused)",
 			"--label <text>",
+			"--as test-report (keep a summary of a Playwright JSON or JUnit XML report)",
 			"--json",
 		},
 		Mutates:     true,
@@ -148,11 +154,12 @@ func cmdFileCLI(args []string, out io.Writer) error {
 	}
 	fs := newCLIFlagSet("orbit file " + action)
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	var taskID, label, sessionID, evidenceID *string
+	var taskID, label, as, sessionID, evidenceID *string
 	switch action {
 	case "upload":
 		taskID = fs.String("task-id", "", "this session's own task")
 		label = fs.String("label", "", "what this is")
+		as = fs.String("as", "", "test-report: keep a summary of this report")
 	case "list":
 		taskID = fs.String("task-id", "", "this task's files")
 		sessionID = fs.String("session-id", "", "this session's files")
@@ -170,7 +177,7 @@ func cmdFileCLI(args []string, out io.Writer) error {
 			return fmt.Errorf("orbit file upload takes one path: %s", fileActionHelp["upload"])
 		}
 		tool = "file_upload"
-		toolArgs["path"], toolArgs["taskId"], toolArgs["label"] = positionals[0], *taskID, *label
+		toolArgs["path"], toolArgs["taskId"], toolArgs["label"], toolArgs["as"] = positionals[0], *taskID, *label, *as
 	case "fetch":
 		if len(positionals) != 1 {
 			return fmt.Errorf("orbit file fetch takes one id: %s", fileActionHelp["fetch"])

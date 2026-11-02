@@ -1,7 +1,8 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 import { MAX_BUNDLE_FILES, MAX_BUNDLE_PATH_CHARS, MAX_FILE_LABEL_CHARS } from './files.service';
+import { TEST_REPORT_UPLOAD } from './test-report';
 
 /**
  * Text a row keeps: a NUL reaches Postgres as an error after the bytes are stored, so it is refused at the door with the
@@ -22,6 +23,11 @@ export class UploadFileDto {
   @MaxLength(MAX_FILE_LABEL_CHARS)
   @Matches(NO_CONTROL_CHARACTERS, { message: 'label must not hold control characters' })
   label?: string;
+
+  /** Read this file as a test report, and keep what it says with it (FilesService.uploadFile). */
+  @IsOptional()
+  @IsIn([TEST_REPORT_UPLOAD])
+  as?: typeof TEST_REPORT_UPLOAD;
 }
 
 export class FileBundleEntryDto {
