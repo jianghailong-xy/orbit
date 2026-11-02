@@ -465,10 +465,15 @@ type StoredWake = {
   createdAt: Date;
 };
 
+/** The reason on a job the runner's permission gate never started (runner-go background_gate.go). */
+const BACKGROUND_JOB_NOT_ALLOWED = 'not_allowed';
+
 /** What the kill reasons a runner reports mean for somebody deciding whether to wait again. */
 const KILLED_BECAUSE: Record<string, string> = {
   runner_shutdown: 'the runner process hosting it stopped — a restart or a self-update — and the job was killed with it',
   session_cancelled: 'the session was cancelled, or handed to another runner process, and the job was killed with it',
+  [BACKGROUND_JOB_NOT_ALLOWED]:
+    'it never ran: this session\'s permission mode asked the owner first, and they did not allow it; the output says what to do',
 };
 
 function describeTrigger(wake: StoredWake): string {
@@ -510,7 +515,8 @@ export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string =
   const lines = ['<background-job-wake>', WAKE_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
   for (const wake of wakes) lines.push(...jobLines(wake, (job) => [describeTrigger(job)]));
   lines.push('  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.');
-  if (wakes.some((wake) => wake.status === 'killed')) {
+  // Not for one the owner refused: nothing was cut short, and asking again is what they just answered.
+  if (wakes.some((wake) => wake.status === 'killed' && wake.reason !== BACKGROUND_JOB_NOT_ALLOWED)) {
     lines.push('  A killed job does not come back on its own: to keep waiting, start it again with bg_run.');
   }
   lines.push('</background-job-wake>');

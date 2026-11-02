@@ -80,6 +80,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             if (CoordinatorQueue.isDecidingMyself(card)) { CoordinatorPausedLine(card); CoordinatorNote(card, CoordinatorQueue.decideHere) }
             Text("Evidence revision ${row.text("evidenceRevision") ?: ""}", style = MaterialTheme.typography.labelMedium)
             Field("Criterion", row.obj("criterion")?.get("text"), open)
+            // What the evidence is, right under what it is measured against, and only when this version cites a file (§2.6).
+            EvidenceFilesArea(card)
             Field("What the submitter says was established", row["claim"], open)
             Field("Not established", row["gaps"], open)
             Text("Cited checks", style = MaterialTheme.typography.titleSmall)

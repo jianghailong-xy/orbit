@@ -86,6 +86,28 @@ fun clearAttachmentHandoffs(context: Context) {
     root.deleteRecursively()
 }
 
+/** [action]: `Intent.ACTION_SEND`, `Intent.ACTION_VIEW` or "copy": the bytes reach another app or the clipboard only as one of these
+ * private handoff files. */
+internal suspend fun handOffFile(context: Context, name: String, mime: String, data: ByteArray, action: String) {
+    val file = withContext(Dispatchers.IO) {
+        val directory = File(context.cacheDir, "handoff/${UUID.randomUUID()}").apply { check(mkdirs()) }
+        File(directory, name.substringAfterLast('/').substringAfterLast('\\').ifBlank { "attachment" }).apply { writeBytes(data) }
+    }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
+    val clip = ClipData.newUri(context.contentResolver, name, uri)
+    if (action == "copy") {
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    } else {
+        val intent = Intent(action).apply {
+            if (action == Intent.ACTION_SEND) { type = mime; putExtra(Intent.EXTRA_STREAM, uri) }
+            else setDataAndType(uri, mime)
+            clipData = clip
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, if (action == Intent.ACTION_SEND) "Share file" else "Open file"))
+    }
+}
+
 /** [open]: where a link inside a previewed Markdown file goes. */
 @Composable
 fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment",
@@ -142,25 +164,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
             context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("Unavailable destination")
         } }
     }
-    suspend fun handoff(data: ByteArray, action: String) {
-        val file = withContext(Dispatchers.IO) {
-            val directory = File(context.cacheDir, "handoff/${UUID.randomUUID()}").apply { check(mkdirs()) }
-            File(directory, name.substringAfterLast('/').substringAfterLast('\\').ifBlank { "attachment" }).apply { writeBytes(data) }
-        }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
-        val clip = ClipData.newUri(context.contentResolver, name, uri)
-        if (action == "copy") {
-            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-        } else {
-            val intent = Intent(action).apply {
-                if (action == Intent.ACTION_SEND) { type = mime; putExtra(Intent.EXTRA_STREAM, uri) }
-                else setDataAndType(uri, mime)
-                clipData = clip
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(intent, if (action == Intent.ACTION_SEND) "Share file" else "Open file"))
-        }
-    }
+    suspend fun handoff(data: ByteArray, action: String) = handOffFile(context, name, mime, data, action)
     suspend fun saveImage(data: ByteArray) = withContext(Dispatchers.IO) {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(data, 0, data.size, options)

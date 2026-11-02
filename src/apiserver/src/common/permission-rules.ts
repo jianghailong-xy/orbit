@@ -248,6 +248,21 @@ export function ruleCoversApproval(
   rules: readonly PermissionRule[],
 ): boolean {
   if (!SERVER_MATCHED_RUNTIMES.has(provider) || !toolName) return false;
+  return rulesAnswerCall(toolName, input, rules);
+}
+
+/**
+ * Whether the workspace's rules answer the card the runner's gate files for a background job
+ * (runner-go background_gate.go). The same reading of the same rules as `ruleCoversApproval`, on every
+ * runtime: its question came from the runner rather than from an engine, so no engine's matcher has
+ * seen it, Claude's and the runtimes' that ask nothing themselves included, and no matcher but this one
+ * ever will.
+ */
+export function ruleCoversBackgroundJobCard(input: unknown, rules: readonly PermissionRule[]): boolean {
+  return rulesAnswerCall('Bash', input, rules);
+}
+
+function rulesAnswerCall(toolName: string, input: unknown, rules: readonly PermissionRule[]): boolean {
   const stored = normalizePermissionRules(rules);
   if (stored.length === 0) return false;
   if (SHELL_TOOLS.has(toolName)) {

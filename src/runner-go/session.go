@@ -1231,7 +1231,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// they were refused. What stays Claude-only is the *guard* that pushes an agent
 	// here (claude_spawn.go); each engine's own background mechanism, and what
 	// Orbit can do about it, is recorded beside that engine's spawn.
-	if stopBgJobService, err := startSessionBgJobService(sessionCtx, bg, job, execDir, scratch); err != nil {
+	if stopBgJobService, err := startSessionBgJobService(sessionCtx, t, bg, job, execDir, scratch); err != nil {
 		// Not fatal, and not silent: the bg_* tools report the transport as
 		// unavailable, and the agent keeps the engine-owned shells it has today.
 		logln("background job service unavailable for", sessionID+":", err)
@@ -2818,6 +2818,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				for _, f := range frames {
 					f.apply(&job.Agent)
 				}
+				job.notePermissionMode(job.Agent.PermissionMode)
 				if refused == nil {
 					// In place: no procCancel, no reloadRequested, and so no `resumed` marker
 					// either. Nothing was resumed, and a transcript that says otherwise teaches
@@ -2878,6 +2879,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					}
 					if cfg.PermissionMode != "" {
 						job.Agent.PermissionMode = cfg.PermissionMode
+						job.notePermissionMode(cfg.PermissionMode)
 					}
 					if cfg.Effort != nil {
 						job.Agent.Effort = *cfg.Effort
@@ -2990,6 +2992,7 @@ scanLoop:
 			continue
 		}
 		handleMessage(msg, emit, bg)
+		claudeNoteEngineMode(job, msg)
 		// The init handshake is where the CLI names its own version, and it is the only place
 		// it does. One control frame has to know it — apply_flag_settings answers `success`
 		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)

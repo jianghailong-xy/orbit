@@ -154,10 +154,14 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 	// off for this invocation. This file is the FLAG settings layer, so the machine's own
 	// interactive claude keeps them; --strict-mcp-config is deliberately not the switch,
 	// because it would also drop a repository's checked-in .mcp.json.
+	//
+	// useAutoModeDuringPlan off: left on, Claude Code's Plan hands a shell command to the Auto classifier,
+	// and a command it passes runs and writes in the middle of a plan. Off, a command in Plan asks a person.
 	settings := map[string]interface{}{
 		"disableClaudeAiConnectors": true,
 		"syncClaudeAiPlugins":       false,
 		"syncClaudeAiSkills":        false,
+		"useAutoModeDuringPlan":     false,
 	}
 	if orbitExe != "" {
 		guard := []map[string]interface{}{{"type": "command", "command": orbitExe + " hook bg-guard"}}
