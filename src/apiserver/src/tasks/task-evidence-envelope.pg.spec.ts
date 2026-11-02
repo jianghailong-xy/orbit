@@ -46,6 +46,7 @@ const GREEN_COMMAND = 'npm run test:outcome-reconciler:fast-gate';
 const CHECKPOINT_SHA = '4d1f0b6c2a8e77935cc0a1b2d3e4f50617283940';
 const ARTIFACT_REF = 'git-bundle://orbit/evidence-envelope/4d1f0b6c.bundle';
 const MERGED_SHA = 'a0b1c2d3e4f5061728394a5b6c7d8e9f01234567';
+const FILE_SHA256 = '3'.repeat(64);
 
 async function empty(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
@@ -142,6 +143,12 @@ async function fixture(db: PrismaClient) {
     });
   }
 
+  await db.fileBlob.create({ data: { sha256: FILE_SHA256, sizeBytes: 2048, storage: 'local' } });
+  const fileId = randomUUID();
+  await db.attachment.create({
+    data: { id: fileId, ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 2048, fileName: 'run.log', sha256: FILE_SHA256 },
+  });
+
   await db.toolCall.createMany({
     data: [
       {
@@ -223,7 +230,7 @@ async function fixture(db: PrismaClient) {
     },
   });
 
-  return { ownerId, workspaceId, projectId, taskId, sessionId, otherTaskId, otherSessionId, criterionId };
+  return { ownerId, workspaceId, projectId, taskId, sessionId, otherTaskId, otherSessionId, criterionId, fileId };
 }
 
 /** A submittable envelope. Every call below names the criterion key, which is only known once
@@ -375,6 +382,7 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
     { kind: 'COMMIT', ref: CHECKPOINT_SHA },
     { kind: 'COMMIT', ref: MERGED_SHA },
     { kind: 'ARTIFACT', ref: ARTIFACT_REF },
+    { kind: 'FILE', ref: uuidToBase62(f.fileId) },
     { kind: 'ARTIFACT', ref: 'git-bundle://nowhere.bundle' },
   ];
   await t.test('input 4: a legal submission returns its revision and every citation', async () => {
@@ -390,6 +398,7 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
         ['COMMIT', CHECKPOINT_SHA, true],
         ['COMMIT', MERGED_SHA, true],
         ['ARTIFACT', ARTIFACT_REF, true],
+        ['FILE', uuidToBase62(f.fileId), true],
         ['ARTIFACT', 'git-bundle://nowhere.bundle', false],
       ],
     );
@@ -404,7 +413,7 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
       'accepted-1',
     );
     assert.equal(replay.id, accepted.id);
-    assert.equal(replay.citations?.length, 5);
+    assert.equal(replay.citations?.length, 6);
   });
 
   await t.test('a stale or unknown criterion is reported, never refused', async () => {
@@ -423,15 +432,18 @@ suite('the evidence envelope is checked against rows, and the receipt says what 
     assert.equal(unknownKey.criterionMatch?.matchesLive, false);
   });
 
-  await t.test('the ledger stores the envelope and re-derives no citation', async () => {
+  await t.test('the ledger stores the envelope and re-derives no citation but a file\'s', async () => {
     // Which rows a citation resolved to is a fact about the moment it was submitted; the rows it
     // named may have been deleted since, and a `resolved` that quietly meant "as of now" would be
     // a different fact under the same name.
     const ledger: EvidenceReceiptView[] = await service.list(f.ownerId, f.taskId);
     assert.deepEqual(ledger.map((row) => row.revision), ['1', '2', '3']);
-    assert.equal(ledger[0].citations, null);
+    assert.equal(ledger[1].citations, null);
+    assert.equal(ledger[1].criterionMatch, null);
+    // A revision that cites a file is told as of the read, for the file's sake (`TaskCompletionEvidenceDto.citations`).
+    assert.equal(ledger[0].citations?.length, 6);
     assert.equal(ledger[0].criterionMatch, null);
-    assert.equal((ledger[0].evidence as { checks: unknown[] }).checks.length, 5);
+    assert.equal((ledger[0].evidence as { checks: unknown[] }).checks.length, 6);
     assert.equal((ledger[0].evidence as { claim: string }).claim, 'the fast gate passed on this branch');
   });
 });
