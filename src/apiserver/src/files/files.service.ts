@@ -74,16 +74,6 @@ export const MAX_BUNDLE_PATH_CHARS = 1024;
 /** How many rows one `file_list` answers: a row per upload, so a folder of any size is one of them. */
 const FILE_LIST_LIMIT = 200;
 
-/**
- * How many files one page of `evidenceFiles` holds: a whole folder, so most versions are one read. A version cites at most
- * 50 things and each can be a folder of 1000, so the whole list can be 50,000 files, and only a page of it is answered at a
- * time. The largest page, with every path and label at its limit, measures 1.7 MB of JSON.
- */
-export const EVIDENCE_FILES_PAGE = MAX_BUNDLE_FILES;
-
-/** The largest revision a `bigint` column holds. */
-const MAX_REVISION = 9_223_372_036_854_775_807n;
-
 /** What `file_upload` says of a file it was told is a test report and could not read as one. */
 export const NOT_A_TEST_REPORT = 'Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary.';
 
@@ -132,6 +122,16 @@ function fileView({ fileName, testReportSummary, ...row }: FileViewRow): FileVie
     testReport: testReportSummary as unknown as TestReportSummary | null,
   };
 }
+
+/**
+ * How many files one page of `evidenceFiles` holds: a whole folder, so most versions are one read. A version cites at most
+ * 50 things and each can be a folder of 1000, so the whole list can be 50,000 files, and only a page of it is answered at a
+ * time. The largest page, with every path and label at its limit, measures 1.7 MB of JSON.
+ */
+export const EVIDENCE_FILES_PAGE = MAX_BUNDLE_FILES;
+
+/** The largest revision a `bigint` column holds. */
+const MAX_REVISION = 9_223_372_036_854_775_807n;
 
 const EVIDENCE_FILE_SELECT = { ...FILE_VIEW_SELECT, expiredAt: true } as const satisfies Prisma.AttachmentSelect;
 
