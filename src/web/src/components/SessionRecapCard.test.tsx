@@ -3,11 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RecapOutcome } from '../api';
 
 /**
  * The conversation's Recap card on its own: when it says the recap was written, what a refresh
- * that wrote nothing says for each reason the pass gives, and that a refresh that did write reads
- * the session again rather than drawing a line of its own.
+ * that wrote nothing says for each reason the pass gives, that a refresh that did write reads the
+ * session again rather than drawing a line of its own, and that Refresh and Hide are its ⋯'s menu.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -66,6 +67,8 @@ describe('SessionRecapCard', () => {
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    // The open menu measures its button; jsdom has no ResizeObserver.
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     vi.mocked(refreshSessionRecap).mockReset();
     Object.values(toast).forEach((spy) => spy.mockReset());
     onHide.mockReset();
@@ -79,6 +82,7 @@ describe('SessionRecapCard', () => {
     await act(async () => root.unmount());
     container.remove();
     client.clear();
+    vi.unstubAllGlobals();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
@@ -92,14 +96,35 @@ describe('SessionRecapCard', () => {
     });
   }
 
-  async function pressRefresh(): Promise<void> {
-    const button = container.querySelector<HTMLButtonElement>('.chat-recap-refresh')!;
-    expect(button.getAttribute('aria-label')).toBe(RECAP_CARD_COPY.refresh);
+  const more = (): HTMLButtonElement => container.querySelector<HTMLButtonElement>('.chat-recap-more')!;
+  const menu = (): HTMLElement | null => document.body.querySelector<HTMLElement>('[role="menu"]');
+
+  /** Press the ⋯ and answer the items of the menu it opens, by their words. */
+  async function openMenu(): Promise<HTMLElement[]> {
     await act(async () => {
-      button.click();
+      more().click();
     });
     await act(async () => {
-      await vi.waitFor(() => expect(button.disabled).toBe(false), { timeout: 5_000, interval: 10 });
+      await vi.waitFor(() => expect(menu()).not.toBeNull(), { timeout: 5_000, interval: 10 });
+    });
+    return [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  }
+
+  /** Run one of the menu's items, and wait for the menu to close behind it. */
+  async function pick(label: string): Promise<void> {
+    const item = (await openMenu()).find((el) => el.textContent?.trim() === label)!;
+    await act(async () => {
+      item.click();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(menu()).toBeNull(), { timeout: 5_000, interval: 10 });
+    });
+  }
+
+  async function pressRefresh(): Promise<void> {
+    await pick(RECAP_CARD_COPY.refresh);
+    await act(async () => {
+      await vi.waitFor(() => expect(more().disabled).toBe(false), { timeout: 5_000, interval: 10 });
     });
   }
 
@@ -110,16 +135,35 @@ describe('SessionRecapCard', () => {
     expect(container.querySelector('.chat-recap-text')?.textContent).toBe('Fixed the login flow; tests pass.');
   });
 
-  it('hands the conversation its ×, named for screen readers, without asking the server anything', async () => {
+  it('holds Refresh and Hide behind one ⋯ named for screen readers, and hands Hide to the conversation without asking the server anything', async () => {
     await render();
-    const hide = container.querySelector<HTMLButtonElement>('.chat-recap-hide')!;
-    expect(hide.getAttribute('aria-label')).toBe(RECAP_CARD_COPY.hide);
-    expect(hide.title).toBe('Hide recap');
+    expect(container.querySelectorAll('button')).toHaveLength(1);
+    expect(more().getAttribute('aria-label')).toBe('Recap actions');
+    const items = await openMenu();
+    expect(items.map((el) => el.textContent?.trim())).toEqual(['Refresh recap', 'Hide recap']);
+    // Shown while its menu is open, though the pointer has left the card for the menu.
+    expect(container.querySelector('.chat-recap')!.classList.contains('is-open')).toBe(true);
     await act(async () => {
-      hide.click();
+      items[1].click();
     });
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(refreshSessionRecap).not.toHaveBeenCalled();
+  });
+
+  it('keeps its ⋯ busy while a refresh asks, so a second one cannot start', async () => {
+    let answer!: (outcome: RecapOutcome) => void;
+    vi.mocked(refreshSessionRecap).mockReturnValue(new Promise<RecapOutcome>((resolve) => { answer = resolve; }));
+    await render();
+    await pick(RECAP_CARD_COPY.refresh);
+    expect(more().disabled).toBe(true);
+    expect(container.querySelector('.chat-recap')!.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      answer({ written: false, reason: 'no-events' });
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(more().disabled).toBe(false), { timeout: 5_000, interval: 10 });
+    });
+    expect(refreshSessionRecap).toHaveBeenCalledTimes(1);
   });
 
   it('reads the session again once a refresh wrote, and says nothing', async () => {

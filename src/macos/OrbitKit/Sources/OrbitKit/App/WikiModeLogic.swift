@@ -24,6 +24,16 @@ public enum WikiModeCopy {
     public static let reviewModeLead = "Who has to look at a change before agents get it."   // WIKI_REVIEW_MODE_LEAD
     public static let modeDefault = "default"                                     // WIKI_MODE_DEFAULT
 
+    // The Workspaces section (mock 38).
+    public static let workspaces = "Workspaces"                                   // WIKI_WORKSPACES
+    public static let workspacesLead = "Agents in these workspaces read this wiki, and maintenance learns from their sessions."   // WIKI_WORKSPACES_LEAD
+    public static let workspaceLeftOut = "Left out. It stays out until you turn it back on."   // WIKI_WORKSPACE_LEFT_OUT
+    public static let workspacesJoin = "New workspaces on this repository join by themselves. A workspace on another repository has its own wiki."   // WIKI_WORKSPACES_JOIN
+    public static let workspacesJoinNoRepository = "This wiki has no repository behind it, so a workspace joins only when you add it."   // WIKI_WORKSPACES_JOIN_NO_REPOSITORY
+    public static let workspacesEmpty = "No workspace is in this wiki yet."       // WIKI_WORKSPACES_EMPTY
+    public static let addWorkspace = "Add workspace…"                             // WIKI_ADD_WORKSPACE
+    public static let addWorkspaceGroup = "Workspaces with no repository"         // WIKI_ADD_WORKSPACE_GROUP
+
     /// A mode's name (`WIKI_MODE_LABELS`). Empty for one this build does not know.
     public static func modeLabel(_ mode: WikiReviewMode) -> String {
         switch mode {
@@ -171,11 +181,12 @@ public enum WikiModeLogic {
 
     /// The settings page's sections, top to bottom — the web's order (`WIKI_SETTINGS_SECTIONS`).
     public enum SettingsSection: String, CaseIterable, Sendable {
-        case reviewMode, maintenance
+        case reviewMode, workspaces, maintenance
 
         public var title: String {
             switch self {
             case .reviewMode:  return WikiModeCopy.reviewMode
+            case .workspaces:  return WikiModeCopy.workspaces
             case .maintenance: return WikiModeCopy.maintenance
             }
         }

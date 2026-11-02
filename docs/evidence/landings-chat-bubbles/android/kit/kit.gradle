@@ -1,0 +1,9 @@
+// Evidence kit for the Android Landings window drawn as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): compiles
+// src/LandingsChatShotsTest.kt (kept in this directory) into the androidTest APK, so nothing under src/android/app/src/androidTest changes
+// for the shots. Pass it as a second -I beside a build-dir init script, with `gradlew -p src/android`: the path is taken from the Android
+// project's root.
+allprojects { p ->
+    p.plugins.withId('com.android.application') {
+        p.android.sourceSets.androidTest.java.srcDir(new File(p.rootProject.projectDir, '../../docs/evidence/landings-chat-bubbles/android/kit/src').canonicalFile)
+    }
+}

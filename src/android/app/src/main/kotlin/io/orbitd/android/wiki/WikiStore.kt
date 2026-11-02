@@ -658,6 +658,14 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
     }
 
+    /** Bring a workspace into a space or leave it out, written at once. Null on success, else the sentence to show. */
+    suspend fun setWorkspace(space: WikiSpace, workspaceId: String, inWiki: Boolean): String? = owned({ refusal -> notice(refusal, WikiCopy.settingsSaved, space.slug) }) {
+        try {
+            if (inWiki) client.addWorkspace(space.id, workspaceId) else client.leaveWorkspaceOut(space.id, workspaceId)
+            outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
+    }
+
     // MARK: an entry a review mode applied
 
     suspend fun confirm(entry: WikiEntry): String? = answer(entry.id, WikiModeCopy.confirmed, entry.displayTitle) { client.confirmEntry(entry.id) }

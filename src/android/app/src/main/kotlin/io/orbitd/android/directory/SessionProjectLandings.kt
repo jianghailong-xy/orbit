@@ -12,8 +12,9 @@ import java.time.ZoneId
 import kotlinx.serialization.json.JsonObject
 
 // The Landings row on a project's sessions page and the project's Landings window (owner 2026-10-27, docs/mocks/landings-one-window;
-// contract §2.9 LS6, revision 28): the row's count sentence, the window's day sections and its `Now`, and the read-only footer. A direct
-// port of OrbitKit's SessionProjectLandings.swift, itself a port of the web's `landingsWindow` and `landingsRowSummary`.
+// contract §2.9 LS6, revision 28): the row's count sentence, the window's day sections and its `Now`, and the read-only footer; since
+// owner 2026-11-02 (docs/mocks/landings-chat-bubbles) also a day's groups of messages. A direct port of OrbitKit's
+// SessionProjectLandings.swift, itself a port of the web's `landingsWindow` and `landingsRowSummary`.
 
 /** The row's and the window's words, and the source session's derived label's. */
 object SessionLandingsCopy {
@@ -150,6 +151,23 @@ object SessionProjectLandings {
             .forEach { buckets[recencyBucket(it.at, today, zone) - 1] += it.row }
         val days = buckets.withIndex().reversed().filter { it.value.isNotEmpty() }.map { LandingsWindowDay(dayTitles[it.index], it.value) }
         return LandingsWindow(days, cards.sortedWith(compareBy<LandingsWindowCard> { it.at }.thenBy { it.sessionId }))
+    }
+
+    /** How far apart two settled landings may be and still read as one group of messages: ten minutes (the Swift's `groupGap`). */
+    const val groupGapMs = 10 * 60 * 1000L
+
+    /** A day's rows, oldest first, as runs Orbit sent close together (owner 2026-11-02, docs/mocks/landings-chat-bubbles): the window
+     *  draws each as one group of messages, Orbit's avatar once, beside the first — so a task's landing and the merge into main that
+     *  carried it read as one exchange. A row joins the group of the one before it when it settled at most [groupGapMs] after it, and
+     *  starts a group of its own when it came later or either instant is unknown. The day sections already split at midnight. */
+    fun groups(rows: List<LandingsWindowRow>): List<List<LandingsWindowRow>> {
+        val runs = mutableListOf<MutableList<LandingsWindowRow>>()
+        for (row in rows) {
+            val last = runs.lastOrNull()?.last()
+            if (last != null && last.at != Long.MIN_VALUE && row.at != Long.MIN_VALUE && row.at - last.at <= groupGapMs) runs.last() += row
+            else runs += mutableListOf(row)
+        }
+        return runs
     }
 
     /** `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` — a count of 0 is left out, today's two share one

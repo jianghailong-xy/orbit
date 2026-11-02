@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>38 wiki workspaces</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/root.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/reset.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Floating.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<script>addEventListener('load', () => { for (const f of window.__afterLoad || []) f(); });</script>
+<style>
+/* Board 38: the Workspaces card of Wiki settings. The web page is drawn with the shipped CSS and class names;
+   wk-ws-* are the classes the implementation would add. iOS is drawn as boards 20 and 35 draw it. */
+.pb-sheet.p2.b38 { width: 1840px; }
+.b38 .pb-lede { max-width: 1700px; }
+.p2.b38 .pb-grid { grid-template-columns: 600px 402px minmax(0, 1fr); column-gap: 32px; }
+.b38 .pb-note p { margin-bottom: 10px; }
+.b38 .pb-note .m-n { margin-right: 6px; }
+.b38 .b-page { background: var(--bg-base); padding: 16px 14px 2px; margin: 0 -14px; border-radius: 12px; }
+.b38 .b-cap { margin: 0 0 6px; font-size: 12.5px; color: var(--text-3); }
+.b38 .b-cap b { color: var(--text-1); font-weight: 600; }
+.b38 .b-stack > * + * { margin-top: 18px; }
+.b38 .wk-settings { margin: 0; max-width: 600px; }
+.b38 .wk-settings-card:last-child { margin-bottom: 14px; }
+.b38 .orbit-switch { flex: none; }
+.b38 .b-pinned { position: relative; }
+.b38 .b-pin { position: absolute; left: -22px; top: 2px; margin: 0; }
+.b38 .wk-ws-row.pb-mark { outline-offset: 4px; }
+
+/* What the implementation adds. */
+.wk-ws-list { display: flex; flex-direction: column; }
+.wk-ws-row { display: flex; align-items: center; gap: 16px; min-height: 42px; padding: 7px 0; }
+.wk-ws-row + .wk-ws-row { border-top: 1px solid var(--border-subtle); }
+.wk-ws-tx { flex: 1; min-width: 0; }
+.wk-ws-t { font-size: 13.5px; line-height: 1.5; color: var(--text-1); overflow-wrap: anywhere; }
+.wk-ws-t .dim { color: var(--text-3); }
+.wk-ws-d { margin-top: 1px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-ws-row.off .wk-ws-t { color: var(--text-3); }
+.wk-ws-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; align-items: center; margin-top: 7px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.wk-ws-note { flex: 1 1 260px; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-ws-empty { padding: 10px 0 11px; font-size: 13.5px; line-height: 1.5; color: var(--text-3); }
+
+/* Board-only: the open menu, placed where the shipped menu would land. */
+.b38 .b-anchor { position: relative; }
+.b38 .b-menu { position: absolute; top: 40px; left: auto; right: 0; width: 280px; z-index: 5; }
+.b38 .b-menuroom { padding-bottom: 108px; }
+
+/* iOS pieces this board adds. */
+.io38-ws { min-height: 60px; padding-top: 9px; padding-bottom: 9px; }
+.io38-ws .t { display: block; font-size: 17px; line-height: 22px; letter-spacing: -.2px; }
+.io38-ws .s { display: block; margin-top: 1px; font-size: 13px; line-height: 18px; letter-spacing: 0; color: #8A8A8D; }
+.io38-ws.off .t { color: #8A8A8D; }
+.io38-mh { padding: 5px 18px 7px; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io38-menu { right: 26px; top: 590px; width: 300px; background: #FAFAFC; }
+.io-mi .tx { min-width: 0; }
+
+/* The rule tables. */
+.b38 .b-rules { grid-column: 1 / -1; display: grid; grid-template-columns: 720px minmax(0, 1fr); gap: 24px; align-items: start; }
+.b38 .b-rulecap { margin: 0 0 7px; font-size: 13px; font-weight: 700; color: var(--text-1); }
+.b38 table.rt { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.55; background: #fff; border-radius: 10px; overflow: hidden; }
+.b38 table.rt th, .b38 table.rt td { padding: 8px 11px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+.b38 table.rt tr:last-child td { border-bottom: 0; }
+.b38 table.rt th { background: #f3f4f6; font-weight: 600; color: #33373f; white-space: nowrap; }
+.b38 table.rt td:first-child { color: #33373f; }
+.b38 table.rt code { font: 11.5px/1.4 "DejaVu Sans Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; }
+.b38 table.rt .en { font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif; }
+.b38 table.rt .pb-tag { margin: 0 0 0 4px; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+
+<div class="m-sheet pb-sheet p2 b38">
+<h1 class="m-h1 zh">38 · Wiki 设置：Workspaces 区块（web ｜ iOS ｜ 说明）</h1>
+<p class="pb-lede zh">一个 wiki 本来就能绑多个 workspace，但现在看不到、也改不了。这张图给 Wiki 设置加一张 <b>Workspaces</b> 卡，让 owner 看到谁在这个 wiki 里，并能决定谁不在。web 用线上 CSS 和真实 class 手绘，<code>wk-ws-*</code> 是将来实现要加的 class；iOS 照图 20、35 的画法。示例数据是虚构的，结构照 owner 的截图：一个仓库、五个按区域分的 workspace、同一台 runner。</p>
+<div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag new">新词</span>新增的界面文案 <span class="pb-tag ask">要你拍板</span>影响现有账号的决定 <span class="pb-tag later">另议</span>不在这次范围</div>
+
+<div class="pb-grid">
+  <div class="pb-colhead">web <span>· /wiki/github-com-acme-shop-cli/settings（600px 一列）</span></div><div class="pb-colhead">iOS <span>· 402×874pt · 滚到这一节</span></div><div class="pb-colhead zh">说明</div>
+
+  <div class="pb-band zh"><span class="pb-bn">1</span>设置页 <small>· 五个同仓库的 workspace，其中一个被 owner 关掉</small></div>
+
+  <div class="b-page">
+    <div class="wk-settings">
+      <div class="wk-crumb"><a>Wiki</a><span class="ic">&gt;</span><span>Settings</span></div>
+      <h1 class="page-title">Wiki settings</h1>
+      <div class="wk-settings-sub">github-com-acme-shop-cli · github.com/acme/shop-cli</div>
+
+      <section class="orbit-card wk-settings-card">
+        <div class="orbit-card-head"><h2 class="orbit-card-title">Review mode</h2><div class="orbit-card-extra"><span class="wk-settings-hint">Only you can switch it</span></div></div>
+        <div class="orbit-card-body">
+          <div class="wk-settings-lead">Who has to look at a change before agents get it.</div>
+          <div class="wk-modes orbit-radio-group" data-variant="default">
+            <div class="wk-mode"><label class="orbit-choice orbit-radio-button"><span class="orbit-radio"></span><span class="orbit-choice-label"><span class="wk-mode-t">Manual</span></span></label><div class="wk-mode-d">Every change from sessions, maintenance and imports waits for you in Review.</div></div>
+            <div class="wk-mode on"><label class="orbit-choice orbit-radio-button"><span class="orbit-radio" data-checked></span><span class="orbit-choice-label"><span class="wk-mode-t">Tiered</span><span class="wk-mode-tag">default</span></span></label><div class="wk-mode-d">Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.</div></div>
+            <div class="wk-mode"><label class="orbit-choice orbit-radio-button"><span class="orbit-radio"></span><span class="orbit-choice-label"><span class="wk-mode-t">Automatic</span></span></label><div class="wk-mode-d">The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.</div></div>
+          </div>
+          <div class="aa-ask wk-floors"><b>Always asks you, in any mode:</b> principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.</div>
+        </div>
+      </section>
+
+      <section class="orbit-card wk-settings-card pb-mark" style="border-radius:8px">
+        <span class="m-n">1</span>
+        <div class="orbit-card-head"><h2 class="orbit-card-title">Workspaces</h2></div>
+        <div class="orbit-card-body">
+          <div class="wk-settings-lead b-pinned"><span class="m-n b-pin">2</span>Agents in these workspaces read this wiki, and maintenance learns from their sessions.</div>
+          <div class="wk-ws-list">
+            <div class="wk-ws-row off pb-mark"><span class="m-n">3</span><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ EU <span class="dim">· build-01</span></div><div class="wk-ws-d">Left out. It stays out until you turn it back on.</div></div><span class="orbit-switch" data-size="middle"><span class="orbit-switch-thumb"></span></span></div>
+            <div class="wk-ws-row b-pinned"><span class="m-n b-pin" style="top:12px">4</span><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ JP <span class="dim">· build-01</span></div></div><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+            <div class="wk-ws-row"><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ SG <span class="dim">· build-01</span></div></div><span class="m-n" style="margin-right:-6px">5</span><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+            <div class="wk-ws-row"><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ staging <span class="dim">· build-01</span></div></div><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+            <div class="wk-ws-row"><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ US <span class="dim">· build-01</span></div></div><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+          </div>
+          <div class="wk-ws-foot b-pinned"><span class="m-n b-pin" style="top:14px">6</span>
+            <div class="wk-ws-note">New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.</div>
+            <button type="button" class="orbit-button orbit-button-default orbit-button-middle"><span>Add workspace…</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="orbit-card wk-settings-card">
+        <div class="orbit-card-head"><h2 class="orbit-card-title">Maintenance</h2></div>
+        <div class="orbit-card-body">
+          <div class="wk-maint-rows">
+            <span class="k">Status</span><span class="v"><span class="wk-dot on"></span> On</span>
+            <span class="k">Reads the repository from</span><span class="v">shop-cli @ SG · build-01</span>
+            <span class="k">Model</span><span class="v"><span class="wk-model-line">System model<span class="dim"> · qwen3.8-27b-fp8</span><span class="wk-model-state up"><span class="wk-dot"></span>Up</span></span></span>
+            <span class="k">Daily limit</span><span class="v">8 runs a day</span>
+            <span class="k">Look back</span><span class="v">Last 14 days</span>
+          </div>
+          <div class="wk-maint-foot"><button type="button" class="orbit-button orbit-button-default orbit-button-middle"><span>Edit</span></button><button type="button" class="orbit-button orbit-button-text orbit-button-middle orbit-button-danger"><span>Turn off</span></button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="pb-ios full grouped" data-name="ios-workspaces"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+    <div class="io-set-f" style="padding-top:0">and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.</div>
+    <div class="io-set-h">Workspaces</div>
+    <div class="io-card pb-mark" style="border-radius:26px;outline-offset:1px"><span class="m-n" style="right:8px;top:8px">7</span>
+      <div class="io-lrow io38-ws off"><span class="lb"><span class="t">shop-cli @ EU</span><span class="s">build-01</span><span class="s">Left out. It stays out until you turn it back on.</span></span><span class="io-toggle"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ JP</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ SG</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ staging</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ US</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow tint"><span class="lb">Add workspace…</span></div>
+    </div>
+    <div class="io-set-f">Agents in these workspaces read this wiki, and maintenance learns from their sessions.</div>
+    <div class="io-set-f">New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.</div>
+    <div class="io-set-h">Maintenance</div>
+    <div class="io-card">
+      <div class="io-lrow"><span class="lb">Status</span><span class="v"><span style="color:#34C759">●</span> On</span></div>
+      <div class="io-lrow"><span class="lb">Reads the repository from</span><span class="v">shop-cli @ SG</span></div>
+      <div class="io-lrow"><span class="lb">Model</span><span class="v">System model</span></div>
+      <div class="io-lrow"><span class="lb">Daily limit</span><span class="v">8 runs a day</span></div>
+    </div>
+  </div>
+
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">1</span><b>放在 Review mode 和 Maintenance 之间。</b>紧贴 Maintenance，「谁在这个 wiki 里」和「从哪里读仓库」上下分开，不再混成一件事。Maintenance 卡这次一字不动。<span class="pb-tag later">另议</span>下拉框收窄、runner 离线时自动换</p>
+    <p><span class="m-n note-n">2</span><b>卡头一句讲在 wiki 里意味着什么。</b><span class="pb-tag new">新词</span><span class="en">Workspaces · Agents in these workspaces read this wiki, and maintenance learns from their sessions.</span></p>
+    <p><span class="m-n note-n">3</span><b>关掉的行变灰，并说明它不会自己回来。</b><span class="pb-tag new">新词</span><span class="en">Left out. It stays out until you turn it back on.</span></p>
+    <p><span class="m-n note-n">4</span><b>列的是这个仓库的全部 workspace</b>，再加手动加入的。别的仓库的不出现。按名字排，切开关时行不跳。行文字用 <span class="en">名字 · runner</span>，和下拉框同一个写法。<span class="pb-tag con">Orbit 一致性</span></p>
+    <p><span class="m-n note-n">5</span><b>开关立刻生效，不弹确认。</b>这页的控件都这样，保存后是同一个 toast <span class="en">Wiki settings saved</span>。关掉可以随时打开，行也留着，所以不需要确认。<span class="pb-tag con">Orbit 一致性</span></p>
+    <p><span class="m-n note-n">6</span><b>卡底一句讲怎么进来</b>，顺带回答「为什么这里没有另一个仓库的 workspace」。<span class="pb-tag new">新词</span><span class="en">New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.</span></p>
+    <p><span class="m-n note-n">7</span><b>原生端：</b>设置页里的一节，一行一个 Toggle，两句说明放节尾 footer，<span class="en">Add workspace…</span> 是节里最后一行，和 <span class="en">Edit…</span> 一样用蓝字。macOS 和 iOS 是同一个页面。Android 同样结构，用 <code>WikiPlanSectionHead</code>、<code>WikiCard</code> 和 <code>Switch</code>。<span class="pb-tag sys">iOS 系统</span></p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">2</span>另外两种样子 <small>· Add workspace… 打开，以及没有仓库的 wiki</small></div>
+
+  <div class="b-stack">
+    <div class="b-menuroom">
+      <div class="b-cap"><b>Add workspace… 打开</b> · 卡的下半部分</div>
+      <section class="orbit-card wk-settings-card" style="margin:0">
+        <div class="orbit-card-body">
+          <div class="wk-ws-list">
+            <div class="wk-ws-row"><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ staging <span class="dim">· build-01</span></div></div><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+            <div class="wk-ws-row"><div class="wk-ws-tx"><div class="wk-ws-t">shop-cli @ US <span class="dim">· build-01</span></div></div><span class="orbit-switch" data-size="middle" data-checked><span class="orbit-switch-thumb"></span></span></div>
+          </div>
+          <div class="wk-ws-foot">
+            <div class="wk-ws-note">New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.</div>
+            <div class="b-anchor">
+              <button type="button" class="orbit-button orbit-button-default orbit-button-middle pb-mark"><span class="m-n">8</span><span>Add workspace…</span></button>
+              <div class="orbit-menu b-menu" data-variant="default">
+                <div class="orbit-menu-group-label">Workspaces with no repository</div>
+                <div class="orbit-menu-group-list">
+                  <div class="orbit-menu-item"><span class="orbit-menu-label">notes · build-01</span></div>
+                  <div class="orbit-menu-item"><span class="orbit-menu-label">scratch · build-01</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div>
+      <div class="b-cap"><b>没有仓库的 wiki</b> · 还没有 workspace</div>
+      <section class="orbit-card wk-settings-card pb-mark" style="margin:0;border-radius:8px">
+        <span class="m-n">9</span>
+        <div class="orbit-card-head"><h2 class="orbit-card-title">Workspaces</h2></div>
+        <div class="orbit-card-body">
+          <div class="wk-settings-lead">Agents in these workspaces read this wiki, and maintenance learns from their sessions.</div>
+          <div class="wk-ws-empty">No workspace is in this wiki yet.</div>
+          <div class="wk-ws-foot" style="margin-top:0">
+            <div class="wk-ws-note">This wiki has no repository behind it, so a workspace joins only when you add it.</div>
+            <button type="button" class="orbit-button orbit-button-default orbit-button-middle"><span>Add workspace…</span></button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="pb-ios full grouped" data-name="ios-add"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+    <div class="io-set-f" style="padding-top:0">and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.</div>
+    <div class="io-set-h">Workspaces</div>
+    <div class="io-card">
+      <div class="io-lrow io38-ws off"><span class="lb"><span class="t">shop-cli @ EU</span><span class="s">build-01</span><span class="s">Left out. It stays out until you turn it back on.</span></span><span class="io-toggle"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ JP</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ SG</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ staging</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow io38-ws"><span class="lb"><span class="t">shop-cli @ US</span><span class="s">build-01</span></span><span class="io-toggle on"></span></div>
+      <div class="io-lrow tint"><span class="lb">Add workspace…</span></div>
+    </div>
+    <div class="io-set-f">Agents in these workspaces read this wiki, and maintenance learns from their sessions.</div>
+    <div class="io-set-f">New workspaces on this repository join by themselves. A workspace on another repository has its own wiki.</div>
+    <div class="io-set-h">Maintenance</div>
+    <div class="io-card">
+      <div class="io-lrow"><span class="lb">Status</span><span class="v"><span style="color:#34C759">●</span> On</span></div>
+      <div class="io-lrow"><span class="lb">Reads the repository from</span><span class="v">shop-cli @ SG</span></div>
+      <div class="io-lrow"><span class="lb">Model</span><span class="v">System model</span></div>
+      <div class="io-lrow"><span class="lb">Daily limit</span><span class="v">8 runs a day</span></div>
+    </div>
+    <div class="io-menu io38-menu">
+      <div class="io38-mh">Workspaces with no repository</div>
+      <div class="io-msep"></div>
+      <div class="io-mi"><span class="tx">notes<span class="sub">build-01</span></span></div>
+      <div class="io-msep"></div>
+      <div class="io-mi"><span class="tx">scratch<span class="sub">build-01</span></span></div>
+    </div>
+  </div>
+
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">8</span><b>Add workspace… 只列没有仓库、也不在别的 wiki 里的 workspace</b>，选中立刻加入，之后和其他行一样。这就是报错文案一直说的「在 Wiki settings 里绑」，现在才有入口。没有可加的 workspace 时不画这个按钮。<span class="pb-tag new">新词</span><span class="en">Add workspace… · Workspaces with no repository</span></p>
+    <p><span class="m-n note-n">9</span><b>没有仓库的 wiki 不会有自动加入的 workspace</b>，所以卡底换一句；列表为空时写一行。<span class="pb-tag new">新词</span><span class="en">No workspace is in this wiki yet. · This wiki has no repository behind it, so a workspace joins only when you add it.</span></p>
+    <p><span class="pb-tag sys">iOS 系统</span>系统 <span class="en">Menu</span>，分组标题是同一句话。</p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">3</span>规则 <small>· 图上看不出来、实现时要守住的部分</small></div>
+
+  <div class="b-rules zh">
+    <div>
+      <div class="b-rulecap">开和关的区别</div>
+      <table class="rt">
+        <tr><th></th><th>开</th><th>关（Left out）</th></tr>
+        <tr><td>维护读它的会话</td><td>读</td><td>不读</td></tr>
+        <tr><td><code>wiki_search</code> <code>wiki_get</code> <code>wiki_propose</code></td><td>可用</td><td>拒绝，报错写明 <span class="en">The owner left this workspace out of its wiki.</span><span class="pb-tag new">新词</span></td></tr>
+        <tr><td>已经写进 wiki 的内容</td><td>保留</td><td>保留，关掉不回收</td></tr>
+        <tr><td><span class="en">Reads the repository from</span></td><td colspan="2">和开关无关：这里选中的 workspace 关掉后，服务端仍从它读仓库</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="b-rulecap">什么时候变</div>
+      <table class="rt">
+        <tr><th>时机</th><th>结果</th></tr>
+        <tr><td>workspace 的 repo URL 写入（手填或 runner 目录探测），这个仓库已有 wiki</td><td>自动加入，不用等 agent 调 wiki 工具</td></tr>
+        <tr><td>这个仓库还没有 wiki</td><td>和现在一样：第一次调 wiki 工具时建</td></tr>
+        <tr><td>owner 关掉过</td><td>上面两条都不再把它加回来，只有 owner 能打开</td></tr>
+        <tr><td>打开或新加入</td><td>维护从当前进度往后读，已经越过的历史不回读</td></tr>
+        <tr><td>上线时 <span class="pb-tag ask">要你拍板</span></td><td>现有同仓库 workspace 一次补齐为开。范围马上完整，代价是它们的新会话立刻进 wiki，要隔离的得由 owner 手动关</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>

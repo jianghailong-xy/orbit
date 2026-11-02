@@ -58,7 +58,15 @@ import {
   WIKI_RUN_REINFORCED,
   WIKI_SAVE,
   WIKI_SETTINGS,
+  WIKI_ADD_WORKSPACE,
+  WIKI_ADD_WORKSPACE_GROUP,
   WIKI_SETTINGS_SECTIONS,
+  WIKI_WORKSPACE_LEFT_OUT,
+  WIKI_WORKSPACES,
+  WIKI_WORKSPACES_EMPTY,
+  WIKI_WORKSPACES_JOIN,
+  WIKI_WORKSPACES_JOIN_NO_REPOSITORY,
+  WIKI_WORKSPACES_LEAD,
   WIKI_SETTINGS_TITLE,
   WIKI_SET_UP,
   WIKI_SET_UP_TITLE,
@@ -103,6 +111,7 @@ interface Fixture {
     title: string;
     crumb: string;
     sections: string[];
+    workspaces: { lead: string; leftOut: string; join: string; joinNoRepository: string; empty: string; add: string; addGroup: string };
     reviewModeHint: string;
     lead: string;
     defaultTag: string;
@@ -217,7 +226,18 @@ const shared = fixture();
 describe('the Wiki settings page says the fixture’s words, in its order', () => {
   const settings = shared.settings;
 
-  it('titles the page and its two sections in the order both clients draw them', () => {
+  it('says the Workspaces card’s words', () => {
+    expect(WIKI_WORKSPACES).toBe(settings.sections[1]);
+    expect(WIKI_WORKSPACES_LEAD).toBe(settings.workspaces.lead);
+    expect(WIKI_WORKSPACE_LEFT_OUT).toBe(settings.workspaces.leftOut);
+    expect(WIKI_WORKSPACES_JOIN).toBe(settings.workspaces.join);
+    expect(WIKI_WORKSPACES_JOIN_NO_REPOSITORY).toBe(settings.workspaces.joinNoRepository);
+    expect(WIKI_WORKSPACES_EMPTY).toBe(settings.workspaces.empty);
+    expect(WIKI_ADD_WORKSPACE).toBe(settings.workspaces.add);
+    expect(WIKI_ADD_WORKSPACE_GROUP).toBe(settings.workspaces.addGroup);
+  });
+
+  it('titles the page and its sections in the order every client draws them', () => {
     expect(WIKI_SETTINGS_TITLE).toBe(settings.title);
     expect(WIKI_SETTINGS).toBe(settings.crumb);
     expect([...WIKI_SETTINGS_SECTIONS]).toEqual(settings.sections);

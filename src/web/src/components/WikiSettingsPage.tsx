@@ -10,7 +10,7 @@ import {
   type WikiReviewMode,
   type WikiSystemModelStatus,
 } from '@orbit/shared';
-import { wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
+import { wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
 import {
@@ -37,6 +37,8 @@ import {
   WIKI_NO_WORKSPACE,
   WIKI_OFF,
   WIKI_ON,
+  WIKI_ADD_WORKSPACE,
+  WIKI_ADD_WORKSPACE_GROUP,
   WIKI_REPO_FROM,
   WIKI_REPO_FROM_NOTE,
   WIKI_REVIEW_MODE,
@@ -59,14 +61,21 @@ import {
   wikiLookbackLabel,
   wikiModeFallback,
   wikiRunsADay,
+  WIKI_WORKSPACE_LEFT_OUT,
+  WIKI_WORKSPACES,
+  WIKI_WORKSPACES_EMPTY,
+  WIKI_WORKSPACES_JOIN,
+  WIKI_WORKSPACES_JOIN_NO_REPOSITORY,
+  WIKI_WORKSPACES_LEAD,
   wikiWorkspaceLabel,
   type WikiLookbackChoice,
 } from '../lib/wikiReviewMode';
-import { updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
 import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Select } from './ui/Select';
@@ -170,6 +179,8 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         </div>
       </Card>
 
+      <WikiWorkspacesCard space={space} />
+
       <Card className="wk-settings-card" title={WIKI_MAINTENANCE}>
         {settings.maintenance.enabled ? (
           <MaintenanceOn
@@ -209,6 +220,81 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The Workspaces card (mock 38, contract `space.workspaces`): the workspaces in this wiki, each with its switch, and
+ * the ones with no repository that can be added. Like every control here it writes at once; a row stays on the list
+ * when it is turned off, and the list goes by name, so nothing moves under the pointer.
+ */
+function WikiWorkspacesCard({ space }: { space: WikiSpaceRow }) {
+  const toast = useToast();
+  const listed = useQuery(wikiSpaceWorkspacesQuery(space.id));
+  const write = useWikiWrite(({ workspaceId, inWiki }: { workspaceId: string; inWiki: boolean }) =>
+    inWiki ? addWikiWorkspace(space.id, workspaceId) : leaveWikiWorkspaceOut(space.id, workspaceId),
+  );
+
+  const change = async (workspaceId: string, inWiki: boolean) => {
+    try {
+      await write.mutateAsync({ workspaceId, inWiki });
+      toast.success(WIKI_SETTINGS_SAVED);
+    } catch (error) {
+      toast.error("Couldn't save the wiki settings", error instanceof Error ? error.message : undefined);
+    }
+  };
+
+  return (
+    <Card className="wk-settings-card" title={WIKI_WORKSPACES}>
+      <div className="wk-settings-lead">{WIKI_WORKSPACES_LEAD}</div>
+      {listed.data && (
+        <>
+          {listed.data.workspaces.length === 0 ? (
+            <div className="wk-ws-empty">{WIKI_WORKSPACES_EMPTY}</div>
+          ) : (
+            <div className="wk-ws-list">
+              {listed.data.workspaces.map((row) => (
+                <div className={`wk-ws-row${row.inWiki ? '' : ' off'}`} key={row.id}>
+                  <div className="wk-ws-tx">
+                    <div className="wk-ws-t">
+                      {row.name}
+                      {row.runner && <span className="dim"> · {row.runner}</span>}
+                    </div>
+                    {!row.inWiki && <div className="wk-ws-d">{WIKI_WORKSPACE_LEFT_OUT}</div>}
+                  </div>
+                  <Switch
+                    aria-label={row.name}
+                    checked={row.inWiki}
+                    disabled={write.isPending}
+                    onCheckedChange={(inWiki) => void change(row.id, inWiki)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="wk-ws-foot">
+            <div className="wk-ws-note">{space.repoUrlNorm ? WIKI_WORKSPACES_JOIN : WIKI_WORKSPACES_JOIN_NO_REPOSITORY}</div>
+            {listed.data.addable.length > 0 && (
+              <Menu
+                align="end"
+                disabled={write.isPending}
+                trigger={<Button>{WIKI_ADD_WORKSPACE}</Button>}
+                items={[{
+                  type: 'group',
+                  key: 'addable',
+                  label: WIKI_ADD_WORKSPACE_GROUP,
+                  children: listed.data.addable.map((row) => ({
+                    key: row.id,
+                    label: row.runner ? `${row.name} · ${row.runner}` : row.name,
+                    onSelect: () => void change(row.id, true),
+                  })),
+                }]}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 

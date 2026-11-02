@@ -82,6 +82,8 @@ export const WIKI_PLAN_RULES = {
   errorsMax: 200,
   /** The most unfound references a runner's report may carry. */
   repoMissingMax: 2_000,
+  /** The most things a stored draft says to look at (`gate.notes`). */
+  notesMax: 50,
   /** The JSON of one object's `extra`: the values of the fields its plan declared as needing adding. */
   extraMaxChars: 4_000,
 } as const;
@@ -212,6 +214,8 @@ export interface WikiPlanDraftRequest {
   target?: { min: number; max: number };
   plan: WikiPlanDraftInput;
   repoCheck: WikiPlanRepoCheck;
+  /** What the job's last round could not mend (`WikiPlanGateReport.notes`). */
+  notes?: WikiPlanGateNote[];
   model?: string;
   /** The owner's, as a changeset's (contract `plan.idempotency`): the same draft sent again under it is
    *  answered with the version it stored, `replayed`; another draft under it is refused
@@ -249,6 +253,12 @@ export interface WikiPlanGateError {
   message: string;
 }
 
+/** One thing a stored draft says to look at: a sentence for the owner, under the check it belongs to. */
+export interface WikiPlanGateNote {
+  check: WikiPlanGateCheck;
+  text: string;
+}
+
 /** What the gate checked of a version it let through, stored beside it. */
 export interface WikiPlanGateReport {
   checkedAt: string;
@@ -258,6 +268,8 @@ export interface WikiPlanGateReport {
   target: { min: number; max: number };
   /** The fields it declared as needing adding, each with how many values it carried. */
   needsNewFields: Array<WikiPlanNewField & { values: number }>;
+  /** What the drafting job's last round could not mend, and what it did instead; absent when there is none. */
+  notes?: WikiPlanGateNote[];
 }
 
 export interface WikiPlanCategory {
@@ -425,7 +437,7 @@ export type WikiPlanJobStoredState = (typeof WIKI_PLAN_JOB_STORED_STATES)[number
 /**
  * Where a job stands as the plan's read says it (contract `plan.jobs.states`): queued behind an
  * unfinished task of the space's maintenance list, held (with why), running (its task is made), or
- * ended — succeeded with the version it stored, or failed with the gate's errors.
+ * ended — succeeded with the version it stored, or failed with no draft to show (`WIKI_PLAN_NO_DRAFT`).
  */
 export const WIKI_PLAN_JOB_STATES = ['queued', 'held', 'running', 'succeeded', 'failed'] as const;
 export type WikiPlanJobState = (typeof WIKI_PLAN_JOB_STATES)[number];
@@ -458,6 +470,20 @@ export const WIKI_PLAN_JOB_RULES = {
   /** The most sessions and projects the materials list. */
   materialsSessionsMax: 5_000,
   materialsProjectsMax: 500,
+} as const;
+
+/**
+ * Why a draft or a revision left no draft (contract `plan.jobs.noDraft`): the only way one fails, and the sentence the
+ * owner reads on its card (`job.error`). What the run knows beyond it goes to its log.
+ */
+export const WIKI_PLAN_NO_DRAFT = {
+  catalogue: 'The model’s catalogue couldn’t be read.',
+  documents: 'The model didn’t write any document.',
+  changed: 'The plan changed while it was being written.',
+  unreachable: 'The repository or the model couldn’t be reached.',
+  unexpected: 'Something went wrong on Orbit’s side.',
+  /** A job from before a draft's last round was settled, which ended with the gate's errors: read, never written now. */
+  check: 'It didn’t pass the plan check.',
 } as const;
 
 /**
@@ -574,12 +600,13 @@ export interface WikiPlanJob {
   progress: WikiPlanBuildProgress | null;
   /** Succeeded: the version it stored. A build's, from the start: the confirmed version it writes. */
   version: number | null;
-  /** Failed: the gate's errors on the last round, and what went wrong in words. */
+  /** Failed before 2026-11-02: the gate's errors on the last round. */
   errors: WikiPlanGateError[];
+  /** Failed: why there is no draft, in a sentence for the owner (`WIKI_PLAN_NO_DRAFT`). */
   error: string | null;
   /** A draft's or a revision's report, or a build's (`kind` says which). */
   report: WikiPlanJobReport | WikiPlanBuildReport | null;
-  /** Failed: the last draft it had, as it was sent to the gate. */
+  /** Failed before 2026-11-02: the last draft it had, as it was sent to the gate. */
   draft: WikiPlanDraftInput | null;
 }
 

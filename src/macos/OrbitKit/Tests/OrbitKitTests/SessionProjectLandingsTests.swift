@@ -59,6 +59,42 @@ final class SessionProjectLandingsTests: XCTestCase {
         XCTAssertEqual(window.now, [])
     }
 
+    /// Settled landings Orbit reported close together read as one group of messages, one avatar
+    /// (owner 2026-11-02, docs/mocks/landings-chat-bubbles): each within ten minutes of the one before
+    /// it, in the same day — a task's landing and the merge into main that carried it.
+    func testGroupsADaysRowsThatCameWithinTenMinutesOfTheOneBefore() {
+        let window = SessionProjectLandings.window([
+            row("T1", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 22, 11)),
+            row("round", title: "Merge project/p1 → main · #1", subject: "PROMOTION", state: "SETTLED",
+                settledAs: "MERGED", settledAt: local(26, 22, 13)),
+            row("T2", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 23, 7)),
+            row("T4", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 23, 17)),
+            row("T6", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: local(26, 23, 28)),
+            row("T5", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 23, 55)),
+            row("T3", state: "SETTLED", settledAs: "LANDED", settledAt: local(27, 0, 1)),
+        ], merges: [], now: now, calendar: calendar)
+        XCTAssertEqual(window.days.map(\.title), ["Yesterday", "Today"])
+        // Ten minutes exactly still joins (T2 → T4); eleven starts a group (T4 → T6); six minutes
+        // across midnight are two days, so two groups (T5 → T3).
+        XCTAssertEqual(window.days[0].groups.map { $0.rows.map(\.id) }, [["T1", "round"], ["T2", "T4"], ["T6"], ["T5"]])
+        XCTAssertEqual(window.days[0].groups.map(\.id), ["T1", "T2", "T6", "T5"])
+        XCTAssertEqual(window.days[1].groups.map { $0.rows.map(\.id) }, [["T3"]])
+        XCTAssertEqual(SessionProjectLandings.groupGap, 600)
+    }
+
+    /// A row whose instant is unknown has no neighbour to be close to: it stands alone.
+    func testARowWithNoInstantIsAGroupOfItsOwn() {
+        let unknown = { (key: String) in
+            LandingsWindowRow(key: key, sessionId: key, subject: "TASK", title: key, detail: "Landed",
+                              tone: .ok, time: "", at: -.infinity)
+        }
+        let known = LandingsWindowRow(key: "c", sessionId: "c", subject: "TASK", title: "c", detail: "Landed",
+                                      tone: .ok, time: "08:00", at: local(1, 8).timeIntervalSince1970)
+        XCTAssertEqual(SessionProjectLandings.groups([unknown("a"), unknown("b"), known]).map { $0.rows.map(\.key) },
+                       [["a"], ["b"], ["c"]])
+        XCTAssertEqual(SessionProjectLandings.groups([]), [])
+    }
+
     func testPutsWhatIsInHandUnderNowInTheOrderItStarted() {
         let window = SessionProjectLandings.window([
             row("Checks failed", state: "AWAITING_DECISION", createdAt: local(27, 10, 1)),

@@ -6,6 +6,7 @@ import {
   WIKI_PLAN_JOB_RULES,
   WIKI_PLAN_REBUILD,
   WIKI_PLAN_SERVER_JOB,
+  WIKI_PLAN_NO_DRAFT,
   wikiMaintenanceSettings,
   type WikiMaintenanceSettings,
   type WikiPlanBuildProgress,
@@ -51,7 +52,7 @@ import { spaceScope } from './wiki-maintenance';
  * change to the maintenance settings or their next request asks again. A job does not need maintenance turned on.
  *
  * JUDGED BY WHAT IT DID. The worker ends the plan job with how its wiki_job went (`finishWikiPlanJob`): a draft
- * the gate let through, or, for a build, the documents of a confirmed version written with no section left
+ * stored, or, for a build, the documents of a confirmed version written with no section left
  * unwritten. A wiki_job that ended before it said how the plan job went leaves the plan job failed, with why.
  *
  * The functions here take the Prisma client and inject nothing, so the space's creation (WikiService),
@@ -152,7 +153,7 @@ export interface WikiPlanJobAnswer {
  */
 export async function requestWikiPlanJob(prisma: Db, ask: WikiPlanJobAsk, now: Date = new Date()): Promise<WikiPlanJobAnswer> {
   const open = await openDraftJob(prisma, ask.ownerId, ask.spaceId);
-  if (open && !(open.state === 'made' && (await endJobWhoseServerJobIsOver(prisma, open, now)))) {
+  if (open && !(open.state === 'made' && (await endJobWhoseServerJobIsOver(prisma, open, now, WIKI_PLAN_NO_DRAFT.unexpected)))) {
     await advanceWikiPlanJob(prisma, ask.ownerId, open.id, now);
     return { created: false, jobId: open.id };
   }
@@ -458,7 +459,7 @@ const UNSETTLED_SERVER_JOB = ['queued', 'running', 'waiting'] as const;
  * before the server ran plan jobs, as a task of the space's maintenance list (task_id, no job_id), has nothing left
  * that runs it, and is ended the same way. Answers whether the plan job is ended now.
  */
-async function endJobWhoseServerJobIsOver(prisma: Db, job: { id: string; jobId: string | null }, now: Date): Promise<boolean> {
+async function endJobWhoseServerJobIsOver(prisma: Db, job: { id: string; jobId: string | null }, now: Date, said?: string): Promise<boolean> {
   const run = job.jobId ? await prisma.wikiJob.findFirst({ where: { id: job.jobId }, select: { state: true } }) : null;
   if (run && (UNSETTLED_SERVER_JOB as readonly string[]).includes(run.state)) return false;
   const why = run
@@ -466,7 +467,7 @@ async function endJobWhoseServerJobIsOver(prisma: Db, job: { id: string; jobId: 
     : job.jobId
       ? 'its server job was deleted before it said how it went'
       : 'it was made as a task of the maintenance list, which no longer runs plan jobs';
-  await prisma.wikiPlanJob.updateMany({ where: { id: job.id, state: 'made' }, data: { state: 'ended', outcome: 'failed', endedAt: now, error: why } });
+  await prisma.wikiPlanJob.updateMany({ where: { id: job.id, state: 'made' }, data: { state: 'ended', outcome: 'failed', endedAt: now, error: said ?? why } });
   return true;
 }
 
@@ -526,7 +527,8 @@ export function wikiPlanJobView(row: WikiPlanJobRow): WikiPlanJob {
     progress: build ? ((row.progress as unknown as WikiPlanBuildProgress | null) ?? null) : null,
     version: row.version,
     errors: (row.errors as unknown as WikiPlanGateError[] | null) ?? [],
-    error: row.error,
+    // What such a job said was the model's list, and the card under the owner's eyes reads this.
+    error: !build && Array.isArray(row.errors) && row.errors.length > 0 ? WIKI_PLAN_NO_DRAFT.check : row.error,
     report: (row.report as unknown as WikiPlanJobReport | WikiPlanBuildReport | null) ?? null,
     draft: row.outcome === 'failed' ? ((row.draft as unknown as WikiPlanDraftInput | null) ?? null) : null,
   };

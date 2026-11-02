@@ -218,8 +218,8 @@ struct ReviewRecordFooterView: View {
     }
 }
 
-/// The one way a sheet still leaves on its own: a card this window answered whose record it has
-/// no copy of. Every card the review presses keeps one, so this is a guard, not a path.
+/// A card this window answered whose record it has no copy of: nothing to show, so the sheet leaves
+/// at once. Every card the review presses keeps one, so this is a guard, not a path.
 private struct ReviewAnswered: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -256,6 +256,22 @@ struct ApprovalReviewSheet: View {
     let console: ConsoleModel
     let target: ApprovalReviewTarget
     @State private var reviewStatusMessage: String?
+
+    /// Whether a press in THIS window answered what the sheet shows, which is what takes the sheet
+    /// away. Neither a request that went away underneath the reader nor a record opened from the
+    /// conversation to be read has a press to confirm, so both stay until they are closed.
+    private var answeredHere: Bool {
+        switch target {
+        case .approval(let id):
+            if case .sent = console.approvalAnswers[id] { return true }
+            return false
+        case .delivered(let card):
+            if case .coordinatorQuestion(let itemID) = card.kind {
+                return console.questionsAnsweredHere.contains(itemID)
+            }
+            return console.answeredHere(card)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -318,6 +334,14 @@ struct ApprovalReviewSheet: View {
         .task {
             await console.refreshRulerQuestions(force: true)
             await console.refreshOwnerConfirmation()
+        }
+        // The record confirms the press, and then the sheet gets out of the way (the owner's call of
+        // 2026-11-02). Long enough to see what was ticked, short enough not to be a thing to dismiss.
+        // The ✕ stays live throughout, and a sheet closed by hand cancels this with the view.
+        .task(id: answeredHere) {
+            guard answeredHere else { return }
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { dismiss() }
         }
         #if os(iOS)
         .presentationDetents([.large])

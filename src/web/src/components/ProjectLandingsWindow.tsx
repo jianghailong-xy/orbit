@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,7 +10,6 @@ import {
   ProjectOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
-  UpOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import type {
@@ -48,6 +47,7 @@ import {
   SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
   landingsWindow,
+  landingsWindowGroups,
   type LandingSessionRow,
   type LandingsWindowCard,
   type LandingsWindowRow,
@@ -102,6 +102,11 @@ interface WindowFacts {
  * in it carries what that page drew: a card still in hand is its status card, polled on §2.7a's
  * cadence; a settled row opens in place to its timeline, read once and never polled. The doors the
  * page's ⋯ held are each landing's own: its ⋯, or a right-click on it.
+ *
+ * It is drawn as a chat (owner 2026-11-02, docs/mocks/landings-chat-bubbles, option C): each day
+ * under a centered chip, each settled landing one message bubble from Orbit, the ones Orbit sent close
+ * together (`landingsWindowGroups`) one group with Orbit's avatar beside its first, the cards in hand
+ * Orbit's last group, and the read-only footer shaped like the composer's card.
  *
  * Nothing here is a new read: the two the project's sessions page already makes (its LANDING rows and
  * its merges into main), and each landing's own view when it is drawn as a card or opened.
@@ -297,59 +302,108 @@ export function ProjectLandingsWindow({
         {landings.days.map((day) => (
           <section key={day.title} className="landings-window-day" aria-label={day.title}>
             <div className="landings-window-day-head">{day.title}</div>
-            {day.rows.map((row) => (
-              <LandingWindowRow
-                key={row.key}
-                row={row}
-                projectId={projectId}
-                facts={facts}
-                expanded={expanded.has(row.sessionId ?? row.key)}
-                outlined={outlined === (row.sessionId ?? row.key)}
-                onToggle={() => toggle(row.sessionId ?? row.key)}
-                onOpenSession={onOpenSession}
-              />
+            {landingsWindowGroups(day.rows).map((group) => (
+              <div key={group[0].key} className="landings-window-group">
+                <OrbitAvatar />
+                <div className="landings-window-column">
+                  {group.map((row) => (
+                    <LandingWindowRow
+                      key={row.key}
+                      row={row}
+                      projectId={projectId}
+                      facts={facts}
+                      expanded={expanded.has(row.sessionId ?? row.key)}
+                      outlined={outlined === (row.sessionId ?? row.key)}
+                      onToggle={() => toggle(row.sessionId ?? row.key)}
+                      onOpenSession={onOpenSession}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </section>
         ))}
         {cards.length > 0 ? (
           <section className="landings-window-day landings-window-now" aria-label={SESSION_LANDINGS_COPY.NOW}>
             <div className="landings-window-day-head">{SESSION_LANDINGS_COPY.NOW}</div>
-            {cards.map((card) => (
-              <LandingWindowCard
-                key={card.sessionId}
-                card={card}
-                projectId={projectId}
-                facts={facts}
-                expanded={expanded.has(card.sessionId)}
-                outlined={outlined === card.sessionId}
-                onToggle={() => toggle(card.sessionId)}
-                onOpenSession={onOpenSession}
-                onSettled={settled}
-              />
-            ))}
+            {/* What is still in hand is Orbit's last group of messages: its cards take the column's
+                whole width, with no gutter on the right. */}
+            <div className="landings-window-group">
+              <OrbitAvatar />
+              <div className="landings-window-column">
+                {cards.map((card) => (
+                  <LandingWindowCard
+                    key={card.sessionId}
+                    card={card}
+                    projectId={projectId}
+                    facts={facts}
+                    expanded={expanded.has(card.sessionId)}
+                    outlined={outlined === card.sessionId}
+                    onToggle={() => toggle(card.sessionId)}
+                    onOpenSession={onOpenSession}
+                    onSettled={settled}
+                  />
+                ))}
+              </div>
+            </div>
           </section>
         ) : null}
         </div>
       </div>
 
       <div className="landing-page-foot">
-        {/* What this window is, who decides, and the way to them: nothing to type here (LS6). */}
+        {/* What this window is, who decides, and the way to them: nothing to type here (LS6). Drawn as
+            the conversation's composer card with nothing to type into — the sentence where the text
+            would be, and the way to the coordinator in Send's place (board 01 b). */}
         <div className="landing-page-foot-line">
           <span>{`${runs} — `}</span><b>{typeHere}</b>
         </div>
-        <div className="landing-page-foot-line">
+        <div className="landing-page-foot-bar">
           <span>{LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}</span>
           {coordinatorId ? (
-            <>
-              <span> · </span>
-              <button type="button" className="landing-page-link" onClick={() => onOpenSession(coordinatorId)}>
-                {`${LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK} ›`}
-              </button>
-            </>
+            <Button className="landing-page-foot-open" icon={<UserOutlined />}
+              onClick={() => onOpenSession(coordinatorId)}>
+              {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
+            </Button>
           ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Orbit's avatar, once beside each group of its messages (board 01 b): the app icon — the favicon's
+ * mark in white on the brand tile, the prompt in the brand's blue — as `OrbitAppIcon` and the native
+ * app icon draw it. Decorative: who sent the group is said by where it stands, not read out each time.
+ */
+function OrbitAvatar(): JSX.Element {
+  const tile = useId();
+  return (
+    <svg className="landings-window-avatar" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id={tile} x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#5c8cff" />
+          <stop offset="1" stopColor="#3370ff" />
+        </linearGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="229" fill={`url(#${tile})`} />
+      <g transform="translate(96 118) scale(13)">
+        <g transform="rotate(-26 32 32)">
+          <ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="#fff" strokeOpacity="0.9" strokeWidth="3.4" fill="none" />
+          <circle cx="56" cy="25.6" r="5.4" fill="#fff" />
+        </g>
+        <rect x="19" y="20" width="26" height="24" rx="6" fill="#fff" />
+        <path
+          d="M25 27.5 L30 32 L25 36.5 M33 35.8 L39.5 35.8"
+          stroke="#3370ff"
+          strokeWidth="2.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </g>
+    </svg>
   );
 }
 
@@ -570,10 +624,11 @@ function LandingReceiptBlock({ receipt }: { receipt: LandingMergeReceipt }): JSX
 }
 
 /**
- * One settled landing: a row with the merged line's head — the mark that says how it ended, the
- * task's name, the moment it settled and one line under them — that opens in place to its record. A
- * merge into main opens to its receipt first. The record is read when the row is opened (or its menu
- * is), once: a settled landing does not move, so its row never polls.
+ * One settled landing: a message bubble from Orbit (board 01 b) — its words whole (the task's name, or
+ * `Merged into main`), and under them the mark that says how it ended, one line and the moment it
+ * settled — that opens to its record on a quiet panel under it (board 03 e). A merge into main opens to
+ * its receipt first. The record is read when the bubble is opened (or its menu is), once: a settled
+ * landing does not move, so it never polls.
  */
 function LandingWindowRow({
   row,
@@ -636,16 +691,12 @@ function LandingWindowRow({
       onContextMenu={(event) => { event.preventDefault(); setMenuOpen(true); }}
     >
       <div className="landings-window-row-line">
-        <button type="button" className="session-row session-project-merge-row session-project-landing-row landings-window-row"
-          aria-expanded={expanded} onClick={onToggle}>
-          <span className={`session-project-landing-mark is-${row.tone}`} aria-hidden="true">{mark}</span>
-          <span className="session-project-merge-row-body">
-            <span className="session-project-merge-row-head">
-              <span className="session-project-merge-row-title">{row.title}</span>
-              {row.time ? <span className="session-time">{row.time}</span> : null}
-              {expanded ? <UpOutlined className="landings-window-up" aria-hidden /> : null}
-            </span>
-            <span className="session-project-merge-row-detail">{row.detail}</span>
+        <button type="button" className="landings-window-row" aria-expanded={expanded} onClick={onToggle}>
+          <span className="landings-window-row-text">{row.title}</span>
+          <span className="landings-window-row-foot">
+            <span className={`landings-window-row-mark is-${row.tone}`} aria-hidden="true">{mark}</span>
+            <span className="landings-window-row-detail">{row.detail}</span>
+            {row.time ? <span className="landings-window-row-time">{row.time}</span> : null}
           </span>
         </button>
         <LandingMore items={items} open={menuOpen} onOpenChange={setMenuOpen} />

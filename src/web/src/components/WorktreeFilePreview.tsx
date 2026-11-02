@@ -3,6 +3,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SessionChangedFile, SessionFilePatch } from '../api';
 import { worktreeFileQuery } from '../lib/queries';
+import { inertObjectUrl, saveUserFile } from '../lib/userFile';
 import {
   FILE_DELETED,
   IMAGE_UNREADABLE,
@@ -197,7 +198,7 @@ function useObjectUrl(blob: Blob | undefined): string | null {
       setUrl(null);
       return;
     }
-    const made = URL.createObjectURL(blob);
+    const made = inertObjectUrl(blob);
     setUrl(made);
     return () => URL.revokeObjectURL(made);
   }, [blob]);
@@ -206,12 +207,5 @@ function useObjectUrl(blob: Blob | undefined): string | null {
 
 /** Hand the bytes to the browser as a download under the file's own name. */
 function saveBlob(blob: Blob, name: string): void {
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+  saveUserFile(inertObjectUrl(blob), name);
 }

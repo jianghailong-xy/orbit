@@ -36,7 +36,7 @@ class WikiSettingsPageTest {
     private val route = OrbitRoute(Destination.WIKI_SETTINGS)
     private val calls = mutableListOf<String>()
     private val actions = WikiSettingsActions(setMode = { calls += "mode $it" }, setSpotChecks = { calls += "spot checks $it" },
-        setUp = { calls += "set up" }, turnOff = { calls += "turn off" })
+        setWorkspace = { id, inWiki -> calls += "workspace $id $inWiki" }, setUp = { calls += "set up" }, turnOff = { calls += "turn off" })
 
     @Before fun quiet() { OrbitToasts.clear() }
 
@@ -101,6 +101,32 @@ class WikiSettingsPageTest {
         // A workspace this client does not hold is named by its id.
         show { WikiSettingsPage(route, space("""{"maintenance":{"enabled":true,"workspaceId":"w9"}}"""), actions = actions) }
         says("wiki-settings-workspace-row", "w9")
+    }
+
+    @Test fun theWorkspacesSectionListsWhoIsInAndWritesEachSwitch() {
+        val listed = WikiSpaceWorkspaces(
+            workspaces = listOf(WikiSpaceWorkspaceRow("w1", "shop-cli @ EU", "build-01", inWiki = false), WikiSpaceWorkspaceRow("w2", "shop-cli @ SG", "build-01", inWiki = true)),
+            addable = listOf(WikiSpaceWorkspaceRow("w3", "notes", "build-01", inWiki = false)))
+        show { WikiSettingsPage(route, space("{}"), actions = actions, workspaces = listed) }
+        says("wiki-settings-workspace-row:w1", "shop-cli @ EU", "build-01", WikiModeCopy.workspaceLeftOut)
+        says("wiki-settings-workspace-row:w2", "shop-cli @ SG", "build-01")
+        compose.onAllNodes(hasText(WikiModeCopy.workspaceLeftOut)).assertCountEquals(1)
+        says("wiki-settings-workspaces-lead", WikiModeCopy.workspacesLead)
+        says("wiki-settings-workspaces-join", WikiModeCopy.workspacesJoin)
+        compose.onNodeWithTag("wiki-settings-workspace-row:w1").assertIsOff().performClick()
+        compose.onNodeWithTag("wiki-settings-workspace-row:w2").assertIsOn().performClick()
+        compose.onNodeWithTag("wiki-settings-add-workspace").performClick()
+        compose.onNodeWithText(WikiModeCopy.addWorkspaceGroup).assertExists()
+        compose.onNodeWithTag("wiki-settings-add-workspace:w3").performClick()
+        assertEquals(listOf("workspace w1 true", "workspace w2 false", "workspace w3 true"), calls)
+    }
+
+    @Test fun aWikiWithNoRepositorySaysHowAWorkspaceJoins() {
+        val bare = Wire.json.decodeFromString(WikiSpace.serializer(), """{"id":"sp1","slug":"notes","settings":{}}""")
+        show { WikiSettingsPage(route, bare, actions = actions, workspaces = WikiSpaceWorkspaces()) }
+        says("wiki-settings-workspaces-empty", WikiModeCopy.workspacesEmpty)
+        says("wiki-settings-workspaces-join", WikiModeCopy.workspacesJoinNoRepository)
+        compose.onAllNodesWithTag("wiki-settings-add-workspace").assertCountEquals(0)
     }
 
     @Test fun aModeTheSpaceWentBackToByItselfIsExplained() {

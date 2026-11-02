@@ -192,7 +192,7 @@ export async function appendWikiContext(
   // nothing, which is why an unbound one is answered with no block rather than with every entry
   // its owner has.
   const binding = await tx.wikiSpaceWorkspace.findFirst({
-    where: { workspaceId: subject.workspaceId, ownerId: subject.ownerId },
+    where: { workspaceId: subject.workspaceId, ownerId: subject.ownerId, leftOutAt: null },
     select: { spaceId: true },
   });
   if (!binding) return subject.content;

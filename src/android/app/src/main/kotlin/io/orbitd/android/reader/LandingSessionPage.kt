@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
@@ -230,8 +229,7 @@ private fun LandingCardHead(taskName: String?, expanded: Boolean, head: @Composa
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             head()
             taskName?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
+                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (expanded) Box(Modifier.padding(top = 8.dp)) { LandingUpArrow() }

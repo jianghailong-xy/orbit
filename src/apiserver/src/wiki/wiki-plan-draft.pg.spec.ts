@@ -41,6 +41,7 @@ import {
   WIKI_PLAN_JOB_OUTCOMES,
   WIKI_PLAN_JOB_STORED_STATES,
   WIKI_PLAN_JOB_TRIGGERS,
+  WIKI_PLAN_NO_DRAFT,
   WIKI_PLAN_SERVER_JOB,
 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -449,7 +450,7 @@ test('the owner asks for a redraft through the owner channel and a job is made o
   // The job its cancelled wiki_job left made was ended when the next request found it: failed, with why.
   const left = (await jobs(h, spaceId))[1];
   assert.deepEqual([left.state, left.outcome], ['ended', 'failed']);
-  assert.match(left.error ?? '', /its server job ended cancelled before it said how it went/u);
+  assert.equal(left.error, WIKI_PLAN_NO_DRAFT.unexpected);
 
   // What the owner may send: an object with instructions, and nothing else.
   for (const [body, why] of [
@@ -623,8 +624,10 @@ test('a run reports its rounds and how it ended: a success names a draft this jo
   assert.deepEqual(shown.errors, errors);
   assert.deepEqual(shown.report, report);
   assert.equal(shown.draft.docs.length, 40, 'the last draft was not kept');
-  assert.match(shown.error, /the gate refused the third round/u);
-  assert.ok(!shown.error.includes('AKIA'), 'a secret in the error was kept');
+  assert.equal(shown.error, WIKI_PLAN_NO_DRAFT.check, 'a job from before a draft was settled reads in the owner\'s words');
+  const ended = (await jobs(h, spaceId))[0];
+  assert.match(ended.error ?? '', /the gate refused the third round/u);
+  assert.ok(!(ended.error ?? '').includes('AKIA'), 'a secret in the error was kept');
   // Ended once: a later end, and a later round, are not kept — what the run said first stands.
   assert.equal((await finish({ outcome: 'failed', error: 'a second end' })).body, false, 'a second end was kept');
   assert.equal(await progressWikiPlanJobOfJob(db, { planJobId: job.id, wikiJobId: wikiJob.id, attempt: 1 }), false, 'a round after the end');

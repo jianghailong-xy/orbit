@@ -2,7 +2,8 @@ import SwiftUI
 import OrbitKit
 
 // Wiki settings (criterion 8, mock 20): which review mode the space runs in, whether Automatic sends
-// spot checks, and the space's Wiki maintenance run — pushed from the Wiki home's gear.
+// spot checks, which workspaces are in the wiki (mock 38), and the space's Wiki maintenance run — pushed from
+// the Wiki home's gear.
 //
 // The app's own settings form, not a new one: inset-grouped sections, a header and a footer each
 // (`SettingsSheet.swift`). The sections are `WikiModeLogic.SettingsSection` in its order, which is the
@@ -18,6 +19,8 @@ import OrbitKit
 struct WikiSettingsActions {
     var setMode: (WikiReviewMode) -> Void = { _ in }
     var setSpotChecks: (Bool) -> Void = { _ in }
+    /// A workspace, and whether it is to be in the wiki: a row's Toggle, and Add workspace's menu.
+    var setWorkspace: (String, Bool) -> Void = { _, _ in }
     /// Set up… when maintenance is off, Edit… when it is on: the same sheet.
     var setUp: () -> Void = {}
     var turnOff: () -> Void = {}
@@ -26,6 +29,8 @@ struct WikiSettingsActions {
 /// The settings page, drawn from the space as the server kept it.
 struct WikiSettingsPage: View {
     let space: WikiSpace
+    /// Who is in the wiki and who can be added; nil until it has been read.
+    var workspaces: WikiSpaceWorkspaces? = nil
     /// A workspace's name and runner, by id, when this client holds the workspace.
     var workspaceLabel: (String) -> String? = { _ in nil }
     /// The System model while the read says the server executes the account's wiki; nil otherwise.
@@ -83,6 +88,23 @@ struct WikiSettingsPage: View {
                 Text(section.title)
             } footer: {
                 (Text(WikiModeCopy.floorsLead).bold() + Text(" " + WikiModeCopy.floorsNote))
+            }
+        case .workspaces:
+            Section {
+                if let workspaces {
+                    if workspaces.workspaces.isEmpty {
+                        Text(WikiModeCopy.workspacesEmpty).foregroundStyle(.secondary)
+                    }
+                    ForEach(workspaces.workspaces) { row in workspaceRow(row) }
+                    if !workspaces.addable.isEmpty { addWorkspaceMenu(workspaces.addable) }
+                }
+            } header: {
+                Text(section.title)
+            } footer: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(WikiModeCopy.workspacesLead)
+                    Text(space.repoUrlNorm == nil ? WikiModeCopy.workspacesJoinNoRepository : WikiModeCopy.workspacesJoin)
+                }
             }
         case .maintenance:
             Section {
@@ -155,6 +177,49 @@ struct WikiSettingsPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(value == mode ? .isSelected : [])
+    }
+
+    /// One workspace: its name over its machine, and the switch that says whether it is in the wiki. One left
+    /// out stays on the list, greyed, and says it will not come back by itself.
+    private func workspaceRow(_ row: WikiSpaceWorkspaceRow) -> some View {
+        Toggle(isOn: Binding(get: { row.inWiki }, set: { actions.setWorkspace(row.id, $0) })) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.name).foregroundStyle(row.inWiki ? Color.primary : Color.secondary)
+                if let runner = row.runner {
+                    Text(runner).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                if !row.inWiki {
+                    Text(WikiModeCopy.workspaceLeftOut)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// The workspaces with no repository, in the system's menu: a press adds the one picked, at once. A Button with
+    /// two Texts is how a menu row gets a grey subtitle.
+    private func addWorkspaceMenu(_ addable: [WikiSpaceWorkspaceRow]) -> some View {
+        Menu {
+            Section(WikiModeCopy.addWorkspaceGroup) {
+                ForEach(addable) { row in
+                    Button {
+                        actions.setWorkspace(row.id, true)
+                    } label: {
+                        Text(row.name)
+                        if let runner = row.runner { Text(runner) }
+                    }
+                }
+            }
+        } label: {
+            Text(WikiModeCopy.addWorkspace)
+                #if os(iOS)
+                // A menu in a form takes a press on its label alone: the label is the whole row, as a Button row is.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                #endif
+        }
     }
 
     private func fallbackBanner(_ text: String) -> some View {
@@ -321,11 +386,12 @@ struct WikiSettingsView: View {
 
     var body: some View {
         if let wiki = model.wiki, let space = wiki.currentSpace {
-            WikiSettingsPage(space: space, workspaceLabel: { id in workspaceLabel(id) }, server: wiki.serverModel,
-                             busy: wiki.busy, actions: actions(wiki, space))
+            WikiSettingsPage(space: space, workspaces: wiki.spaceWorkspaces[space.id], workspaceLabel: { id in workspaceLabel(id) },
+                             server: wiki.serverModel, busy: wiki.busy, actions: actions(wiki, space))
                 .task {
                     await wiki.loadSpaces()
                     await wiki.loadSystemModel()
+                    await wiki.loadSpaceWorkspaces(space)
                 }
                 .sheet(isPresented: $settingUp) {
                     let current = space.settings?.maintenance ?? .default
@@ -362,6 +428,7 @@ struct WikiSettingsView: View {
         WikiSettingsActions(
             setMode: { mode in Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(reviewMode: mode))) } },
             setSpotChecks: { on in Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(automaticSpotChecks: on))) } },
+            setWorkspace: { id, inWiki in Task { finish(await wiki.setWorkspace(space, workspaceID: id, inWiki: inWiki)) } },
             setUp: { settingUp = true },
             turnOff: {
                 Task { finish(await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(enabled: false)))) }

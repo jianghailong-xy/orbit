@@ -74,6 +74,9 @@ final class WikiAPIClientTests: XCTestCase {
             case "/api/wiki/changesets/C1":
                 return (200, #"{"id":"C1","status":"settled","ops":[],"appliedByMode":"automatic","entries":[],"counts":{"applied":0,"auto":0,"unreviewed":0,"rejectedByCheck":0,"toReview":0},"revertible":false,"revert":null}"#)
             case "/api/wiki/spaces/S1/changesets": return (200, #"{"changesetId":"C2","replayed":false,"ops":[]}"#)
+            case "/api/wiki/spaces/S1/workspaces":
+                return (200, #"{"workspaces":[{"id":"W1","name":"shop-cli @ EU","runner":"build-01","inWiki":false}],"addable":[{"id":"W2","name":"notes","runner":null,"inWiki":false}]}"#)
+            case "/api/wiki/spaces/S1/workspaces/W1": return (200, "{}")
             default: return (404, "")
             }
         }
@@ -92,7 +95,12 @@ final class WikiAPIClientTests: XCTestCase {
         _ = try await api.submitWikiChangeset(
             spaceID: "S1", WikiChangesetRequest(ops: [.retire(entryId: "E1", baseRevision: 2, reason: "r")],
                                                 rationale: "Retired from the iOS app"))
+        let workspaces = try await api.wikiSpaceWorkspaces("S1")
+        try await api.addWikiWorkspace(spaceID: "S1", workspaceID: "W2")
+        try await api.leaveWikiWorkspaceOut(spaceID: "S1", workspaceID: "W1")
 
+        XCTAssertEqual(workspaces.workspaces, [WikiSpaceWorkspaceRow(id: "W1", name: "shop-cli @ EU", runner: "build-01", inWiki: false)])
+        XCTAssertEqual(workspaces.addable, [WikiSpaceWorkspaceRow(id: "W2", name: "notes", runner: nil, inWiki: false)])
         XCTAssertEqual(spaces.count, 2)
         XCTAssertEqual(detail.entry.id, WikiFixtures.pitfallID)
         XCTAssertEqual(decided.status, .settled)
@@ -110,6 +118,9 @@ final class WikiAPIClientTests: XCTestCase {
             "GET /api/wiki/search?q=redaction&include=topics&space=S1",
             "POST /api/wiki/changesets/C1/decide",
             "POST /api/wiki/spaces/S1/changesets",
+            "GET /api/wiki/spaces/S1/workspaces",
+            "POST /api/wiki/spaces/S1/workspaces",
+            "DELETE /api/wiki/spaces/S1/workspaces/W1",
         ])
     }
 }

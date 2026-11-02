@@ -47,6 +47,8 @@ import kotlinx.serialization.json.*
 internal class WikiSettingsActions(
     val setMode: (String) -> Unit = {},
     val setSpotChecks: (Boolean) -> Unit = {},
+    /** A workspace, and whether it is to be in the wiki: a row's switch, and Add workspace's menu. */
+    val setWorkspace: (String, Boolean) -> Unit = { _, _ -> },
     /** Set up… when maintenance is off, Edit… when it is on: the same sheet. */
     val setUp: () -> Unit = {},
     val turnOff: () -> Unit = {},
@@ -57,10 +59,12 @@ internal class WikiSettingsActions(
  * workspace. [server]: the deployment's System model while the server executes the account's wiki (mock 35 ①②, P9),
  * drawn read-only with its state, and one sentence says where the wiki's material goes; null while the read does not
  * say so (still loading, or a control plane from before it), which draws neither.
+ * [workspaces]: who is in the wiki and who can be added (mock 38); null until it has been read.
  * Every control is off while a write is in flight ([busy]). */
 @Composable
 internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabel: (String) -> String? = { null },
-    server: WikiSystemModelStatus? = null, busy: Boolean = false, actions: WikiSettingsActions = WikiSettingsActions()) {
+    server: WikiSystemModelStatus? = null, busy: Boolean = false, actions: WikiSettingsActions = WikiSettingsActions(),
+    workspaces: WikiSpaceWorkspaces? = null) {
     val mode = WikiModeLogic.mode(space.settings)
     val maintenance = space.settings?.maintenance ?: WikiMaintenanceSettings.default
     PageBar.Bind(route, WikiModeCopy.settingsTitle)
@@ -102,6 +106,31 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                             append(" " + WikiModeCopy.floorsNote)
                         }, Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp).testTag("wiki-settings-floors"), style = WikiType.label,
                             color = WikiPalette.secondary)
+                    }
+                }
+                WikiModeLogic.SettingsSection.WORKSPACES -> {
+                    item(key = "workspaces-header") { WikiPlanSectionHead(section.title) }
+                    if (workspaces != null) item(key = "workspaces") {
+                        WikiCard(Modifier.testTag("wiki-settings-workspaces")) {
+                            if (workspaces.workspaces.isEmpty()) Text(WikiModeCopy.workspacesEmpty,
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("wiki-settings-workspaces-empty"),
+                                style = WikiType.prose, color = WikiPalette.secondary)
+                            workspaces.workspaces.forEachIndexed { index, row ->
+                                if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                                SettingsWorkspaceRow(row, busy) { inWiki -> actions.setWorkspace(row.id, inWiki) }
+                            }
+                            if (workspaces.addable.isNotEmpty()) {
+                                HorizontalDivider(Modifier.padding(start = 16.dp))
+                                SettingsAddWorkspaceRow(workspaces.addable, busy) { id -> actions.setWorkspace(id, true) }
+                            }
+                        }
+                    }
+                    item(key = "workspaces-footer") {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            WikiPlanFootnoteText(WikiModeCopy.workspacesLead, "wiki-settings-workspaces-lead")
+                            WikiPlanFootnoteText(if (space.repoUrlNorm == null) WikiModeCopy.workspacesJoinNoRepository else WikiModeCopy.workspacesJoin,
+                                "wiki-settings-workspaces-join")
+                        }
                     }
                 }
                 WikiModeLogic.SettingsSection.MAINTENANCE -> {
@@ -186,6 +215,42 @@ private fun SettingsButtonRow(title: String, tag: String, busy: Boolean, destruc
     val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     WikiRowButton(tag, enabled = !busy, onClick = onClick) {
         Text(title, style = WikiType.prose, color = tint.copy(alpha = if (busy) 0.38f else 1f))
+    }
+}
+
+/** One workspace: its name over its machine, and the switch that says whether it is in the wiki. One left out stays on
+ * the list, greyed, and says it will not come back by itself. */
+@Composable
+private fun SettingsWorkspaceRow(row: WikiSpaceWorkspaceRow, busy: Boolean, change: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().toggleable(row.inWiki, enabled = !busy, role = Role.Switch, onValueChange = change)
+        .padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-settings-workspace-row:${row.id}"), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(row.name, style = WikiType.prose, color = if (row.inWiki) MaterialTheme.colorScheme.onSurface else WikiPalette.secondary)
+            row.runner?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) }
+            if (!row.inWiki) Text(WikiModeCopy.workspaceLeftOut, style = WikiType.label, color = WikiPalette.secondary)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = row.inWiki, onCheckedChange = null, enabled = !busy)
+    }
+}
+
+/** The workspaces with no repository, in a menu: a press adds the one picked, at once. */
+@Composable
+private fun SettingsAddWorkspaceRow(addable: List<WikiSpaceWorkspaceRow>, busy: Boolean, add: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        SettingsButtonRow(WikiModeCopy.addWorkspace, "wiki-settings-add-workspace", busy) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            Text(WikiModeCopy.addWorkspaceGroup, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = WikiType.label, color = WikiPalette.secondary)
+            addable.forEach { row ->
+                DropdownMenuItem(text = {
+                    Column {
+                        Text(row.name)
+                        row.runner?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) }
+                    }
+                }, onClick = { expanded = false; add(row.id) }, modifier = Modifier.testTag("wiki-settings-add-workspace:${row.id}"))
+            }
+        }
     }
 }
 
@@ -369,6 +434,9 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
     var settingUp by rememberSaveable { mutableStateOf(false) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
     var reads by remember { mutableStateOf(WikiMaintenanceReads()) }
+    var members by remember { mutableStateOf<WikiSpaceWorkspaces?>(null) }
+    suspend fun readMembers(id: String) { optional { store.client.spaceWorkspaces(id) }?.let { members = it } }
+    LaunchedEffect(store, state.currentSpace?.id) { state.currentSpace?.let { readMembers(it.id) } }
     LaunchedEffect(store) { store.loadSpaces() }
     LaunchedEffect(store) { store.loadSystemModel() }
     LaunchedEffect(store) { reads = wikiMaintenanceReads(store.client) }
@@ -386,8 +454,14 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
         actions = WikiSettingsActions(
             setMode = { mode -> scope.launch { finish(store.updateSpace(space, wikiReviewModeUpdate(mode))) } },
             setSpotChecks = { on -> scope.launch { finish(store.updateSpace(space, wikiSpotChecksUpdate(on))) } },
+            setWorkspace = { id, inWiki -> scope.launch {
+                val answer = store.setWorkspace(space, id, inWiki)
+                readMembers(space.id)
+                finish(answer)
+            } },
             setUp = { settingUp = true },
-            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } }))
+            turnOff = { scope.launch { finish(store.updateSpace(space, wikiMaintenanceOff())) } }),
+        workspaces = members)
     if (settingUp) {
         val current = space.settings?.maintenance ?: WikiMaintenanceSettings.default
         // A space names a codebase, and so does a workspace's name more often than not: the one called what the space

@@ -32,9 +32,10 @@ class WikiPlanFixtureTest {
             WikiPlanCopy.cancel to "cancel", WikiPlanCopy.viewRun to "viewRun", WikiPlanCopy.setUp to "setUp",
             WikiPlanCopy.viewRunners to "viewRunners", WikiPlanCopy.none to "none", WikiPlanCopy.emptyTitle to "emptyTitle",
             WikiPlanCopy.documents to "documents", WikiPlanCopy.inForce to "inForce", WikiPlanCopy.queued to "queued",
-            WikiPlanCopy.drafting to "drafting", WikiPlanCopy.held to "held", WikiPlanCopy.failed to "failed", WikiPlanCopy.passed to "passed",
+            WikiPlanCopy.drafting to "drafting", WikiPlanCopy.held to "held", WikiPlanCopy.ready to "ready", WikiPlanCopy.passed to "passed",
             WikiPlanCopy.writing to "writing", WikiPlanCopy.writingNow to "writingNow", WikiPlanCopy.jobFailed to "jobFailed",
-            WikiPlanCopy.buildFailed to "buildFailed", WikiPlanCopy.question to "question", WikiPlanCopy.writtenFor to "writtenFor",
+            WikiPlanCopy.redraftFailed to "redraftFailed", WikiPlanCopy.buildFailed to "buildFailed", WikiPlanCopy.question to "question",
+            WikiPlanCopy.writtenFor to "writtenFor",
             WikiPlanCopy.covers to "covers", WikiPlanCopy.notCovered to "notCovered", WikiPlanCopy.length to "length",
             WikiPlanCopy.protected to "protected", WikiPlanCopy.drawsOn to "drawsOn", WikiPlanCopy.sections to "sections",
             WikiPlanCopy.sourceDocs to "sourceDocs", WikiPlanCopy.sourceCode to "sourceCode", WikiPlanCopy.sourceContracts to "sourceContracts",
@@ -47,7 +48,8 @@ class WikiPlanFixtureTest {
             WikiPlanCopy.check to "check", WikiPlanCopy.changeRejected to "changeRejected", WikiPlanCopy.redraftAsked to "redraftAsked",
             WikiPlanCopy.redraftAlready to "redraftAlready", WikiPlanCopy.acceptRefused to "acceptRefused",
             WikiPlanCopy.redraftTitle to "redraftTitle", WikiPlanCopy.redraftGo to "redraftGo",
-            WikiPlanCopy.redraftPlaceholder to "redraftPlaceholder", WikiPlanCopy.editTitleField to "editTitleField",
+            WikiPlanCopy.redraftPlaceholder to "redraftPlaceholder", WikiPlanCopy.startOver to "startOver",
+            WikiPlanCopy.startOverTitle to "startOverTitle", WikiPlanCopy.startOverGo to "startOverGo", WikiPlanCopy.editTitleField to "editTitleField",
             WikiPlanCopy.editKind to "editKind", WikiPlanCopy.protectedSwitch to "protectedSwitch", WikiPlanCopy.addSection to "addSection",
             WikiPlanCopy.saveDraft to "saveDraft", WikiPlanCopy.protectedNote to "protectedNote",
             WikiPlanCopy.notProtectedNote to "notProtectedNote",
@@ -84,7 +86,7 @@ class WikiPlanFixtureTest {
         rows("chars").forEach { row -> val length = row.fobj("length")
             assertEquals(row.fstr("says"), WikiPlanCopy.chars(WikiPlanRange(length.fint("min"), length.fint("max")))) }
         rows("sectionChars").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.sectionChars(it.fint("n"))) }
-        rows("errors").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.errorCount(it.fint("n"))) }
+        rows("notFound").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.notFoundCount(it.fint("n"))) }
         rows("changesCount").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.changeCount(it.fint("n"))) }
         rows("time").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.time(it["since"].text(), it["until"].text())) }
         rows("protectedKept").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.protectedKept(it.fstrings("numbers"))) }
@@ -94,7 +96,21 @@ class WikiPlanFixtureTest {
         rows("changeAdded").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.changeAdded(it.fint("n"))) }
         rows("draftSaved").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.draftSaved(it.fint("n"))) }
         rows("andMore").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.andMore(it.fint("n"))) }
-        rows("failedHint").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.failedHint(it["inForce"].integer())) }
+        rows("startOverText").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.startOverText(it.fint("version"))) }
+    }
+
+    // MARK: the two doors
+
+    @Test fun theTwoDoorsAreTheFixtures() {
+        val doors = plan.farr("doors").map { it.jsonObject }
+        assertEquals(8, doors.size)
+        doors.forEach { door ->
+            val about = door.fstr("about")
+            val state = state(door.fobj("spec"))
+            assertEquals(about, door["ready"].bool(), WikiPlanLogic.redraftReady(state, door.fstr("words")))
+            assertEquals(about, door.fstr("boxHolds"), WikiPlanLogic.redraftWords(state))
+            assertEquals(about, door["startOver"].integer(), WikiPlanLogic.startOver(state))
+        }
     }
 
     // MARK: the readings
@@ -103,7 +119,7 @@ class WikiPlanFixtureTest {
     @Test fun everyStateIsTheFixtures() {
         val states = plan.fobj("states")
         val directory = WikiPlanFixture.directory
-        assertEquals(13, states.size)
+        assertEquals(17, states.size)
         states.keys.sorted().forEach { name ->
             val expected = states.fobj(name)
             val spec = expected.fobj("spec")
@@ -129,13 +145,11 @@ class WikiPlanFixtureTest {
             val open = WikiPlanLogic.openJob(state)
             val failed = WikiPlanLogic.failedJob(state)
             val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && state.confirmed?.version == shown.version
-            assertEquals(name, expected["head"].text(), if (shown == null) open?.let { WikiPlanLogic.jobHead(it, zone) } else null)
+            assertEquals(name, expected["head"].text(), if (shown == null) (open ?: failed)?.let { WikiPlanLogic.jobHead(it, zone) } else null)
             assertEquals(name, (expected["meta"] as? JsonArray)?.map { it.jsonPrimitive.content },
-                shown?.let { WikiPlanLogic.meta(it, if (it.status == WikiPlanLogic.ShownStatus.FAILED) failed else (open ?: state.job), if (inForce) docs else null, zone) })
-            assertEquals(name, expected["hint"].text(),
-                if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) WikiPlanCopy.failedHint(state.confirmed?.version) else null)
+                shown?.let { WikiPlanLogic.meta(it, open ?: state.job, if (inForce) docs else null, zone) })
 
-            val card = WikiPlanLogic.jobCard(state.job, now, online, if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null,
+            val card = WikiPlanLogic.jobCard(state.job, now, online, failed?.let { it to state },
                 inForce, if (state.confirmed != null) directory else null)
             val wantCard = expected["jobCard"] as? JsonObject
             assertEquals(name, wantCard?.let { "${it.fstr("look")} | ${it.fstr("title")} | ${it.fstr("text")}" },
@@ -145,8 +159,8 @@ class WikiPlanFixtureTest {
             assertEquals(name, (wantCard?.get("progress") as? JsonObject)?.let { "${it.fint("done")}/${it.fint("total")} ${it["now"].textOrDash()}" },
                 card?.progress?.let { "${it.done}/${it.total} ${it.now ?: "-"}" })
 
-            if (shown != null && (shown.status == WikiPlanLogic.ShownStatus.DRAFT || shown.status == WikiPlanLogic.ShownStatus.FAILED)) {
-                val gate = WikiPlanLogic.gate(shown, WikiPlanLogic.base(shown, state), if (shown.status == WikiPlanLogic.ShownStatus.FAILED) failed else state.job)
+            if (shown?.status == WikiPlanLogic.ShownStatus.DRAFT) {
+                val gate = WikiPlanLogic.gate(shown, WikiPlanLogic.base(shown, state), state.job)
                 val want = expected["gate"] as? JsonObject ?: throw AssertionError("$name has no gate")
                 assertEquals(name, listOf(if (want["passed"].bool() == true) "passed" else "failed", want.fstr("title"), want.fstr("line"), want["aside"].textOrDash()),
                     listOf(if (gate.passed) "passed" else "failed", gate.title, gate.line, gate.aside ?: "-"))
@@ -163,10 +177,10 @@ class WikiPlanFixtureTest {
                 categories.map { "${it.key} ${it.number} ${it.title} ${WikiPlanLogic.categoryLine(it)}" })
             categories.zip(wantCategories).forEach { (category, want) ->
                 assertEquals(name, want.farr("docs").map { it.jsonObject }.map {
-                    "${it.fstr("slug")} ${it.fstr("number")} ${it.fstr("title")} ${it["protected"].bool()} ${it.fint("errors")} ${it["errorLabel"].textOrDash()} ${it.fstr("line")}"
+                    "${it.fstr("slug")} ${it.fstr("number")} ${it.fstr("title")} ${it["protected"].bool()} ${it.fint("notFound")} ${it["notFoundLabel"].textOrDash()} ${it.fstr("line")}"
                 }, category.docs.map { doc ->
-                    val errors = WikiPlanLogic.docErrors(shown!!, doc).size
-                    "${doc.slug} ${doc.number} ${doc.title} ${doc.protected} $errors ${if (errors > 0) WikiPlanCopy.errorCount(errors) else "-"} ${WikiPlanLogic.docLine(doc)}"
+                    val missing = WikiPlanLogic.docMissing(shown!!, doc).size
+                    "${doc.slug} ${doc.number} ${doc.title} ${doc.protected} $missing ${if (missing > 0) WikiPlanCopy.notFoundCount(missing) else "-"} ${WikiPlanLogic.docLine(doc)}"
                 })
             }
         }
@@ -174,25 +188,22 @@ class WikiPlanFixtureTest {
 
     @Test fun theVersionMenuIsTheFixtures() {
         val rows = plan.fobj("versionRows")
-        val failed = rows.fobj("failed")
-        val ours = WikiPlanLogic.versionRows(rows.farr("versions").decode(ListSerializer(WikiPlanVersionSummary.serializer())),
-            failed.fint("version") to failed["at"].text(), zone)
+        val ours = WikiPlanLogic.versionRows(rows.farr("versions").decode(ListSerializer(WikiPlanVersionSummary.serializer())), zone)
         assertEquals(rows.farr("rows").map { it.jsonObject }.map { "v${it.fint("version")} ${it.fstr("status")} ${it.fstr("note")}" },
             ours.map { "v${it.version} ${it.status.name.lowercase()} ${it.note}" })
     }
 
-    /** A document's and a section's pages of the failed draft and of the version in force. */
+    /** A document's and a section's pages of a draft with references not found and of the version in force. */
     @Test fun aDocumentsAndASectionsPagesAreTheFixtures() {
         plan.farr("docPages").map { it.jsonObject }.forEach { expected ->
-            val state = state(plan.fobj("states").fobj(if (expected.fint("version") == 1) "inForce" else "draftFailed").fobj("spec"))
+            val state = state(plan.fobj("states").fobj(if (expected.fint("version") == 1) "inForce" else "draftNoted").fobj("spec"))
             val shown = WikiPlanLogic.defaultShown(state)!!
-            val base = WikiPlanLogic.base(shown, state)
             val doc = shown.docs.first { it.slug == expected.fstr("slug") }
             val at = "v${expected.fint("version")} ${expected.fstr("slug")}"
-            val errors = WikiPlanLogic.docErrors(shown, doc).size
+            val missing = WikiPlanLogic.docMissing(shown, doc).size
             assertEquals(at, listOf(expected.fstr("title"), expected.fstr("number"), "${expected["protected"].bool()}"), listOf(doc.title, doc.number, "${doc.protected}"))
             assertEquals(at, expected.fstrings("head"), listOf("${WikiPlanCopy.versionLabel(shown.version)} · ${shown.status.label}") +
-                (if (errors > 0) listOf(WikiPlanCopy.errorCount(errors)) else emptyList()) + WikiPlanLogic.docLine(doc))
+                (if (missing > 0) listOf(WikiPlanCopy.notFoundCount(missing)) else emptyList()) + WikiPlanLogic.docLine(doc))
             assertEquals(at, expected.fstr("length"), WikiPlanCopy.chars(doc.length))
             assertEquals(at, expected.fstr("protectedNote"), if (doc.protected) WikiPlanCopy.protectedNote else WikiPlanCopy.notProtectedNote)
             assertEquals(at, expected.fstr("drawsOn"), WikiPlanLogic.drawsOn(doc))
@@ -219,10 +230,6 @@ class WikiPlanFixtureTest {
                     section.sources.sessions?.let { s -> listOf(s.projects.joinToString(",") { it.title }, WikiPlanCopy.time(s.since, s.until),
                         s.keywords.joinToString(","), s.anchorPaths.joinToString(","), s.entryKinds.joinToString(" · "), s.topics.joinToString(" · "), s.evidence) })
             }
-            assertEquals(at, expected.farr("lost").map { it.jsonObject }.map { "${it.fint("number")} ${it.fstr("label")} | ${it.fstr("why")}" },
-                WikiPlanLogic.lostSections(shown, base, doc.slug).map {
-                    "${it.number} ${WikiPlanCopy.lostLabel(base?.version ?: 0, it.number, it.title)} | ${WikiPlanCopy.protectedMovePhone(it.movedTo, doc.number)}"
-                })
         }
     }
 
@@ -295,6 +302,32 @@ class WikiPlanFixtureTest {
         assertEquals("failed", state.job?.state)
         assertNull(state.job?.draft)
         assertNull(WikiPlanLogic.defaultShown(state))
+    }
+
+    /** A job is no version: the draft a job kept before 2026-11-02 is never drawn, nor is the number the next version gets. */
+    @Test fun aFailedJobIsNoVersion() {
+        val kept = WikiPlanState.decode(Json.parseToJsonElement(
+            """{"spaceId":"sp1","confirmed":null,"draft":null,"proposals":[],"job":{"id":"j","kind":"draft","state":"failed","draft":{"categories":[],"docs":[]}}}"""))
+        assertNotNull(kept.job?.draft)
+        assertNull(WikiPlanLogic.defaultShown(kept))
+        val inForce = state(plan.fobj("states").fobj("draftFailed").fobj("spec"))
+        assertNull(wikiPlanShown(inForce, WikiPlanLogic.nextVersion(inForce), emptyMap()))
+        assertEquals(1, wikiPlanShown(inForce, null, emptyMap())?.version)
+    }
+
+    /** Why a reference is listed, by what it was looked for in (`MISS_WHY`): the fixture's draft names two of the four, and a
+     * kind this build has not heard of claims nothing. */
+    @Test fun everyKindOfReferenceSaysWhyItIsListed() {
+        val draft = version("v2Noted")
+        val missing = listOf("file", "docSection", "symbol", "contract", "later").map { WikiPlanRepoCheck.Miss(it, "r", "plan.docs[0]") }
+        val gate = WikiPlanLogic.gate(WikiPlanLogic.fromVersion(draft.copy(repoCheck = draft.repoCheck?.copy(missing = missing))), null, null)
+        assertEquals(listOf("no such file", "no such heading", "not in the file", "no such file", ""), gate.refs.map { it.why })
+    }
+
+    /** With no words of its own a job still says what stands. */
+    @Test fun aFailedJobWithNoErrorSaysItsRunEnded() {
+        val job = WikiPlanJob.read(Json.parseToJsonElement("""{"id":"j","kind":"draft","state":"failed"}"""))!!
+        assertEquals("Its run ended without a draft. Nothing was saved.", WikiPlanLogic.failedText(job, WikiPlanState("sp1", null, null, emptyList(), job)))
     }
 
     // MARK: the orders

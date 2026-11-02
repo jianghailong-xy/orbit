@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { Link } from 'react-router-dom';
 import {
   fetchSharedAttachmentObjectUrl,
+  sharedAttachmentUrl,
   type ShareInclude,
   type SharedScope,
   type SharedTask,
@@ -20,6 +21,7 @@ import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import { countOf, shortDate } from '../lib/shareLinks';
 import { taskOutcomeChip } from '../lib/taskOutcome';
 import { titleFirstLine } from '../lib/title';
+import { openUserFile } from '../lib/userFile';
 import { ACCEPTANCE_EMPTY } from './TaskDetailPage';
 
 /** What the declared judgment means, said to somebody who does not own the task. */
@@ -160,11 +162,7 @@ function Acceptance({ task }: { task: SharedTask }) {
 
 /** One input file: opened through the link's own attachment route, never the owner's. */
 function InputFile({ token, input }: { token: string; input: NonNullable<SharedTask['inputs']>[number] }) {
-  const open = () => {
-    void fetchSharedAttachmentObjectUrl(token, input.id)
-      .then((url) => window.open(url, '_blank', 'noopener'))
-      .catch(() => undefined);
-  };
+  const open = () => openUserFile(sharedAttachmentUrl(token, input.id), input.mimeType, input.fileName ?? 'attachment');
   return (
     <button type="button" className="share-input" onClick={open} title="Open this file">
       <FileOutlined />

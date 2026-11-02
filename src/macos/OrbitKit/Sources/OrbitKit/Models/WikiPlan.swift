@@ -178,6 +178,13 @@ public struct WikiPlanNewField: Codable, Equatable, Sendable {
     public let values: Int?
 }
 
+/// One thing a stored draft says to look at: a sentence for the owner, under the check it belongs to
+/// (contract `plan.gate.notes`).
+public struct WikiPlanGateNote: Codable, Equatable, Sendable {
+    public let check: WikiPlanGateCheck
+    public let text: String
+}
+
 /// What the gate checked of a version it let through (contract `plan.gate.report`).
 public struct WikiPlanGateReport: Codable, Equatable, Sendable {
     public let checkedAt: String?
@@ -186,6 +193,8 @@ public struct WikiPlanGateReport: Codable, Equatable, Sendable {
     public let docs: Int?
     public let target: WikiPlanRange?
     public let needsNewFields: [WikiPlanNewField]?
+    /// What the drafting job's last round could not mend; absent when there is none.
+    public let notes: [WikiPlanGateNote]?
 }
 
 /// What the drafting job found when it checked the repository references on the runner, at `sha`.
@@ -491,13 +500,14 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
     public let progress: Progress?
     /// A job that succeeded: the version it stored. A build's, from the start: the confirmed version it writes.
     public let version: Int?
-    /// A job that failed: the gate's errors on its last round, and what went wrong in words.
+    /// A job that failed before 2026-11-02: the gate's errors on its last round.
     public let errors: [WikiPlanGateError]?
+    /// A job that failed: why there is no draft, in a sentence for the owner.
     public let error: String?
     public let report: Report?
-    /// A job that failed: the last draft it had, as it was sent to the gate — what the plan page shows in
-    /// its place, since the server stores nothing the gate refused. The model wrote it and the gate may
-    /// have refused its very shape, so a draft this build cannot read is dropped, never the job with it.
+    /// A job that failed before 2026-11-02: the last draft it had, as it was sent to the gate. No page draws
+    /// it. The model wrote it and the gate may have refused its very shape, so a draft this build cannot
+    /// read is dropped, never the job with it.
     public var draft: WikiPlanDraftInput? { lossyDraft?.value }
     private let lossyDraft: LossyDecodable<WikiPlanDraftInput>?
 
