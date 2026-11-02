@@ -21,13 +21,12 @@ volume.
 
 ## How to use
 
-Run the script from anywhere (it `cd`s to the repo root itself):
+Run the script of the checkout the deployment runs from (see [Where to run it](#where-to-run-it)). Your
+working directory does not matter: it `cd`s to its own repo root.
 
 ```bash
 .claude/skills/upgrade/upgrade.sh
 ```
-
-Run it in the checkout the deployment runs from (see [Where to run it](#where-to-run-it)).
 
 It will, in order:
 
@@ -129,8 +128,8 @@ one it started on, and Compose sees no change. The script compares what the cont
 the checkout. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup
 in progress, which it takes again as it starts.
 
-One that is not running is left as it is, and the run says `pgbackup was NOT updated` as its last
-lines, with the command to run.
+A sidecar that is not running is left as it is, and the run says `pgbackup was NOT updated` as its
+last lines, with the command to run.
 
 The step is in the script, so it runs once the script on disk has it. A run from an older version
 pulls the new script from inside itself and finishes as the old one, reporting success with
@@ -158,7 +157,7 @@ show: see the [backup and restore runbook](../../../docs/postgres-backup-restore
 
 - Docker with the Compose v2 plugin (`docker compose`). The legacy
   `docker-compose` v1 binary is used as a fallback, but `--wait` requires v2.
-- Run from a checkout of the repo (the script resolves the repo root relative
+- Run the script of the checkout the deployment runs from (it resolves the repo root relative
   to its own location).
 - The same environment the stack normally uses (e.g. `JWT_SECRET`) should be
   present in the shell or repo-root `.env`.

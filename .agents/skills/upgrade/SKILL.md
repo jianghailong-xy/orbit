@@ -70,7 +70,7 @@ So the helper stops first, before it pulls, builds, tags or recreates anything, 
 
 The backup sidecar needs a step of its own. Compose bind-mounts `scripts/pg-backup.sh` into it as a single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and Compose sees no change. The helper compares what the container has with the checkout: if they differ it runs `docker compose up -d --wait --no-deps --force-recreate pgbackup`, otherwise the same without `--force-recreate`, which recreates it for a change of configuration, such as a new mount, and leaves it running if there is none. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup in progress, which it takes again as it starts.
 
-One that is not running is left as it is, and the helper says `pgbackup was NOT updated` as its last lines, with the command to run.
+A sidecar that is not running is left as it is, and the helper says `pgbackup was NOT updated` as its last lines, with the command to run.
 
 The step is in the script, so it runs once the script on disk has it. A run from an older version pulls the new script from inside itself and finishes as the old one, reporting success with `pgbackup` unchanged. Put the new version on disk first and pass `--no-pull`, or run it a second time.
 
@@ -94,5 +94,5 @@ With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last t
 ## Requirements
 
 - Docker Compose v2 is preferred. The legacy `docker-compose` binary is a fallback, but `--wait` requires v2 support.
-- Run against an Orbit checkout with the normal deployment environment, including values normally supplied through the root `.env`.
+- Run against the checkout the deployment runs from, with the normal deployment environment, including values normally supplied through the root `.env`.
 - Never delete or recreate the `orbit_pg` volume as part of this workflow.
