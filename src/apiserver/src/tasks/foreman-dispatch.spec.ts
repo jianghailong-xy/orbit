@@ -159,6 +159,8 @@ test('the foreman brief names the stall and stays a one-shot', async () => {
   // The instruction that keeps this episodic. A coordinator that decided to sit and poll would
   // be the resident supervisor this design exists to avoid, and it would hold a slot doing it.
   assert.match(description, /one-off coordinating task: do not keep running or polling/);
+  // A foreman is a run: it reports what settles another task, because editing it would be refused.
+  assert.match(description, /neither is what settles another task \(.+\): report either as in step 4/);
 });
 
 test('the foreman does not auto-run — the stall dispatched it, not a prerequisite', async () => {

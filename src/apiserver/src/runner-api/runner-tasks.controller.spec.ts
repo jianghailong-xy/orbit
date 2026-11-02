@@ -127,11 +127,16 @@ test('dependency graph and edge edits stay owner-scoped through TasksService', a
   await controller.getTaskDependencyGraph(RUNNER, 'task-1', '12', '300');
   await controller.addTaskDependency(RUNNER, 'task-1', { dependsOnTaskId: 'task-0' });
   await controller.removeTaskDependency(RUNNER, 'task-1', 'task-0');
+  // The session a newer runner names on these two; an older one names none, and reads as the owner.
+  await controller.addTaskDependency(RUNNER, 'task-1', { dependsOnTaskId: 'task-0' }, 'session-1');
+  await controller.removeTaskDependency(RUNNER, 'task-1', 'task-0', 'session-1');
 
   assert.deepEqual(calls, [
     { method: 'dependencyGraph', args: ['owner-1', 'task-1', { maxDepth: '12', maxNodes: '300' }] },
-    { method: 'addDependency', args: ['owner-1', 'task-1', 'task-0'] },
-    { method: 'removeDependency', args: ['owner-1', 'task-1', 'task-0'] },
+    { method: 'addDependency', args: ['owner-1', 'task-1', 'task-0', undefined] },
+    { method: 'removeDependency', args: ['owner-1', 'task-1', 'task-0', undefined] },
+    { method: 'addDependency', args: ['owner-1', 'task-1', 'task-0', 'session-1'] },
+    { method: 'removeDependency', args: ['owner-1', 'task-1', 'task-0', 'session-1'] },
   ]);
 });
 

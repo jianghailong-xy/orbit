@@ -753,19 +753,17 @@ async function statedCriterion(stack: Stack, w: World, text: string): Promise<st
 }
 
 /** A run of ANOTHER task: the independent session a decision about this task may come from. */
-async function independentRun(
+async function independentSession(
   stack: Stack,
   w: World,
   label: string,
-): Promise<{ taskId: string; sessionId: string }> {
-  const review = await bareTask(stack, w, `${label}-review`);
+): Promise<{ sessionId: string }> {
   const sessionId = randomUUID();
   await stack.db.session.create({
     data: {
       id: sessionId,
       ownerId: w.ownerId,
       creatorId: w.ownerId,
-      taskId: review.taskId,
       workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId,
       title: `${label}-review`,
@@ -773,10 +771,10 @@ async function independentRun(
       provider: 'claude',
       status: RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER,
-      startsTaskWork: true,
+      startsTaskWork: false,
     },
   });
-  return { taskId: review.taskId, sessionId };
+  return { sessionId };
 }
 
 function assertEscalatesAfterDefault(item: ItemRow): void {
@@ -1044,7 +1042,7 @@ test('the evidence judgment settles the task, and answers the failure item an ea
         'OPEN',
       );
 
-      const review = await independentRun(stack, w, 'judgment-settles');
+      const review = await independentSession(stack, w, 'judgment-settles');
       await stack.evidence.decide(
         w.ownerId,
         a.taskId,

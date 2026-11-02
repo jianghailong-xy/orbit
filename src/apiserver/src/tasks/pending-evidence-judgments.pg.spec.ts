@@ -32,8 +32,8 @@
  * owner, so before this every session was handed every one of this account's open questions and
  * merely told, per row, which ones it was not allowed to answer — one fact painted onto as many
  * faces as there were open sessions, none of whose readers could act on most of it. What comes
- * back is now scoped, and scoped all the way: four readers of the same three facts are asked about
- * three, two, two and two of them, and the stalled row only its submitter can clear reaches the
+ * back is now scoped, and scoped all the way: of four readers of the same three facts, the session
+ * of no task is asked about all three and each run about none, and the stalled row only its submitter can clear reaches the
  * submitter and no other session. A group that greyed the same row and showed it anyway was that
  * one fact on those same N faces under a politer heading, which is why the assertions below ask
  * which groups a task appears in AT ALL rather than which of two named ones it landed in.
@@ -83,7 +83,7 @@ async function empty(client: Client): Promise<void> {
 }
 
 /**
- * Three runs that did work, and one that did not.
+ * Three runs that did work, and a session of no task that reads what they submitted.
  *
  * The three working tasks submit at deliberately spaced `submitted_at` values, because "the oldest
  * question" is a claim about order and a fixture that wrote all three in the same millisecond
@@ -94,7 +94,6 @@ async function fixture(db: PrismaClient) {
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   const projectId = randomUUID();
-  const coordinatorTaskId = randomUUID();
   const coordinatorSessionId = randomUUID();
   // The stalled population this rail actually meets: evidence imported from a task comment, from
   // before the envelope existed. It quotes no criterion because there was nowhere to quote one.
@@ -134,7 +133,6 @@ async function fixture(db: PrismaClient) {
 
   for (const [id, title] of [
     ...work.map((unit, index) => [unit.taskId, `work ${index + 1}`] as const),
-    [coordinatorTaskId, 'the run doing the deciding'] as const,
     [legacyTaskId, 'the SOURCE contract rebase'] as const,
   ]) {
     await db.task.create({
@@ -163,7 +161,7 @@ async function fixture(db: PrismaClient) {
   }
   for (const [id, taskFor, title] of [
     ...work.map((unit, index) => [unit.sessionId, unit.taskId, `run ${index + 1}`] as const),
-    [coordinatorSessionId, coordinatorTaskId, 'the coordinator'] as const,
+    [coordinatorSessionId, undefined, 'the coordinator'] as const,
     [legacySessionId, legacyTaskId, 'the run that predates the envelope'] as const,
   ]) {
     await db.session.create({
@@ -179,7 +177,7 @@ async function fixture(db: PrismaClient) {
         provider: 'claude',
         status: RunStatus.AWAITING_INPUT,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
+        startsTaskWork: taskFor !== undefined,
       },
     });
   }
@@ -212,7 +210,6 @@ async function fixture(db: PrismaClient) {
     runnerId,
     workspaceId,
     projectId,
-    coordinatorTaskId,
     coordinatorSessionId,
     legacyTaskId,
     legacySessionId,
@@ -431,22 +428,19 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
   // (ii) -----------------------------------------------------------------------------------------
   // The scope claim, and the one the screenshot was of. Three questions exist on this ACCOUNT; the
   // number any one session is asked about is decided by what that session may answer, so four
-  // readers of the same three facts get four different answers. A read that only decorated its
+  // readers of the same three facts do not get one answer. A read that only decorated its
   // rows with independence — which is what this was before — answers "three" to every one of them.
   await t.test('what comes back is scoped to the reader, not to the account', async () => {
     const read = await queue(f.coordinatorSessionId);
     assert.deepEqual(read.pending?.map((row) => row.independence?.independent), [true, true, true]);
 
-    // Read from the run that DID the first task's work. That question has not gone anywhere — the
-    // coordinator above is still being asked it — it is simply not among the ones put to a reader
-    // the door would refuse. Nothing this session can act on is withheld, and nothing it cannot
-    // act on is shown.
+    // Read from the run that DID the first task's work. Those questions have not gone anywhere — the
+    // coordinator above is still being asked them — they are simply not among the ones put to a
+    // reader the door would refuse: a run decides neither its own task's evidence nor a sibling's.
+    // Nothing this session can act on is withheld, and nothing it cannot act on is shown.
     const fromTheSubmitter = await queue(f.work[0].sessionId);
-    assert.equal(fromTheSubmitter.count, 2);
-    assert.deepEqual(fromTheSubmitter.pending?.map((row) => row.taskId),
-      [f.work[1].taskId, f.work[2].taskId]);
-    assert.equal(fromTheSubmitter.pending?.some((row) => row.taskId === f.work[0].taskId), false,
-      'a session was handed the question about its own work');
+    assert.equal(fromTheSubmitter.count, 0);
+    assert.deepEqual(fromTheSubmitter.pending, []);
     // Not shunted into another group either: the other group is about evidence no decision can be
     // recorded about, which is a different fact from "not by you". Asked of every group the read
     // returns rather than of the ones this spec can name.
@@ -454,7 +448,7 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     assert.equal(fromTheSubmitter.count, fromTheSubmitter.pending?.length);
     // And the headline number follows the rows rather than the account, so a session cannot lead
     // with a count of questions it is not being asked.
-    assert.equal(fromTheSubmitter.oldestAgeSeconds, fromTheSubmitter.pending?.[0].ageSeconds);
+    assert.equal(fromTheSubmitter.oldestAgeSeconds, null);
 
     // The whole shape of the bug, stated as one assertion: N readers, the same three account-level
     // facts, and the size of the list is a function of the READER. Before this, every entry in
@@ -469,7 +463,7 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
       asked.set(label, (await queue(sessionId)).count ?? -1);
     }
     assert.deepEqual([...asked.entries()],
-      [['coordinator', 3], ['run 1', 2], ['run 2', 2], ['run 3', 2]],
+      [['coordinator', 3], ['run 1', 0], ['run 2', 0], ['run 3', 0]],
       'the same account-level list was handed to every session');
   });
 
@@ -572,7 +566,6 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
         id: reopenedId,
         ownerId: f.ownerId,
         creatorId: f.ownerId,
-        taskId: f.coordinatorTaskId,
         workspaceId: f.workspaceId,
         assignedRunnerId: f.runnerId,
         title: 'the coordinator, reopened',
@@ -580,7 +573,6 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
         provider: 'claude',
         status: RunStatus.RUNNING,
         dispatchOrigin: SessionDispatchOrigin.USER,
-        startsTaskWork: true,
       },
     });
 
