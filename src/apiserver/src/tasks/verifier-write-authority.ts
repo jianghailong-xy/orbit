@@ -9,9 +9,10 @@ import { toUuid } from '@orbit/shared';
  * keeps what it had: a verifier writes its own verdict.
  *
  * A run may therefore not make another task a verifier, nor write any field of another task that is one. Any field rather
- * than a list of them: no flow has a run edit another task's check, and a verifier's instructions, standard, engine and
- * verdict each decide what its answer is worth. An ordinary sibling is still a run's to edit, and a conversation of no task
- * is the scope contract's question, as it was.
+ * than a list of them: a verifier's instructions, standard, engine and verdict each decide what its answer is worth, and a
+ * list is what the next field slips past. A list's foreman is a run like any other, and reports a stuck verifier rather than
+ * editing it. An ordinary sibling is still a run's to edit, and a conversation of no task is the scope contract's question,
+ * as it was.
  *
  * A run does file a verifier of its own on the owner's yes: the MCP tools and the CLI raise a card before they write. That
  * card is the authority, so the door that files one checks for it, as the delete routes do (`requireDeleteApproval`).
