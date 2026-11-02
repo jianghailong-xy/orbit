@@ -348,8 +348,12 @@ public enum EvidenceFiles {
     public static func fileSize(_ bytes: Int) -> String {
         if bytes < 1024 { return "\(bytes) B" }
         if bytes < 1024 * 1024 { return "\((bytes + 512) / 1024) KB" }
-        let tenths = (bytes * 10 + 512 * 1024) / (1024 * 1024)
-        return "\(tenths / 10).\(tenths % 10) MB"
+        func tenths(of unit: Int) -> String {
+            let tenths = (bytes * 10 + unit / 2) / unit
+            return "\(tenths / 10).\(tenths % 10)"
+        }
+        if bytes < 1024 * 1024 * 1024 { return "\(tenths(of: 1024 * 1024)) MB" }
+        return "\(tenths(of: 1024 * 1024 * 1024)) GB"
     }
 
     /// Whether every file has lost its bytes. Only the last page can say so of the whole list.

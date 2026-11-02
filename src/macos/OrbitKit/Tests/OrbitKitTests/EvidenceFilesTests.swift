@@ -144,6 +144,10 @@ final class EvidenceFilesTests: XCTestCase {
         XCTAssertEqual(EvidenceFiles.fileSize(25 << 20), "25.0 MB")
         // A tie: `toFixed(1)` rounds this one up, where a binary formatter may not.
         XCTAssertEqual(EvidenceFiles.fileSize(2_359_296), "2.3 MB")
+        // A folder of big files passes a gigabyte, in the unit the web moves to at 1024 MB.
+        XCTAssertEqual(EvidenceFiles.fileSize((1 << 30) - 1), "1024.0 MB")
+        XCTAssertEqual(EvidenceFiles.fileSize(1 << 30), "1.0 GB")
+        XCTAssertEqual(EvidenceFiles.fileSize(25 << 30), "25.0 GB")
     }
 
     func testTheHeadline() {

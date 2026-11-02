@@ -136,6 +136,7 @@ final class EvidenceFilesCopyParityTests: XCTestCase {
         let web = try source("src/web/src/lib/worktreeFile.ts")
         assertContains(web, "if (bytes < 1024) return `${bytes} B`;", "bytes")
         assertContains(web, "if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;", "kilobytes")
-        assertContains(web, "return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;", "megabytes")
+        assertContains(web, "if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;", "megabytes")
+        assertContains(web, "return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;", "gigabytes")
     }
 }
