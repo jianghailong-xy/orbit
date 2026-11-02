@@ -56,12 +56,16 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// and Kimi — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
     /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`).
     public let accounts: [AccountChoice]?
+    /// `unavailable` is this runner's region: its Claude connection to Anthropic comes out where
+    /// Anthropic doesn't offer Claude (docs/claude-region-check-contract.md §8). Nothing on the page
+    /// fixes that, so the row names no fix — the machine's Claude Code row (`fixEngine`) explains.
+    public let regionBlocked: Bool
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
-                accounts: [AccountChoice]? = nil, labelDetail: String? = nil) {
+                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false) {
         self.slug = slug
         self.label = label
         self.labelDetail = labelDetail
@@ -75,6 +79,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.inPool = inPool
         self.note = note
         self.accounts = accounts
+        self.regionBlocked = regionBlocked
     }
 
     /// The engine's own credential on the runner — its sign-in, or OpenCode's own configuration —
@@ -127,10 +132,13 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
     /// none of its credentials can run, or the DeepSeek key there is none of.
     public let unavailable: String?
     public let fixEngine: String?
+    /// `unavailable` is the runner's region (`ProviderChoice.regionBlocked`): explained, not fixed.
+    public let regionBlocked: Bool
     public var id: String { slug }
 
     public init(slug: String, label: String, brandKey: String?, providers: [ProviderChoice],
-                provider: ProviderChoice?, unavailable: String? = nil, fixEngine: String? = nil) {
+                provider: ProviderChoice?, unavailable: String? = nil, fixEngine: String? = nil,
+                regionBlocked: Bool = false) {
         self.slug = slug
         self.label = label
         self.brandKey = brandKey
@@ -138,6 +146,7 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
         self.provider = provider
         self.unavailable = unavailable
         self.fixEngine = fixEngine
+        self.regionBlocked = regionBlocked
     }
 }
 
@@ -168,13 +177,17 @@ public struct ChoiceSources: Sendable {
     /// Whether these apps draw Cursor CLI at all: a runner of the account knows it
     /// (`ProviderEngines.appleShowsEngine`, web `fleet`).
     public var showsCursor: Bool
+    /// Where the runner's Claude connection last came out (`Runner.region`), with the effective
+    /// verdict. Blocked, its Anthropic-bound credentials can't run Claude Code there; nil (a runner that
+    /// doesn't check), nothing is gated.
+    public var region: RunnerRegionView?
 
     public init(configured: [ConfiguredProvider], catalog: RunnerModelCatalog? = nil,
                 runtimeDefaults: [String: String]? = nil, engines: [RunnerEngineHealth]? = nil,
                 pools: [ProviderPool] = [], planUsage: PlanUsage? = nil, now: Date = Date(),
                 antigravity: RunnerAntigravityState? = nil, antigravityKeyAvailable: Bool? = nil,
                 dshState: DshRuntime.RunnerState? = nil, cursorState: CursorRuntime.RunnerState? = nil,
-                showsCursor: Bool = false) {
+                showsCursor: Bool = false, region: RunnerRegionView? = nil) {
         self.configured = configured
         self.catalog = catalog
         self.runtimeDefaults = runtimeDefaults
@@ -187,6 +200,7 @@ public struct ChoiceSources: Sendable {
         self.dshState = dshState
         self.cursorState = cursorState
         self.showsCursor = showsCursor
+        self.region = region
     }
 }
 
@@ -311,6 +325,15 @@ public enum SessionProviderChoices {
         return login && health?.auth == "no" ? "Not signed in" : nil
     }
 
+    /// Why an Anthropic-bound credential can't run Claude Code on this runner, or nothing: the runner's
+    /// verdict is blocked and the credential talks to Anthropic (`ClaudeRegion.credentialIsAnthropicBound`
+    /// — Claude Code's own sign-in, a Claude pool, an Anthropic key). Claude only (decision ⑥), and it
+    /// outranks every other reason: no install or sign-in here changes it (web `regionBlocker`).
+    static func regionBlocked(_ engine: String, sources: ChoiceSources, credential: ClaudeRegion.Credential) -> Bool {
+        engine == ClaudeRegion.engine && ClaudeRegion.blocked(sources.region)
+            && ClaudeRegion.credentialIsAnthropicBound(credential)
+    }
+
     /// Read only the server's key-availability result for the machine this session will run on.
     public static func antigravityKeyAvailable(workspace: Agent?, runner: Runner?) -> Bool {
         guard let runner else { return false }
@@ -399,7 +422,9 @@ public enum SessionProviderChoices {
             && (engine != "antigravity" || keyAvailable || antigravity?.authSource == "google") {
             let googleAccount = antigravity?.authSource == "google"
                 && !(keyAvailable && antigravity?.envKeyAvailable == false)
-            let blocker = engine == "antigravity"
+            let region = regionBlocked(engine, sources: sources, credential: .login(engine: engine))
+            let blocker = region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED
+                : engine == "antigravity"
                 ? antigravityBlocker(antigravity, health: health, login: !keyAvailable || googleAccount)
                 : engine == CursorRuntime.engine ? cursorBlocker(sources.cursorState, health: health, login: true)
                 : engineBlocker(health)
@@ -415,7 +440,8 @@ public enum SessionProviderChoices {
                     ? accountChoices(health, usage: CodexAccounts.usage(engine, planUsage: sources.planUsage,
                                                                          engines: sources.engines), now: sources.now)
                     : nil,
-                labelDetail: engine == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil))
+                labelDetail: engine == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil,
+                regionBlocked: region))
         }
         if engine == "opencode" { own.append(openCodeOwnChoice(sources)) }
 
@@ -424,19 +450,21 @@ public enum SessionProviderChoices {
         // on, and the pool's own answer (`unavailable`) is the reason. A missing CLI outranks the
         // members, because it is the one of the two a runner can fix.
         let pools = sources.pools.filter { poolEngine($0) == engine }.map { pool -> ProviderChoice in
-            ProviderChoice(
+            let region = regionBlocked(engine, sources: sources, credential: .pool(engine: poolEngine(pool)))
+            return ProviderChoice(
                 slug: pool.slug,
                 label: pool.label,
                 kind: .pool,
                 brandKey: enginePreset[engine],
                 modelLabel: modelLabel(engine: engine, provider: pool.slug, sources: sources),
-                unavailable: carried ?? poolBlocker(pool),
-                fixEngine: carried == nil ? nil : engine,
+                unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : carried ?? poolBlocker(pool),
+                fixEngine: region || carried != nil ? engine : nil,
                 poolSize: pool.members.count,
                 // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT
                 // accounts counts accounts (the reader's own words — ProviderPools.memberNoun).
                 poolUnit: pool.shared != nil && !pool.members.contains { $0.login != nil } ? "key" : nil,
-                note: ProviderPools.spentNote(pool, now: sources.now))
+                note: ProviderPools.spentNote(pool, now: sources.now),
+                regionBlocked: region)
         }
 
         let poolSlugs = Set(sources.pools.map(\.slug))
@@ -449,15 +477,17 @@ public enum SessionProviderChoices {
                     && ProviderEngines.engines(ofProvider: $0.slug, configured: sources.configured).contains(engine)
             }
             .map { key -> ProviderChoice in
-                ProviderChoice(
+                let region = regionBlocked(engine, sources: sources, credential: .key(presetSlug: key.presetSlug))
+                return ProviderChoice(
                     slug: key.slug,
                     label: key.label,
                     kind: .key,
                     brandKey: key.presetSlug,
                     modelLabel: modelLabel(engine: engine, provider: key.slug, sources: sources),
-                    unavailable: carried,
-                    fixEngine: carried == nil ? nil : engine,
-                    inPool: pooled.contains(key.slug))
+                    unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : carried,
+                    fixEngine: region || carried != nil ? engine : nil,
+                    inPool: pooled.contains(key.slug),
+                    regionBlocked: region)
             }
 
         return own + pools + keys
@@ -565,7 +595,8 @@ public enum SessionProviderChoices {
                                 on provider: ProviderChoice) -> EngineChoice {
         EngineChoice(slug: engine, label: ProviderEngines.cliName(engine), brandKey: enginePreset[engine],
                      providers: providers, provider: provider,
-                     unavailable: provider.unavailable, fixEngine: provider.fixEngine)
+                     unavailable: provider.unavailable, fixEngine: provider.fixEngine,
+                     regionBlocked: provider.unavailable != nil && provider.regionBlocked)
     }
 
     /// Where a pick of `engine` lands: the first of `preferred` it holds that can run (the draft's pick,

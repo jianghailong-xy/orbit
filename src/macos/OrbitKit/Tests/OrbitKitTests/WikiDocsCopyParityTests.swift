@@ -20,6 +20,7 @@ final class WikiDocsCopyParityTests: XCTestCase {
     private static let directory = "src/web/src/components/WikiDirectory.tsx"
     private static let browsePage = "src/web/src/components/WikiBrowsePage.tsx"
     private static let indexPage = "src/web/src/components/WikiIndexPage.tsx"
+    private static let diagram = "src/web/src/components/WikiDiagram.tsx"
     private static let fixturePath = "src/shared/src/wiki-docs.fixture.json"
     private static let app = "src/macos/OrbitApp/Sources/OrbitApp/"
 
@@ -395,7 +396,7 @@ final class WikiDocsCopyParityTests: XCTestCase {
                               ("WIKI_DOC_SECTION_NOT_WRITTEN", WikiDocCopy.sectionNotWritten),
                               ("WIKI_DOC_FOOTNOTES", WikiDocCopy.footnotes), ("WIKI_VIA_ENTRY", WikiDocCopy.viaEntry),
                               ("WIKI_NO_QUOTE_GIVEN", WikiDocCopy.noQuoteGiven), ("WIKI_DOC_ENTRIES", WikiDocCopy.entries),
-                              ("WIKI_OPEN_THE_ENTRY", WikiDocCopy.openTheEntry)] {
+                              ("WIKI_OPEN_THE_ENTRY", WikiDocCopy.openTheEntry), ("WIKI_DOC_DIAGRAM", WikiDocCopy.diagram)] {
             assertDeclares(lib, name, value, in: Self.lib)
         }
         assertSays(lib, "WIKI_DOC_SCOPE_FOLDED = `${WIKI_DOC_WRITTEN_FOR} · ${WIKI_DOC_COVERS} · ${WIKI_DOC_NOT_COVERED}`", in: Self.lib)
@@ -695,6 +696,66 @@ final class WikiDocsCopyParityTests: XCTestCase {
         // A footnote on a phone is a sheet from the bottom, at both ends.
         assertSays(page, "<Drawer placement=\"bottom\"", in: Self.docPage)
         assertSays(nativePage, ".presentationDetents([.medium, .large])", in: "WikiDocView.swift")
+    }
+
+    /// A section's diagram (contract `docs.diagram`): drawn where the web draws it, in the web's diagram look
+    /// (docs/mocks/wiki-diagram-look) — its colours, Mermaid options, finish and turn — with its accessible name, by the
+    /// Mermaid build the web's lockfile resolves, which the app carries and both packagings ship.
+    func testADiagramIsDrawnAsTheWebDrawsIt() throws {
+        let webDiagram = try web(Self.diagram)
+        let nativeDiagram = try native("Views/WikiDiagram.swift")
+        for line in [
+            // The colours, each theme's one line.
+            "light: { fill: '#ffffff', border: '#d5d8dd', text: '#1f2329', label: '#646a73', line: '#9aa0a8', group: 'rgba(0, 0, 0, 0.035)', groupBorder: 'rgba(0, 0, 0, 0.06)' },",
+            "dark: { fill: 'rgba(255, 255, 255, 0.07)', border: 'rgba(255, 255, 255, 0.18)', text: '#c9ced5', label: '#a7adb6', line: '#6e737b', group: 'rgba(255, 255, 255, 0.035)', groupBorder: 'rgba(255, 255, 255, 0.06)' },",
+            // Mermaid's options.
+            "startOnLoad: false, securityLevel: 'strict', look: 'classic', theme: 'base', fontFamily,",
+            "themeVariables: { darkMode: dark, fontSize: '13px', primaryColor: c.fill, mainBkg: c.fill, primaryBorderColor: c.border, nodeBorder: c.border,",
+            "primaryTextColor: c.text, nodeTextColor: c.text, textColor: c.text, lineColor: c.line, clusterBkg: c.group, clusterBorder: c.groupBorder, titleColor: c.label },",
+            "flowchart: { useMaxWidth: false, curve: 'basis', nodeSpacing: 28, rankSpacing: 34, padding: 10, wrappingWidth: 200, minNodeWidth: 0, diagramPadding: 4 },",
+            "'.node rect { rx: 6px; ry: 6px; } .cluster rect { rx: 8px; ry: 8px; } .cluster-label span { font-size: 12px; font-weight: 600; }",
+            " .edgeLabel, .edgeLabel p, .labelBkg { background-color: transparent; font-size: 12px; color: ' + c.label + '; } .edgeLabel rect { fill: none; } .flowchart-link { stroke-width: 1.2px; }'",
+            "getComputedStyle(document.body).fontFamily",
+            // The finish: a group's title at its top left, the links cut out under the labels and titles.
+            "title.setAttribute('transform', 'translate(' + (Number(box.getAttribute('x')) + 10) + ', ' + (at[1] + 4) + ')');",
+            "if (width > 0 && height > 0) holes.push([x - 3, y - 1, width + 6, height + 2]);",
+            "if (outer && inner) hole(outer[0] + inner[0], outer[1] + inner[1], label.querySelector('foreignObject'));",
+            "if (title && at) hole(at[0], at[1], title.querySelector('foreignObject'));",
+            "mask.append(rect(-100000, -100000, 200000, 200000, 'white'), ...holes.map(([x, y, width, height]) => rect(x, y, width, height, 'black')));",
+            "for (const links of childrenOf(root, 'edgePaths')) links.setAttribute('mask', 'url(#' + id + ')');",
+            // The turn: a left-to-right flowchart, top to bottom.
+            "/^flowchart LR\\n/u.test(source) ? source.replace(/^flowchart LR/u, 'flowchart TB') : null;",
+        ] {
+            assertSays(webDiagram, line, in: Self.diagram)
+            assertSays(nativeDiagram, line, in: "WikiDiagram.swift")
+        }
+        // Which drawing shows: the turned one, only while the written one is wider than the room and it is narrower.
+        assertSays(webDiagram, "drawn.turned !== null && room !== null && drawn.written.width > room && drawn.turned.width < drawn.written.width ? drawn.turned : drawn.written",
+                   in: Self.diagram)
+        assertSays(nativeDiagram, "drawn.turned !== null && room > 0 && widthOf(drawn.written) > room && widthOf(drawn.turned) < widthOf(drawn.written) ? drawn.turned : drawn.written",
+                   in: "WikiDiagram.swift")
+        // The room is the figure's inside: the column less the 12 pt each side the drawing stands in.
+        assertSays(nativeDiagram, "WikiDiagramWeb(source: source, dark: colorScheme == .dark, room: room)", in: "WikiDiagram.swift")
+        assertSays(nativeDiagram, ".onGeometryChange(for: CGFloat.self) { $0.size.width } action: { room = max(0, ($0 - 24).rounded(.down)) }",
+                   in: "WikiDiagram.swift")
+        assertSays(nativeDiagram, "arguments: [\"source\": drawing.source, \"dark\": drawing.dark, \"room\": Double(drawing.room)]", in: "WikiDiagram.swift")
+        assertSays(webDiagram, "aria-label={WIKI_DOC_DIAGRAM}", in: Self.diagram)
+        assertSays(nativeDiagram, ".accessibilityLabel(WikiDocCopy.diagram)", in: "WikiDiagram.swift")
+        let block = try slice(try native("Views/WikiDocView.swift"), from: "case .diagram:", to: "case .item:")
+        assertSays(block, "WikiDiagram(source: block.text ?? \"\")", in: "WikiDocView.swift")
+
+        let lock = try String(contentsOf: find("package-lock.json"), encoding: .utf8)
+        let pinned = try XCTUnwrap(lock.range(of: #""node_modules/mermaid": \{\s*"version": "[^"]+""#, options: .regularExpression),
+                                   "package-lock.json resolves no mermaid")
+        let version = String(lock[pinned].split(separator: "\"").last ?? "")
+        let bundled = try Data(contentsOf: find(Self.app + "Resources/mermaid.min.js"))
+        XCTAssertNotNil(bundled.range(of: Data("{version:\"\(version)\"}".utf8)),
+                        "Resources/mermaid.min.js is not mermaid \(version), which package-lock.json resolves: "
+                            + "copy node_modules/mermaid/dist/mermaid.min.js over it")
+        assertSays(try String(contentsOf: find("src/macos/OrbitApp/Package.swift"), encoding: .utf8),
+                   ".copy(\"Resources/mermaid.min.js\")", in: "Package.swift")
+        assertSays(try String(contentsOf: find("src/macos/scripts/build-dmg.sh"), encoding: .utf8),
+                   "Resources/mermaid.min.js", in: "build-dmg.sh")
     }
 
     /// A footnote's card: its head, the words or the lines, what went wrong, where, the entry it came

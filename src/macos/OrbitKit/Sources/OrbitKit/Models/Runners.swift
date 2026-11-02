@@ -406,6 +406,9 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let fingerprintPrefix: String?
     /// Temporarily skipped until this time, without changing authentication or quota.
     public let pausedUntil: String?
+    /// How many sessions are at work on this account: the server's count, which keeps each account to
+    /// its share of them (`CodexAccounts.toStartOn`). Absent from an older server.
+    public let activeSessions: Int?
     /// When this signed-in account's login lapses (ISO 8601): the CLI's own expiry for it, Claude Code
     /// only. Absent where the CLI recorded none.
     public let loginExpiresAt: String?
@@ -416,7 +419,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
-                loginExpiresAt: String? = nil, kimiRegion: String? = nil) {
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -426,6 +429,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.pausedUntil = pausedUntil
         self.loginExpiresAt = loginExpiresAt
         self.kimiRegion = kimiRegion
+        self.activeSessions = activeSessions
     }
 }
 
@@ -480,6 +484,12 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
 
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
 public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+}
+
+/// POST /runners/:id/region-check (Check again, docs/claude-region-check-contract.md §7) answers when
+/// the check was asked for (shared `ClaudeRegionCheckRequest`); the runner checks once per value.
+public struct ClaudeRegionCheckRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
 }
 
@@ -771,6 +781,31 @@ public struct PlanUsageBucket: Codable, Equatable, Sendable {
         self.remainingFraction = remainingFraction
         self.resetTime = resetTime
     }
+
+    /// The buckets of an Antigravity account that a run on `model` spends (shared
+    /// `antigravityModelBuckets`). agy spells a bucket's id `<group>-<window>`: a `gemini-` model spends
+    /// the `gemini` group, any other model (Claude, GPT-OSS) the `3p` group, unless a group of their own
+    /// names the model (`gemini-argon-wtu`, of `gemini-4-argon`). Every bucket when no model is named
+    /// (agy runs its own default) or no group is the model's.
+    public static func spent(by model: String?, of buckets: [PlanUsageBucket]) -> [PlanUsageBucket] {
+        let name = (model ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !name.isEmpty else { return buckets }
+        let family = name.hasPrefix("gemini-") ? "gemini" : "3p"
+        let words = Set(name.split(separator: "-").map(String.init))
+        let own = buckets.filter { bucket in
+            bucket.group.hasPrefix(family + "-")
+                && bucket.group.dropFirst(family.count + 1).split(separator: "-").contains { words.contains(String($0)) }
+        }
+        if !own.isEmpty { return own }
+        let shared = buckets.filter { $0.group == family }
+        return shared.isEmpty ? buckets : shared
+    }
+
+    /// The group this bucket belongs to, from its id: `gemini` for `gemini-5h`.
+    private var group: String {
+        let id = self.id.lowercased(), suffix = "-" + window.lowercased()
+        return id.hasSuffix(suffix) ? String(id.dropLast(suffix.count)) : id
+    }
 }
 
 /// One Cursor CLI account's included usage this period, as Cursor's dashboard reports it to that
@@ -956,6 +991,19 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
     /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
     public var nearLimit: Bool { window.utilization >= 90 }
+    /// Nothing left of the window. Its bar is drawn full and red whichever way the row counts: an
+    /// Antigravity bucket at 0% remaining would otherwise be an empty track that reads as no data.
+    public var spent: Bool { window.utilization >= 100 }
+}
+
+/// The compact iOS Plan usage sheet's height for its rows (the sheet fits a detent to them): 66 pt a
+/// row, and 21 more for a row that names its bucket on a line above (an Antigravity bucket's id: a
+/// 17.3 pt line and 4 pt of spacing on an iPhone 17 Pro simulator, 2026-11-01). Five Antigravity
+/// buckets at 66 each ran ~85 pt short, pushing the title into the grabber.
+public enum PlanUsageSheetLayout {
+    public static func rowsHeight(_ rows: [PlanUsageRow]) -> Int {
+        rows.reduce(0) { $0 + 66 + ($1.groupLabel == nil ? 0 : 21) }
+    }
 }
 
 private func isApproximateWindow(_ minutes: Int, _ expected: Int) -> Bool {
@@ -1054,9 +1102,11 @@ public extension PlanUsageSnapshot {
     /// one before any other — of several, the one that resets last, since the login is back only once
     /// every spent one has — else the one closest to its limit, a tie going to the first. Whatever
     /// shows one number for a login shows this one: a Claude login's 5-hour window can read 6% while
-    /// its weekly one is spent.
-    func bindingRow(at now: Date = Date()) -> PlanUsageRow? {
-        let current = currentRows(at: now)
+    /// its weekly one is spent. Of an Antigravity account, only the buckets a run on `model` spends
+    /// (`PlanUsageBucket.spent(by:of:)`, web `modelPlanUsage`): another group's stops nothing it does.
+    func bindingRow(at now: Date = Date(), model: String? = nil) -> PlanUsageRow? {
+        let spends = provider == "antigravity" ? Set(PlanUsageBucket.spent(by: model, of: buckets ?? []).map(\.id)) : nil
+        let current = currentRows(at: now).filter { spends?.contains($0.key) ?? true }
         let spent = current.filter { $0.window.utilization >= 100 }
         if let first = spent.first {
             // A spent window with no reset named holds the login for as long as anyone can tell.

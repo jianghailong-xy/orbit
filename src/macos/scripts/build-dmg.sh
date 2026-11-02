@@ -35,6 +35,8 @@ cp "$bin" "$app/Contents/MacOS/$APP_NAME"
 iconset="$out/AppIcon.iconset"; rm -rf "$iconset"; mkdir -p "$iconset"
 cp "$here/../Assets.xcassets/AppIcon.appiconset/"icon_*.png "$iconset/"
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+# The Mermaid build that draws a wiki document's diagrams (WikiDiagram.swift), and its license: the package's resources.
+cp "$pkg/Sources/OrbitApp/Resources/mermaid.min.js" "$pkg/Sources/OrbitApp/Resources/mermaid-LICENSE.txt" "$app/Contents/Resources/"
 sparkle_keys=""
 if [ -n "$SU_PUBLIC_ED_KEY" ]; then
   sparkle_keys="  <key>SUFeedURL</key><string>$SU_FEED_URL</string>

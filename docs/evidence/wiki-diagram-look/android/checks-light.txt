@@ -1,0 +1,38 @@
+2026-11-01T18:52:15.639823Z fixture at http://localhost:46903/
+2026-11-01T18:52:15.992287Z signed in to the fixture
+2026-11-01T18:52:16.400174Z PASS the drawer's Wiki row
+2026-11-01T18:52:16.764852Z PASS the wiki home lists the document
+2026-11-01T18:52:19.032754Z PASS the document's page
+2026-11-01T18:52:22.995707Z PASS wiki-doc-block:s1.1 is drawn, its WebView as high as the SVG and across the figure
+2026-11-01T18:52:22.996162Z wiki-doc-block:s1.1 drew {"id":"wk-diagram","width":148,"height":413,"left":105,"page":356,"scrollLeft":0,"labels":["in order","in order","live, or on return","live, or on return","Turn stored","Event written","Event stream","Shown in the app"],"text":"in orderlive, or on returnTurn storedEvent writtenEvent streamShown in the app","font":"sans-serif","color":"rgb(31, 35, 41)","scripts":["https://appassets.androidplatform.net/mermaid/mermaid.min.js"]}
+2026-11-01T18:52:22.996317Z PASS wiki-doc-block:s1.1 shows Turn stored, Event written, Event stream, Shown in the app, in order, live, or on return (missing: )
+2026-11-01T18:52:22.996392Z PASS wiki-doc-block:s1.1 is set in the page's font
+2026-11-01T18:52:22.996459Z PASS wiki-doc-block:s1.1 loaded Mermaid from the app's assets alone
+2026-11-01T18:52:22.997121Z PASS wiki-doc-block:s1.1 is in the light theme (its labels rgb(31, 35, 41))
+2026-11-01T18:52:23.528740Z PASS it fits the column (148 dp in 355.42856 dp)
+2026-11-01T18:52:23.528949Z PASS its page centres it (left 105 of 356 dp)
+2026-11-01T18:52:23.545127Z PASS TalkBack names it Diagram
+2026-11-01T18:52:23.578702Z PASS it is wholly on screen
+2026-11-01T18:52:25.503475Z PASS wiki-doc-block:s2.1 is drawn, its WebView as high as the SVG and across the figure
+2026-11-01T18:52:25.503728Z wiki-doc-block:s2.1 drew {"id":"wk-diagram-tb","width":289,"height":643,"left":34,"page":356,"scrollLeft":0,"labels":["The server","The server","claims","claims","reads","reads","Plan confirmed","docs_build job","wiki-worker","Repository","Model queue","System model"],"text":"The serverclaimsreadsPlan confirmeddocs_build jobwiki-workerRepositoryModel queueSystem model","font":"sans-serif","color":"rgb(31, 35, 41)","scripts":["https://appassets.androidplatform.net/mermaid/mermaid.min.js"]}
+2026-11-01T18:52:25.503790Z PASS wiki-doc-block:s2.1 shows Plan confirmed, docs_build job, wiki-worker, Repository, Model queue, The server, System model, claims, reads (missing: )
+2026-11-01T18:52:25.503834Z PASS wiki-doc-block:s2.1 is set in the page's font
+2026-11-01T18:52:25.503869Z PASS wiki-doc-block:s2.1 loaded Mermaid from the app's assets alone
+2026-11-01T18:52:25.504058Z PASS wiki-doc-block:s2.1 is in the light theme (its labels rgb(31, 35, 41))
+2026-11-01T18:52:25.903110Z PASS it is drawn top to bottom (wk-diagram-tb)
+2026-11-01T18:52:25.927974Z PASS so it fits the column (289 dp in 355.42856 dp)
+2026-11-01T18:52:25.928070Z PASS its page centres it (left 34 of 356 dp)
+2026-11-01T18:52:28.062228Z PASS wiki-doc-block:s3.1 is drawn, its WebView as high as the SVG and across the figure
+2026-11-01T18:52:28.062603Z wiki-doc-block:s3.1 drew {"id":"wk-diagram","width":736,"height":147,"left":0,"page":356,"scrollLeft":0,"labels":["Plan confirmed","docs_build job","wiki-worker","Repository","Model queue","System model"],"text":"Plan confirmeddocs_build jobwiki-workerRepositoryModel queueSystem model","font":"sans-serif","color":"rgb(31, 35, 41)","scripts":["https://appassets.androidplatform.net/mermaid/mermaid.min.js"]}
+2026-11-01T18:52:28.062693Z PASS wiki-doc-block:s3.1 shows Plan confirmed, docs_build job, wiki-worker, Repository, Model queue, System model (missing: )
+2026-11-01T18:52:28.062763Z PASS wiki-doc-block:s3.1 is set in the page's font
+2026-11-01T18:52:28.062824Z PASS wiki-doc-block:s3.1 loaded Mermaid from the app's assets alone
+2026-11-01T18:52:28.063170Z PASS wiki-doc-block:s3.1 is in the light theme (its labels rgb(31, 35, 41))
+2026-11-01T18:52:28.532058Z PASS it is drawn as written (wk-diagram)
+2026-11-01T18:52:28.561693Z PASS it is wider than the column (736 dp against 355.42856 dp)
+2026-11-01T18:52:28.561844Z PASS it starts at its left edge
+2026-11-01T18:52:28.595877Z PASS it is wholly on screen
+2026-11-01T18:52:30.613277Z PASS a drag scrolls it sideways, well past the touch slop, and it comes to rest
+2026-11-01T18:52:30.613496Z scrolled sideways by 380 dp of 380
+2026-11-01T18:52:33.328221Z PASS a drag down over it scrolls the document (1803.0 from 1414.0)
+2026-11-01T18:52:33.328779Z PASS the app fetched nothing for it

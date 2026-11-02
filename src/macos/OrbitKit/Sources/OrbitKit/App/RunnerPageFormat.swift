@@ -184,6 +184,31 @@ public enum RunnerPageFormat {
         return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
+    /// Whether `engine` is Claude Code on a machine whose Claude connection comes out where Anthropic
+    /// doesn't offer Claude (`Runner.region`, docs/claude-region-check-contract.md): Orbit runs no
+    /// Anthropic account there and starts no Claude sign-in, so its row says so, and Check Again stands
+    /// where Sign In and Add Account would. A runner that reads no region is never blocked.
+    public static func claudeRegionBlocked(_ runner: Runner, engine: String) -> Bool {
+        engine == ClaudeRegion.engine && ClaudeRegion.blocked(runner.region)
+    }
+
+    /// What a machine blocked for the Claude region says under its Claude Code row (web's
+    /// `re-login-note`, board 03's group footnote): why, and what still runs there; then when it was
+    /// checked and where Claude's connection came out.
+    public struct RegionNote: Equatable, Sendable {
+        public let note: String
+        public let checked: String?
+    }
+
+    public static func claudeRegionNote(_ runner: Runner, now: Date) -> RegionNote? {
+        guard let region = runner.region, region.blocked, let name = region.name, !name.isEmpty else { return nil }
+        let checked = region.checkedAt.map {
+            ClaudeRegionCopy.claudeRegionChecked(when: RunnerAttention.ago($0, nowMs: nowMs(now)), region: name,
+                                                 viaProxy: region.viaProxy == true)
+        }
+        return RegionNote(note: ClaudeRegionCopy.claudeRegionMachineNote(region: name), checked: checked)
+    }
+
     /// The CLI's own product name, as every list of engines says it (shared `ENGINE_CLI_NAMES`, web's
     /// `ENGINE_CLI_NAME`): `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`, `Antigravity CLI`, `DeepSeek
     /// Harness` — on a machine's page as in the pickers.
@@ -261,6 +286,11 @@ public enum RunnerPageFormat {
     /// accounts is signed in only when every one of them is (web `signedIn`): a row that called the
     /// machine signed in over a signed-out account would hide the one thing it is there to say.
     public static func engineStatus(_ health: RunnerEngineHealth, runner: Runner? = nil) -> Status? {
+        // Claude's connection from this machine comes out where Anthropic doesn't offer Claude: the row's
+        // whole story, which no install or sign-in here changes (web's orange Region not supported).
+        if let runner, claudeRegionBlocked(runner, engine: health.engine) {
+            return Status(text: ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED, tone: .warn)
+        }
         // Harness has no sign-in: each session brings a configured API key. What this machine decides
         // is whether it can start one at all, which is what the row says instead (web parity).
         if health.engine == "dsh" {
@@ -337,6 +367,8 @@ public enum RunnerPageFormat {
     /// signs in, Antigravity's Google sign-in only where the runner offers it, and Cursor CLI only where
     /// the runner can run it.
     public static func canSignIn(_ runner: Runner, engine: String) -> Bool {
+        // No Claude sign-in starts on a machine blocked for the region (contract §12).
+        if claudeRegionBlocked(runner, engine: engine) { return false }
         if engine == CursorRuntime.engine { return !CursorRuntime.state(of: runner).blocks }
         return engine != "antigravity" || antigravityCanSignIn(runner)
     }
@@ -347,7 +379,8 @@ public enum RunnerPageFormat {
     /// KIMI_CODE_HOME of its own (`kimi-account-login/v1`); an older one would sign Default in again in
     /// its place.
     public static func canAddAccount(_ runner: Runner, engine: String) -> Bool {
-        guard keepsAccounts(engine) else { return false }
+        // An account is added by signing it in, which a machine blocked for the Claude region doesn't do.
+        guard keepsAccounts(engine), !claudeRegionBlocked(runner, engine: engine) else { return false }
         switch engine {
         case "antigravity":
             return antigravityCanSignIn(runner)
@@ -413,7 +446,9 @@ public enum RunnerPageFormat {
     /// machine's, and never as Default's. None for an account signed out. One per row, whether the CLI
     /// reports two windows or four: every window, and every account's, is the engine page's to list.
     public static func engineWindows(_ runner: Runner, engine: String, now: Date = Date()) -> [PlanUsageRow] {
-        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true else {
+        // No Anthropic usage is read on a machine blocked for the Claude region: nothing to gauge.
+        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
+              !claudeRegionBlocked(runner, engine: engine) else {
             return []
         }
         let account: String
@@ -446,7 +481,9 @@ public enum RunnerPageFormat {
     /// on (`nextAccount`) — so only where the engine has two accounts or more to choose between, or
     /// its Default is removed from Orbit and one remains.
     public static func marksNext(_ runner: Runner, engine: String, account: String, now: Date = Date()) -> Bool {
-        guard let health = runner.engines?.first(where: { $0.engine == engine }) else { return false }
+        // No session starts on any Claude account of a machine blocked for the region (web parity).
+        guard let health = runner.engines?.first(where: { $0.engine == engine }),
+              !claudeRegionBlocked(runner, engine: engine) else { return false }
         return nextAccount(runner, health: health, now: now) == account
     }
 
@@ -464,6 +501,7 @@ public enum RunnerPageFormat {
     /// the one its engine health carries (`CodexAccounts.usage`), where Default's buckets are there only
     /// while the runner's own Google sign-in is.
     public static func accountWindows(_ runner: Runner, engine: String, account: String) -> [PlanUsageRow] {
+        guard !claudeRegionBlocked(runner, engine: engine) else { return [] }
         let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
         return CodexAccounts.snapshot(usage, account: account)?.rows ?? []
     }

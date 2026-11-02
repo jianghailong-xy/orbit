@@ -2106,16 +2106,23 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
 | `ORBIT_WIKI_MODEL_API_KEY` | 以 Bearer 发送 |
 | `ORBIT_WIKI_MODEL` | 模型名 |
 | `ORBIT_WIKI_MODEL_CONCURRENCY` | 所有空间合计的在途请求上限，默认 4；不是正整数时用默认值 |
+| `ORBIT_WIKI_MODEL_THINKING` | 可选，默认不设（owner 2026-11-01 加）。`disabled` 或 `enabled`（`envRules.thinkingValues`）时，每次调用的体都带 `thinking: {type: <值>}`；不设或为空时不带 `thinking` 字段；其他值记一次问题，也不带 |
 
 - 前三项齐全且可用才算已配置；缺任何一项就是 `unconfigured`，不探测，也不调用。
+- `ORBIT_WIKI_MODEL_THINKING` 是给不问也会思考的端点用的：DeepSeek 的 V4 模型（`https://api.deepseek.com/anthropic`）默认就思考，部署方设
+  `disabled` 关掉。vLLM 不问就不思考，不用设。它不决定是否已配置，探测不带它；它属于 worker，不属于调用：请求队列的 `request` 和
+  `request_sha256` 里都没有它。
 - 只配给 wiki-worker，apiserver 的环境里一项都没有。名字都不是 `ANTHROPIC_*`。
-- `readWikiSystemModel(env)` 是纯函数，返回配置、缺了哪几项（`missing`）和 `problems`。worker 启动时经 `currentWikiSystemModel()` 读一次，
-  问题只记一次日志。`problems` 和日志都不引用 key 和地址（日志只写地址的 origin）。
+- `readWikiSystemModel(env)` 是纯函数，返回配置（含 `thinking`：`disabled`、`enabled` 或 null）、缺了哪几项（`missing`）和 `problems`。worker
+  启动时经 `currentWikiSystemModel()` 读一次，问题只记一次日志；thinking 开关设了时，日志那一行也写出它。`problems` 和日志都不引用 key 和地址
+  （日志只写地址的 origin）。
 
 ### 23.3 调用（`systemModel.request`）
 
 - `POST {base}/v1/messages`，头是 `authorization: Bearer {key}`、`anthropic-version: 2023-06-01`、`content-type: application/json`；体是
-  `{model, max_tokens, system, messages: [一条 user], stream: true}`。`max_tokens` 由每次调用显式给出；不带 tools，不开 thinking。
+  `{model, max_tokens, system, messages: [一条 user], stream: true}`，`ORBIT_WIKI_MODEL_THINKING` 设了时后面再加
+  `thinking: {type: disabled | enabled}`。`max_tokens` 由每次调用显式给出；不带 tools。没设这个开关时体里没有 `thinking` 字段，与加开关之前
+  逐字节相同，思不思考由端点自己决定。
 - 用 Node 自带的 fetch 流式读取，按 SSE 的规则逐行解析：`event:` 给事件名，多行 `data:` 用换行拼接，空行派发，`:` 开头是注释；CRLF 和
   跨块切开的行照常读。`message_start` 给出模型名和初始用量；`content_block_delta` 里的 `text_delta` 依次拼成答案；`message_delta` 给出
   `stop_reason` 和截至目前的用量；收到 `message_stop` 才算结束。`error` 事件按类型分类。`ping`、`content_block_start` / `stop`、不认识的事件，

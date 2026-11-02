@@ -1,0 +1,652 @@
+# node --test --test-reporter=tap test/compose-topology.test.mjs test/compose-topology-rejections.test.mjs
+# Run 2026-11-01T15:00:06Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+TAP version 13
+# Subtest: the topology checks accept the control and reject deployment counterexamples
+    # Subtest: unchanged Compose passes all topology assertions
+    ok 1 - unchanged Compose passes all topology assertions
+      ---
+      duration_ms: 80.372139
+      type: 'test'
+      ...
+    # Subtest: rejects a sixth resident service
+    ok 2 - rejects a sixth resident service
+      ---
+      duration_ms: 81.021432
+      type: 'test'
+      ...
+    # Subtest: rejects removed sidecar watchdog
+    ok 3 - rejects removed sidecar watchdog
+      ---
+      duration_ms: 80.294061
+      type: 'test'
+      ...
+    # Subtest: rejects removed sidecar outcome-coordinator
+    ok 4 - rejects removed sidecar outcome-coordinator
+      ---
+      duration_ms: 78.636645
+      type: 'test'
+      ...
+    # Subtest: rejects removed sidecar outcome-coordinator-secondary
+    ok 5 - rejects removed sidecar outcome-coordinator-secondary
+      ---
+      duration_ms: 73.62573
+      type: 'test'
+      ...
+    # Subtest: rejects removed sidecar executable-dead-man
+    ok 6 - rejects removed sidecar executable-dead-man
+      ---
+      duration_ms: 79.800992
+      type: 'test'
+      ...
+    # Subtest: rejects a one-shot profile
+    ok 7 - rejects a one-shot profile
+      ---
+      duration_ms: 79.406818
+      type: 'test'
+      ...
+    # Subtest: rejects a new restart policy
+    ok 8 - rejects a new restart policy
+      ---
+      duration_ms: 84.33805
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: ./data/postgres:/var/lib/postgresql/data
+    ok 9 - rejects postgres change: ./data/postgres:/var/lib/postgresql/data
+      ---
+      duration_ms: 84.406375
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: ./data/pg-archive:/archive
+    ok 10 - rejects postgres change: ./data/pg-archive:/archive
+      ---
+      duration_ms: 86.236923
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: shared_preload_libraries=pg_stat_statements
+    ok 11 - rejects postgres change: shared_preload_libraries=pg_stat_statements
+      ---
+      duration_ms: 85.777577
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: pg_stat_statements.max=10000
+    ok 12 - rejects postgres change: pg_stat_statements.max=10000
+      ---
+      duration_ms: 85.044008
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: pg_stat_statements.track=top
+    ok 13 - rejects postgres change: pg_stat_statements.track=top
+      ---
+      duration_ms: 84.407936
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: log_temp_files=1024
+    ok 14 - rejects postgres change: log_temp_files=1024
+      ---
+      duration_ms: 83.88536
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: statement_timeout=300s
+    ok 15 - rejects postgres change: statement_timeout=300s
+      ---
+      duration_ms: 83.239421
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: lock_timeout=30s
+    ok 16 - rejects postgres change: lock_timeout=30s
+      ---
+      duration_ms: 84.127639
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: idle_in_transaction_session_timeout=300s
+    ok 17 - rejects postgres change: idle_in_transaction_session_timeout=300s
+      ---
+      duration_ms: 82.66156
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change: jit=off
+    ok 18 - rejects postgres change: jit=off
+      ---
+      duration_ms: 82.352585
+      type: 'test'
+      ...
+    # Subtest: rejects postgres change:       - wal_compression=on
+    ok 19 - rejects postgres change:       - wal_compression=on
+      ---
+      duration_ms: 84.129765
+      type: 'test'
+      ...
+    # Subtest: rejects gateway config mount change
+    ok 20 - rejects gateway config mount change
+      ---
+      duration_ms: 82.574368
+      type: 'test'
+      ...
+    # Subtest: rejects gateway command addition
+    ok 21 - rejects gateway command addition
+      ---
+      duration_ms: 81.488325
+      type: 'test'
+      ...
+    # Subtest: rejects resident command inside pgbackup
+    ok 22 - rejects resident command inside pgbackup
+      ---
+      duration_ms: 77.601911
+      type: 'test'
+      ...
+    # Subtest: rejects resident command inside apiserver
+    ok 23 - rejects resident command inside apiserver
+      ---
+      duration_ms: 81.554198
+      type: 'test'
+      ...
+    # Subtest: rejects resident command inside web
+    ok 24 - rejects resident command inside web
+      ---
+      duration_ms: 80.80832
+      type: 'test'
+      ...
+    # Subtest: rejects an unreviewed apiserver env
+    ok 25 - rejects an unreviewed apiserver env
+      ---
+      duration_ms: 82.942364
+      type: 'test'
+      ...
+    # Subtest: rejects changed env: ${ORBIT_WATCHES_MODE:-on}
+    ok 26 - rejects changed env: ${ORBIT_WATCHES_MODE:-on}
+      ---
+      duration_ms: 83.111236
+      type: 'test'
+      ...
+    # Subtest: rejects changed env: ${ORBIT_WIKI_MODE:-on}
+    ok 27 - rejects changed env: ${ORBIT_WIKI_MODE:-on}
+      ---
+      duration_ms: 77.48188
+      type: 'test'
+      ...
+    # Subtest: rejects changed env:       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
+    ok 28 - rejects changed env:       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
+      ---
+      duration_ms: 83.103795
+      type: 'test'
+      ...
+    # Subtest: rejects changed env:       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
+    ok 29 - rejects changed env:       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
+      ---
+      duration_ms: 83.387061
+      type: 'test'
+      ...
+    # Subtest: rejects changed FCM value: FCM_PROJECT_ID
+    ok 30 - rejects changed FCM value: FCM_PROJECT_ID
+      ---
+      duration_ms: 86.647201
+      type: 'test'
+      ...
+    # Subtest: rejects duplicate FCM env: FCM_PROJECT_ID
+    ok 31 - rejects duplicate FCM env: FCM_PROJECT_ID
+      ---
+      duration_ms: 82.51225
+      type: 'test'
+      ...
+    # Subtest: rejects changed FCM value: FCM_CLIENT_EMAIL
+    ok 32 - rejects changed FCM value: FCM_CLIENT_EMAIL
+      ---
+      duration_ms: 82.901566
+      type: 'test'
+      ...
+    # Subtest: rejects duplicate FCM env: FCM_CLIENT_EMAIL
+    ok 33 - rejects duplicate FCM env: FCM_CLIENT_EMAIL
+      ---
+      duration_ms: 77.800077
+      type: 'test'
+      ...
+    # Subtest: rejects changed FCM value: FCM_PRIVATE_KEY
+    ok 34 - rejects changed FCM value: FCM_PRIVATE_KEY
+      ---
+      duration_ms: 79.98031
+      type: 'test'
+      ...
+    # Subtest: rejects duplicate FCM env: FCM_PRIVATE_KEY
+    ok 35 - rejects duplicate FCM env: FCM_PRIVATE_KEY
+      ---
+      duration_ms: 79.402241
+      type: 'test'
+      ...
+    # Subtest: rejects changed FCM value: FCM_ANDROID_PACKAGE
+    ok 36 - rejects changed FCM value: FCM_ANDROID_PACKAGE
+      ---
+      duration_ms: 78.894221
+      type: 'test'
+      ...
+    # Subtest: rejects duplicate FCM env: FCM_ANDROID_PACKAGE
+    ok 37 - rejects duplicate FCM env: FCM_ANDROID_PACKAGE
+      ---
+      duration_ms: 80.334519
+      type: 'test'
+      ...
+    # Subtest: rejects an unapproved FCM env
+    ok 38 - rejects an unapproved FCM env
+      ---
+      duration_ms: 80.303181
+      type: 'test'
+      ...
+    # Subtest: rejects a port on the wiki worker
+    ok 39 - rejects a port on the wiki worker
+      ---
+      duration_ms: 81.185185
+      type: 'test'
+      ...
+    # Subtest: rejects a mount on the wiki worker
+    ok 40 - rejects a mount on the wiki worker
+      ---
+      duration_ms: 80.895581
+      type: 'test'
+      ...
+    # Subtest: rejects the System model key given to the apiserver
+    ok 41 - rejects the System model key given to the apiserver
+      ---
+      duration_ms: 81.206659
+      type: 'test'
+      ...
+    # Subtest: rejects the System model thinking switch given to the apiserver
+    ok 42 - rejects the System model thinking switch given to the apiserver
+      ---
+      duration_ms: 80.857216
+      type: 'test'
+      ...
+    # Subtest: rejects the Docker channel outside its profile
+    ok 43 - rejects the Docker channel outside its profile
+      ---
+      duration_ms: 81.309704
+      type: 'test'
+      ...
+    # Subtest: rejects the managed runners profile on another service
+    ok 44 - rejects the managed runners profile on another service
+      ---
+      duration_ms: 81.911805
+      type: 'test'
+      ...
+    # Subtest: rejects a port on the Docker channel
+    ok 45 - rejects a port on the Docker channel
+      ---
+      duration_ms: 79.98121
+      type: 'test'
+      ...
+    # Subtest: rejects a privileged Docker channel
+    ok 46 - rejects a privileged Docker channel
+      ---
+      duration_ms: 80.585783
+      type: 'test'
+      ...
+    # Subtest: rejects the Docker socket given to the apiserver
+    ok 47 - rejects the Docker socket given to the apiserver
+      ---
+      duration_ms: 79.309485
+      type: 'test'
+      ...
+    # Subtest: rejects managed runners on by default
+    ok 48 - rejects managed runners on by default
+      ---
+      duration_ms: 78.860308
+      type: 'test'
+      ...
+    # Subtest: rejects a writable managed runners directory in the apiserver
+    ok 49 - rejects a writable managed runners directory in the apiserver
+      ---
+      duration_ms: 78.273254
+      type: 'test'
+      ...
+    # Subtest: rejects a Kubernetes template mounted by the Docker channel
+    ok 50 - rejects a Kubernetes template mounted by the Docker channel
+      ---
+      duration_ms: 82.42994
+      type: 'test'
+      ...
+    # Subtest: rejects the link gateway outside its profile
+    ok 51 - rejects the link gateway outside its profile
+      ---
+      duration_ms: 79.531519
+      type: 'test'
+      ...
+    # Subtest: rejects the runner link profile on another service
+    ok 52 - rejects the runner link profile on another service
+      ---
+      duration_ms: 79.61079
+      type: 'test'
+      ...
+    # Subtest: rejects the token signing key given to the link gateway
+    ok 53 - rejects the token signing key given to the link gateway
+      ---
+      duration_ms: 84.363025
+      type: 'test'
+      ...
+    # Subtest: rejects a database for the link gateway
+    ok 54 - rejects a database for the link gateway
+      ---
+      duration_ms: 80.506508
+      type: 'test'
+      ...
+    # Subtest: rejects the link gateway metrics on every interface
+    ok 55 - rejects the link gateway metrics on every interface
+      ---
+      duration_ms: 78.183601
+      type: 'test'
+      ...
+    # Subtest: rejects a writable root for the link gateway
+    ok 56 - rejects a writable root for the link gateway
+      ---
+      duration_ms: 81.943465
+      type: 'test'
+      ...
+    # Subtest: rejects the Docker socket given to the link gateway
+    ok 57 - rejects the Docker socket given to the link gateway
+      ---
+      duration_ms: 82.354963
+      type: 'test'
+      ...
+    # Subtest: rejects NATS outside its profile
+    ok 58 - rejects NATS outside its profile
+      ---
+      duration_ms: 81.122626
+      type: 'test'
+      ...
+    # Subtest: rejects JetStream on NATS
+    ok 59 - rejects JetStream on NATS
+      ---
+      duration_ms: 78.779381
+      type: 'test'
+      ...
+    # Subtest: rejects NATS reading the image's configuration file
+    ok 60 - rejects NATS reading the image's configuration file
+      ---
+      duration_ms: 78.921902
+      type: 'test'
+      ...
+    # Subtest: rejects a NATS port on the host
+    ok 61 - rejects a NATS port on the host
+      ---
+      duration_ms: 80.140836
+      type: 'test'
+      ...
+    # Subtest: rejects a store for NATS
+    ok 62 - rejects a store for NATS
+      ---
+      duration_ms: 79.085305
+      type: 'test'
+      ...
+    # Subtest: rejects hints published to another NATS by default
+    ok 63 - rejects hints published to another NATS by default
+      ---
+      duration_ms: 79.144797
+      type: 'test'
+      ...
+    # Subtest: rejects the hints address given to the wiki worker
+    ok 64 - rejects the hints address given to the wiki worker
+      ---
+      duration_ms: 82.205641
+      type: 'test'
+      ...
+    # Subtest: rejects the runner link listener published on the host
+    ok 65 - rejects the runner link listener published on the host
+      ---
+      duration_ms: 81.348988
+      type: 'test'
+      ...
+    # Subtest: rejects the runner link listener on another port by default
+    ok 66 - rejects the runner link listener on another port by default
+      ---
+      duration_ms: 78.885479
+      type: 'test'
+      ...
+    # Subtest: rejects the gateway's NATS seed given to the apiserver
+    ok 67 - rejects the gateway's NATS seed given to the apiserver
+      ---
+      duration_ms: 76.546846
+      type: 'test'
+      ...
+    # Subtest: rejects the runner releases read from elsewhere by default
+    ok 68 - rejects the runner releases read from elsewhere by default
+      ---
+      duration_ms: 77.413776
+      type: 'test'
+      ...
+    # Subtest: rejects the apiserver's NATS seed given to the gateway
+    ok 69 - rejects the apiserver's NATS seed given to the gateway
+      ---
+      duration_ms: 79.473477
+      type: 'test'
+      ...
+    # Subtest: rejects a NATS user's key given to the gateway
+    ok 70 - rejects a NATS user's key given to the gateway
+      ---
+      duration_ms: 79.641349
+      type: 'test'
+      ...
+    # Subtest: rejects NATS reading a writable configuration
+    ok 71 - rejects NATS reading a writable configuration
+      ---
+      duration_ms: 81.528999
+      type: 'test'
+      ...
+    # Subtest: rejects a third NATS user
+    ok 72 - rejects a third NATS user
+      ---
+      duration_ms: 82.119789
+      type: 'test'
+      ...
+    # Subtest: rejects a NATS cluster
+    ok 73 - rejects a NATS cluster
+      ---
+      duration_ms: 83.52534
+      type: 'test'
+      ...
+    # Subtest: rejects JetStream in the NATS configuration
+    ok 74 - rejects JetStream in the NATS configuration
+      ---
+      duration_ms: 81.765566
+      type: 'test'
+      ...
+    # Subtest: rejects a gateway allowed to publish hints
+    ok 75 - rejects a gateway allowed to publish hints
+      ---
+      duration_ms: 80.229146
+      type: 'test'
+      ...
+    # Subtest: rejects an apiserver allowed to publish live streams
+    ok 76 - rejects an apiserver allowed to publish live streams
+      ---
+      duration_ms: 79.403608
+      type: 'test'
+      ...
+    # Subtest: rejects a gateway allowed to read what the apiservers hand each other
+    ok 77 - rejects a gateway allowed to read what the apiservers hand each other
+      ---
+      duration_ms: 79.823241
+      type: 'test'
+      ...
+    # Subtest: rejects a gateway allowed to read the apiservers' inboxes
+    ok 78 - rejects a gateway allowed to read the apiservers' inboxes
+      ---
+      duration_ms: 78.43645
+      type: 'test'
+      ...
+    # Subtest: rejects trace logging in the NATS configuration
+    ok 79 - rejects trace logging in the NATS configuration
+      ---
+      duration_ms: 83.151837
+      type: 'test'
+      ...
+    # Subtest: rejects NATS run with trace logging
+    ok 80 - rejects NATS run with trace logging
+      ---
+      duration_ms: 78.497178
+      type: 'test'
+      ...
+    # Subtest: rejects NATS on another listener
+    ok 81 - rejects NATS on another listener
+      ---
+      duration_ms: 79.248691
+      type: 'test'
+      ...
+    1..81
+ok 1 - the topology checks accept the control and reject deployment counterexamples
+  ---
+  duration_ms: 6651.503694
+  type: 'test'
+  ...
+# Subtest: the baseline commit really is the nine-service stack this change removes from
+ok 2 - the baseline commit really is the nine-service stack this change removes from
+  ---
+  duration_ms: 0.9442
+  type: 'test'
+  ...
+# Subtest: the approved configuration commits still have exactly the five surviving services
+ok 3 - the approved configuration commits still have exactly the five surviving services
+  ---
+  duration_ms: 0.085804
+  type: 'test'
+  ...
+# Subtest: (a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners' firewall, the runner link gateway and its NATS
+ok 4 - (a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners' firewall, the runner link gateway and its NATS
+  ---
+  duration_ms: 0.106496
+  type: 'test'
+  ...
+# Subtest: (b) no removed sidecar is named anywhere in Compose
+ok 5 - (b) no removed sidecar is named anywhere in Compose
+  ---
+  duration_ms: 0.105059
+  type: 'test'
+  ...
+# Subtest: (c) nothing was added back: no new service, no new always-on process, no init job
+ok 6 - (c) nothing was added back: no new service, no new always-on process, no init job
+  ---
+  duration_ms: 0.639064
+  type: 'test'
+  ...
+# Subtest: (i) the postgres service definition matches the approved configuration, byte for byte
+ok 7 - (i) the postgres service definition matches the approved configuration, byte for byte
+  ---
+  duration_ms: 0.106326
+  type: 'test'
+  ...
+# Subtest: (j) the gateway service definition is unchanged and still mounts ./gateway/nginx.conf
+ok 8 - (j) the gateway service definition is unchanged and still mounts ./gateway/nginx.conf
+  ---
+  duration_ms: 0.073266
+  type: 'test'
+  ...
+# Subtest: nothing beyond the approved configuration was added to pgbackup, apiserver or web
+ok 9 - nothing beyond the approved configuration was added to pgbackup, apiserver or web
+  ---
+  duration_ms: 0.225006
+  type: 'test'
+  ...
+# Subtest: (k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained
+ok 10 - (k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained
+  ---
+  duration_ms: 2.947015
+  type: 'test'
+  ...
+# Subtest: (l) the wiki worker is exactly the service the owner approved on 2026-10-07
+ok 11 - (l) the wiki worker is exactly the service the owner approved on 2026-10-07
+  ---
+  duration_ms: 0.151564
+  type: 'test'
+  ...
+# Subtest: (l) the System model's address and key are given to the wiki worker and to no other service
+ok 12 - (l) the System model's address and key are given to the wiki worker and to no other service
+  ---
+  duration_ms: 0.248577
+  type: 'test'
+  ...
+# Subtest: (m) the Docker channel is exactly the service the owner allowed on 2026-10-17, off unless its profile is on
+ok 13 - (m) the Docker channel is exactly the service the owner allowed on 2026-10-17, off unless its profile is on
+  ---
+  duration_ms: 0.07017
+  type: 'test'
+  ...
+# Subtest: (m) Docker's socket is given to the Docker channel and to no other service
+ok 14 - (m) Docker's socket is given to the Docker channel and to no other service
+  ---
+  duration_ms: 0.130109
+  type: 'test'
+  ...
+# Subtest: (m) Compose names nothing of Kubernetes, Rook, Ceph or CSI
+ok 15 - (m) Compose names nothing of Kubernetes, Rook, Ceph or CSI
+  ---
+  duration_ms: 0.216342
+  type: 'test'
+  ...
+# Subtest: (n) the managed runners' firewall is exactly the service the owner allowed on 2026-10-19, off unless its profile is on
+ok 16 - (n) the managed runners' firewall is exactly the service the owner allowed on 2026-10-19, off unless its profile is on
+  ---
+  duration_ms: 0.068129
+  type: 'test'
+  ...
+# Subtest: (n) the host's network and NET_ADMIN are given to the managed runners' firewall and to no other service
+ok 17 - (n) the host's network and NET_ADMIN are given to the managed runners' firewall and to no other service
+  ---
+  duration_ms: 0.22987
+  type: 'test'
+  ...
+# Subtest: (o) the runner link gateway is exactly the service the runner link project added on 2026-10-25, off unless its profile is on
+ok 18 - (o) the runner link gateway is exactly the service the runner link project added on 2026-10-25, off unless its profile is on
+  ---
+  duration_ms: 0.066001
+  type: 'test'
+  ...
+# Subtest: (o) the link token signing key is given to the apiserver alone, and the gateway secret to the apiserver and the link gateway
+ok 19 - (o) the link token signing key is given to the apiserver alone, and the gateway secret to the apiserver and the link gateway
+  ---
+  duration_ms: 0.180231
+  type: 'test'
+  ...
+# Subtest: (p) the runner link's NATS is exactly the service the runner link project added on 2026-10-25, off unless its profile is on
+ok 20 - (p) the runner link's NATS is exactly the service the runner link project added on 2026-10-25, off unless its profile is on
+  ---
+  duration_ms: 0.064464
+  type: 'test'
+  ...
+# Subtest: (p) NATS is named to the apiserver and the link gateway alone, and stores nothing
+ok 21 - (p) NATS is named to the apiserver and the link gateway alone, and stores nothing
+  ---
+  duration_ms: 0.30244
+  type: 'test'
+  ...
+# Subtest: (q) the runner link's NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does
+ok 22 - (q) the runner link's NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does
+  ---
+  duration_ms: 0.305948
+  type: 'test'
+  ...
+1..22
+# tests 103
+# suites 0
+# pass 103
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6699.397995
+exit=0
+
+## JWT_SECRET=x PROVIDER_SECRET_KEY=x docker compose config --quiet
+exit=0
+
+## Rendered with ORBIT_WIKI_MODEL_THINKING unset: the System model's variables of each service
+apiserver: none
+gateway: none
+pgbackup: none
+postgres: none
+web: none
+wiki-worker: ORBIT_WIKI_MODEL="" ORBIT_WIKI_MODEL_API_KEY="<redacted>" ORBIT_WIKI_MODEL_BASE_URL="" ORBIT_WIKI_MODEL_CONCURRENCY="4" ORBIT_WIKI_MODEL_THINKING=""
+
+## Rendered with ORBIT_WIKI_MODEL_THINKING =disabled: the System model's variables of each service
+apiserver: none
+gateway: none
+pgbackup: none
+postgres: none
+web: none
+wiki-worker: ORBIT_WIKI_MODEL="" ORBIT_WIKI_MODEL_API_KEY="<redacted>" ORBIT_WIKI_MODEL_BASE_URL="" ORBIT_WIKI_MODEL_CONCURRENCY="4" ORBIT_WIKI_MODEL_THINKING="disabled"

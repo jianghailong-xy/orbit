@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/user"
 	"time"
 )
 
@@ -49,7 +50,9 @@ func hostdCall(socketPath, verb string) (hostdResponse, error) {
 // hostdDo asks the broker for one verb and reports whether it actually carried it out,
 // printing why when it did not. Not getting it done is never fatal here: every caller
 // has the legacy sudo path left to try, and registration must not dead-end on a broker
-// that is missing or unwell.
+// that is missing or unwell. The one refusal that is not a cue to fall back is enable's
+// for an account with no copy of its own (hostdRefusedOwnCopy): no note is printed for
+// it, and registerViaHostd hands the broker's reason on instead.
 func hostdDo(socketPath, verb string) (hostdResponse, bool) {
 	// No socket at all is the ordinary state of a machine nobody ran `orbit host setup`
 	// on, which is most of them. That is not news, so it is not printed — the legacy
@@ -63,6 +66,8 @@ func hostdDo(socketPath, verb string) (hostdResponse, bool) {
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "note: the machine broker at %s did not answer %q (%v) — falling back to the sudo path.\n", socketPath, verb, err)
 		return resp, false
+	case !resp.OK && resp.Code == hostdRefusedOwnCopy:
+		return resp, false
 	case !resp.OK:
 		fmt.Fprintf(os.Stderr, "note: the machine broker refused %q (%s) — falling back to the sudo path.\n", verb, resp.Error)
 		return resp, false
@@ -70,14 +75,26 @@ func hostdDo(socketPath, verb string) (hostdResponse, bool) {
 	return resp, true
 }
 
+// hostdOwnCopyRefusal is the broker declining to enable this account's instance until the
+// account has a copy of its own for it to run, in the broker's words: what is missing and
+// the one command that puts it right. The sudo path is no way around it — on a host set up
+// for instances it would install a unit of its own beside the template.
+type hostdOwnCopyRefusal struct{ reason string }
+
+func (e *hostdOwnCopyRefusal) Error() string { return e.reason }
+
 // registerViaHostd asks the broker to enable and start this user's runner instance, and
-// reports whether it did. The credential the instance will read was already written by
-// `orbit register` itself, as this user, before we got here — so there is nothing left
-// that needs root, and nothing here shells out at all.
-func registerViaHostd(socketPath string, proxyVars []envVar) bool {
+// reports whether it did, or the refusal registration has to stop at. The credential the
+// instance will read was already written by `orbit register` itself, as this user, before
+// we got here — so there is nothing left that needs root, and nothing here shells out at
+// all.
+func registerViaHostd(socketPath string, proxyVars []envVar) (bool, error) {
 	resp, ok := hostdDo(socketPath, "enable")
 	if !ok {
-		return false
+		if resp.Code == hostdRefusedOwnCopy {
+			return false, &hostdOwnCopyRefusal{reason: resp.Error}
+		}
+		return false, nil
 	}
 	unit := hostdUnit(resp)
 	printServiceStarted("runs at boot")
@@ -88,7 +105,7 @@ func registerViaHostd(socketPath string, proxyVars []envVar) bool {
 		// leave the user to work out why nothing reaches the control plane.
 		fmt.Fprintf(os.Stderr, "note: --proxy is not carried into %s — the machine's shared runner template has no per-user proxy environment.\n", unit)
 	}
-	return true
+	return true, nil
 }
 
 // unregisterViaHostd asks the broker to stop and disable this user's runner instance.
@@ -104,10 +121,13 @@ func unregisterViaHostd(socketPath string) bool {
 // hostdUnit is the unit the broker says it acted on. Its answer, not a guess of ours:
 // hostd derives the instance from the caller's kernel-attested uid, so what it reports
 // back is the name the user should actually point systemctl at. The guess is only for a
-// response that left the field out.
+// response that left the field out, and reads the machine's template as hostd does.
 func hostdUnit(resp hostdResponse) string {
 	if unit, _ := resp.Data["unit"].(string); unit != "" {
 		return unit
+	}
+	if u, err := user.Current(); err == nil && (hostdSystem{unitDir: systemdUnitDir}).namesInstances() {
+		return unitForAccount(u.Username)
 	}
 	return unitForUid(uint32(os.Getuid()))
 }

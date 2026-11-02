@@ -1,0 +1,4 @@
+mac-new-folder: 1 window(s)
+new-folder-row-button: in view after 0 move(s) at (689.0, 299.0, 293.0, 63.0)
+new-folder-use-button: in view after 0 move(s) at (689.0, 437.0, 105.0, 20.0)
+new-folder-created: 03:08:01 BODY /api/sessions {"assignedRunnerId": "austin", "effort": "", "engine": "claude", "model": "claude-opus-5-5", "newWorkspace": {"workDir": "/home/orbit/orbit-repos/payments"}, "permissionMode": "auto", "prompt": "Fix the flaky login test in tests/auth — it fails about one run in five on CI.", "provider": "claude"}

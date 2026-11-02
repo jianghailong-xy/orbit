@@ -88,6 +88,31 @@ final class MachineSetupTests: XCTestCase {
         XCTAssertFalse(MachineSetup.updatesItself(try runner(#"{"id":"r","name":"m","selfUpdate":{"state":"dirNotWritable"}}"#)))
     }
 
+    /// What the server reads for a machine whose `orbit run` has not beaten yet (contract §2).
+    func testApprovedAndNeverHeardFromAMachineIsStillConnecting() throws {
+        XCTAssertTrue(MachineSetup.isConnecting(try runner(#"{"id":"r","name":"m","online":false,"lastHeartbeatAt":null,"capabilities":[]}"#)))
+        XCTAssertTrue(MachineSetup.isConnecting(try runner(#"{"id":"r","name":"m","online":false}"#)))
+    }
+
+    func testHeardFromOnceAMachineIsOfflineOrOnlineNeverConnecting() throws {
+        XCTAssertFalse(MachineSetup.isConnecting(try runner(
+            #"{"id":"r","name":"m","online":false,"lastHeartbeatAt":"2026-10-31T09:00:00Z"}"#)))
+        XCTAssertFalse(MachineSetup.isConnecting(try runner(
+            #"{"id":"r","name":"m","online":true,"lastHeartbeatAt":"2026-10-31T09:00:00Z"}"#)))
+        // Online is its own heartbeat's word, whatever else the row has yet to carry.
+        XCTAssertFalse(MachineSetup.isConnecting(try runner(#"{"id":"r","name":"m","online":true,"lastHeartbeatAt":null}"#)))
+    }
+
+    /// The card's page reads its machine as often as the web's does, and more often while it connects.
+    func testTheCardsPageReadsAConnectingMachineMoreOften() throws {
+        XCTAssertEqual(MachineSetup.refreshSeconds(for: try runner(#"{"id":"r","name":"m","online":false,"lastHeartbeatAt":null}"#)), 2)
+        XCTAssertEqual(MachineSetup.refreshSeconds(for: try runner(
+            #"{"id":"r","name":"m","online":true,"lastHeartbeatAt":"2026-10-31T09:00:00Z"}"#)), 5)
+        XCTAssertEqual(MachineSetup.refreshSeconds(for: try runner(
+            #"{"id":"r","name":"m","online":false,"lastHeartbeatAt":"2026-10-31T09:00:00Z"}"#)), 5)
+        XCTAssertEqual(MachineSetup.refreshSeconds(for: nil), 5)
+    }
+
     // MARK: rule 3: a new folder
 
     func testANewFolderTakesTheNamesTheServerTakes() {
@@ -109,6 +134,46 @@ final class MachineSetupTests: XCTestCase {
                        "C:\\Users\\orbit\\orbit-repos\\app")
         XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos", name: ""),
                        "/home/orbit/orbit-repos/")
+    }
+
+    private func inReposFolder(exists: Bool = false, isDir: Bool = false, isGit: Bool = false, branch: String? = nil,
+                               error: String? = nil) -> DirProbe {
+        probe(path: "/home/orbit/orbit-repos/app", exists: exists, isDir: isDir, isGit: isGit, branch: branch, error: error)
+    }
+
+    func testANewFolderWithNothingThereStartsEmptyAsTheBoardSays() {
+        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(), machine: "orbit@austin"),
+                       FolderVerdict(tone: .ok, text: "Starts empty. Ask for a clone or a new project in your first message.",
+                                     short: "new folder · created as the session starts", usable: true))
+        XCTAssertEqual(MachineSetup.newFolderPick(inReposFolder(), name: "app", reposRoot: "/home/orbit/orbit-repos",
+                                                  machine: "orbit@austin"),
+                       .new(name: "app", path: "/home/orbit/orbit-repos/app"))
+    }
+
+    func testANewFolderThatIsThereAlreadyIsUsedWithWhatIsInItAsThatFolder() {
+        let there = inReposFolder(exists: true, isDir: true, isGit: true, branch: "main")
+        XCTAssertEqual(MachineSetup.newFolderVerdict(there, machine: "orbit@austin"),
+                       FolderVerdict(tone: .warn, text: "This folder already exists on orbit@austin. Sessions will use what’s in it.",
+                                     short: "git repository · main", usable: true))
+        XCTAssertEqual(MachineSetup.newFolderPick(there, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"),
+                       .existing(path: "/home/orbit/orbit-repos/app", note: "git repository · main"))
+        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(exists: true, isDir: true), machine: "orbit@austin").short,
+                       "not a git repository — sessions will share it instead of isolating.")
+    }
+
+    func testANewFolderOverAFileCantBeAndSaysWhy() {
+        let file = inReposFolder(exists: true)
+        let text = "There’s already a file with this name on orbit@austin. Pick another name."
+        XCTAssertEqual(MachineSetup.newFolderVerdict(file, machine: "orbit@austin"),
+                       FolderVerdict(tone: .bad, text: text, short: text, usable: false))
+        XCTAssertNil(MachineSetup.newFolderPick(file, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
+    }
+
+    func testANewFolderTheRunnerCouldNotLookAtHasNothingToPick() {
+        let failed = inReposFolder(error: "permission denied")
+        XCTAssertEqual(MachineSetup.newFolderVerdict(failed, machine: "orbit@austin").text,
+                       "Couldn’t check on orbit@austin: permission denied")
+        XCTAssertNil(MachineSetup.newFolderPick(failed, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
     }
 
     // MARK: rule 4: how a checked path reads
@@ -439,6 +504,17 @@ final class MachineSetupTests: XCTestCase {
         let script = Script([DirProbeAnswer(path: "p", status: "pending"), DirProbeAnswer(path: "p", status: "idle")])
         let outcome = try await run(script)
         XCTAssertEqual(outcome, .replaced)
+    }
+
+    /// One question at a time per machine: the register directory's, replaced by a path asked before it was answered,
+    /// is asked again once nothing else waits, and only while the machine can be asked.
+    func testAReplacedRegisterQuestionIsAskedAgainOnceNothingElseWaits() {
+        XCTAssertTrue(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: false))
+        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: true))
+        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: false, otherWaiting: false), "offline, what is stored is all")
+        XCTAssertFalse(DirProbeRelay.asksAgain(nil, online: true, otherWaiting: false), "still asking")
+        XCTAssertFalse(DirProbeRelay.asksAgain(.unanswered, online: true, otherWaiting: false))
+        XCTAssertFalse(DirProbeRelay.asksAgain(.answered(probe()), online: true, otherWaiting: false))
     }
 
     func testAMachineThatNeverAnswersIsSaidToHaveNot() async throws {

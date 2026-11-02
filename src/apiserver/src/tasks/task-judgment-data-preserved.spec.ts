@@ -2624,7 +2624,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved triggers/functions is named, and no function, trigger, type, index or constraint is created, replaced
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
       // NULL in both.
-      '0461_runner_region'],
+      '0461_runner_region',
+      // Orbit Files' storage layer (0462, docs/orbit-files-design.md §2.1; files/files.service.ts): a new table
+      // `file_blob` (sha256 primary key, size_bytes, storage, last_referenced_at, with three CHECKs) holds one row per
+      // stored content; `attachment` gains seven nullable columns (sha256 with a foreign key to file_blob ON DELETE
+      // RESTRICT and an index, retention, expires_at, expired_at, pinned_at, file_bundle_id, evidence_id), `data` drops
+      // NOT NULL, and attachment_bytes_present requires `data` or `sha256`. Neither table is a preserved relation: no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved triggers/functions is
+      // named, and no function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored attachment keeps its bytes in `data`.
+      '0462_file_blob'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

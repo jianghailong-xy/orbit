@@ -1,0 +1,1 @@
+new-folder-file-row-button: in view after 0 move(s) at (60.0, 358.0, 314.0, 71.0)

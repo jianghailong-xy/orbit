@@ -1,6 +1,7 @@
 package io.orbitd.android.composer
 
 import io.orbitd.android.core.auth.*
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
@@ -566,14 +567,16 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     /** What a provider picked for the session will do, and when (A07-19 (a), iOS e6295abe7/6f3083272 `providerSwitchNote`): said by the
      * names of the credential it is on — or a pick already held for it — and the one picked, over a session still going as the turn
      * in flight finishing on the one and the next on the other. None for a draft, a pick of what it is already on, or before the
-     * catalogue that names them is read. */
+     * catalogue that names them is read. A session held for its runner's Claude region has nothing in flight: its waiting message runs on
+     * the pick (OrbitKit ConsoleModel `liveRun: isLive && !regionHeld`). */
     private fun switchNote(detail: JsonObject, values: JsonObject): String? {
         if (target != null) return null
         val to = values.text("provider") ?: return null
         val from = state.value.draft.resumeConfig.text("provider") ?: detail.text("provider") ?: return null
         val catalog = state.value.catalog ?: return null
         val engine = values.text("engine") ?: catalog.engineOf(detail)
-        return EngineCopy.switchNote(catalog.providerName(engine, from), catalog.providerName(engine, to), liveRun = !terminal(detail))
+        return EngineCopy.switchNote(catalog.providerName(engine, from), catalog.providerName(engine, to),
+            liveRun = !terminal(detail) && !ClaudeRegion.held(detail))
     }
     fun consumeCreated() { mutable.update { it.copy(draft = it.draft.copy(createdSessionId = null)) }; launch { persist() } }
 

@@ -9,9 +9,13 @@ import {
 import { encodeId } from './idCodec';
 import {
   SETUP_FOUND_PREFIX,
+  SETUP_NEW_FOLDER_DONE,
+  SETUP_NEW_FOLDER_META,
   SETUP_NOT_GIT,
   setupCouldNotCheck,
   setupGit,
+  setupNewFolderExists,
+  setupNewFolderIsFile,
   setupNoSuchDirectory,
   setupNotADirectory,
 } from './machineSetupCopy';
@@ -78,6 +82,17 @@ export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: s
 export const updatesItself = (runner: { selfUpdate?: { state?: string } | null }): boolean =>
   runner.selfUpdate?.state !== 'disabledByEnv' && runner.selfUpdate?.state !== 'dirNotWritable';
 
+/** A machine approved a moment ago that has not connected yet: never heard from, so it reads offline and has
+ *  declared nothing (contract §2). Not one too old to check folders, nor one that went away: it is waited for. */
+export const isConnecting = (runner: { online?: boolean; lastHeartbeatAt?: string | null }): boolean =>
+  runner.online !== true && runner.lastHeartbeatAt == null;
+
+/** How often a machine's new session page reads the machine again while its card is up, as the native pages do:
+ *  a sign-in landing or the machine going away moves the card by itself. One still connecting is read more often,
+ *  so the folder step opens within seconds of its first heartbeat. */
+export const SETUP_POLL_MS = 5_000;
+export const SETUP_CONNECTING_POLL_MS = 2_000;
+
 /** `newFolder`'s rule on the server (§3.1): one path segment, nothing a shell or a path could read
  *  anything into. */
 export function isValidNewFolder(name: string): boolean {
@@ -112,6 +127,27 @@ export function folderVerdict(probe: DirProbe, machine: string): FolderVerdict {
   if (!probe.isDir) return refused(setupNotADirectory(machine));
   const short = probe.isGit ? setupGit(probe.branch) : SETUP_NOT_GIT;
   return { tone: probe.isGit ? 'ok' : 'warn', text: `${SETUP_FOUND_PREFIX}${short}`, short, usable: true };
+}
+
+/** What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a
+ *  new folder starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a
+ *  file can't become one. */
+export function newFolderVerdict(probe: DirProbe, machine: string): FolderVerdict {
+  const refused = (text: string): FolderVerdict => ({ tone: 'bad', text, short: text, usable: false });
+  if (probe.error) return refused(setupCouldNotCheck(machine, probe.error));
+  if (!probe.exists) return { tone: 'ok', text: SETUP_NEW_FOLDER_META, short: SETUP_NEW_FOLDER_DONE, usable: true };
+  if (!probe.isDir) return refused(setupNewFolderIsFile(machine));
+  return { tone: 'warn', text: setupNewFolderExists(machine), short: folderVerdict(probe, machine).short, usable: true };
+}
+
+/** What Use this folder picks on that answer: a new folder while nothing is there, else the directory that is,
+ *  which is then a folder like any other and is sent by its path. */
+export function newFolderPick(probe: DirProbe, name: string, reposRoot: string, machine: string): PickedFolder | null {
+  const verdict = newFolderVerdict(probe, machine);
+  if (!verdict.usable) return null;
+  return probe.exists
+    ? { kind: 'existing', path: probe.path, note: verdict.short }
+    : { kind: 'new', name, path: newFolderPath(reposRoot, name) };
 }
 
 /** The folder step's answer, once the person has pressed Use this folder. */

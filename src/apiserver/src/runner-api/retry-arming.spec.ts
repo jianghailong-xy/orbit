@@ -97,7 +97,9 @@ function planFor(
   delivered = true,
 ): Promise<RetryPlan> {
   const tx = transactionDouble<RetryPlanTransaction>({
+    runEvent: { findFirst: async () => null },
     session: {
+      findMany: async () => [],
       findUnique: async () => ({
         ownerId: OWNER_ID,
         provider: session.provider ?? 'claude',

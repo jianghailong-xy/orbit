@@ -27,6 +27,9 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
@@ -61,10 +64,14 @@ test('tenant isolation: every route that names something by path refuses another
   await sql.connect();
   const db: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
+  // Where the server keeps the files it is sent (ORBIT_FILES_DIR, files/file-store.ts): this run's own directory, so an
+  // owner's upload is kept and a refused one is seen removed, whatever the host's /var/lib allows.
+  const filesDir = mkdtempSync(path.join(tmpdir(), 'tenant-isolation-files-'));
   t.after(async () => {
     await server?.stop();
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
+    rmSync(filesDir, { recursive: true, force: true });
   });
   await verifyCoordinatorPgIdentity(sql);
   process.env.PROVIDER_SECRET_KEY = PROVIDER_SECRET_KEY;
@@ -76,6 +83,7 @@ test('tenant isolation: every route that names something by path refuses another
     PROVIDER_SECRET_KEY,
     // No reaching models.dev from a spec: the catalogue keeps the lists this build shipped.
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
+    ORBIT_FILES_DIR: filesDir,
   });
   const { api, account, tenant } = censusFixtures({ run: RUN, db, sql, server, jwt });
   type Account = CensusAccount;

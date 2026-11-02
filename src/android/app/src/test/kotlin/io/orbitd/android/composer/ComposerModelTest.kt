@@ -645,6 +645,31 @@ class ComposerModelTest {
         assertEquals("Applies when this session starts.", draft.state.value.notice)
     }
 
+    /** A session held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11) has nothing in flight: a provider
+     * picked for it — the region card's Use another provider — says its waiting message runs on the pick, never that a turn finishes on
+     * Claude Code (OrbitKit ConsoleModel `liveRun: isLive && !regionHeld`). A session queued for anything else keeps the note it had. */
+    @Test fun aProviderPickOnAHeldSessionSaysTheWaitingMessageRunsOnIt() = runTest {
+        val refusal = "CLAUDE_REGION_UNSUPPORTED: HPC’s connection to Anthropic is in mainland China, where Anthropic doesn’t offer Claude."
+        for ((error, note) in listOf(refusal to "Your next message uses DeepSeek.",
+            null to "The turn in flight finishes on Claude Code. Your next one uses DeepSeek.")) {
+            val rig = Rig(this)
+            rig.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude"],
+                "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}]"""
+            rig.runners = """[{"id":"r","engines":[{"engine":"claude","installed":true,"auth":"yes"}],
+                "region":{"verdict":"blocked","country":"CN","regionCode":null,"name":"mainland China","viaProxy":false,"checkedAt":"2026-10-31T03:58:00Z"}}]"""
+            rig.detail = buildJsonObject {
+                put("id", "s"); put("status", "PENDING"); put("runStatus", "PENDING"); put("runState", "QUEUED"); put("assignedRunnerId", "r")
+                put("provider", "claude"); put("engine", "claude"); error?.let { put("error", it) }
+                putJsonObject("capabilities") { put("canSend", true); put("canResume", false) }
+            }.toString()
+            val model = rig.start()
+            model.loadCatalog(); runCurrent()
+            model.config(buildJsonObject { put("provider", "deepseek"); put("engine", "claude") }); runCurrent()
+            assertEquals(note, model.state.value.switchNote)
+            assertNotNull("the pick went to the server", rig.calls.lastOrNull { it.path == listOf("sessions", "s", "config") && it.method == HttpMethod.PATCH })
+        }
+    }
+
     /** Send's other way while a turn runs (docs/mocks/steer-tray): queued for the next turn, it says so; an ordinary send leaves where it
      * goes to the server, as every send before it did. */
     @Test fun queueingForTheNextTurnSaysSoAndASendOtherwiseLeavesItToTheServer() = runTest {

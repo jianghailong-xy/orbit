@@ -1,0 +1,42 @@
+# Mutation checks: each mutant must turn the new test that covers it red.
+# Run 2026-11-01T15:00:49Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+## Unmutated build
+# pass 24
+# fail 0
+
+## M1 the client always sends thinking, disabled when the setting is null
+sed -i 's/\.\.\.(endpoint\.thinking ? { thinking: { type: endpoint\.thinking } } : {})/thinking: { type: endpoint.thinking ?? "disabled" }/' src/apiserver/build/wiki-worker/wiki-model-client.js
+not ok 1 - a call is POST /v1/messages, streamed: one user message, the key as a Bearer, the version pinned, its own max_tokens, no tools and no thinking
+not ok 2 - the thinking switch: with none set the body is byte for byte the one sent before it; disabled and enabled add thinking: {type}
+# pass 22
+# fail 2
+
+## M2 the client never sends thinking
+sed -i 's/\.\.\.(endpoint\.thinking ? { thinking: { type: endpoint\.thinking } } : {})/...({})/' src/apiserver/build/wiki-worker/wiki-model-client.js
+not ok 2 - the thinking switch: with none set the body is byte for byte the one sent before it; disabled and enabled add thinking: {type}
+# pass 23
+# fail 1
+
+## M3 the reader takes the value case-insensitively
+sed -i 's/const think = value(shared_1\.WIKI_SYSTEM_MODEL_ENV\.thinking);/const think = value(shared_1.WIKI_SYSTEM_MODEL_ENV.thinking).toLowerCase();/' src/apiserver/build/wiki-worker/wiki-system-model.js
+not ok 22 - a thinking value that is neither is said, and no thinking is sent; it does not unconfigure the model
+# pass 23
+# fail 1
+
+## M4 the configuration and its problems are said on every read
+sed -i 's/if (said !== announced) {/if (true) {/' src/apiserver/build/wiki-worker/wiki-system-model.js
+not ok 24 - the worker's log names the thinking switch when it is set, says a value it cannot use once, and never the key
+# pass 23
+# fail 1
+
+build restored: identical to before the mutants
+
+## M5 the request queue does not carry the setting on the endpoint (source mutant; run-pg-spec.sh compiles from source)
+sed -i 's/^      thinking: this.config.thinking,$/      \/\/ mutant: thinking dropped/' src/apiserver/src/wiki-worker/wiki-model-queue.service.ts
+not ok 8 - the worker's thinking switch rides every call the queue makes; unset, empty or unusable, the body is as it was
+    thinking "disabled"
+  expected: '{"model":"qwen3-coder-spec","max_tokens":32,"system":"s","messages":[{"role":"user","content":"thinking \\"disabled\\""}],"stream":true,"thinking":{"type":"disabled"}}'
+  actual: '{"model":"qwen3-coder-spec","max_tokens":32,"system":"s","messages":[{"role":"user","content":"thinking \\"disabled\\""}],"stream":true}'
+==== wiki-model-queue.pg.spec.ts tests=8 pass=7 fail=1 skipped=0 node exited rc=1; 1 failing
+source restored: git diff -- src is empty

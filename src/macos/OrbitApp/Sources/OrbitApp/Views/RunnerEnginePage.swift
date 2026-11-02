@@ -285,7 +285,12 @@ private struct RunnerEngineContent: View {
                let name = RunnerPageFormat.removedDefaultName(health) {
                 removedDefaultRow(removed, name: name, login: login)
             }
-            if RunnerPageFormat.canAddAccount(runner, engine: engine) {
+            // A machine blocked for the Claude region adds no Claude account — that is a sign-in — and
+            // offers Check Again in Add Account's place (board 03); the accounts stay as they are.
+            if RunnerPageFormat.claudeRegionBlocked(runner, engine: engine) {
+                Button(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) { checkRegion() }
+                    .disabled(offline || runners.regionChecking.contains(runner.id))
+            } else if RunnerPageFormat.canAddAccount(runner, engine: engine) {
                 addAccountRow(health, login: login, offline: offline)
             } else if let hint = RunnerPageFormat.signInHint(runner, engine: engine) {
                 Text(hint)
@@ -295,7 +300,10 @@ private struct RunnerEngineContent: View {
         } header: {
             RunnerSectionHeader(RunnerPageFormat.accountsTitle(runner, engine: engine))
         } footer: {
-            if engine == "antigravity" && RunnerPageFormat.antigravityCanSignIn(runner) {
+            if RunnerPageFormat.claudeRegionBlocked(runner, engine: engine),
+               let region = RunnerPageFormat.claudeRegionNote(runner, now: now) {
+                ClaudeRegionNoteView(region: region, offline: offline)
+            } else if engine == "antigravity" && RunnerPageFormat.antigravityCanSignIn(runner) {
                 VStack(alignment: .leading, spacing: 8) {
                     GoogleSignInTermsView()
                     if offline {
@@ -349,6 +357,9 @@ private struct RunnerEngineContent: View {
         let status = spent.map { RunnerPageFormat.Status(text: CursorRuntime.spentStatus($0, now: now), tone: .warn) }
             ?? RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
+        // On a machine blocked for the Claude region an account says its sign-in alone: no quota is read
+        // there, and nothing signs it in again or renews it (web parity).
+        let regionBlocked = RunnerPageFormat.claudeRegionBlocked(runner, engine: engine)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -392,7 +403,7 @@ private struct RunnerEngineContent: View {
                 // Cursor reports no share of this account's usage, or only 0%, which is no reading
                 // (contract §11): under the plan's name, no number at all rather than one Orbit made up.
                 cursorUsageUnavailable(plan: line.plan)
-            } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
+            } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine), !regionBlocked {
                 // Kimi only: a read that held no window at all is a plan with no quota limit, said so —
                 // not the failed-or-never-ran read's "No quota reported" (web QuotaCell).
                 Text(RunnerPageFormat.accountNoQuotaLimit(runner, engine: engine, account: line.id)
@@ -402,7 +413,7 @@ private struct RunnerEngineContent: View {
             }
             // A login about to lapse, said before it does the way Claude Code says it, with the way to
             // renew it beside it: the row's own sign-in, into the same account.
-            if signingIn != line.id, let expiring = RunnerPageFormat.loginExpiresLine(line, now: now) {
+            if signingIn != line.id, !regionBlocked, let expiring = RunnerPageFormat.loginExpiresLine(line, now: now) {
                 HStack(alignment: .firstTextBaseline) {
                     Label(expiring, systemImage: "exclamationmark.triangle.fill")
                         .font(.orbitLabel.weight(.semibold))
@@ -425,7 +436,7 @@ private struct RunnerEngineContent: View {
                                  onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })
             } else if Self.pressesOnRow && canPause && (line.auth == "yes" || AccountPause.isPaused(line.pausedUntil, now: now)) {
                 AccountPauseControls(name: line.name, pausedUntil: line.pausedUntil, scope: Self.pauseScope,
-                                     signedInAction: { signingIn = line.id },
+                                     signedInAction: regionBlocked ? nil : { signingIn = line.id },
                                      signInDisabled: offline || removal?.pending == true) { minutes in
                     await runners.pauseAccount(runner.id, engine: login, account: line.id, durationMinutes: minutes)
                 }
@@ -434,7 +445,7 @@ private struct RunnerEngineContent: View {
                     // Paused is the row's state; Resume and a new duration are its swipe's and menu's.
                     AccountPauseLine(pausedUntil: line.pausedUntil)
                 }
-                if let note = RunnerPageFormat.signedOutNote(line, alone: alone, engine: engine) {
+                if !regionBlocked, let note = RunnerPageFormat.signedOutNote(line, alone: alone, engine: engine) {
                     Text(note)
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
@@ -649,6 +660,14 @@ private struct RunnerEngineContent: View {
             if note.tone == .warn { words[Colour.self] = RunnerInk.amber }
             line += words
         }
+        // The machine blocked for the Claude region: the head says so in the row's own words, as the
+        // machine page's Claude Code row does.
+        if RunnerPageFormat.claudeRegionBlocked(runner, engine: engine) {
+            if !line.characters.isEmpty { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
+            var words = AttributedString(ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED)
+            words[Colour.self] = RunnerInk.amber
+            line += words
+        }
         return line
     }
 
@@ -803,6 +822,16 @@ private struct RunnerEngineContent: View {
         let slug = engine
         Task {
             if let failure = await runners.installEngine(id, engine: slug) { show(failure) }
+        }
+    }
+
+    /// Check again (docs/claude-region-check-contract.md §7), held until the check it asked for is back.
+    private func checkRegion() {
+        let id = runner.id
+        Task {
+            if let failure = await runners.checkRegion(id) {
+                show("\(ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED) — \(failure)")
+            }
         }
     }
 

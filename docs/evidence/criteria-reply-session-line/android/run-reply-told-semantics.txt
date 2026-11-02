@@ -1,0 +1,53 @@
+Printing with useUnmergedTree = 'true'
+1) Node #121 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+ |-Node #174 at (l=0.0, t=0.0, r=411.0, b=74.0)px
+   IsContainer = 'true'
+    |-Node #176 at (l=16.0, t=16.0, r=395.0, b=58.0)px, Tag: 'record:11:coordinatorDelivery'
+       |-Node #177 at (l=16.0, t=16.0, r=395.0, b=58.0)px
+         Focused = 'false'
+         Actions = [OnClick, RequestFocus]
+         MergeDescendants = 'true'
+          |-Node #178 at (l=28.0, t=28.0, r=41.0, b=46.0)px
+          | ClearAndSetSemantics = 'true'
+          |-Node #180 at (l=47.0, t=22.0, r=192.0, b=37.0)px, Tag: 'record:11:coordinatorDelivery:sentence'
+          | Text = '[Criteria proposal rejected]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #181 at (l=47.0, t=39.0, r=183.0, b=52.0)px, Tag: 'record:11:coordinatorDelivery:sent'
+          | Text = '[Sent to this session · 01:03]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #182 at (l=379.0, t=30.0, r=383.0, b=45.0)px
+            ClearAndSetSemantics = 'true'
+2) Node #183 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #184 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   [IsDialog]
+    |-Node #185 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+      IsContainer = 'true'
+       |-Node #186 at (l=12.0, t=12.0, r=399.0, b=879.0)px, Tag: 'record:11:coordinatorDelivery:told'
+         IsTraversalGroup = 'true'
+         VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+         Actions = [ScrollBy, ScrollByOffset]
+          |-Node #188 at (l=12.0, t=26.0, r=184.0, b=46.0)px
+          | Text = '[What this session was told]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #189 at (l=332.0, t=16.0, r=399.0, b=56.0)px
+          | Focused = 'false'
+          | Role = 'Button'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |  |-Node #191 at (l=344.0, t=24.0, r=387.0, b=48.0)px
+          |    Text = '[Close]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #192 at (l=12.0, t=68.0, r=157.0, b=83.0)px
+          | Text = '[Criteria proposal rejected]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #193 at (l=12.0, t=91.0, r=148.0, b=104.0)px
+          | Text = '[Sent to this session · 01:03]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #194 at (l=12.0, t=112.0, r=399.0, b=256.0)px
+            Focused = 'false'
+            Actions = [RequestFocus]
+             |-Node #196 at (l=12.0, t=112.0, r=399.0, b=256.0)px
+               Text = '[From Orbit · criteria decision
+
+Your criteria proposal 34pX0YF3mJmoTBvNxc8Kt on project “Runner link v1” (34nmPkyh9pd8tVm1fCv2Q) was refused by the account owner at 2026-10-31T11:30:00.000Z. Nothing was applied: criterion 2 stays at revision 1.]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

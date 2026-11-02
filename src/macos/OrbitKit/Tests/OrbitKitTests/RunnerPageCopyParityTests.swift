@@ -269,6 +269,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("attentionCantUpdateItselfDetail",
          RunnerPageCopy.attentionCantUpdateItselfDetail(version: "${version}", latest: "${latest}",
                                                         command: "${command}")),
+        ("runnerUpgradeCommandIn", RunnerPageCopy.runnerUpgradeCommandIn(folder: "${folder}")),
         ("runnerUpdatedFromTo", RunnerPageCopy.runnerUpdatedFromTo(from: "${from}", to: "${to}")),
         ("attentionInstallFolderNotWritableDetail",
          RunnerPageCopy.attentionInstallFolderNotWritableDetail(folder: "${folder}", version: "${version}",

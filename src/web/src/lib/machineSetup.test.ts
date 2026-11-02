@@ -8,6 +8,7 @@ import {
   folderName,
   folderVerdict,
   installedLogins,
+  isConnecting,
   isOfferedFolder,
   isValidNewFolder,
   machineDraftPath,
@@ -15,6 +16,8 @@ import {
   machinesToSetUp,
   makesNewFolders,
   newFolderPath,
+  newFolderPick,
+  newFolderVerdict,
   newWorkspaceOf,
   registerDirToProbe,
   updatesItself,
@@ -138,6 +141,19 @@ describe('what a machine declares', () => {
     expect(updatesItself({ selfUpdate: { state: 'disabledByEnv' } })).toBe(false);
     expect(updatesItself({ selfUpdate: { state: 'dirNotWritable' } })).toBe(false);
   });
+
+  it('approved and never heard from, it is still connecting: offline with no heartbeat yet', () => {
+    // What the server reads for a machine whose `orbit run` has not beaten yet (contract §2).
+    expect(isConnecting({ online: false, lastHeartbeatAt: null })).toBe(true);
+    expect(isConnecting({ online: false })).toBe(true);
+  });
+
+  it('heard from once, it is offline or online, never connecting', () => {
+    expect(isConnecting({ online: false, lastHeartbeatAt: '2026-10-31T09:00:00Z' })).toBe(false);
+    expect(isConnecting({ online: true, lastHeartbeatAt: '2026-10-31T09:00:00Z' })).toBe(false);
+    // Online is its own heartbeat's word, whatever else the row has yet to carry.
+    expect(isConnecting({ online: true, lastHeartbeatAt: null })).toBe(false);
+  });
 });
 
 describe('rule 3: a new folder', () => {
@@ -155,6 +171,63 @@ describe('rule 3: a new folder', () => {
     expect(newFolderPath('/home/orbit/orbit-repos/', 'app')).toBe('/home/orbit/orbit-repos/app');
     expect(newFolderPath('C:\\Users\\orbit\\orbit-repos', 'app')).toBe('C:\\Users\\orbit\\orbit-repos\\app');
     expect(newFolderPath('/home/orbit/orbit-repos', '')).toBe('/home/orbit/orbit-repos/');
+  });
+
+  const machine = 'orbit@austin';
+  const at = (over: Partial<DirProbe>) =>
+    probe({ path: '/home/orbit/orbit-repos/app', exists: false, isDir: false, isGit: false, branch: null, ...over });
+
+  it('nothing there yet: it starts empty, as the board says, and is made as the session starts', () => {
+    expect(newFolderVerdict(at({}), machine)).toEqual({
+      tone: 'ok',
+      text: 'Starts empty. Ask for a clone or a new project in your first message.',
+      short: 'new folder · created as the session starts',
+      usable: true,
+    });
+    expect(newFolderPick(at({}), 'app', '/home/orbit/orbit-repos', machine)).toEqual({
+      kind: 'new',
+      name: 'app',
+      path: '/home/orbit/orbit-repos/app',
+    });
+  });
+
+  it('a folder there already: used with what is in it, and sent by its path like any folder', () => {
+    const there = at({ exists: true, isDir: true, isGit: true, branch: 'main' });
+    expect(newFolderVerdict(there, machine)).toEqual({
+      tone: 'warn',
+      text: 'This folder already exists on orbit@austin. Sessions will use what’s in it.',
+      short: 'git repository · main',
+      usable: true,
+    });
+    expect(newFolderPick(there, 'app', '/home/orbit/orbit-repos', machine)).toEqual({
+      kind: 'existing',
+      path: '/home/orbit/orbit-repos/app',
+      note: 'git repository · main',
+    });
+    expect(newFolderVerdict(at({ exists: true, isDir: true }), machine).short).toBe(
+      'not a git repository — sessions will share it instead of isolating.',
+    );
+  });
+
+  it('a file there: no folder can be made over it, and it says why', () => {
+    const file = at({ exists: true });
+    expect(newFolderVerdict(file, machine)).toEqual({
+      tone: 'bad',
+      text: 'There’s already a file with this name on orbit@austin. Pick another name.',
+      short: 'There’s already a file with this name on orbit@austin. Pick another name.',
+      usable: false,
+    });
+    expect(newFolderPick(file, 'app', '/home/orbit/orbit-repos', machine)).toBeNull();
+  });
+
+  it('a look the runner could not take: nothing to pick on', () => {
+    const failed = at({ error: 'permission denied' });
+    expect(newFolderVerdict(failed, machine)).toMatchObject({
+      tone: 'bad',
+      text: 'Couldn’t check on orbit@austin: permission denied',
+      usable: false,
+    });
+    expect(newFolderPick(failed, 'app', '/home/orbit/orbit-repos', machine)).toBeNull();
   });
 });
 

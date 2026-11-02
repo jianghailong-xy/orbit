@@ -52,7 +52,8 @@ import {
   confirmationReviewRetryTurnId,
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
-import { accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
+import { withActiveSessions } from '../providers/active-sessions';
+import { ACCOUNT_RESET_WAIT_MS, accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { isBuiltinProvider } from '../providers/custom-provider';
@@ -67,6 +68,8 @@ import { RUNNER_BEATS } from '../runners/runner-presence';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 
 const SWEEP_INTERVAL_MS = 30_000;
+/** How often the retries held for a far reset are looked at again (AutoRetryService.releaseHeldRetries). */
+const HELD_RETRY_INTERVAL_MS = 5 * 60_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
 // ordinary reasons a runner drops mid-turn — a restart, a self-update's drain, a deploy, a
 // brief partition — all of which resolve in low single-digit minutes. Past this the machine
@@ -257,6 +260,8 @@ type AggregateSettleOutcome = 'SETTLED' | 'RELEASED' | 'BUSY';
 export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('AutoRetry');
   private timer?: ReturnType<typeof setInterval>;
+  /** When releaseHeldRetries last ran. */
+  private heldRetriesAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -299,8 +304,106 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // 24). First, and on its own: a failure there must not cost the due rows their pass.
     return this.releaseExpiredClaims()
       .catch((e) => this.log.error('expired retry claims were not given up: ' + (e as Error).message))
+      .then(() => this.releaseHeldRetriesWhenDue())
+      .catch((e) => this.log.error('held retries were not looked at: ' + (e as Error).message))
       .then(() => this.sweep())
       .catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
+  }
+
+  private releaseHeldRetriesWhenDue(): Promise<void> {
+    const now = new Date();
+    if (now.getTime() - this.heldRetriesAt < HELD_RETRY_INTERVAL_MS) return Promise.resolve();
+    this.heldRetriesAt = now.getTime();
+    return this.releaseHeldRetries(now);
+  }
+
+  /**
+   * A session on a spent account that another account had no room for when its limit stopped it waits for
+   * its own reset, and nothing else would look at it before then: the room that opens when a session on
+   * another account finishes would go unused beside it for hours. So every HELD_RETRY_INTERVAL_MS the
+   * retries armed further off than ACCOUNT_RESET_WAIT_MS are asked again, the furthest first, and one that
+   * another account can take now is made due: the sweep re-sends it and the claim moves it there.
+   *
+   * One a pass for each of a runner's engines. Nothing moves until the claim, so the count this reads
+   * cannot see the one before it, and several released together would land on one free place. An arm under
+   * that wait is left to its reset: it is, or may be, one that keeps its cache (waitsForWarmCache).
+   */
+  async releaseHeldRetries(now = new Date()): Promise<void> {
+    const held = await this.prisma.session.findMany({
+      where: {
+        retryAt: { gt: new Date(now.getTime() + ACCOUNT_RESET_WAIT_MS) },
+        deletedAt: null,
+        completedAt: null,
+        sessionKind: 'CONVERSATION',
+        OR: [
+          { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+          { status: RunStatus.FAILED },
+        ],
+        AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
+      },
+      orderBy: { retryAt: 'desc' },
+      take: MAX_PER_SWEEP,
+      select: {
+        id: true,
+        engine: true,
+        provider: true,
+        providerBuiltin: true,
+        retryAt: true,
+        retryAttempts: true,
+        status: true,
+        taskId: true,
+        startsTaskWork: true,
+        assignedRunnerId: true,
+        assignedRunner: {
+          select: { planUsage: true, engines: true, capabilities: true, accountPauses: true, defaultRemoved: true },
+        },
+        codexAccount: true,
+        claudeAccount: true,
+        antigravityAccount: true,
+        kimiAccount: true,
+        cursorAccount: true,
+        codexAccountPinned: true,
+        claudeAccountPinned: true,
+        antigravityAccountPinned: true,
+        kimiAccountPinned: true,
+        cursorAccountPinned: true,
+        workspace: {
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
+        },
+      },
+    });
+    const released = new Set<string>();
+    for (const session of held) {
+      const engine = session.provider;
+      const runner = session.assignedRunner;
+      const runnerId = session.assignedRunnerId;
+      if (!isAccountEngine(engine) || !isBuiltinProvider(engine, session.providerBuiltin) || !runner || !runnerId) continue;
+      if ((recordedEngine(session.engine) ?? engine) !== engine) continue;
+      if (!runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine])) continue;
+      const place = `${runnerId}:${engine}`;
+      if (released.has(place)) continue;
+      const column = ACCOUNT_CHOICE[engine];
+      const account = runAccount(engine, session.workspace?.env, { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
+      const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
+      if (!planUsageBlockedUntil(usage, engine, now, account)) continue;
+      const elsewhere = accountAfterUsageLimitAt(
+        engine,
+        { account: session[column], pinned: session[ACCOUNT_PINNED[engine]] },
+        session.workspace,
+        await withActiveSessions(this.prisma, runnerId, runner, now),
+        now,
+      );
+      if (!elsewhere || elsewhere > now) continue;
+      const claimed = await this.rearm(session.id, session.status, now, session.retryAttempts, {
+        taskId: session.taskId ?? null,
+        startsTaskWork: session.startsTaskWork,
+        retryAt: session.retryAt,
+        retryAttempts: session.retryAttempts,
+      });
+      if (claimed > 0) released.add(place);
+    }
   }
 
   onModuleDestroy(): void {
@@ -597,7 +700,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               engine,
               { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
               session.workspace,
-              session.assignedRunner,
+              session.assignedRunnerId && session.assignedRunner
+                ? await withActiveSessions(this.prisma, session.assignedRunnerId, session.assignedRunner, now)
+                : session.assignedRunner,
               now,
             )
           : null;
@@ -1389,11 +1494,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * about to write. Returns the copies' ids, in the shape `resume` links: owned by the same
    * person, scoped to the session, not yet on a turn.
    *
-   * Copies rather than re-points, even though it duplicates the bytes. An attachment belongs to
-   * exactly one turn and cascade-deletes with it, and the turn a retry writes is a QUEUED one —
-   * an interrupt, a withdrawal or an end deletes it. Moving the rows would put the only copy of
-   * the user's image behind that, so the failed attempt's bubble would lose its picture the
-   * first time a retry was cancelled. The copies die with the session either way.
+   * Copies rather than re-points. An attachment belongs to exactly one turn and cascade-deletes
+   * with it, and the turn a retry writes is a QUEUED one — an interrupt, a withdrawal or an end
+   * deletes it. Moving the rows would put the only copy of the user's image behind that, so the
+   * failed attempt's bubble would lose its picture the first time a retry was cancelled. The
+   * copies die with the session either way. A copy names the same stored bytes (`sha256`) as the
+   * row it copies; only a row from before Orbit Files carries its bytes in `data`, and its copy too.
    */
   private async copyAttachments(
     sessionId: string,
@@ -1412,6 +1518,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           mimeType: a.mimeType,
           sizeBytes: a.sizeBytes,
           fileName: a.fileName,
+          sha256: a.sha256,
           data: a.data,
         },
         select: { id: true },

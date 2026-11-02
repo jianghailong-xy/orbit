@@ -1,0 +1,12 @@
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test0AMachineStillConnectingIsWaitedFor]' started.
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test0AMachineStillConnectingIsWaitedFor]' passed (53.804 seconds).
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test1ANewFolderNameThatIsAFolderIsUsedAsItIs]' started.
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test1ANewFolderNameThatIsAFolderIsUsedAsItIs]' passed (62.587 seconds).
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test2TheSuggestionComesBackAfterAnotherPathTookItsQuestion]' started.
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test2TheSuggestionComesBackAfterAnotherPathTookItsQuestion]' passed (38.171 seconds).
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test3ANewFolderNameThatIsAFileCantBe]' started.
+Test Case '-[FwProbeUITests.FirstWorkspaceFinishShotTests test3ANewFolderNameThatIsAFileCantBe]' passed (29.567 seconds).
+	 Executed 4 tests, with 0 failures (0 unexpected) in 184.129 (184.134) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 184.129 (184.135) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 184.129 (184.150) seconds
+** TEST SUCCEEDED **

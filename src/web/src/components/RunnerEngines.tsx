@@ -69,6 +69,7 @@ import {
   currentPlanUsageRows,
   cursorUsageLimit,
   kimiNoQuotaLimit,
+  planUsageRowSpent,
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
 } from '../lib/planUsage';
@@ -424,8 +425,8 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
                 <b>{row.label}</b>
                 <span>{row.percent}%{row.remaining ? ' remaining' : ''}</span>
               </div>
-              <div className={`runner-util ${row.nearLimit ? 'full' : ''}`}>
-                <span className="runner-util-fill" style={{ width: `${row.percent}%` }} />
+              <div className={`runner-util ${planUsageRowSpent(row) ? 'spent' : row.nearLimit ? 'full' : ''}`}>
+                <span className="runner-util-fill" style={{ width: `${planUsageRowSpent(row) ? 100 : row.percent}%` }} />
               </div>
               {row.window.resetsAt && (
                 <div className="re-reset">resets {formatResetTime(row.window.resetsAt)}</div>

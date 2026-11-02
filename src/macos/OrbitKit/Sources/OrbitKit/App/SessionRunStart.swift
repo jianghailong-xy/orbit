@@ -54,14 +54,28 @@ public enum SessionRunStart {
         public let actions: [Action]
         /// The run's own epitaph under the card.
         public let footer: String?
+        /// A page the body cites, linked after it (the region check's Supported regions).
+        public let link: Link?
 
         public init(why: String, body: String, lines: [String] = [], actions: [Action] = [],
-                    footer: String? = nil) {
+                    footer: String? = nil, link: Link? = nil) {
             self.why = why
             self.body = body
             self.lines = lines
             self.actions = actions
             self.footer = footer
+            self.link = link
+        }
+    }
+
+    /// A link after the card's body: its words and where it goes.
+    public struct Link: Equatable, Sendable {
+        public let label: String
+        public let url: String
+
+        public init(label: String, url: String) {
+            self.label = label
+            self.url = url
         }
     }
 
@@ -76,6 +90,11 @@ public enum SessionRunStart {
             case openRunner
             /// Hand the composer a reply about this run.
             case chatAboutThis
+            /// The region check's three ways out (board 03): the same Claude Code on a credential
+            /// Anthropic isn't behind, a workspace on another machine, and a check now.
+            case otherProvider
+            case moveSession
+            case checkAgain
         }
 
         public let kind: Kind
@@ -87,7 +106,7 @@ public enum SessionRunStart {
         }
 
         /// The press that answers the card, rather than the one that only looks around.
-        public var primary: Bool { kind == .startItAgain || kind == .sendItAgain }
+        public var primary: Bool { kind == .startItAgain || kind == .sendItAgain || kind == .otherProvider }
     }
 
     /// §6.1's terminal state, as the DB spells it (`session_source_state_chk`).
@@ -99,20 +118,26 @@ public enum SessionRunStart {
 
     /// The card for a session whose engine never ran, or nil for a session this card has nothing
     /// to say about — one that never claimed a run, or one whose reason another card owns.
+    /// `region` is where the session's machine's Claude connection last came out (`Runner.region`):
+    /// the place a region refusal names, never read out of its sentence.
     public static func card(for session: Session, runnerName: String? = nil,
-                            runnerVersion: String? = nil) -> Card? {
+                            runnerVersion: String? = nil, region: RunnerRegionView? = nil,
+                            now: Date = Date(), timeZone: TimeZone = .current) -> Card? {
         card(error: session.error, sourceState: session.sourceState,
              sourceRefusalCode: session.sourceRefusalCode,
              sourceRefusalDetail: session.sourceRefusalDetail,
              status: session.effectiveRunStatus,
-             runnerName: runnerName, runnerVersion: runnerVersion)
+             runnerName: runnerName, runnerVersion: runnerVersion, region: region,
+             now: now, timeZone: timeZone)
     }
 
     /// The same card from the facts themselves, for a caller that holds them one by one rather
     /// than holding the whole row (the console adopts the fields it needs by name).
     public static func card(error: String?, sourceState: String?, sourceRefusalCode: String?,
                             sourceRefusalDetail: SourceRefusalDetail?, status: RunStatus,
-                            runnerName: String? = nil, runnerVersion: String? = nil) -> Card? {
+                            runnerName: String? = nil, runnerVersion: String? = nil,
+                            region: RunnerRegionView? = nil,
+                            now: Date = Date(), timeZone: TimeZone = .current) -> Card? {
         // A refusal is terminal (§6.1 T8) and says so from its own column, whatever the run's
         // status is — which is the whole point: the bug this card exists for is a refused session
         // sitting on its claim forever, reading `Starting`.
@@ -121,7 +146,8 @@ public enum SessionRunStart {
             return refused
         }
         guard machineReasonStands(status: status) else { return nil }
-        return machineCard(error: error, runnerName: runnerName, runnerVersion: runnerVersion)
+        return machineCard(error: error, runnerName: runnerName, runnerVersion: runnerVersion,
+                           status: status, region: region, now: now, timeZone: timeZone)
     }
 
     /// Whether a machine-side reason is still this session's news.
@@ -241,15 +267,25 @@ public enum SessionRunStart {
     /// (the modules that mirror web's repair cards) and from the server's own claim errors
     /// (`runner-provider-support.ts`), so a row and this card cannot drift apart.
     static func machineCard(error rawError: String?, runnerName: String?,
-                            runnerVersion: String?) -> Card? {
+                            runnerVersion: String?, status: RunStatus = .failed,
+                            region: RunnerRegionView? = nil,
+                            now: Date = Date(), timeZone: TimeZone = .current) -> Card? {
         guard let error = rawError?.trimmingCharacters(in: .whitespacesAndNewlines),
               !error.isEmpty else { return nil }
+
+        let machine = machineName(runnerName)
+
+        // Before anything read by pattern: the region refusal is the only reason here with a code of
+        // its own, and the machine's name in its sentence could hold any of the words the tests below
+        // look for (web's `machineCause`).
+        if ClaudeRegion.isRegionError(error) {
+            return regionCard(error: error, machine: machine, status: status, region: region, now: now,
+                              timeZone: timeZone)
+        }
 
         // An Antigravity or DeepSeek Harness engine repair already has a card of its own on this
         // page. One fact, one card (see the type's note).
         if EngineAuth.antigravityRepair(error) != nil || DshRuntime.repair(error) != nil { return nil }
-
-        let machine = machineName(runnerName)
 
         if isRunnerOffline(error) {
             return Card(why: "The runner holding this session went offline",
@@ -278,6 +314,55 @@ public enum SessionRunStart {
         }
 
         return nil
+    }
+
+    // MARK: - the Claude region
+
+    /// The web card's two feet, word for word (`RunNeverStartedCard.tsx`'s `waitingFoot` and
+    /// `endedFoot`): the region card's, whose message still waits — or, from a control plane that
+    /// predates the hold, whose run it failed.
+    static let waitingFoot = "No engine ran · your message is still here"
+    static let endedFoot = "Ended · no engine ran · 0 turns"
+
+    /// An Anthropic-bound Claude turn this machine's runner refused because its connection to
+    /// Anthropic is in a region Anthropic doesn't offer Claude in (docs/claude-region-check-contract.md
+    /// §9–§11): the control plane holds the session in the queue, with the refusal in its error. The
+    /// web's `regionUnsupported`, board 03's card.
+    ///
+    /// The code says which reason this is; the place comes from `region`, never from the sentence. Its
+    /// ways out are the board's three: another provider for the same Claude Code, another machine, or a
+    /// check now. A runner whose region no longer reads blocked — a check passed, the hold is about to
+    /// release — keeps the server's own words, without the code, rather than a place it no longer
+    /// reports. A turn stopped by a confirmed flip ran: on a control plane that predates the hold it is
+    /// a failed run whose engine spoke, and its sentence stands in the transcript instead (web parity).
+    static func regionCard(error: String, machine: String, status: RunStatus, region: RunnerRegionView?,
+                           now: Date, timeZone: TimeZone) -> Card? {
+        if status == .failed && ClaudeRegion.isStoppedSentence(error) { return nil }
+        var lines: [String] = []
+        let body: String
+        if let region, region.blocked, let name = region.name, !name.isEmpty {
+            // Ukraine's excluded regions carry their own code (UA-43): the country alone is a listed one.
+            lines.append(ClaudeRegionCopy.claudeRegionSubject(code: region.regionCode ?? region.country))
+            if let checked = region.checkedAt,
+               let when = ProviderPools.formatResetTime(checked, now: now, timeZone: timeZone) {
+                lines.append(ClaudeRegionCopy.claudeRegionChecked(when: when, region: name,
+                                                                  viaProxy: region.viaProxy == true))
+            }
+            body = ClaudeRegionCopy.claudeRegionConnectionIsIn(machine: machine, region: name)
+        } else {
+            lines.append(ClaudeRegionCopy.claudeRegionSubject(code: nil))
+            let colon = error.firstIndex(of: ":").map { error.index(after: $0) } ?? error.startIndex
+            body = error[colon...].trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return Card(why: ClaudeRegionCopy.claudeRegionCantUseAnthropicOn(machine: machine),
+                    body: body, lines: lines,
+                    actions: [Action(kind: .otherProvider, label: ClaudeRegionCopy.CLAUDE_REGION_USE_ANOTHER_PROVIDER),
+                              Action(kind: .moveSession, label: ClaudeRegionCopy.CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE),
+                              Action(kind: .checkAgain, label: ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN)],
+                    // Held, the message is still queued; a control plane that predates the hold failed the run.
+                    footer: status == .failed ? endedFoot : waitingFoot,
+                    link: Link(label: ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS,
+                               url: ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS_URL))
     }
 
     /// The word web and this client both use for a run the reaper ended because the machine

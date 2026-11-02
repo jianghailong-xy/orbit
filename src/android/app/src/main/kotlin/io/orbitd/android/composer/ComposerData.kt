@@ -1,5 +1,7 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.ClaudeRegionCopy
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.AccountCopy
 import io.orbitd.android.management.CodexLogins
@@ -65,9 +67,12 @@ enum class CredentialKind { LOGIN, OPENCODE, POOL, KEY }
 /** One credential an engine can run on, as the Provider menu lists it under that engine (web `ProviderChoice`). A key is a
  * choice under every engine that runs it; picking one never changes the engine. [detail] is what a sign-in is, in small type
  * beside it (`opencode auth`; Antigravity's Google account or env key). [fixEngine] is the engine whose page on the runner fixes
- * [unavailable] (OrbitKit `ProviderChoice.fixEngine`), null when none can. */
+ * [unavailable] (OrbitKit `ProviderChoice.fixEngine`), null when none can. [regionBlocked]: [unavailable] is the runner's Claude region
+ * (docs/claude-region-check-contract.md §8), which nothing on the page fixes, so the row names no fix — the machine's Claude Code page
+ * ([fixEngine]) explains (OrbitKit `ProviderChoice.regionBlocked`). */
 data class ProviderOption(val id: String, val label: String, val kind: CredentialKind,
-    val models: List<JsonObject>, val unavailable: String? = null, val detail: String? = null, val fixEngine: String? = null)
+    val models: List<JsonObject>, val unavailable: String? = null, val detail: String? = null, val fixEngine: String? = null,
+    val regionBlocked: Boolean = false)
 
 /** An engine as the new session's Engine list shows it (web `EngineChoice`): every credential it runs on here, and the one a pick
  * of it lands on — none for DeepSeek Harness before a DeepSeek key is connected, whose row offers the connection instead. */
@@ -76,6 +81,8 @@ data class EngineOption(val engine: String, val providers: List<ProviderOption>,
     val label get() = ProviderEngines.cliName(engine)
     /** The engine page that fixes why this engine can't run here — an install, a sign-in, a runner update. */
     val fixEngine get() = landing?.fixEngine?.takeIf { unavailable != null }
+    /** [unavailable] is the runner's Claude region ([ProviderOption.regionBlocked]): explained, not fixed. */
+    val regionBlocked get() = unavailable != null && landing?.regionBlocked == true
 }
 
 /** The words the engine and provider pickers share across the composer and a task's pins (boards 4–6). */
@@ -167,6 +174,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     }
 
     private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
+
+    /** Whether [credential] can't run [engine] on this runner for its Claude region (OrbitKit `SessionProviderChoices.regionBlocked`,
+     * web `regionBlocker`): the runner's effective verdict is blocked (`region`, docs/claude-region-check-contract.md §6) and the
+     * credential talks to Anthropic. Claude Code only (decision ⑥), and it outranks every other reason: no install or sign-in here changes
+     * it. A runner that reads no region gates nothing. */
+    private fun regionBlocked(engine: String, credential: ClaudeRegion.Credential) = engine == ClaudeRegion.ENGINE &&
+        ClaudeRegion.blocked(runner["region"] as? JsonObject) && ClaudeRegion.credentialIsAnthropicBound(credential)
     private fun catalogRows(engine: String) = ((runner["modelCatalog"] as? JsonObject)?.get(engine) as? JsonArray)?.filterIsInstance<JsonObject>()
 
     fun usage(detail: JsonObject): JsonObject? {
@@ -354,7 +368,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         CredentialKind.OPENCODE -> EngineCopy.OWN_SIGN_IN_VALUE
         CredentialKind.LOGIN -> {
             val accounts = accounts(engine)
-            if (option.id != engine || accounts.size < 2) option.label
+            // No account is offered under a sign-in the runner's Claude region blocks: the row's own name (web parity).
+            if (option.id != engine || accounts.size < 2 || option.regionBlocked) option.label
             else accountOn(engine, detail, held, draft).let { on ->
                 // Automatic is said where the account rows offer it: a draft's, or a session's on a runner that moves it between them —
                 // and every Cursor CLI session's, whose rows are listed whether or not it may still move (D5).
@@ -435,8 +450,14 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val slug = row.text("slug") ?: return@filter false
             slug !in ProviderEngines.LOGIN_ENGINES && slug != ProviderEngines.OPENCODE && engine in providerEngines(slug)
         }
-        fun option(row: JsonObject, kind: CredentialKind) = ProviderOption(row.text("slug")!!, row.text("label") ?: row.text("slug")!!, kind,
-            models(engine, row.text("slug")!!), carried ?: row.text("unavailable"), fixEngine = fix)
+        fun option(row: JsonObject, kind: CredentialKind): ProviderOption {
+            // A pool by the engine it runs on, a key by its preset: GET /providers leaves a key's endpoint out.
+            val region = regionBlocked(engine, if (kind == CredentialKind.POOL) ClaudeRegion.Credential.Pool(row.text("runtime") ?: engine)
+                else ClaudeRegion.Credential.Key(row.text("presetSlug")))
+            return ProviderOption(row.text("slug")!!, row.text("label") ?: row.text("slug")!!, kind, models(engine, row.text("slug")!!),
+                if (region) ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED else carried ?: row.text("unavailable"),
+                fixEngine = if (region) engine else fix, regionBlocked = region)
+        }
         return own + runs.filter(::isPool).map { option(it, CredentialKind.POOL) } + runs.filterNot(::isPool).map { option(it, CredentialKind.KEY) }
     }
 
@@ -459,10 +480,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 if (googleAccount) "Google account" else AccountCopy.ENV_KEY, engine.takeIf { blocker != null })
         }
         val signedOut = health?.text("auth") == "no" && health.objects("accounts").none { it.text("auth") == "yes" }
+        // Claude Code's own sign-in on a runner its Claude region blocks: the reason no install or sign-in here changes.
+        val region = regionBlocked(engine, ClaudeRegion.Credential.Login(engine))
         // Cursor CLI's runner has to run the pinned build first (web `cursorBlocker`), then the sign-in is every engine's.
-        val blocker = (if (engine == ProviderEngines.CURSOR) cursorBlocker() else null)
+        val blocker = if (region) ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED else (if (engine == ProviderEngines.CURSOR) cursorBlocker() else null)
             ?: if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else if (signedOut) "Not signed in" else null
-        return ProviderOption(engine, signInLabel(engine), CredentialKind.LOGIN, models(engine, engine), blocker, fixEngine = engine.takeIf { blocker != null })
+        return ProviderOption(engine, signInLabel(engine), CredentialKind.LOGIN, models(engine, engine), blocker, fixEngine = engine.takeIf { blocker != null },
+            regionBlocked = region)
     }
 
     /** What an engine's own sign-in is called in the menu: the one account the runner reports by its own name, else Default — the

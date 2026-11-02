@@ -28,8 +28,9 @@ const (
 const atlasRussiaRefusal = "CLAUDE_REGION_UNSUPPORTED: atlas’s connection to Anthropic is in Russia, where Anthropic doesn’t offer Claude."
 
 // isolateClaudeRegionEnv gives a test an environment of its own for everything the region check reads: no
-// proxy and no NO_PROXY, no Anthropic endpoint and no Bedrock or Vertex switch, and a Claude Code config
-// directory of its own, whose path it returns. This machine's own proxy and settings.json are never read.
+// proxy and no NO_PROXY, no Anthropic endpoint and no Bedrock or Vertex switch, a Claude Code config directory
+// of its own, whose path it returns, and a runner home of its own, where orbit doctor keeps its answers
+// (claudeRegionStorePath). This machine's own proxy, settings.json and kept answers are never read or written.
 func isolateClaudeRegionEnv(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
@@ -39,6 +40,11 @@ func isolateClaudeRegionEnv(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	orbitHome := filepath.Join(home, ".orbit")
+	if err := os.Mkdir(orbitHome, machineHomePerm); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", orbitHome)
 	for _, key := range append(append([]string{}, claudeProxyVars...),
 		"no_proxy", "NO_PROXY", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX") {
 		t.Setenv(key, "")
@@ -170,7 +176,7 @@ func (s *regionStub) checksSoFar() []string {
 // atlas, on clock, for the rest of the test.
 func installRegionCheck(t *testing.T, stub *regionStub, clock *fakePoolClock) *claudeRegionCheck {
 	t.Helper()
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	check.clock = clock
 	previous := claudeRegion.Swap(check)
 	t.Cleanup(func() { claudeRegion.Store(previous) })
@@ -239,7 +245,7 @@ func TestClaudeRegionCheckGoesThroughClaudesProxy(t *testing.T) {
 		t.Fatalf("NO_PROXY = %q does not list the Orbit host", os.Getenv("NO_PROXY"))
 	}
 
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	v := check.check(context.Background())
 	if v.Verdict != claudeRegionAllowed || !v.ViaProxy || v.Name != "United States" || v.Country != "US" {
 		t.Fatalf("check = %+v, want allowed in the United States through the proxy", v)
@@ -264,7 +270,7 @@ func TestClaudeRegionCheckGoesDirectlyWithNoProxy(t *testing.T) {
 	stub := newRegionStub(t, regionAnswerBlocked)
 	proxy := newForwardProxy(t) // there, and named by nothing
 
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	v := check.check(context.Background())
 	if v.Verdict != claudeRegionBlocked || v.ViaProxy || v.Name != "Russia" {
 		t.Fatalf("check = %+v, want blocked in Russia, directly", v)
@@ -284,7 +290,7 @@ func TestClaudeRegionCheckTakesTheProxyFromSettingsJSON(t *testing.T) {
 	fromSettings, fromEnv := newForwardProxy(t), newForwardProxy(t)
 	writeClaudeSettingsEnv(t, dir, map[string]interface{}{"HTTPS_PROXY": fromSettings.server.URL})
 
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	if v := check.check(context.Background()); !v.ViaProxy || len(fromSettings.requests()) != 1 {
 		t.Fatalf("check = %+v with settings.json naming a proxy; that proxy was asked %q", v, fromSettings.requests())
 	}
@@ -357,7 +363,7 @@ func TestClaudeRegionCheckIsUnknownWhenItCannotDecide(t *testing.T) {
 		"not JSON":          garbage.URL,
 	}
 	for name, server := range cases {
-		check := newClaudeRegionCheck(NewTransport(server, "runner-token"), "atlas")
+		check := newClaudeRegionCheck(NewTransport(server, "runner-token"), "atlas", "")
 		began := time.Now()
 		v := check.check(context.Background())
 		if v.Verdict != claudeRegionUnknown || v.Name != "" {
@@ -377,7 +383,7 @@ func TestClaudeRegionTurnGoesOnAFreshAnswerOrAsksNow(t *testing.T) {
 	isolateClaudeRegionEnv(t)
 	stub := newRegionStub(t, regionAnswerAllowed)
 	clock := newFakePoolClock()
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	check.clock = clock
 
 	if v := check.forTurn(context.Background()); v.Verdict != claudeRegionAllowed {
@@ -408,7 +414,7 @@ func TestClaudeRegionKeepsTheLastDecidedVerdictByProxy(t *testing.T) {
 	stub := newRegionStub(t, regionAnswerBlocked)
 	proxy := newForwardProxy(t)
 	clock := newFakePoolClock()
-	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas")
+	check := newClaudeRegionCheck(NewTransport(stub.server.URL, "runner-token"), "atlas", "")
 	check.clock = clock
 
 	decidedAt := clock.Now()
@@ -536,7 +542,7 @@ func TestClaudeRegionCheckAgainOncePerRequest(t *testing.T) {
 	if resp.RegionCheckRequest == nil || resp.RegionCheckRequest.RequestedAt != "2026-11-01T09:00:00.000Z" {
 		t.Fatalf("regionCheckRequest decoded as %+v", resp.RegionCheckRequest)
 	}
-	check := newClaudeRegionCheck(nil, "atlas")
+	check := newClaudeRegionCheck(nil, "atlas", "")
 	for _, c := range []struct {
 		requestedAt string
 		want        bool

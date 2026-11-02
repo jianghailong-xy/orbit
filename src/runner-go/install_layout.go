@@ -18,7 +18,7 @@ import (
 // self-update replaces the copy in ~/.orbit/bin. Older installs put the real file in
 // /usr/local/bin, which is root's while the service runs as an ordinary account: a release
 // could be downloaded but never swapped in. `orbit register` (adoptUserBin) and
-// `sudo orbit upgrade` (migrateLegacyInstall) move such an install over.
+// `sudo /usr/local/bin/orbit upgrade` (migrateLegacyInstall) move such an install over.
 
 // userBinPath is where the runner binary of the account whose home is home lives.
 func userBinPath(home string) string {
@@ -164,8 +164,8 @@ func adoptUserBin(exe string, u *user.User, defs []serviceDef, root bool, sudo s
 	gid, _ := strconv.Atoi(u.Gid)
 	to, err := moveToUserBin(exe, u.HomeDir, uid, gid, root, sudo)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "note: could not move %s into %s (%v); the runner cannot update itself until `sudo orbit upgrade` does.\n",
-			exe, filepath.Dir(userBinPath(u.HomeDir)), err)
+		fmt.Fprintf(os.Stderr, "note: could not move %s into %s (%v); the runner cannot update itself until `sudo %s upgrade` does.\n",
+			exe, filepath.Dir(userBinPath(u.HomeDir)), err, exe)
 		return exe
 	}
 	fmt.Printf("✓ moved orbit to %s (%s links to it), so the runner can update itself.\n", to, exe)
@@ -225,7 +225,7 @@ func launchAgentPath(home string) string {
 
 // launchdServicesRunning returns the LaunchAgent of the account that invoked sudo, when it
 // runs exe. A LaunchAgent belongs to one login, and that login is whose runner a
-// `sudo orbit upgrade` is about.
+// `sudo /usr/local/bin/orbit upgrade` is about.
 func launchdServicesRunning(exe string) []serviceDef {
 	name := os.Getenv("SUDO_USER")
 	if name == "" || name == "root" {
@@ -295,7 +295,7 @@ func (d serviceDef) withProgram(content, to string) string {
 	return strings.Join(lines, "\n")
 }
 
-// migrateLegacyInstall is `sudo orbit upgrade`'s half of the move, run as root before the
+// migrateLegacyInstall is `sudo /usr/local/bin/orbit upgrade`'s half of the move, run as root before the
 // release is swapped in. When exe sits in a directory only root can write and the runner
 // service that runs it belongs to one ordinary account, the binary moves into that account's
 // ~/.orbit/bin, exe becomes a symlink to it, and the service definition is rewritten to name

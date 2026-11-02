@@ -1,0 +1,1 @@
+F2: the setup card exists only at 0 workspaces (board rule 1), so "pick a new folder next" on the same machine needs the first workspace deleted first: there is no web path to a second folder other than the Add workspace form, which has no new-folder option

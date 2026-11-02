@@ -1,0 +1,13 @@
+#!/bin/sh
+# What alice plants at ~/.orbit/bin/orbit in scripts/install-sh-e2e.sh R1, a file of hers. Each run
+# logs who ran it, with which arguments, ORBIT_INSTALL_PLAN, HOME and whether stdin is a terminal;
+# run as root, it also leaves /etc/install-sh-e2e-planted behind, which alice cannot write.
+args=""
+for a in "$@"; do args="$args[$a]"; done
+tty=no
+[ -t 0 ] && tty=yes
+echo "ran: uid=$(id -u) user=$(id -un) args=$args ORBIT_INSTALL_PLAN=${ORBIT_INSTALL_PLAN-unset} HOME=${HOME-unset} stdin-tty=$tty" >>/var/log/install-sh-e2e-planted.log
+touch /etc/install-sh-e2e-planted 2>/dev/null
+# install.sh asks for the version once the binary is in place.
+[ "${1-}" != version ] || echo 0.0.0-planted
+exit 0

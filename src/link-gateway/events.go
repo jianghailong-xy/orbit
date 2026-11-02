@@ -598,7 +598,8 @@ func (b *creditBook) announce(reduced bool) {
 			continue
 		}
 		c.link.mu.Lock()
-		if c.link.credit != level {
+		// A connection with no credit yet has not started: Welcome may still be to come, and start tells it this change.
+		if c.link.credit != (creditLevel{}) && c.link.credit != level {
 			c.link.setCreditLocked(level)
 		}
 		c.link.mu.Unlock()

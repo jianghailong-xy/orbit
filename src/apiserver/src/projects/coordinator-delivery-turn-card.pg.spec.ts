@@ -21,7 +21,9 @@
  *       approved, and rejected;
  *   (5) an ordinary message carries none — nor one under a derived key no wake names, nor one under
  *       a key a wake delivered to ANOTHER conversation names, nor the words of a reply on a
- *       conversation that filed no proposal — and a card the runner sends is dropped.
+ *       conversation that filed no proposal — and a card the runner sends is dropped;
+ *   (6) the owner's answer to a proposal a task's run filed: told to that run, and said to be — the
+ *       project's own coordinator pointer names another conversation, so `toCoordinator` is false.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/coordinator-delivery-turn-card.pg.spec.ts
  *
@@ -267,6 +269,7 @@ test('a turn telling a session about a committed fact carries a coordinatorDeliv
       revision: null,
       count: null,
       deliveredAt: wake.updated_at.toISOString(),
+      toCoordinator: true,
     };
 
     const queued = (await sessions.listQueuedTurns(ownerId, coordinator)).find((row) => row.turnId === told.id);
@@ -306,6 +309,7 @@ test('a turn telling a session about a committed fact carries a coordinatorDeliv
     const wake = await wakeOf(fact);
     const expected: CoordinatorDeliveryCard = {
       kind: 'CRITERION_UNLANDED', task: null, revision: null, count: 2, deliveredAt: wake.updated_at.toISOString(),
+      toCoordinator: true,
     };
 
     // Nothing waits ahead of it — `resume` refuses a conversation with a message it has not read — so
@@ -349,6 +353,7 @@ test('a turn telling a session about a committed fact carries a coordinatorDeliv
       revision: null,
       count: null,
       deliveredAt: moved.updated_at.toISOString(),
+      toCoordinator: true,
     }, 'the re-sent turn is drawn as the line, at the moment it was re-sent');
 
     const head = await deliver(coordinator);
@@ -396,6 +401,7 @@ test('a turn telling a session about a committed fact carries a coordinatorDeliv
         revision: null,
         count: null,
         deliveredAt: reply.createdAt.toISOString(),
+        toCoordinator: true,
       };
 
       const active = (await sessions.listQueuedTurns(ownerId, proposal.coordinator, 'active')).find((row) => row.turnId === reply.id);
@@ -452,5 +458,69 @@ test('a turn telling a session about a committed fact carries a coordinatorDeliv
       assert.equal(stored.coordinatorDelivery, undefined, `the echo of ${turnId} carries a card`);
       await finish(coordinator, turnId);
     }
+  });
+
+  await t.test('(6) the answer to a proposal a task’s run filed is told to that run, and says so — not the coordinator', async () => {
+    const { projectId, coordinator } = await coordinatedProject('the project a task’s run asks to loosen');
+    await projects.update(ownerId, projectId, {
+      acceptanceCriteriaItems: ['The line is one line', 'The words are unchanged']
+        .map((text) => ({ text, verificationMethod: METHOD })),
+    } as never);
+    const [kept] = await prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId }, orderBy: { ordinal: 'asc' }, select: { id: true },
+    });
+    // A run of one of the project's tasks, parked between turns, asks to drop a criterion.
+    const taskId = await task(projectId, 'Say where the reply went');
+    const run = await conversation('Task: Say where the reply went', { taskId });
+    const held = (await projects.update(ownerId, projectId, {
+      acceptanceCriteriaItems: [{ id: kept!.id, text: 'The line is one line', verificationMethod: METHOD }],
+    } as never, run) as { acceptanceCriteriaHold?: { intentId: string; baselineSeal: string } }).acceptanceCriteriaHold;
+    assert.ok(held, 'dropping a criterion from a task’s run is held for the owner');
+    const { rows: [key] } = await sql.query<{ commit_token: string }>(
+      `SELECT "commit_token" FROM "project_ratified_action_intent" WHERE "id" = $1::uuid`, [held.intentId],
+    );
+    // Something waits ahead of the answer, so it is on both views of the queue until it is handed out.
+    const ahead = await ownerSays(run, 'the owner says something first');
+    const decided = await projects.decideCriteriaChange(ownerId, projectId, held.intentId, {
+      commitToken: key!.commit_token, decision: 'REJECT', baseSeal: held.baselineSeal,
+    } as never) as { reply?: { channel: string; turnId?: string } | null };
+    assert.equal(decided.reply?.channel, 'SESSION', 'the reply went to the run that asked');
+    const reply = await turnKeyed(run, criteriaDecisionReplyTurnId(held.intentId));
+    assert.equal(decided.reply?.turnId, reply.id);
+    assert.match(reply.content ?? '', /^From Orbit · criteria decision\n\nYour criteria proposal /, 'the words are what they were');
+    assert.equal(
+      await prisma.conversationTurn.count({ where: { sessionId: coordinator, clientTurnId: reply.clientTurnId } }), 0,
+      'nothing of it went to the coordinator',
+    );
+    const expected: CoordinatorDeliveryCard = {
+      kind: 'CRITERIA_REJECTED',
+      task: null,
+      revision: null,
+      count: null,
+      deliveredAt: reply.createdAt.toISOString(),
+      toCoordinator: false,
+    };
+    /** The reply's card on each view of the run's queue. */
+    const views = async () => {
+      const queue = (await sessions.listQueuedTurns(ownerId, run)).find((row) => row.turnId === reply.id);
+      const active = (await sessions.listQueuedTurns(ownerId, run, 'active')).find((row) => row.turnId === reply.id);
+      assert.ok(queue && active, 'a view of the queue does not list the reply');
+      return { queue: wire(queue.coordinatorDelivery), active: wire(active.coordinatorDelivery) };
+    };
+    assert.deepEqual(await views(), { queue: expected, active: expected }, 'both views of the queue');
+
+    // The project's pointer says who the run is, not what kind of session it is: while the pointer
+    // names it, the same task run is the coordinator, and the same reply reads as the coordinator's.
+    await prisma.project.update({ where: { id: projectId }, data: { coordinatorSessionId: run } });
+    const asCoordinator = { ...expected, toCoordinator: true };
+    assert.deepEqual(await views(), { queue: asCoordinator, active: asCoordinator }, 'the run, while it is the coordinator');
+    await prisma.project.update({ where: { id: projectId }, data: { coordinatorSessionId: coordinator } });
+
+    const head = await deliver(run);
+    assert.equal(head.turnId, ahead, 'the owner’s message ahead of it was handed out first');
+    await finish(run, head.turnId);
+    const handed = await deliver(run);
+    assert.equal(handed.turnId, reply.id);
+    assert.deepEqual(wire((await echo(run, handed)).coordinatorDelivery), expected, 'the echo');
   });
 });

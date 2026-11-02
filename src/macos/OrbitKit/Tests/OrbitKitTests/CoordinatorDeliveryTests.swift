@@ -150,6 +150,16 @@ final class CoordinatorDeliveryTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(UserBubble.self, from: stored).coordinatorDelivery, expected)
         let older = Data("{\"id\": \"u1\", \"text\": \"hi\", \"pending\": false}".utf8)
         XCTAssertNil(try JSONDecoder().decode(UserBubble.self, from: older).coordinatorDelivery)
+
+        // A reply told to a task's run keeps saying so; a card cached before `toCoordinator` existed is
+        // still the card it was drawn as — the coordinator's — rather than no card at all.
+        let run = CoordinatorDelivery(kind: .criteriaRejected, deliveredAt: expected.deliveredAt, toCoordinator: false)
+        let ran = try JSONEncoder().encode(UserBubble(id: "u2", text: "x", pending: false, coordinatorDelivery: run))
+        XCTAssertEqual(try JSONDecoder().decode(UserBubble.self, from: ran).coordinatorDelivery, run)
+        let cachedBefore = Data(("{\"id\": \"u3\", \"text\": \"x\", \"pending\": false, \"coordinatorDelivery\": "
+            + "{\"kind\": \"CRITERIA_APPROVED\", \"deliveredAt\": \"2026-10-31T11:30:00.000Z\"}}").utf8)
+        XCTAssertEqual(try JSONDecoder().decode(UserBubble.self, from: cachedBefore).coordinatorDelivery,
+                       CoordinatorDelivery(kind: .criteriaApproved, deliveredAt: "2026-10-31T11:30:00.000Z"))
     }
 
     /// Undelivered, the line offers nothing to put back in the composer: the words are the platform's,
@@ -222,6 +232,50 @@ final class CoordinatorDeliveryTests: XCTestCase {
         XCTAssertTrue(sent.hasPrefix("Sent to the coordinator · "))
         XCTAssertEqual(CoordinatorDeliveryCard.line(expected, now: sameDay),
                        "Evidence revision 1 submitted: \(Self.title) · \(sent)")
+    }
+
+    // MARK: - a reply told to a session that is not the coordinator
+
+    /// The owner's answer to a criteria proposal goes to whichever session filed it. Told to a task's run,
+    /// the line says it was sent to this session and opens to what this session was told — never the
+    /// coordinator, which it was not sent to. Told to the coordinator, it says what it always said.
+    func testAReplyToATasksRunSaysThisSession() throws {
+        let reply = "{\"kind\": \"CRITERIA_REJECTED\", \"task\": null, \"revision\": null, \"count\": null, "
+            + "\"deliveredAt\": \"2026-10-31T11:30:00.000Z\", \"toCoordinator\": false}"
+        let run = try XCTUnwrap(try parse(reply))
+        XCTAssertEqual(run, CoordinatorDelivery(kind: .criteriaRejected, deliveredAt: "2026-10-31T11:30:00.000Z",
+                                                toCoordinator: false))
+        let sameDay = try XCTUnwrap(ThinkingSummary.date("2026-10-31T11:45:00.000Z"))
+        let time = EvidenceDecisions.receiptTime(run.deliveredAt, now: sameDay)
+        XCTAssertEqual(CoordinatorDeliveryCard.sent(run, now: sameDay), "Sent to this session · \(time)")
+        XCTAssertEqual(CoordinatorDeliveryCard.line(run, now: sameDay), "Criteria proposal rejected · Sent to this session · \(time)")
+        XCTAssertEqual(CoordinatorDeliveryCard.heading(run), "What this session was told")
+        XCTAssertEqual(CoordinatorDeliveryCard.openHint(run), "Opens what this session was told")
+        for said in [CoordinatorDeliveryCard.sent(run, now: sameDay), CoordinatorDeliveryCard.line(run, now: sameDay),
+                     CoordinatorDeliveryCard.heading(run), CoordinatorDeliveryCard.openHint(run)] {
+            XCTAssertFalse(said.contains("coordinator"), said)
+        }
+        // The sentence and the sticky bar are what they were.
+        XCTAssertEqual(CoordinatorDeliveryCard.sentence(run), "Criteria proposal rejected")
+        XCTAssertEqual(StickySummary.of(text: "From Orbit · criteria decision", coordinatorDelivery: run).label, "↑ From Orbit")
+
+        let coordinator = try XCTUnwrap(try parse(reply.replacingOccurrences(of: "false}", with: "true}")))
+        XCTAssertTrue(coordinator.toCoordinator)
+        XCTAssertEqual(CoordinatorDeliveryCard.sent(coordinator, now: sameDay), EvidenceDecisions.sentLine(coordinator.deliveredAt, now: sameDay))
+        XCTAssertTrue(CoordinatorDeliveryCard.sent(coordinator, now: sameDay).hasPrefix("Sent to the coordinator · "))
+        XCTAssertEqual(CoordinatorDeliveryCard.heading(coordinator), "What the coordinator was told")
+        XCTAssertEqual(CoordinatorDeliveryCard.openHint(coordinator), "Opens what the coordinator was told")
+    }
+
+    /// Only the server's own `false` says the conversation is not the coordinator: a card stored before the
+    /// field existed — every fact a coordinator is told, and every reply until now — reads as it was drawn.
+    func testOnlyTheServersFalseSaysNotTheCoordinator() throws {
+        XCTAssertTrue(try XCTUnwrap(CoordinatorDelivery.parse(try echo(card).payload)).toCoordinator, "a card with no field")
+        for odd in ["\"false\"", "0", "null", "\"no\""] {
+            let read = try XCTUnwrap(try parse(card.replacingOccurrences(of: "\"count\": null,",
+                                                                          with: "\"count\": null, \"toCoordinator\": \(odd),")), odd)
+            XCTAssertTrue(read.toCoordinator, odd)
+        }
     }
 
     /// The task the fact names opens in the app; a fact that names none has no link.

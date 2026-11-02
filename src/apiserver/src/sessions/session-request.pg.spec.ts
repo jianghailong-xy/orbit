@@ -66,6 +66,9 @@
  *
  * And an outcome whose asker is armed again does not hold the request worker's place in line.
  *
+ * And §8 criterion 33: a recipient whose turn runs to its end without a word is handed each message once —
+ * a note settles, a request answered through session_reply stays REPLIED, one let pass is NO_REPLY.
+ *
  * The doors are the real controllers with the real orchestration credential; the inbox, the event
  * ingest and the turn completion are the real RunnerApiController methods, called as the runner does.
  *
@@ -500,6 +503,47 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.match(back.content, /outcome="NO_REPLY"/);
     assert.match(back.content, /not a formal reply/);
     assert.match(back.content, /The gateway listens on 8443/);
+  });
+
+  await t.test('a recipient whose turn says nothing is handed each message once: a note, a request it answered by tool, one it let pass', async () => {
+    // 2026-11-01: a Codex session told "no reply needed" ended its turn without a word, and the
+    // control plane handed it the same note three times before failing the run.
+    const asker = await session('Worker: reports, then asks');
+    const recipient = await session('Codex: answers through the tool, or not at all');
+    /** The recipient's turn ends the way Codex reports one it said nothing in. */
+    const silently = (turnId: string) => api.turnComplete({ id: runnerId } as never, recipient, {
+      turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'completed', numTurns: 1, costUsd: 0,
+    } as never);
+    const turnStatus = async (turnId: string) =>
+      (await prisma.conversationTurn.findUniqueOrThrow({ where: { id: turnId } })).status;
+    const queued = () => prisma.conversationTurn.count({
+      where: { sessionId: recipient, kind: 'message', status: { in: ['PENDING', 'IN_FLIGHT'] } },
+    });
+
+    await sessionSend(asker, recipient, 'The manual-charge case is written up. No reply needed.');
+    const note = await deliver(recipient);
+    await say(recipient, note.turnId, RunEventType.USER, { text: note.content });
+    await silently(note.turnId);
+    assert.equal(await turnStatus(note.turnId), 'ANSWERED', 'a note asks for no words, so its turn settles it');
+    assert.equal(await queued(), 0, 'and the engine is not handed it a second time');
+
+    const answered = await ask(asker, recipient, 'which port does the gateway listen on?');
+    const asked = await deliver(recipient);
+    await say(recipient, asked.turnId, RunEventType.USER, { text: asked.content });
+    await reply(recipient, answered.requestId, { message: '8443' });
+    await silently(asked.turnId);
+    assert.equal(await turnStatus(asked.turnId), 'ANSWERED', 'the answer went through session_reply');
+    assert.equal((await requestRow(answered.id)).state, 'REPLIED');
+    assert.equal(await queued(), 0, 'and the answered request is not delivered again');
+
+    const ignored = await ask(asker, recipient, 'and which port does the web listen on?');
+    const read = await deliver(recipient);
+    await say(recipient, read.turnId, RunEventType.USER, { text: read.content });
+    await silently(read.turnId);
+    assert.equal(await turnStatus(read.turnId), 'ANSWERED');
+    assert.equal((await requestRow(ignored.id)).state, 'NO_REPLY',
+      'a request read and let pass is closed NO_REPLY, as §4.1 says, rather than read again');
+    assert.equal(await queued(), 0);
   });
 
   await t.test('NO_REPLY waits while any of the five wake sources is pending, and is judged once none is', async () => {

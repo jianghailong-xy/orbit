@@ -1,13 +1,14 @@
-import { WIKI_SYSTEM_MODEL, type WikiSystemModelErrorKind } from '@orbit/shared';
+import { WIKI_SYSTEM_MODEL, type WikiSystemModelErrorKind, type WikiSystemModelThinking } from '@orbit/shared';
 
 /**
  * The System model's client (contract `systemModel.request` and `.health`, design §4.5 and §6): what
  * Claude Code did implicitly for the runner's `claude -p --bare`, done here explicitly.
  *
  *   - One call is `POST {base}/v1/messages` with the key as a Bearer and `anthropic-version: 2023-06-01`:
- *     a system prompt and one user message, `stream: true`, the call's own `max_tokens`, no tools and no
- *     thinking. The answer is read as it streams, with Node's own fetch, and its server-sent events are
- *     parsed here: message_start, content_block_delta, message_delta (with the usage), message_stop, error.
+ *     a system prompt and one user message, `stream: true`, the call's own `max_tokens`, no tools, and a
+ *     `thinking` field only when the endpoint's configuration sets one (ORBIT_WIKI_MODEL_THINKING). The answer
+ *     is read as it streams, with Node's own fetch, and its server-sent events are parsed here:
+ *     message_start, content_block_delta, message_delta (with the usage), message_stop, error.
  *   - Three things end a call early, all through one AbortController: its own budget, five minutes without
  *     a byte (idle), and the caller's signal (cancel). The text received so far is handed to the caller
  *     after every delta, and carried by the error of a call that fails — the partial the queue keeps.
@@ -24,6 +25,8 @@ export interface WikiModelEndpoint {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Sent as every call's `thinking: {type}`. Absent or null, the body has no `thinking` field. The probe sends no body. */
+  thinking?: WikiSystemModelThinking | null;
 }
 
 /** One call: a system prompt, one user message, and the call's own limits. */
@@ -274,6 +277,8 @@ export async function askWikiSystemModel(endpoint: WikiModelEndpoint, call: Wiki
         system: call.system,
         messages: [{ role: 'user', content: call.prompt }],
         stream: true,
+        // Only when the deployment asks for it: with no setting the body is the one sent before the switch, byte for byte.
+        ...(endpoint.thinking ? { thinking: { type: endpoint.thinking } } : {}),
       }),
       signal: controller.signal,
     });

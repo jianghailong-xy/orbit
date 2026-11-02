@@ -86,10 +86,13 @@ func (l *linkState) greeted(hello *linkpb.Hello) {
 	l.providers = hello.GetSupportedProviders()
 }
 
-// start runs once Welcome is queued: credit is what Welcome granted.
+// start runs once Welcome is queued: credit is what Welcome granted, and a change since then is told here, behind it.
 func (l *linkState) start(credit creditLevel) {
 	l.mu.Lock()
 	l.credit = credit
+	if level := l.c.g.credit.current(); level != credit {
+		l.setCreditLocked(level)
+	}
 	l.mu.Unlock()
 	go l.heartbeatLoop()
 }

@@ -1,13 +1,16 @@
 package io.orbitd.android.core.cards
 
 import kotlinx.serialization.json.JsonObject
+import java.time.ZoneId
 
 /**
  * The card a session draws when no engine ever ran on it (A08-5; iOS 698b707ea, OrbitKit `SessionRunStart`): "This run never started".
  * Two tiers, one card. A refused SOURCE (`sourceState == REFUSED`) is terminal, so the way on is a new run — "Start it again" — and
  * the card carries the code, the ref and the runner's own words the server wrote down, in the prose of its `fixAction`. A machine-side
  * reason (`error` on a failed or queued run) leaves the conversation resumable — "Send it again" — or waits on the runner. An
- * Antigravity or DeepSeek Harness engine that is missing or refusing to start is not claimed here: those have cards of their own.
+ * Antigravity or DeepSeek Harness engine that is missing or refusing to start is not claimed here: those have cards of their own. A
+ * Claude turn the runner refused for its region (docs/claude-region-check-contract.md, board 03) is claimed before every reason read by
+ * pattern, with its three ways out.
  */
 object SessionRunStart {
     const val title = "This run never started"
@@ -21,21 +24,27 @@ object SessionRunStart {
     /** What a press of "Chat about this" puts in the composer. */
     const val chatPrefix = "About this run: "
 
-    enum class Kind { START_IT_AGAIN, SEND_IT_AGAIN, OPEN_RUNNER, CHAT_ABOUT_THIS }
+    /** The region check's three ways out (board 03) are OTHER_PROVIDER — the same Claude Code on a credential Anthropic isn't behind —
+     * MOVE_SESSION, to a workspace on another machine, and CHECK_AGAIN, a check now. */
+    enum class Kind { START_IT_AGAIN, SEND_IT_AGAIN, OPEN_RUNNER, CHAT_ABOUT_THIS, OTHER_PROVIDER, MOVE_SESSION, CHECK_AGAIN }
     data class Action(val kind: Kind, val label: String) {
         /** The press that answers the card, rather than the one that only looks around. */
-        val primary: Boolean get() = kind == Kind.START_IT_AGAIN || kind == Kind.SEND_IT_AGAIN
+        val primary: Boolean get() = kind == Kind.START_IT_AGAIN || kind == Kind.SEND_IT_AGAIN || kind == Kind.OTHER_PROVIDER
     }
+    /** A page the body cites, linked after it (the region check's Supported regions): its words and where it goes. */
+    data class Link(val label: String, val url: String)
     data class Card(val why: String, val body: String, val lines: List<String> = emptyList(), val actions: List<Action> = emptyList(),
-        val footer: String? = null)
+        val footer: String? = null, val link: Link? = null)
 
     /** The card for a session whose engine never ran, read off its row ([detail], GET /sessions/:id), or null for one this card has
-     * nothing to say about. [runnerName] and [runnerVersion] are the assigned runner's. */
-    fun card(detail: JsonObject, runnerName: String? = null, runnerVersion: String? = null): Card? {
+     * nothing to say about. [runnerName] and [runnerVersion] are the assigned runner's; [region] is where its Claude connection last came
+     * out (the runner's `region` on GET /runners) — the place a region refusal names, never read out of its sentence. */
+    fun card(detail: JsonObject, runnerName: String? = null, runnerVersion: String? = null, region: JsonObject? = null,
+        nowMs: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Card? {
         refusalCard(detail.text("sourceState"), detail.text("sourceRefusalCode"), detail.obj("sourceRefusalDetail"))?.let { return it }
         val status = detail.text("runStatus") ?: detail.text("status")
         if (!machineReasonStands(status)) return null
-        return machineCard(detail.text("error"), runnerName, runnerVersion)
+        return machineCard(detail.text("error"), runnerName, runnerVersion, status, region, nowMs, zone)
     }
 
     /** A machine-side reason is still this session's news only on a failed or queued run. */
@@ -102,11 +111,15 @@ object SessionRunStart {
     /** The branch a full ref names; a ref outside `refs/heads/` comes back whole. */
     fun branchName(ref: String) = ref.removePrefix("refs/heads/")
 
-    fun machineCard(error: String?, runnerName: String?, runnerVersion: String?): Card? {
+    fun machineCard(error: String?, runnerName: String?, runnerVersion: String?, status: String? = "FAILED", region: JsonObject? = null,
+        nowMs: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): Card? {
         val said = error?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val machine = runnerName?.takeIf { it.isNotEmpty() } ?: "this runner"
+        // Before anything read by pattern: the region refusal is the only reason here with a code of its own, and the machine's name in
+        // its sentence could hold any of the words the tests below look for (web `machineCause`).
+        if (ClaudeRegion.isRegionError(said)) return regionCard(said, machine, status, region, nowMs, zone)
         // An Antigravity or DeepSeek Harness engine repair has a card of its own: one fact, one card.
         if (antigravityRepair(said) || dshRepair(said)) return null
-        val machine = runnerName?.takeIf { it.isNotEmpty() } ?: "this runner"
         if (said.lowercase().contains("offline")) return Card("The runner holding this session went offline",
             "$machine stopped reporting while this run was starting. Nothing was produced, and nothing was sent anywhere.",
             listOf(offlineLabel), listOf(Action(Kind.SEND_IT_AGAIN, "Send it again"), Action(Kind.CHAT_ABOUT_THIS, chatAction)),
@@ -122,6 +135,45 @@ object SessionRunStart {
                 footer = "No engine ran — your message is still here.")
         }
         return null
+    }
+
+    /** The web card's two feet, word for word (`RunNeverStartedCard.tsx`'s `waitingFoot` and `endedFoot`): the region card's, whose
+     * message still waits — or, from a control plane that predates the hold, whose run it failed. */
+    const val waitingFoot = "No engine ran · your message is still here"
+    const val endedFoot = "Ended · no engine ran · 0 turns"
+
+    /**
+     * An Anthropic-bound Claude turn this machine's runner refused because its connection to Anthropic is in a region Anthropic doesn't
+     * offer Claude in (docs/claude-region-check-contract.md §9–§11): the control plane holds the session in the queue, with the refusal
+     * in its error — the web's `regionUnsupported`, OrbitKit's `regionCard`, board 03's card.
+     *
+     * The code says which reason this is; the place comes from [region], never from the sentence. A runner whose region no longer reads
+     * blocked — a check passed, the hold is about to release — keeps the server's own words, without the code, rather than a place it no
+     * longer reports. A turn stopped by a confirmed flip ran: on a control plane that predates the hold it is a failed run whose engine
+     * spoke, and its sentence stands in the transcript instead.
+     */
+    fun regionCard(error: String, machine: String, status: String?, region: JsonObject?, nowMs: Long, zone: ZoneId): Card? {
+        if (status == "FAILED" && ClaudeRegion.isStoppedSentence(error)) return null
+        val place = region?.takeIf(ClaudeRegion::blocked)?.text("name")?.takeIf { it.isNotEmpty() }
+        val lines = mutableListOf<String>()
+        val body = if (region != null && place != null) {
+            // Ukraine's excluded regions carry their own code (UA-43): the country alone is a listed one.
+            lines += ClaudeRegionCopy.claudeRegionSubject(region.text("regionCode") ?: region.text("country"))
+            region.text("checkedAt")?.let { ClaudeRegion.checkTime(it, nowMs, zone) }?.let { at ->
+                lines += ClaudeRegionCopy.claudeRegionChecked(at, place, region.flag("viaProxy"))
+            }
+            ClaudeRegionCopy.claudeRegionConnectionIsIn(machine, place)
+        } else {
+            lines += ClaudeRegionCopy.claudeRegionSubject(null)
+            error.substring(error.indexOf(':') + 1).trim()
+        }
+        return Card(ClaudeRegionCopy.claudeRegionCantUseAnthropicOn(machine), body, lines,
+            listOf(Action(Kind.OTHER_PROVIDER, ClaudeRegionCopy.CLAUDE_REGION_USE_ANOTHER_PROVIDER),
+                Action(Kind.MOVE_SESSION, ClaudeRegionCopy.CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE),
+                Action(Kind.CHECK_AGAIN, ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN)),
+            // Held, the message is still queued; a control plane that predates the hold failed the run.
+            if (status == "FAILED") endedFoot else waitingFoot,
+            Link(ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS, ClaudeRegionCopy.CLAUDE_REGION_SUPPORTED_REGIONS_URL))
     }
 
     fun notInstalled(error: String): String? {

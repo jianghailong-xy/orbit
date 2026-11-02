@@ -26,13 +26,23 @@ export const DEFAULT_ACCOUNT = 'default';
  * Every field is required, as `accountNames` is on NamedRunner: a select that forgets one does not
  * compile. That is also what keeps Automatic's pick the same wherever it is made — at create, before a
  * turn, at dispatch and at every quota gate.
+ *
+ * `activeSessions` is not a column but a count of the session table (withActiveSessions), so a read that
+ * has no need of it leaves it out. With it, a pick keeps each account to its share of them
+ * (accountToStartOn, accountToMoveTo); without it, it answers by quota alone. A quota gate can go
+ * without: an account's share only ever decides between accounts that can run.
  */
 export interface AccountRunner {
   engines: unknown;
   defaultRemoved: unknown;
   accountPauses: unknown;
   planUsage: unknown;
+  activeSessions?: ActiveSessions;
 }
+
+/** How many sessions are at work on each of a runner's accounts of each engine, by account id, an account
+ *  with none left out (activeSessionsOn). An engine present here was counted. */
+export type ActiveSessions = Partial<Record<AccountEngine, Record<string, number>>>;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -51,15 +61,18 @@ export function defaultRemovedOn(engine: string | null | undefined, runner: Acco
   return !!engine && !!usedEngine(engine, runner)?.removedDefault;
 }
 
-/** The runner's accounts of `engine` as Orbit uses them, each with the pause it is under at `now`. */
+/** The runner's accounts of `engine` as Orbit uses them, each with the pause it is under at `now` and,
+ *  where they were counted, its active sessions. */
 export function accountsOn(
   engine: AccountEngine,
   runner: AccountRunner | null | undefined,
   now: Date,
 ): RunnerEngineAccount[] | undefined {
+  const active = runner?.activeSessions?.[engine];
   return usedEngine(engine, runner)?.accounts?.map((account) => ({
     ...account,
     pausedUntil: runnerAccountPausedUntil(runner!.accountPauses, engine, account.id, now)?.toISOString(),
+    ...(active ? { activeSessions: active[account.id] ?? 0 } : {}),
   }));
 }
 

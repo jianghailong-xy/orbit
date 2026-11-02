@@ -235,6 +235,11 @@ describe('two Google accounts on one runner', () => {
     );
     expect(engineRow(page).querySelector('.re-meta')?.textContent).toBe('1.3.0 · 1 of 2 accounts available');
     expect(tags(accountRows(page)[1])[0]).toMatch(/^Spent · resets /);
+    // Its spent bucket's bar is full and red, not an empty track at 0% remaining.
+    const spentBars = all(accountRows(page)[1], '.runner-util.spent');
+    expect(spentBars).toHaveLength(1);
+    expect(spentBars[0].querySelector<HTMLElement>('.runner-util-fill')!.style.width).toBe('100%');
+    expect(all(accountRows(page)[0], '.runner-util.spent')).toHaveLength(0);
   });
 
   it('adds another account as a Google sign-in of its own, named as it is added', async () => {

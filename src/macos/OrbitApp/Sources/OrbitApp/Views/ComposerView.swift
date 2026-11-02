@@ -616,7 +616,7 @@ struct ComposerView: View {
                 // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
                 // detail rather than beside it, where a phone's footer has no room for an email (web
                 // parity).
-                PlanUsageIndicator(usage: usage,
+                PlanUsageIndicator(usage: usage, model: console.modelID,
                                    account: (console.accountLabel ?? console.poolAccountLabel).map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
                                    }, resetConsole: console)
@@ -1282,7 +1282,9 @@ struct ComposerView: View {
     private func providerRowLabel(_ choice: ProviderChoice, blocked: Bool, fixable: Bool) -> some View {
         let selected = choice.slug == console.provider
         if blocked {
-            let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
+            // The runner's Claude region is a reason nothing here fixes: the row names no fix, and its
+            // press still opens the machine's Claude Code page, which explains (web parity).
+            let fix = fixable && !choice.regionBlocked ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
             menuItemLabel("\(SessionProviderChoices.providerName(on: console.engine, choice)) — \(choice.unavailable ?? "")\(fix)",
                           selected: false)
         } else {
@@ -1987,6 +1989,8 @@ private struct PlanUsageAccount {
 /// bucket's, which says what is left, as agy does, and says so ("4% left").
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
+    /// The model the session runs: the pill's number is the quota it spends (`bindingRow(model:)`).
+    let model: String
     var account: PlanUsageAccount?
     let resetConsole: ConsoleModel?
     @State private var showDetail = false
@@ -2004,14 +2008,14 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let row = usage.bindingRow() {
+        if let row = usage.bindingRow(model: model) {
             let pct = row.percent
             // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
             // (web parity).
             let left = row.remaining ? " left" : ""
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil)
+                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
                         .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
@@ -2327,7 +2331,8 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight + resetHeight))])
+                .presentationDetents([.height(CGFloat(120 + PlanUsageSheetLayout.rowsHeight(usage.currentRows())
+                                                       + accountHeight + resetHeight))])
                 .presentationDragIndicator(.visible)
             }
         }
@@ -2380,7 +2385,7 @@ private struct PlanUsageDetailRows: View {
                         Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
                     }
                     .font(compact ? .caption : .subheadline)
-                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil, spent: row.spent)
                         .frame(height: compact ? 5 : 8)
                     if let reset = row.window.resetsAt.flatMap(formatReset) {
                         Text("Resets \(reset)")
@@ -2393,19 +2398,22 @@ private struct PlanUsageDetailRows: View {
     }
 }
 
-/// A horizontal utilization gauge that fills its frame; turns amber past 90%.
+/// A horizontal utilization gauge that fills its frame; turns amber past 90%, and full red once spent.
 private struct UsageBar: View {
     let percent: Int
     /// Whether it is amber, for a reading that counts what is left (an Antigravity bucket), whose
     /// percent says nothing of how near its limit it is. Nil judges `percent` as the share used.
     var warn: Bool? = nil
-    private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
+    /// Nothing left (`PlanUsageRow.spent`): the whole bar red, even where `percent` counts what is
+    /// left and is 0.
+    var spent: Bool = false
+    private var fraction: CGFloat { spent ? 1 : CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill((warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
+                Capsule().fill(spent ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }

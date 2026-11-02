@@ -232,6 +232,100 @@ class FirstWorkspaceShotsTest {
         // Opens the offline machine's draft page, showing the offline notice on the setup card.
         awaitText(MachineSetupCopy.setupOffline("orbit@austin"))
     }
+
+    private fun openTheMachineFromMachinesAndModels() {
+        awaitText(Infrastructure.MACHINES)
+        compose.onNode(hasText("orbit@austin") and hasClickAction()).performScrollTo().performClick()
+        awaitText(MachineSetupCopy.START_A_SESSION)
+        compose.onNode(hasText(MachineSetupCopy.START_A_SESSION) and hasClickAction()).performScrollTo().performClick()
+    }
+
+    /** Lets the page's own timers run: its reads of the machine, the relay's polls and the typing pause are on the test clock. */
+    private fun waitFor(text: String, maxMs: Long = 6_000) {
+        var waited = 0L
+        while (compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
+            assertTrue("\"$text\" never showed within ${maxMs}ms of the page's clock", waited < maxMs)
+            compose.mainClock.advanceTimeBy(250)
+            waited += 250
+            compose.waitForIdle()
+        }
+    }
+
+    @Test fun aMachineApprovedAMomentAgoIsWaitedForAndItsFolderStepOpensWithinSecondsOfItsFirstHeartbeat() {
+        FirstWorkspaceShell.runnerConnecting = true
+        signIn()
+        // Nothing online yet: rule 11 lands on Machines & models, and the machine's Start a session opens its card.
+        openTheMachineFromMachinesAndModels()
+        awaitText(MachineSetupCopy.setupConnecting("orbit@austin"))
+        compose.onAllNodesWithText("updates itself first", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("is offline", substring = true).assertCountEquals(0)
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsNotEnabled()
+        assertFalse("a machine still connecting is asked nothing", FirstWorkspaceShell.calls.any { it.startsWith("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe") })
+        shot("06-connecting")
+
+        // Its first heartbeat. Nothing tells the page: its own reads, 2 s apart while it connects, find it.
+        FirstWorkspaceShell.runnerConnecting = false
+        waitFor("Found · git repository · main", maxMs = 5_000)
+        compose.onAllNodesWithText(MachineSetupCopy.setupConnecting("orbit@austin")).assertCountEquals(0)
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+    }
+
+    @Test fun aRegisterQuestionAnotherPathTookIsAskedAgainSoTheSuggestionStillComes() {
+        FirstWorkspaceShell.slots = true
+        FirstWorkspaceShell.slowFirstRegisterAnswer = true
+        signIn()
+        awaitText(MachineSetupCopy.setupOtherFolder("orbit@austin"))
+        compose.onAllNodesWithText(MachineSetupCopy.SETUP_REGISTER_DIR).assertCountEquals(0)
+
+        // Another folder, typed before the machine has answered about the register directory: its question takes the slot.
+        compose.onNode(hasText(MachineSetupCopy.setupOtherFolder("orbit@austin")) and hasClickAction()).performClick()
+        compose.onNodeWithTag("setup-other-folder-path").performTextInput("/srv/shared")
+        waitFor("Found · not a git repository")
+        waitFor(MachineSetupCopy.SETUP_REGISTER_DIR)
+        assertEquals(
+            "the register directory is asked twice: once at first, once after the path's answer",
+            2,
+            FirstWorkspaceShell.bodies.count { (call, body) ->
+                call == "POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe" && body.contains("/home/orbit/code/app")
+            },
+        )
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+    }
+
+    @Test fun aNewFolderNameIsCheckedWhereItWouldGoBeforeAnythingIsSent() {
+        FirstWorkspaceShell.slots = true
+        signIn()
+        awaitText("Found · git repository · main")
+        compose.onNode(hasText(MachineSetupCopy.SETUP_NEW_FOLDER) and hasClickAction()).performClick()
+
+        // A folder a deleted workspace left: it is used with what is in it, not called empty.
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("payments")
+        waitFor(MachineSetupCopy.setupNewFolderExists("orbit@austin"))
+        assertEquals(
+            buildJsonObject { put("path", "/home/orbit/orbit-repos/payments") },
+            FirstWorkspaceShell.body("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe"),
+        )
+        compose.onAllNodesWithText("Starts empty", substring = true).assertCountEquals(0)
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+        shot("07-new-folder-exists")
+
+        // A file of that name: it can't be one, and says why.
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("notes.txt")
+        waitFor(MachineSetupCopy.setupNewFolderIsFile("orbit@austin"))
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsNotEnabled()
+
+        // Nothing there: it starts empty, as the board says.
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("scratch-notes")
+        waitFor(MachineSetupCopy.SETUP_NEW_FOLDER_META)
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+
+        // Back to the one that is there: Use This Folder takes it as that folder.
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("payments")
+        waitFor(MachineSetupCopy.setupNewFolderExists("orbit@austin"))
+        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        awaitText("/home/orbit/orbit-repos/payments")
+        compose.onAllNodesWithText(MachineSetupCopy.SETUP_NEW_FOLDER_DONE).assertCountEquals(0)
+    }
 }
 
 internal object FirstWorkspaceShell {
@@ -244,16 +338,42 @@ internal object FirstWorkspaceShell {
     private val disk = ConcurrentHashMap<String, ByteArray>()
 
     @Volatile var runnerOnline = true
+    /** Approved a moment ago and not beaten yet: offline, never heard from, nothing declared (contract §2). */
+    @Volatile var runnerConnecting = false
+    /** The relay as the server keeps it: one question per machine, answered only for the path in it. */
+    @Volatile var slots = false
+    /** With [slots]: the register directory's first question is not answered until another takes its place. */
+    @Volatile var slowFirstRegisterAnswer = false
     @Volatile var workspaceCreated = false
     @Volatile var workspaceName = "app"
+    @Volatile private var asked: String? = null
+    private val asks = ConcurrentHashMap<String, Int>()
 
     fun reset() {
         calls.clear()
         bodies.clear()
         disk.clear()
+        asks.clear()
+        asked = null
         runnerOnline = true
+        runnerConnecting = false
+        slots = false
+        slowFirstRegisterAnswer = false
         workspaceCreated = false
         workspaceName = "app"
+    }
+
+    private const val REGISTER = "/home/orbit/code/app"
+
+    /** What the runner finds at a path, in the slot model: the register directory, and the Repos Folder's leftovers. */
+    private fun at(path: String): String = when (path) {
+        REGISTER -> """{"path":"$path","exists":true,"isDir":true,"isGit":true,"branch":"main","isHome":false,"freeBytes":10737418240}"""
+        "/srv/shared" -> """{"path":"$path","exists":true,"isDir":true,"isGit":false,"branch":null,"isHome":false,"freeBytes":10737418240}"""
+        "/home/orbit/orbit-repos/payments" ->
+            """{"path":"$path","exists":true,"isDir":true,"isGit":true,"branch":"main","isHome":false,"freeBytes":10737418240}"""
+        "/home/orbit/orbit-repos/notes.txt" ->
+            """{"path":"$path","exists":true,"isDir":false,"isGit":false,"branch":null,"isHome":false,"freeBytes":null}"""
+        else -> """{"path":"$path","exists":false,"isDir":false,"isGit":false,"branch":null,"isHome":false,"freeBytes":null}"""
     }
 
     fun obj(json: String): JsonObject = Wire.json.parseToJsonElement(json).jsonObject
@@ -261,24 +381,27 @@ internal object FirstWorkspaceShell {
 
     private fun runnerJson(): JsonObject {
         val now = Instant.now()
-        val heartbeat = if (runnerOnline) now.toString() else now.minusSeconds(3 * 86_400).toString()
+        val online = runnerOnline && !runnerConnecting
+        val heartbeat = if (runnerConnecting) "null" else "\"${if (online) now else now.minusSeconds(3 * 86_400)}\""
+        val capabilities = if (runnerConnecting) "[]" else """["dir-probe/v1","create-workdir/v1"]"""
+        val engines = if (runnerConnecting) "null" else """[
+                    {"engine":"claude","installed":true,"version":"2.1.302","auth":"no"},
+                    {"engine":"codex","installed":true,"version":"0.164.0","auth":"no"}
+                ]"""
         return obj(
             """{
                 "id":"$RUNNER",
                 "name":"orbit@austin",
-                "online":$runnerOnline,
-                "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}",
+                "online":$online,
+                "status":"${if (online) "ONLINE" else "OFFLINE"}",
                 "version":"0.1.240",
                 "maxConcurrent":16,
                 "activeSessions":0,
-                "lastHeartbeatAt":"$heartbeat",
+                "lastHeartbeatAt":$heartbeat,
                 "registerDir":"/home/orbit/code/app",
                 "reposRoot":"/home/orbit/orbit-repos",
-                "capabilities":["dir-probe/v1","create-workdir/v1"],
-                "engines":[
-                    {"engine":"claude","installed":true,"version":"2.1.302","auth":"no"},
-                    {"engine":"codex","installed":true,"version":"0.164.0","auth":"no"}
-                ],
+                "capabilities":$capabilities,
+                "engines":$engines,
                 "modelCatalog":{
                     "claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],
                     "codex":[{"value":"gpt-5.4","label":"GPT-5.4"}]
@@ -370,6 +493,20 @@ internal object FirstWorkspaceShell {
             path == "auth/logout" -> ok("{}")
             path == "users/me" -> ok("""{"id":"u1","email":"owner@orbit.test","name":"Owner"}""")
             path == "runners" -> ok("[${runnerJson()}]")
+            path == "runners/$RUNNER/dir-probe" && method == "POST" && slots -> {
+                val p = api.body?.decodeToString()?.let(::obj)?.get("path")?.jsonPrimitive?.contentOrNull.orEmpty()
+                asked = p
+                asks.merge(p, 1, Int::plus)
+                ok("""{"path":"$p","status":"pending","requestedAt":"2026-10-31T08:00:00Z"}""")
+            }
+            path == "runners/$RUNNER/dir-probe" && method == "GET" && slots -> {
+                val p = api.query.firstOrNull { it.first == "path" }?.second.orEmpty()
+                when {
+                    p != asked -> ok("""{"path":"$p","status":"idle","result":null}""")
+                    p == REGISTER && slowFirstRegisterAnswer && asks[p] == 1 -> ok("""{"path":"$p","status":"pending","result":null}""")
+                    else -> ok("""{"path":"$p","status":"done","result":${at(p)}}""")
+                }
+            }
             path == "runners/$RUNNER/dir-probe" && method == "POST" -> ok(
                 """{"path":"/home/orbit/code/app","status":"pending","requestedAt":"2026-10-31T08:00:00Z"}"""
             )

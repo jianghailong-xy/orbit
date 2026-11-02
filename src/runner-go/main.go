@@ -187,9 +187,9 @@ Usage:
   orbit upgrade
 
 Use this if the startup auto-update isn't working. On an install whose binary still
-sits in root's /usr/local/bin, sudo orbit upgrade moves it into ~/.orbit/bin of the
-account the runner service runs as, links /usr/local/bin/orbit to it and restarts the
-service, so later releases install themselves.
+sits in root's /usr/local/bin, sudo /usr/local/bin/orbit upgrade moves it into
+~/.orbit/bin of the account the runner service runs as, links /usr/local/bin/orbit to
+it and restarts the service, so later releases install themselves.
 `,
 	"engine-update": `orbit engine-update — update the coding-engine CLIs now
 
@@ -645,8 +645,7 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 	serviceStarted := false
 	if withService {
 		if err := setupService(machineHome(), proxyVars); err != nil {
-			fmt.Fprintf(os.Stderr, "\n✗ Could not start the background service: %s\n", firstLine(err.Error()))
-			fmt.Fprintln(os.Stderr, "  Start it in the foreground instead:  orbit run")
+			printServiceFailure(os.Stderr, err)
 		} else {
 			serviceStarted = true
 		}
@@ -665,6 +664,19 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		clearInheritedSessionContext()
 		runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	}
+}
+
+// printServiceFailure says why the background service did not start and what to do
+// instead. The machine broker's refusal of an account with no copy of its own names the
+// one command that puts it right, so it is printed whole, in place of the foreground hint.
+func printServiceFailure(w io.Writer, err error) {
+	var refused *hostdOwnCopyRefusal
+	if errors.As(err, &refused) {
+		fmt.Fprintf(w, "\n✗ Could not start the background service: %s\n", refused.reason)
+		return
+	}
+	fmt.Fprintf(w, "\n✗ Could not start the background service: %s\n", firstLine(err.Error()))
+	fmt.Fprintln(w, "  Start it in the foreground instead:  orbit run")
 }
 
 // autoInstallEnabled is the register-time default: engines install on demand

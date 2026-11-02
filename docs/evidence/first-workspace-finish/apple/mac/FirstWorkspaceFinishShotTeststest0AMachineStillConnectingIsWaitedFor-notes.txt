@@ -1,0 +1,3 @@
+mac-connecting: 1 window(s)
+f1: the folder step opened 2.0 s after the first heartbeat
+f1: the register directory's answer showed 3.5 s after it
