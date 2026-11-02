@@ -48,14 +48,14 @@ const PROJECTS: SidebarProject[] = [
   },
 ];
 
-function serve(projects: SidebarProject[] = PROJECTS) {
+function serve(projects: SidebarProject[] = PROJECTS, wikis: Array<{ id: string; slug: string; title: string }> = []) {
   vi.mocked(api).mockImplementation((async (path: string) => {
     if (path === '/runners') return [{ id: RUNNER, name: 'wikova', online: true }];
     if (path === '/workspaces') return WORKSPACES;
     if (path === '/projects/sidebar') return projects;
     if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role: 'USER' };
-    if (path === '/wiki/spaces') return [];
+    if (path === '/wiki/spaces') return wikis;
     throw new Error(`unstubbed ${path}`);
   }) as never);
 }
@@ -65,7 +65,7 @@ function serve(projects: SidebarProject[] = PROJECTS) {
  * head ends (the Workspaces group starts at 0); and where the first Workspace row starts, each row
  * 36 tall, moved up by however far the list is scrolled.
  */
-const geometry = { list: 0, headBottom: 0, firstRow: 0 };
+const geometry = { list: 0, headBottom: 0, firstRow: 0, firstWikiRow: 0 };
 const rect = (top: number, height: number) =>
   ({ x: 0, y: top, top, bottom: top + height, left: 0, right: 280, width: 280, height, toJSON: () => ({}) }) as DOMRect;
 function boxOf(el: Element): DOMRect {
@@ -77,18 +77,23 @@ function boxOf(el: Element): DOMRect {
   const rows = [...document.querySelectorAll('.tp-group-workspaces .tp-item')];
   const index = rows.indexOf(el);
   if (index >= 0) return rect(geometry.firstRow + index * 36 - scrolled, 36);
+  const wikiIndex = [...document.querySelectorAll('.tp-group-wiki .tp-item')].indexOf(el);
+  if (wikiIndex >= 0) return rect(geometry.firstWikiRow + wikiIndex * 36 - scrolled, 36);
   return rect(0, 0);
 }
 
 /** A stand-in ResizeObserver: the panel's callbacks, fired by `resize()` as a resize would. */
 const observing = new Set<() => void>();
+const observed = new Set<Element>();
 class FakeResizeObserver {
   private readonly fire: () => void;
   constructor(callback: ResizeObserverCallback) {
     this.fire = () => callback([], this as unknown as ResizeObserver);
     observing.add(this.fire);
   }
-  observe() {}
+  observe(el: Element) {
+    observed.add(el);
+  }
   unobserve() {}
   disconnect() {
     observing.delete(this.fire);
@@ -143,7 +148,7 @@ const pinned = () => lists().classList.contains('pin-workspaces');
 
 beforeEach(() => {
   serve();
-  Object.assign(geometry, { list: 0, headBottom: 0, firstRow: 0 });
+  Object.assign(geometry, { list: 0, headBottom: 0, firstRow: 0, firstWikiRow: 0 });
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     return boxOf(this);
   });
@@ -155,6 +160,7 @@ afterEach(() => {
   root = null;
   container = null;
   observing.clear();
+  observed.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -194,6 +200,30 @@ describe('the rail scrolls Workspaces and Projects as one, or only Projects whil
     // And back as it grows.
     await resize({ list: 800 });
     expect(pinned()).toBe(true);
+  });
+
+  it('watches the Wiki group too: it stands above the Projects head, so folding it moves the head', async () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    serve(PROJECTS, [{ id: 'wiki-1', slug: 'orbit', title: 'orbit' }]);
+    await visit(`/workspaces/${A}`);
+    expect(observed.has(container!.querySelector('.tp-group-wiki')!)).toBe(true);
+
+    await resize({ list: 549, headBottom: 549 });
+    expect(pinned()).toBe(true);
+    // The Wiki rows bring the head past the room there is, as they do with the group unfolded.
+    await resize({ headBottom: 549 + 36 });
+    expect(pinned()).toBe(false);
+  });
+
+  it('scrolls the wiki `/wiki` lit into the list, or nothing lit would say where you are', async () => {
+    Object.assign(geometry, { list: 550, firstWikiRow: 600 });
+    serve(PROJECTS, [
+      { id: 'wiki-1', slug: 'cbai', title: 'cbai' },
+      { id: 'wiki-2', slug: 'orbit', title: 'orbit' },
+    ]);
+    await visit('/wiki/orbit/activity');
+    // The second row ends at 600 + 36 + 36, in a list 550 tall.
+    expect(lists().scrollTop).toBe(122);
   });
 
   it('pins nothing with no open project, or a list with no height (the rail folded to its icons)', async () => {

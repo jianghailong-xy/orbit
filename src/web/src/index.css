@@ -695,10 +695,10 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--text-1);
 }
-/* The rail's middle: the fixed entries stay put, and under them Workspaces and Projects scroll as
-   one (.tp-lists), unless every workspace fits with the Projects head still showing under them:
-   then the workspaces stay put too and only Projects scrolls (.pin-workspaces, which
-   TasksSidePanel sets from its measurements). */
+/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one
+   (.tp-lists), unless every workspace and wiki fits with the Projects head still showing under them:
+   then those stay put too and only Projects scrolls (.pin-workspaces, which TasksSidePanel sets from
+   its measurements). */
 .tp-scroll {
   flex: 1;
   min-height: 0;
@@ -732,6 +732,10 @@ button.toast--pill:focus-visible {
   flex: none;
 }
 .tp-lists.pin-workspaces > .tp-group-workspaces {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+.tp-lists.pin-workspaces > .tp-group-wiki {
   overflow: hidden;
   scrollbar-gutter: stable;
 }

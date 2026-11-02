@@ -126,13 +126,15 @@ describe('TasksSidePanel nav', () => {
     expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
-    expect(source.match(/role="link"/g)).toHaveLength(2);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(2);
-    expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(2);
+    // The two surfaces, and a wiki's row in the group under them.
+    expect(source.match(/role="link"/g)).toHaveLength(3);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(3);
+    expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
+    expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
   });
 
-  it('highlights the matching TOP item by sel === t.key in both surfaces', () => {
-    expect(source).toContain("`tp-rail-item ${sel === t.key ? 'active' : ''}`");
+  it('highlights the matching TOP item by sel === t.key, on the rail by railSel, which has no Wiki group', () => {
+    expect(source).toContain("`tp-rail-item ${railSel === t.key ? 'active' : ''}`");
     expect(source).toContain("`tp-item ${sel === t.key ? 'active' : ''}`");
   });
 
@@ -187,9 +189,9 @@ describe('TasksSidePanel workspace navigation', () => {
   });
 
   it('does not add a second divider when there are no Workspace rows', () => {
-    expect(source).toMatch(
-      /\(orderedWorkspaces\.length > 0 \|\| bareMachines\.length > 0\) && openProjects\.length > 0 && \(\s*<div className="tp-divider" \/>/,
-    );
+    expect(source).toContain('const hasWorkspaceRows = orderedWorkspaces.length > 0 || bareMachines.length > 0;');
+    expect(source).toContain('{hasWorkspaceRows && hasWikis && <div className="tp-divider" />}');
+    expect(source).toContain('{(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}');
   });
 
   it('labels exactly the first nine Workspace shortcuts for each desktop platform', () => {
@@ -222,6 +224,7 @@ describe('TasksSidePanel scrolling', () => {
       '.tp-scroll > .tp-section',
       '.tp-lists',
       '.tp-lists.pin-workspaces > .tp-group-workspaces',
+      '.tp-lists.pin-workspaces > .tp-group-wiki',
       '.tp-lists.pin-workspaces > .tp-group-projects',
     ]) {
       expect(rule(selector)).toMatch(/scrollbar-gutter:\s*stable;/);
