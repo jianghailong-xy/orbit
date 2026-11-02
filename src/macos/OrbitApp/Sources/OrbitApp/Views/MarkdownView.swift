@@ -685,7 +685,7 @@ private struct MarkdownImageView: View {
 
     /// What comes back is decided by what it is, not by what the path promised: bytes that decode as
     /// an image are drawn in place (tappable into the same viewer every other image opens), anything
-    /// else goes to the platform — the share sheet on iOS, the file's own application on a Mac, which
+    /// else goes to the platform — the share sheet on iOS, `FileHandoff`'s list on a Mac, which
     /// has no such viewer. A fetch that comes back empty, or a tap on a path that turned out not to
     /// be an image, says so rather than leaving the reader unanswered.
     private func fetch(_ path: String) {
@@ -702,7 +702,7 @@ private struct MarkdownImageView: View {
                 inlineImage = image
                 return
             }
-            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path)) {
+            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path), app: app) {
                 app?.showToast("Couldn't open that file", detail: path, tone: .error)
             }
         }
@@ -959,7 +959,7 @@ private struct MarkdownFileLinkView: View {
             }
             if let preview = TextFilePreview(data: data, fileName: fileName) {
                 textPreview = preview
-            } else if !FileHandoff.deliver(data, named: handoffName) {
+            } else if !FileHandoff.deliver(data, named: handoffName, app: app) {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
             }
         }

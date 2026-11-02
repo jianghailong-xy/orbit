@@ -9,6 +9,7 @@ import CoreTransferable
 struct WorktreeFilePreview: View {
     let worktree: WorktreeModel
     let file: SessionChangedFile
+    @Environment(AppModel.self) private var app: AppModel?
     @State private var data: Data?
     @State private var image: PlatformImage?
     @State private var dimensions: String?
@@ -202,7 +203,7 @@ struct WorktreeFilePreview: View {
         #if os(iOS)
         previewTarget = ImagePreviewTarget(index: 0, id: file.path)
         #else
-        if let data, !FileHandoff.deliver(data, named: fileName) {
+        if let data, !FileHandoff.deliver(data, named: fileName, app: app) {
             errorTitle = "Couldn't open image"
             exportError = "The image could not be opened."
         }
