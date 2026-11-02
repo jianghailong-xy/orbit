@@ -213,18 +213,20 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   await t.test('(2b) a task\'s input is listed once, not once per run, and a reply\'s image in its session is not listed', async () => {
     const inputTaskId = await taskOf('a task with an input');
     const firstRun = await sessionOf('the first run', inputTaskId);
-    const secondRun = await sessionOf('the second run', inputTaskId);
     const blob = sha256(Buffer.from('an input'));
     await db.fileBlob.create({ data: { sha256: blob, sizeBytes: 8, storage: 'local' } });
     const input = await db.attachment.create({
       data: { ownerId, taskId: inputTaskId, mimeType: 'text/plain', sizeBytes: 8, fileName: 'input.txt', sha256: blob },
     });
     // What copyTaskAttachments writes into each run: another row, another id, the same bytes.
-    for (const sessionId of [firstRun, secondRun]) {
-      await db.attachment.create({ data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 8, fileName: 'input.txt', sha256: blob } });
-    }
+    const copyInto = (session: string) =>
+      db.attachment.create({ data: { ownerId, sessionId: session, mimeType: 'text/plain', sizeBytes: 8, fileName: 'input.txt', sha256: blob } });
+    await copyInto(firstRun);
     created(await upload(api, `/api/runner/sessions/${b62(firstRun)}/attachments`, machine.token, { name: 'reply.png' }), 'a reply image');
     const kept = created(await upload(api, door(firstRun), machine.token, { name: 'kept.png' }), 'a file_upload');
+    // One run of a task at a time: the second starts when the first has ended.
+    await db.session.update({ where: { id: firstRun }, data: { status: 'SUCCEEDED' } });
+    await copyInto(await sessionOf('the second run', inputTaskId));
     const { json } = await list(`?taskId=${b62(inputTaskId)}`);
     assert.deepEqual(
       json.files.map((file: { name: string }) => file.name).sort(),
@@ -311,7 +313,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     const file = await uploaded(sessionId, 'input.png');
     const made = created(await bundle(sessionId, [{ path: 'dir/input.png', id: file.publicId }]), 'the bundle');
     const taskBody = (attachmentIds: string[]) => ({
-      title: `a task from a folder ${randomUUID()}`, completionCriterion: 'EVIDENCE_JUDGMENT', autoRunWhenReady: false, attachmentIds,
+      title: `a task from a folder ${randomUUID()}`, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0, autoRunWhenReady: false, attachmentIds,
     });
     const tasksBefore = await db.task.count({ where: { ownerId } });
     const refused = await call(api, 'POST', '/api/runner/tasks', machine.token, taskBody([made.id]));
