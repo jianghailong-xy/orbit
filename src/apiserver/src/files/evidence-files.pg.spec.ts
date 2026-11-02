@@ -273,11 +273,11 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
     }
     assert.deepEqual(readdirSync(path.join(dir, shot.sha256.slice(0, 2))).includes(shot.sha256), false);
     const gone = await fetch(`http://127.0.0.1:${api.port}/api/attachments/${shot.publicId}`, { headers: { authorization: `Bearer ${owner.bearer}` } });
-    assert.equal(gone.status, 404, 'the bytes are gone');
+    assert.equal(gone.status, 410, 'the bytes are gone');
     const after = await read(work.taskId, revision);
     assert.deepEqual(
-      after.files.map(({ expiredAt, ...file }: { expiredAt: string }) => file),
-      before.files.map(({ expiredAt, ...file }: { expiredAt: string | null }) => file),
+      after.files.map(({ expiredAt, expiresAt, ...file }: { expiredAt: string; expiresAt: string }) => file),
+      before.files.map(({ expiredAt, expiresAt, ...file }: { expiredAt: string | null; expiresAt: string | null }) => file),
       'names, sizes, sha256 and the report read as they did',
     );
     assert.deepEqual([...new Set(after.files.map((file: { expiredAt: string }) => file.expiredAt))], [date.toISOString()]);
@@ -305,7 +305,7 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
       {
         id: a.publicId, kind: 'file', name: null, label: null, mimeType: null, sizeBytes: null, sha256: a.sha256,
         sessionId: null, taskId: null, fileBundleId: null, testReport: null, createdAt: null, folder: null,
-        width: 20, height: 21, expiredAt: null, gone: true,
+        width: 20, height: 21, expiresAt: null, expiredAt: null, pinnedAt: null, gone: true,
         // Every id field of an answer has its public spelling beside it.
         sessionPublicId: null, taskPublicId: null, fileBundlePublicId: null,
       },

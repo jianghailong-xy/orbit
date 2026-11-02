@@ -1,6 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  GoneException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -18,7 +21,7 @@ import { Readable } from 'node:stream';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionJudgesEvidence } from '../tasks/task-evidence-decision';
-import { citedFileIds, storedEvidenceEnvelope, type EvidenceCheck } from '../tasks/task-evidence-envelope';
+import { citedFileIds, fileSize, storedEvidenceEnvelope, type EvidenceCheck } from '../tasks/task-evidence-envelope';
 import {
   LocalFileStore,
   filesConfigFrom,
@@ -32,6 +35,7 @@ import {
   type FilesConfig,
   type HashedTempFile,
 } from './file-store';
+import { FILE_UPLOAD_RETENTION, uploadExpiry } from './file-retention';
 import { refuseCredentialIn } from './file-secret-scan';
 import type { FileUpload } from './file-upload-storage';
 import { IMAGE_HEADER_BYTES, imageSizeOf, type ImageSize } from './image-size';
@@ -51,12 +55,7 @@ export interface OpenedFile {
   fileName: string | null;
 }
 
-/**
- * `attachment.retention` of a row `file_upload` wrote (§2.8): an upload that expires unless evidence references it.
- * A reply's image and a person's upload come through doors of their own and stay NULL, which follows their session or
- * task; this is what tells the retention rules the two apart.
- */
-export const FILE_UPLOAD_RETENTION = 'file_upload';
+export { FILE_UPLOAD_RETENTION } from './file-retention';
 
 /** The type of a folder bundle's manifest. It only says how to read the bytes: what makes a row a bundle is `fileBundleId`. */
 export const FILE_BUNDLE_MIME_TYPE = 'application/vnd.orbit.file-bundle+json';
@@ -80,6 +79,36 @@ const FILE_LIST_LIMIT = 200;
 /** How often `open` says that one store made it answer from `data`: a store gone bad does that on every read. */
 const STORE_FALLBACK_WARNING_MS = 60_000;
 
+/** The code of an upload refused because the account has used its quota (ORBIT_FILES_QUOTA_BYTES). */
+export const FILE_QUOTA_EXCEEDED = 'FILE_QUOTA_EXCEEDED';
+
+/** How many projects and tasks the usage read names, largest first. */
+const USAGE_RANKING_ROWS = 10;
+
+/** How many weeks the usage read goes back, this one included. */
+const USAGE_WEEKS = 8;
+
+/** What Settings shows of an account's files (`FilesService.usage`). */
+export interface StorageUsage {
+  /** What the account keeps now, each content once. */
+  totalBytes: number;
+  fileCount: number;
+  /** ORBIT_FILES_QUOTA_BYTES, when this deployment sets one. */
+  quotaBytes: number | null;
+  /** Largest first. A file counts under its task, and its task's project. */
+  projects: { projectId: string; title: string; bytes: number; fileCount: number }[];
+  tasks: { taskId: string; title: string; bytes: number; fileCount: number }[];
+  /** What arrived each week, oldest first, ending with this week, which starts on a Monday, UTC. */
+  weeks: { weekStart: string; bytes: number }[];
+}
+
+/** The Monday `weeksAgo` weeks before the week of `now`, as YYYY-MM-DD, in UTC. */
+function weekStart(now: Date, weeksAgo: number): string {
+  const sinceMonday = (now.getUTCDay() + 6) % 7;
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - sinceMonday - 7 * weeksAgo));
+  return start.toISOString().slice(0, 10);
+}
+
 /** What `file_upload` says of a file it was told is a test report and could not read as one. */
 export const NOT_A_TEST_REPORT = 'Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary.';
 
@@ -102,6 +131,12 @@ export interface FileView {
   /** What `file_upload --as test-report` read out of this file; null on every other file. */
   testReport: TestReportSummary | null;
   createdAt: Date;
+  /** When this file expires (file-retention.ts). Null on a file with no such date: one evidence holds, or not an agent's. */
+  expiresAt: Date | null;
+  /** When it expired. The row stays, so everything else here still reads; its bytes go a grace period later. */
+  expiredAt: Date | null;
+  /** When it was pinned, which keeps it past `expiresAt`; null when it is not. */
+  pinnedAt: Date | null;
 }
 
 const FILE_VIEW_SELECT = {
@@ -116,6 +151,9 @@ const FILE_VIEW_SELECT = {
   fileBundleId: true,
   testReportSummary: true,
   createdAt: true,
+  expiresAt: true,
+  expiredAt: true,
+  pinnedAt: true,
 } as const satisfies Prisma.AttachmentSelect;
 
 type FileViewRow = Prisma.AttachmentGetPayload<{ select: typeof FILE_VIEW_SELECT }>;
@@ -139,9 +177,9 @@ export const EVIDENCE_FILES_PAGE = MAX_BUNDLE_FILES;
 /** The largest revision a `bigint` column holds. */
 const MAX_REVISION = 9_223_372_036_854_775_807n;
 
-const EVIDENCE_FILE_SELECT = { ...FILE_VIEW_SELECT, expiredAt: true } as const satisfies Prisma.AttachmentSelect;
+const EVIDENCE_FILE_SELECT = FILE_VIEW_SELECT;
 
-type EvidenceFileRow = Prisma.AttachmentGetPayload<{ select: typeof EVIDENCE_FILE_SELECT }>;
+type EvidenceFileRow = FileViewRow;
 
 /**
  * One file of a version of evidence, as an evidence card reads it: `FileView`, and what a card wants beside it. The id is
@@ -159,8 +197,6 @@ export interface EvidenceFileView extends Omit<FileView, 'mimeType' | 'sizeBytes
   /** An image's size in pixels, known only for an image cited by itself. */
   width: number | null;
   height: number | null;
-  /** When its bytes expired (§2.8). The row stays, so everything else here still reads. */
-  expiredAt: Date | null;
   gone: boolean;
 }
 
@@ -238,7 +274,7 @@ export class FilesService implements OnApplicationBootstrap {
     return this.s3 ?? this.local;
   }
 
-  private storeOf(storage: string): FileStore | null {
+  storeOf(storage: string): FileStore | null {
     if (storage === 'local') return this.local;
     if (storage === 's3') return this.s3;
     return null;
@@ -249,26 +285,33 @@ export class FilesService implements OnApplicationBootstrap {
    * the file is dropped and nothing is written but the file_blob row's `lastReferencedAt`; otherwise it
    * moves into the store new bytes go to. Either way the temporary file is gone afterwards, and the
    * file_blob row exists before the caller writes a row that names it.
+   *
+   * The stamp comes first, because the retention sweep deletes bytes only under this row's lock and only if the
+   * stamp is older than the grace period (file-retention-sweep.ts). So this waits out a delete in progress and then finds
+   * the bytes gone, or the sweep leaves them alone from here on: bytes found here stay until the row naming them exists.
    */
   async store(file: HashedTempFile): Promise<string> {
     const { sha256, size } = file;
-    const known = await this.prisma.fileBlob.findUnique({ where: { sha256 }, select: { storage: true } });
-    const holder = known ? this.storeOf(known.storage) : null;
+    const now = new Date();
+    const stamped = await this.prisma.fileBlob.updateMany({ where: { sha256 }, data: { lastReferencedAt: now } });
+    const known = stamped.count === 0
+      ? null
+      : await this.prisma.fileBlob.findUnique({ where: { sha256 }, select: { storage: true, bytesDeletedAt: true } });
+    const holder = known && !known.bytesDeletedAt ? this.storeOf(known.storage) : null;
     let storage: FileStorage;
     if (holder && (await holder.has(sha256))) {
       await removeTempFile(file.path);
       storage = holder.storage;
     } else {
-      // New bytes, or bytes whose row outlived them (a files directory restored older than the database):
-      // kept again, where new bytes go.
+      // New bytes, or bytes whose row outlived them (expired and deleted, or a files directory restored older than the
+      // database): kept again, where new bytes go.
       await this.target.put(sha256, file.path, size);
       storage = this.target.storage;
     }
-    const now = new Date();
     await this.prisma.fileBlob.upsert({
       where: { sha256 },
       create: { sha256, sizeBytes: size, storage, lastReferencedAt: now },
-      update: { storage, lastReferencedAt: now },
+      update: { storage, lastReferencedAt: now, releasedAt: null, bytesDeletedAt: null, offHostPruneAt: null },
     });
     return sha256;
   }
@@ -284,7 +327,10 @@ export class FilesService implements OnApplicationBootstrap {
     }
   }
 
-  /** A new attachment row for an upload the route has accepted: the bytes kept, then the row naming them. */
+  /**
+   * A new attachment row for an upload the route has accepted: the bytes kept, then the row naming them. An upload past the
+   * account's quota is refused before anything is kept; the route removes its temporary file.
+   */
   async createAttachment(
     upload: FileUpload,
     scope: {
@@ -296,7 +342,9 @@ export class FilesService implements OnApplicationBootstrap {
       testReport?: TestReportSummary | null;
     },
   ): Promise<{ id: string }> {
+    await this.assertWithinQuota(scope.ownerId, upload);
     const sha256 = await this.store(upload);
+    const createdAt = new Date();
     return this.prisma.attachment.create({
       data: {
         ownerId: scope.ownerId,
@@ -308,6 +356,8 @@ export class FilesService implements OnApplicationBootstrap {
         sha256,
         label: scope.label ?? null,
         retention: scope.retention ?? null,
+        createdAt,
+        expiresAt: scope.retention === FILE_UPLOAD_RETENTION ? uploadExpiry(createdAt) : null,
         testReportSummary: (scope.testReport ?? undefined) as Prisma.InputJsonValue | undefined,
       },
       select: { id: true },
@@ -327,6 +377,7 @@ export class FilesService implements OnApplicationBootstrap {
         mimeType: true,
         fileName: true,
         sha256: true,
+        expiredAt: true,
         blob: { select: { storage: true, sizeBytes: true } },
       },
     });
@@ -351,6 +402,12 @@ export class FilesService implements OnApplicationBootstrap {
     // Copied and cleared since `row` was read (attachment-migration.ts): the row names its bytes now.
     if (legacy?.sha256 && !row.sha256) return this.open({ id: row.id });
     if (storeFailure) throw storeFailure;
+    // Not something gone wrong, so nothing is logged: what is left of the file is what its row says.
+    if (row.expiredAt) {
+      throw new GoneException(
+        `this file expired on ${row.expiredAt.toISOString().slice(0, 10)} and its bytes have been deleted; its name, size and sha256 remain`,
+      );
+    }
     this.logger.error(
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
     );
@@ -428,13 +485,14 @@ export class FilesService implements OnApplicationBootstrap {
    * What citing these files as evidence takes from the file store (§2.4), before the transaction that saves it, which holds
    * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
    * it is, which is kept on the citation so that no later read of it has to come here. Keyed by file. The citation
-   * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold.
+   * itself is judged in that transaction, so this reads the owner's rows whether or not it will hold. An expired row has
+   * nothing to take: that transaction refuses a new version citing it, and answers a replay of the one that already did.
    */
   async prepareCitedFiles(ownerId: string, ids: string[]): Promise<Map<string, ImageSize>> {
     const images = new Map<string, ImageSize>();
     if (ids.length === 0) return images;
     const rows = await this.prisma.attachment.findMany({
-      where: { id: { in: ids }, ownerId },
+      where: { id: { in: ids }, ownerId, expiredAt: null },
       select: { id: true, sha256: true, mimeType: true },
     });
     for (const row of rows) {
@@ -656,6 +714,150 @@ export class FilesService implements OnApplicationBootstrap {
   }
 
   /**
+   * Pin a row or take its pin away (§2.8), the row `where` finds, which says whose it may be; null when it finds none. A
+   * folder bundle's manifest brings the files in it along, since its pin is meant for the folder. A pin keeps a file past
+   * its date, and within the grace period it brings an expired one back; once the bytes have gone it can only say so.
+   *
+   * The bytes' rows are held while it lifts a tombstone (FOR SHARE), so the sweep sees either the tombstone or the file
+   * brought back, and never deletes bytes under a pin it has not seen.
+   */
+  async setPinned(where: Prisma.AttachmentWhereInput, pinned: boolean): Promise<FileView | null> {
+    const row = await this.prisma.attachment.findFirst({ where, select: { id: true, ownerId: true, fileBundleId: true } });
+    if (!row) return null;
+    const { id, ownerId } = row;
+    const scope: Prisma.AttachmentWhereInput = row.fileBundleId === id ? { ownerId, OR: [{ id }, { fileBundleId: id }] } : { id };
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        if (!pinned) {
+          await tx.attachment.updateMany({ where: scope, data: { pinnedAt: null } });
+          return;
+        }
+        const names = await tx.attachment.findMany({ where: { AND: [scope, { sha256: { not: null } }] }, select: { sha256: true } });
+        const held = await tx.$queryRaw<Array<{ sha256: string; gone: boolean }>>`
+          SELECT sha256, bytes_deleted_at IS NOT NULL AS gone
+            FROM file_blob
+           WHERE sha256 = ANY(${[...new Set(names.map((name) => name.sha256 as string))]}::text[])
+           ORDER BY sha256
+           FOR SHARE`;
+        const gone = held.filter((blob) => blob.gone).map((blob) => blob.sha256);
+        const named = await tx.attachment.findUniqueOrThrow({ where: { id }, select: { sha256: true } });
+        if (named.sha256 && gone.includes(named.sha256)) {
+          throw new GoneException('this file expired and its bytes have been deleted, so it cannot be pinned; upload it again');
+        }
+        // A file of a folder whose bytes went stays what it is, and the rest of the folder is kept.
+        await tx.attachment.updateMany({
+          where: { AND: [scope, { OR: [{ sha256: null }, { sha256: { notIn: gone } }] }] },
+          data: { pinnedAt: new Date(), expiredAt: null },
+        });
+      },
+      loggedRetry(this.logger, 'files.setPinned'),
+    );
+    return fileView(await this.prisma.attachment.findUniqueOrThrow({ where: { id }, select: FILE_VIEW_SELECT }));
+  }
+
+  /**
+   * What an account keeps (§2.10), for its Settings and for the quota: each content once, however many rows name it, because
+   * that is what is kept. A row with a tombstone no longer counts, its bytes being on their way out.
+   */
+  private async storedTotals(ownerId: string): Promise<{ bytes: number; files: number }> {
+    const [totals] = await this.prisma.$queryRaw<Array<{ bytes: bigint; files: bigint }>>`
+      SELECT COALESCE(SUM(size), 0)::bigint AS bytes, COUNT(*)::bigint AS files
+        FROM (
+          SELECT MAX(size_bytes) AS size
+            FROM attachment
+           WHERE owner_id = ${ownerId}::uuid AND expired_at IS NULL
+           GROUP BY COALESCE(sha256, id::text)
+        ) AS contents`;
+    return { bytes: Number(totals.bytes), files: Number(totals.files) };
+  }
+
+  /**
+   * Refuses an upload that would take the account past its quota, when the deployment sets one. Bytes the account already
+   * keeps cost nothing more. Read without a lock, so uploads racing at the limit can pass it by what they carry, at most
+   * 25 MiB each: a quota is there to bound what an account keeps, not to count its last byte.
+   */
+  private async assertWithinQuota(ownerId: string, upload: Pick<HashedTempFile, 'sha256' | 'size'>): Promise<void> {
+    const quota = this.config.quotaBytes;
+    if (!quota) return;
+    const kept = await this.prisma.attachment.findFirst({
+      where: { ownerId, sha256: upload.sha256, expiredAt: null },
+      select: { id: true },
+    });
+    if (kept) return;
+    const { bytes } = await this.storedTotals(ownerId);
+    if (bytes + upload.size <= quota) return;
+    throw new HttpException(
+      {
+        code: FILE_QUOTA_EXCEEDED,
+        message:
+          `This account's file storage is full: ${fileSize(bytes)} of ${fileSize(quota)} is in use and this file is `
+          + `${fileSize(upload.size)}, so nothing was kept. Older uploads free up room as they expire, or ask this `
+          + "instance's administrator for a larger quota.",
+        usedBytes: bytes,
+        quotaBytes: quota,
+      },
+      HttpStatus.PAYLOAD_TOO_LARGE,
+    );
+  }
+
+  /** What Settings shows of an account's files (§2.10): what it keeps, where most of that is, and how fast it grows. */
+  async usage(ownerId: string, now: Date = new Date()): Promise<StorageUsage> {
+    const totals = await this.storedTotals(ownerId);
+    // Each content once within a task and within a project, so that the runs of one task do not count its inputs twice.
+    const tasks = await this.prisma.$queryRaw<Array<{ id: string; title: string; bytes: bigint; files: bigint }>>`
+      SELECT t.id, t.title, SUM(c.size)::bigint AS bytes, COUNT(*)::bigint AS files
+        FROM (
+          SELECT COALESCE(a.task_id, s.task_id) AS task_id, MAX(a.size_bytes) AS size
+            FROM attachment a
+            LEFT JOIN session s ON s.id = a.session_id
+           WHERE a.owner_id = ${ownerId}::uuid AND a.expired_at IS NULL AND COALESCE(a.task_id, s.task_id) IS NOT NULL
+           GROUP BY 1, COALESCE(a.sha256, a.id::text)
+        ) AS c
+        JOIN task t ON t.id = c.task_id
+       GROUP BY t.id, t.title
+       ORDER BY bytes DESC, t.id
+       LIMIT ${USAGE_RANKING_ROWS}`;
+    const projects = await this.prisma.$queryRaw<Array<{ id: string; title: string; bytes: bigint; files: bigint }>>`
+      SELECT p.id, p.title, SUM(c.size)::bigint AS bytes, COUNT(*)::bigint AS files
+        FROM (
+          SELECT t.project_id, MAX(a.size_bytes) AS size
+            FROM attachment a
+            LEFT JOIN session s ON s.id = a.session_id
+            JOIN task t ON t.id = COALESCE(a.task_id, s.task_id)
+           WHERE a.owner_id = ${ownerId}::uuid AND a.expired_at IS NULL AND t.project_id IS NOT NULL
+           GROUP BY 1, COALESCE(a.sha256, a.id::text)
+        ) AS c
+        JOIN project p ON p.id = c.project_id
+       GROUP BY p.id, p.title
+       ORDER BY bytes DESC, p.id
+       LIMIT ${USAGE_RANKING_ROWS}`;
+    // A content counts in the week the account first kept it. Expired files count: this says what arrived, not what is left.
+    const weeks = await this.prisma.$queryRaw<Array<{ week: string; bytes: bigint }>>`
+      SELECT to_char(date_trunc('week', first_kept), 'YYYY-MM-DD') AS week, SUM(size)::bigint AS bytes
+        FROM (
+          SELECT MIN(created_at) AS first_kept, MAX(size_bytes) AS size
+            FROM attachment
+           WHERE owner_id = ${ownerId}::uuid
+           GROUP BY COALESCE(sha256, id::text)
+        ) AS contents
+       WHERE first_kept >= ${weekStart(now, USAGE_WEEKS - 1)}::timestamp
+       GROUP BY 1`;
+    const added = new Map(weeks.map(({ week, bytes }) => [week, Number(bytes)]));
+    return {
+      totalBytes: totals.bytes,
+      fileCount: totals.files,
+      quotaBytes: this.config.quotaBytes ?? null,
+      projects: projects.map(({ id, title, bytes, files }) => ({ projectId: id, title, bytes: Number(bytes), fileCount: Number(files) })),
+      tasks: tasks.map(({ id, title, bytes, files }) => ({ taskId: id, title, bytes: Number(bytes), fileCount: Number(files) })),
+      weeks: Array.from({ length: USAGE_WEEKS }, (_, index) => {
+        const start = weekStart(now, USAGE_WEEKS - 1 - index);
+        return { weekStart: start, bytes: added.get(start) ?? 0 };
+      }),
+    };
+  }
+
+  /**
    * A folder bundle (§2.2): a manifest, kept like any file, that says which path of the folder each of these uploaded
    * files is. All or nothing: the manifest's row and the files' claim on it commit together, and a file already in a
    * bundle, or claimed by another bundle meanwhile, refuses the whole of it. Only a session's own `file_upload`s can be
@@ -706,6 +908,7 @@ export class FilesService implements OnApplicationBootstrap {
     const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
     const sha256 = await this.storeBytes(bytes);
     const id = randomUUID();
+    const createdAt = new Date();
     await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -720,6 +923,8 @@ export class FilesService implements OnApplicationBootstrap {
             sha256,
             label,
             retention: FILE_UPLOAD_RETENTION,
+            createdAt,
+            expiresAt: uploadExpiry(createdAt),
             fileBundleId: id,
           },
         });
@@ -743,7 +948,7 @@ function membersOf(ownerId: string, folder: EvidenceFileRow): Prisma.AttachmentW
 
 /** A row as `evidenceFiles` answers it. A manifest's name is the folder's with `.json` after it (`createBundle`). */
 function evidenceFile(
-  { expiredAt, ...row }: EvidenceFileRow,
+  row: EvidenceFileRow,
   folder: EvidenceFileRow | null,
   check?: Pick<EvidenceCheck, 'width' | 'height'>,
 ): EvidenceFileView {
@@ -753,7 +958,6 @@ function evidenceFile(
     folder: folder?.fileName?.replace(/\.json$/, '') ?? null,
     width: check?.width ?? null,
     height: check?.height ?? null,
-    expiredAt,
     gone: false,
   };
 }
@@ -776,7 +980,9 @@ function goneFile({ ref, sha256, width, height }: EvidenceCheck): EvidenceFileVi
     folder: null,
     width: width ?? null,
     height: height ?? null,
+    expiresAt: null,
     expiredAt: null,
+    pinnedAt: null,
     gone: true,
   };
 }

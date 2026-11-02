@@ -184,9 +184,22 @@ test('an upload the bucket keeps frees its connection, however soon the bucket a
 
 // ── Configuration ──────────────────────────────────────────────────────────────────────────────
 test('with nothing set, files are kept in /var/lib/orbit/files', () => {
-  assert.deepEqual(filesConfigFrom({}), { dir: DEFAULT_FILES_DIR, storage: 'local' });
+  // Two days is the backup sidecar's defaults, a day between base backups and two kept.
+  const backupRetentionMs = 2 * 24 * 60 * 60 * 1000;
+  assert.deepEqual(filesConfigFrom({}), { dir: DEFAULT_FILES_DIR, storage: 'local', backupRetentionMs });
   assert.equal(DEFAULT_FILES_DIR, '/var/lib/orbit/files');
-  assert.deepEqual(filesConfigFrom({ ORBIT_FILES_DIR: '/srv/files' }), { dir: '/srv/files', storage: 'local' });
+  assert.deepEqual(filesConfigFrom({ ORBIT_FILES_DIR: '/srv/files' }), { dir: '/srv/files', storage: 'local', backupRetentionMs });
+});
+
+test('the quota and the backup retention are read from the environment, and a value that means nothing stops the start', () => {
+  assert.equal(filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: '1048576' }).quotaBytes, 1_048_576);
+  assert.equal(filesConfigFrom({ ORBIT_FILES_QUOTA_BYTES: ' ' }).quotaBytes, undefined, 'blank is what Compose passes when unset');
+  assert.equal(filesConfigFrom({ ORBIT_BASE_BACKUP_INTERVAL: '3600', ORBIT_BASE_BACKUP_KEEP: '48' }).backupRetentionMs, 48 * 3_600_000);
+  for (const name of ['ORBIT_FILES_QUOTA_BYTES', 'ORBIT_BASE_BACKUP_INTERVAL', 'ORBIT_BASE_BACKUP_KEEP']) {
+    for (const value of ['0', '-1', '1.5', 'ten', '1e3']) {
+      assert.throws(() => filesConfigFrom({ [name]: value }), new RegExp(`${name} must be a whole number above zero, not "${value.replace('.', '\.')}"`));
+    }
+  }
 });
 
 test('s3 takes the endpoint, bucket, key pair and region, and refuses to start without them', () => {
@@ -200,6 +213,7 @@ test('s3 takes the endpoint, bucket, key pair and region, and refuses to start w
     dir: DEFAULT_FILES_DIR,
     storage: 's3',
     s3: { endpoint: 'http://minio:9000', bucket: 'orbit', accessKeyId: 'id', secretAccessKey: 'secret', region: 'us-east-1' },
+    backupRetentionMs: 2 * 24 * 60 * 60 * 1000,
   });
   assert.throws(
     () => filesConfigFrom({ ORBIT_FILES_BACKEND: 's3', ORBIT_FILES_S3_ENDPOINT: 'http://minio:9000' }),
