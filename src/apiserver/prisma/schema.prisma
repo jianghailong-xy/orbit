@@ -2773,12 +2773,11 @@ model SessionMessageCharge {
   @@map("session_message_charge")
 }
 
-// Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
-// Postgres is the only persistent store in the single-host Compose deployment (the
-// apiserver mounts no volume), and the runner is a remote process that must fetch bytes
-// over HTTP regardless of backend — so DB storage is the simplest option that also
-// survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
-// the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+// Attachments (composer uploads, task inputs, runner-uploaded images): since 0462 an attachment's
+// bytes are kept in the file store by sha256 (FileBlob below, files/files.service.ts) and the row
+// holds what describes them; rows written before it keep theirs in `data` (bytea) until they are
+// moved. Bytes are stored raw (not base64); callers base64-encode only at the claude/runner
+// boundary. Bounded by a size cap (attachments.media.ts).
 /// A user's profile photo (0335): the image every client draws where the account's avatar is, in
 /// place of the name's first letter. The client crops it square and scales it down before sending;
 /// the server keeps the bytes whole, typed by what it read off them. One per user, replaced whole;
@@ -2822,14 +2821,47 @@ model Attachment {
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
   fileName  String?           @map("file_name")
-  data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
+  // Raw bytes (bytea) of a row written before Orbit Files (0462). NULL on a row whose bytes are in
+  // the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
+  data      Bytes?
+  /// The bytes' sha256, 64 lowercase hex (0462, docs/orbit-files-design.md §2.1): this row's bytes
+  /// are the file_blob of that name, kept once however many rows name them (files/files.service.ts).
+  /// NULL on a row whose bytes are still in `data`.
+  sha256    String?
+  blob      FileBlob?         @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
+  /// Columns of the retention rules (§2.8), folder bundles (§2.2) and FILE evidence (§2.4), created by
+  /// 0462 for the tasks that build those. NULL: the row follows its session or task, as every attachment
+  /// did before them.
+  retention String?
+  expiresAt DateTime?         @map("expires_at")
+  expiredAt DateTime?         @map("expired_at")
+  pinnedAt  DateTime?         @map("pinned_at")
+  fileBundleId String?        @map("file_bundle_id") @db.Uuid
+  evidenceId   String?        @map("evidence_id") @db.Uuid
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])
   @@index([sessionId])
   @@index([turnId])
   @@index([taskId])
+  @@index([sha256])
   @@map("attachment")
+}
+
+/// The bytes of Orbit Files (0462, docs/orbit-files-design.md §2.1): one row per distinct content,
+/// named by its sha256, however many attachment rows name it. The bytes themselves are in the store
+/// `storage` names — `local`, the files directory (ORBIT_FILES_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
+/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_FILES_S3_BUCKET) — and never in Postgres.
+model FileBlob {
+  sha256           String       @id
+  sizeBytes        Int          @map("size_bytes")
+  /// `local` | `s3` (file_blob_storage_check).
+  storage          String
+  /// The last time an upload stored these bytes or found them already stored.
+  lastReferencedAt DateTime     @default(now()) @map("last_referenced_at")
+  attachments      Attachment[]
+
+  @@map("file_blob")
 }
 
 // Lightweight activity feed (no FKs, append-only).

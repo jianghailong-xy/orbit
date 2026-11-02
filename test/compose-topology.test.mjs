@@ -85,6 +85,13 @@
 // environment: TRUSTED_PROXIES, the proxies in front of the gateway that a visitor's address is read through, empty
 // unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
 // every visitor's address exactly as before.
+//
+// On 2026-11-02 Orbit Files' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
+// account owner approved that day, docs/orbit-files-design.md §2.10) moved attachment bytes out of Postgres into a store
+// named by sha256, and added to the apiserver six lines of environment — the store (local unless the host's .env says s3)
+// and the S3-compatible bucket's endpoint, bucket, key pair and region, each empty unless .env sets it — and one bind
+// mount, ./data/files, the local store's directory, beside ./data/postgres as the design asks. No service or port is
+// added. The two blocks below pin those lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -292,7 +299,8 @@ function directivesNotInBaseline(block, baselineBlock) {
   return unaccounted;
 }
 
-// Unlike postgres and gateway, these three carry no relative bind mount to fence off, so the
+// Unlike postgres and gateway, these three carry no relative bind mount to fence off — but for the
+// apiserver's ./data/files, which is pinned line for line among its approved blocks below — so the
 // guarantee here is one-directional on purpose: nothing beyond the fixed configuration may be
 // added to a surviving service, while
 // a directive the repository has genuinely stopped needing is free to leave and the prose around
@@ -343,6 +351,17 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
+  // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
+  // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
+  // the file, and before the managed runners'.
+  [
+    '      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"',
+    '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
+    '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
+    '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
+    '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
+    '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
@@ -352,6 +371,12 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
     '    volumes:',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
+  ],
+  // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
+  // mount of ./data/files beside ./data/postgres. It is the next entry of the managed runners' `volumes:`, before the name
+  // every apiserver answers to.
+  [
+    '      - ./data/files:/var/lib/orbit/files',
   ],
   // The name every apiserver answers to (2026-10-28, the top of this file), which the web gateway's routes for several
   // apiservers reach them by. It comes after the managed runners' lines in the file, behind the port the service exposes.

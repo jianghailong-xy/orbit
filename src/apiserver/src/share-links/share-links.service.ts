@@ -22,14 +22,14 @@ import {
   type PublicProject,
   readProjectScope,
   readPublicProject,
-  readPublicProjectAttachment,
+  publicProjectAttachmentWhere,
   readPublicProjectConversation,
   readPublicProjectTask,
 } from './public-project';
 import {
   type PublicTask,
   readPublicTask,
-  readPublicTaskAttachment,
+  publicTaskAttachmentWhere,
   readPublicTaskRun,
   taskShareCounts,
   type TaskShareCounts,
@@ -423,13 +423,13 @@ export class ShareLinksService {
     return readPublicProjectConversation(this.prisma, this.rootOf(link, 'PROJECT'), link.include, sessionId);
   }
 
-  /** An attachment a task or project link's layers include (input files, their runs' images), or
-   *  the one 404. */
-  rootAttachment(link: OpenLink, id: string): Promise<{ data: Buffer; mimeType: string }> {
+  /** Which attachment a task or project link's layers include as `id` (input files, their runs'
+   *  images): the scope its bytes are read within (SharedController), or the one 404. */
+  async rootAttachment(link: OpenLink, id: string): Promise<Prisma.AttachmentWhereInput> {
     if (link.kind === 'PROJECT') {
-      return readPublicProjectAttachment(this.prisma, this.rootOf(link, 'PROJECT'), link.include, id);
+      return publicProjectAttachmentWhere(this.prisma, this.rootOf(link, 'PROJECT'), link.include, id);
     }
-    return readPublicTaskAttachment(this.prisma, this.rootOf(link, 'TASK'), link.include, id);
+    return publicTaskAttachmentWhere(this.rootOf(link, 'TASK'), link.include, id);
   }
 
   private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT' | 'WIKI'): string {

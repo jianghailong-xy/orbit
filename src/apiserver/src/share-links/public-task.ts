@@ -271,23 +271,21 @@ export async function readPublicTaskRun(
 }
 
 /**
- * An attachment's bytes for a task link: one of the task's input files when the link includes
+ * Which attachment a task link may serve as `id`: one of the task's input files when the link includes
  * Comments & files, or one belonging to one of its runs when it includes Conversations. Anything
- * else — another task's file, a run in the Trash, a layer that is off — is the one 404.
+ * else — another task's file, a run in the Trash, a layer that is off — finds nothing, the one 404.
+ * The bytes are read through the file store (SharedController).
  */
-export async function readPublicTaskAttachment(
-  prisma: PrismaService,
+export function publicTaskAttachmentWhere(
   taskId: string,
   include: Required<ShareInclude>,
   id: string,
-): Promise<{ data: Buffer; mimeType: string }> {
+): Prisma.AttachmentWhereInput {
   const within: Prisma.AttachmentWhereInput[] = [];
   if (include.commentsAndFiles) within.push({ taskId });
   if (include.conversations) within.push({ session: { taskId, deletedAt: null } });
   if (within.length === 0) throw linkNotFound();
-  const row = await prisma.attachment.findFirst({ where: { id, OR: within }, select: { data: true, mimeType: true } });
-  if (!row) throw linkNotFound();
-  return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  return { id, OR: within };
 }
 
 /** How much a task link's layers hold: its comments and input files, and its runs' transcripts. */

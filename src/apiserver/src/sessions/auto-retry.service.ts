@@ -1494,11 +1494,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * about to write. Returns the copies' ids, in the shape `resume` links: owned by the same
    * person, scoped to the session, not yet on a turn.
    *
-   * Copies rather than re-points, even though it duplicates the bytes. An attachment belongs to
-   * exactly one turn and cascade-deletes with it, and the turn a retry writes is a QUEUED one —
-   * an interrupt, a withdrawal or an end deletes it. Moving the rows would put the only copy of
-   * the user's image behind that, so the failed attempt's bubble would lose its picture the
-   * first time a retry was cancelled. The copies die with the session either way.
+   * Copies rather than re-points. An attachment belongs to exactly one turn and cascade-deletes
+   * with it, and the turn a retry writes is a QUEUED one — an interrupt, a withdrawal or an end
+   * deletes it. Moving the rows would put the only copy of the user's image behind that, so the
+   * failed attempt's bubble would lose its picture the first time a retry was cancelled. The
+   * copies die with the session either way. A copy names the same stored bytes (`sha256`) as the
+   * row it copies; only a row from before Orbit Files carries its bytes in `data`, and its copy too.
    */
   private async copyAttachments(
     sessionId: string,
@@ -1517,6 +1518,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           mimeType: a.mimeType,
           sizeBytes: a.sizeBytes,
           fileName: a.fileName,
+          sha256: a.sha256,
           data: a.data,
         },
         select: { id: true },
