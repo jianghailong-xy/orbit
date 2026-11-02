@@ -993,9 +993,12 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
     // A file reference in a block that cannot host a SwiftUI file card (a table cell or heading) is
     // still drawn as muted prose instead of a tinted link whose click could only do nothing. The
     // iOS selectable renderer adds the matching paperclip glyph. The same goes for a reference this
-    // app has no screen for (`ReferenceLink.isInert`). Ranges first, as above.
+    // app has no screen for (`ReferenceLink.isInert`) and a link that may not leave the app
+    // (`ExternalLink.isDead`). Ranges first, as above.
     let deadRanges = attributed.runs
-        .filter { $0.link.map { AttachmentLink.isFileReference($0) || ReferenceLink.isInert($0) } == true }
+        .filter { run in
+            run.link.map { AttachmentLink.isFileReference($0) || ReferenceLink.isInert($0) || ExternalLink.isDead($0) } == true
+        }
         .map(\.range)
     for range in deadRanges {
         attributed[range].link = nil

@@ -251,8 +251,9 @@ struct SelectableText: UIViewRepresentable {
                         attrs[.link] = link
                         attrs[.foregroundColor] = UIColor.tintColor
                     }
-                } else if ReferenceLink.isInert(link) {
-                    // A project or task list this app has no screen for: its title reads as prose.
+                } else if ReferenceLink.isInert(link) || ExternalLink.isDead(link) {
+                    // A project or task list this app has no screen for, or a link that may not
+                    // leave the app: its words read as prose.
                 } else {
                     attrs[.link] = link
                 }
@@ -371,7 +372,7 @@ extension SelectableText {
                     self?.downloadArtifact(path)
                 }
             }
-            return defaultAction
+            return ExternalLink.mayLeaveTheApp(url) ? defaultAction : nil
         }
 
         /// A file the session's runner is holding, by path: the control plane asks it to upload the

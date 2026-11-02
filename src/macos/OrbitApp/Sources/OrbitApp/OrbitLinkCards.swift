@@ -147,10 +147,19 @@ final class OrbitLinkCards {
 
 // MARK: - where an Orbit link goes
 
+extension OpenURLAction.Result {
+    /// The answer for a link no Orbit screen took: the system's action if the link may leave the app,
+    /// and nothing at all if it may not. Every `OpenURLAction` here ends in this: one set closer to a
+    /// view replaces the app's own rather than falling through to it.
+    static func leaving(_ url: URL) -> Self {
+        ExternalLink.mayLeaveTheApp(url) ? .systemAction : .discarded
+    }
+}
+
 extension AppModel {
     /// The Orbit object a link names — a reference (`orbit-task:<id>`, what agents are told to write)
     /// or a page URL of this deployment (`https://…/tasks/<id>`) — or nil for a link this app has no
-    /// business opening, which the caller hands to the system.
+    /// business opening, which the caller hands to the system if it may leave the app.
     func orbitRef(for url: URL) -> OrbitLinkRef? {
         let text = url.absoluteString
         if let target = OrbitLinkParser.target(forReference: text) {
