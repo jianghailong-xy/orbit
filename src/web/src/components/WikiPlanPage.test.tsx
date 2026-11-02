@@ -278,7 +278,7 @@ describe('the plan page, by what its job is doing', () => {
     expect(writes[0].body).toEqual({});
     // The owner's door only: nothing here speaks for a session.
     expect(Object.keys(writes[0].headers).filter((name) => /session/i.test(name))).toEqual([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs as a Wiki maintenance task'));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs on the server with the System model'));
   });
 
   it('says what a draft on its way is doing, and who drafts it again: the System model', async () => {
@@ -380,6 +380,122 @@ describe('the plan page, by what its job is doing', () => {
   });
 });
 
+describe('Redraft… and Start over…: two doors, each saying what it does', () => {
+  const field = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>('.wk-pl-redraft-dialog textarea')!;
+  const dialog = (): HTMLElement => document.querySelector<HTMLElement>('.wk-pl-redraft-dialog')!;
+  const type = async (words: string): Promise<void> => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field(), words);
+      field().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+  };
+  const openRedraft = async (): Promise<void> => {
+    await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
+    await press(button('Redraft…', planPage()));
+    await vi.waitFor(() => expect(field()).toBeTruthy());
+  };
+  const more = (): HTMLElement | null => planPage().querySelector<HTMLElement>('.wk-pl-acts [aria-label="More"]');
+  const openMore = async (): Promise<void> => {
+    await vi.waitFor(() => expect(more()).toBeTruthy());
+    await act(async () => more()!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await settle();
+  };
+  const startOverItem = (): HTMLElement | undefined =>
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent?.trim() === 'Start over…');
+
+  it('with a stored version, Redraft stays off while the box is blank, and goes with the words', async () => {
+    plan = stateOf('inForce');
+    await open('/wiki/orbit/plan');
+    await openRedraft();
+    expect(field().placeholder).toBe('What should change: what to merge, add or leave out');
+    expect(button('Redraft', dialog())?.disabled).toBe(true);
+    await type('  \n ');
+    expect(button('Redraft', dialog())?.disabled, 'white space is no words').toBe(true);
+    await type('Merge the two storage documents');
+    expect(button('Redraft', dialog())?.disabled).toBe(false);
+    await press(button('Redraft', dialog()));
+    expect(writes.map((row) => `${row.method} ${row.path} ${JSON.stringify(row.body)}`)).toEqual([
+      `POST /api/wiki/spaces/${SPACE_ID}/plan/redraft {"instructions":"Merge the two storage documents"}`,
+    ]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs on the server with the System model'));
+  });
+
+  it('after a failed job with instructions, the box opens holding those words, and they can go again', async () => {
+    plan = stateOf('draftFailed');
+    await open('/wiki/orbit/plan');
+    await openRedraft();
+    expect(field().value).toBe(SHARED.plan.jobs.failed.instructions);
+    expect(button('Redraft', dialog())?.disabled).toBe(false);
+    await press(button('Redraft', dialog()));
+    expect(writes.map((row) => row.body)).toEqual([{ instructions: SHARED.plan.jobs.failed.instructions }]);
+  });
+
+  it('with no stored version, it may be sent empty, as a first draft is; a failed first draft has no words to give back', async () => {
+    plan = { ...stateOf('draftFailed'), confirmed: null, job: { ...linkable(SHARED.plan.jobs.failed), kind: 'draft', instructions: null } };
+    await open('/wiki/orbit/plan');
+    await openRedraft();
+    expect(field().value).toBe('');
+    expect(button('Redraft', dialog())?.disabled).toBe(false);
+    await press(button('Redraft', dialog()));
+    expect(writes.map((row) => row.body)).toEqual([{}]);
+  });
+
+  it('Start over… asks in its own words what it costs, then sends the redraft with no instructions', async () => {
+    plan = stateOf('inForce');
+    await open('/wiki/orbit/plan');
+    await openMore();
+    await vi.waitFor(() => expect(startOverItem()).toBeTruthy());
+    await press(startOverItem());
+    expect(writes).toEqual([]);
+    const confirm = await vi.waitFor(() => {
+      const found = [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].find((node) => node.textContent?.includes('Writes a new plan'));
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    expect(spaced(confirm)).toContain('Start over');
+    expect(confirm.textContent).toContain('Writes a new plan from the repository. It doesn’t read v1: only protected documents stay. Once you confirm it, most documents are written again.');
+    await press(button('Start over', confirm));
+    await vi.waitFor(() => expect(writes.map((row) => `${row.method} ${row.path} ${JSON.stringify(row.body)}`)).toEqual([`POST /api/wiki/spaces/${SPACE_ID}/plan/redraft {}`]));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs on the server with the System model'));
+  });
+
+  it('Start over… can be backed out of, and asks nothing', async () => {
+    plan = stateOf('draftReady');
+    await open('/wiki/orbit/plan');
+    await openMore();
+    await vi.waitFor(() => expect(startOverItem()).toBeTruthy());
+    await press(startOverItem());
+    const confirm = await vi.waitFor(() => {
+      const found = [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].find((node) => node.textContent?.includes('Writes a new plan'));
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    expect(confirm.textContent, 'the version it would not read is the newest').toContain('It doesn’t read v2:');
+    await press(button('Cancel', confirm));
+    expect(writes).toEqual([]);
+    await vi.waitFor(() => expect(document.activeElement, 'focus goes back to the ⋯ button: the menu item it came from is gone').toBe(more()));
+  });
+
+  it('Start over… is in the menu only with a stored version and no draft job open', async () => {
+    // A version stored and a draft on its way: nothing to ask for yet.
+    plan = { ...stateOf('inForce'), job: linkable(SHARED.plan.jobs.drafting) };
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Redraft…', planPage())?.disabled).toBe(true));
+    expect(more(), 'nothing else is in the menu here').toBeNull();
+    // No version: Draft plan is the door, and the page has no head to hang a menu on.
+    plan = stateOf('none');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(planPage()?.querySelector('.wk-pl-empty')).toBeTruthy());
+    expect(more()).toBeNull();
+    // A failed draft with nothing stored: Redraft is the door.
+    plan = { ...stateOf('draftFailed'), confirmed: null };
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
+    expect(more()).toBeNull();
+  });
+});
+
 describe('Update documents: the version in force’s documents asked for again (contract `plan.jobs.rebuild`)', () => {
   const acts = (): HTMLElement => planPage().querySelector<HTMLElement>('.wk-pl-acts')!;
 
@@ -387,8 +503,8 @@ describe('Update documents: the version in force’s documents asked for again (
     plan = stateOf('writingStopped');
     await open('/wiki/orbit/plan');
     await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
-    // In the head's actions, after Redraft…; the card still says what stopped.
-    expect([...acts().querySelectorAll('button')].map((node) => node.textContent?.trim())).toEqual(['Redraft…', 'Update documents']);
+    // In the head's actions, after Redraft… and before the menu; the card still says what stopped.
+    expect([...acts().querySelectorAll('button')].map((node) => node.textContent?.trim() || node.getAttribute('aria-label'))).toEqual(['Redraft…', 'Update documents', 'More']);
     expect(jobCard()).toEqual(['Writing documents didn’t finish the run was cut off at 120 turns · Wiki maintenance writes what’s left on its next run View run']);
     await press(button('Update documents', acts()));
     expect(writes.map((row) => `${row.method} ${row.path} ${JSON.stringify(row.body)}`)).toEqual([`POST /api/wiki/spaces/${SPACE_ID}/plan/versions/1/build {}`]);

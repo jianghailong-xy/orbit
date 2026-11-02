@@ -1547,7 +1547,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   `EXECUTABLE` 是 `orbit wiki plan check`（契约原来的 `plan.jobs.task`），P11 随维护会话删除。
 - **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，或会话提议时隐式建的 space）；
   `owner`——owner 在 plan 页要求（`POST /api/wiki/spaces/:id/plan/redraft`，只认 JWT，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
-  body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草），或者确认一个版本
+  body 带 `instructions` 就是修订，最多 `rules.instructionsMaxChars` 4000 字，不带就是起草。客户端有两个门：有版本时 Redraft… 必须写字，它读那个版本；
+  不读版本的重新起草走 ⋯ 里的 Start over…，确认后发不带 `instructions` 的请求；没有版本时 Redraft… 可以不写字。上一个作业没留下草稿时，输入框带着它的 `instructions`），或者确认一个版本
   （`POST /api/wiki/spaces/:id/plan/versions/:version/confirm`，要的是按它生成文档：`build`），或者对在册版本再要一次生成
   （`POST …/plan/versions/:version/build`，21.11）。`support`——管理员为支持再要一次（`POST /api/admin/wiki/spaces/:id/plan/build`，
   21.11，迁移 0429）。

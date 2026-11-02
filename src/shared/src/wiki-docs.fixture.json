@@ -1855,6 +1855,9 @@
       "drafting": "Drafting",
       "held": "Held",
       "ready": "Ready for review",
+      "startOver": "Start over…",
+      "startOverTitle": "Start over",
+      "startOverGo": "Start over",
       "passed": "Passed the plan check",
       "writing": "Writing documents",
       "writingNow": "Writing now:",
@@ -1890,12 +1893,12 @@
       "from": "From",
       "check": "Check",
       "changeRejected": "Change rejected",
-      "redraftAsked": "Redraft asked for — it runs as a Wiki maintenance task",
+      "redraftAsked": "Redraft asked for — it runs on the server with the System model",
       "redraftAlready": "A draft is already on its way",
       "acceptRefused": "This change no longer passes the plan check, so nothing was confirmed:",
       "redraftTitle": "Redraft the plan",
       "redraftGo": "Redraft",
-      "redraftPlaceholder": "What should change: what to merge, split, move or leave out",
+      "redraftPlaceholder": "What should change: what to merge, add or leave out",
       "editTitleField": "Title",
       "editKind": "Kind",
       "protectedSwitch": "A redraft keeps it as it is",
@@ -5875,8 +5878,128 @@
           "n": 2,
           "says": "2 not found"
         }
+      ],
+      "startOverText": [
+        {
+          "version": 3,
+          "says": "Writes a new plan from the repository. It doesn’t read v3: only protected documents stay. Once you confirm it, most documents are written again."
+        }
       ]
     },
+    "doors": [
+      {
+        "about": "No plan: Draft plan's page. Redraft may go empty, and there is nothing to start over from.",
+        "spec": {
+          "confirmed": null,
+          "draft": null,
+          "proposals": false,
+          "job": null,
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": true,
+        "boxHolds": "",
+        "startOver": null
+      },
+      {
+        "about": "A version in force and an empty box: Redraft waits for words, and Start over… is the fresh draft.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": null,
+          "proposals": false,
+          "job": null,
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": false,
+        "boxHolds": "",
+        "startOver": 1
+      },
+      {
+        "about": "Spaces and new lines are no words.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": "v2",
+          "proposals": false,
+          "job": null,
+          "runnerOnline": true
+        },
+        "words": "  \n\t ",
+        "ready": false,
+        "boxHolds": "",
+        "startOver": 2
+      },
+      {
+        "about": "With words a stored version can be redrafted.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": "v2",
+          "proposals": false,
+          "job": null,
+          "runnerOnline": true
+        },
+        "words": "合并到 30 篇左右",
+        "ready": true,
+        "boxHolds": "",
+        "startOver": 2
+      },
+      {
+        "about": "A failed run over a stored version: its words come back to the box, and Start over… is still there.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": null,
+          "proposals": false,
+          "job": "failed",
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": false,
+        "boxHolds": "合并到 30 篇左右",
+        "startOver": 1
+      },
+      {
+        "about": "A failed run with nothing stored: it may go empty again, and its words come back all the same.",
+        "spec": {
+          "confirmed": null,
+          "draft": null,
+          "proposals": false,
+          "job": "failed",
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": true,
+        "boxHolds": "合并到 30 篇左右",
+        "startOver": null
+      },
+      {
+        "about": "A draft on its way: no fresh draft to ask for.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": null,
+          "proposals": false,
+          "job": "drafting",
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": false,
+        "boxHolds": "",
+        "startOver": null
+      },
+      {
+        "about": "A build on its way is no draft job.",
+        "spec": {
+          "confirmed": "v1",
+          "draft": null,
+          "proposals": false,
+          "job": "writing",
+          "runnerOnline": true
+        },
+        "words": "",
+        "ready": false,
+        "boxHolds": "",
+        "startOver": 1
+      }
+    ],
     "edit": {
       "stored": {
         "id": "d-runtime",

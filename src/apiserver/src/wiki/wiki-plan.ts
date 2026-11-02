@@ -1447,7 +1447,11 @@ export class WikiPlans {
       if (earlier !== null) return { ...(await this.version(ownerId, spaceId, earlier)), replayed: true };
     }
 
-    const base = await this.latest(this.prisma, ownerId, spaceId);
+    const latest = await this.latest(this.prisma, ownerId, spaceId);
+    // A replay of a job its worker lost after it stored a later round's draft meets that draft here. The rounds before
+    // it are gated as they were, on what it revised, so the job goes on to the same draft and is answered with its version.
+    const own = latest !== null && latest.authorJobId === authorJobId && latest.baseVersion === baseVersion;
+    const base = !own ? latest : baseVersion === null ? null : await this.prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version: baseVersion }, select: VERSION_SELECT });
     if ((base?.version ?? null) !== baseVersion) {
       throw stale(
         `this draft revises ${baseVersion === null ? 'no version' : `version ${baseVersion}`}, and the plan stands at `

@@ -1067,7 +1067,7 @@ export const wikiPlanConfirmed = (version: number): string => `Plan v${version} 
 export const wikiPlanChangeAdded = (version: number): string => `Change added to draft v${version}`;
 export const WIKI_PLAN_CHANGE_REJECTED = 'Change rejected';
 export const wikiPlanDraftSaved = (version: number): string => `Draft v${version} saved`;
-export const WIKI_PLAN_REDRAFT_ASKED = 'Redraft asked for — it runs as a Wiki maintenance task';
+export const WIKI_PLAN_REDRAFT_ASKED = 'Redraft asked for — it runs on the server with the System model';
 export const WIKI_PLAN_REDRAFT_ALREADY = 'A draft is already on its way';
 /** The gate refused an accepted change on the plan it now meets (the plan moved since it was proposed). */
 export const WIKI_PLAN_ACCEPT_REFUSED = 'This change no longer passes the plan check, so nothing was confirmed:';
@@ -1098,12 +1098,34 @@ export function wikiPlanUpdateDocs(
 
 export const WIKI_PLAN_REDRAFT_TITLE = 'Redraft the plan';
 export const WIKI_PLAN_REDRAFT_GO = 'Redraft';
-export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge, split, move or leave out';
+export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge, add or leave out';
+
+/** Whether the words can be sent: a redraft reads the version stored, so it needs them; with none stored, it may go empty. */
+export const wikiPlanRedraftReady = (state: Pick<WikiPlanState, 'confirmed' | 'draft'>, words: string): boolean =>
+  wikiPlanNewest(state) === null || words.trim() !== '';
+
+/** What the box opens holding: the words of the run that failed, to send again or change. */
+export const wikiPlanRedraftWords = (state: Pick<WikiPlanState, 'confirmed' | 'draft' | 'job'>): string =>
+  wikiPlanFailedJob(state)?.instructions ?? '';
 
 /** The dialog's sentence: what drafts it again, and from which version. */
 export function wikiPlanRedraftNote(from: { version: number; inForce: boolean } | null): string {
   const base = from ? (from.inForce ? ` from v${from.version}, the plan in force,` : ` from draft v${from.version},`) : '';
   return `The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here.`;
+}
+
+export const WIKI_PLAN_START_OVER = 'Start over…';
+export const WIKI_PLAN_START_OVER_TITLE = 'Start over';
+export const WIKI_PLAN_START_OVER_GO = 'Start over';
+export const wikiPlanStartOverText = (version: number): string =>
+  `Writes a new plan from the repository. It doesn’t read v${version}: only protected documents stay. Once you confirm it, most documents are written again.`;
+
+/**
+ * The version Start over… would leave unread, or null when the menu has no such item: only with a version stored, since
+ * Draft plan asks for a first one, and no draft job open. It sends the redraft with no instructions: a fresh draft.
+ */
+export function wikiPlanStartOver(state: Pick<WikiPlanState, 'confirmed' | 'draft' | 'job'>): number | null {
+  return wikiPlanOpenJob(state) ? null : (wikiPlanNewest(state)?.version ?? null);
 }
 
 /** `Protected, kept as they are: 3.1 · 4.2 · 7.1`. */

@@ -26,6 +26,7 @@ import { WikiContentsButton } from './WikiDirectory';
 import { WikiDocRow } from './WikiDocList';
 import { WikiSourceCard } from './WikiSources';
 import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
 import { Input } from './ui/Input';
@@ -98,6 +99,9 @@ import {
   WIKI_PLAN_REFS_SHOWN_PHONE,
   WIKI_PLAN_REJECT,
   WIKI_PLAN_SAVE_DRAFT,
+  WIKI_PLAN_START_OVER,
+  WIKI_PLAN_START_OVER_GO,
+  WIKI_PLAN_START_OVER_TITLE,
   WIKI_PLAN_SECTIONS,
   WIKI_PLAN_SESSION_ANCHORS,
   WIKI_PLAN_SESSION_EVIDENCE,
@@ -157,6 +161,8 @@ import {
   wikiPlanPath,
   wikiPlanProtectedKept,
   wikiPlanRedraftNote,
+  wikiPlanRedraftReady,
+  wikiPlanRedraftWords,
   wikiPlanSaveNote,
   wikiPlanSectionChars,
   wikiPlanSectionEditBody,
@@ -166,6 +172,8 @@ import {
   wikiPlanSectionsHint,
   wikiPlanSourceFound,
   wikiPlanSourceLines,
+  wikiPlanStartOver,
+  wikiPlanStartOverText,
   wikiPlanSourcesSummary,
   wikiPlanTime,
   wikiPlanUpdateAsked,
@@ -307,6 +315,9 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   // The version in force's documents asked for again (contract `plan.jobs.rebuild`): while the server executes the wiki.
   const update = useWikiWrite(({ version }: { version: number }) => buildWikiPlan(spaceId, version));
   const updateDocs = wikiPlanUpdateDocs(plan, { inForce, serverExecutes: page.serverExecutes });
+  const startOver = wikiPlanStartOver(plan);
+  const [confirmStartOver, startOverConfirmation] = useConfirm();
+  const more = useRef<HTMLButtonElement>(null);
   const diff = comparing && shown && page.base ? wikiPlanDiff(shown, page.base) : null;
   const canEdit = !!shown && (shown.status === 'draft' || inForce) && wikiPlanNewest(plan)?.version === shown.version;
   const showsChanges = !!shown && shown.status !== 'superseded' && plan.proposals.length > 0;
@@ -339,10 +350,24 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
     }
   };
 
+  const onStartOver = (version: number) =>
+    void confirmStartOver({
+      title: WIKI_PLAN_START_OVER_TITLE,
+      description: wikiPlanStartOverText(version),
+      confirmText: WIKI_PLAN_START_OVER_GO,
+      cancelText: WIKI_PLAN_CANCEL,
+      onConfirm: async () => {
+        const answer = await draft.mutateAsync(undefined);
+        message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
+      },
+      returnFocus: more,
+    });
+
   const moreItems = [
     ...(shown && page.base && shown.version !== page.base.version
       ? [{ key: 'compare', label: comparing ? WIKI_PLAN_HIDE_COMPARE : wikiPlanCompare(page.base.version), onSelect: () => setComparing(!comparing) }]
       : []),
+    ...(startOver !== null ? [{ key: 'start-over', label: WIKI_PLAN_START_OVER, onSelect: () => onStartOver(startOver) }] : []),
   ];
 
   return (
@@ -402,7 +427,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
               </Button>
             )}
             {moreItems.length > 0 && (
-              <Menu items={moreItems} trigger={<Button icon={<EllipsisOutlined />} aria-label="More" />} />
+              <Menu items={moreItems} trigger={<Button ref={more} icon={<EllipsisOutlined />} aria-label="More" />} />
             )}
           </div>
         )}
@@ -432,7 +457,9 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         />
       )}
 
+      {startOverConfirmation}
       <PlanRedraftModal
+        key={page.failed?.id ?? 'no-failure'}
         open={redrafting}
         onClose={() => setRedrafting(false)}
         spaceId={spaceId}
@@ -1285,7 +1312,11 @@ function WikiPlanSectionPage({
 
 // ── Redraft… ───────────────────────────────────────────────────────────────────────────────────
 
-/** Redraft the plan (mock 21 ⑧, 22 ⑧): what to change, in the owner's words; empty is a fresh draft. */
+/**
+ * Redraft the plan (mock 21 ⑧, 22 ⑧): what to change, in the owner's words, which a version stored needs — a fresh draft
+ * over one is Start over…'s, and it says what it costs. It opens holding the words of the run that failed; a new failure
+ * makes a new one (its key), and anything else leaves what was typed.
+ */
 function PlanRedraftModal({
   open,
   onClose,
@@ -1300,7 +1331,7 @@ function PlanRedraftModal({
   protectedDocs: string[];
 }) {
   const message = useToast();
-  const [words, setWords] = useState('');
+  const [words, setWords] = useState(() => wikiPlanRedraftWords(plan));
   const field = useRef<HTMLTextAreaElement>(null);
   const redraft = useWikiWrite((instructions: string) => redraftWikiPlan(spaceId, instructions));
   const newest = wikiPlanNewest(plan);
@@ -1328,7 +1359,7 @@ function PlanRedraftModal({
       footer={
         <>
           <Button onClick={onClose}>{WIKI_PLAN_CANCEL}</Button>
-          <Button variant="primary" loading={redraft.isPending} onClick={() => void submit()}>
+          <Button variant="primary" loading={redraft.isPending} disabled={!wikiPlanRedraftReady(plan, words)} onClick={() => void submit()}>
             {WIKI_PLAN_REDRAFT_GO}
           </Button>
         </>

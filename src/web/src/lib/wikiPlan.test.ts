@@ -45,6 +45,7 @@ interface PlanFixture {
   docPages: Array<Record<string, unknown> & { version: number; slug: string }>;
   changes: Array<Record<string, unknown> & { proposal: string }>;
   counts: Record<string, Array<Record<string, unknown> & { says: string }>>;
+  doors: Array<{ about: string; spec: StateCase['spec']; words: string; ready: boolean; boxHolds: string; startOver: number | null }>;
   edit: {
     stored: WikiPlanVersion['docs'][number];
     input: unknown;
@@ -145,6 +146,9 @@ describe("the plan's words", () => {
       [P.WIKI_PLAN_DRAFTING, w.drafting],
       [P.WIKI_PLAN_HELD, w.held],
       [P.WIKI_PLAN_READY, w.ready],
+      [P.WIKI_PLAN_START_OVER, w.startOver],
+      [P.WIKI_PLAN_START_OVER_TITLE, w.startOverTitle],
+      [P.WIKI_PLAN_START_OVER_GO, w.startOverGo],
       [P.WIKI_PLAN_PASSED, w.passed],
       [P.WIKI_PLAN_WRITING, w.writing],
       [P.WIKI_PLAN_WRITING_NOW, w.writingNow],
@@ -226,6 +230,7 @@ describe("the plan's words", () => {
     for (const row of c.changeAdded) expect(P.wikiPlanChangeAdded(row.n as number)).toBe(row.says);
     for (const row of c.draftSaved) expect(P.wikiPlanDraftSaved(row.n as number)).toBe(row.says);
     for (const row of c.andMore) expect(P.wikiPlanAndMore(row.n as number)).toBe(row.says);
+    for (const row of c.startOverText) expect(P.wikiPlanStartOverText(row.version as number)).toBe(row.says);
   });
 
   it('are drawn in the fixture’s orders: the page, a document’s, a section’s, a change’s card, and the home’s looks', () => {
@@ -259,6 +264,17 @@ describe('the plan’s words that name a drafter', () => {
     expect(card.text.startsWith(`${served.plan.drafter} · attempt `)).toBe(true);
     expect(P.wikiPlanCard('drafting', drafting(), context).text).toContain(`Drafting the plan · ${served.plan.drafter} · attempt `);
   });
+});
+
+describe('the two doors to a new draft', () => {
+  for (const door of plan.doors) {
+    it(door.about, () => {
+      const state = stateOf(door.spec);
+      expect(P.wikiPlanRedraftReady(state, door.words)).toBe(door.ready);
+      expect(P.wikiPlanRedraftWords(state)).toBe(door.boxHolds);
+      expect(P.wikiPlanStartOver(state)).toBe(door.startOver);
+    });
+  }
 });
 
 describe('every state of the plan', () => {

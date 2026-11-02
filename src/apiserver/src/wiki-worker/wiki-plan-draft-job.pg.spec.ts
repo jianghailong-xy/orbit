@@ -891,6 +891,15 @@ test('what the server\'s gate finds goes back to the model, and what three round
   assert.deepEqual(section.sources.sessions.projects, [], 'the name goes');
   assert.ok(section.sources.sessions.keywords.length > 0, 'the rest of the condition stays');
   assert.deepEqual(page.body.draft.gate.notes, [{ check: 'references', text: 'A project name couldn’t be matched and was left out: App 项目.' }]);
+
+  // Its draft stored and its end not said: replayed, it meets the same refusals and is answered with the same version.
+  const job = await wikiJobOf(h, planJobId);
+  await h.sql.query(`UPDATE "wiki_plan_job" SET "state" = 'made', "outcome" = NULL, "version" = NULL, "ended_at" = NULL, "report" = NULL WHERE "id" = $1`, [planJobId]);
+  await h.sql.query(`UPDATE "wiki_job" SET "state" = 'queued', "ended_at" = NULL, "report" = NULL WHERE "id" = $1`, [job.id]);
+  const replayed = await drive(h, worker(h), planJobId, 60);
+  assert.equal(replayed.outcome, 'succeeded', replayed.error);
+  assert.equal(replayed.version, end.version, 'the version the first submission stored');
+  assert.equal((await versions(h, o.spaceId)).length, 2, 'and no other');
 });
 
 // ── 6. a revision ────────────────────────────────────────────────────────────────────────────────────
