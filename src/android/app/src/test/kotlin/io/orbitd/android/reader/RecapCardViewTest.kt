@@ -2,9 +2,14 @@ package io.orbitd.android.reader
 
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -91,5 +96,30 @@ class RecapCardViewTest {
         val more = compose.onNodeWithTag("recap-more").getUnclippedBoundsInRoot()
         assertTrue("the card gains a line under the words", row.bottom.value > text.bottom.value + 10f)
         assertEquals((text.bottom + row.bottom).value / 2, (more.top + more.bottom).value / 2, 0.5f)
+    }
+
+    /** A real touch, not a semantics press, at each edge of ⋮'s target: it hangs past the card it stands in, above and below a line
+     * and past the line's end, so nothing but the hit test says those parts answer. In the reader's own list, between two items. */
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun aTouchAnywhereOnTheTargetOpensTheMenuThoughItHangsPastTheCard() {
+        compose.setContent {
+            OrbitTheme {
+                LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item { Text("The reply above.") }
+                    item { RecapCardView(card.copy(text = "Done.", whenWritten = null), refreshing = false, onRefresh = {}, onHide = {}) }
+                    item { Text("The next item.") }
+                }
+            }
+        }
+        val more = compose.onNodeWithTag("recap-more")
+        val edges: List<Pair<String, TouchInjectionScope.() -> Offset>> = listOf(
+            "the middle" to { center }, "the top" to { topCenter + Offset(0f, 1f) }, "the bottom" to { bottomCenter - Offset(0f, 1f) },
+            "the left" to { centerLeft + Offset(1f, 0f) }, "the right" to { centerRight - Offset(1f, 0f) })
+        edges.forEach { (edge, at) ->
+            more.performTouchInput { click(at()) }
+            compose.onNodeWithText("Refresh recap").assertExists("a touch at $edge of ⋮ opened no menu")
+            // Its item closes it; `onHide` here does nothing, so the card stays for the next touch.
+            compose.onNodeWithText("Hide recap").performClick()
+            compose.onNodeWithText("Refresh recap").assertDoesNotExist()
+        }
     }
 }
