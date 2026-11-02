@@ -465,9 +465,12 @@ func registerCommand(args []string) {
 
 func cmdRegister(flags map[string]string, bools map[string]bool) {
 	// Before anything is asked of the control plane or of a person (checkConfigStorage).
-	ensureOwnedByUser(machineHome())
 	if err := checkConfigStorage(); err != nil {
-		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered.\n", machineHome(), err)
+		who := "this account"
+		if u, err := registeringUser(); err == nil {
+			who = u.Username
+		}
+		fmt.Fprintf(os.Stderr, "orbit register: cannot keep the runner's config in %s: %v\nNothing was registered. If an earlier sudo left it to root: sudo chown -R %s %s\n", machineHome(), err, who, machineHome())
 		os.Exit(1)
 	}
 	// One runner per machine. Re-registering re-issues its credential, so confirm
@@ -804,6 +807,12 @@ func unregisterCommand(args []string) {
 func cmdUnregister(bools map[string]bool) {
 	cfg := loadConfig()
 	if cfg == nil {
+		// A service that names this home and finds no config in it exits at every start: an unregister
+		// that could not remove it left it so, and running again is how to finish.
+		if u, err := registeringUser(); err == nil && serviceNamesMachineHome(runtime.GOOS, u) {
+			uninstallService()
+			return
+		}
 		fmt.Println("no runner registered on this machine")
 		return
 	}

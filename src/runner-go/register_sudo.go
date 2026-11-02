@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -23,7 +24,7 @@ import (
 //
 // As the account, register writes the credential into the account's own ~/.orbit itself, so root
 // follows no link there, and asks for root only for the system service: through sudo, or from hostd
-// on a set-up host. install.sh hands register over the same way under `curl … | sudo bash`.
+// on a set-up host. install.sh hands register to the account as well under `curl … | sudo bash`.
 // unregister goes along, so that it finds the config register wrote and removes that account's unit.
 
 // sudoHandOffEnv is what of root's environment the account's command still reads, and sudo would
@@ -49,7 +50,11 @@ func sudoAccount() (*user.User, bool) {
 	u, err := lookupUser(name)
 	if err != nil {
 		// A release build reads /etc/passwd alone, where an LDAP or SSSD account is not. Going on as
-		// root would give it a root runner; sudo can still switch to it by name.
+		// root would give it a root runner; sudo can still switch to it by name. One the system does
+		// not know either, a SUDO_USER a shell or an image inherited, is no hand-off.
+		if !accountKnownToSystem(name) {
+			return nil, false
+		}
 		return &user.User{Username: name}, true
 	}
 	if u.Uid == "0" {
@@ -58,10 +63,27 @@ func sudoAccount() (*user.User, bool) {
 	return u, true
 }
 
-// handedOffBySudo reports whether this process is such a command's account side: not root, started by
-// root through sudo. Someone asked for this with root in hand, install.sh included.
+// accountKnownToSystem asks the system's own id, which goes through NSS, whether name is an account
+// other than root. A var so a test can answer for an account the machine does not have.
+var accountKnownToSystem = func(name string) bool {
+	for _, id := range []string{"/usr/bin/id", "/bin/id"} {
+		if _, err := os.Stat(id); err == nil {
+			out, err := exec.Command(id, "-u", "--", name).Output()
+			return err == nil && strings.TrimSpace(string(out)) != "0"
+		}
+	}
+	return false
+}
+
+// sudoHandOffMark is set for a command handed to the account, by this hand-off (sudoHandOffEnviron).
+const sudoHandOffMark = "ORBIT_SUDO_HANDOFF"
+
+// handedOffBySudo reports whether this process is such a command's account side, install.sh's included:
+// someone asked for this with root in hand. Root's own `sudo -u svc orbit register` is not one: that is a
+// plain registration of svc's, as far as anyone asked.
 func handedOffBySudo() bool {
-	return processEUID() != 0 && os.Getenv("SUDO_USER") == "root"
+	return processEUID() != 0 && os.Getenv("SUDO_USER") == "root" &&
+		(os.Getenv(sudoHandOffMark) == "1" || os.Getenv("ORBIT_INSTALL_PLAN") == "1")
 }
 
 // sudoHandOffArgv is the command line that runs exe with args as account: sudo -H gives it the account's
@@ -78,7 +100,7 @@ func sudoHandOffArgv(sudo, account, exe string, args []string) []string {
 // hold anything, for a binary that may be the account's to replace. sudo drops what it always drops
 // (LD_*) and sets USER, LOGNAME and HOME for the account.
 func sudoHandOffEnviron() []string {
-	var env []string
+	env := []string{sudoHandOffMark + "=1"}
 	for _, k := range append([]string{"PATH", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "DISPLAY", "WAYLAND_DISPLAY"}, sudoHandOffEnv...) {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
@@ -150,6 +172,11 @@ func handOffUnderSudo(args []string) bool {
 	}
 	fmt.Fprintf(os.Stderr, "note: under sudo, `orbit %s` runs as %s, the account that ran sudo and the one its runner runs as%s.\n",
 		args[0], account.Username, where)
+	if root, err := lookupUser("root"); err == nil {
+		if config := filepath.Join(root.HomeDir, ".orbit", "config.json"); fileExists(config) {
+			fmt.Fprintf(os.Stderr, "note: root's home holds a runner's config too, %s, which this leaves as it is. For that runner: sudo -i env -u SUDO_USER orbit %s\n", config, args[0])
+		}
+	}
 	// main put this process's own engine directories first on PATH, for root's commands. They are
 	// nothing to the account, and where sudo keeps PATH (macOS, a sudoers with no secure_path) the
 	// account's register would bake them into its service's PATH.
@@ -161,43 +188,66 @@ func handOffUnderSudo(args []string) bool {
 }
 
 // stayRootForRunnerLeftInRootsHome points this process at a runner an older `sudo orbit register` left
-// in root's home, and reports whether there is one. Unregister has to read that runner's credential to
-// delete it, and only root can: it is the service the incident's register installed for the account,
-// with ORBIT_HOME in /root, or on macOS an agent root loaded from its own LaunchAgents. Handed to the
-// account, unregister would find no runner and leave that service running, so this one stays root's,
-// on the system's own PATH, past the broker, which answers uid 0 about root's own instance.
+// in root's home, and reports whether there is one (runnerLeftInRootsHome). Unregister has to read that
+// runner's credential to delete it, and only root can. Handed to the account, it would find no runner and
+// leave that service running, so this one stays root's, on the system's own PATH, past the broker, which
+// answers uid 0 about root's own instance.
 func stayRootForRunnerLeftInRootsHome() bool {
 	account, ok := sudoAccount()
 	if !ok {
 		return false
 	}
 	root, err := lookupUser("root")
-	if err != nil {
+	if err != nil || !runnerLeftInRootsHome(runtime.GOOS, account, root) {
 		return false
 	}
 	home := filepath.Join(root.HomeDir, ".orbit")
-	if _, err := os.Stat(filepath.Join(home, "config.json")); err != nil {
-		return false
-	}
-	switch runtime.GOOS {
-	case "linux":
-		unit, err := os.ReadFile(filepath.Join(serviceUnitDir, systemdServiceFor(account.Username)+".service"))
-		if err != nil || !strings.Contains(string(unit), "\nEnvironment=ORBIT_HOME="+home+"\n") {
-			return false
-		}
-	case "darwin":
-		if _, err := os.Stat(launchAgentPath(root.HomeDir)); err != nil {
-			return false
-		}
-	default:
-		return false
-	}
 	fmt.Fprintf(os.Stderr, "note: this runner's config is in %s, where an older `sudo orbit register` left it and only root can reach it, so `orbit unregister` stays root for this one.\n", home)
 	_ = os.Setenv("HOME", root.HomeDir)
 	_ = os.Setenv("ORBIT_HOME", home)
 	_ = os.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 	serviceBrokerSocket = ""
 	return true
+}
+
+// runnerLeftInRootsHome reports whether account's runner is one an older `sudo orbit register` left in
+// root's home. A config there, and on Linux the account's unit naming it as ORBIT_HOME, which is what that
+// register installed. A Mac cannot tell: that register's agent is in root's own LaunchAgents, as a runner
+// root registered for itself is, so there it takes an account with no runner of its own to be the one
+// asking about this one.
+func runnerLeftInRootsHome(goos string, account, root *user.User) bool {
+	home := filepath.Join(root.HomeDir, ".orbit")
+	if !fileExists(filepath.Join(home, "config.json")) {
+		return false
+	}
+	switch goos {
+	case "linux":
+		unit, err := os.ReadFile(filepath.Join(serviceUnitDir, systemdServiceFor(account.Username)+".service"))
+		return err == nil && strings.Contains(string(unit), "\nEnvironment=ORBIT_HOME="+home+"\n")
+	case "darwin":
+		return fileExists(launchAgentPath(root.HomeDir)) && !fileExists(filepath.Join(account.HomeDir, ".orbit", "config.json"))
+	}
+	return false
+}
+
+// serviceNamesMachineHome reports whether the service definition of this account's runner, whatever is or
+// is not left of its config, names this process's machineHome as its runner home.
+func serviceNamesMachineHome(goos string, u *user.User) bool {
+	home := machineHome()
+	switch goos {
+	case "linux":
+		unit, err := os.ReadFile(filepath.Join(serviceUnitDir, systemdServiceFor(u.Username)+".service"))
+		return err == nil && strings.Contains(string(unit), "\nEnvironment=ORBIT_HOME="+home+"\n")
+	case "darwin":
+		plist, err := os.ReadFile(launchAgentPath(userHome()))
+		return err == nil && strings.Contains(string(plist), "<key>ORBIT_HOME</key><string>"+home+"</string>")
+	}
+	return false
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // registerCwd is the directory this registration says it ran in, or nothing when this account cannot

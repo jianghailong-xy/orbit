@@ -45,8 +45,11 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 	processEUID = func() int { return 0 }
 	currentUser = func() (*user.User, error) { return root, nil }
 	lookupUser = func(name string) (*user.User, error) {
-		if name == account.Username {
+		switch name {
+		case account.Username:
 			return account, nil
+		case root.Username:
+			return root, nil
 		}
 		return user.Lookup(name)
 	}

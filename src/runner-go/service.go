@@ -130,7 +130,7 @@ func uninstallSystemd() {
 	// Also a leftover legacy single-runner unit, but only if it's this user's.
 	legacy := svc != systemdService && unitRunsAsUser(systemdService, username)
 	if processEUID() != 0 {
-		removeUnitsThroughSudo(svc, legacy)
+		removeUnitsThroughSudo(svc, username, legacy)
 		return
 	}
 	runQuiet("systemctl", "disable", "--now", svc)
@@ -143,17 +143,28 @@ func uninstallSystemd() {
 	fmt.Printf("✓ removed the %s service\n", svc)
 }
 
-// removeUnitsThroughSudo is uninstallSystemd for an account: nothing at all when it has no unit
-// (--no-service, or one already gone), and it says it removed one only when sudo did.
-func removeUnitsThroughSudo(svc string, legacy bool) {
+// removeUnitsThroughSudo is uninstallSystemd for an account: it asks root for nothing when the account has
+// no unit (--no-service, or one already gone), and says it removed a unit only when sudo did. With a unit,
+// both steps are tried whatever became of the other: a systemctl that cannot reach systemd still leaves a
+// file to take away.
+func removeUnitsThroughSudo(svc, username string, legacy bool) {
 	var units []string
-	if _, err := os.Stat(filepath.Join(serviceUnitDir, svc+".service")); err == nil {
+	if fileExists(filepath.Join(serviceUnitDir, svc+".service")) {
 		units = append(units, svc)
 	}
 	if legacy {
 		units = append(units, systemdService)
 	}
 	if len(units) == 0 {
+		// On a set-up host the runner is an instance of the machine's template, which only the broker
+		// takes down without root, and it did not (uninstallServiceLinux brought this here).
+		if template := (hostdSystem{unitDir: serviceUnitDir}); fileExists(filepath.Join(serviceUnitDir, filepath.Base(hostRunnerTemplatePath))) {
+			instance := unitForUid(uint32(os.Getuid()))
+			if template.namesInstances() {
+				instance = unitForAccount(username)
+			}
+			fmt.Fprintf(os.Stderr, "note: the machine broker did not take down this account's runner — run: sudo systemctl disable --now %s\n", instance)
+		}
 		return
 	}
 	sudo, err := exec.LookPath("sudo")
@@ -162,17 +173,19 @@ func removeUnitsThroughSudo(svc string, legacy bool) {
 		return
 	}
 	if interactive() {
-		fmt.Printf("\nRemoving the %s service needs root — you may be prompted for your password.\n", svc)
+		fmt.Printf("\nRemoving the %s service needs root — you may be prompted for your password.\n", units[0])
 	}
 	for _, unit := range units {
 		path := filepath.Join(serviceUnitDir, unit+".service")
-		if run(sudo, "systemctl", "disable", "--now", unit) != nil || run(sudo, "rm", "-f", path) != nil {
+		disabled := run(sudo, "systemctl", "disable", "--now", unit) == nil
+		removed := run(sudo, "rm", "-f", path) == nil
+		if disabled && removed {
+			fmt.Printf("✓ removed the %s service\n", unit)
+		} else {
 			fmt.Fprintf(os.Stderr, "note: could not remove the %s service — run: sudo systemctl disable --now %s && sudo rm -f %s\n", unit, unit, path)
-			return
 		}
 	}
 	_ = run(sudo, "systemctl", "daemon-reload")
-	fmt.Printf("✓ removed the %s service\n", svc)
 }
 
 // sudoUsable reports whether this process can get root through sudo: at a terminal sudo can

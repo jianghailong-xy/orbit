@@ -334,6 +334,7 @@ func TestRegisterReceiptUnderSudoSaysWhoseCommandsTheyAre(t *testing.T) {
 	processEUID = func() int { return 4242 }
 	currentUser = func() (*user.User, error) { return account, nil }
 	cfg := &RunnerConfig{Name: "c2b-load-2", ServerURL: "https://orbitd.io", RunnerID: registerTestRunnerID}
+	t.Setenv(sudoHandOffMark, "1")
 	for sudoUser, want := range map[string]string{
 		"root": "orbit status · orbit doctor · orbit unregister (as c2b)\n",
 		"":     "orbit status · orbit doctor · orbit unregister\n",

@@ -114,6 +114,9 @@ func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 	root := &user.User{Uid: "0", Gid: "0", Username: "root", Name: "root", HomeDir: t.TempDir()}
 	pretendRegisterHost(t, func() {})
 	fakeAccounts(t, account, root)
+	prevKnown := accountKnownToSystem
+	t.Cleanup(func() { accountKnownToSystem = prevKnown })
+	accountKnownToSystem = func(string) bool { return false }
 	t.Setenv("SUDO_USER", "c2b")
 	for _, k := range sudoHandOffEnvForTest {
 		t.Setenv(k, "")
@@ -222,6 +225,19 @@ func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 		t.Fatalf("with no unit, unregister ran %q and printed:\n%s", *commands, out)
 	}
 
+	// On a set-up host whose broker did not answer, the runner is an instance only root can stop now.
+	template := filepath.Join(unitDir, filepath.Base(hostRunnerTemplatePath))
+	if err := os.WriteFile(template, []byte("[Service]\nUser=%I\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = captureServiceOutput(t, uninstallSystemd)
+	if want := "note: the machine broker did not take down this account's runner — run: sudo systemctl disable --now orbit-runner@c2b.service"; len(*commands) != 0 || !strings.Contains(out, want) {
+		t.Fatalf("with a template and no unit, unregister ran %q and printed:\n%s", *commands, out)
+	}
+	if err := os.Remove(template); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := os.WriteFile(unitPath, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +254,8 @@ func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 		t.Errorf("unregister printed:\n%s", out)
 	}
 
-	// A sudo that refuses: the password mistyped, sudoers that do not allow it.
+	// A sudo that refuses, the password mistyped, or a systemctl with no systemd to reach: every step is
+	// still tried, and nothing is claimed.
 	recorded := run
 	run = func(name string, args ...string) error {
 		_ = recorded(name, args...)
@@ -246,10 +263,13 @@ func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 	}
 	*commands = nil
 	out = captureServiceOutput(t, uninstallSystemd)
+	run = recorded
+	if !slices.Equal(*commands, want) {
+		t.Errorf("unregister with a failing sudo ran %q, want every step: %q", *commands, want)
+	}
 	if strings.Contains(out, "✓ removed") || !strings.Contains(out, "note: could not remove the orbit-runner-c2b service — run: sudo systemctl disable --now orbit-runner-c2b && sudo rm -f "+unitPath) {
 		t.Errorf("unregister with a sudo that refuses printed:\n%s", out)
 	}
-	run = recorded
 
 	// A sudo that would ask for a password, with no terminal to ask at.
 	if err := os.WriteFile(sudo, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
@@ -259,6 +279,46 @@ func TestUnregisterRemovesTheAccountsUnitThroughSudo(t *testing.T) {
 	out = captureServiceOutput(t, uninstallSystemd)
 	if len(*commands) != 0 || !strings.Contains(out, "note: removing the systemd service needs root — run: sudo systemctl disable --now orbit-runner-c2b") {
 		t.Fatalf("unregister without a usable sudo ran %q and printed:\n%s", *commands, out)
+	}
+}
+
+// An unregister that could not take the unit down left it restarting with no config. Running again finishes
+// the job, for the unit that names this home and no other: an ORBIT_HOME with no runner in it, a trial one,
+// is no reason to stop the account's real runner.
+func TestUnregisterFinishesAServiceLeftWithNoConfig(t *testing.T) {
+	account := &user.User{Uid: "4242", Gid: "4242", Username: "c2b", Name: "c2b", HomeDir: t.TempDir()}
+	unitDir := pretendRegisterHost(t, func() {})
+	t.Setenv("SUDO_USER", "")
+	t.Setenv("HOME", account.HomeDir)
+	orbitHome := filepath.Join(account.HomeDir, ".orbit")
+	t.Setenv("ORBIT_HOME", orbitHome)
+	prevEUID, prevCurrent := processEUID, currentUser
+	t.Cleanup(func() { processEUID, currentUser = prevEUID, prevCurrent })
+	processEUID = func() int { return 4242 }
+	currentUser = func() (*user.User, error) { return account, nil }
+	sudo, err := exec.LookPath("sudo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := filepath.Join(unitDir, "orbit-runner-c2b.service")
+	if err := os.WriteFile(unit, []byte(renderSystemdUnit("c2b", "c2b", "/x/orbit", account.HomeDir, orbitHome, "/usr/bin", nil)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	commands := recordCommands(t)
+
+	t.Setenv("ORBIT_HOME", filepath.Join(account.HomeDir, ".orbit-trial"))
+	out := captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
+	if len(*commands) != 0 || !strings.Contains(out, "no runner registered on this machine") {
+		t.Fatalf("with another ORBIT_HOME, unregister ran %q and printed:\n%s", *commands, out)
+	}
+
+	t.Setenv("ORBIT_HOME", orbitHome)
+	out = captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
+	if want := sudo + " systemctl disable --now orbit-runner-c2b"; len(*commands) == 0 || (*commands)[0] != want {
+		t.Fatalf("unregister ran %q, want %q first; printed:\n%s", *commands, want, out)
+	}
+	if strings.Contains(out, "no runner registered") {
+		t.Errorf("unregister printed:\n%s", out)
 	}
 }
 
@@ -283,15 +343,23 @@ func TestRegisterUnderSudoCountsAServiceItCouldNotInstallAsNotOnline(t *testing.
 	currentUser = func() (*user.User, error) { return account, nil }
 	cfg := &RunnerConfig{ServerURL: cp.URL, RunnerID: registerTestRunnerID, RunnerToken: cp.token, Name: "c2b-load-2"}
 
-	for sudoUser, want := range map[string]registerOutcome{"root": serviceNotOnline, "": registeredOnly} {
-		t.Setenv("SUDO_USER", sudoUser)
+	for _, tc := range []struct {
+		name, sudoUser, mark string
+		want                 registerOutcome
+	}{
+		{"handed off", "root", "1", serviceNotOnline},
+		{"root's own sudo -u", "root", "", registeredOnly},
+		{"a plain account", "", "", registeredOnly},
+	} {
+		t.Setenv("SUDO_USER", tc.sudoUser)
+		t.Setenv(sudoHandOffMark, tc.mark)
 		var outcome registerOutcome
 		out := captureServiceOutput(t, func() { outcome = startService(cfg, nil) })
-		if outcome != want {
-			t.Errorf("SUDO_USER=%q: outcome = %v, want %v", sudoUser, outcome, want)
+		if outcome != tc.want {
+			t.Errorf("%s: outcome = %v, want %v", tc.name, outcome, tc.want)
 		}
 		if wantLine := "✗ Could not start the background service: installing the systemd service needs root, and c2b has no sudo that works without a terminal: run this at a terminal"; !strings.Contains(out, wantLine) {
-			t.Errorf("SUDO_USER=%q: output lacks %q:\n%s", sudoUser, wantLine, out)
+			t.Errorf("%s: output lacks %q:\n%s", tc.name, wantLine, out)
 		}
 	}
 }
