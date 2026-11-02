@@ -90,7 +90,9 @@ struct RecapCardView: View {
                 .focused($focused)
             }
             .overlay { if refreshing { ProgressView().controlSize(.small) } }
-            .opacity(controlsShown ? 1 : 0)
+            // Not quite 0: SwiftUI drops a wholly transparent view from the accessibility tree, and a
+            // screen reader has no pointer to bring it back with.
+            .opacity(controlsShown ? 1 : 0.001)
             .allowsHitTesting(controlsShown)
             .padding(.trailing, -8)
     }
