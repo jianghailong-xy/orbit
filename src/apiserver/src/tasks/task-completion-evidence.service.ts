@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
+import { settleCitedFileExpiry } from '../files/file-retention';
 import { FilesService, type EvidenceFileList } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -398,13 +399,29 @@ export class TaskCompletionEvidenceService {
           include: evidenceInclude,
         });
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
-        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8).
+        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
+        // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
+        // for this commit or has already written the tombstone this finds.
         if (fileIds.length > 0) {
-          await tx.attachment.updateMany({
-            where: { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] },
-            data: { evidenceId: evidence.id },
+          const cited = { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] };
+          await tx.attachment.updateMany({ where: { ...cited, expiredAt: null }, data: { evidenceId: evidence.id } });
+          const expired = await tx.attachment.findMany({
+            where: { ...cited, expiredAt: { not: null } },
+            select: { fileName: true },
+            take: 5,
           });
+          if (expired.length > 0) {
+            throw new ConflictException({
+              code: 'EVIDENCE_FILE_EXPIRED',
+              message:
+                `evidence.checks cites a file that has expired (${expired.map(({ fileName }) => fileName ?? 'a pasted image').join(', ')}); `
+                + 'nothing was written. Upload it again and cite the new id, or pin the file first if its bytes are still kept',
+              requiredAction: 'UPLOAD_THE_FILE_AGAIN',
+            });
+          }
         }
+        // This version holds what it cites, and the one before it no longer does.
+        await settleCitedFileExpiry(tx, { ownerId, taskId });
       }
 
       if (idempotencyKey) {
@@ -647,6 +664,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
       });
@@ -814,6 +832,8 @@ export class TaskCompletionEvidenceService {
         },
         include: decisionInclude,
       });
+      // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
+      await settleCitedFileExpiry(tx, { ownerId, taskId });
 
       // The derivation, and the only thing this door writes outside its own row. It asks the
       // task's OWN declared criterion: evidence submitted against an EXECUTABLE or VERIFICATION

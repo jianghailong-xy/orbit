@@ -16,6 +16,8 @@
 # set the loop also mirrors it to another machine over ssh — the only copy that survives
 # losing this disk. The attachment files go with it: Postgres only names their bytes, which
 # are in the files directory (docs/orbit-files-design.md §2.10), mounted here read-only.
+# Before the mirror's --delete it reads the target, and leaves one that holds another cluster's
+# archive alone. The files copy is pruned by name, of bytes the database says have gone.
 set -eu
 
 ARCHIVE_DIR="${ORBIT_ARCHIVE_DIR:-/archive}"
@@ -35,6 +37,13 @@ SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
 # archive mirror's --delete would remove them.
 FILES_DIR="${ORBIT_FILES_DIR:-/var/lib/orbit/files}"
 FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"
+# The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
+FILES_DB=orbit
+# When the off-host files copy was last pruned: at most once per interval, since it lists the whole copy.
+LAST_PRUNE=0
+# Whether this round's mirror went through. The files copy is pruned only then, so never on behalf of a
+# cluster that target refused.
+MIRRORED=no
 # Backups are due on the interval; the loop wakes at least every 15 minutes so a run
 # skipped for disk space retries without waiting a whole day.
 if [ "$INTERVAL" -lt 900 ]; then POLL="$INTERVAL"; else POLL=900; fi
@@ -101,9 +110,111 @@ sync_ready() {
   fi
 }
 
+# One directory of the target, as `rsync --list-only` prints it: "<mode> <size> <date> <time> <name>".
+# Exit 23 is rsync finding nothing at that path, which is what a first install looks like, so it
+# answers as an empty directory. Any other failure says why on the way out, and answers non-zero.
+list_target() {
+  if listing="$(rsync --list-only --timeout=600 -e "ssh $ssh_opts" "$1" 2>&1)"; then
+    printf '%s\n' "$listing"
+    return 0
+  else
+    status=$?
+  fi
+  [ "$status" -eq 23 ] && return 0
+  printf '%s\n' "$listing" | tr '\n' ' ' | tail -c 300
+  return 1
+}
+
+# The lines of a listing that are finished WAL segments: 24 hex digits, the timeline first, so that
+# their names sort in the order Postgres wrote them.
+segment_lines() { grep -E ' [0-9A-F]{24}\.gz$' || true; }
+
+# The name of the newest segment in such lines.
+newest_segment() { awk '{print $NF}' | LC_ALL=C sort | tail -n1; }
+
+# The system identifier in a gzipped segment's first page (XLogLongPageHeaderData.xlp_sysid: 8 bytes
+# at offset 24), printed as pg_control_system() prints it. initdb chooses one for a new cluster, and a
+# restored cluster keeps it on every timeline, so it says whose a segment is with nothing written anywhere.
+segment_system_id() { gzip -dc "$1" 2>/dev/null | head -c 32 | od -An -tu8 -j24 -N8 | tr -d ' \n'; }
+
+# What an operator can do about a refused target, for the end of a log line.
+replace_target_advice() {
+  printf '%s' "If this host replaces the old one, restore from the target first (docs/postgres-backup-restore.md, Restore on a replacement host). If that archive really is to go, move it aside on the backup host and the next poll syncs as a first install."
+}
+
+# Whether the target is this cluster's to overwrite. The mirror's --delete removes whatever this archive
+# does not hold, and a new cluster has a real base backup and real WAL of its own: one started by
+# `docker compose up -d` before a restore would replace the only copy of the old cluster's history.
+# Asked of what any mirror already holds, so it needs no marker there and works for one that predates it:
+#   - nothing Postgres wrote: a first install;
+#   - a segment both sides hold with the same mode, size and time, which is rsync's own test for one file;
+#   - otherwise the system identifier in one of its segments, the smallest, which costs the least to fetch.
+# Every refusal is logged, and leaves the target as it was. Moving the old mirror aside on the backup host
+# is how an operator replaces it on purpose: an empty target is a first install.
+target_is_ours() {
+  if ! remote_wal="$(list_target "$SYNC_TARGET/wal/")"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_wal"
+    return 1
+  fi
+  remote_segments="$(printf '%s\n' "$remote_wal" | segment_lines)"
+  if [ -z "$remote_segments" ]; then
+    # A first sync cut short has a base backup of ours there and no WAL yet. One of someone else's is not ours.
+    if ! remote_base="$(list_target "$SYNC_TARGET/base/")"; then
+      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
+      return 1
+    fi
+    for stamp in $(printf '%s\n' "$remote_base" | awk '{print $NF}' | grep -E '^[0-9]{8}T[0-9]{6}Z$' || true); do
+      if ! list_backups | grep -qx "$stamp"; then
+        log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backup $stamp, which is not in $ARCHIVE_DIR, and no WAL to tell whose it is, and --delete would remove it. $(replace_target_advice)"
+        return 1
+      fi
+    done
+    return 0
+  fi
+
+  if ! here="$(psql -Atc 'select system_identifier from pg_control_system()' 2>&1)"; then
+    log "ERROR: off-host sync to $SYNC_TARGET skipped: could not read this cluster's system identifier: $(printf '%s' "$here" | tr '\n' ' ' | tail -c 200)"
+    return 1
+  fi
+  local_segments="$(rsync --list-only "$WAL_DIR/" | segment_lines)"
+  newest_here="$(printf '%s\n' "$local_segments" | newest_segment)"
+  newest_there="$(printf '%s\n' "$remote_segments" | newest_segment)"
+  # Old WAL copied back under a new cluster: its segments would pass as the target's own below.
+  archived="$(segment_system_id "$WAL_DIR/$newest_here")"
+  if [ "$archived" != "$here" ]; then
+    log "ERROR: refusing off-host sync to $SYNC_TARGET: the newest WAL in $ARCHIVE_DIR ($newest_here) belongs to cluster ${archived:-unknown}, and this one is $here, and --delete would carry that to the target. $(replace_target_advice)"
+    return 1
+  fi
+
+  scratch="$(mktemp -d)"
+  printf '%s\n' "$local_segments" > "$scratch/here"
+  if ! printf '%s\n' "$remote_segments" | grep -Fxq -f "$scratch/here"; then
+    smallest="$(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n1 | awk '{print $NF}')"
+    if ! out="$(rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$smallest" "$scratch/segment" 2>&1)"; then
+      rm -rf "$scratch"
+      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $smallest from the target: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+      return 1
+    fi
+    there="$(segment_system_id "$scratch/segment")"
+    if [ "$there" != "$here" ]; then
+      rm -rf "$scratch"
+      log "ERROR: refusing off-host sync to $SYNC_TARGET: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
+      return 1
+    fi
+  fi
+  rm -rf "$scratch"
+
+  # This cluster's, and further on than this archive: a timeline or a segment this archive has never held.
+  if [ "$(printf '%s\n%s\n' "$newest_here" "$newest_there" | LC_ALL=C sort | tail -n1)" != "$newest_here" ]; then
+    log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds WAL newer than $ARCHIVE_DIR (newest segment $newest_there there, $newest_here here), and --delete would remove it. $(replace_target_advice)"
+    return 1
+  fi
+}
+
 # Mirror the archive to another machine. Runs every poll rather than only after a base
 # backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
 sync_archive() {
+  MIRRORED=no
   # A real archive holds a base backup and the WAL Postgres writes to it. Anything less is an
   # empty or wrong mount, say a recreate from another checkout, and --delete would clear the only
   # off-host copy. WAL too because this loop has already taken a base backup by now, even there.
@@ -111,6 +222,7 @@ sync_archive() {
     log "ERROR: refusing off-host sync to $SYNC_TARGET: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
     return 1
   fi
+  target_is_ours || return 1
   # --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
@@ -119,6 +231,7 @@ sync_archive() {
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
     return 1
   fi
+  MIRRORED=yes
   changed="$(printf '%s\n' "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
 }
@@ -134,8 +247,8 @@ sync_files() {
     return 0
   fi
   # No --delete: a Postgres backup still retained may name bytes the live database has let go
-  # of, so this copy only ever grows (docs/postgres-backup-restore.md). tmp/ is uploads still
-  # arriving.
+  # of, so what goes from this copy goes by name, in prune_files (docs/postgres-backup-restore.md).
+  # tmp/ is uploads still arriving.
   if ! out="$(rsync -a --timeout=600 --itemize-changes --exclude '/tmp/' \
        -e "ssh $ssh_opts" "$FILES_DIR/" "$FILES_SYNC_TARGET/" 2>&1)"; then
     log "ERROR: off-host sync to $FILES_SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
@@ -143,6 +256,67 @@ sync_files() {
   fi
   changed="$(printf '%s\n' "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $FILES_SYNC_TARGET"
+}
+
+# Remove from the files copy the bytes the database says went from here a grace period ago, by name
+# (file_blob.off_host_prune_at, which the apiserver's retention sweep writes one grace period after it
+# deleted them, so that no database a retained backup can restore still expects them there). Nothing
+# here depends on what the files directory holds, so an empty or unmounted one cannot empty the copy: the
+# names come from the database, each is removed only if it is on the target and not back here (an upload
+# of the same content), and an empty directory stops it anyway, since something is wrong with this host.
+# At most once per base backup interval, because it lists the whole copy.
+prune_files() {
+  [ "$MIRRORED" = yes ] || return 0
+  now="$(date -u +%s)"
+  [ "$((now - LAST_PRUNE))" -ge "$INTERVAL" ] || return 0
+  if ! due="$(psql -d "$FILES_DB" -Atc "select sha256 from file_blob where off_host_prune_at <= now() at time zone 'utc'" 2>&1)"; then
+    log "WARN: not pruning $FILES_SYNC_TARGET: could not read which files have gone: $(printf '%s' "$due" | tr '\n' ' ' | tail -c 200)"
+    return 1
+  fi
+  LAST_PRUNE="$now"
+  due="$(printf '%s\n' "$due" | grep -E '^[0-9a-f]{64}$' || true)"
+  [ -n "$due" ] || return 0
+  if [ ! -d "$FILES_DIR" ] || [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then
+    log "ERROR: refusing to prune $FILES_SYNC_TARGET: $FILES_DIR is empty or not mounted"
+    return 1
+  fi
+  if listed="$(rsync -r --list-only --timeout=600 -e "ssh $ssh_opts" "$FILES_SYNC_TARGET/" 2>&1)"; then
+    :
+  else
+    status=$?
+    # No copy there yet, and so nothing to prune.
+    [ "$status" -eq 23 ] && return 0
+    log "ERROR: pruning $FILES_SYNC_TARGET failed: could not list it: $(printf '%s' "$listed" | tr '\n' ' ' | tail -c 300)"
+    return 1
+  fi
+  scratch="$(mktemp -d)"
+  mkdir "$scratch/none"
+  printf '%s\n' "$listed" | awk '{print $NF}' | LC_ALL=C sort > "$scratch/there"
+  printf '%s\n' "$due" | awk '{print substr($0, 1, 2) "/" $0}' | LC_ALL=C sort > "$scratch/due"
+  count=0
+  # The database keeps naming what has gone, so most of these are long gone from the copy too.
+  for file in $(LC_ALL=C comm -12 "$scratch/due" "$scratch/there"); do
+    [ ! -e "$FILES_DIR/$file" ] || continue
+    mkdir -p "$scratch/none/${file%/*}"
+    printf '+ /%s/\n+ /%s\n' "${file%/*}" "$file" >> "$scratch/rules"
+    count=$((count + 1))
+  done
+  if [ "$count" -eq 0 ]; then
+    rm -rf "$scratch"
+    return 0
+  fi
+  # A source holding only the empty directories of these names, so that --delete looks inside those and
+  # keeps them. Every other name is excluded, which --delete leaves alone, and --max-delete says how many
+  # this can be whatever the rules turn out to match.
+  echo '- *' >> "$scratch/rules"
+  if ! out="$(rsync -r --delete --max-delete="$count" --filter="merge $scratch/rules" --timeout=600 \
+       -e "ssh $ssh_opts" "$scratch/none/" "$FILES_SYNC_TARGET/" 2>&1)"; then
+    rm -rf "$scratch"
+    log "ERROR: pruning $FILES_SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+    return 1
+  fi
+  rm -rf "$scratch"
+  log "pruned $count file(s) from $FILES_SYNC_TARGET"
 }
 
 take_backup() {
@@ -216,6 +390,7 @@ while :; do
   if sync_ready; then
     sync_archive || true
     sync_files || true
+    prune_files || true
   fi
   sleep "$POLL"
 done
