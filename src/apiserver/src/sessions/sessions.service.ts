@@ -164,7 +164,8 @@ import {
   mergeStatusForResult,
 } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
-import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
+import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { FilesService } from '../files/files.service';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
@@ -794,7 +795,17 @@ export class SessionsService {
      * by hand, which is the same.
      */
     @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
-  ) {}
+    /**
+     * Where attachment bytes are kept and read (files/files.service.ts): a worktree file a runner sent
+     * for preview, a legacy artifact. Nest's one instance; the specs that build this service by hand get
+     * their own over the same prisma and the same environment, which behaves the same.
+     */
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
+
+  private readonly files: FilesService;
 
   /**
    * Work for `runnerId` has just been recorded — a session or a turn queued — or is about to be, as
@@ -4938,7 +4949,7 @@ export class SessionsService {
           status: true, content: true,
           attachments: {
             where: { ownerId, sessionId: id }, take: 1,
-            select: { id: true, data: true, mimeType: true },
+            select: { id: true },
           },
         },
       });
@@ -4947,12 +4958,15 @@ export class SessionsService {
         const receipt = readWorktreeArtifactRequest(result.content)?.result;
         const attachment = result.attachments[0];
         if (receipt?.status === 'uploaded' && attachment) {
-          // Preview bytes are transient; do not retain a new blob for every file opening.
+          const uploaded = await this.files.read({ id: attachment.id });
+          // Preview bytes are transient; do not retain a new attachment for every file opening. The
+          // bytes stay in the file store, where the same content opened again is the same file.
           await this.prisma.attachment.deleteMany({
             where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
           });
+          if (!uploaded) throw new NotFoundException('File is no longer available.');
           return {
-            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
+            data: uploaded.data, mimeType: uploaded.mimeType,
             disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
           };
         }
@@ -5105,12 +5119,13 @@ export class SessionsService {
     const row = await this.prisma.attachment.findFirst({
       where: { sessionId, fileName: filename, turnId: null },
       orderBy: { createdAt: 'desc' },
-      select: { data: true, mimeType: true, fileName: true },
+      select: { id: true, fileName: true },
     });
-    if (!row) return null;
+    const stored = row && (await this.files.read({ id: row.id }));
+    if (!row || !stored) return null;
     return {
-      data: Buffer.from(row.data),
-      mimeType: row.mimeType,
+      data: stored.data,
+      mimeType: stored.mimeType,
       disposition: legacyArtifactDisposition(row.fileName ?? filename),
     };
   }
@@ -5123,6 +5138,7 @@ export class SessionsService {
   ): Promise<void> {
     const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ownerId: true } });
     if (!session) return;
+    const sha256 = await this.files.storeBytes(data);
     await this.prisma.attachment.create({
       data: {
         ownerId: session.ownerId,
@@ -5130,7 +5146,7 @@ export class SessionsService {
         mimeType,
         sizeBytes: data.length,
         fileName: filename,
-        data: toBytes(data),
+        sha256,
       },
     });
   }
@@ -5586,10 +5602,12 @@ export class SessionsService {
         .map((a) => [a.id, resentAttachmentId(sessionId, clientTurnId, a.id)] as const),
     );
     if (copyOf.size === 0) return ids;
-    // In the database, so the bytes are not carried through this process under the session lock.
+    // In the database, so the bytes are not carried through this process under the session lock. The
+    // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
+    // before Orbit Files.
     await tx.$executeRaw`
-      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
-      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.data
+      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
+      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data
         FROM unnest(ARRAY[${Prisma.join([...copyOf.keys()])}]::uuid[],
                     ARRAY[${Prisma.join([...copyOf.values()])}]::uuid[]) AS c(source_id, copy_id)
         JOIN "attachment" a ON a.id = c.source_id`;

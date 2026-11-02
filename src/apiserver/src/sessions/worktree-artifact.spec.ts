@@ -67,6 +67,13 @@ function fixture() {
       },
     },
     attachment: {
+      // The bytes are read through the file store's door (FilesService.open): these rows keep theirs in `data`, as a row
+      // from before Orbit Files does, so the store names none.
+      findFirst: async ({ where }: Row) => {
+        const row = attachments.find((att) => matches(att, where));
+        return row ? { ...row, sha256: null, blob: null } : null;
+      },
+      findUnique: async ({ where }: Row) => attachments.find((att) => att.id === where.id) ?? null,
       updateMany: async ({ where, data }: Row) => {
         const selected = attachments.filter((row) => matches(row, where));
         for (const row of selected) Object.assign(row, data);
