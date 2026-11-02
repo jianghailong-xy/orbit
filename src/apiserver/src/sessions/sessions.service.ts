@@ -481,6 +481,14 @@ function expectedTurnAttachments(
     .sort();
 }
 
+/** The mode a session gets when nobody names one, as create() stores it. */
+function modeOfNoneNamed(owner: { preferences: unknown }, engine: string | null): PermissionMode {
+  const accountDefault = accountDefaultPermissionMode(owner);
+  return engine === AgentProvider.CURSOR
+    ? cursorDefaultPermissionMode(accountDefault)
+    : accountDefault ?? DEFAULT_PERMISSION_MODE;
+}
+
 /** A header value the id middleware could not decode is left as it arrived, and Prisma would 500 on it. */
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -2360,11 +2368,7 @@ export class SessionsService {
           "the account owner to start it, or to switch this session's mode.",
       );
     }
-    const accountDefault = accountDefaultPermissionMode(parent.owner);
-    const defaultMode = engine === AgentProvider.CURSOR
-      ? cursorDefaultPermissionMode(accountDefault)
-      : accountDefault ?? DEFAULT_PERMISSION_MODE;
-    return isWiderThanStarter(starter, defaultMode, engine) ? starter.mode : undefined;
+    return isWiderThanStarter(starter, modeOfNoneNamed(parent.owner, engine), engine) ? starter.mode : undefined;
   }
 
   /**
@@ -2388,11 +2392,9 @@ export class SessionsService {
     if (!acting) return;
     const starter = { mode: resolvePermissionMode(acting.permissionMode, acting.owner), engine: acting.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return;
-    const accountDefault = resolvePermissionMode(null, acting.owner);
     const engine = await this.engineOfStart(ownerId, target);
-    if (isWiderThanStarter(starter, accountDefault, engine)) {
-      throw widerModeRefusal(starter.mode, accountDefault, engine, next);
-    }
+    const mode = modeOfNoneNamed(acting.owner, engine);
+    if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
   }
 
   /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */

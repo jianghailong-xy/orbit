@@ -462,6 +462,12 @@ test('a session cannot start a session wider than itself', {
       assert.equal(answer.status, 201, answer.text);
       assert.deepEqual((await runsOf(taskId)).map((run) => run.permissionMode), [null]);
     }
+    // Cursor CLI with no account default starts in its own, which an ask mode may start.
+    await accountDefault(null);
+    const onCursor = await taskFor('on Cursor CLI', { engine: 'cursor' });
+    const started = await taskStart(onCursor, await sessionIn('default'));
+    assert.equal(started.status, 201, started.text);
+    assert.deepEqual((await runsOf(onCursor)).map((run) => run.permissionMode), ['acceptEdits']);
     // A default the caller may start: an account whose default is Default, from a session in it.
     await accountDefault('default');
     const taskId = await taskFor('at the account default');
