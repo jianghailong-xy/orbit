@@ -524,10 +524,15 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 		}
 	}
 	runQuiet("launchctl", "unload", plistPath) // best-effort; ignore "not loaded" noise
+	// What the runner logs from here on is this start's (runnerService.logFrom).
+	var logFrom int64
+	if fi, err := os.Stat(logPath); err == nil {
+		logFrom = fi.Size()
+	}
 	if err := run("launchctl", "load", "-w", plistPath); err != nil {
 		return nil, fmt.Errorf("launchctl load failed")
 	}
-	return &runnerService{label: label, logPath: logPath, how: "starts at login"}, nil
+	return &runnerService{label: label, logPath: logPath, logFrom: logFrom, how: "starts at login"}, nil
 }
 
 // printServiceStarted is the one success line every service path ends with, once the

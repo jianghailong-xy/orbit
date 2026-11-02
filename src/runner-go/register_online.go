@@ -23,6 +23,9 @@ type runnerService struct {
 	unit    string // the systemd unit, e.g. orbit-runner-alice.service or orbit-runner@alice.service
 	label   string // the launchd agent's label
 	logPath string // the file the launchd agent writes its output to
+	// logFrom is logPath's size when the agent was loaded: the file outlives every runner that wrote
+	// to it, and what this one logs starts there.
+	logFrom int64
 	how     string // how it comes back: "runs at boot" or "starts at login"
 }
 
@@ -195,9 +198,9 @@ func plistValue(out, key string) string {
 	return ""
 }
 
-// serviceLog is the end of the service's log, at most n lines, or nothing when it cannot be read:
-// for a unit, what it logged since started, which journalctl shows an account for its own runner only
-// when the journal is persistent; for a LaunchAgent, the end of the file its output goes to.
+// serviceLog is the end of what the service has logged since it started, at most n lines, or nothing
+// when it cannot be read: for a unit, its journal since started, which journalctl shows an account for
+// its own runner only when the journal is persistent; for a LaunchAgent, its file from logFrom on.
 func serviceLog(svc *runnerService, started time.Time, n int) []string {
 	var text string
 	switch {
@@ -212,6 +215,9 @@ func serviceLog(svc *runnerService, started time.Time, n int) []string {
 		b, err := os.ReadFile(svc.logPath)
 		if err != nil {
 			return nil
+		}
+		if svc.logFrom <= int64(len(b)) { // a shorter file was started anew: all of it is this start's
+			b = b[svc.logFrom:]
 		}
 		text = string(b)
 	}

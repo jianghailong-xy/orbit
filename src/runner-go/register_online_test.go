@@ -243,19 +243,32 @@ func TestRegisterSaysWhyTheRunnerIsNotOnlineAndWhereToLook(t *testing.T) {
 	}
 }
 
+// A LaunchAgent's log is a file every runner registered on the account has written to: what register
+// shows of it is what this start wrote, from where the file ended when the agent was loaded.
 func TestRegisterShowsALaunchAgentsLogFromItsFile(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "runner.log")
+	earlier := "runner \"before\" online\nrunner stopping; draining session supervisors...\n"
 	var lines []string
 	for i := 1; i <= 20; i++ {
 		lines = append(lines, fmt.Sprintf("line %d", i))
 	}
-	if err := os.WriteFile(logPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(logPath, []byte(earlier+strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	svc := &runnerService{label: launchdLabel, logPath: logPath, how: "starts at login"}
+	svc := &runnerService{label: launchdLabel, logPath: logPath, logFrom: int64(len(earlier)), how: "starts at login"}
 	got := serviceLog(svc, time.Now(), 3)
 	if strings.Join(got, "|") != "line 18|line 19|line 20" {
 		t.Fatalf("serviceLog = %q, want the last 3 lines", got)
+	}
+	if got := serviceLog(svc, time.Now(), 30); len(got) != 20 || got[0] != "line 1" {
+		t.Fatalf("serviceLog = %q, want this start's 20 lines and none from before", got)
+	}
+	// A file started anew since, shorter than where it ended: all of it is this start's.
+	if err := os.WriteFile(logPath, []byte("fresh\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := serviceLog(svc, time.Now(), 30); strings.Join(got, "|") != "fresh" {
+		t.Fatalf("serviceLog = %q, want the new file's line", got)
 	}
 	if got := svc.whereToLook(); strings.Join(got, "|") != "launchctl list com.orbit.runner|tail -n 100 "+logPath {
 		t.Fatalf("whereToLook = %q", got)
