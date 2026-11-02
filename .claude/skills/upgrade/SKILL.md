@@ -121,6 +121,10 @@ run's Compose project. Otherwise it is left as it is, and the run says `pgbackup
 before it builds and again as its last lines, with the command to run in the checkout it runs from.
 `--pull-base` from another directory stops before anything is built.
 
+The step is in the script, so it runs once the script on disk has it. A run from an older version
+pulls the new script from inside itself and finishes as the old one, reporting success with
+`pgbackup` unchanged. Put the new version on disk first and pass `--no-pull`, or run it a second time.
+
 After an upgrade, confirm it took effect:
 
 ```bash
