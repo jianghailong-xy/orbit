@@ -68,12 +68,12 @@ struct RecapCardView: View {
                     Button(action: refresh) { Label(RecapCard.refresh, systemImage: "arrow.clockwise") }
                     Button(action: onHide) { Label(RecapCard.hide, systemImage: "xmark") }
                 } label: {
-                    // A line is shorter than a comfortable target: the target hangs over it both ways,
-                    // and the row is laid out as if it didn't.
+                    // A line is shorter than a comfortable target, so the target hangs over it both ways. No
+                    // negative padding to hide that from the row: the hidden ⋯ below is what the row lays out,
+                    // and iOS takes a Menu's taps on its frame alone (tapped, 18 of these 32 pt answered with it).
                     glyph
                         .padding(.vertical, 7)
                         .contentShape(Rectangle())
-                        .padding(.vertical, -7)
                 }
                 #if os(macOS)
                 // `.button` + plain draws the label as it is, in the row's grey (the account menu's recipe).
