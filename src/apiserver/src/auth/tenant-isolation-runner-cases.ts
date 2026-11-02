@@ -330,6 +330,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
     nested: ['fileId'],
   },
+  'PUT /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
+  'DELETE /runner/sessions/:id/files/:fileId/pin': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId, fileId: of.runner.sessionAttachmentId } }),
+    nested: ['fileId'],
+  },
   'POST /runner/sessions/:id/file-bundles': {
     as: RUNNER,
     request: (of) => ({

@@ -114,7 +114,12 @@ function serviceFor(row: ProjectRow | null) {
     // project is waiting on its owner's start card.
     projectAcceptanceCriterionDefinition: { findFirst: async () => ({ id: uuid('c') }) },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
+  const service = new TasksService(
+    prisma,
+    // What a session may start is session-mode-ceiling.pg.spec.ts's question, not this one's.
+    { assertMayStartAtAccountDefault: async () => undefined } as never,
+    {} as never,
+  );
   const stub = service as unknown as Record<string, unknown>;
   stub.planWorkspaceRun = async (_o: string, t: { id: string }) =>
     ({ kind: 'CREATE', sessionId: `00000000-0000-4000-8000-${t.id}` });

@@ -336,12 +336,20 @@ orbit file fetch <id> --json
 orbit file list --json
 orbit file list --task-id <task-id> --json
 orbit file list --evidence-id <evidence-id> --json
+orbit file pin <id> --json
+orbit file pin <id> --unpin --json
 ```
 
-The three verbs are the three MCP tools of the same name (`file_upload`, `file_fetch`, `file_list`)
-with the same parameters. `upload` and `fetch` act for the session they run in (`ORBIT_SESSION_ID`),
-so they have no headless form; `list` runs anywhere the runner's credential does, as long as it names
-what to list. With nothing named it lists the session it runs in.
+The four verbs are the four MCP tools of the same name (`file_upload`, `file_fetch`, `file_list`,
+`file_pin`) with the same parameters. `upload`, `fetch` and `pin` act for the session they run in
+(`ORBIT_SESSION_ID`), so they have no headless form; `list` runs anywhere the runner's credential does,
+as long as it names what to list. With nothing named it lists the session it runs in.
+
+A file expires 14 days after upload unless evidence cites it, and 30 days after a version citing it is
+sent back or replaced; a confirmed version holds it until its task is deleted. Only the bytes go: the
+file's name, size, sha256 and test summary stay, and `list` answers `expiredAt`. `pin`, or
+`upload --pin`, keeps a file past that date, and pinning an expired file brings it back while its bytes
+are still kept.
 
 `upload` reads only the session's checkout and its uploads directory, the same two directories a reply
 can link from. The check goes by a path's real location, with links resolved, so a link in a repository

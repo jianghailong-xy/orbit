@@ -254,7 +254,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   'RunnerFilesController.hostedSession': {
     file: 'runner-api/runner-files.controller.ts',
     snippet: 'if (session) assertEngineSession(session);',
-    note: 'a folder bundle is written into a session the way an upload is',
+    note: 'a folder bundle is written into a session the way an upload is, and a pin acts for the session that asks',
   },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
@@ -319,6 +319,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/attachments': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/files': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/file-bundles': 'RunnerFilesController.hostedSession',
+  'PUT /runner/sessions/:id/files/:fileId/pin': 'RunnerFilesController.hostedSession',
+  'DELETE /runner/sessions/:id/files/:fileId/pin': 'RunnerFilesController.hostedSession',
   'POST /runner/sessions/:id/artifacts/result': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/approvals': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/background-wake': 'RunnerApiController.assertSessionOwnership',

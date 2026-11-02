@@ -2214,9 +2214,12 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 	// by two encoders agreeing.
 	body := map[string]string{"triggerId": triggerID}
 	path := "/runner/tasks/" + url.PathEscape(id) + "/execute"
+	// The session asking, for the MCP tool and the CLI alike: the server holds what a session may start
+	// to the session's own mode, and a person's shell has none to name.
+	headers := sessionHeader(strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")))
 	return deliverRunRequest(func() (json.RawMessage, error) {
 		var out json.RawMessage
-		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		err := t.doHeaders(nil, "POST", path, body, &out, taskOpTimeout, headers)
 		return out, err
 	})
 }
