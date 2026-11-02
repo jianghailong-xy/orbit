@@ -174,6 +174,11 @@ export class TaskEvidenceCitationDto {
    *  already the readable thing, which is every kind but TOOL_CALL and every citation that did
    *  not resolve. */
   label!: string | null;
+  /** A resolved FILE citation only: the bytes it is bound to. */
+  sha256?: string;
+  /** A resolved FILE citation of an image only: its size in pixels. */
+  width?: number;
+  height?: number;
 }
 
 /** The stated criterion the envelope named, and whether it still reads that way. */
@@ -212,6 +217,9 @@ export class TaskCompletionEvidenceDto {
    * order. Present on a submit receipt — including a replayed one — and null on a list read,
    * which re-derives nothing: the rows a stored envelope cited may have been deleted since, and
    * a `resolved` that quietly means "as of now" would be a different fact under the same name.
+   *
+   * A revision that cites a file is the exception, resolved as of the read: an id says nothing of a
+   * file, so a reader is told what each one is (docs/orbit-files-design.md §2.4).
    */
   citations!: TaskEvidenceCitationDto[] | null;
   criterionMatch!: TaskEvidenceCriterionMatchDto | null;

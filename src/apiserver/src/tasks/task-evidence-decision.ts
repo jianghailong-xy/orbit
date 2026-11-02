@@ -362,6 +362,47 @@ export async function assertDecidingSessionInTaskProject(
   });
 }
 
+/**
+ * Whether this task's evidence is this session's to judge, which is what lets it read the files that evidence cites
+ * (docs/orbit-files-design.md §2.7).
+ *
+ * Narrower than the door, on purpose. The door asks who may not answer and takes an answer from everybody else, which is
+ * the right question for an answer: it is recorded under a name and anyone can read why. Asked of bytes it would hand
+ * every cited file to every unrelated session of the account. So this asks who the evidence is addressed to, and the door's
+ * independence check still comes first: the session that did the work judges nothing. Four readers:
+ *
+ *  - the conversation the task's project is coordinated from now, which is delivered each revision to decide;
+ *  - a judgment session opened for that project (`decidingSessionProject` reads them as acting for it);
+ *  - for a task in no project, the session that dispatched it (`evidence-review.ts`);
+ *  - a run of a task that verifies this one (`verifiesTaskId`), which used to read the evidence out of the repository.
+ *
+ * All asked of the task as it stands, so a replaced coordinator, or the project a task was moved out of, reads nothing.
+ */
+export async function sessionJudgesEvidence(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; taskId: string },
+  session: { id: string; taskId: string | null },
+): Promise<boolean> {
+  if ((await decidingSessionDisqualification(tx, scope, session)) !== null) return false;
+  const task = await tx.task.findFirst({
+    where: { id: scope.taskId, ownerId: scope.ownerId },
+    select: { projectId: true, creatorSessionId: true, project: { select: { coordinatorSessionId: true } } },
+  });
+  if (!task) return false;
+  if (session.taskId !== null) {
+    const verifies = await tx.task.count({
+      where: { id: session.taskId, ownerId: scope.ownerId, verifiesTaskId: scope.taskId },
+    });
+    if (verifies > 0) return true;
+  }
+  if (task.projectId === null) return task.creatorSessionId === session.id;
+  if (task.project?.coordinatorSessionId === session.id) return true;
+  const judgments = await tx.projectCoordinatorWake.count({
+    where: { projectId: task.projectId, sessionId: session.id, status: 'SESSION_OPENED' },
+  });
+  return judgments > 0;
+}
+
 /** Check 4's other half: a rejection nobody can act on leaves the next revision nothing to aim at. */
 export function decisionNote(
   decision: EvidenceDecisionValue,

@@ -83,7 +83,10 @@ export interface RunnerObjects {
   /** RUNNING, to be finalized and completed. */
   finalizeSessionId: string;
   completeSessionId: string;
-  /** Of `machineSessionId`: a file it holds, an approval already allowed, a file request waiting on it. */
+  /**
+   * Of `machineSessionId`: a file it holds, an approval already allowed, a file request waiting on it. The file is also
+   * cited by `evidenceRevisionId`, so its doors are asked about the one kind of file that reaches past a session.
+   */
   sessionAttachmentId: string;
   /** Of `machineSessionId`: a `file_upload` in no bundle yet, which is what a bundle is made of. */
   uploadedFileId: string;

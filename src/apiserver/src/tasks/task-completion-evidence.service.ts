@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
+import { FilesService } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -28,9 +29,13 @@ import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import {
   EvidenceCitation,
   EvidenceCriterionMatch,
+  bindCitedFiles,
+  citedFileIds,
+  describeEvidenceCitations,
   evidenceCriterionMatch,
   parseEvidenceEnvelope,
   resolveEvidenceCitations,
+  storedEvidenceEnvelope,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { EvidenceReviewService } from './evidence-review.service';
@@ -197,7 +202,7 @@ function legacyImportResponse(row: EvidenceRow['legacyImport']): TaskLegacyEvide
 
 interface EvidenceReceipt {
   citations: EvidenceCitation[];
-  criterionMatch: EvidenceCriterionMatch;
+  criterionMatch: EvidenceCriterionMatch | null;
 }
 
 function response(row: EvidenceRow, receipt?: EvidenceReceipt): TaskCompletionEvidenceDto {
@@ -258,6 +263,7 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
 @Injectable()
 export class TaskCompletionEvidenceService {
   private readonly logger = new Logger(TaskCompletionEvidenceService.name);
+  private readonly files: FilesService;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -265,7 +271,10 @@ export class TaskCompletionEvidenceService {
     @Optional() private readonly completionInputs?: CompletionInputRouter,
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
-  ) {}
+    @Optional() files?: FilesService,
+  ) {
+    this.files = files ?? new FilesService(prisma);
+  }
 
   async submit(ownerId: string, taskId: string, actor: CompletionEvidenceActor, input: SubmitCompletionEvidence) {
     if (!UUID_RE.test(actor.id) || !Object.values(CreatorType).includes(actor.type)) {
@@ -281,11 +290,13 @@ export class TaskCompletionEvidenceService {
     // Task mutex to be decided. Parsed from the NORMALIZED object because that is what gets
     // stored and digested, so the command layer 3 compares is the one a later reader will find.
     const envelope = parseEvidenceEnvelope(normalizedEvidence);
-    const evidenceDigest = completionDigest(normalizedEvidence);
     const idempotencyKey = input.idempotencyKey?.trim().normalize('NFC');
     if (input.idempotencyKey !== undefined && (!idempotencyKey || idempotencyKey.length > 200)) {
       throw new BadRequestException('idempotencyKey must contain 1 to 200 characters');
     }
+    // Out here because it may read the file store, and nothing else of this task should wait on a bucket.
+    const fileIds = citedFileIds(envelope.checks);
+    const images = await this.files.prepareCitedFiles(ownerId, fileIds);
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // One Task mutex serialises revision allocation, stable-fact dedupe and retry-key binding.
@@ -322,9 +333,12 @@ export class TaskCompletionEvidenceService {
       // Layers 2 and 3, ahead of the retry-key lookup so a replayed submission is answered with
       // the same receipt a first one gets. Both read only rows already inside this transaction's
       // scope, and both refuse by throwing, so nothing below runs for a refused envelope.
-      const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope);
+      const citations = await resolveEvidenceCitations(tx, { ownerId, taskId }, envelope, images);
       const criterionMatch = await evidenceCriterionMatch(tx, task, envelope.criterion);
       const receipt: EvidenceReceipt = { citations, criterionMatch };
+      // In here because a cited file's sha256 is read with its citation, and is digested with the rest.
+      const boundEvidence = bindCitedFiles(normalizedEvidence, citations);
+      const evidenceDigest = completionDigest(boundEvidence);
 
       if (idempotencyKey) {
         const replay = await tx.taskCompletionEvidenceIdempotency.findFirst({
@@ -377,12 +391,20 @@ export class TaskCompletionEvidenceService {
             sourceAttemptId: sourceAttempt?.id,
             criterionRevision,
             criterion: criterion as Prisma.InputJsonObject,
-            evidence: normalizedEvidence as Prisma.InputJsonObject,
+            evidence: boundEvidence as Prisma.InputJsonObject,
             evidenceDigest,
             revision: (latest._max.revision ?? 0n) + 1n,
           },
           include: evidenceInclude,
         });
+        // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
+        // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8).
+        if (fileIds.length > 0) {
+          await tx.attachment.updateMany({
+            where: { ownerId, OR: [{ id: { in: fileIds } }, { fileBundleId: { in: fileIds } }] },
+            data: { evidenceId: evidence.id },
+          });
+        }
       }
 
       if (idempotencyKey) {
@@ -929,7 +951,13 @@ export class TaskCompletionEvidenceService {
       orderBy: { revision: 'asc' },
       include: evidenceInclude,
     });
-    // Not `map(response)`: the receipt parameter would receive the array index.
-    return rows.map((row) => response(row));
+    const revisions: TaskCompletionEvidenceDto[] = [];
+    for (const row of rows) {
+      const checks = storedEvidenceEnvelope(row.evidence)?.checks ?? [];
+      revisions.push(response(row, checks.some((check) => check.kind === 'FILE')
+        ? { citations: await describeEvidenceCitations(this.prisma, { ownerId, taskId }, checks), criterionMatch: null }
+        : undefined));
+    }
+    return revisions;
   }
 }
