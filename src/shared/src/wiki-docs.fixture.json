@@ -1854,11 +1854,12 @@
       "queued": "Queued",
       "drafting": "Drafting",
       "held": "Held",
-      "failed": "Didn’t pass the plan check",
+      "ready": "Ready for review",
       "passed": "Passed the plan check",
       "writing": "Writing documents",
       "writingNow": "Writing now:",
       "jobFailed": "The draft didn’t finish",
+      "redraftFailed": "The redraft didn’t finish",
       "buildFailed": "Writing documents didn’t finish",
       "question": "Question",
       "writtenFor": "Written for",
@@ -1905,8 +1906,7 @@
       "statusLabels": {
         "draft": "Draft",
         "confirmed": "Confirmed",
-        "superseded": "Superseded",
-        "failed": "Draft"
+        "superseded": "Superseded"
       },
       "opLabels": {
         "addSection": "ADD SECTION",
@@ -1936,7 +1936,16 @@
       "newSectionLength": 500
     },
     "orders": {
-      "page": ["crumb","title","meta","actions","hint","job","gate","changes","documents"],
+      "page": [
+        "crumb",
+        "title",
+        "meta",
+        "actions",
+        "job",
+        "gate",
+        "changes",
+        "documents"
+      ],
       "doc": ["crumb","title","meta","fields","sections"],
       "section": ["crumb","title","meta","covers","sources"],
       "change": ["head","title","why","change","sources","from","check","actions"],
@@ -2387,7 +2396,10 @@
           }
         ],
         "newFields": [],
-        "target": {"min":20,"max":35},
+        "target": {
+          "min": 3,
+          "max": 5
+        },
         "gate": {
           "checkedAt": "2026-09-28T12:43:00.000Z",
           "checks": {
@@ -2397,7 +2409,10 @@
             "references": "passed"
           },
           "docs": 3,
-          "target": {"min":20,"max":35},
+          "target": {
+            "min": 3,
+            "max": 5
+          },
           "needsNewFields": [
             {
               "at": "section",
@@ -2669,6 +2684,747 @@
                     "since": null,
                     "until": null,
                     "keywords": ["overlay"],
+                    "anchorPaths": [],
+                    "entryKinds": [],
+                    "topics": [],
+                    "evidence": ""
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "v2Noted": {
+        "id": "pv2-noted",
+        "spaceId": "sp1",
+        "version": 2,
+        "status": "draft",
+        "origin": "maintenance",
+        "baseVersion": 1,
+        "proposalId": null,
+        "categories": [
+          {
+            "key": "overview",
+            "title": "产品概览",
+            "question": "Orbit 是什么、解决什么问题、适用边界",
+            "forAgents": false,
+            "extra": {}
+          },
+          {
+            "key": "sessions",
+            "title": "会话",
+            "question": "session 是什么、怎么跑起来、状态与消息怎么流转",
+            "forAgents": false,
+            "extra": {}
+          },
+          {
+            "key": "agents",
+            "title": "给 agent 的开发约定",
+            "question": "agent 在这个仓库里要守哪些约定",
+            "forAgents": true,
+            "extra": {}
+          }
+        ],
+        "newFields": [],
+        "target": {
+          "min": 3,
+          "max": 5
+        },
+        "gate": {
+          "checkedAt": "2026-09-28T12:43:00.000Z",
+          "checks": {
+            "schema": "passed",
+            "docCount": "passed",
+            "protected": "passed",
+            "references": "passed"
+          },
+          "docs": 3,
+          "target": {
+            "min": 3,
+            "max": 5
+          },
+          "needsNewFields": [
+            {
+              "at": "section",
+              "name": "evidenceWeight",
+              "why": "which record weighs most",
+              "values": 2
+            }
+          ],
+          "notes": [
+            {
+              "check": "docCount",
+              "text": "Search ranking was left out: nothing was written for it."
+            },
+            {
+              "check": "references",
+              "text": "A topic isn’t this wiki’s and was left out: invented."
+            }
+          ]
+        },
+        "repoCheck": {
+          "sha": "99cd3c4a1b2c3d4e5f60718293a4b5c6d7e8f901",
+          "checked": 5566,
+          "missing": [
+            {
+              "kind": "symbol",
+              "ref": "src/runner-go/runloop.go: runLoop()",
+              "at": "plan.docs[1].sections[1].sources.code[0].symbols[0]"
+            },
+            {
+              "kind": "docSection",
+              "ref": "docs/architecture.md § 1. Why",
+              "at": "plan.docs[0].sections[1].sources.docs[0].section"
+            }
+          ]
+        },
+        "model": "local-vllm",
+        "authorSessionId": "se-draft-1",
+        "authorUserId": null,
+        "confirmedByUserId": null,
+        "confirmedAt": null,
+        "supersededAt": null,
+        "createdAt": "2026-09-28T12:43:00.000Z",
+        "docs": [
+          {
+            "id": "d-product",
+            "position": 0,
+            "category": "overview",
+            "slug": "product",
+            "title": "产品定位与使用场景",
+            "question": "我是新读者，Orbit 解决什么问题、和直接开一个 CLI 有什么不同",
+            "audience": [
+              "第一次打开 Orbit 的人"
+            ],
+            "scopeIn": [
+              "Orbit 解决的问题",
+              "和 CLI 的差别"
+            ],
+            "scopeOut": [],
+            "length": {
+              "min": 1200,
+              "max": 2000
+            },
+            "protected": false,
+            "extra": {},
+            "sections": [
+              {
+                "id": "x1",
+                "key": "s1",
+                "position": 0,
+                "title": "总览",
+                "kind": "overview",
+                "covers": "一段话说清 Orbit",
+                "length": 300,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "x2",
+                "key": "s2",
+                "position": 1,
+                "title": "适用场景",
+                "kind": "concepts",
+                "covers": "哪些场景用 Orbit",
+                "length": 600,
+                "extra": {},
+                "sources": {
+                  "docs": [
+                    {
+                      "path": "docs/architecture.md",
+                      "section": "1. Why"
+                    }
+                  ],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              }
+            ]
+          },
+          {
+            "id": "d-runtime",
+            "position": 1,
+            "category": "sessions",
+            "slug": "session-runtime",
+            "title": "会话运行模型与长连接",
+            "question": "我想理解一个 session 怎么被 runner 领取、turn 怎么投递、长轮询与重连怎么工作",
+            "audience": [
+              "新加入的开发者：读完能描述一个 session 的完整链路",
+              "写 agent 提示词的人：读完能判断 turn 的边界"
+            ],
+            "scopeIn": [
+              "resumable 多轮会话的定义",
+              "user turn 先存后投的语义与 inbox lease",
+              "runner long-poll 与心跳探测机制"
+            ],
+            "scopeOut": [
+              {
+                "text": "session 的 runState / lifecycleState 三维度状态模型",
+                "docs": [
+                  "session-state"
+                ]
+              }
+            ],
+            "length": {
+              "min": 3000,
+              "max": 4500
+            },
+            "protected": true,
+            "extra": {},
+            "sections": [
+              {
+                "id": "r1",
+                "key": "s1",
+                "position": 0,
+                "title": "会话运行模型与长连接：总览",
+                "kind": "overview",
+                "covers": "总览本篇",
+                "length": 300,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "r3",
+                "key": "s3",
+                "position": 1,
+                "title": "turn 投递与 inbox 领取：long-poll 与心跳",
+                "kind": "flow",
+                "covers": "讲 runner 如何用 outbound HTTP 轮询领取工作而非等入站连接",
+                "length": 800,
+                "extra": {},
+                "sources": {
+                  "docs": [
+                    {
+                      "path": "docs/architecture.md",
+                      "section": "Realtime and recovery"
+                    },
+                    {
+                      "path": "docs/interactive-claude-runner-design.md",
+                      "section": "1. Transport"
+                    }
+                  ],
+                  "code": [
+                    {
+                      "path": "src/runner-go/runloop.go",
+                      "symbols": [
+                        "runLoop()",
+                        "claimRetryDelayAfter()"
+                      ]
+                    },
+                    {
+                      "path": "src/apiserver/src/realtime/realtime.service.ts",
+                      "symbols": [
+                        "RealtimeService.waitForInbox"
+                      ]
+                    }
+                  ],
+                  "contracts": [
+                    {
+                      "path": "contracts/runner.contract.json"
+                    }
+                  ],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "r7",
+                "key": "s7",
+                "position": 2,
+                "title": "已知的坑",
+                "kind": "pitfalls",
+                "covers": "启动窗口的竞态",
+                "length": 700,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [
+                      {
+                        "id": "pr1",
+                        "title": "会话合并"
+                      },
+                      {
+                        "id": "pr-gone",
+                        "title": null
+                      }
+                    ],
+                    "since": "2026-08-19",
+                    "until": null,
+                    "keywords": [
+                      "superseded",
+                      "detach"
+                    ],
+                    "anchorPaths": [
+                      "src/runner-go/"
+                    ],
+                    "entryKinds": [
+                      "pitfall"
+                    ],
+                    "topics": [
+                      "sessions"
+                    ],
+                    "evidence": "合并被判 superseded 的原话"
+                  }
+                }
+              },
+              {
+                "id": "r9",
+                "key": "s9",
+                "position": 3,
+                "title": "约定",
+                "kind": "conventions",
+                "covers": "跑测试与长命令的约定",
+                "length": 400,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [
+                      {
+                        "id": "pr3",
+                        "title": "Claude Code 运行中 Prompt 接入改造"
+                      }
+                    ],
+                    "since": "2026-08-19",
+                    "until": null,
+                    "keywords": [
+                      "runner 宿主",
+                      "env -u"
+                    ],
+                    "anchorPaths": [
+                      "src/runner-go/"
+                    ],
+                    "entryKinds": [
+                      "convention",
+                      "pitfall"
+                    ],
+                    "topics": [
+                      "agent-tooling"
+                    ],
+                    "evidence": "runner-go 测试须在 runner 宿主跑的约定原文"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "d-tests",
+            "position": 4,
+            "category": "agents",
+            "slug": "agent-tests",
+            "title": "测试怎么跑",
+            "question": "我是 agent，要在 worktree 里跑测试",
+            "audience": [
+              "在 worktree 里干活的 agent"
+            ],
+            "scopeIn": [
+              "铺依赖",
+              "跑哪几支测试"
+            ],
+            "scopeOut": [],
+            "length": {
+              "min": 800,
+              "max": 1200
+            },
+            "protected": false,
+            "extra": {},
+            "sections": [
+              {
+                "id": "a1",
+                "key": "s1",
+                "position": 0,
+                "title": "铺依赖",
+                "kind": "conventions",
+                "covers": "worktree overlay",
+                "length": 500,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [],
+                    "since": null,
+                    "until": null,
+                    "keywords": [
+                      "overlay"
+                    ],
+                    "anchorPaths": [],
+                    "entryKinds": [],
+                    "topics": [],
+                    "evidence": ""
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "v2Outside": {
+        "id": "pv2-outside",
+        "spaceId": "sp1",
+        "version": 2,
+        "status": "draft",
+        "origin": "maintenance",
+        "baseVersion": 1,
+        "proposalId": null,
+        "categories": [
+          {
+            "key": "overview",
+            "title": "产品概览",
+            "question": "Orbit 是什么、解决什么问题、适用边界",
+            "forAgents": false,
+            "extra": {}
+          },
+          {
+            "key": "sessions",
+            "title": "会话",
+            "question": "session 是什么、怎么跑起来、状态与消息怎么流转",
+            "forAgents": false,
+            "extra": {}
+          },
+          {
+            "key": "agents",
+            "title": "给 agent 的开发约定",
+            "question": "agent 在这个仓库里要守哪些约定",
+            "forAgents": true,
+            "extra": {}
+          }
+        ],
+        "newFields": [],
+        "target": {
+          "min": 20,
+          "max": 35
+        },
+        "gate": {
+          "checkedAt": "2026-09-28T12:43:00.000Z",
+          "checks": {
+            "schema": "passed",
+            "docCount": "passed",
+            "protected": "passed",
+            "references": "passed"
+          },
+          "docs": 3,
+          "target": {
+            "min": 20,
+            "max": 35
+          },
+          "needsNewFields": [
+            {
+              "at": "section",
+              "name": "evidenceWeight",
+              "why": "which record weighs most",
+              "values": 2
+            }
+          ]
+        },
+        "repoCheck": {
+          "sha": "99cd3c4a1b2c3d4e5f60718293a4b5c6d7e8f901",
+          "checked": 5566,
+          "missing": []
+        },
+        "model": "local-vllm",
+        "authorSessionId": "se-draft-1",
+        "authorUserId": null,
+        "confirmedByUserId": null,
+        "confirmedAt": null,
+        "supersededAt": null,
+        "createdAt": "2026-09-28T12:43:00.000Z",
+        "docs": [
+          {
+            "id": "d-product",
+            "position": 0,
+            "category": "overview",
+            "slug": "product",
+            "title": "产品定位与使用场景",
+            "question": "我是新读者，Orbit 解决什么问题、和直接开一个 CLI 有什么不同",
+            "audience": [
+              "第一次打开 Orbit 的人"
+            ],
+            "scopeIn": [
+              "Orbit 解决的问题",
+              "和 CLI 的差别"
+            ],
+            "scopeOut": [],
+            "length": {
+              "min": 1200,
+              "max": 2000
+            },
+            "protected": false,
+            "extra": {},
+            "sections": [
+              {
+                "id": "x1",
+                "key": "s1",
+                "position": 0,
+                "title": "总览",
+                "kind": "overview",
+                "covers": "一段话说清 Orbit",
+                "length": 300,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "x2",
+                "key": "s2",
+                "position": 1,
+                "title": "适用场景",
+                "kind": "concepts",
+                "covers": "哪些场景用 Orbit",
+                "length": 600,
+                "extra": {},
+                "sources": {
+                  "docs": [
+                    {
+                      "path": "docs/architecture.md",
+                      "section": "1. Why"
+                    }
+                  ],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              }
+            ]
+          },
+          {
+            "id": "d-runtime",
+            "position": 1,
+            "category": "sessions",
+            "slug": "session-runtime",
+            "title": "会话运行模型与长连接",
+            "question": "我想理解一个 session 怎么被 runner 领取、turn 怎么投递、长轮询与重连怎么工作",
+            "audience": [
+              "新加入的开发者：读完能描述一个 session 的完整链路",
+              "写 agent 提示词的人：读完能判断 turn 的边界"
+            ],
+            "scopeIn": [
+              "resumable 多轮会话的定义",
+              "user turn 先存后投的语义与 inbox lease",
+              "runner long-poll 与心跳探测机制"
+            ],
+            "scopeOut": [
+              {
+                "text": "session 的 runState / lifecycleState 三维度状态模型",
+                "docs": [
+                  "session-state"
+                ]
+              }
+            ],
+            "length": {
+              "min": 3000,
+              "max": 4500
+            },
+            "protected": true,
+            "extra": {},
+            "sections": [
+              {
+                "id": "r1",
+                "key": "s1",
+                "position": 0,
+                "title": "会话运行模型与长连接：总览",
+                "kind": "overview",
+                "covers": "总览本篇",
+                "length": 300,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "r3",
+                "key": "s3",
+                "position": 1,
+                "title": "turn 投递与 inbox 领取：long-poll 与心跳",
+                "kind": "flow",
+                "covers": "讲 runner 如何用 outbound HTTP 轮询领取工作而非等入站连接",
+                "length": 800,
+                "extra": {},
+                "sources": {
+                  "docs": [
+                    {
+                      "path": "docs/architecture.md",
+                      "section": "Realtime and recovery"
+                    },
+                    {
+                      "path": "docs/interactive-claude-runner-design.md",
+                      "section": "1. Transport"
+                    }
+                  ],
+                  "code": [
+                    {
+                      "path": "src/runner-go/runloop.go",
+                      "symbols": [
+                        "runLoop()",
+                        "claimRetryDelayAfter()"
+                      ]
+                    },
+                    {
+                      "path": "src/apiserver/src/realtime/realtime.service.ts",
+                      "symbols": [
+                        "RealtimeService.waitForInbox"
+                      ]
+                    }
+                  ],
+                  "contracts": [
+                    {
+                      "path": "contracts/runner.contract.json"
+                    }
+                  ],
+                  "sessions": null
+                }
+              },
+              {
+                "id": "r7",
+                "key": "s7",
+                "position": 2,
+                "title": "已知的坑",
+                "kind": "pitfalls",
+                "covers": "启动窗口的竞态",
+                "length": 700,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [
+                      {
+                        "id": "pr1",
+                        "title": "会话合并"
+                      },
+                      {
+                        "id": "pr-gone",
+                        "title": null
+                      }
+                    ],
+                    "since": "2026-08-19",
+                    "until": null,
+                    "keywords": [
+                      "superseded",
+                      "detach"
+                    ],
+                    "anchorPaths": [
+                      "src/runner-go/"
+                    ],
+                    "entryKinds": [
+                      "pitfall"
+                    ],
+                    "topics": [
+                      "sessions"
+                    ],
+                    "evidence": "合并被判 superseded 的原话"
+                  }
+                }
+              },
+              {
+                "id": "r9",
+                "key": "s9",
+                "position": 3,
+                "title": "约定",
+                "kind": "conventions",
+                "covers": "跑测试与长命令的约定",
+                "length": 400,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [
+                      {
+                        "id": "pr3",
+                        "title": "Claude Code 运行中 Prompt 接入改造"
+                      }
+                    ],
+                    "since": "2026-08-19",
+                    "until": null,
+                    "keywords": [
+                      "runner 宿主",
+                      "env -u"
+                    ],
+                    "anchorPaths": [
+                      "src/runner-go/"
+                    ],
+                    "entryKinds": [
+                      "convention",
+                      "pitfall"
+                    ],
+                    "topics": [
+                      "agent-tooling"
+                    ],
+                    "evidence": "runner-go 测试须在 runner 宿主跑的约定原文"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "d-tests",
+            "position": 4,
+            "category": "agents",
+            "slug": "agent-tests",
+            "title": "测试怎么跑",
+            "question": "我是 agent，要在 worktree 里跑测试",
+            "audience": [
+              "在 worktree 里干活的 agent"
+            ],
+            "scopeIn": [
+              "铺依赖",
+              "跑哪几支测试"
+            ],
+            "scopeOut": [],
+            "length": {
+              "min": 800,
+              "max": 1200
+            },
+            "protected": false,
+            "extra": {},
+            "sections": [
+              {
+                "id": "a1",
+                "key": "s1",
+                "position": 0,
+                "title": "铺依赖",
+                "kind": "conventions",
+                "covers": "worktree overlay",
+                "length": 500,
+                "extra": {},
+                "sources": {
+                  "docs": [],
+                  "code": [],
+                  "contracts": [],
+                  "sessions": {
+                    "projects": [],
+                    "since": null,
+                    "until": null,
+                    "keywords": [
+                      "overlay"
+                    ],
                     "anchorPaths": [],
                     "entryKinds": [],
                     "topics": [],
@@ -3044,34 +3800,8 @@
         "attemptsMax": 3,
         "progress": null,
         "version": null,
-        "errors": [
-          {
-            "check": "docCount",
-            "path": "plan.docs",
-            "message": "the plan has 3 documents; the target is 20–35"
-          },
-          {
-            "check": "protected",
-            "path": "plan.docs[1].sections",
-            "message": "session-runtime is protected: its sections may not change"
-          },
-          {
-            "check": "references",
-            "path": "plan.docs[1].sections[1].sources.code[0].symbols[0]",
-            "message": "not in the file"
-          },
-          {
-            "check": "references",
-            "path": "plan.docs[2].sections[0].sources.sessions.topics[0]",
-            "message": "no such topic in this space"
-          },
-          {
-            "check": "references",
-            "path": "plan.docs[1].sections[1].sources.code[0]",
-            "message": "no such file"
-          }
-        ],
-        "error": "the draft failed the gate on its last round",
+        "errors": [],
+        "error": "The model’s catalogue couldn’t be read.",
         "report": {
           "categories": 3,
           "docs": 3,
@@ -3106,155 +3836,7 @@
           "seconds": 7320,
           "model": "local-vllm"
         },
-        "draft": {
-          "categories": [
-            {"key":"overview","title":"产品概览","question":"Orbit 是什么"},
-            {"key":"sessions","title":"会话","question":"session 是什么"},
-            {"key":"agents","title":"给 agent 的开发约定","forAgents":true}
-          ],
-          "docs": [
-            {
-              "id": "d-product",
-              "position": 0,
-              "category": "overview",
-              "slug": "product",
-              "title": "产品定位与使用场景",
-              "question": "我是新读者，Orbit 解决什么问题、和直接开一个 CLI 有什么不同",
-              "audience": ["第一次打开 Orbit 的人"],
-              "scopeIn": ["Orbit 解决的问题","和 CLI 的差别"],
-              "scopeOut": [],
-              "length": {"min":1200,"max":2000},
-              "protected": false,
-              "extra": {},
-              "sections": [
-                {
-                  "key": "s1",
-                  "title": "总览",
-                  "kind": "overview",
-                  "covers": "一段话说清 Orbit",
-                  "length": 300,
-                  "extra": {},
-                  "sources": {"docs":[]}
-                },
-                {
-                  "key": "s2",
-                  "title": "适用场景",
-                  "kind": "concepts",
-                  "covers": "哪些场景用 Orbit",
-                  "length": 600,
-                  "extra": {},
-                  "sources": {
-                    "docs": [
-                      {
-                        "path": "docs/architecture.md",
-                        "section": "1. Why"
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "category": "sessions",
-              "slug": "session-runtime",
-              "title": "会话运行模型与长连接",
-              "question": "我想理解一个 session 怎么被 runner 领取、turn 怎么投递、长轮询与重连怎么工作",
-              "audience": [
-                "新加入的开发者：读完能描述一个 session 的完整链路",
-                "写 agent 提示词的人：读完能判断 turn 的边界"
-              ],
-              "scopeIn": [
-                "resumable 多轮会话的定义",
-                "user turn 先存后投的语义与 inbox lease",
-                "runner long-poll 与心跳探测机制"
-              ],
-              "scopeOut": [
-                {
-                  "text": "session 的状态模型",
-                  "docs": ["session-state"]
-                }
-              ],
-              "length": {"min":3000,"max":4500},
-              "protected": true,
-              "sections": [
-                {
-                  "key": "s1",
-                  "title": "会话运行模型与长连接：总览",
-                  "kind": "overview",
-                  "covers": "总览本篇",
-                  "length": 300,
-                  "sources": {}
-                },
-                {
-                  "key": "s3",
-                  "title": "turn 投递与 inbox 领取：long-poll 与心跳",
-                  "kind": "flow",
-                  "covers": "轮询领取",
-                  "length": 800,
-                  "sources": {
-                    "docs": [
-                      {
-                        "path": "docs/architecture.md",
-                        "section": "Realtime and recovery"
-                      }
-                    ],
-                    "code": [
-                      {
-                        "path": "src/runner-go/claude.go",
-                        "symbols": [
-                          "claudeRuntime.setPhase"
-                        ]
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "category": "agents",
-              "slug": "agent-tests",
-              "title": "测试怎么跑",
-              "question": "我是 agent，要在 worktree 里跑测试",
-              "audience": ["agent"],
-              "scopeIn": ["铺依赖"],
-              "scopeOut": [],
-              "length": {"min":800,"max":1200},
-              "sections": [
-                {
-                  "key": "s1",
-                  "title": "铺依赖",
-                  "kind": "conventions",
-                  "covers": "overlay",
-                  "length": 500,
-                  "sources": {
-                    "sessions": {
-                      "topics": [
-                        "session-state-routing"
-                      ],
-                      "keywords": [
-                        "overlay"
-                      ]
-                    }
-                  }
-                },
-                {
-                  "title": "已知的坑",
-                  "kind": "pitfalls",
-                  "covers": "启动窗口的竞态",
-                  "length": 700,
-                  "sources": {}
-                },
-                {
-                  "title": "约定",
-                  "kind": "conventions",
-                  "covers": "长命令",
-                  "length": 400,
-                  "sources": {}
-                }
-              ]
-            }
-          ]
-        }
+        "draft": null
       },
       "writing": {
         "id": "job-writing",
@@ -3361,6 +3943,80 @@
         "error": "the run was cut off at 120 turns",
         "report": null,
         "draft": null
+      },
+      "failedLater": {
+        "id": "job-failed-later",
+        "spaceId": "sp1",
+        "kind": "revise",
+        "trigger": "owner",
+        "state": "failed",
+        "instructions": "合并到 30 篇左右",
+        "requestedAt": "2026-09-28T13:00:00.000Z",
+        "held": null,
+        "waitingFor": null,
+        "taskId": "tk-job",
+        "provider": null,
+        "sessionId": "se-job",
+        "madeAt": "2026-09-28T12:00:05.000Z",
+        "startedAt": "2026-09-28T12:00:30.000Z",
+        "endedAt": "2026-09-28T13:40:00.000Z",
+        "attempt": 3,
+        "attemptsMax": 3,
+        "progress": null,
+        "version": null,
+        "errors": [],
+        "error": "The model’s catalogue couldn’t be read.",
+        "report": {
+          "categories": 3,
+          "docs": 3,
+          "sections": 7,
+          "target": {
+            "min": 20,
+            "max": 35
+          },
+          "attempts": [
+            {
+              "attempt": 1,
+              "local": 15,
+              "server": 0,
+              "checks": {
+                "references": 11,
+                "schema": 4
+              }
+            },
+            {
+              "attempt": 2,
+              "local": 6,
+              "server": 0,
+              "checks": {
+                "references": 6
+              }
+            },
+            {
+              "attempt": 3,
+              "local": 5,
+              "server": 0,
+              "checks": {
+                "references": 3,
+                "docCount": 1,
+                "protected": 1
+              }
+            }
+          ],
+          "repo": {
+            "sha": "99cd3c4a1b2c3d4e5f60718293a4b5c6d7e8f901",
+            "checked": 5566,
+            "missing": 47
+          },
+          "tokens": {
+            "input": 1264295,
+            "output": 129343,
+            "calls": 60
+          },
+          "seconds": 7320,
+          "model": "local-vllm"
+        },
+        "draft": null
       }
     },
     "states": {
@@ -3382,7 +4038,6 @@
         "shown": null,
         "head": null,
         "meta": null,
-        "hint": null,
         "jobCard": null,
         "gate": null,
         "categories": [],
@@ -3406,7 +4061,6 @@
         "shown": null,
         "head": "First draft · asked when the space was made",
         "meta": null,
-        "hint": null,
         "jobCard": {
           "look": "queued",
           "title": "Queued",
@@ -3440,7 +4094,6 @@
         "shown": null,
         "head": "First draft · you asked Sep 28, 20:00",
         "meta": null,
-        "hint": null,
         "jobCard": {
           "look": "drafting",
           "title": "Drafting",
@@ -3474,7 +4127,6 @@
         "shown": null,
         "head": "First draft · you asked Sep 28, 20:00",
         "meta": null,
-        "hint": null,
         "jobCard": {
           "look": "held",
           "title": "Held",
@@ -3512,7 +4164,6 @@
         "shown": null,
         "head": "First draft · you asked Sep 28, 20:00",
         "meta": null,
-        "hint": null,
         "jobCard": {
           "look": "held",
           "title": "Held",
@@ -3551,7 +4202,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": null,
         "gate": null,
         "categories": [
@@ -3566,8 +4216,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -3583,8 +4233,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -3592,8 +4242,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -3601,8 +4251,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -3618,8 +4268,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -3654,7 +4304,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": null,
         "gate": null,
         "categories": [
@@ -3669,8 +4318,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -3686,8 +4335,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -3695,8 +4344,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -3704,8 +4353,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -3721,8 +4370,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -3752,7 +4401,6 @@
           "local-vllm · Sep 28, 20:43",
           "3 categories · 3 documents · 7 sections"
         ],
-        "hint": null,
         "jobCard": null,
         "gate": {
           "passed": true,
@@ -3764,7 +4412,7 @@
               "check": "docCount",
               "ok": true,
               "title": "Documents",
-              "text": "3 documents — within 20–35"
+              "text": "3 documents — within 3–5"
             },
             {
               "check": "protected",
@@ -3800,8 +4448,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -3817,8 +4465,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               }
             ]
@@ -3834,8 +4482,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -3854,7 +4502,7 @@
         "look": "draftFailed",
         "pending": 1,
         "banner": {
-          "text": "Plan draft didn’t pass the check",
+          "text": "Plan draft didn’t finish",
           "tone": "amber",
           "to": "plan"
         },
@@ -3862,74 +4510,30 @@
         "build": null,
         "failed": "job-failed",
         "nextVersion": 2,
-        "shown": {"version":2,"status":"failed","label":"v2","statusLabel":"Draft"},
+        "shown": {
+          "version": 1,
+          "status": "confirmed",
+          "label": "v1",
+          "statusLabel": "Confirmed"
+        },
         "head": null,
         "meta": [
-          "Redrafted from v1 at your request",
-          "local-vllm · Sep 28, 22:02",
-          "3 categories · 3 documents · 7 sections"
+          "Confirmed Sep 28 by you",
+          "3 categories · 5 documents · 10 sections",
+          "3 written, 2 to write"
         ],
-        "hint": "Confirm needs a passing check. Redraft with what to change — v1 stays in force until you confirm.",
         "jobCard": {
           "look": "failed",
-          "title": "Didn’t pass the plan check",
-          "text": "3 of 4 checks failed · after 3 attempts · 5 errors listed below",
-          "link": null,
+          "title": "The redraft didn’t finish",
+          "text": "The model’s catalogue couldn’t be read. v1 stays in force.",
+          "link": {
+            "label": "View run",
+            "to": "run",
+            "sessionId": "se-job"
+          },
           "progress": null
         },
-        "gate": {
-          "passed": false,
-          "title": "Didn’t pass the plan check",
-          "line": "3 of 4 checks failed · references checked at 99cd3c4",
-          "aside": "local-vllm tried 3 times",
-          "rows": [
-            {
-              "check": "docCount",
-              "ok": false,
-              "title": "Documents",
-              "text": "3 documents — the plan asks for 20–35"
-            },
-            {
-              "check": "protected",
-              "ok": false,
-              "title": "Protected documents",
-              "text": "2.1 lost §3 已知的坑 (moved to 3.1), §4 约定 (moved to 3.1)."
-            },
-            {
-              "check": "references",
-              "ok": false,
-              "title": "References",
-              "text": "3 of 5,566 not found at 99cd3c4 — files, symbols and headings on origin/main; projects and topics in this space"
-            },
-            {
-              "check": "schema",
-              "ok": true,
-              "title": "Fields",
-              "text": "Every field is one the plan has"
-            }
-          ],
-          "refKinds": ["1 symbol","1 topic","1 code path"],
-          "refs": [
-            {
-              "where": "2.1 §2",
-              "kind": "Symbol",
-              "ref": "claudeRuntime.setPhase in src/runner-go/claude.go",
-              "why": "not in the file"
-            },
-            {
-              "where": "3.1 §1",
-              "kind": "Topic",
-              "ref": "session-state-routing",
-              "why": "no such topic in this space"
-            },
-            {
-              "where": "2.1 §2",
-              "kind": "Code path",
-              "ref": "src/runner-go/claude.go",
-              "why": "no such file"
-            }
-          ]
-        },
+        "gate": null,
         "categories": [
           {
             "key": "overview",
@@ -3942,8 +4546,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -3952,16 +4556,34 @@
             "key": "sessions",
             "number": 2,
             "title": "会话",
-            "line": "1 document",
+            "line": "3 documents",
             "docs": [
               {
                 "slug": "session-runtime",
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 3,
-                "errorLabel": "3 errors",
-                "line": "2 sections · 3,000–4,500 chars"
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "4 sections · 3,000–4,500 chars"
+              },
+              {
+                "slug": "session-state",
+                "number": "2.2",
+                "title": "会话状态生命周期",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "1 section · 1,500–2,400 chars"
+              },
+              {
+                "slug": "session-search",
+                "number": "2.3",
+                "title": "会话搜索",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "2 sections · 1,500–2,200 chars"
               }
             ]
           },
@@ -3976,9 +4598,9 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 1,
-                "errorLabel": "1 error",
-                "line": "3 sections · 800–1,200 chars"
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "1 section · 800–1,200 chars"
               }
             ]
           }
@@ -4012,7 +4634,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": {
           "look": "writing",
           "title": "Writing documents",
@@ -4033,8 +4654,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -4050,8 +4671,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -4059,8 +4680,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -4068,8 +4689,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -4085,8 +4706,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -4121,7 +4742,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": {
           "look": "queued",
           "title": "Queued",
@@ -4142,8 +4762,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -4159,8 +4779,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -4168,8 +4788,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -4177,8 +4797,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -4194,8 +4814,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -4234,7 +4854,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": {
           "look": "held",
           "title": "Held",
@@ -4259,8 +4878,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -4276,8 +4895,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -4285,8 +4904,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -4294,8 +4913,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -4311,8 +4930,8 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
@@ -4347,7 +4966,6 @@
           "3 categories · 5 documents · 10 sections",
           "3 written, 2 to write"
         ],
-        "hint": null,
         "jobCard": {
           "look": "failed",
           "title": "Writing documents didn’t finish",
@@ -4368,8 +4986,8 @@
                 "number": "1.1",
                 "title": "产品定位与使用场景",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,200–2,000 chars"
               }
             ]
@@ -4385,8 +5003,8 @@
                 "number": "2.1",
                 "title": "会话运行模型与长连接",
                 "protected": true,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "4 sections · 3,000–4,500 chars"
               },
               {
@@ -4394,8 +5012,8 @@
                 "number": "2.2",
                 "title": "会话状态生命周期",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 1,500–2,400 chars"
               },
               {
@@ -4403,8 +5021,8 @@
                 "number": "2.3",
                 "title": "会话搜索",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "2 sections · 1,500–2,200 chars"
               }
             ]
@@ -4420,14 +5038,452 @@
                 "number": "3.1",
                 "title": "测试怎么跑",
                 "protected": false,
-                "errors": 0,
-                "errorLabel": null,
+                "notFound": 0,
+                "notFoundLabel": null,
                 "line": "1 section · 800–1,200 chars"
               }
             ]
           }
         ],
         "acceptConfirms": true
+      },
+      "noneFailed": {
+        "spec": {
+          "confirmed": null,
+          "draft": null,
+          "proposals": false,
+          "job": "failed",
+          "runnerOnline": true
+        },
+        "look": "draftFailed",
+        "pending": 1,
+        "banner": {
+          "text": "Plan draft didn’t finish",
+          "tone": "amber",
+          "to": "plan"
+        },
+        "open": null,
+        "build": null,
+        "failed": "job-failed",
+        "nextVersion": 1,
+        "shown": null,
+        "head": "Redraft · you asked Sep 28, 20:00",
+        "meta": null,
+        "jobCard": {
+          "look": "failed",
+          "title": "The draft didn’t finish",
+          "text": "The model’s catalogue couldn’t be read. Nothing was saved.",
+          "link": {
+            "label": "View run",
+            "to": "run",
+            "sessionId": "se-job"
+          },
+          "progress": null
+        },
+        "gate": null,
+        "categories": [],
+        "acceptConfirms": true
+      },
+      "draftFailedOver": {
+        "spec": {
+          "confirmed": "v1",
+          "draft": "v2",
+          "proposals": false,
+          "job": "failedLater",
+          "runnerOnline": true
+        },
+        "look": "draftFailed",
+        "pending": 2,
+        "banner": {
+          "text": "Plan draft didn’t finish",
+          "tone": "amber",
+          "to": "plan"
+        },
+        "open": null,
+        "build": null,
+        "failed": "job-failed-later",
+        "nextVersion": 3,
+        "shown": {
+          "version": 2,
+          "status": "draft",
+          "label": "v2",
+          "statusLabel": "Draft"
+        },
+        "head": null,
+        "meta": [
+          "Redrafted from v1 at your request",
+          "local-vllm · Sep 28, 20:43",
+          "3 categories · 3 documents · 7 sections"
+        ],
+        "jobCard": {
+          "look": "failed",
+          "title": "The redraft didn’t finish",
+          "text": "The model’s catalogue couldn’t be read. Draft v2 is unchanged.",
+          "link": {
+            "label": "View run",
+            "to": "run",
+            "sessionId": "se-job"
+          },
+          "progress": null
+        },
+        "gate": {
+          "passed": true,
+          "title": "Passed the plan check",
+          "line": "4 checks · references checked at 99cd3c4",
+          "aside": null,
+          "rows": [
+            {
+              "check": "docCount",
+              "ok": true,
+              "title": "Documents",
+              "text": "3 documents — within 3–5"
+            },
+            {
+              "check": "protected",
+              "ok": true,
+              "title": "Protected documents",
+              "text": "2.1 unchanged"
+            },
+            {
+              "check": "references",
+              "ok": true,
+              "title": "References",
+              "text": "All 5,566 found at 99cd3c4"
+            },
+            {
+              "check": "schema",
+              "ok": true,
+              "title": "Fields",
+              "text": "1 field to add: evidenceWeight (section)"
+            }
+          ],
+          "refKinds": [],
+          "refs": []
+        },
+        "categories": [
+          {
+            "key": "overview",
+            "number": 1,
+            "title": "产品概览",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "product",
+                "number": "1.1",
+                "title": "产品定位与使用场景",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "2 sections · 1,200–2,000 chars"
+              }
+            ]
+          },
+          {
+            "key": "sessions",
+            "number": 2,
+            "title": "会话",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "session-runtime",
+                "number": "2.1",
+                "title": "会话运行模型与长连接",
+                "protected": true,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "4 sections · 3,000–4,500 chars"
+              }
+            ]
+          },
+          {
+            "key": "agents",
+            "number": 3,
+            "title": "给 agent 的开发约定",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "agent-tests",
+                "number": "3.1",
+                "title": "测试怎么跑",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "1 section · 800–1,200 chars"
+              }
+            ]
+          }
+        ],
+        "acceptConfirms": false
+      },
+      "draftNoted": {
+        "spec": {
+          "confirmed": "v1",
+          "draft": "v2Noted",
+          "proposals": false,
+          "job": "revised",
+          "runnerOnline": true
+        },
+        "look": "draftReady",
+        "pending": 1,
+        "banner": {
+          "text": "Plan draft ready to confirm",
+          "tone": "amber",
+          "to": "plan"
+        },
+        "open": null,
+        "build": null,
+        "failed": null,
+        "nextVersion": 3,
+        "shown": {
+          "version": 2,
+          "status": "draft",
+          "label": "v2",
+          "statusLabel": "Draft"
+        },
+        "head": null,
+        "meta": [
+          "Redrafted from v1 at your request",
+          "local-vllm · Sep 28, 20:43",
+          "3 categories · 3 documents · 7 sections"
+        ],
+        "jobCard": null,
+        "gate": {
+          "passed": false,
+          "title": "Ready for review",
+          "line": "4 to look at · references checked at 99cd3c4",
+          "aside": "attempt 2",
+          "rows": [
+            {
+              "check": "docCount",
+              "ok": true,
+              "title": "Documents",
+              "text": "3 documents — within 3–5"
+            },
+            {
+              "check": "docCount",
+              "ok": false,
+              "title": "Documents",
+              "text": "Search ranking was left out: nothing was written for it."
+            },
+            {
+              "check": "protected",
+              "ok": true,
+              "title": "Protected documents",
+              "text": "2.1 unchanged"
+            },
+            {
+              "check": "references",
+              "ok": false,
+              "title": "References",
+              "text": "5,564 of 5,566 found at 99cd3c4 — the rest stay on their sections, and a document is written without any that’s still missing"
+            },
+            {
+              "check": "references",
+              "ok": false,
+              "title": "References",
+              "text": "A topic isn’t this wiki’s and was left out: invented."
+            },
+            {
+              "check": "schema",
+              "ok": true,
+              "title": "Fields",
+              "text": "1 field to add: evidenceWeight (section)"
+            }
+          ],
+          "refKinds": [
+            "1 symbol",
+            "1 doc section"
+          ],
+          "refs": [
+            {
+              "where": "2.1 §2",
+              "kind": "Symbol",
+              "ref": "src/runner-go/runloop.go: runLoop()",
+              "why": "not in the file"
+            },
+            {
+              "where": "1.1 §2",
+              "kind": "Doc section",
+              "ref": "docs/architecture.md § 1. Why",
+              "why": "no such heading"
+            }
+          ]
+        },
+        "categories": [
+          {
+            "key": "overview",
+            "number": 1,
+            "title": "产品概览",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "product",
+                "number": "1.1",
+                "title": "产品定位与使用场景",
+                "protected": false,
+                "notFound": 1,
+                "notFoundLabel": "1 not found",
+                "line": "2 sections · 1,200–2,000 chars"
+              }
+            ]
+          },
+          {
+            "key": "sessions",
+            "number": 2,
+            "title": "会话",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "session-runtime",
+                "number": "2.1",
+                "title": "会话运行模型与长连接",
+                "protected": true,
+                "notFound": 1,
+                "notFoundLabel": "1 not found",
+                "line": "4 sections · 3,000–4,500 chars"
+              }
+            ]
+          },
+          {
+            "key": "agents",
+            "number": 3,
+            "title": "给 agent 的开发约定",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "agent-tests",
+                "number": "3.1",
+                "title": "测试怎么跑",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "1 section · 800–1,200 chars"
+              }
+            ]
+          }
+        ],
+        "acceptConfirms": false
+      },
+      "draftOutside": {
+        "spec": {
+          "confirmed": "v1",
+          "draft": "v2Outside",
+          "proposals": false,
+          "job": "revised",
+          "runnerOnline": true
+        },
+        "look": "draftReady",
+        "pending": 1,
+        "banner": {
+          "text": "Plan draft ready to confirm",
+          "tone": "amber",
+          "to": "plan"
+        },
+        "open": null,
+        "build": null,
+        "failed": null,
+        "nextVersion": 3,
+        "shown": {
+          "version": 2,
+          "status": "draft",
+          "label": "v2",
+          "statusLabel": "Draft"
+        },
+        "head": null,
+        "meta": [
+          "Redrafted from v1 at your request",
+          "local-vllm · Sep 28, 20:43",
+          "3 categories · 3 documents · 7 sections"
+        ],
+        "jobCard": null,
+        "gate": {
+          "passed": false,
+          "title": "Ready for review",
+          "line": "1 to look at · references checked at 99cd3c4",
+          "aside": "attempt 2",
+          "rows": [
+            {
+              "check": "docCount",
+              "ok": false,
+              "title": "Documents",
+              "text": "3 documents — the plan asks for 20–35. Confirm it as it is, or Redraft with what to merge or split."
+            },
+            {
+              "check": "protected",
+              "ok": true,
+              "title": "Protected documents",
+              "text": "2.1 unchanged"
+            },
+            {
+              "check": "references",
+              "ok": true,
+              "title": "References",
+              "text": "All 5,566 found at 99cd3c4"
+            },
+            {
+              "check": "schema",
+              "ok": true,
+              "title": "Fields",
+              "text": "1 field to add: evidenceWeight (section)"
+            }
+          ],
+          "refKinds": [],
+          "refs": []
+        },
+        "categories": [
+          {
+            "key": "overview",
+            "number": 1,
+            "title": "产品概览",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "product",
+                "number": "1.1",
+                "title": "产品定位与使用场景",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "2 sections · 1,200–2,000 chars"
+              }
+            ]
+          },
+          {
+            "key": "sessions",
+            "number": 2,
+            "title": "会话",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "session-runtime",
+                "number": "2.1",
+                "title": "会话运行模型与长连接",
+                "protected": true,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "4 sections · 3,000–4,500 chars"
+              }
+            ]
+          },
+          {
+            "key": "agents",
+            "number": 3,
+            "title": "给 agent 的开发约定",
+            "line": "1 document",
+            "docs": [
+              {
+                "slug": "agent-tests",
+                "number": "3.1",
+                "title": "测试怎么跑",
+                "protected": false,
+                "notFound": 0,
+                "notFoundLabel": null,
+                "line": "1 section · 800–1,200 chars"
+              }
+            ]
+          }
+        ],
+        "acceptConfirms": false
       }
     },
     "versionRows": {
@@ -4457,19 +5513,17 @@
           "supersededAt": null
         }
       ],
-      "failed": {"version":3,"at":"2026-09-29T06:02:00.000Z"},
       "rows": [
-        {
-          "version": 3,
-          "status": "failed",
-          "note": "Redraft · Sep 29, 14:02 · didn’t pass the check"
-        },
         {
           "version": 2,
           "status": "draft",
           "note": "Redraft · Sep 28, 20:43 · waiting for you"
         },
-        {"version":1,"status":"confirmed","note":"Sep 28, 17:12 · confirmed by you"}
+        {
+          "version": 1,
+          "status": "confirmed",
+          "note": "Sep 28, 17:12 · confirmed by you"
+        }
       ]
     },
     "docPages": [
@@ -4479,11 +5533,20 @@
         "title": "会话运行模型与长连接",
         "number": "2.1",
         "protected": true,
-        "head": ["v2 · Draft","3 errors","2 sections · 3,000–4,500 chars"],
+        "head": [
+          "v2 · Draft",
+          "1 not found",
+          "4 sections · 3,000–4,500 chars"
+        ],
         "length": "3,000–4,500 chars",
         "protectedNote": "Protected — a redraft keeps it as it is; only you can change it",
-        "drawsOn": "1 design doc · 1 code path",
-        "scopeOut": [{"text":"session 的状态模型","see":["→ session-state"]}],
+        "drawsOn": "2 design docs · 2 code paths · 1 contract · topics sessions, agent-tooling · 3 projects",
+        "scopeOut": [
+          {
+            "text": "session 的 runState / lifecycleState 三维度状态模型",
+            "see": ["→ session-state"]
+          }
+        ],
         "sections": [
           {
             "n": 1,
@@ -4495,7 +5558,7 @@
           {
             "n": 2,
             "title": "turn 投递与 inbox 领取：long-poll 与心跳",
-            "line": "Flow · ~800 chars · 1 doc section · 1 code file",
+            "line": "Flow · ~800 chars · 2 doc sections · 2 code files · 1 contract",
             "meta": "Flow · ~800 chars · references checked at 99cd3c4",
             "sources": {
               "docs": [
@@ -4503,23 +5566,94 @@
                   "path": "docs/architecture.md",
                   "section": "Realtime and recovery",
                   "found": true
+                },
+                {
+                  "path": "docs/interactive-claude-runner-design.md",
+                  "section": "1. Transport",
+                  "found": true
                 }
               ],
               "code": [
                 {
-                  "path": "src/runner-go/claude.go",
-                  "symbols": ["claudeRuntime.setPhase"],
+                  "path": "src/runner-go/runloop.go",
+                  "symbols": [
+                    "runLoop()",
+                    "claimRetryDelayAfter()"
+                  ],
                   "found": false
+                },
+                {
+                  "path": "src/apiserver/src/realtime/realtime.service.ts",
+                  "symbols": [
+                    "RealtimeService.waitForInbox"
+                  ],
+                  "found": true
                 }
               ],
-              "contracts": [],
+              "contracts": [
+                {
+                  "path": "contracts/runner.contract.json",
+                  "found": true
+                }
+              ],
               "sessions": null
             }
+          },
+          {
+            "n": 3,
+            "title": "已知的坑",
+            "line": "Pitfalls · ~700 chars · sessions",
+            "meta": "Pitfalls · ~700 chars · sessions",
+            "sources": {
+              "docs": [],
+              "code": [],
+              "contracts": [],
+              "sessions": {
+                "projects": [
+                  "会话合并",
+                  "pr-gone"
+                ],
+                "time": "2026-08-19 → now",
+                "keywords": [
+                  "superseded",
+                  "detach"
+                ],
+                "anchorPaths": [
+                  "src/runner-go/"
+                ],
+                "entryKinds": "pitfall",
+                "topics": "sessions",
+                "evidence": "合并被判 superseded 的原话"
+              }
+            }
+          },
+          {
+            "n": 4,
+            "title": "约定",
+            "line": "Conventions · ~400 chars · sessions",
+            "meta": "Conventions · ~400 chars · sessions",
+            "sources": {
+              "docs": [],
+              "code": [],
+              "contracts": [],
+              "sessions": {
+                "projects": [
+                  "Claude Code 运行中 Prompt 接入改造"
+                ],
+                "time": "2026-08-19 → now",
+                "keywords": [
+                  "runner 宿主",
+                  "env -u"
+                ],
+                "anchorPaths": [
+                  "src/runner-go/"
+                ],
+                "entryKinds": "convention · pitfall",
+                "topics": "agent-tooling",
+                "evidence": "runner-go 测试须在 runner 宿主跑的约定原文"
+              }
+            }
           }
-        ],
-        "lost": [
-          {"number":3,"label":"v1 §3 已知的坑","why":"Moved to 3.1 — 2.1 is protected"},
-          {"number":4,"label":"v1 §4 约定","why":"Moved to 3.1 — 2.1 is protected"}
         ]
       },
       {
@@ -4528,10 +5662,13 @@
         "title": "测试怎么跑",
         "number": "3.1",
         "protected": false,
-        "head": ["v2 · Draft","1 error","3 sections · 800–1,200 chars"],
+        "head": [
+          "v2 · Draft",
+          "1 section · 800–1,200 chars"
+        ],
         "length": "800–1,200 chars",
         "protectedNote": "Not protected — a redraft may change it",
-        "drawsOn": "topics session-state-routing",
+        "drawsOn": "sessions",
         "scopeOut": [],
         "sections": [
           {
@@ -4549,27 +5686,12 @@
                 "keywords": ["overlay"],
                 "anchorPaths": [],
                 "entryKinds": "",
-                "topics": "session-state-routing",
+                "topics": "",
                 "evidence": ""
               }
             }
-          },
-          {
-            "n": 2,
-            "title": "已知的坑",
-            "line": "Pitfalls · ~700 chars · No sources yet",
-            "meta": "Pitfalls · ~700 chars · references checked at 99cd3c4",
-            "sources": {"docs":[],"code":[],"contracts":[],"sessions":null}
-          },
-          {
-            "n": 3,
-            "title": "约定",
-            "line": "Conventions · ~400 chars · No sources yet",
-            "meta": "Conventions · ~400 chars · references checked at 99cd3c4",
-            "sources": {"docs":[],"code":[],"contracts":[],"sessions":null}
           }
-        ],
-        "lost": []
+        ]
       },
       {
         "version": 1,
@@ -4669,8 +5791,7 @@
               }
             }
           }
-        ],
-        "lost": []
+        ]
       }
     ],
     "changes": [
@@ -4727,7 +5848,6 @@
         {"length":{"min":800,"max":800},"says":"800 chars"}
       ],
       "sectionChars": [{"n":300,"says":"~300 chars"},{"n":1500,"says":"~1,500 chars"}],
-      "errors": [{"n":1,"says":"1 error"},{"n":2,"says":"2 errors"}],
       "changesCount": [{"n":1,"says":"1 change"},{"n":2,"says":"2 changes"}],
       "time": [
         {"since":"2026-08-19","until":null,"says":"2026-08-19 → now"},
@@ -4746,14 +5866,14 @@
       "changeAdded": [{"n":3,"says":"Change added to draft v3"}],
       "draftSaved": [{"n":3,"says":"Draft v3 saved"}],
       "andMore": [{"n":4,"says":"and 4 more"}],
-      "failedHint": [
+      "notFound": [
         {
-          "inForce": 1,
-          "says": "Confirm needs a passing check. Redraft with what to change — v1 stays in force until you confirm."
+          "n": 1,
+          "says": "1 not found"
         },
         {
-          "inForce": null,
-          "says": "Confirm needs a passing check. Redraft with what to change — until you confirm a plan, the Wiki shows its topic articles."
+          "n": 2,
+          "says": "2 not found"
         }
       ]
     },

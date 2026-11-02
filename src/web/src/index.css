@@ -25124,7 +25124,7 @@ button.project-open-item-action:disabled {
 .wk-pl-verrow .d { color: var(--text-2); font-size: 12.5px; }
 .wk-pl-meta { margin-top: 8px; font-size: 13px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 9px; align-items: center; }
 .wk-pl-meta .sep { color: var(--text-4); }
-.wk-pl-meta .errn { color: var(--error); font-weight: 600; }
+.wk-pl-meta .notn, .wk-pl-docs .l3 .notn { color: var(--warning); font-weight: 600; }
 .wk-pl-hint { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
 
 /* the plan check, and the job's card — an Alert-coloured card, one row a check */
@@ -25148,6 +25148,9 @@ button.project-open-item-action:disabled {
 .wk-pl-check.run > .h .ic { color: var(--brand); }
 .wk-pl-check.wait > .h { background: var(--bg-subtle); }
 .wk-pl-check.wait > .h .ic { color: var(--text-3); }
+.wk-pl-check.note { border-color: var(--warning-border); }
+.wk-pl-check.note > .h { background: var(--warning-bg); border-bottom-color: var(--warning-border); }
+.wk-pl-check.note > .h .ic, .wk-pl-check.note > .h b { color: var(--warning); }
 .wk-pl-check.held { border-color: var(--warning-border); }
 .wk-pl-check.held > .h { background: var(--warning-bg); border-bottom-color: var(--warning-border); }
 .wk-pl-check.held > .h .ic, .wk-pl-check.held > .h b { color: var(--warning); }
@@ -25159,7 +25162,7 @@ button.project-open-item-action:disabled {
 .wk-pl-ck + .wk-pl-ck { border-top: 1px solid var(--border-subtle); }
 .wk-pl-ck > .ic { font-size: 13px; transform: translateY(2px); }
 .wk-pl-ck.is-ok > .ic { color: var(--success); }
-.wk-pl-ck.is-bad > .ic { color: var(--error); }
+.wk-pl-ck.is-note > .ic { color: var(--warning); }
 .wk-pl-ck .n { font-weight: 600; color: var(--text-1); }
 .wk-pl-ck .r { color: var(--text-1); min-width: 0; font-weight: 400; overflow-wrap: anywhere; }
 .wk-pl-ck code, .wk-pl-err code, .wk-pl-kv code, .wk-pl-src code, .wk-pl-sec code, .wk-fn2 code, .wk-dc-scope code {
@@ -25172,7 +25175,7 @@ button.project-open-item-action:disabled {
 .wk-pl-err .at { font: 600 11.5px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--brand); }
 .wk-pl-err .k { color: var(--text-3); white-space: nowrap; }
 .wk-pl-err .m { color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
-.wk-pl-err .m .why { color: var(--error); }
+.wk-pl-err .m .why { color: var(--text-3); }
 .wk-pl-errs .more { display: block; width: 100%; text-align: left; padding: 6px 10px 7px; border: 0; border-top: 1px solid var(--border-subtle); background: transparent;
                     font: inherit; font-size: 12.5px; color: var(--brand); cursor: pointer; }
 
@@ -25231,8 +25234,8 @@ button.project-open-item-action:disabled {
 .wk-pl-doc .main > .t .ic.lock { flex: none; font-size: 12px; color: var(--text-3); }
 .wk-pl-doc .main > .q { display: block; margin-top: 1px; font-size: 12.5px; line-height: 18px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wk-pl-doc > .meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
-.wk-pl-doc .errn { display: inline-flex; align-items: center; gap: 4px; color: var(--error); font-weight: 600; }
-.wk-pl-doc .errn .ic { font-size: 12px; }
+.wk-pl-doc .notn { display: inline-flex; align-items: center; gap: 4px; color: var(--warning); font-weight: 600; }
+.wk-pl-doc .notn .ic { font-size: 12px; }
 .wk-pl-chg { padding: 0 7px; border-radius: 999px; background: var(--warning-bg); color: var(--warning); font-weight: 600; font-size: 11.5px; line-height: 18px; }
 .wk-pl-diff { flex: none; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 600; }
 .wk-pl-diff.new { background: var(--success-bg); color: var(--success); }
@@ -25270,10 +25273,6 @@ button.project-open-item-action:disabled {
 .wk-pl-sec > .len { font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wk-pl-sec > .src { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wk-pl-sec.open { background: color-mix(in srgb, var(--brand-tint) 45%, var(--bg-raised)); margin: 0 -8px; padding: 7px 8px; border-radius: 6px; }
-.wk-pl-sec.gone { background: var(--error-bg); margin: 0 -8px; padding: 7px 8px; border-radius: 6px; border-top-color: transparent; }
-.wk-pl-sec.gone > .t { color: var(--text-3); text-decoration: line-through; cursor: default; }
-.wk-pl-sec.gone + .wk-pl-sec { border-top-color: transparent; }
-.wk-pl-sec .why { grid-column: 2 / -1; margin-top: -2px; font-size: 12px; color: var(--error); display: flex; align-items: center; gap: 6px; }
 .wk-pl-src { grid-column: 2 / -1; margin: 4px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--bg-raised); border: 1px solid var(--border-subtle); }
 .wk-pl-src .g { margin: 6px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--text-3); letter-spacing: .2px; }
 .wk-pl-src .g:first-child { margin-top: 0; }
@@ -25281,7 +25280,7 @@ button.project-open-item-action:disabled {
 .wk-pl-src .r .p { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
 .wk-pl-src .r .p .sym { color: var(--text-2); }
 .wk-pl-src .r .ok { color: var(--success); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-.wk-pl-src .r .bad { color: var(--error); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.wk-pl-src .r .bad { color: var(--warning); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .wk-pl-src .cond { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 10px; font-size: 12.5px; line-height: 1.55; }
 .wk-pl-src .cond .k { color: var(--text-3); }
 .wk-pl-src .cond .v { color: var(--text-1); min-width: 0; }
@@ -25502,8 +25501,6 @@ button.project-open-item-action:disabled {
   .wk-pl-sec.phone { grid-template-columns: 22px minmax(0, 1fr) 12px; gap: 6px; padding: 9px 2px 10px; text-decoration: none; color: inherit; }
   .wk-pl-sec.phone > .t { font-size: 14.5px; line-height: 20px; }
   .wk-pl-sec.phone .cov { white-space: normal; font-size: 12.5px; }
-  .wk-pl-sec.gone.phone { display: block; margin: 4px -4px; }
-  .wk-pl-sec.gone.phone .why { display: block; margin-top: 2px; }
   .wk-pl-src { margin: 12px 0 0; }
   .wk-pl-src .cond { grid-template-columns: minmax(0, 1fr); }
   .wk-pl-prop .card-actions { flex-wrap: wrap; }

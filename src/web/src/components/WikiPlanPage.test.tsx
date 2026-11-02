@@ -99,7 +99,7 @@ function stateOf(name: string): WikiPlanState {
   return {
     spaceId: SPACE_ID,
     confirmed: spec.confirmed ? SHARED.plan.versions.v1 : null,
-    draft: spec.draft ? SHARED.plan.versions.v2 : null,
+    draft: spec.draft ? (SHARED.plan.versions as Record<string, WikiPlanVersion>)[spec.draft] : null,
     proposals: spec.proposals ? PROPOSALS : [],
     job: spec.job ? linkable(SHARED.plan.jobs[spec.job]) : null,
   };
@@ -334,16 +334,49 @@ describe('the plan page, by what its job is doing', () => {
     );
   });
 
-  it('shows a draft that failed the gate with its report, and will not confirm it', async () => {
+  it('shows what a stored draft says to look at, amber, and confirms it all the same', async () => {
+    plan = stateOf('draftNoted');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(planPage()?.querySelector('.wk-pl-check.note')).toBeTruthy());
+    const gate = planPage().querySelector('.wk-pl-check.note')!;
+    expect(text('b', gate)[0]).toBe('Ready for review');
+    expect(text('.wk-pl-ck .n', gate)).toEqual(['Documents', 'Documents', 'Protected documents', 'References', 'References', 'Fields']);
+    expect(text('.wk-pl-ck .r', gate)).toContain('Search ranking was left out: nothing was written for it.');
+    expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '1.1 §2']);
+    expect(planPage().querySelector('.wk-pl-hint')).toBeNull();
+    expect(planPage().querySelector('.wk-pl-check.fail')).toBeNull();
+    expect(text('.wk-pl-doc .notn', planPage())).toEqual(['1 not found', '1 not found']);
+    expect(button('Confirm plan', planPage())?.disabled).toBe(false);
+    expect(button('Redraft…', planPage())?.disabled).toBe(false);
+  });
+
+  it('says in one line that a redraft left no draft, over the version that stands, and Redraft stays', async () => {
     plan = stateOf('draftFailed');
     await open('/wiki/orbit/plan');
-    await vi.waitFor(() => expect(planPage()?.querySelector('.wk-pl-check.fail:not(.wk-pl-job)')).toBeTruthy());
-    expect(text('.wk-pl-hint', planPage())).toEqual(['Confirm needs a passing check. Redraft with what to change — v1 stays in force until you confirm.']);
-    expect(jobCard()).toEqual(['Didn’t pass the plan check 3 of 4 checks failed · after 3 attempts · 5 errors listed below']);
-    expect(button('Confirm plan', planPage())?.disabled).toBe(true);
-    const gate = planPage().querySelector('.wk-pl-check.fail:not(.wk-pl-job)')!;
-    expect(text('.wk-pl-ck .n', gate)).toEqual(['Documents', 'Protected documents', 'References', 'Fields']);
-    expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '3.1 §1', '2.1 §2']);
+    await vi.waitFor(() => expect(jobCard()).toEqual(['The redraft didn’t finish The model’s catalogue couldn’t be read. v1 stays in force. View run']));
+    expect(planPage().querySelector('.wk-pl-check:not(.wk-pl-job)')).toBeNull();
+    expect(text('.wk-pl-doc .tt', planPage()).length).toBeGreaterThan(0);
+    expect(button('Confirm plan', planPage())).toBeUndefined();
+    expect(button('Redraft…', planPage())?.disabled).toBe(false);
+  });
+
+  it('keeps a draft waiting as it is when a redraft of it left none', async () => {
+    plan = stateOf('draftFailedOver');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(jobCard()).toEqual(['The redraft didn’t finish The model’s catalogue couldn’t be read. Draft v2 is unchanged. View run']));
+    expect(planPage().querySelector('.wk-pl-check.pass')).toBeTruthy();
+    expect(button('Confirm plan', planPage())?.disabled).toBe(false);
+  });
+
+  it('draws a first draft that left nothing as the card and Redraft, with no version made up for it', async () => {
+    plan = stateOf('noneFailed');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(jobCard()).toEqual(['The draft didn’t finish The model’s catalogue couldn’t be read. Nothing was saved. View run']));
+    expect(planPage().querySelector('.wk-pl-ver')).toBeNull();
+    expect(planPage().querySelector('.wk-pl-empty')).toBeNull();
+    expect(text('.wk-pl-meta', planPage())).toEqual(['Redraft · you asked Sep 28, 20:00']);
+    expect(button('Confirm plan', planPage())).toBeUndefined();
+    expect(button('Redraft…', planPage())?.disabled).toBe(false);
   });
 });
 
@@ -398,9 +431,9 @@ describe('Update documents: the version in force’s documents asked for again (
     await open('/wiki/orbit/plan');
     await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
     expect(button('Update documents', planPage())).toBeUndefined();
-    // A draft, and a draft that failed: not the version in force.
+    // A draft: not the version in force.
     serverExecutes = true;
-    for (const name of ['draftReady', 'draftFailed']) {
+    for (const name of ['draftReady', 'draftFailedOver']) {
       plan = stateOf(name);
       await open('/wiki/orbit/plan');
       await vi.waitFor(() => expect(button('Redraft…', planPage()), name).toBeTruthy());
