@@ -1734,7 +1734,8 @@ func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 	bg := newBgTailer(ctx, func(string, map[string]interface{}) {}, nil)
 	bg.wakeSessionVia(func(w bgWake) error { wakesMu.Lock(); wakes[w.JobID] = w; wakesMu.Unlock(); return nil })
 	defer bg.stopAll()
-	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho"}
+	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho",
+		agentID: "agent-ho", taskID: "task-ho", mode: func() string { return "plan" }}
 	socket := filepath.Join(home, "bg.sock")
 	stop, err := startBgJobService(ctx, svc, socket, filepath.Join(home, "bg.token"))
 	if err != nil {
@@ -1786,7 +1787,7 @@ func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 			}
 		}
 	}
-	if leftovers, _ := filepath.Glob(filepath.Join(os.TempDir(), "orbit-mcp-handoff-*.json")); len(leftovers) != 0 {
+	if leftovers, _ := filepath.Glob(filepath.Join(home, "orbit-mcp-handoff-*.json")); len(leftovers) != 0 {
 		t.Fatalf("request files left behind: %v", leftovers)
 	}
 }

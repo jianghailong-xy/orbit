@@ -1537,6 +1537,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					// Not taken up: the session keeps the mode it runs in.
 					p.emit(evError, map[string]interface{}{"message": err.Error()})
 					p.job.Agent.PermissionMode = beforeMode
+					p.job.notePermissionMode(beforeMode)
 				} else {
 					bridge.setPolicy(next)
 				}

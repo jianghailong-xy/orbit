@@ -1862,42 +1862,10 @@ func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) m
 	if socket == "" || token == "" {
 		return refuse("this session has no runner-hosted background job service to hand the wait to")
 	}
-	exe := orbitCLIExecutable()
-	if exe == "" {
-		return refuse("the orbit executable could not be resolved")
-	}
-	params, err := json.Marshal(map[string]interface{}{"name": name, "arguments": args})
+	// Its own operation, not `run`: the gate on `run` is about commands, and this is a question put to a
+	// person, which Plan and Don't Ask may do (bgJobService.startOwnerWait).
+	raw, err := bgSocketCall(socket, token, "owner_wait", map[string]interface{}{"tool": name, "arguments": args})
 	if err != nil {
-		return refuse(err.Error())
-	}
-	request, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call", Params: params})
-	file, err := os.CreateTemp("", "orbit-mcp-handoff-*.json")
-	if err != nil {
-		return refuse(err.Error())
-	}
-	_, err = file.Write(append(request, '\n'))
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		_ = os.Remove(file.Name())
-		return refuse(err.Error())
-	}
-	// The job's environment is the runner's, which carries this session and the job's own id but not
-	// the rest of who is asking: the agent the write is attributed to, the current task, the
-	// orchestration switch. They are this server's own, put back as it was started with them. The
-	// timeout is cleared so the job waits as long as the owner takes, and only this tool is served.
-	// The request file is unlinked once open, so nothing is left behind however the job ends.
-	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
-		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
-		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
-		shellQuote(exe), shellQuote(file.Name()))
-	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
-		"command": command, "kind": bgKindWatch, "wakeOnExit": true,
-		"description": "Orbit " + name + ": waiting for the owner's confirmation",
-	})
-	if err != nil {
-		_ = os.Remove(file.Name())
 		return refuse("handing the wait to a runner-hosted job failed: " + err.Error())
 	}
 	var job struct {

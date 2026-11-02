@@ -263,7 +263,8 @@ func TestClaimedWatchesDisabledDecodesAndDefaultsToOn(t *testing.T) {
 }
 
 func guardDecision(tool string, input map[string]interface{}) (string, string) {
-	out := bgGuardDecision(hookInput{HookEventName: "PreToolUse", ToolName: tool, ToolInput: input})
+	// In a mode that does not ask, where having no objection reads as allow (hookModeSkipsAsking).
+	out := bgGuardDecision(hookInput{HookEventName: "PreToolUse", ToolName: tool, ToolInput: input, PermissionMode: "auto"})
 	specific, _ := out["hookSpecificOutput"].(map[string]interface{})
 	decision, _ := specific["permissionDecision"].(string)
 	reason, _ := specific["permissionDecisionReason"].(string)

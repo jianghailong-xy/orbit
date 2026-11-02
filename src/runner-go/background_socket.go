@@ -28,8 +28,10 @@ import (
 
 const (
 	bgSocketProtocolVersion = 1
-	bgSocketRequestCap      = 64 * 1024
-	bgSocketTimeout         = 30 * time.Second
+	// Past any command line, because owner_wait carries a whole tool call: a batch of tasks can run to
+	// hundreds of kilobytes, and it used to reach the hosted job through a file nothing here read.
+	bgSocketRequestCap = 8 * 1024 * 1024
+	bgSocketTimeout    = 30 * time.Second
 	// A unix socket path is bounded by sun_path — 108 bytes on Linux, 104 on
 	// macOS, and a bind that exceeds it fails with a message about nothing in
 	// particular. Refuse early and say which path was too long.
@@ -73,6 +75,15 @@ type bgJobService struct {
 	// The session this service serves, carried onto every job it starts so a gated write inside
 	// one still reaches the owner (see `bgJobSpec.SessionID`).
 	sessionID string
+	// What the gate reads (background_gate.go): the session's permission mode at this moment, the engine
+	// it runs on, and where a card is filed. A nil mode refuses every job.
+	mode   func() string
+	engine string
+	t      *Transport
+	// Who is asking, for the hosted job of a call that waits for the owner (startOwnerWait).
+	agentID            string
+	taskID             string
+	allowOrchestration bool
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -189,7 +200,7 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
-		status, err := s.bg.startJob(bgJobSpec{
+		spec := bgJobSpec{
 			Command:      getString(args, "command"),
 			Kind:         getString(args, "kind"),
 			Dir:          dir,
@@ -200,11 +211,27 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 			WakeOnStall:  wakeOnStall,
-		})
+		}
+		if err := validateBgJobSpec(spec); err != nil {
+			return bgSocketResponse{Error: err.Error()}
+		}
+		// The gate on every job, whoever asks (background_gate.go).
+		verdict := s.admit(spec)
+		if verdict.refusal != "" {
+			return bgSocketResponse{Error: verdict.refusal}
+		}
+		start := s.bg.startJob
+		if verdict.ask {
+			start = s.startGatedJob
+		}
+		status, err := start(spec)
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
 		return bgSocketResponse{OK: true, Result: status}
+
+	case "owner_wait":
+		return s.startOwnerWait(args)
 
 	case "output":
 		tail, err := bgOptionalInt(args, "tail")
@@ -372,19 +399,27 @@ func bgSocketCall(socketPath, token, op string, args map[string]interface{}) (js
 // startSessionBgJobService wires one session's job service: a fresh token per
 // run (so a socket left by a predecessor cannot be talked to with an old one)
 // and the session's own directories as the only places a job may run.
-func startSessionBgJobService(ctx context.Context, bg *bgTailer, job *ClaimedSession, execDir, scratchDir string) (func(), error) {
+func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, job *ClaimedSession, execDir, scratchDir string) (func(), error) {
 	token, err := newBgSessionToken()
 	if err != nil {
 		return nil, err
 	}
+	liveMode := &sessionLiveMode{mode: job.Agent.PermissionMode}
+	job.liveMode = liveMode
 	svc := &bgJobService{
-		bg:         bg,
-		token:      token,
-		execDir:    execDir,
-		scratchDir: scratchDir,
-		extraDirs:  []string{uploadsDir(job.SessionID)},
-		env:        job.Agent.Env,
-		sessionID:  job.SessionID,
+		bg:                 bg,
+		token:              token,
+		execDir:            execDir,
+		scratchDir:         scratchDir,
+		extraDirs:          []string{uploadsDir(job.SessionID)},
+		env:                job.Agent.Env,
+		sessionID:          job.SessionID,
+		mode:               liveMode.current,
+		engine:             runtimeProvider(job),
+		t:                  t,
+		agentID:            publicID(job.AgentID),
+		taskID:             publicID(job.TaskID),
+		allowOrchestration: job.AllowOrchestration,
 	}
 	return startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 }
