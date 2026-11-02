@@ -27,6 +27,23 @@ launchctl list com.orbit.runner
 tail -n 100 ~/.orbit/runner.log
 ```
 
+An account logged in at the Mac's screen gets an Aqua agent, in `gui/<uid>`. An account that only logs in over
+SSH has no desktop session, so `orbit register` limits its agent to the Background session, in `user/<uid>`.
+`launchctl list com.orbit.runner` finds either. Which one is installed is in the plist:
+
+```bash
+# macOS only. Background means user/<uid>; "Could not extract value" means an Aqua agent in gui/<uid>.
+plutil -extract LimitLoadToSessionType raw ~/Library/LaunchAgents/com.orbit.runner.plist
+```
+
+A Background agent does not start by itself, so it stays down after the Mac restarts, and logging in over SSH
+does not bring it back. Start it again from an SSH shell:
+
+```bash
+# macOS only, for a Background agent.
+launchctl bootstrap user/$(id -u) ~/Library/LaunchAgents/com.orbit.runner.plist
+```
+
 If registered with `--foreground`, inspect the terminal running `orbit run`. Do not start a second
 runner process to diagnose an already-running service.
 
@@ -110,6 +127,11 @@ tokens, authentication headers, cookies, internal network addresses, identifiers
 4. A provider quota/rate-limit error after successful authentication is a provider-availability failure.
    Expected next action: wait for the reported reset or select an authorized provider with available
    quota, then retry. Use the [first-run task check](first-run.md#5-complete-a-small-task) to verify success.
+
+**A Mac account that only logs in over SSH shows Claude as signed out:** its Background agent cannot read the
+login Keychain, even one unlocked with `security unlock-keychain` in an SSH shell: that unlock stays in that
+shell. Sign in again with the UI's runner sign-in action. Claude Code then keeps the login in
+`~/.claude/.credentials.json`, mode 0600, which the service can read.
 
 **Safe issue evidence:** selected runtime/provider type, runtime and Orbit versions, doctor status for
 that runtime (installed/auth/service PATH), UTC timestamps, and sanitized error text. Redact API keys,

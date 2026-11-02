@@ -362,11 +362,11 @@ func restartServices(defs []serviceDef, uid string) {
 	reloaded := false
 	for _, d := range defs {
 		if d.launchd {
-			// The account's own GUI domain: as root, a plain `launchctl load` lands in root's.
-			domain := "gui/" + uid
-			runQuiet("launchctl", "bootout", domain, d.path)
-			if err := run("launchctl", "bootstrap", domain, d.path); err != nil {
-				fmt.Fprintf(os.Stderr, "note: could not reload %s; it starts from the new path at the next login\n", d.path)
+			// The account's own domain, which its plist records: as root, a plain `launchctl load` lands in root's.
+			plist, _ := os.ReadFile(d.path)
+			domain := launchdDomain(string(plist), uid)
+			if err := startLaunchd(domain, domain, d.path, launchdLabel, func() {}); err != nil {
+				fmt.Fprintf(os.Stderr, "note: could not reload %s (%v); it starts from the new path the next time it starts\n", d.path, err)
 			}
 			continue
 		}
