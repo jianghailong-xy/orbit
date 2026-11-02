@@ -310,8 +310,9 @@ can link from. The check goes by a path's real location, with links resolved, so
 does not reach out of it; anywhere else is refused, and the refusal names the uploads directory to copy
 a file into. The checkout is the session's own worktree and the working directory itself. A working
 directory that is `/` or holds the home directory counts as neither, and a session started there
-uploads from its uploads directory. Inside the runner's own directory (`~/.orbit`) nothing but this
-session's directories is ever read. A file is opened as it is sent, so one that changed after a
+uploads from its uploads directory; a reply's links still reach such a working directory, where the
+engine can read anyway. Inside the runner's own directory (`~/.orbit`) nothing but this session's
+directories is ever read. A file is opened as it is sent, so one that changed after a
 directory was read is listed under `skipped` and not sent.
 
 `upload` answers `id`, `sha256`, `sizeBytes` and `link`, an `orbit-attachment:` link to put in a reply:

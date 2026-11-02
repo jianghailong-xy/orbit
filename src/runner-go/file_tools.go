@@ -431,10 +431,14 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 }
 
 // newFileUploadScope is what file_upload may read: this session's own directories, and the working directory it was
-// called from, which is what a reply's links are held to (session.go, execDir). Nothing the session can write decides
-// it, so no repository's configuration does: git would read that from the checkout. A working directory that is / or
-// holds the home directory is no root, so the rule fails closed whatever directory an engine starts this process in,
-// and a refused path can still go through the uploads directory.
+// called from. Nothing the session can write decides it, so no repository's configuration does: git would read that from
+// the checkout. A working directory that is / or holds the home directory is no root, so the rule fails closed whatever
+// directory an engine starts this process in, and a refused path can still go through the uploads directory.
+//
+// That last rule is where this is narrower than a reply's links. Those are held to the session's execDir however broad
+// it is, with Orbit's own directory still refused (session.go): the engine can read there anyway in such a session, and
+// refusing would take away ordinary reply images. So in a session running at / or in a home directory, a reply's link
+// reaches that directory and file_upload does not.
 func newFileUploadScope(sessionID string) localFileScope {
 	cwd, err := os.Getwd()
 	if err != nil || !usableAsARoot(cwd) {
