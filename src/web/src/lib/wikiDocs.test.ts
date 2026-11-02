@@ -357,6 +357,14 @@ describe('the directory, Browse and the A–Z index by document', () => {
     expect(wikiDocDirectoryGroups(docs.directory.read)).toEqual(docs.directory.groups);
   });
 
+  it('show a section title as words, not as the backticks the plan wrote it with', () => {
+    const read = structuredClone(docs.directory.read);
+    const section = read.categories.flatMap((category) => category.docs).flatMap((doc) => doc.sections)[0];
+    section.title = '必填参数:`--app_id` 与 `--date`';
+    const rows = wikiDocDirectoryGroups(read).flatMap((group) => group.docs).flatMap((doc) => doc.sections);
+    expect(rows[0].title).toBe('必填参数：--app_id 与 --date');
+  });
+
   it('say Browse’s lines as the fixture does', () => {
     expect(wikiDocsBrowseSummary(docs.directory.read)).toEqual(docs.browse.summary);
     const categories = docs.directory.read.categories.filter((category) => category.docs.length > 0);
@@ -375,6 +383,13 @@ describe('the directory, Browse and the A–Z index by document', () => {
         rows: group.items.map((item) => ({ title: item.title, kind: item.kind, meta: wikiDocsIndexMeta(item) })),
       })),
     ).toEqual(docs.index.groups);
+  });
+
+  it('file a title by its words, whatever marks the plan wrote it with', () => {
+    const item = { ...docs.index.items[0], title: '`--force` 的用法' };
+    expect(wikiDocsIndexGroups([item]).map((group) => [group.letter, group.items[0].title])).toEqual([['#', '--force 的用法']]);
+    const named = { ...docs.index.items[0], title: '`app-build` 总览' };
+    expect(wikiDocsIndexGroups([named]).map((group) => [group.letter, group.items[0].title])).toEqual([['A', 'app-build 总览']]);
   });
 
   it('link a document to its page and a section to its place on it', () => {

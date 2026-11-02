@@ -37,7 +37,7 @@ import {
   shortSha,
   type WikiEntry,
 } from './wiki';
-import { wikiArticleCount, wikiCount, wikiIndexInitial, wikiPinyinCollator, WIKI_INDEX_LETTERS } from './wikiArticles';
+import { wikiArticleCount, wikiCount, wikiIndexInitial, wikiPinyinCollator, wikiPlainWords, WIKI_INDEX_LETTERS } from './wikiArticles';
 import { wikiMonthDay } from './wikiReviewMode';
 
 export type {
@@ -748,7 +748,7 @@ export function wikiDocDirectoryGroups(directory: WikiDocsDirectory): WikiDocDir
         sections: doc.sections.map((section) => ({
           key: section.key,
           number: section.number,
-          title: section.title,
+          title: wikiPlainWords(section.title),
           written: section.written,
           stale: section.stale,
         })),
@@ -820,7 +820,7 @@ export interface WikiDocsIndexGroup {
 /** Every title under its letter (`wikiIndexInitial`), the letters in the bar's order, each group by pinyin. */
 export function wikiDocsIndexGroups(items: readonly WikiDocsIndexItem[]): WikiDocsIndexGroup[] {
   const compare = wikiPinyinCollator().compare;
-  const sorted = [...items].sort(
+  const sorted = items.map((item) => ({ ...item, title: wikiPlainWords(item.title) })).sort(
     (a, b) =>
       compare(a.title, b.title)
       || (a.kind === b.kind ? 0 : a.kind === 'doc' ? -1 : 1)

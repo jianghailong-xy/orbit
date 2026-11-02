@@ -29,6 +29,7 @@ import {
   type FilesConfig,
   type HashedTempFile,
 } from './file-store';
+import { refuseCredentialIn } from './file-secret-scan';
 import type { FileUpload } from './file-upload-storage';
 import { IMAGE_HEADER_BYTES, imageSizeOf, type ImageSize } from './image-size';
 import { S3FileStore } from './s3-file-store';
@@ -357,6 +358,7 @@ export class FilesService {
     session: { id: string; ownerId: string; taskId: string | null },
     options: { taskId?: string; label?: string; as?: typeof TEST_REPORT_UPLOAD },
   ): Promise<FileView & { note?: string }> {
+    await refuseCredentialIn(upload);
     if (options.taskId !== undefined && options.taskId !== session.taskId) {
       throw new BadRequestException(
         'taskId has to be the task this session is running, or left out: a file stays with the session that uploads it, '
