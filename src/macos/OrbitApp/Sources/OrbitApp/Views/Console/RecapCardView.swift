@@ -59,8 +59,8 @@ struct RecapCardView: View {
 
     /// The ⋯ on the last line's baseline, hidden in place rather than removed, so the words never move
     /// when it appears. Touch has no hover, so on iOS it always shows (the message bubble's copy button
-    /// makes the same split). A Menu reports no baseline of its own, so it lies over a hidden ⋯ that
-    /// does; while a refresh asks, a spinner takes its place.
+    /// makes the same split). The Menu lies over a hidden ⋯, whose baseline is the one the last line
+    /// aligns on; while a refresh asks, a spinner takes its place.
     private var more: some View {
         glyph.hidden()
             .overlay {
