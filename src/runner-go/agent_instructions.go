@@ -126,7 +126,7 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
 // until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
 // orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
-// (fileUploadScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
+// (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
 // because the tool call that printed it is already stored. ASCII like the rest.
 const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
 	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +

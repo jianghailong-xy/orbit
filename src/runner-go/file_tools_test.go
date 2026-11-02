@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,12 +14,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -219,6 +222,16 @@ func (f *fakeFileServer) mcp(t *testing.T) *mcpServer {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	chdirForTest(t, t.TempDir())
 	return &mcpServer{t: newCallerTransport(f.URL, "runner-secret", runnerCallerMCP), sessionID: fileTestSession}
+}
+
+// uploadTestAttachment opens a test's file and sends it, as a door does.
+func uploadTestAttachment(t *Transport, sessionID, path, mimeType string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	return t.uploadSessionAttachmentFile(context.Background(), sessionID, file, mimeType, filepath.Base(path))
 }
 
 // chdirForTest is t.Chdir, which go.mod's Go does not have.
@@ -441,7 +454,7 @@ func TestWalkFolderStopsAtTheLimitWithoutReadingTheRest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	files, skipped, err := walkFolder(root, fileUploadScope{roots: []string{root}})
+	files, skipped, err := walkFolder(root, localFileScope{roots: []string{root}})
 	if err == nil || !strings.Contains(err.Error(), "more than") {
 		t.Fatalf("err = %v", err)
 	}
@@ -1057,26 +1070,67 @@ func TestFileUploadFromAWorkingDirectoryInsideOrbitsOwnDirectory(t *testing.T) {
 	}
 }
 
-// git calls a home directory that is a repository its own checkout. Orbit's own directory stays refused, by the file and
-// by the folder. The rest of that home does not, which is the limit this rule states rather than hides.
+// A home directory is no checkout, repository or not, and neither is a directory above it: the working directory counts
+// only when it is narrower than the home it runs in.
+func TestFileUploadFromAWorkingDirectoryAsBroadAsTheHomeDirectory(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	gitInit(t, host.home)
+	mine := writeTestFile(t, filepath.Join(host.home, "notes.txt"), "mine")
+
+	for _, cwd := range []string{host.home, filepath.Dir(host.home), string(filepath.Separator)} {
+		chdirForTest(t, cwd)
+		assertRefused(t, api, s, host.key, "outside this session's checkout")
+		assertRefused(t, api, s, mine, "outside this session's checkout")
+		assertRefused(t, api, s, host.home, "outside this session's checkout")
+		assertRefused(t, api, s, host.config, "Orbit's own directory")
+	}
+}
+
+// The environment's home is the caller's to set, so the account's counts too.
+func TestAWorkingDirectoryAtTheAccountsHomeIsNoRootWhateverHomeSays(t *testing.T) {
+	account, err := user.Current()
+	if err != nil || account.HomeDir == "" {
+		t.Skip("no account home here")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	if usableAsARoot(account.HomeDir) {
+		t.Errorf("%s counts as a root", account.HomeDir)
+	}
+	if !usableAsARoot(t.TempDir()) {
+		t.Error("an ordinary directory counts as no root")
+	}
+}
+
+// A working directory inside a repository rooted at the home directory is the root, not the repository around it.
 func TestFileUploadInARepositoryRootedAtTheHomeDirectory(t *testing.T) {
 	api := newFakeFileServer(t)
 	host := newFileScopeHost(t)
 	s := api.inHost(t)
 	gitInit(t, host.home)
-	writeTestFile(t, filepath.Join(host.home, "project", "a.txt"), "mine")
-	chdirForTest(t, filepath.Join(host.home, "project"))
+	project := filepath.Join(host.home, "project")
+	writeTestFile(t, filepath.Join(project, "a.txt"), "mine")
+	chdirForTest(t, project)
 
 	assertRefused(t, api, s, host.config, "Orbit's own directory")
+	assertRefused(t, api, s, host.key, "outside this session's checkout")
+	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": "a.txt"}); got.Name != "a.txt" {
+		t.Errorf("a file in the working directory: %+v", got)
+	}
+}
 
-	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": host.home})
-	if !equalStrings(sortedSkipped(got.Skipped), []string{".orbit"}) {
-		t.Errorf("skipped = %v, want Orbit's own directory, whole", got.Skipped)
+// What a repository says about itself decides nothing: its configuration is the session's to write.
+func TestFileUploadTakesNoRootFromARepositorysConfiguration(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	if out, err := exec.Command("git", "-C", host.checkout, "config", "core.worktree", host.home).CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v: %s", err, out)
 	}
-	assertNothingSecretKept(t, api)
-	if reachable := fileResult(t, s, "file_upload", map[string]interface{}{"path": host.key}); reachable.ID == "" {
-		t.Error("the rest of a home-rooted checkout is reachable, and the docs say so")
-	}
+	assertRefused(t, api, s, host.key, "outside this session's checkout")
+	assertRefused(t, api, s, host.config, "Orbit's own directory")
 }
 
 func TestFileUploadReadsTheSessionsOwnDirectories(t *testing.T) {
@@ -1116,19 +1170,29 @@ func TestFileUploadReadsTheSessionsOwnDirectories(t *testing.T) {
 	_ = host
 }
 
-// A deeper working directory means the same checkout, and an upload may reach up to the top of it.
-func TestFileUploadFromASubdirectoryOfTheCheckout(t *testing.T) {
+// The root is the working directory itself, unless the session's own checkout is around it.
+func TestFileUploadFromASubdirectory(t *testing.T) {
 	api := newFakeFileServer(t)
 	host := newFileScopeHost(t)
 	s := api.inHost(t)
+
 	writeTestFile(t, filepath.Join(host.checkout, "top.txt"), "top")
 	sub := filepath.Join(host.checkout, "deep", "er")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	chdirForTest(t, sub)
+	assertRefused(t, api, s, "../../top.txt", "outside this session's checkout")
+
+	own := filepath.Join(worktreesDir(), decodeSessionID(fileTestSession))
+	writeTestFile(t, filepath.Join(own, "top.txt"), "top")
+	ownSub := filepath.Join(own, "deep", "er")
+	if err := os.MkdirAll(ownSub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	chdirForTest(t, ownSub)
 	if got := fileResult(t, s, "file_upload", map[string]interface{}{"path": "../../top.txt"}); got.Name != "top.txt" {
-		t.Errorf("answered %+v", got)
+		t.Errorf("the top of this session's own checkout: %+v", got)
 	}
 }
 
@@ -1159,25 +1223,24 @@ func TestFileUploadOfAFolderListsWhatTheServerWouldRefuse(t *testing.T) {
 }
 
 // Mode 000 reads as a size and an open that fails, for anybody but root, which reads everything.
-func TestWalkFolderListsAFileItCannotOpen(t *testing.T) {
+func TestFileUploadOfAFolderListsAFileItCannotOpen(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root opens a mode 000 file")
 	}
-	root := t.TempDir()
+	api := newFakeFileServer(t)
+	s := api.mcp(t)
+	root := inCheckout(t)
 	writeTestFile(t, filepath.Join(root, "good.txt"), "kept")
 	locked := writeTestFile(t, filepath.Join(root, "locked.txt"), "x")
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
-	files, skipped, err := walkFolder(root, fileUploadScope{roots: []string{root}})
-	if err != nil {
-		t.Fatal(err)
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": root})
+	if len(got.Files) != 1 || got.Files[0].Path != "good.txt" {
+		t.Errorf("files = %+v", got.Files)
 	}
-	if len(files) != 1 || files[0].rel != "good.txt" {
-		t.Errorf("files = %+v", files)
-	}
-	if len(skipped) != 1 || skipped[0].Path != "locked.txt" || !strings.Contains(skipped[0].Reason, "could not be read") {
-		t.Errorf("skipped = %+v", skipped)
+	if len(got.Skipped) != 1 || got.Skipped[0].Path != "locked.txt" || !strings.Contains(got.Skipped[0].Reason, "could not be read") {
+		t.Errorf("skipped = %+v", got.Skipped)
 	}
 }
 
@@ -1238,7 +1301,7 @@ func TestFolderTimeoutErrorShortensALongList(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		files = append(files, folderFile{rel: fmt.Sprintf("%02d.png", i)})
 	}
-	text := folderTimeoutError("/x", files, 5, time.Minute).Error()
+	text := folderTimeoutError("/x", files[5:], 5, len(files), time.Minute).Error()
 	if !strings.Contains(text, "5 of 50 files") || !strings.Contains(text, "05.png") || !strings.Contains(text, "24.png") ||
 		strings.Contains(text, "25.png") || !strings.Contains(text, "and 25 more in path order") {
 		t.Errorf("error = %s", text)
@@ -1261,5 +1324,447 @@ func TestFileFetchStopsBeforeTheEnginesDeadline(t *testing.T) {
 	s := &mcpServer{t: newCallerTransport(api.URL, "runner-secret", runnerCallerMCP), sessionID: fileTestSession, callTimeout: 200 * time.Millisecond}
 	if text := fileToolText(t, s, "file_fetch", map[string]interface{}{"id": "f1"}, true); !strings.Contains(text, "this engine ends a tool call after") {
 		t.Errorf("error = %s", text)
+	}
+}
+
+// Saving under the uploads directory goes by handles and a link at any level stops it, the last level included.
+func TestSaveLocalFileRefusesALinkAtAnyLevelAndWritesNothingElsewhere(t *testing.T) {
+	for _, level := range []string{"session", "files", "file", "name"} {
+		t.Run(level, func(t *testing.T) {
+			api := newFakeFileServer(t)
+			host := newFileScopeHost(t)
+			s := api.inHost(t)
+			file := api.keep("config.json", "text/plain", "", "file", []byte("bytes from the server"))
+			session := uploadsDir(fileTestSession)
+			link := map[string]string{
+				"session": session,
+				"files":   filepath.Join(session, "files"),
+				"file":    filepath.Join(session, "files", file.id),
+				"name":    filepath.Join(session, "files", file.id, "config.json"),
+			}[level]
+			target := host.orbit
+			if level == "name" {
+				target = host.config
+			}
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Fatal(err)
+			}
+
+			text := fileToolText(t, s, "file_fetch", map[string]interface{}{"id": file.id}, true)
+
+			if strings.Contains(text, `"path"`) {
+				t.Errorf("a refused fetch reports a path: %s", text)
+			}
+			if data, _ := os.ReadFile(host.config); string(data) != `{"runnerToken":"the-runner-credential"}` {
+				t.Errorf("the file behind the link changed: %q", data)
+			}
+			entries, err := os.ReadDir(host.orbit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name(), ".saving-") || entry.Name() == "files" {
+					t.Errorf("left behind in the link's target: %s", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+// A link that stays inside the directory stops a save too: the rule is that there is no link, not where one leads.
+func TestSaveLocalFileRefusesALinkThatStaysInside(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	file := api.keep("a.txt", "text/plain", "", "file", []byte("x"))
+	session := uploadsDir(fileTestSession)
+	elsewhere := filepath.Join(session, "elsewhere")
+	if err := os.MkdirAll(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(session, "files")); err != nil {
+		t.Fatal(err)
+	}
+	fileToolText(t, s, "file_fetch", map[string]interface{}{"id": file.id}, true)
+	if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+		t.Errorf("wrote %v through a link", entries)
+	}
+	_ = host
+}
+
+func TestSaveLocalFileReplacesItsOwnFileAndLeavesNoTemporary(t *testing.T) {
+	api := newFakeFileServer(t)
+	newFileScopeHost(t)
+	s := api.inHost(t)
+	file := api.keep("a.txt", "text/plain", "", "file", []byte("first"))
+	first := fileResult(t, s, "file_fetch", map[string]interface{}{"id": file.id})
+	file.data = []byte("second")
+	file.sha = sha256Hex(file.data)
+	second := fileResult(t, s, "file_fetch", map[string]interface{}{"id": file.id})
+	if first.Path != second.Path {
+		t.Errorf("a second fetch moved the file: %s, %s", first.Path, second.Path)
+	}
+	if data, _ := os.ReadFile(second.Path); string(data) != "second" {
+		t.Errorf("read back %q", data)
+	}
+	entries, err := os.ReadDir(filepath.Dir(second.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("the directory holds %v", entries)
+	}
+	if info, err := os.Stat(second.Path); err != nil || info.Mode().Perm() != 0o644 {
+		t.Errorf("mode %v, %v", info.Mode(), err)
+	}
+}
+
+// A bundle's manifest is read from what was received, not from a path.
+func TestFileFetchReadsABundlesManifestFromWhatItReceived(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	root := filepath.Join(host.checkout, "shots")
+	writeTestFile(t, filepath.Join(root, "a.txt"), "a")
+	bundle := fileResult(t, s, "file_upload", map[string]interface{}{"path": root})
+	dir := filepath.Join(uploadsDir(fileTestSession), "files", bundle.ID)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(host.orbit, dir); err != nil {
+		t.Fatal(err)
+	}
+	if text := fileToolText(t, s, "file_fetch", map[string]interface{}{"id": bundle.ID}, true); strings.Contains(text, "runnerToken") {
+		t.Errorf("a refused bundle answered %s", text)
+	}
+}
+
+func TestWriteUploadRefusesALinkAndWritesNothingElsewhere(t *testing.T) {
+	host := newFileScopeHost(t)
+	session := uploadsDir(fileTestSession)
+	if err := os.MkdirAll(session, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(host.config, filepath.Join(session, "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if path, err := writeUpload(fileTestSession, "notes.txt", "att-1", []byte("from an attachment")); err == nil {
+		t.Errorf("saved through a link at %s", path)
+	}
+	if data, _ := os.ReadFile(host.config); string(data) != `{"runnerToken":"the-runner-credential"}` {
+		t.Errorf("the file behind the link changed: %q", data)
+	}
+
+	path, err := writeUpload(fileTestSession, "other.txt", "att-2", []byte("from an attachment"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(session, "other.txt"); path != want {
+		t.Errorf("path = %s, want %s", path, want)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "from an attachment" {
+		t.Errorf("read back %q", data)
+	}
+}
+
+func TestStageCodexGeneratedImageRefusesALinkAtItsDestination(t *testing.T) {
+	host := newFileScopeHost(t)
+	generated := filepath.Join(host.home, ".codex", "generated_images")
+	saved := writeTestFile(t, filepath.Join(generated, "thread", "image.png"), "\x89PNG")
+	uploads := uploadsDir(fileTestSession)
+	if err := os.MkdirAll(uploads, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(host.config, filepath.Join(uploads, "image.png")); err != nil {
+		t.Fatal(err)
+	}
+	if staged := stageCodexGeneratedImage(saved, generated, uploads); staged != "" {
+		t.Errorf("staged through a link at %s", staged)
+	}
+	if data, _ := os.ReadFile(host.config); string(data) != `{"runnerToken":"the-runner-credential"}` {
+		t.Errorf("the file behind the link changed: %q", data)
+	}
+}
+
+// replaceAfterFirstUpload changes what the file the folder sends next is, in the fake server's handler, so that the
+// change is certain to come after the walk and before the send.
+func replaceAfterFirstUpload(api *fakeFileServer, replace func()) {
+	inner := api.Config.Handler
+	var once sync.Once
+	api.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inner.ServeHTTP(w, r)
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/files") {
+			once.Do(replace)
+		}
+	})
+}
+
+func TestFileUploadOfAFolderSendsOnlyWhatItFound(t *testing.T) {
+	for name, change := range map[string]func(t *testing.T, host fileScopeHost, next string){
+		"a link out of the session": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+			if err := os.Symlink(host.config, next); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a link inside the folder": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+			if err := os.Symlink(filepath.Join(filepath.Dir(next), "a.txt"), next); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"another file": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+			writeTestFile(t, next, "other bytes")
+		},
+		"different contents": func(t *testing.T, host fileScopeHost, next string) {
+			if err := os.WriteFile(next, []byte("rewritten and longer"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a directory": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+			if err := os.Mkdir(next, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"nothing": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+		},
+		"a named pipe": func(t *testing.T, host fileScopeHost, next string) {
+			mustRemove(t, next)
+			if err := syscall.Mkfifo(next, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"a directory link above it": func(t *testing.T, host fileScopeHost, next string) {
+			dir := filepath.Dir(next)
+			if err := os.Rename(dir, dir+".moved"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Dir(host.key), dir); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			api := newFakeFileServer(t)
+			host := newFileScopeHost(t)
+			s := api.inHost(t)
+			folder := filepath.Join(host.checkout, "shots")
+			writeTestFile(t, filepath.Join(folder, "a.txt"), "first")
+			next := writeTestFile(t, filepath.Join(folder, "sub", "b.txt"), "second")
+			writeTestFile(t, filepath.Join(folder, "z.txt"), "last")
+			if name != "a directory link above it" {
+				next = filepath.Join(folder, "b.txt")
+				mustRemove(t, filepath.Join(folder, "sub", "b.txt"))
+				mustRemove(t, filepath.Join(folder, "sub"))
+				writeTestFile(t, next, "second")
+			}
+			replaceAfterFirstUpload(api, func() { change(t, host, next) })
+
+			done := make(chan fileAnswer, 1)
+			go func() { done <- fileResult(t, s, "file_upload", map[string]interface{}{"path": folder}) }()
+			var got fileAnswer
+			select {
+			case got = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the upload hung")
+			}
+
+			rel := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(next, folder)), "/")
+			if !equalStrings(sortedSkipped(got.Skipped), []string{rel}) {
+				t.Errorf("skipped = %+v, want %s", got.Skipped, rel)
+			}
+			var paths []string
+			for _, file := range got.Files {
+				paths = append(paths, file.Path)
+			}
+			if !equalStrings(paths, []string{"a.txt", "z.txt"}) {
+				t.Errorf("the bundle holds %v", paths)
+			}
+			assertNothingSecretKept(t, api)
+			for _, kept := range api.files {
+				if kept.kind == "file" && bytes.Contains(kept.data, []byte("second")) || bytes.Contains(kept.data, []byte("other bytes")) || bytes.Contains(kept.data, []byte("the-ssh-key")) {
+					t.Errorf("sent %s: %q", kept.name, kept.data)
+				}
+			}
+		})
+	}
+}
+
+func mustRemove(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// One file is opened once, and its type comes from that handle: a name says nothing here, and the bytes are sniffed.
+func TestFileUploadSniffsWhatItOpened(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	png := writeTestFile(t, filepath.Join(host.checkout, "shot"), "\x89PNG\r\n\x1a\n image")
+	got := fileResult(t, s, "file_upload", map[string]interface{}{"path": png})
+	if got.MimeType != "image/png" {
+		t.Errorf("mimeType = %q", got.MimeType)
+	}
+	for _, kept := range api.files {
+		if !bytes.HasPrefix(kept.data, []byte("\x89PNG")) {
+			t.Errorf("sniffing moved the offset: the server got %q", kept.data)
+		}
+	}
+}
+
+// A single file that is a named pipe is refused at once.
+func TestFileUploadOfANamedPipeDoesNotHang(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	s := api.inHost(t)
+	pipe := filepath.Join(host.checkout, "pipe")
+	if err := syscall.Mkfifo(pipe, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan string, 1)
+	go func() { done <- fileToolText(t, s, "file_upload", map[string]interface{}{"path": pipe}, true) }()
+	select {
+	case text := <-done:
+		if !strings.Contains(text, "regular file") {
+			t.Errorf("error = %s", text)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the upload hung")
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("sent %v", api.calls)
+	}
+}
+
+// A reply's link is held to the same rule as file_upload: where it really leads, and what was opened.
+func TestRepliesFollowTheSameRuleAsFileUpload(t *testing.T) {
+	host := newFileScopeHost(t)
+	notes := filepath.Join(host.checkout, "notes.txt")
+	shot := filepath.Join(host.checkout, "shot.png")
+	folder := filepath.Join(host.checkout, "folder")
+	for link, target := range map[string]string{notes: host.config, shot: host.key, folder: filepath.Dir(host.key)} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, text := range []string{
+		"see [notes](notes.txt)",
+		"see [notes](" + notes + ")",
+		"see ![shot](shot.png)",
+		"see [key](folder/id_rsa)",
+		"see [config](" + host.config + ")",
+	} {
+		got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{host.checkout},
+			func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+				t.Errorf("%q reached the uploader as %s", text, path)
+				return "att", nil
+			})
+		if got != text {
+			t.Errorf("%q was rewritten to %q", text, got)
+		}
+	}
+}
+
+func TestRepliesRefuseOrbitsOwnDirectoryEvenInsideARoot(t *testing.T) {
+	host := newFileScopeHost(t)
+	text := "see [config](" + host.config + ")"
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{host.home},
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+			t.Errorf("Orbit's own directory reached the uploader as %s", path)
+			return "att", nil
+		})
+	if got != text {
+		t.Errorf("rewritten to %q", got)
+	}
+}
+
+// What a reply sends is read from the handle the rule opened, and a link that stays in the session still works.
+func TestRepliesSendWhatWasOpened(t *testing.T) {
+	host := newFileScopeHost(t)
+	target := writeTestFile(t, filepath.Join(host.checkout, "real.txt"), "mine")
+	if err := os.Symlink(target, filepath.Join(host.checkout, "alias.txt")); err != nil {
+		t.Fatal(err)
+	}
+	var sent []byte
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), "see [notes](alias.txt)", []string{host.checkout},
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+			sent, _ = io.ReadAll(file)
+			return "att", nil
+		})
+	if string(sent) != "mine" || !strings.Contains(got, "orbit-attachment:att") {
+		t.Errorf("sent %q, rewritten %q", sent, got)
+	}
+}
+
+// Codex can keep its home under Orbit's directory, and its generated images are this session's.
+func TestCodexGeneratedImagesStillTravelFromUnderOrbitsDirectory(t *testing.T) {
+	host := newFileScopeHost(t)
+	generated := filepath.Join(host.orbit, "codex-home", "generated_images")
+	saved := writeTestFile(t, filepath.Join(generated, "thread", "image.png"), "\x89PNG\r\n\x1a\n image")
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), "![generated image]("+saved+")",
+		[]string{host.checkout, generated}, func(ctx context.Context, file *os.File, path, mimeType string) (string, error) {
+			return "att", nil
+		})
+	if got != "![generated image](orbit-attachment:att)" {
+		t.Errorf("rewritten = %q", got)
+	}
+	staged := stageCodexGeneratedImage(saved, generated, uploadsDir(fileTestSession))
+	if staged == "" {
+		t.Fatal("the generated image was not staged")
+	}
+	if data, _ := os.ReadFile(staged); !bytes.HasPrefix(data, []byte("\x89PNG")) {
+		t.Errorf("staged %q", data)
+	}
+	// The roots a reply is given make only themselves readable there.
+	other := "![config](" + host.config + ")"
+	if text := rewriteLocalMarkdownImagesWithUploader(context.Background(), other, []string{host.checkout, generated},
+		func(ctx context.Context, file *os.File, path, mimeType string) (string, error) { return "att", nil }); text != other {
+		t.Errorf("rewritten = %q", text)
+	}
+}
+
+func TestStageCodexGeneratedImageJudgesWhereALinkLeads(t *testing.T) {
+	host := newFileScopeHost(t)
+	generated := filepath.Join(host.home, ".codex", "generated_images")
+	link := filepath.Join(generated, "image.png")
+	if err := os.MkdirAll(generated, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := writeTestFile(t, filepath.Join(host.checkout, "elsewhere.png"), "\x89PNG")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	if staged := stageCodexGeneratedImage(link, generated, uploadsDir(fileTestSession)); staged != "" {
+		t.Errorf("staged %s from outside its root", staged)
+	}
+}
+
+func TestLegacyArtifactRequestJudgesWhereALinkLeads(t *testing.T) {
+	api := newFakeFileServer(t)
+	host := newFileScopeHost(t)
+	own := filepath.Join(worktreesDir(), decodeSessionID(fileTestSession))
+	if err := os.MkdirAll(own, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(own, "notes.txt")
+	if err := os.Symlink(host.config, link); err != nil {
+		t.Fatal(err)
+	}
+	out := uploadLegacyArtifact(context.Background(), NewTransport(api.URL, "runner-secret"), ArtifactCommand{
+		RequestID: "r-1", SessionID: fileTestSession, Path: link,
+	})
+	if out.Status != "missing" {
+		t.Errorf("out = %+v", out)
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("sent %v", api.calls)
 	}
 }

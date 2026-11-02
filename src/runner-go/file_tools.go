@@ -16,6 +16,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ import (
 // multipart and the download raw bytes, like the attachments'). Upload and fetch act for the session they are called
 // from: a file stays with the session that uploads it, and arrives in that session's uploads directory, which is
 // outside the checkout, so neither direction can put a file in a commit. What may be uploaded is the session's own
-// checkout and uploads directory and nothing else (fileUploadScope).
+// checkout and uploads directory and nothing else (localFileScope), and a fetch is saved by saveLocalFile.
 
 // The limits a request would be refused against (apiserver files/files.service.ts), stated so that a folder that cannot
 // be kept is refused before anything of it is sent. maxSessionAttachmentBytes is the third.
@@ -128,13 +129,8 @@ type skippedFile struct {
 
 // uploadFile keeps one file. The name goes out through mime.FormatMediaType, which writes RFC 5987 `filename*` for a
 // name a quoted string cannot carry: busboy reads a plain filename as Latin-1.
-func (t *Transport) uploadFile(parent context.Context, sessionID, path, name, mimeType string, fields map[string]string) (sessionFile, error) {
+func (t *Transport) uploadFile(parent context.Context, sessionID string, file *os.File, name, mimeType string, fields map[string]string) (sessionFile, error) {
 	var out sessionFile
-	file, err := os.Open(path)
-	if err != nil {
-		return out, err
-	}
-	defer file.Close()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	for key, value := range fields {
@@ -221,51 +217,45 @@ func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 	return out, err
 }
 
-// downloadFile streams one file's bytes into dest and answers their sha256 and length. It writes beside dest and
-// renames into place only once they are all there and match `want`, so that a dropped connection or a wrong byte
-// leaves no file that looks fetched. `want` is empty for a row from before Orbit Files, which has no sha256 to match.
-func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, dest, want string) (string, int64, error) {
+// downloadFile streams one file's bytes into this session's uploads directory, under the file's own id, because two
+// files of a folder can share a name, and answers where they went, their sha256 and their length. saveLocalFile puts
+// them there only once they are all in and match `want`, so a dropped connection or a wrong byte leaves no file that
+// looks fetched. `want` is empty for a row from before Orbit Files, which has no sha256 to match. The bytes also go to
+// keep, for a caller that reads them: what was checked, and not what a path holds afterwards.
+func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (string, string, int64, error) {
 	ctx, cancel := context.WithTimeout(parent, fileCallTimeout)
 	defer cancel()
 	route := "/runner/sessions/" + sessionID + "/attachments/" + url.PathEscape(fileID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/api"+route, nil)
 	if err != nil {
-		return "", 0, err
+		return "", "", 0, err
 	}
 	t.authorizeFileCall(req)
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return "", 0, err
+		return "", "", 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return "", 0, &transportHTTPError{method: http.MethodGet, path: route, statusCode: resp.StatusCode, body: string(data)}
+		return "", "", 0, &transportHTTPError{method: http.MethodGet, path: route, statusCode: resp.StatusCode, body: string(data)}
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return "", 0, err
-	}
-	temp, err := os.CreateTemp(filepath.Dir(dest), ".fetch-*")
-	if err != nil {
-		return "", 0, err
-	}
-	defer os.Remove(temp.Name())
 	hash := sha256.New()
-	n, err := io.Copy(io.MultiWriter(temp, hash), resp.Body)
-	if closeErr := temp.Close(); err == nil {
-		err = closeErr
-	}
+	var size int64
+	dest, err := saveLocalFile(uploadsRootDir(), []string{decodeSessionID(sessionID), "files", fileID}, uploadFileName(name, fileID), func(w io.Writer) error {
+		var err error
+		if size, err = io.Copy(io.MultiWriter(w, hash, keep), resp.Body); err != nil {
+			return err
+		}
+		if got := hex.EncodeToString(hash.Sum(nil)); want != "" && got != want {
+			return fmt.Errorf("the bytes received hash to %s, not the %s Orbit holds; nothing was saved", got, want)
+		}
+		return nil
+	})
 	if err != nil {
-		return "", 0, err
+		return "", "", 0, err
 	}
-	got := hex.EncodeToString(hash.Sum(nil))
-	if want != "" && got != want {
-		return "", 0, fmt.Errorf("the bytes received hash to %s, not the %s Orbit holds; nothing was saved", got, want)
-	}
-	if err := os.Chmod(temp.Name(), 0o644); err != nil {
-		return "", 0, err
-	}
-	return got, n, os.Rename(temp.Name(), dest)
+	return dest, hex.EncodeToString(hash.Sum(nil)), size, nil
 }
 
 // ── The tools ───────────────────────────────────────────────────────────────────────────────────
@@ -331,9 +321,8 @@ func fileTimeoutError(action string, timeout time.Duration) error {
 
 // folderTimeoutError says how far a folder got by the engine's deadline, and which of its files were not uploaded, in
 // the order they were sent. The one in flight is among them: it may have been kept, and nothing says so.
-func folderTimeoutError(root string, files []folderFile, kept int, timeout time.Duration) error {
+func folderTimeoutError(root string, left []folderFile, kept, total int, timeout time.Duration) error {
 	const shown = 20
-	left := files[kept:]
 	names := make([]string, 0, shown)
 	for _, file := range left[:min(len(left), shown)] {
 		names = append(names, file.rel)
@@ -345,7 +334,7 @@ func folderTimeoutError(root string, files []folderFile, kept int, timeout time.
 	return fmt.Errorf("file_upload %s: this engine ends a tool call after %s, so this one stopped first: %d of %d files were "+
 		"kept, no bundle was made, and these were not uploaded: %s%s. Uploading the folder again sends every file again and "+
 		"stores no byte twice. Upload its subdirectories one at a time, or run `orbit file upload` in a shell, which has no "+
-		"such limit", root, timeout, kept, len(files), strings.Join(names, ", "), more)
+		"such limit", root, timeout, kept, total, strings.Join(names, ", "), more)
 }
 
 // fileSessionOf is the session a tool that needs one acts for, as a path segment.
@@ -390,8 +379,8 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	if err != nil {
 		return out, fmt.Errorf("file_upload: %w", err)
 	}
-	// Where the path really is, which is what the scope and everything after it go by: a link named here is followed
-	// and judged by its target, and a link inside a folder is not followed at all.
+	// Where the path really is, which is what the scope goes by: a link named here is judged by its target, and a link
+	// inside a folder is not followed at all.
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return out, fmt.Errorf("file_upload: %w", err)
@@ -408,92 +397,75 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label string) 
 	if taskID != "" {
 		fields["taskId"] = taskID
 	}
-	if !info.IsDir() {
-		if label != "" {
-			fields["label"] = label
-		}
-		if !info.Mode().IsRegular() || info.Size() == 0 {
-			return out, fmt.Errorf("file_upload: %s is empty or is not a regular file", abs)
-		}
-		if info.Size() > maxSessionAttachmentBytes {
-			return out, fmt.Errorf("file_upload: %s: %w", abs, errAttachmentTooLarge)
-		}
-		ctx, cancel := tool.callContext()
-		defer cancel()
-		file, err := t.uploadFile(ctx, sessionID, real, filepath.Base(abs), attachmentMime(real), fields)
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return out, fileTimeoutError("file_upload "+abs, tool.callTimeout)
-		}
-		if err != nil {
-			return out, fileCallError("file_upload "+abs, err)
-		}
-		return answerFor(file), nil
+	if info.IsDir() {
+		return uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
 	}
-	return uploadFolder(t, tool, sessionID, abs, real, scope, label, fields)
+	if label != "" {
+		fields["label"] = label
+	}
+	file, opened, err := scope.open(real)
+	var refused *localFileRefused
+	if errors.As(err, &refused) {
+		return out, fileScopeError(abs, refused.reason, sessionID)
+	}
+	if err != nil {
+		return out, fmt.Errorf("file_upload %s: %w", abs, err)
+	}
+	defer file.Close()
+	if opened.Size() == 0 {
+		return out, fmt.Errorf("file_upload: %s is empty", abs)
+	}
+	if opened.Size() > maxSessionAttachmentBytes {
+		return out, fmt.Errorf("file_upload: %s: %w", abs, errAttachmentTooLarge)
+	}
+	ctx, cancel := tool.callContext()
+	defer cancel()
+	uploaded, err := t.uploadFile(ctx, sessionID, file, filepath.Base(abs), attachmentMimeOf(file, abs), fields)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return out, fileTimeoutError("file_upload "+abs, tool.callTimeout)
+	}
+	if err != nil {
+		return out, fileCallError("file_upload "+abs, err)
+	}
+	return answerFor(uploaded), nil
 }
 
-// fileUploadScope is what file_upload may read: this session's own checkout and uploads directory, the rule a reply's
-// links follow (attachLocalReplyFiles). The tool needs it more than a reply does. Orbit's MCP tools are always allowed,
-// with no prompt in any permission mode, and this process runs outside the engine's sandbox, so a path it read without
-// asking would be a way around both, and file_fetch would hand back what it read.
-//
-// Orbit's own directory is refused first and whatever the roots say, because it holds the machine's credentials, which
-// are kept in a file exactly so that they stay out of the engine (cmdMcp), and because a root can be wider than a
-// checkout: a home directory that is itself a git repository is its own checkout, by what git says. Nothing else is
-// listed by name. Such a root still reaches the rest of that home, ~/.ssh included: a list of other people's credential
-// directories could not be complete, and the session could read them there anyway if it was given that repository.
-type fileUploadScope struct {
-	// Orbit's own directory (machineHome).
-	home string
-	// What in it is this session's: its uploads directory and its checkout.
-	own []string
-	// Where a path may be: those, and the checkout this process runs in.
-	roots []string
+// newFileUploadScope is what file_upload may read: this session's own directories, and the working directory it was
+// called from, which is what a reply's links are held to (session.go, execDir). Nothing the session can write decides
+// it, so no repository's configuration does: git would read that from the checkout. A working directory that is / or
+// holds the home directory is no root, so the rule fails closed whatever directory an engine starts this process in,
+// and a refused path can still go through the uploads directory.
+func newFileUploadScope(sessionID string) localFileScope {
+	cwd, err := os.Getwd()
+	if err != nil || !usableAsARoot(cwd) {
+		return newLocalFileScope(artifactRequestRoots(sessionID))
+	}
+	return newLocalFileScope(artifactRequestRoots(sessionID), cwd)
 }
 
-// newFileUploadScope reads the working directory: the checkout a call means is the one it was made from, and no variable
-// names it. `cd` moves the CLI's, which runs inside the engine's own shell permissions.
-func newFileUploadScope(sessionID string) fileUploadScope {
-	own := []string{realPath(uploadsDir(sessionID)), realPath(filepath.Join(worktreesDir(), decodeSessionID(sessionID)))}
-	scope := fileUploadScope{home: realPath(machineHome()), own: own, roots: own}
-	if cwd, err := os.Getwd(); err == nil {
-		checkout, err := git(cwd, "rev-parse", "--show-toplevel")
-		if err != nil {
-			checkout = cwd
-		}
-		scope.roots = append(own[:len(own):len(own)], realPath(checkout))
+// usableAsARoot reports whether a working directory is narrower than the home it runs in. Both homes count, because the
+// environment's is the caller's to set: the account's is what the passwd file says. With neither known, it is no root.
+func usableAsARoot(cwd string) bool {
+	real := realPath(cwd)
+	if real == string(filepath.Separator) {
+		return false
 	}
-	return scope
-}
-
-// refuses says why a path, with its links resolved, may not be read, and "" when it may.
-func (s fileUploadScope) refuses(real string) string {
-	if pathInsideAny(real, s.home) && !pathInsideAny(real, s.own...) {
-		return "inside Orbit's own directory, which holds this machine's credentials"
+	homes := []string{machineHome()}
+	if home, err := os.UserHomeDir(); err == nil {
+		homes = append(homes, home)
 	}
-	if !pathInsideAny(real, s.roots...) {
-		return "outside this session's checkout and uploads directory"
+	if account, err := user.Current(); err == nil {
+		homes = append(homes, account.HomeDir)
 	}
-	return ""
-}
-
-// realPath is path with its links resolved, or as it stands when it does not exist yet.
-func realPath(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
+	if len(homes) == 1 {
+		return false
 	}
-	return filepath.Clean(path)
-}
-
-// pathInsideAny reports whether path is one of the roots or under one.
-func pathInsideAny(path string, roots ...string) bool {
-	for _, root := range roots {
-		rel, err := filepath.Rel(root, path)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return true
+	for _, home := range homes {
+		if pathInsideAny(realPath(home), real) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // fileScopeError refuses a path, and names the directory a file can go through: the uploads directory, which is made
@@ -503,7 +475,7 @@ func fileScopeError(path, reason, sessionID string) error {
 	uploads := uploadsDir(sessionID)
 	_ = os.MkdirAll(uploads, 0o755)
 	next := "Copy the file there first."
-	if strings.HasPrefix(reason, "inside") {
+	if reason == localFileInOrbitsDirectory {
 		next = "That file is not one to upload."
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
@@ -514,7 +486,7 @@ func fileScopeError(path, reason, sessionID string) error {
 // files are measured before the first one is sent, so that a folder that cannot be kept costs nothing. A failure part
 // way leaves files no manifest names: they are this session's, nothing is wrong with them, and a retry stores no byte
 // twice.
-func uploadFolder(t *Transport, tool fileToolContext, sessionID, root, resolved string, scope fileUploadScope, label string, fields map[string]string) (fileAnswer, error) {
+func uploadFolder(t *Transport, tool fileToolContext, sessionID, root, resolved string, scope localFileScope, label string, fields map[string]string) (fileAnswer, error) {
 	var out fileAnswer
 	files, skipped, err := walkFolder(resolved, scope)
 	if err != nil {
@@ -527,10 +499,14 @@ func uploadFolder(t *Transport, tool fileToolContext, sessionID, root, resolved 
 	defer cancel()
 	entries := make([]bundleEntry, 0, len(files))
 	bundled := map[string]fileBundleFile{}
-	for _, file := range files {
-		uploaded, err := t.uploadFile(ctx, sessionID, file.path, filepath.Base(file.path), attachmentMime(file.path), fields)
+	for i, file := range files {
+		uploaded, reason, err := sendFolderFile(ctx, t, sessionID, scope, file, fields)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return out, folderTimeoutError(root, files, len(entries), tool.callTimeout)
+			return out, folderTimeoutError(root, files[i:], len(entries), len(files), tool.callTimeout)
+		}
+		if reason != "" {
+			skipped = append(skipped, skippedFile{Path: file.rel, Reason: reason})
+			continue
 		}
 		if err != nil {
 			return out, fileCallError(fmt.Sprintf("file_upload %s: %s (%d of %d files had been kept, and no bundle was made)",
@@ -541,6 +517,9 @@ func uploadFolder(t *Transport, tool fileToolContext, sessionID, root, resolved 
 			Path: file.rel, ID: uploaded.id(), SHA256: uploaded.SHA256, SizeBytes: uploaded.SizeBytes,
 			MimeType: uploaded.MimeType, Link: fileLink(uploaded.id()),
 		}
+	}
+	if len(entries) == 0 {
+		return out, fmt.Errorf("file_upload %s: no file of this folder could be kept; skipped: %v", root, skipped)
 	}
 	bundle, err := t.createFileBundle(sessionID, filepath.Base(resolved), label, entries)
 	if err != nil {
@@ -554,10 +533,28 @@ func uploadFolder(t *Transport, tool fileToolContext, sessionID, root, resolved 
 	return out, nil
 }
 
-// folderFile is one regular file of a folder: where it is, and its path in the folder, with / between its parts.
+// sendFolderFile sends one file of a folder as it is now. It is opened here, as it is sent, and held to what the walk
+// saw: the walk may be minutes old by this file, and a folder is the session's to change meanwhile. Anything else is
+// the reason it is left out, and it goes into the answer rather than the bundle.
+func sendFolderFile(ctx context.Context, t *Transport, sessionID string, scope localFileScope, entry folderFile, fields map[string]string) (sessionFile, string, error) {
+	file, info, err := scope.open(entry.path)
+	if err != nil {
+		return sessionFile{}, "could not be read as it was found: " + err.Error(), nil
+	}
+	defer file.Close()
+	if !os.SameFile(entry.info, info) || entry.info.Size() != info.Size() || !entry.info.ModTime().Equal(info.ModTime()) {
+		return sessionFile{}, "changed after the folder was read", nil
+	}
+	uploaded, err := t.uploadFile(ctx, sessionID, file, filepath.Base(entry.path), attachmentMimeOf(file, entry.path), fields)
+	return uploaded, "", err
+}
+
+// folderFile is one regular file of a folder: where it is, its path in the folder, with / between its parts, and what
+// the walk saw there.
 type folderFile struct {
 	path string
 	rel  string
+	info os.FileInfo
 }
 
 // walkFolder is the files of a directory, in lexical order, and what it left out. It does not follow a symbolic link: a
@@ -567,13 +564,12 @@ type folderFile struct {
 // rather than after a walk of it: more entries than a bundle holds (fileBundleMaxFiles, counting the skipped, which go
 // into the answer too), or one file too large to keep. What cannot be kept for a reason of its own is listed instead of
 // refusing the folder around it: an empty file, an entry that cannot be read, and a path the server would refuse, which
-// would otherwise be found out once everything else had been uploaded. Each file is opened here rather than only
-// measured: a mode 000 file has a size, and only the open tells it apart.
+// would otherwise be found out once everything else had been uploaded. Nothing here opens a file: sendFolderFile does,
+// as it sends it, and a file that cannot be opened is listed from there.
 //
-// Each entry is held to the scope by itself, as the folder was: a folder a home-rooted repository lets through has
-// Orbit's own directory inside it, which is skipped whole. Nothing here follows a link, so a file's real path is the
+// Each entry is held to the scope by itself, as the folder was. Nothing here follows a link, so a file's real path is the
 // walk's, and resolving it again is what keeps that true of a directory swapped for a link since the walk began.
-func walkFolder(root string, scope fileUploadScope) ([]folderFile, []skippedFile, error) {
+func walkFolder(root string, scope localFileScope) ([]folderFile, []skippedFile, error) {
 	var files []folderFile
 	var skipped []skippedFile
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -623,13 +619,7 @@ func walkFolder(root string, scope fileUploadScope) ([]folderFile, []skippedFile
 			case info.Size() == 0:
 				skip("empty, and Orbit keeps no empty file")
 			default:
-				file, err := os.Open(path)
-				if err != nil {
-					skip("could not be read: " + err.Error())
-					break
-				}
-				file.Close()
-				files = append(files, folderFile{path: path, rel: rel})
+				files = append(files, folderFile{path: path, rel: rel, info: info})
 			}
 		}
 		if len(files)+len(skipped) > fileBundleMaxFiles {
@@ -656,16 +646,6 @@ func bundlePathProblem(rel string) string {
 	return ""
 }
 
-// fetchedFilePath is where a fetched file goes: under its own id, because two files of a folder can share a name and a
-// fetch of one must not take the place of the other. In the uploads directory, so that it is outside the checkout and
-// is a path a reply may link.
-func fetchedFilePath(sessionID, fileID, name string) (string, error) {
-	if err := validatePathSegmentID(fileID); err != nil {
-		return "", fmt.Errorf("the server named a file %q: %w", fileID, err)
-	}
-	return filepath.Join(uploadsDir(sessionID), "files", fileID, uploadFileName(name, fileID)), nil
-}
-
 // fetchFile is file_fetch. A bundle's bytes are its manifest, which is saved and read out: a judge usually wants a few
 // of a folder's files, and picks them from this (docs/orbit-files-design.md §6, item 2).
 func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error) {
@@ -681,13 +661,17 @@ func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error
 	if err != nil {
 		return out, fileCallError("file_fetch "+id, err)
 	}
-	dest, err := fetchedFilePath(sessionID, file.id(), file.Name)
-	if err != nil {
-		return out, fmt.Errorf("file_fetch %s: %w", id, err)
+	if err := validatePathSegmentID(file.id()); err != nil {
+		return out, fmt.Errorf("file_fetch %s: the server named it %q: %w", id, file.id(), err)
 	}
 	ctx, cancel := tool.callContext()
 	defer cancel()
-	sum, size, err := t.downloadFile(ctx, sessionID, file.id(), dest, file.SHA256)
+	var manifestBytes bytes.Buffer
+	var keep io.Writer = io.Discard
+	if file.Kind == "bundle" {
+		keep = &manifestBytes
+	}
+	dest, sum, size, err := t.downloadFile(ctx, sessionID, file.id(), file.Name, file.SHA256, keep)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return out, fileTimeoutError("file_fetch "+id, tool.callTimeout)
 	}
@@ -697,12 +681,8 @@ func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error
 	out = answerFor(file)
 	out.SHA256, out.SizeBytes, out.Path = sum, size, dest
 	if file.Kind == "bundle" {
-		data, err := os.ReadFile(dest)
-		if err != nil {
-			return out, fmt.Errorf("file_fetch %s: %w", id, err)
-		}
 		var manifest fileBundleManifest
-		if err := json.Unmarshal(data, &manifest); err != nil {
+		if err := json.Unmarshal(manifestBytes.Bytes(), &manifest); err != nil {
 			return out, fmt.Errorf("file_fetch %s: the bundle's manifest cannot be read: %w", id, err)
 		}
 		for _, entry := range manifest.Files {

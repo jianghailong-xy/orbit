@@ -63,7 +63,7 @@
 ### 2.3 给 agent 的接口
 
 - **MCP**：
-  - `file_upload`：`path`（文件或目录，解析符号链接后必须在本会话的 checkout 或 uploads 目录内，和回复附件同一条规则；`~/.orbit` 下本会话目录以外的路径一律拒绝），可选 `taskId`、`label`、`as: "test-report"`。返回 `id`、`sha256`、大小，以及可以直接写进回复的 `orbit-attachment:` 链接。
+  - `file_upload`：`path`（文件或目录，解析符号链接后必须在本会话自己的 worktree、uploads 目录或工作目录内，和回复附件同一条规则；工作目录是 `/` 或包含 home 时不算；`~/.orbit` 下本会话目录以外的路径一律拒绝），可选 `taskId`、`label`、`as: "test-report"`。返回 `id`、`sha256`、大小，以及可以直接写进回复的 `orbit-attachment:` 链接。
   - `file_fetch`：给 `id`，把文件下载到本会话的 uploads 目录，返回绝对路径。
   - `file_list`：按任务、会话或证据版本列出文件。
 - **CLI**：`orbit file upload|fetch|list`，参数同上。不支持 MCP 的引擎用 CLI。

@@ -308,9 +308,11 @@ what to list. With nothing named it lists the session it runs in.
 `upload` reads only the session's checkout and its uploads directory, the same two directories a reply
 can link from. The check goes by a path's real location, with links resolved, so a link in a repository
 does not reach out of it; anywhere else is refused, and the refusal names the uploads directory to copy
-a file into. Inside the runner's own directory (`~/.orbit`) nothing but this session's directories is
-ever read. The checkout is the git repository of the working directory, so a session in a repository
-rooted at a home directory can reach the rest of that home.
+a file into. The checkout is the session's own worktree and the working directory itself. A working
+directory that is `/` or holds the home directory counts as neither, and a session started there
+uploads from its uploads directory. Inside the runner's own directory (`~/.orbit`) nothing but this
+session's directories is ever read. A file is opened as it is sent, so one that changed after a
+directory was read is listed under `skipped` and not sent.
 
 `upload` answers `id`, `sha256`, `sizeBytes` and `link`, an `orbit-attachment:` link to put in a reply:
 `![name](link)` for an image, `[name](link)` for anything else. A directory becomes one folder bundle:
@@ -323,7 +325,8 @@ and a file reaches another task as an input through `orbit task create --attachm
 file by file.
 
 `fetch` saves the file under the uploads directory, checks it against the sha256 Orbit holds, and
-answers its absolute path as `path`. A session fetches only its own files. Given a bundle's id, it
+answers its absolute path as `path`. A link anywhere under that directory refuses the fetch. A session
+fetches only its own files. Given a bundle's id, it
 saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones you
 need. `list` answers one task's, one session's or one evidence version's files, newest first, and
 shows a bundle as one row of kind `bundle`; a task's files are its inputs and what the sessions that

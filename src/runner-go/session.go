@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -3279,13 +3280,8 @@ func uploadFileName(name, id string) string {
 // to claude. The name is reduced to its base (no path traversal) and falls back to the
 // attachment id when unusable.
 func writeUpload(sessionID, name, id string, data []byte) (string, error) {
-	dir := uploadsDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	p := filepath.Join(dir, uploadFileName(name, id))
-	if err := os.WriteFile(p, data, 0o644); err != nil {
-		return "", err
-	}
-	return p, nil
+	return saveLocalFile(uploadsRootDir(), []string{decodeSessionID(sessionID)}, uploadFileName(name, id), func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
 }

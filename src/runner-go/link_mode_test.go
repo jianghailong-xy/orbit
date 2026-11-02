@@ -484,7 +484,7 @@ func TestEveryOtherCallerSaysWhoItIs(t *testing.T) {
 			if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, _ = tr.uploadSessionAttachment(context.Background(), "session-a", file, "text/plain")
+			_, _ = uploadTestAttachment(tr, "session-a", file, "text/plain")
 			requests := cp.requests()
 			if len(requests) < 12 {
 				t.Fatalf("%d requests", len(requests))
