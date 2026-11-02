@@ -22,7 +22,7 @@
 .evidence-tile-empty { width: 100%; height: 100%; }
 .evidence-tile-kind { font-weight: 600; letter-spacing: 0.03em; overflow-wrap: anywhere; padding: 4px; }
 .evidence-tile-expired { padding: 4px; color: var(--text-3); overflow-wrap: anywhere; }
-.evidence-tile:has(> .evidence-tile-expired) { border-style: dashed; border-color: var(--border); background: none; }
+.evidence-tile:has(> .evidence-tile-expired) { border-style: dashed; border-color: var(--border); }
 .evidence-tile-more { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .evidence-tile-press { cursor: pointer; }
 .evidence-tile-press:hover { border-color: var(--border); }
