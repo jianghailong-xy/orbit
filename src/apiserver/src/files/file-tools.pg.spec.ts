@@ -22,13 +22,17 @@
  *   (8) `file_list` takes exactly one of task, session and evidence version, refuses an id that names nothing rather
  *       than answering empty, shows a bundle as one row, and says when it stopped short;
  *   (9) a file is read as an attachment is, in the session that holds it: another session of the same owner is told it
- *       is not there, and another runner is refused the session.
+ *       is not there, and another runner is refused the session;
+ *  (10) a text file holding a credential is refused for each shape §2.9 names: the answer and the server's log say what
+ *       it looks like and where, and never repeat it, and no row, bytes or temporary file are left. What ordinary test
+ *       logs hold and binary files are kept byte for byte, and the bytes, not the declared type, say which is which. A
+ *       folder's other files are kept and bundle as usual.
  *
  * Not destructive: every row belongs to users this run creates.
  */
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -41,6 +45,7 @@ import { Client } from 'pg';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { CREDENTIAL_SAMPLES, ORDINARY_LINES, issued, survivingPiece } from './file-secret-samples.spec';
 import { MAX_BUNDLE_FILES, type FileBundleManifest } from './files.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -434,5 +439,65 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     assert.equal(stranger.status, 403, 'and it cannot upload into it');
     assert.equal((await call(api, 'POST', bundleDoor(sessionId), otherMachine.token, { name: 'x', files: [{ path: 'x', id: file.publicId }] })).status, 403);
     assert.equal((await call(api, 'GET', `/api/runner/files?sessionId=${b62(sessionId)}`, bearer)).status, 401, 'a person\'s sign-in is not a runner');
+  });
+
+  const kept = (bytes: Buffer, reply: Reply, what: string) => {
+    const file = created(reply, what);
+    assert.equal(file.sha256, sha256(bytes), `${what} is kept as it was sent`);
+    return file;
+  };
+
+  await t.test('(10) a file holding a credential is refused for every shape, says what and where, and leaves nothing', async () => {
+    const before = { rows: await rowsOf({}), blobs: await db.fileBlob.count() };
+    for (const { kind, shape, text, secret } of CREDENTIAL_SAMPLES) {
+      const bytes = Buffer.from(`the run\nthe value was ${text}\n`);
+      const refused = await upload(api, door(sessionId), machine.token, { bytes, name: 'run.log', type: 'text/plain' });
+      assert.equal(refused.status, 422, `${shape} answered ${refused.status}: ${refused.json?.code}`);
+      assert.equal(refused.json.code, 'FILE_HOLDS_SECRET', shape);
+      assert.ok(refused.json.message.startsWith(`run.log holds what looks like ${kind} on line 2,`), refused.json.message);
+      for (const piece of secret) assert.equal(survivingPiece(refused.text, piece), undefined, `the answer repeats ${shape}`);
+      const hash = sha256(bytes);
+      assert.equal(existsSync(path.join(dir, hash.slice(0, 2), hash)), false, `the bytes of ${shape} are not in the store`);
+    }
+    assert.deepEqual(tempFiles(), [], 'no temporary file is left');
+    assert.deepEqual({ rows: await rowsOf({}), blobs: await db.fileBlob.count() }, before, 'no row, no bytes kept');
+    for (const { shape, secret } of CREDENTIAL_SAMPLES) {
+      for (const piece of secret) assert.equal(survivingPiece(api.output(), piece), undefined, `the server's log repeats ${shape}`);
+    }
+  });
+
+  await t.test('(10a) what ordinary test logs hold is kept, byte for byte', async () => {
+    const bytes = Buffer.from(ORDINARY_LINES.map(([, line]) => line).join('\n'));
+    const file = kept(bytes, await upload(api, door(sessionId), machine.token, { bytes, name: 'test.log', type: 'text/plain' }), 'an ordinary test log');
+    assert.ok((await bytesOf(api, sessionId, file.publicId, machine.token)).equals(bytes), 'read back as it was sent');
+  });
+
+  await t.test('(10b) a binary file is not scanned, and the bytes, not the declared type, say what is text', async () => {
+    const key = issued('ghp_', 36);
+    const png = Buffer.concat([Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), Buffer.from(key), randomBytes(64)]);
+    kept(png, await upload(api, door(sessionId), machine.token, { bytes: png, name: 'shot.png', type: 'image/png' }), 'a PNG with a key in it');
+    const gzip = Buffer.concat([Buffer.from([0x1f, 0x8b, 0x08, 0x00]), Buffer.from(key)]);
+    kept(gzip, await upload(api, door(sessionId), machine.token, { bytes: gzip, name: 'trace.gz', type: 'application/octet-stream' }), 'a gzip with a key in it');
+    for (const [name, type] of [['notes.png', 'image/png'], ['client.ts', 'video/mp2t'], ['id_rsa', 'application/octet-stream']]) {
+      const refused = await upload(api, door(sessionId), machine.token, { bytes: Buffer.from(`the key ${key}\n`), name, type });
+      assert.equal(refused.status, 422, `text declared ${type} answered ${refused.status}`);
+    }
+  });
+
+  await t.test('(10c) a folder keeps its other files: one refused, the rest uploaded and bundled', async () => {
+    const folderSession = await sessionOf('a session with a folder that holds a key');
+    const first = randomBytes(256);
+    const last = randomBytes(256);
+    const a = kept(first, await upload(api, door(folderSession), machine.token, { bytes: first, name: 'a.png' }), 'a.png');
+    const refused = await upload(api, door(folderSession), machine.token, { bytes: Buffer.from(`the key ${issued('ghp_', 36)}\n`), name: 'run.log', type: 'text/plain' });
+    assert.equal(refused.status, 422);
+    const z = kept(last, await upload(api, door(folderSession), machine.token, { bytes: last, name: 'z.png' }), 'z.png');
+    const made = created(await call(api, 'POST', bundleDoor(folderSession), machine.token, {
+      name: 'evidence',
+      files: [{ path: 'a.png', id: a.publicId }, { path: 'shots/z.png', id: z.publicId }],
+    }), 'the bundle of the rest');
+    const manifest = JSON.parse((await bytesOf(api, folderSession, made.id, machine.token)).toString('utf8')) as FileBundleManifest;
+    assert.deepEqual(manifest.files.map((entry) => entry.path), ['a.png', 'shots/z.png']);
+    assert.equal(await rowsOf({ sessionId: folderSession }), 3, 'two files and the manifest, and nothing of the refused one');
   });
 });

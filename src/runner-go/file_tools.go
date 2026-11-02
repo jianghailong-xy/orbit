@@ -43,6 +43,10 @@ const (
 	fileLabelMaxChars      = 200
 )
 
+// fileHoldsSecret is the code of the server's refusal of a file for a credential in it (apiserver
+// files/file-secret-scan.ts).
+const fileHoldsSecret = "FILE_HOLDS_SECRET"
+
 // fileCallTimeout is how long one file may take to travel. Longer than the attachments' 35 seconds, which were chosen
 // for a screenshot: this one may be 25 MiB on a home connection.
 const fileCallTimeout = 2 * time.Minute
@@ -550,7 +554,25 @@ func sendFolderFile(ctx context.Context, t *Transport, sessionID string, scope l
 		return sessionFile{}, "changed after the folder was read", nil
 	}
 	uploaded, err := t.uploadFile(ctx, sessionID, file, filepath.Base(entry.path), attachmentMimeOf(file, entry.path), fields)
+	if reason := secretRefusal(err); reason != "" {
+		return sessionFile{}, reason, nil
+	}
 	return uploaded, "", err
+}
+
+// secretRefusal is the server's own sentence when it refused a file for the credential in it, and "" for anything else.
+// The server knows that much of the file and no more: the sentence says what the credential looks like and where, and
+// never repeats it. Every other refusal is about the whole folder, and stops it.
+func secretRefusal(err error) string {
+	var refused *transportHTTPError
+	if !errors.As(err, &refused) || refused.code() != fileHoldsSecret {
+		return ""
+	}
+	var body struct {
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal([]byte(refused.body), &body)
+	return body.Message
 }
 
 // folderFile is one regular file of a folder: where it is, its path in the folder, with / between its parts, and what
