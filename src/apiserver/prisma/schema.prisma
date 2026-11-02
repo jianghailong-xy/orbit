@@ -2821,12 +2821,13 @@ model Attachment {
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
   fileName  String?           @map("file_name")
-  // Raw bytes (bytea) of a row written before Orbit Files (0462). NULL on a row whose bytes are in
-  // the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
+  // Raw bytes (bytea) of a row written before Orbit Files (0462). NULL on a row whose bytes are only
+  // in the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
+  // A row the copy has reached has both, until the clear (files/attachment-migration.ts).
   data      Bytes?
   /// The bytes' sha256, 64 lowercase hex (0462, docs/orbit-files-design.md §2.1): this row's bytes
   /// are the file_blob of that name, kept once however many rows name them (files/files.service.ts).
-  /// NULL on a row whose bytes are still in `data`.
+  /// NULL on a row whose bytes are only in `data`.
   sha256    String?
   blob      FileBlob?         @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
   /// Columns of the retention rules (§2.8), folder bundles (§2.2) and FILE evidence (§2.4), created by

@@ -11,8 +11,8 @@ import {
 import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, statfs } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -147,8 +147,8 @@ function assertBundlePath(filePath: string): void {
  * its bytes are kept once per content in a file store — the files directory, or an S3-compatible bucket —
  * under their sha256, with a `file_blob` row saying which. Every attachment upload is kept here; every read
  * of an attachment's bytes comes through `open`, which serves a row from before Orbit Files from its own
- * `data` column until those rows are moved. What agents keep with `file_upload` and find with `file_list` is the same
- * rows, with the doors at the end of this class.
+ * `data` column until the copy of old attachments reaches it (attachment-migration.ts). What agents keep with
+ * `file_upload` and find with `file_list` is the same rows, with the doors at the end of this class.
  */
 @Injectable()
 export class FilesService {
@@ -265,15 +265,24 @@ export class FilesService {
     });
     if (!row) return null;
     const { mimeType, fileName } = row;
+    let storeFailure: unknown;
     if (row.sha256 && row.blob) {
-      const content = await this.storeOf(row.blob.storage)?.open(row.sha256);
-      if (content) return { content, mimeType, fileName, sizeBytes: row.blob.sizeBytes };
+      try {
+        const content = await this.storeOf(row.blob.storage)?.open(row.sha256);
+        if (content) return { content, mimeType, fileName, sizeBytes: row.blob.sizeBytes };
+      } catch (error) {
+        // A row the copy has reached is not left to a store that fails while its bytes are still in `data`.
+        storeFailure = error;
+      }
     }
-    const legacy = await this.prisma.attachment.findUnique({ where: { id: row.id }, select: { data: true } });
+    const legacy = await this.prisma.attachment.findUnique({ where: { id: row.id }, select: { data: true, sha256: true } });
     if (legacy?.data) {
       const data = Buffer.from(legacy.data);
       return { content: data, mimeType, fileName, sizeBytes: data.length };
     }
+    // Copied and cleared since `row` was read (attachment-migration.ts): the row names its bytes now.
+    if (legacy?.sha256 && !row.sha256) return this.open({ id: row.id });
+    if (storeFailure) throw storeFailure;
     this.logger.error(
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
     );
@@ -305,6 +314,30 @@ export class FilesService {
     return Buffer.concat(chunks).subarray(0, limit);
   }
 
+  /** The room left on the disk under the files directory. */
+  async freeBytes(): Promise<number> {
+    await mkdir(this.config.dir, { recursive: true });
+    const { bavail, bsize } = await statfs(this.config.dir);
+    return bavail * bsize;
+  }
+
+  /**
+   * What the store `blob` names really holds under its name, read back to the last byte: what the clear checks before it
+   * lets a row's `data` go. Null when it holds nothing there, or when this deployment has no such store. The bytes pass
+   * through in the store's own chunks, so a file of any size takes the same memory.
+   */
+  async readBack(blob: { sha256: string; storage: string }): Promise<{ sha256: string; sizeBytes: number } | null> {
+    const content = await this.storeOf(blob.storage)?.open(blob.sha256);
+    if (!content) return null;
+    const hash = createHash('sha256');
+    let sizeBytes = 0;
+    for await (const chunk of content) {
+      hash.update(chunk as Buffer);
+      sizeBytes += (chunk as Buffer).length;
+    }
+    return { sha256: hash.digest('hex'), sizeBytes };
+  }
+
   /**
    * What citing these files as evidence takes from the file store (§2.4), before the transaction that saves it, which holds
    * the task's lock: a row from before Orbit Files gets the sha256 the citation binds, and an image's header says how big
@@ -330,7 +363,8 @@ export class FilesService {
   /**
    * The sha256 a copy of the attachment row `row` names, so that a copy is a row and never the bytes again:
    * the row's own, or — for a row whose bytes are still in `data` — that of those bytes once they are kept,
-   * written onto the row so that the next copy reads it there.
+   * written onto the row so that the next copy reads it there. The copy of old attachments is this, a row at a time
+   * (attachment-migration.ts). `data` stays: only the clear takes it.
    */
   async referenceOf(row: { id: string; sha256: string | null }): Promise<string> {
     if (row.sha256) return row.sha256;
