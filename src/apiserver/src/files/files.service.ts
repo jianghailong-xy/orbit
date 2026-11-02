@@ -16,6 +16,7 @@ import {
 } from './file-store';
 import type { FileUpload } from './file-upload-storage';
 import { S3FileStore } from './s3-file-store';
+import { attachmentDisposition, inlineType } from './user-file-response';
 
 /** A FilesConfig to use instead of the environment's; nothing provides one but a spec. */
 export const FILES_CONFIG = Symbol('FILES_CONFIG');
@@ -26,6 +27,7 @@ export interface OpenedFile {
   content: Readable | Buffer;
   mimeType: string;
   sizeBytes: number;
+  fileName: string | null;
 }
 
 /**
@@ -130,17 +132,24 @@ export class FilesService {
   async open(where: Prisma.AttachmentWhereInput): Promise<OpenedFile | null> {
     const row = await this.prisma.attachment.findFirst({
       where,
-      select: { id: true, mimeType: true, sha256: true, blob: { select: { storage: true, sizeBytes: true } } },
+      select: {
+        id: true,
+        mimeType: true,
+        fileName: true,
+        sha256: true,
+        blob: { select: { storage: true, sizeBytes: true } },
+      },
     });
     if (!row) return null;
+    const { mimeType, fileName } = row;
     if (row.sha256 && row.blob) {
       const content = await this.storeOf(row.blob.storage)?.open(row.sha256);
-      if (content) return { content, mimeType: row.mimeType, sizeBytes: row.blob.sizeBytes };
+      if (content) return { content, mimeType, fileName, sizeBytes: row.blob.sizeBytes };
     }
     const legacy = await this.prisma.attachment.findUnique({ where: { id: row.id }, select: { data: true } });
     if (legacy?.data) {
       const data = Buffer.from(legacy.data);
-      return { content: data, mimeType: row.mimeType, sizeBytes: data.length };
+      return { content: data, mimeType, fileName, sizeBytes: data.length };
     }
     this.logger.error(
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
@@ -176,13 +185,15 @@ export class FilesService {
 }
 
 /**
- * An opened file as a download route answers it: inline, typed and sized. With the route's response, a
+ * An opened file as a download route answers it: typed and sized, inline only when its type may be shown
+ * (UserFileResponseInterceptor) and otherwise saved under its own name. With the route's response, a
  * stream from the store is ended when the response closes, so a client that leaves early does not hold a
  * file or a connection to the bucket open.
  */
 export function streamable(file: OpenedFile, response?: Pick<Response, 'once'>): StreamableFile {
   const { content } = file;
-  const options = { type: file.mimeType, disposition: 'inline', length: file.sizeBytes };
+  const disposition = inlineType(file.mimeType) ? 'inline' : attachmentDisposition(file.fileName ?? 'attachment');
+  const options = { type: file.mimeType, disposition, length: file.sizeBytes };
   if (Buffer.isBuffer(content)) return new StreamableFile(content, options);
   response?.once('close', () => content.destroy());
   return new StreamableFile(content, options);

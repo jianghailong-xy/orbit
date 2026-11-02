@@ -28,6 +28,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
+import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
@@ -658,11 +659,11 @@ export const deleteAttachment = async (id: string): Promise<void> => {
 /** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in
  *  the transcript after reload. The download endpoint is bearer-guarded, so an `<img src>`
  *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
- *  the caller must revoke. */
+ *  the caller must revoke (lib/userFile.ts says what kind: an SVG's is a data: URL). */
 export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
@@ -670,7 +671,7 @@ export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactP
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 /** Fetch an attachment's bytes as a base64 data URL — used by the HTML export, where the
@@ -1666,14 +1667,16 @@ export const getSharedEventsAfter = (
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
 
+/** The public attachment route: no bearer, so a browser can be sent straight to it. */
+export const sharedAttachmentUrl = (token: string, id: string): string =>
+  `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`;
+
 /** Object URL for an inline image in a shared transcript, via the public attachment route
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */
 export const fetchSharedAttachmentObjectUrl = async (token: string, id: string): Promise<string> => {
-  const res = await fetch(
-    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
-  );
+  const res = await fetch(sharedAttachmentUrl(token, id));
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: string): Promise<string> => {
@@ -1681,7 +1684,7 @@ export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: 
     `/api/shared/${encodeURIComponent(token)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  return userFileUrl(await res.blob());
 };
 
 /** Base64 data URL for an inline image in a shared transcript, via the public attachment

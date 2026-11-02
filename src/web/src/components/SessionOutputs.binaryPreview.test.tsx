@@ -225,6 +225,18 @@ describe('a binary file in the diff drawer', () => {
     expect(pane()?.textContent).toContain("Couldn't preview image");
     expect(buttonIn(pane(), 'Retry')).toBeTruthy();
   });
+
+  it('never makes an address that would open as a page, for drawing or for saving', async () => {
+    vi.mocked(getWorktreeFile).mockResolvedValue(new Blob(['<html>'], { type: 'text/html' }));
+    await openDrawer();
+    await press(document.querySelector('.wt-diff-group-head[title="docs/mocks/board/fonts"]'));
+    await press(row(BOARD));
+    await press(row(FONT));
+    await press(buttonIn(pane(), 'Download'));
+
+    expect(downloads).toEqual(['Inter.woff2']);
+    expect([...blobs.values()].map((blob) => blob.type)).toEqual(['application/octet-stream', 'application/octet-stream']);
+  });
 });
 
 describe('paging the drawer with ‹ ›', () => {

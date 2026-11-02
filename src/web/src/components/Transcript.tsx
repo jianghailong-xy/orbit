@@ -64,6 +64,7 @@ import {
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import {
@@ -3074,14 +3075,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
     setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolveFileObjectUrl(resolve, id);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = label;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+      saveUserFile(await resolveFileObjectUrl(resolve, id), label);
     } catch {
       // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
       // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
@@ -3386,14 +3380,7 @@ function LocalArtifactFile({
     setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolveFileObjectUrl(resolve, artifactPath);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+      saveUserFile(await resolveFileObjectUrl(resolve, artifactPath), filename);
     } catch {
       // The artifact endpoint may refuse a stale path or an offline runner. Surface that state so
       // the user knows the click was handled and can retry when the runner is back.
