@@ -6,7 +6,7 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/files.pg.spec.ts
  *
  *   local  the files directory, a directory of this run's (ORBIT_FILES_DIR);
- *   s3     a real S3-compatible server — VersityGW, the image pinned below — that this spec starts on Docker the way
+ *   s3     a real S3-compatible server — VersityGW, the image pinned in test-support/s3-test-server.ts — started on Docker the way
  *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_FILES_BACKEND=s3). It checks
  *          every request's signature and every PUT's payload hash, as AWS S3 does.
  *
@@ -33,7 +33,6 @@
  * Not destructive: every row belongs to users this run creates, and each store gets bytes of its own.
  */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
@@ -53,16 +52,15 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { TasksService } from '../tasks/tasks.service';
-import { LocalFileStore, type FilesConfig, type S3FilesConfig } from './file-store';
+import { startS3 } from '../test-support/s3-test-server';
+import { LocalFileStore, type FilesConfig } from './file-store';
 import { FilesService } from './files.service';
 import { IMAGE_HEADER_BYTES } from './image-size';
-import { S3FileStore, sigV4Authorization } from './s3-file-store';
+import { S3FileStore } from './s3-file-store';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const PROVIDER_SECRET_KEY = `orbit-files-${RUN}`;
-/** The S3-compatible server the s3 store is held against: VersityGW 1.10.0 (Apache-2.0), on Docker Hub. */
-const S3_IMAGE = 'versity/versitygw:v1.10.0';
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const b62 = (id: string) => uuidToBase62(id);
@@ -89,7 +87,7 @@ test('every upload door streams to disk through FILE_UPLOAD_STORAGE, under the 2
   }
   // The engine itself: each part piped to a file opened under the files directory's tmp/, hashed on the way.
   assert.match(source('files/file-upload-storage.ts'), /writeHashedTempFile\(file\.stream, tempDir\(\)/);
-  assert.match(source('files/file-store.ts'), /await pipeline\(source, hashing, handle\.createWriteStream\(\{ flush: true \}\)\)/);
+  assert.match(source('files/file-store.ts'), /await pipeline\(source, hashing, closedWhenDropped\(createWriteStream\(tempPath, \{ fd, flush: true \}\), fd\)\)/);
   assert.equal(MAX_UPLOAD_BYTES, 25 * 1024 * 1024);
 });
 
@@ -149,59 +147,6 @@ const idOf = (answer: Answer, what: string): string => {
   assert.equal(answer.status, 201, `${what} answered ${answer.status}: ${answer.body.toString('utf8').slice(0, 500)}`);
   return toUuid(JSON.parse(answer.body.toString('utf8')).id);
 };
-
-// ── The S3-compatible server ───────────────────────────────────────────────────────────────────
-async function s3Request(config: S3FilesConfig, method: 'PUT', requestPath: string): Promise<number> {
-  const endpoint = new globalThis.URL(config.endpoint);
-  const empty = sha256(Buffer.alloc(0));
-  const amzDate = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const headers = { host: endpoint.host, 'x-amz-content-sha256': empty, 'x-amz-date': amzDate };
-  const authorization = sigV4Authorization(
-    { method, path: requestPath, headers, payloadSha256: empty },
-    { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey, region: config.region, service: 's3' },
-    amzDate,
-  );
-  return new Promise((resolve, reject) => {
-    const req = http.request({
-      hostname: endpoint.hostname, port: endpoint.port, method, path: requestPath, headers: { ...headers, authorization },
-    }, (res) => {
-      res.resume();
-      res.on('end', () => resolve(res.statusCode ?? 0));
-    });
-    req.on('error', reject);
-    req.end();
-  });
-}
-
-/** VersityGW on Docker, on a port of its own, with this run's bucket; removed when the test ends. */
-async function startS3(after: (fn: () => void) => void): Promise<S3FilesConfig> {
-  const name = `orbit-files-s3-${RUN}`;
-  const accessKeyId = `orbitfiles${RUN}`;
-  const secretAccessKey = randomBytes(24).toString('hex');
-  execFileSync('docker', [
-    'run', '-d', '--rm', '--name', name, '-p', '127.0.0.1::7070', '--tmpfs', '/data',
-    S3_IMAGE, '--access', accessKeyId, '--secret', secretAccessKey, 'posix', '/data',
-  ], { stdio: ['ignore', 'ignore', 'inherit'] });
-  after(() => {
-    try {
-      execFileSync('docker', ['rm', '-f', name], { stdio: 'ignore' });
-    } catch {
-      // Already gone.
-    }
-  });
-  const port = execFileSync('docker', ['port', name, '7070/tcp'], { encoding: 'utf8' }).split('\n')[0].split(':').pop();
-  const config: S3FilesConfig = {
-    endpoint: `http://127.0.0.1:${port}`, bucket: `orbit-files-${RUN}`, accessKeyId, secretAccessKey, region: 'us-east-1',
-  };
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    // The bucket is the readiness probe: a refused connection or an error before the gateway serves is retried.
-    const status = await s3Request(config, 'PUT', `/${config.bucket}`).catch(() => 0);
-    if (status === 200) return config;
-    if (Date.now() > deadline) assert.fail(`${S3_IMAGE} did not create the bucket within 60 s (last answer ${status})`);
-    await sleep(250);
-  }
-}
 
 // ── One store, the same cases ──────────────────────────────────────────────────────────────────
 interface Leg {

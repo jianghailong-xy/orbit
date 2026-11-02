@@ -256,6 +256,29 @@ class RunnerEnginePageTest {
         compose.onNode(hasText("Sign In") and hasClickAction()).assertExists()
     }
 
+    /** The device flow's card with a link that is not an https page: its code stands, and nothing opens the link. */
+    @Test fun aDeviceFlowLinkThatIsNotHttpsIsNotOffered() {
+        fixture.runnerEngines = """[{"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"}]"""
+        fixture.loginStarted = """{"engine":"codex","status":"awaiting_approval","userCode":"WXYZ-1234","url":"javascript:void(0)"}"""
+        page("engine:codex")
+        click(hasText("Sign In") and hasClickAction())
+        await("WXYZ-1234")
+        assertEquals(0, shown("Copy Code & Open Sign-In Page"))
+        assertEquals(0, shown(AccountCopy.OPEN_PAGE))
+    }
+
+    /** The paste-back form's: the code can still be pasted, and nothing opens the link. */
+    @Test fun aPasteBackLinkThatIsNotHttpsIsNotOffered() {
+        fixture.runnerEngines = claudeAccounts(at(47))
+        fixture.loginStarted = """{"engine":"claude","account":"default","status":"awaiting_code","url":"data:text/html,hello"}"""
+        page("engine:claude")
+        await("Login expires in 2 days")
+        menu("Default")
+        click(hasText("Sign In Again"))
+        await("Approve it there, then paste the code the page gives you:")
+        assertEquals(0, shown(AccountCopy.OPEN_PAGE))
+    }
+
     // Kimi Code's accounts (docs/mocks/kimi-accounts/02-ios and its Android notes)
 
     private val kimiCapabilities = ""","capabilities":["kimi-account-login/v1","kimi-account-remove/v1","kimi-account-move/v1","kimi-login-region/v1"]"""

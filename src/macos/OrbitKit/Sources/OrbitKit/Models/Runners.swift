@@ -547,6 +547,15 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
         self.reason = reason
     }
 
+    /// The page at `url` a browser may be sent to, or nil: only ever an https page, whatever the runner
+    /// reported. The system hands any other scheme to whatever claims it, so a card opens nothing else.
+    /// The server keeps no other (web `signInPage`); this holds for whatever a row still carries.
+    public var signInPage: URL? {
+        guard let url, let page = URL(string: url),
+              page.scheme?.lowercased() == "https", page.host?.isEmpty == false else { return nil }
+        return page
+    }
+
     private enum CodingKeys: String, CodingKey {
         case status, engine, url, userCode, message, account, expiresAt, reason
     }
