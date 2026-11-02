@@ -2,7 +2,23 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { once, EventEmitter } from 'node:events';
-import fs, { fstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import fs, {
+  chmodSync,
+  existsSync,
+  fstatSync,
+  lutimesSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -10,19 +26,20 @@ import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import test from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { BadRequestException, type ExecutionContext } from '@nestjs/common';
+import { BadRequestException, Logger, type ExecutionContext } from '@nestjs/common';
 import type { Response } from 'express';
 import { lastValueFrom, of, throwError, type Observable } from 'rxjs';
 import {
   DEFAULT_FILES_DIR,
   LocalFileStore,
   filesConfigFrom,
+  removeStaleTempFiles,
   uploadTempDir,
   writeHashedTempFile,
 } from './file-store';
 import { FileUploadCleanupInterceptor } from './file-upload-cleanup.interceptor';
 import { fileUploadStorage } from './file-upload-storage';
-import { streamable } from './files.service';
+import { FilesService, streamable } from './files.service';
 import { S3FileStore, sigV4Authorization, sigV4Encode } from './s3-file-store';
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -274,6 +291,191 @@ test('an upload\'s temporary file is gone once its request has ended, and the an
   assert.deepEqual(await through({ path: path.join(dir, 'kept') }, () => of({ id: 'b' })), { id: 'b' });
   assert.deepEqual(await through(undefined, () => of({ id: 'c' })), { id: 'c' });
 });
+
+// ── What a process killed during an upload leaves behind ──────────────────────────────────────
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+function writtenHoursAgo(dir: string, name: string, hours: number, bytes = 'bytes'): string {
+  const file = path.join(dir, name);
+  writeFileSync(file, bytes);
+  utimesSync(file, hoursAgo(hours), hoursAgo(hours));
+  return file;
+}
+
+/** A files directory of the test's, with its temporary directory, and what a sweep says about it. */
+function sweeping(t: { after: (fn: () => void) => void }) {
+  const dir = scratch(t);
+  const tempDir = uploadTempDir(dir);
+  mkdirSync(tempDir);
+  const said = { log: [] as string[], warn: [] as string[] };
+  const log = { log: (line: string) => said.log.push(line), warn: (line: string) => said.warn.push(line) };
+  return { dir, tempDir, said, log };
+}
+
+test('regular files in the temporary directory not written for a day are removed, whatever their names, and newer ones stay', async (t) => {
+  const { tempDir, said, log } = sweeping(t);
+  writtenHoursAgo(tempDir, 'upload-killed', 25, 'a killed upload');
+  writtenHoursAgo(tempDir, 'not-an-upload', 24 * 30, 'old');
+  writtenHoursAgo(tempDir, 'upload-nearly-a-day', 23);
+  writtenHoursAgo(tempDir, 'upload-under-way', 0);
+  await removeStaleTempFiles(tempDir, log);
+  assert.deepEqual(readdirSync(tempDir).sort(), ['upload-nearly-a-day', 'upload-under-way']);
+  assert.deepEqual(said, { log: [`temporary files: removed 2 (18 bytes) not written for a day from ${tempDir}`], warn: [] });
+
+  said.log.length = 0;
+  await removeStaleTempFiles(tempDir, log);
+  assert.deepEqual(readdirSync(tempDir).sort(), ['upload-nearly-a-day', 'upload-under-way'], 'run again, it changes nothing');
+  assert.deepEqual(said, { log: [], warn: [] }, 'and has nothing to say');
+});
+
+test('a link or a directory in the temporary directory stays as it is, and nothing is followed', async (t) => {
+  const { dir, tempDir, said, log } = sweeping(t);
+  const longAgo = hoursAgo(48);
+  const outside = path.join(dir, 'outside');
+  mkdirSync(outside);
+  const outsideFile = writtenHoursAgo(outside, 'stale-but-not-a-temporary-file', 48);
+  const links = { 'to-a-file': outsideFile, 'to-a-directory': outside, 'to-nothing': path.join(dir, 'nothing') };
+  for (const [name, target] of Object.entries(links)) {
+    symlinkSync(target, path.join(tempDir, name));
+    // The link itself as old as a file that would be removed.
+    lutimesSync(path.join(tempDir, name), longAgo, longAgo);
+  }
+  const inner = path.join(tempDir, 'a-directory');
+  mkdirSync(inner);
+  const innerFile = writtenHoursAgo(inner, 'stale-in-a-directory', 48);
+  utimesSync(inner, longAgo, longAgo);
+  const killed = writtenHoursAgo(tempDir, 'upload-killed', 48);
+
+  await removeStaleTempFiles(tempDir, log);
+
+  assert.equal(existsSync(killed), false, 'the regular file beside them is what goes');
+  for (const [name, target] of Object.entries(links)) assert.equal(readlinkSync(path.join(tempDir, name)), target, `${name} is still that link`);
+  assert.equal(readFileSync(outsideFile, 'utf8'), 'bytes', 'the file a link points at is untouched');
+  assert.equal(readFileSync(innerFile, 'utf8'), 'bytes', 'and so is one in a directory');
+  assert.deepEqual(said.warn, []);
+});
+
+test('a temporary directory that is itself a link is not followed, and says so', async (t) => {
+  const { dir, tempDir, said, log } = sweeping(t);
+  const elsewhere = path.join(dir, 'elsewhere');
+  mkdirSync(elsewhere);
+  const file = writtenHoursAgo(elsewhere, 'somebody-elses', 48);
+  rmSync(tempDir, { recursive: true });
+  symlinkSync(elsewhere, tempDir);
+  await removeStaleTempFiles(tempDir, log);
+  assert.equal(existsSync(file), true);
+  assert.deepEqual(said, { log: [], warn: [`temporary files: could not read ${tempDir}: it is a link, or not a directory`] });
+});
+
+test('with no temporary directory yet there is nothing to do or say, and none is made', async (t) => {
+  const { tempDir, said, log } = sweeping(t);
+  rmSync(tempDir, { recursive: true });
+  await removeStaleTempFiles(tempDir, log);
+  assert.equal(existsSync(tempDir), false);
+  assert.deepEqual(said, { log: [], warn: [] });
+});
+
+/** `work` as a user that file modes bind, which root is not: where these specs run as root, nobody's. */
+async function boundByFileModes<T>(work: () => Promise<T>): Promise<T> {
+  const root = process.geteuid?.() === 0;
+  if (root) process.seteuid!(65534);
+  try {
+    return await work();
+  } finally {
+    if (root) process.seteuid!(0);
+  }
+}
+
+test('a temporary directory that cannot be read is said, thrown to nobody, and leaves its files', async (t) => {
+  const { dir, tempDir, said, log } = sweeping(t);
+  const stale = writtenHoursAgo(tempDir, 'upload-killed', 48);
+  // Only the directory itself is what refuses.
+  chmodSync(dir, 0o755);
+  chmodSync(tempDir, 0o000);
+  try {
+    await boundByFileModes(() => removeStaleTempFiles(tempDir, log));
+  } finally {
+    chmodSync(tempDir, 0o700);
+  }
+  assert.equal(said.warn.length, 1, said.warn.join('\n'));
+  assert.match(said.warn[0], new RegExp(`^temporary files: could not read ${tempDir}: EACCES`));
+  assert.deepEqual(said.log, []);
+  assert.equal(existsSync(stale), true);
+
+  const notADirectory = path.join(dir, 'a-file');
+  writeFileSync(notADirectory, '');
+  said.warn.length = 0;
+  await removeStaleTempFiles(notADirectory, log);
+  assert.deepEqual(said.warn, [`temporary files: could not read ${notADirectory}: it is a link, or not a directory`]);
+
+  said.warn.length = 0;
+  await removeStaleTempFiles(path.join(notADirectory, 'tmp'), log);
+  assert.match(said.warn[0], /ENOTDIR/, 'a files directory that cannot be reached either');
+});
+
+test('a file that cannot be removed is said, and the others still go', async (t) => {
+  const { tempDir, said, log } = sweeping(t);
+  for (const name of ['upload-a', 'upload-b', 'upload-c']) writtenHoursAgo(tempDir, name, 25);
+  // Whichever it comes to first, so that the others are the ones after a failure.
+  let refused = '';
+  const unlink = fsPromises.unlink;
+  t.mock.method(fsPromises, 'unlink', async (file: string) => {
+    if (refused) return unlink(file);
+    refused = file;
+    throw Object.assign(new Error(`EPERM: operation not permitted, unlink '${file}'`), { code: 'EPERM' });
+  });
+  await removeStaleTempFiles(tempDir, log);
+  assert.deepEqual(readdirSync(tempDir), [path.basename(refused)]);
+  assert.deepEqual(said, {
+    log: [`temporary files: removed 2 (10 bytes) not written for a day from ${tempDir}`],
+    warn: [`temporary files: could not remove 1 from ${tempDir}: EPERM: operation not permitted, unlink '${refused}'`],
+  });
+});
+
+test('a file that goes while this runs, by its upload ending or to another apiserver starting at once, is no failure', async (t) => {
+  const { tempDir, said, log } = sweeping(t);
+  for (let i = 0; i < 40; i += 1) writtenHoursAgo(tempDir, `upload-${i}`, 25);
+  const readdir = fsPromises.readdir;
+  t.mock.method(fsPromises, 'readdir', async (dir: string) => [...(await readdir(dir)), 'upload-gone-since-the-listing']);
+  await Promise.all([removeStaleTempFiles(tempDir, log), removeStaleTempFiles(tempDir, log)]);
+  assert.deepEqual(readdirSync(tempDir), []);
+  assert.deepEqual(said.warn, []);
+});
+
+for (const [storage, config] of [
+  ['the local store', { storage: 'local' as const }],
+  ['a bucket', { storage: 's3' as const, s3: { endpoint: 'http://127.0.0.1:9', bucket: 'b', accessKeyId: 'a', secretAccessKey: 's', region: 'r' } }],
+] as const) {
+  test(`a start with ${storage} removes what is stale, without waiting for it, and goes on whatever it finds`, async (t) => {
+    const { dir, tempDir } = sweeping(t);
+    const warnings: string[] = [];
+    t.mock.method(Logger.prototype, 'log', () => undefined);
+    t.mock.method(Logger.prototype, 'warn', (line: string) => {
+      warnings.push(line);
+    });
+    const files = new FilesService({} as never, { dir, ...config });
+
+    const stale = writtenHoursAgo(tempDir, 'upload-killed', 25);
+    const fresh = writtenHoursAgo(tempDir, 'upload-under-way', 0);
+    // Nothing for Nest to wait on: a disk that hangs holds up no start.
+    assert.equal(files.onApplicationBootstrap(), undefined);
+    for (let i = 0; i < 500 && existsSync(stale); i += 1) await sleep(10);
+    assert.equal(existsSync(stale), false);
+    assert.equal(existsSync(fresh), true);
+
+    chmodSync(dir, 0o755);
+    chmodSync(tempDir, 0o000);
+    try {
+      await boundByFileModes(async () => {
+        assert.equal(files.onApplicationBootstrap(), undefined, 'and a directory it cannot read does not stop it');
+        for (let i = 0; i < 500 && warnings.length === 0; i += 1) await sleep(10);
+      });
+    } finally {
+      chmodSync(tempDir, 0o700);
+    }
+    assert.match(warnings[0] ?? '', new RegExp(`^temporary files: could not read ${tempDir}: EACCES`));
+  });
+}
 
 // ── The files directory as a store ─────────────────────────────────────────────────────────────
 test('the local store keeps a content once at <sha256[0:2]>/<sha256>, by renaming the temporary file', async (t) => {

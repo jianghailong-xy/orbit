@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Optional,
   StreamableFile,
+  type OnApplicationBootstrap,
 } from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
@@ -21,6 +22,8 @@ import { citedFileIds, storedEvidenceEnvelope } from '../tasks/task-evidence-env
 import {
   LocalFileStore,
   filesConfigFrom,
+  messageOf,
+  removeStaleTempFiles,
   removeTempFile,
   uploadTempDir,
   writeHashedTempFile,
@@ -73,6 +76,9 @@ export const MAX_BUNDLE_PATH_CHARS = 1024;
 
 /** How many rows one `file_list` answers: a row per upload, so a folder of any size is one of them. */
 const FILE_LIST_LIMIT = 200;
+
+/** How often `open` says that one store made it answer from `data`: a store gone bad does that on every read. */
+const STORE_FALLBACK_WARNING_MS = 60_000;
 
 /** What `file_upload` says of a file it was told is a test report and could not read as one. */
 export const NOT_A_TEST_REPORT = 'Not a Playwright JSON or JUnit XML report, so this was kept as a plain file, with no test summary.';
@@ -151,11 +157,13 @@ function assertBundlePath(filePath: string): void {
  * `file_upload` and find with `file_list` is the same rows, with the doors at the end of this class.
  */
 @Injectable()
-export class FilesService {
+export class FilesService implements OnApplicationBootstrap {
   private readonly logger = new Logger(FilesService.name);
   readonly config: FilesConfig;
   private readonly local: LocalFileStore;
   private readonly s3: S3FileStore | null;
+  /** When each store last made `open` say so, and how many reads it has made it answer from `data` since. */
+  private readonly storeFallbacks = new Map<string, { warnedAt: number; readsSince: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -164,6 +172,14 @@ export class FilesService {
     this.config = config ?? filesConfigFrom();
     this.local = new LocalFileStore(this.config.dir);
     this.s3 = this.config.s3 ? new S3FileStore(this.config.s3) : null;
+  }
+
+  /**
+   * A start removes what a killed process left in the temporary directory, whichever store is in use, since every upload
+   * is written there first. The start does not wait for it: a disk that hangs holds up nothing else.
+   */
+  onApplicationBootstrap(): void {
+    void removeStaleTempFiles(uploadTempDir(this.config.dir), this.logger);
   }
 
   /** The store new bytes go to. */
@@ -277,6 +293,7 @@ export class FilesService {
     }
     const legacy = await this.prisma.attachment.findUnique({ where: { id: row.id }, select: { data: true, sha256: true } });
     if (legacy?.data) {
+      if (row.blob) this.warnOfStoreFallback(row.id, row.blob.storage, storeFailure);
       const data = Buffer.from(legacy.data);
       return { content: data, mimeType, fileName, sizeBytes: data.length };
     }
@@ -287,6 +304,24 @@ export class FilesService {
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
     );
     throw new NotFoundException('attachment bytes are missing');
+  }
+
+  /**
+   * Say that a copied row was answered from `data` because its store failed or no longer holds the bytes. The reader
+   * cannot tell, so without this a store gone bad stays unseen until the clear refuses its rows. At most once a minute for
+   * each store, with how many reads went the same way in between.
+   */
+  private warnOfStoreFallback(id: string, storage: string, failure: unknown): void {
+    const now = Date.now();
+    const last = this.storeFallbacks.get(storage);
+    if (last && now - last.warnedAt < STORE_FALLBACK_WARNING_MS) {
+      last.readsSince += 1;
+      return;
+    }
+    this.storeFallbacks.set(storage, { warnedAt: now, readsSince: 0 });
+    const why = failure ? `could not be read: ${messageOf(failure)}` : 'does not hold these bytes';
+    const since = last?.readsSince ? ` ${last.readsSince} more reads went the same way since the last warning.` : '';
+    this.logger.warn(`attachment ${id} was answered from Postgres: the ${storage} file store ${why}.${since}`);
   }
 
   /** The whole of an attachment's bytes, for a caller that hands them on in one piece. */
