@@ -333,6 +333,26 @@ export function wikiSentenceSegments(text: string): WikiSentenceSegment[] {
   return segments;
 }
 
+const FULL_WIDTH: Readonly<Record<string, string>> = { ',': '，', ':': '：', ';': '；' };
+
+/**
+ * A run of prose with the half-width , : ; that touch a Chinese character, or the quote closing one, written full
+ * width, a space after one going with it. Models mix the two inside one document, and a half-width comma sets a
+ * Chinese sentence too tight. Only what the reader sees: a footnote's quote is checked against what was stored.
+ * English, numbers and code touch no Chinese, and the sentence's code is not a run of prose.
+ */
+export const wikiProsePunctuation = (text: string): string =>
+  text.replace(/(?<=\p{Script=Han}[”’」』）]?)[,:;] ?|[,:;] ?(?=\p{Script=Han})/gu, (mark) => FULL_WIDTH[mark[0]]);
+
+/** A title in a row too small to draw its marks: its code and strong words as plain words. */
+export const wikiPlainWords = (text: string): string =>
+  wikiSentenceSegments(text)
+    .map((segment) => (segment.kind === 'code' ? segment.text : wikiProsePunctuation(segment.text)))
+    .join('');
+
+/** What parts a sentence from the next, as the server's `docLead` joins them: a space after a Latin stop, none after a full-width one. */
+export const wikiSentenceGap = (text: string): string => (/[。！？][」』"”’）)]*$/u.test(text) ? '' : ' ');
+
 /** The kinds an article's tags count, in the registry's order, and what each count is called. */
 const KIND_PLURALS: Record<WikiEntryKind, [string, string]> = {
   principle: ['principle', 'principles'],

@@ -16,9 +16,10 @@ import { Popover } from '../components/ui/Popover';
 import { WikiDiagram } from '../components/WikiDiagram';
 import { WikiDocRow } from '../components/WikiDocList';
 import { WikiDocFootnoteCard, WikiDocFootnoteList } from '../components/WikiDocPage';
+import { WikiWords } from '../components/WikiWords';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { WIKI_HISTORY_MAINTENANCE, WIKI_TITLE } from '../lib/wiki';
-import { wikiSentenceSegments } from '../lib/wikiArticles';
+import { wikiPlainWords, wikiSentenceGap } from '../lib/wikiArticles';
 import {
   WIKI_DOC_COVERS,
   WIKI_DOC_NOT_COVERED,
@@ -93,7 +94,7 @@ export function SharedWikiHome({ token, data }: { token: string; data: { include
                     to={sharedDocPath(token, doc.slug)}
                     number={doc.number}
                     title={doc.title}
-                    line={doc.lead ?? undefined}
+                    line={doc.lead ? wikiPlainWords(doc.lead) : undefined}
                     lead
                   />
                 ))}
@@ -204,7 +205,7 @@ function SharedWikiDocument({ token, data }: { token: string; data: SharedWikiDo
             <section className="wk-dc-sec" id={wikiDocSectionAnchor(section.key)} key={section.key}>
               <h2>
                 <span className="no">{section.number}</span>
-                {section.title}
+                <WikiWords text={section.title} />
               </h2>
               {blockRuns(section.blocks).map((run) => {
                 const sentences = (b: number) =>
@@ -230,7 +231,13 @@ function SharedWikiDocument({ token, data }: { token: string; data: SharedWikiDo
                     </ul>
                   );
                 }
-                if (run.kind === 'heading') return <h3 key={run.at[0]}>{section.blocks[run.at[0]].text}</h3>;
+                if (run.kind === 'heading') {
+                  return (
+                    <h3 key={run.at[0]}>
+                      <WikiWords text={section.blocks[run.at[0]].text ?? ''} />
+                    </h3>
+                  );
+                }
                 if (run.kind === 'code') {
                   return (
                     <pre key={run.at[0]} className="wk-dc-code">
@@ -356,18 +363,11 @@ function SharedWikiSentence({
   docSlug: string;
 }) {
   const lit = open?.at === at;
-  const words = wikiSentenceSegments(text).map((segment, i) =>
-    segment.kind === 'code' ? (
-      <code key={i}>{segment.text}</code>
-    ) : segment.kind === 'strong' ? (
-      <strong key={i}>{segment.text}</strong>
-    ) : (
-      <Fragment key={i}>{segment.text}</Fragment>
-    ),
-  );
   return (
     <>
-      <span className={lit ? 'hl' : undefined}>{words}</span>
+      <span className={lit ? 'hl' : undefined}>
+        <WikiWords text={text} />
+      </span>
       {numbers.length > 0 && (
         <sup className="wk-fn">
           {numbers.map((n, i) => {
@@ -403,7 +403,8 @@ function SharedWikiSentence({
             );
           })}
         </sup>
-      )}{' '}
+      )}
+      {wikiSentenceGap(text)}
     </>
   );
 }
