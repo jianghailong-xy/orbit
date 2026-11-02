@@ -1,0 +1,94 @@
+# bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-model-queue.pg.spec.ts
+# Run 2026-11-01T14:59:52Z on 572dc25ad86e3fe476d65a368947f03015b1f4c5.
+
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/072724db-fc06-569d-af1f-68823dab1347/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/072724db-fc06-569d-af1f-68823dab1347/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/072724db-fc06-569d-af1f-68823dab1347/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/072724db-fc06-569d-af1f-68823dab1347 is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-988029-11028 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:33249, system_identifier=7703217979312803881
+==> prisma migrate deploy (template pccspec_tpl)
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> 458 migrations applied
+########## wiki-model-queue.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.2/32:5432 system_identifier=7703217979312803881 version=16.15
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: several schedulers claim at once; the deployment's concurrency is never passed, and the order is priority then first-come
+ok 1 - several schedulers claim at once; the deployment's concurrency is never passed, and the order is priority then first-come
+  ---
+  duration_ms: 206.492514
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: a scheduler stopped mid-call: answered requests are not issued again, the interrupted one keeps its partial and finishes
+ok 2 - a scheduler stopped mid-call: answered requests are not issued again, the interrupted one keeps its partial and finishes
+  ---
+  duration_ms: 85.661327
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: a stop's release is the last write on the lease: no renewal lands after it, and the next scheduler takes the call over at once
+ok 3 - a stop's release is the last write on the lease: no renewal lands after it, and the next scheduler takes the call over at once
+  ---
+  duration_ms: 450.917509
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM    WARN [WikiModelStatus] qwen3-coder-spec is auth_failed: HTTP 401 authentication_error: invalid x-api-key
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: a 401 pauses the queue, and a worker that starts with a good key resumes it
+ok 4 - a 401 pauses the queue, and a worker that starts with a good key resumes it
+  ---
+  duration_ms: 182.496771
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM    WARN [WikiModelStatus] qwen3-coder-spec is down: /health answered HTTP 503
+# [Nest] 989471  - 11/01/2026, 11:00:05 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: a model that is down is not called at all, and its recovery resumes the queue
+ok 5 - a model that is down is not called at all, and its recovery resumes the queue
+  ---
+  duration_ms: 169.91095
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:06 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: a request that waited past its step's limit fails with the wait limit's words — the job's cue to fail as infra
+ok 6 - a request that waited past its step's limit fails with the wait limit's words — the job's cue to fail as infra
+  ---
+  duration_ms: 8.443184
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:06 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: the metrics read the queue's rows: depth, in flight, wait and run, tokens and errors by status
+ok 7 - the metrics read the queue's rows: depth, in flight, wait and run, tokens and errors by status
+  ---
+  duration_ms: 16.831716
+  type: 'test'
+  ...
+# [Nest] 989471  - 11/01/2026, 11:00:06 PM     LOG [WikiModelStatus] qwen3-coder-spec is up
+# Subtest: the worker's thinking switch rides every call the queue makes; unset, empty or unusable, the body is as it was
+ok 8 - the worker's thinking switch rides every call the queue makes; unset, empty or unusable, the body is as it was
+  ---
+  duration_ms: 23.973874
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1324.85227
+SPEC_EXIT=0
+==== wiki-model-queue.pg.spec.ts tests=8 pass=8 fail=0 skipped=0 
+==> OK: 1 spec(s) witnessed against PostgreSQL 16.15, no skips
+==> removing pccspec-pg-988029-11028
+exit=0

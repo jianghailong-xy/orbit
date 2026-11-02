@@ -64,6 +64,7 @@ function makeService(
     },
     modelProvider: { findFirst: async () => null },
     session: {
+      findMany: async () => [],
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);
         return { id: 'session-1', ...data, endReason: null, completedAt: null, archivedAt: null, deletedAt: null };

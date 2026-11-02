@@ -157,7 +157,18 @@ test('a runner served with a Default removed from Orbit', { skip, concurrency: 1
       { engines: runner.engines, planUsage: runner.planUsage },
       'POST /runners/reorder',
     );
-    return { engines: runner.engines!, planUsage: runner.planUsage as unknown as PlanUsage };
+    // No session runs here, so the count each account is served with says nothing to these cases.
+    const engines = runner.engines!.map((entry) => {
+      if (!entry.accounts) return entry;
+      return {
+        ...entry,
+        accounts: entry.accounts.map(({ activeSessions, ...account }) => {
+          assert.equal(activeSessions, 0);
+          return account;
+        }),
+      };
+    });
+    return { engines, planUsage: runner.planUsage as unknown as PlanUsage };
   }
 
   await t.test('(1)–(5) before removal, removed beside two and beside one, brought back, and the other account gone', async () => {

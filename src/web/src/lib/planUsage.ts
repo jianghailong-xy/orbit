@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  antigravityModelBuckets,
   codexAccountSnapshot,
   type PlanUsage,
   type PlanUsageRateLimit,
@@ -96,6 +97,17 @@ export function sessionPlanUsage(
   if (provider === engine) return planUsageSnapshotForProvider(runnerUsage, engine);
   const builtin = Object.values(AgentProvider).some((p) => p === provider);
   return (builtin ? undefined : configured?.find((p) => p.slug === provider))?.planUsage ?? null;
+}
+
+/**
+ * `usage` as a run on `model` spends it. An Antigravity account's buckets belong to model groups, so
+ * only the ones that model draws on are kept (antigravityModelBuckets): another group's spent bucket
+ * stops nothing this run does. Any other engine's windows are the whole login's, and come back as
+ * they are.
+ */
+export function modelPlanUsage(usage: PlanUsageSnapshot, model: string | null | undefined): PlanUsageSnapshot {
+  if (usage.provider !== AgentProvider.ANTIGRAVITY || !usage.buckets) return usage;
+  return { ...usage, buckets: antigravityModelBuckets(usage.buckets, model) };
 }
 
 /** Split a runner's possibly multi-runtime quota payload into display sections. */
@@ -337,6 +349,15 @@ export function currentPlanUsageRows(usage: PlanUsageSnapshot, now: number = Dat
 }
 
 /**
+ * Nothing left of the window (100% used). Its bar is drawn full and red whichever way the row counts:
+ * an Antigravity bucket at 0% remaining would otherwise be an empty track that reads as no data
+ * (Apple's `PlanUsageRow.spent`).
+ */
+export function planUsageRowSpent(row: PlanUsageDisplayRow): boolean {
+  return row.window.utilization >= 100;
+}
+
+/**
  * The window that stops a login, or will stop it first: a spent one (100%) before any other — of
  * several, the one that resets last, since the login is back only once every spent one has — else
  * the one closest to its limit, a tie going to the first (the 5-hour window). Anything that shows one
@@ -347,7 +368,7 @@ export function currentPlanUsageRows(usage: PlanUsageSnapshot, now: number = Dat
 export function bindingPlanUsageRow(rows: PlanUsageDisplayRow[]): PlanUsageDisplayRow | undefined {
   // A spent window with no reset named holds the login for as long as anyone can tell.
   const resetOf = (row: PlanUsageDisplayRow) => Date.parse(row.window.resetsAt ?? '') || Infinity;
-  const spent = rows.filter((row) => row.window.utilization >= 100);
+  const spent = rows.filter(planUsageRowSpent);
   if (spent.length > 0) return spent.reduce((last, row) => (resetOf(row) > resetOf(last) ? row : last));
   return rows.reduce<PlanUsageDisplayRow | undefined>(
     (tightest, row) => (!tightest || row.window.utilization > tightest.window.utilization ? row : tightest),

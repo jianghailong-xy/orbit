@@ -66,7 +66,7 @@ internal fun Gauge(fraction: Float, tint: Color, modifier: Modifier = Modifier, 
 }
 
 /** One quota window: its label and percent — what is left of an Antigravity bucket, said so — the gauge (amber from 90%
- * used), and when it resets. A runner page's row ([withGroup]) names the window's group above it (RunnerWindowRow). */
+ * used, full and red once spent), and when it resets. A runner page's row ([withGroup]) names the window's group above it (RunnerWindowRow). */
 @Composable
 internal fun UsageWindowRow(row: UsageRow, resets: String?, withGroup: Boolean = false) {
     Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -75,7 +75,7 @@ internal fun UsageWindowRow(row: UsageRow, resets: String?, withGroup: Boolean =
             Text(row.label, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
             Text("${row.percent}%${if (row.remaining) " remaining" else ""}", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         }
-        Gauge(row.percent / 100f, if (row.nearLimit) Ink.amber else MaterialTheme.colorScheme.primary)
+        Gauge(row.gaugeFraction, if (row.spent) Ink.red else if (row.nearLimit) Ink.amber else MaterialTheme.colorScheme.primary)
         resets?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (row.nearLimit) Ink.amber else Ink.muted) }
     }
 }

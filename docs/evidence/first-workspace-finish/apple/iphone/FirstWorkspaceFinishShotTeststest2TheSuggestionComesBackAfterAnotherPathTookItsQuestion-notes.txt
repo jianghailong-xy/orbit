@@ -1,0 +1,1 @@
+re-ask-other-button: in view after 0 move(s) at (60.0, 408.0, 314.0, 36.333333333333314)

@@ -65,6 +65,32 @@ class RunnerAccountsTest {
         assertNull("none signed in", EngineAccounts.toStartOn(listOf(json("""{"id":"default","auth":"no"}"""), json("""{"id":"$pro","auth":"no"}""")), usage(0, 0, 0), now))
     }
 
+    /** Mirrors shared planUsage.spec.ts: where the server counted the sessions, an account takes no more than its share of them. */
+    @Test fun aNewSessionGoesPastAnAccountThatHasItsShare() {
+        val now = ms("2026-08-03T13:00:00Z")
+        val pro = "1fda3f43"
+        val third = "3fa91c2e"
+        fun window(used: Int, resetsAt: String) = """{"provider":"codex","primary":{"utilization":$used,"windowDurationMins":300,"resetsAt":"$resetsAt"}}"""
+        fun usage(default: Int, two: Int, three: Int, defaultResets: String = "2026-08-04T01:00:00Z") = json("""{"provider":"codex",
+            "primary":{"utilization":$default,"windowDurationMins":300,"resetsAt":"$defaultResets"},
+            "accounts":{"$pro":${window(two, "2026-08-09T05:26:43Z")},"$third":${window(three, "2026-08-10T00:00:00Z")}}}""")
+        fun spread(default: Int, two: Int, three: Int) = listOf("default" to default, pro to two, third to three)
+            .map { (id, active) -> json("""{"id":"$id","auth":"yes","activeSessions":$active}""") }
+        val room = usage(10, 20, 30)
+        assertEquals("default", EngineAccounts.toStartOn(spread(2, 0, 0), room, now))
+        assertEquals("three stay, the next spreads", pro, EngineAccounts.toStartOn(spread(3, 0, 0), room, now))
+        assertEquals("11 and this one make four each", third, EngineAccounts.toStartOn(spread(4, 4, 3), room, now))
+        assertEquals("default", EngineAccounts.toStartOn(spread(3, 4, 4), room, now))
+        assertEquals("every one full: the order stands", "default", EngineAccounts.toStartOn(spread(4, 4, 4), room, now))
+        assertEquals("a nearly spent account is no home for a session", pro, EngineAccounts.toStartOn(spread(0, 5, 5), usage(85, 20, 30), now))
+        assertEquals("never a spent one", pro, EngineAccounts.toStartOn(spread(1, 6, 6), usage(100, 20, 30), now))
+        // Back in two hours, Default keeps its place: 20 over three is seven each. Out for days it has none: ten each.
+        assertEquals(third, EngineAccounts.toStartOn(spread(6, 7, 6), usage(100, 20, 30, "2026-08-03T15:00:00Z"), now))
+        assertEquals(pro, EngineAccounts.toStartOn(spread(6, 7, 6), usage(100, 20, 30, "2026-08-08T13:00:00Z"), now))
+        val uncounted = listOf("default", pro, third).map { json("""{"id":"$it","auth":"yes"}""") }
+        assertEquals("nothing counted, nothing held back", "default", EngineAccounts.toStartOn(uncounted, room, now))
+    }
+
     /** A signed-in account whose login lapses within three days says so, in whole days rounded up the way Claude Code counts. */
     @Test fun aLoginAboutToLapseSaysHowManyDaysAreLeft() {
         val now = ms("2026-09-14T02:00:00Z")

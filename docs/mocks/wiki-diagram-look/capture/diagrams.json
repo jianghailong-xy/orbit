@@ -1,0 +1,6 @@
+{
+  "flow": "flowchart TB\n  n1[\"用户发送消息\"]\n  n2[\"apiserver 落库 turn\"]\n  n3[(\"run_event 表\")]\n  subgraph s1[\"Gateway\"]\n    n4[\"唤醒 runner\"]\n    n5{\"runner 在线？\"}\n  end\n  n6[\"runner 领取 inbox\"]\n  n7[\"等 long-poll 重连\"]\n  n8(\"引擎执行一轮\")\n  n9[(\"事件流\")]\n  n1 --> n2\n  n2 --> n3\n  n4 --> n5\n  n3 --> n4\n  n5 -->|\"是\"| n6\n  n5 -->|\"否\"| n7\n  n7 -.-> n6\n  n6 --> n8\n  n8 --> n9",
+  "pipeline": "flowchart LR\n  n1[\"确认 plan\"]\n  n2[\"排入 docs_build 作业\"]\n  n3[\"wiki-worker 领取\"]\n  n4[\"模型逐节写作\"]\n  n5{\"句子核对通过？\"}\n  n6[\"发布文档\"]\n  n7[\"标记待审\"]\n  n1 --> n2\n  n2 --> n3\n  n3 --> n4\n  n4 --> n5\n  n5 -->|\"是\"| n6\n  n5 -->|\"否\"| n7",
+  "architecture": "flowchart LR\n  n1[\"客户端\"]\n  subgraph s1[\"服务端\"]\n    n2[\"apiserver\"]\n    n3[(\"Postgres\")]\n    n4[\"gateway\"]\n  end\n  subgraph s2[\"用户机器\"]\n    n5[\"runner\"]\n    n6[\"引擎 CLI\"]\n    n7[(\"worktree\")]\n  end\n  n2 --> n3\n  n2 --> n4\n  n5 --> n6\n  n6 --> n7\n  n1 -->|\"HTTPS\"| n2\n  n4 -->|\"长连接\"| n5\n  n5 -.->|\"心跳\"| n2",
+  "english": "flowchart TD\n  subgraph s1[\"apiserver\"]\n    n1[\"Turn stored\"]\n    n2[(\"run_event row\")]\n  end\n  n3([\"Gateway delivers\"])\n  n4[[\"Runner #amp; engine #lt;1#gt;\"]]\n  n1 --> n2\n  n2 --> n3\n  n3 --> n4"
+}

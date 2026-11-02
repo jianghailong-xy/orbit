@@ -117,6 +117,16 @@ final class AgentsModel {
         return runnerNames[id] ?? id
     }
 
+    /// The machine a session runs on, by the name its page gives it: the runner its claim is bound
+    /// for, else its workspace's — what a session held for the Claude region says Anthropic is
+    /// unavailable on. Nil before the runners have been read.
+    func machineName(for session: Session) -> String? {
+        let workspace = session.agent?.id ?? session.agentId
+        guard let runnerID = session.assignedRunnerId ?? items.first(where: { $0.id == workspace })?.runnerId,
+              let runner = runnerRows.first(where: { $0.id == runnerID }) else { return nil }
+        return RunnerPageFormat.displayName(runner)
+    }
+
     /// Whether a runner is authoritatively known to be offline. A missing runner relation and a
     /// runner whose directory row has not loaded yet are both "unknown", not offline — otherwise
     /// Workspace folders flash a false disconnect badge while the best-effort runners fetch lands.

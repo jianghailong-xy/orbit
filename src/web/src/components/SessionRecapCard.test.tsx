@@ -62,11 +62,13 @@ describe('SessionRecapCard', () => {
   let container: HTMLDivElement;
   let root: Root;
   let client: QueryClient;
+  const onHide = vi.fn();
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.mocked(refreshSessionRecap).mockReset();
     Object.values(toast).forEach((spy) => spy.mockReset());
+    onHide.mockReset();
     client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -84,7 +86,7 @@ describe('SessionRecapCard', () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <SessionRecapCard sessionId="sess-1" text="Fixed the login flow; tests pass." recapAt={null} />
+          <SessionRecapCard sessionId="sess-1" text="Fixed the login flow; tests pass." recapAt={null} onHide={onHide} />
         </QueryClientProvider>,
       );
     });
@@ -106,6 +108,18 @@ describe('SessionRecapCard', () => {
     expect(container.querySelector('.chat-recap-word')?.textContent).toBe('Recap');
     expect(container.querySelector('.chat-recap-when')).toBeNull();
     expect(container.querySelector('.chat-recap-text')?.textContent).toBe('Fixed the login flow; tests pass.');
+  });
+
+  it('hands the conversation its ×, named for screen readers, without asking the server anything', async () => {
+    await render();
+    const hide = container.querySelector<HTMLButtonElement>('.chat-recap-hide')!;
+    expect(hide.getAttribute('aria-label')).toBe(RECAP_CARD_COPY.hide);
+    expect(hide.title).toBe('Hide recap');
+    await act(async () => {
+      hide.click();
+    });
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(refreshSessionRecap).not.toHaveBeenCalled();
   });
 
   it('reads the session again once a refresh wrote, and says nothing', async () => {

@@ -119,10 +119,12 @@ const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 
 // e223d8ee adds exactly one postgres directive after CONFIGURATION_SHA, shm_size: "256m", and the six
 // comment lines that explain it: Docker's default 64MB /dev/shm made a manual VACUUM die with ENOSPC on
-// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. Postgres alone
-// is compared with this pin; every other service keeps the pin it had. New settings still require an
-// explicit review.
-const POSTGRES_CONFIGURATION_SHA = 'e223d8eede64cb71bb6efa5cf712b96f3b3af79b';
+// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. a2adab1d then
+// adds `-c jit=off` and the one comment line that explains it: production already ran jit = off for its
+// role and database, and the bundled Postgres JIT-compiled the dispatch sweep's scan.
+// docs/postgres-runtime-settings.md §10 records that approval (2026-11-01). Postgres alone is compared
+// with this pin; every other service keeps the pin it had. New settings still require an explicit review.
+const POSTGRES_CONFIGURATION_SHA = 'a2adab1d49ab991d4fcebe2b305ddc12d7c98f8e';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
@@ -439,7 +441,8 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here.
+// model's variables: the four of 2026-10-07, and ORBIT_WIKI_MODEL_THINKING, the opt-in thinking switch the
+// owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep). Changing any of it is a new decision, made here.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -454,6 +457,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
+    // Approved by the owner on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep): the opt-in thinking switch, empty by default.
+    '      ORBIT_WIKI_MODEL_THINKING: "${ORBIT_WIKI_MODEL_THINKING:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',
@@ -463,7 +468,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
 test('(l) the System model\'s address and key are given to the wiki worker and to no other service', () => {
   for (const [name, block] of currentServices) {
     const given = directives(block).join('\n').match(/\bORBIT_WIKI_MODEL(?:_[A-Z]+)*\b/g) ?? [];
-    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 4, `${name} lacks a System model variable`);
+    // Five: the four of 2026-10-07, and the thinking switch the owner approved on 2026-11-01 (task 34q5GS4qKNliE7wQoDkep).
+    if (name === WIKI_WORKER) assert.equal(new Set(given).size, 5, `${name} lacks a System model variable`);
     else assert.deepEqual(given, [], `${name} is given the System model's ${given.join(', ')}`);
   }
   // None of them is a name an agent session carries: Compose prefers the shell's environment to .env.

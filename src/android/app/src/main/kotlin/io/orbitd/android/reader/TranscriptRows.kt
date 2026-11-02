@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
@@ -103,7 +104,10 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
  * folds them: a `system` event's notice is a notice row, a recoverable diagnostic a diagnostic row (its
  * repeats counted on it), its stderr an error row (repeats folded as "×N", continuation lines joined, a
  * tool's failure settling that call), and a reply or error event that is really the provider failing
- * becomes an error row or an auto-retry row.
+ * becomes an error row or an auto-retry row. A Claude region error draws as OrbitKit's `appendError` draws
+ * it (docs/claude-region-check-contract.md §9, §10; web `claudeRegionErrorLine`): a refusal draws no row —
+ * the held session's card says it, with its ways out — and its turn counts as answered; a turn stopped by a
+ * confirmed flip has no card, and says its sentence without the code.
  */
 internal class EngineReading(events: List<RunEvent>) {
     /** Each listed event's own row in its place, or null where it draws none (silent, benign, folded). */
@@ -160,7 +164,14 @@ internal class EngineReading(events: List<RunEvent>) {
                         lastRow = e
                     }
                 }
-                "error" -> if (!selfHealing(e, e.fields.string("message") ?: e.fields.string("error") ?: e.fields.string("text") ?: "error")) lastRow = e
+                "error" -> {
+                    val message = e.fields.string("message") ?: e.fields.string("error") ?: e.fields.string("text") ?: "error"
+                    when (val region = ClaudeRegion.errorLine(message)) {
+                        ClaudeRegion.ErrorLine.Refusal -> rows[e.seq] = null
+                        is ClaudeRegion.ErrorLine.Stopped -> { rows[e.seq] = e.row("error") { put("text", region.sentence) }; lastRow = e }
+                        ClaudeRegion.ErrorLine.NotRegion -> if (!selfHealing(e, message)) lastRow = e
+                    }
+                }
                 "thinking", "interrupt" -> lastRow = e
                 "system" -> {
                     // A new engine run: as on web, a diagnostic it reports again starts a row of its own.

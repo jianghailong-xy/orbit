@@ -1957,6 +1957,10 @@ button.toast--pill:focus-visible {
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
 }
+/* A spent quota window: the whole track red, even where its percent counts what is left and is 0. */
+.runner-util.spent .runner-util-fill {
+  background: var(--error-solid);
+}
 /* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
    triangle stays with its first line. */
 .runner-attention {
@@ -7473,6 +7477,9 @@ button.toast--pill:focus-visible {
 .composer-usage.full .composer-usage-fill {
   background: var(--warning-solid);
 }
+.composer-usage.spent .composer-usage-fill {
+  background: var(--error-solid);
+}
 .composer-usage-pct {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -9222,11 +9229,22 @@ button.chat-jump-start:hover {
 .chat-recap-when {
   margin-left: 4px;
 }
-/* Beside the first line. Shown under the pointer, on keyboard focus and while it is asking; hidden
-   otherwise but still in place, so the words never move when it appears. */
-.chat-recap-refresh {
+/* Refresh and hide (×), beside the first line. Shown under the pointer, on keyboard focus and while
+   a refresh asks; hidden otherwise but still in place, so the words never move when they appear. */
+.chat-recap-actions {
   flex: none;
+  display: inline-flex;
   margin: -2px -6px 0 0;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.chat-recap:hover .chat-recap-actions,
+.chat-recap.is-busy .chat-recap-actions,
+.chat-recap-actions:has(:focus-visible) {
+  opacity: 1;
+}
+.chat-recap-refresh,
+.chat-recap-hide {
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -9237,24 +9255,18 @@ button.chat-jump-start:hover {
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease-out;
 }
-.chat-recap:hover .chat-recap-refresh,
-.chat-recap.is-busy .chat-recap-refresh,
-.chat-recap-refresh:focus-visible {
-  opacity: 1;
-}
-.chat-recap-refresh:hover:not(:disabled) {
+.chat-recap-refresh:hover:not(:disabled),
+.chat-recap-hide:hover {
   background: var(--bg-hover);
   color: var(--text-2);
 }
 .chat-recap-refresh:disabled {
   cursor: default;
 }
-/* A screen with no hover has no way to show it: there it stays, as on the phones' native cards. */
+/* A screen with no hover has no way to show them: there they stay, as on the phones' native cards. */
 @media (hover: none) {
-  .chat-recap-refresh {
+  .chat-recap-actions {
     opacity: 1;
   }
 }

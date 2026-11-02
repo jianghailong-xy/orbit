@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
-# End-to-end acceptance for multi-user runners without root (orbit-hostd + orbit-runner@<uid>).
+# End-to-end acceptance for multi-user runners without root (orbit-hostd + orbit-runner@<user>).
 #
-# On a real systemd, in a throwaway container that has no sudo at all, root runs
-# `orbit host setup` once. From then on two ordinary accounts — one with a dot in its name —
-# register, survive a kill -9, take a central update and unregister, none of it as root.
+# On a real systemd, in a throwaway container that has no sudo at all, root installs orbit with
+# src/web/public/install.sh, which puts it in root's own home, sees `orbit host setup` refuse that
+# copy, puts the machine's copy in place and runs setup from it, once. From then on two ordinary
+# accounts — one with a dot in its name — each with a copy of orbit of its own, register, survive a
+# kill -9, each update its own copy and unregister, none of it as root. Each account's runner is the
+# instance orbit-runner@<user name, as systemd-escape prints it>, running that account's own
+# ~/.orbit/bin/orbit.
 #
 #   bash scripts/hostd-e2e.sh
 #
-# Prints one PASS or FAIL line per assertion (numbered as in the task: 1 setup · 2 accounts and a
-# legacy unit · 3 alice registers · 4 test.user registers · 5 kill -9 · 6 update · 7 alice
-# unregisters · 8 test.user unregisters past a legacy unit · 9 no sudo throughout). The first FAIL
-# prints systemctl status and the journal of the units involved and exits 1; a harness problem
-# (no docker, a failed build) exits 2.
+# Prints one PASS or FAIL line per assertion (numbered as in the task: 0 setup refusing root's own
+# copy, which is not the machine's · 1 setup · 2 accounts and a legacy unit · 2b setup refusing a
+# binary an account could change · 3 alice registers · 4 test.user registers · 5 kill -9 · 6 each
+# runner updates its own copy · 7 alice unregisters · 8 test.user unregisters past a legacy unit ·
+# 9 no sudo throughout). The first FAIL prints systemctl status and the journal of the units involved
+# and exits 1; a harness problem (no docker, a failed build) exits 2.
+#
+# It is also what keeps docs/self-hosting.md "Multi-user Linux machines" true: every command that
+# section shows is run here, under a "# docs:" comment naming the heading it comes from, with the
+# same arguments and the same orbit-runner@<user> unit names. Root runs the section's sudo commands
+# itself, since this machine has no sudo (assertion 9).
 #
 # Needs docker — 28 or newer, for --security-opt writable-cgroups — and a Go toolchain. Builds from
-# this tree: orbit twice (the release setup installs, and the one the stub control plane publishes
-# as the update), the stub control plane (scripts/hostd-e2e/stubserver) and the image
-# (scripts/hostd-e2e/Dockerfile). The container is not privileged — under --privileged its systemd
-# would apply its sysctl and udev defaults to the host — and has no network, so nothing in it can
-# reach a real control plane.
+# this tree: orbit twice (the release root installs and sets the machine up from, and the one the
+# stub control plane publishes as the update), the stub control plane (scripts/hostd-e2e/stubserver)
+# and the image (scripts/hostd-e2e/Dockerfile). The container is not privileged — under --privileged
+# its systemd would apply its sysctl and udev defaults to the host — and has no network, so nothing in
+# it can reach a real control plane.
 #
 # HOSTD_E2E_KEEP=1 leaves the container running afterwards for inspection.
 
@@ -32,8 +42,17 @@ PORT=18080
 SERVER="http://127.0.0.1:$PORT"
 V1="0.1.900" # installed by `orbit host setup`
 V2="0.1.901" # published by the stub as the update
+PROXY="http://proxy.example.com:3128" # alice's --proxy, which the shared template cannot carry
 BIN="/usr/local/bin/orbit"
+HOME_COPY="/root/.orbit/bin/orbit" # root's own copy, where install.sh puts it (step 0)
 TEMPLATE="/etc/systemd/system/orbit-runner@.service"
+# The template's ExecStart: each instance runs its account's own copy, $HOME left for the shell.
+EXEC_START="ExecStart=/bin/sh -c 'exec \"\$HOME/.orbit/bin/orbit\" run'"
+# What an account with no copy of its own runs, as enable's refusal names it.
+OWN_COPY='mkdir -p -m 0700 ~/.orbit && install -D -m 0755 /usr/local/bin/orbit ~/.orbit/bin/orbit'
+# The five files `orbit host setup` installs.
+SETUP_FILES=("$TEMPLATE" /etc/systemd/system/orbit-hostd.socket /etc/systemd/system/orbit-hostd.service
+  /usr/lib/tmpfiles.d/orbit-hostd.conf /etc/orbit/config.json)
 CTR="orbit-hostd-e2e-$$-$RANDOM"
 WORK=""
 ACCOUNTS=()
@@ -83,6 +102,31 @@ stub_field() { stub_runners | awk -v n="$1" -v c="$2" '$1 == n { print $c }'; }
 beats_since() { [ "$(stub_field "$1" 4)" -gt "$2" ] 2>/dev/null; }
 reports_version() { [ "$(stub_field "$1" 5)" = "$2" ] && [ "$(stub_field "$1" 3)" = live ]; }
 machine_version_is() { [ "$(cx "$BIN" --version 2>/dev/null)" = "$1" ]; }
+# own_copy_is ACCOUNT SHA256 — ACCOUNT's own ~/.orbit/bin/orbit is a regular file of that account's
+# holding the build with SHA256.
+own_copy_is() {
+  [ "$(cx stat -c '%F %U' "/home/$1/.orbit/bin/orbit")" = "regular file $1" ] &&
+    [ "$(cx sha256sum "/home/$1/.orbit/bin/orbit" | cut -d' ' -f1)" = "$2" ]
+}
+# own_journal_has ACCOUNT TEXT — ACCOUNT's own `journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"`,
+# run as that account, shows a line containing TEXT.
+own_journal_has() { as "$1" 'journalctl -u "orbit-runner@$(systemd-escape "$(id -un)")"' 2>/dev/null | grep -qF -- "$2"; }
+# runner_logged TEXT — one of the two runner instances has logged a line containing TEXT.
+runner_logged() {
+  local u
+  for u in "$UNIT_A" "$UNIT_T"; do
+    cx journalctl -u "$u" -o cat --no-pager | grep -qF -- "$1" && return 0
+  done
+  return 1
+}
+
+# publish VERSION — the stub serves VERSION as the latest release. Asset first, manifest last, each
+# by rename: what a runner reads is always a whole release.
+publish() {
+  csh "cp /opt/orbit-e2e/release-$1/orbit-linux-x64.gz /srv/orbit-dl/.asset && mv /srv/orbit-dl/.asset /srv/orbit-dl/orbit-linux-x64.gz &&
+    cp /opt/orbit-e2e/release-$1/version.json /srv/orbit-dl/.manifest && mv /srv/orbit-dl/.manifest /srv/orbit-dl/version.json" ||
+    harness_fail "publishing $1 failed"
+}
 
 # wait_until SECONDS CMD... — polls CMD once a second; fails if it has not succeeded in time.
 wait_until() {
@@ -146,22 +190,28 @@ check_user_command() {
   fi
 }
 
-# check_machine_binary N SHA256 — the machine binary every instance runs is still the machine's:
-# a root-owned 0755 regular file holding the release expected, not moved into an account's
-# ~/.orbit/bin nor replaced by a link to one, and the runner template is as setup wrote it.
+# check_machine_binary N SHA256 — the machine binary hostd runs is still the machine's: a
+# root-owned 0755 regular file holding the release expected, not replaced by a link into an
+# account's ~/.orbit/bin, and the runner template is as setup wrote it.
 check_machine_binary() {
-  local st sha acct
+  local st sha
   st=$(cx stat -c '%F %U %a' "$BIN")
   [ "$st" = "regular file root 755" ] ||
     fail "$1" "$BIN is now '$st'; it must stay the machine's root-owned 0755 regular file"
   sha=$(cx sha256sum "$BIN" | cut -d' ' -f1)
   [ "$sha" = "$2" ] || fail "$1" "$BIN has sha256 $sha, want $2"
-  for acct in "${ACCOUNTS[@]}"; do
-    cx test ! -e "/home/$acct/.orbit/bin/orbit" ||
-      fail "$1" "/home/$acct/.orbit/bin/orbit exists: the shared binary was moved into an account"
-  done
   [ "$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)" = "$TEMPLATE_SHA" ] ||
     fail "$1" "$TEMPLATE was rewritten after setup"
+}
+
+# check_own_runner N ACCOUNT UID UNIT — UNIT's main process runs as ACCOUNT (euid UID) from
+# ACCOUNT's own ~/.orbit/bin/orbit, as /proc/<pid>/exe names it.
+check_own_runner() {
+  local pid
+  pid=$(main_pid "$4")
+  [ "$(csh "euid $pid")" = "$3" ] || fail "$1" "$4's main process $pid runs with euid $(csh "euid $pid"), want $3" "$4"
+  [ "$(csh "exe $pid")" = "/home/$2/.orbit/bin/orbit" ] ||
+    fail "$1" "$4's main process $pid runs $(csh "exe $pid"), want $2's own /home/$2/.orbit/bin/orbit" "$4"
 }
 
 # check_one_runner N UID UNIT — UID has exactly one runner process, UNIT's main process.
@@ -223,8 +273,10 @@ BASE_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 echo "==> base $BASE_SHA ($(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null))"
 echo "==> building orbit $V1 and $V2 (linux/amd64), the stub control plane and $IMAGE"
 for v in "$V1" "$V2"; do
+  # defaultServer is the stub, as a deployment's own download defaults to its PUBLIC_ORIGIN: root's
+  # `orbit upgrade` in 6 has no runner config to name a server.
   (cd "$SRC" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags "-s -w -X main.version=$v -X main.sourceSHA=$BASE_SHA" -o "$WORK/orbit-$v" .) ||
+    go build -ldflags "-s -w -X main.version=$v -X main.sourceSHA=$BASE_SHA -X main.defaultServer=$SERVER" -o "$WORK/orbit-$v" .) ||
     harness_fail "building orbit $v failed"
   mkdir -p "$WORK/release-$v"
   gzip -c -n "$WORK/orbit-$v" >"$WORK/release-$v/orbit-linux-x64.gz" || harness_fail "gzip failed"
@@ -258,26 +310,72 @@ wait_until 90 system_up || harness_fail "systemd in the container did not come u
 echo "    $(cx systemctl --version | head -1), $(cx sh -c '. /etc/os-release; echo "$PRETTY_NAME"'), docker $(docker version --format '{{.Server.Version}}')"
 
 cx mkdir -p /opt/orbit-e2e /srv/orbit-dl || harness_fail "mkdir in the container failed"
-docker cp -q "$WORK/orbit-$V1" "$CTR:$BIN" &&
-  docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
+docker cp -q "$WORK/stubserver" "$CTR:/opt/orbit-e2e/stubserver" &&
   docker cp -q "$HERE/in-container.sh" "$CTR:/opt/orbit-e2e/in-container.sh" &&
   docker cp -q "$WORK/release-$V2" "$CTR:/opt/orbit-e2e/release-$V2" &&
   docker cp -q "$WORK/release-$V1/." "$CTR:/srv/orbit-dl/" ||
   harness_fail "copying into the container failed"
-cx chown -R root:root "$BIN" /opt/orbit-e2e /srv/orbit-dl && cx chmod 0755 "$BIN" /opt/orbit-e2e/stubserver ||
+cx chown -R root:root /opt/orbit-e2e /srv/orbit-dl && cx chmod 0755 /opt/orbit-e2e/stubserver ||
   harness_fail "chown/chmod in the container failed"
 
-# The stub publishes $V1 — the release setup installs — until step 6 publishes $V2.
+# The stub publishes $V1 — the release install.sh downloads in step 0 — until step 6 publishes $V2.
 cx systemd-run --quiet --unit=orbit-e2e-stub /opt/orbit-e2e/stubserver serve -addr "127.0.0.1:$PORT" -dl /srv/orbit-dl ||
   harness_fail "cannot start the stub control plane"
 wait_until 20 cx /opt/orbit-e2e/stubserver get "$SERVER/dl/version.json" >/dev/null 2>&1 ||
   harness_fail "the stub control plane did not come up"
 check_no_sudo "before setup"
 
+# --- 0. root installs orbit the default way, and setup refuses that copy -------------------------
+
+echo "==> 0. root: install.sh the default way (ORBIT_NO_REGISTER=1), then $HOME_COPY host setup --server $SERVER"
+# install.sh downloads with `curl -fsSL URL -o FILE`, and this image has no curl: for that one run, a
+# stand-in first on its PATH fetches URL with the stub's own client.
+docker exec -i "$CTR" sh -c 'mkdir -p /opt/orbit-e2e/curl && cat >/opt/orbit-e2e/curl/curl && chmod 0755 /opt/orbit-e2e/curl/curl' <<'EOF' || harness_fail "cannot put the curl stand-in in place"
+#!/bin/sh
+[ "$#" -eq 4 ] && [ "$1" = -fsSL ] && [ "$3" = -o ] || { echo "curl stand-in: unexpected call: curl $*" >&2; exit 2; }
+exec /opt/orbit-e2e/stubserver get "$2" >"$4"
+EOF
+# docs: "Set up the machine once" — install.sh, run by root the default way (`curl … | bash`), installs
+# into root's own home and puts no machine's copy in place.
+out=$(docker exec -i "$CTR" env ORBIT_NO_REGISTER=1 ORBIT_BASE_URL="$SERVER" \
+  PATH="/opt/orbit-e2e/curl:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" bash <"$ROOT/src/web/public/install.sh" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 0 "install.sh run by root exited $rc"
+grep -qxF "✓ Orbit $V1 installed to $HOME_COPY" <<<"$out" || fail 0 "install.sh did not report orbit $V1 installed to $HOME_COPY"
+[ "$(cx stat -c '%F %U' "$HOME_COPY")" = "regular file root" ] && [ "$(cx sha256sum "$HOME_COPY" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 0 "$HOME_COPY is not a regular file of root's holding the $V1 release"
+cx test ! -e "$BIN" && cx test ! -L "$BIN" || fail 0 "install.sh left something at $BIN on a machine that is not set up"
+levels=$(cx stat -c '%n %a' /root /root/.orbit "$HOME_COPY" | paste -sd, -)
+# docs: "Set up the machine once" — setup refuses root's copy, which is not the one binary the host
+# broker runs, and says how to put the machine's copy in place.
+out=$(cx "$HOME_COPY" host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 0 "orbit host setup from $HOME_COPY exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with $HOME_COPY: the host broker runs only $BIN." <<<"$out" ||
+  fail 0 "orbit host setup did not refuse $HOME_COPY as not the binary the host broker runs"
+grep -qxF "  sudo install -o 0 -g 0 -m 0755 $HOME_COPY $BIN" <<<"$out" && grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 0 "orbit host setup did not say how to put the machine's copy in place and set the host up from it"
+for f in "${SETUP_FILES[@]}"; do
+  cx test ! -e "$f" || fail 0 "the refused orbit host setup wrote $f"
+done
+cx test ! -e /run/orbit || fail 0 "the refused orbit host setup created /run/orbit"
+cx systemctl is-enabled --quiet orbit-hostd.socket 2>/dev/null &&
+  fail 0 "orbit-hostd.socket is enabled after the refused orbit host setup" orbit-hostd.socket
+check_no_sudo "after root's install"
+pass 0 "root: install.sh (ORBIT_NO_REGISTER=1, ORBIT_BASE_URL=$SERVER) exit 0, the real file is $HOME_COPY (root's, the $V1 release; $levels), nothing at $BIN; orbit host setup from it refused (exit 1: the host broker runs only $BIN), giving install -o 0 -g 0 -m 0755 $HOME_COPY $BIN, then setup from $BIN; none of the five files setup installs written, no /run/orbit, orbit-hostd.socket not enabled"
+
 # --- 1. root sets the machine up, once -----------------------------------------------------------
 
-echo "==> 1. root: orbit host setup --server $SERVER"
-out=$(cx orbit host setup --server "$SERVER" 2>&1)
+echo "==> 1. root: the machine's copy of ~/.orbit/bin/orbit at $BIN, then $BIN host setup --server $SERVER"
+# docs: "Set up the machine once" — the machine's copy first: a regular file root owns and only root
+# can write, in directories only root can write all the way up to / (as this image has them already).
+csh 'install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit /usr/local/bin/orbit' || fail 1 "putting the machine's copy in place failed"
+[ "$(cx stat -c '%F %u %g %a' "$BIN")" = "regular file 0 0 755" ] && [ "$(cx sha256sum "$BIN" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 1 "$BIN is not a regular file of uid 0 and gid 0, mode 0755, holding the $V1 release"
+# docs: "Set up the machine once" — `sudo /usr/local/bin/orbit host setup --server <PUBLIC_ORIGIN>`.
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
 rc=$?
 show "$out"
 [ "$rc" -eq 0 ] || fail 1 "orbit host setup exited $rc"
@@ -286,12 +384,32 @@ sock=$(cx stat -c '%F %a %U' /run/orbit/host.sock 2>&1)
 for f in "$TEMPLATE" /etc/systemd/system/orbit-hostd.socket /etc/systemd/system/orbit-hostd.service; do
   cx test -f "$f" || fail 1 "$f was not installed"
 done
-cx grep -qx 'User=%i' "$TEMPLATE" || fail 1 "$TEMPLATE does not run instances as User=%i"
-cx grep -qx "ExecStart=$BIN run" "$TEMPLATE" || fail 1 "$TEMPLATE does not run $BIN"
+cx grep -qx 'User=%I' "$TEMPLATE" || fail 1 "$TEMPLATE does not run instances as User=%I"
+cx grep -qxF "$EXEC_START" "$TEMPLATE" || fail 1 "$TEMPLATE does not run each account's own ~/.orbit/bin/orbit ($EXEC_START)"
+cx grep -qxF "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service || fail 1 "orbit-hostd.service does not run $BIN"
 [ "$(unit_prop orbit-hostd.socket ActiveState)" = active ] || fail 1 "orbit-hostd.socket is not active" orbit-hostd.socket
 TEMPLATE_SHA=$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)
+# docs: "Security model" — hostd brings up no runner for root: root's own registration is refused and
+# taken by the legacy path, which runs a root runner and says so. Root unregisters it again.
+out=$(csh "orbit register --server $SERVER --token e2e-enroll-root --name root-e2e --force </dev/null" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 1 "root's orbit register exited $rc"
+grep -qxF "note: the machine broker refused \"enable\" (refusing to enable orbit-runner@root.service: the runner must not run as root — it would own every file its agents write and read root's own engine logins. Ask from the unprivileged account the runner should belong to instead.) — falling back to the sudo path." <<<"$out" ||
+  fail 1 "hostd did not refuse to bring up a runner for root" orbit-hostd.service
+grep -qF "Running as root — agents will have root access on this machine." <<<"$out" ||
+  fail 1 "root's registration did not warn that its runner runs as root"
+[ "$(unit_prop orbit-runner@root.service UnitFileState)" != enabled ] || fail 1 "orbit-runner@root.service is enabled" orbit-runner@root.service
+[ "$(unit_prop orbit-runner-root.service User)" = root ] || fail 1 "the legacy path did not install orbit-runner-root.service" orbit-runner-root.service
+out=$(csh "orbit unregister --yes </dev/null" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 1 "root's orbit unregister exited $rc"
+[ "$(unit_prop orbit-runner-root.service LoadState)" = not-found ] ||
+  fail 1 "orbit-runner-root.service is still there after root unregistered" orbit-runner-root.service
+[ -z "$(csh "runner_pids 0")" ] || fail 1 "root still runs a runner after unregistering" orbit-runner-root.service
 check_no_sudo "after setup"
-pass 1 "orbit host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%i, ExecStart=$BIN run), orbit-hostd.socket (active) and orbit-hostd.service installed"
+pass 1 "install -o 0 -g 0 -m 0755 ~/.orbit/bin/orbit $BIN (root) made $BIN a regular file of uid 0 and gid 0, mode 0755, the $V1 release; $BIN host setup (root) exit 0: /run/orbit/host.sock is a root-owned socket, mode 0666; orbit-runner@.service (User=%I, $EXEC_START), orbit-hostd.socket (active) and orbit-hostd.service (ExecStart=$BIN hostd) installed; root's own orbit register refused by hostd (orbit-runner@root.service not enabled), taken by the legacy path with its root warning, then unregistered"
 
 # --- 2. two accounts, and the unit alice's runner had before the broker existed ------------------
 
@@ -300,8 +418,11 @@ cx useradd -m -s /bin/bash alice && cx useradd -m -s /bin/bash test.user || fail
 ACCOUNTS=(alice test.user)
 UID_A=$(cx id -u alice)
 UID_T=$(cx id -u test.user)
-UNIT_A="orbit-runner@$UID_A.service"
-UNIT_T="orbit-runner@$UID_T.service"
+# Each account's instance, named by systemd's own escaping of its user name.
+UNIT_A="orbit-runner@$(cx systemd-escape alice).service"
+UNIT_T="orbit-runner@$(cx systemd-escape test.user).service"
+[ "$UNIT_A" = orbit-runner@alice.service ] && [ "$UNIT_T" = orbit-runner@test.user.service ] ||
+  fail 2 "systemd-escape names the instances $UNIT_A and $UNIT_T"
 # Before `orbit host setup`, alice registered the sudo way: a credential of hers, and a unit of
 # her own that root wrote and started. Registering with --no-service writes the first; the unit is
 # written here exactly as installSystemd rendered it.
@@ -314,20 +435,107 @@ wait_until 15 unit_running orbit-runner-alice.service || fail 2 "orbit-runner-al
 [ "$(unit_prop orbit-runner-alice.service User)" = alice ] || fail 2 "orbit-runner-alice.service does not run as User=alice"
 legacy_pid=$(main_pid orbit-runner-alice.service)
 [ "$(csh "euid $legacy_pid")" = "$UID_A" ] || fail 2 "orbit-runner-alice.service's process is not alice's"
+# docs: "Set up the machine once" — the same command run without root changes nothing and says what
+# to run instead; typed as a bare `orbit`, which sudo would look up only on its secure_path, the line
+# to re-run names the binary by its path.
+out=$(as alice "orbit host setup --server $SERVER" 2>&1)
+setup_rc=$?
+show "$out"
+[ "$setup_rc" -ne 0 ] || fail 2 "orbit host setup run by alice exited 0"
+grep -qxF "orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 2 "orbit host setup run by alice did not say that it needs root and what to re-run"
+[ "$(cx sha256sum "$TEMPLATE" | cut -d' ' -f1)" = "$TEMPLATE_SHA" ] || fail 2 "orbit host setup run by alice rewrote $TEMPLATE"
 check_no_sudo "after creating the accounts"
-pass 2 "accounts alice (uid $UID_A) and test.user (uid $UID_T) created; legacy /etc/systemd/system/orbit-runner-alice.service (User=alice) enabled and running (pid $legacy_pid, euid $UID_A)"
+pass 2 "accounts alice (uid $UID_A, instance $UNIT_A) and test.user (uid $UID_T, instance $UNIT_T) created; legacy /etc/systemd/system/orbit-runner-alice.service (User=alice) enabled and running (pid $legacy_pid, euid $UID_A); alice's own orbit host setup refused (exit $setup_rc, re-run with sudo) and $TEMPLATE unchanged"
+
+# --- 2b. setup refuses a binary an account could change -------------------------------------------
+
+echo "==> 2b. root: orbit host setup through a link into alice's ~/.orbit/bin, then under /usr/local root:staff 2775"
+# What setup installs, as step 1 left it: a refused setup must not change a byte of it.
+setup_sums() { cx sha256sum "${SETUP_FILES[@]}"; }
+sums=$(setup_sums) || harness_fail "cannot read the files setup installed"
+# The layout earlier releases of install.sh left for an account that ran them: the account's own copy
+# in its ~/.orbit/bin, and $BIN a link to that copy.
+cx install -d -o alice -g alice /home/alice/.orbit/bin &&
+  cx install -o alice -g alice -m 0755 "$BIN" /home/alice/.orbit/bin/orbit &&
+  cx ln -sf /home/alice/.orbit/bin/orbit "$BIN" || harness_fail "cannot give alice the installer's layout"
+# docs: "Set up the machine once" — setup refuses the file that link leads to, which alice can
+# replace, and says how to put a root-owned copy in place.
+out=$(cx orbit host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 2b "orbit host setup through the link into alice's home exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with /home/alice/.orbit/bin/orbit: it belongs to uid $UID_A rather than root." <<<"$out" ||
+  fail 2b "orbit host setup did not refuse the binary the link leads to as alice's"
+grep -qxF "  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit $BIN" <<<"$out" &&
+  grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 2b "orbit host setup did not say how to put a root-owned copy in place and set the host up from it"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
+cx grep -qxF "$EXEC_START" "$TEMPLATE" && cx grep -qxF "ExecStart=$BIN hostd" /etc/systemd/system/orbit-hostd.service ||
+  fail 2b "the runner template no longer runs each account's own copy, or the hostd unit no longer runs $BIN"
+# docs: "Set up the machine once" — the root-owned copy in place of the link, then setup from it.
+cx install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit "$BIN" || fail 2b "installing the root-owned copy failed"
+[ "$(cx stat -c '%F %U %a' "$BIN")" = "regular file root 755" ] && [ "$(cx sha256sum "$BIN" | cut -d' ' -f1)" = "$SHA_V1" ] ||
+  fail 2b "$BIN is not a root-owned 0755 copy of the $V1 build after install"
+[ "$(cx stat -c '%F %U %a' /home/alice/.orbit/bin/orbit)" = "regular file alice 755" ] || fail 2b "install changed alice's own copy"
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 2b "orbit host setup from the root-owned copy exited $rc"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "orbit host setup from the root-owned copy did not install what step 1 did"
+# Older Debian installs have /usr/local and /usr/local/bin root:staff 2775.
+cx chgrp staff /usr/local /usr/local/bin && cx chmod 2775 /usr/local /usr/local/bin ||
+  harness_fail "cannot make /usr/local and /usr/local/bin root:staff 2775"
+# docs: "Set up the machine once" — refused too, naming every directory the staff group can write.
+out=$(cx orbit host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 1 ] || fail 2b "orbit host setup under /usr/local and /usr/local/bin root:staff 2775 exited $rc, want 1"
+grep -qxF "orbit host: refusing to set this host up with $BIN: its directory /usr/local/bin is not root's alone (owned by uid 0, mode 0775); /usr/local, a directory above it, is not root's alone (owned by uid 0, mode 0775)." <<<"$out" ||
+  fail 2b "orbit host setup did not name both directories the staff group can write"
+grep -qxF "  sudo chmod g-w /usr/local/bin /usr/local" <<<"$out" && grep -qxF "  sudo $BIN host setup --server $SERVER" <<<"$out" ||
+  fail 2b "orbit host setup did not say how to take the group's write access back"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "the refused orbit host setup changed the files setup installs"
+# docs: "Set up the machine once" — `sudo chmod g-w /usr/local/bin /usr/local`, then setup again:
+# `sudo /usr/local/bin/orbit host setup --server <PUBLIC_ORIGIN>`.
+cx chmod g-w /usr/local/bin /usr/local || fail 2b "chmod g-w /usr/local/bin /usr/local failed"
+dirs=$(cx stat -c '%n %U:%G %a' /usr/local/bin /usr/local | paste -sd, -)
+out=$(cx "$BIN" host setup --server "$SERVER" 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 2b "orbit host setup with $dirs exited $rc"
+[ "$(setup_sums)" = "$sums" ] || fail 2b "orbit host setup after chmod g-w did not install what step 1 did"
+# Back to the image's root:root 0755. alice keeps the copy of her own, which her instance runs from
+# step 3 on.
+cx chgrp root /usr/local /usr/local/bin && cx chmod g-s /usr/local /usr/local/bin ||
+  harness_fail "cannot put /usr/local back as it was"
+check_machine_binary 2b "$SHA_V1"
+own_copy_is alice "$SHA_V1" || fail 2b "alice's own /home/alice/.orbit/bin/orbit is not her regular file of the $V1 build"
+check_no_sudo "after setup's refusals"
+pass 2b "orbit host setup run through $BIN, a link to alice's ~/.orbit/bin/orbit, refused (exit 1: it belongs to uid $UID_A rather than root) with the five files it installs unchanged; install -o 0 -g 0 -m 0755 replaced the link with a root-owned copy and setup from it exited 0; under /usr/local and /usr/local/bin root:staff 2775 refused (exit 1, both directories named), then chmod g-w /usr/local/bin /usr/local ($dirs) and setup exited 0; the runner template ran each account's own copy and the hostd unit $BIN throughout; alice's own copy stays hers"
 
 # --- 3. alice registers, without root ------------------------------------------------------------
 
-echo "==> 3. alice: orbit register (enrollment token, non-interactive)"
-out=$(as alice "orbit register --server $SERVER --token e2e-enroll-alice --name alice-e2e --force" 2>&1)
+echo "==> 3. alice: orbit register (enrollment token, non-interactive, --proxy)"
+# docs: "Migrating from per-user units" — the account's next registration retires its legacy unit.
+# docs: "Known limitations" — and --proxy, which the shared template does not carry.
+out=$(as alice "orbit register --server $SERVER --token e2e-enroll-alice --name alice-e2e --force --proxy $PROXY" 2>&1)
 rc=$?
 show "$out"
 check_user_command 3 "$out" "$rc" "Background service started as alice"
+grep -qxF "note: --proxy is not carried into $UNIT_A — the machine's shared runner template has no per-user proxy environment." <<<"$out" ||
+  fail 3 "the registration did not warn that --proxy is not carried into $UNIT_A"
 wait_until 30 unit_running "$UNIT_A" || fail 3 "$UNIT_A is not active" "$UNIT_A" orbit-runner-alice.service
+env_a=$(unit_prop "$UNIT_A" Environment)
+[ -z "$env_a" ] || fail 3 "$UNIT_A runs with Environment=$env_a; the shared template sets none" "$UNIT_A"
 [ "$(unit_prop "$UNIT_A" UnitFileState)" = enabled ] || fail 3 "$UNIT_A is not enabled" "$UNIT_A"
+# The unit as systemd rendered it: User= the account, and $HOME left for the shell to expand.
+[ "$(unit_prop "$UNIT_A" User)" = alice ] || fail 3 "$UNIT_A runs as User=$(unit_prop "$UNIT_A" User), want alice" "$UNIT_A"
+exec_a=$(unit_prop "$UNIT_A" ExecStart)
+grep -qF 'argv[]=/bin/sh -c exec "$HOME/.orbit/bin/orbit" run ;' <<<"$exec_a" ||
+  fail 3 "$UNIT_A's ExecStart is '$exec_a', want /bin/sh -c with \$HOME left for the shell" "$UNIT_A"
 PID_A=$(main_pid "$UNIT_A")
-[ "$(csh "euid $PID_A")" = "$UID_A" ] || fail 3 "$UNIT_A's main process $PID_A runs with euid $(csh "euid $PID_A"), want $UID_A" "$UNIT_A"
+check_own_runner 3 alice "$UID_A" "$UNIT_A"
 cx test ! -e /etc/systemd/system/orbit-runner-alice.service || fail 3 "the legacy unit file is still there" orbit-runner-alice.service
 cx test ! -e /etc/systemd/system/multi-user.target.wants/orbit-runner-alice.service ||
   fail 3 "the legacy unit is still wanted by multi-user.target"
@@ -336,11 +544,16 @@ cx test ! -e /etc/systemd/system/multi-user.target.wants/orbit-runner-alice.serv
 check_one_runner 3 "$UID_A" "$UNIT_A"
 check_machine_binary 3 "$SHA_V1"
 check_no_sudo "after alice registered"
-pass 3 "alice: orbit register exit 0 without root; $UNIT_A enabled and active, main process $PID_A euid $UID_A (alice); legacy orbit-runner-alice.service stopped, its unit file removed, unknown to systemd; alice runs exactly one runner; $BIN still the root-owned machine binary"
+pass 3 "alice: orbit register exit 0 without root; $UNIT_A enabled and active (User=alice, ExecStart argv /bin/sh -c exec \"\$HOME/.orbit/bin/orbit\" run), main process $PID_A euid $UID_A (alice), exe /home/alice/.orbit/bin/orbit; legacy orbit-runner-alice.service stopped, its unit file removed, unknown to systemd; alice runs exactly one runner; $BIN still the root-owned machine binary; --proxy reported as not carried, and $UNIT_A runs with no proxy environment"
 
 # --- 4. test.user registers too ------------------------------------------------------------------
 
-echo "==> 4. test.user: orbit register (browser approval, approved by the stub)"
+echo "==> 4. test.user: a copy of its own, then orbit register (browser approval, approved by the stub)"
+# The command enable's refusal gives an account with no copy of its own, run by the account itself.
+out=$(as test.user "$OWN_COPY" 2>&1) || fail 4 "test.user's $OWN_COPY failed: $out"
+own_copy_is test.user "$SHA_V1" || fail 4 "test.user's own /home/test.user/.orbit/bin/orbit is not its regular file of the $V1 build"
+[ "$(cx stat -c '%U %a' /home/test.user/.orbit)" = "test.user 700" ] || fail 4 "/home/test.user/.orbit is not test.user's, mode 0700"
+# docs: "Register each account's runner" — `orbit register --server <PUBLIC_ORIGIN> --name <name>`.
 out=$(as test.user "orbit register --server $SERVER --name test-user-e2e" 2>&1)
 rc=$?
 show "$out"
@@ -348,88 +561,121 @@ check_user_command 4 "$out" "$rc" "Background service started as test.user"
 wait_until 30 unit_running "$UNIT_T" || fail 4 "$UNIT_T is not active" "$UNIT_T"
 [ "$(unit_prop "$UNIT_T" UnitFileState)" = enabled ] || fail 4 "$UNIT_T is not enabled" "$UNIT_T"
 PID_T=$(main_pid "$UNIT_T")
-[ "$(csh "euid $PID_T")" = "$UID_T" ] || fail 4 "$UNIT_T's main process $PID_T runs with euid $(csh "euid $PID_T"), want $UID_T" "$UNIT_T"
+check_own_runner 4 test.user "$UID_T" "$UNIT_T"
 unit_running "$UNIT_A" && [ "$(main_pid "$UNIT_A")" = "$PID_A" ] ||
   fail 4 "alice's runner did not stay up untouched while test.user registered" "$UNIT_A"
 [ "$(csh "unit_of $PID_A")" = "$UNIT_A" ] && [ "$(csh "unit_of $PID_T")" = "$UNIT_T" ] ||
   fail 4 "the runners do not each live in their own instance's cgroup" "$UNIT_A" "$UNIT_T"
 check_one_runner 4 "$UID_T" "$UNIT_T"
-# The dotted name needs no escaping because nothing is named after it: no orbit-runner-<name> unit.
+# The dotted name needs no escaping in systemd's own rule, and no sudo-era orbit-runner-<name> unit
+# exists beside the instances.
 named=$(csh 'compgen -G "/etc/systemd/system/orbit-runner-*.service"')
-[ -z "$named" ] || fail 4 "username-keyed unit files exist beside the uid instances: $named"
+[ -z "$named" ] || fail 4 "orbit-runner-<user> unit files exist beside the instances: $named"
 ID_A=$(cx sed -n 's/.*"runnerId": *"\([^"]*\)".*/\1/p' /home/alice/.orbit/config.json)
 ID_T=$(cx sed -n 's/.*"runnerId": *"\([^"]*\)".*/\1/p' /home/test.user/.orbit/config.json)
 [ -n "$ID_A" ] && [ -n "$ID_T" ] && [ "$ID_A" != "$ID_T" ] ||
   fail 4 "the two accounts do not hold separate runner credentials ('$ID_A', '$ID_T')"
+# docs: "Register each account's runner" — the receipt's next step and, right under it, this
+# runner's new-session page. The id is the one test.user's config.json holds: the CLI writes a UUID
+# in base62, as the docs show, and leaves the stub's ids, which are not UUIDs, as they are.
+next_step="    Next     Start a session"$'\n'"             $SERVER/runners/$ID_T/new"
+[ "$(grep -xF -A1 -- "    Next     Start a session" <<<"$out")" = "$next_step" ] ||
+  fail 4 "the command did not end with the next step the docs show: '    Next     Start a session', then '             $SERVER/runners/$ID_T/new'"
 # Independent heartbeats: each runner beats the stub with its own credential (first beat at ~30s).
 wait_until 60 beats_since alice-e2e 0 && wait_until 60 beats_since test-user-e2e 0 ||
   fail 4 "the stub did not see both runners heartbeat" "$UNIT_A" "$UNIT_T"
+# docs: "Register each account's runner" — the account's own status and log, without root.
+out=$(as test.user 'systemctl status "orbit-runner@$(systemd-escape "$(id -un)")"' 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 4 "test.user's systemctl status \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" exited $rc" "$UNIT_T"
+grep -qF "$UNIT_T - Orbit runner (test.user)" <<<"$out" && grep -qF "Active: active (running)" <<<"$out" ||
+  fail 4 "test.user's systemctl status \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" does not show $UNIT_T active (running)" "$UNIT_T"
+wait_until 15 own_journal_has test.user "runner \"test-user-e2e\" online -> $SERVER" ||
+  fail 4 "test.user's journalctl -u \"orbit-runner@\$(systemd-escape \"\$(id -un)\")\" does not show its runner coming online" "$UNIT_T"
 check_machine_binary 4 "$SHA_V1"
 check_no_sudo "after test.user registered"
-pass 4 "test.user: orbit register exit 0 without root; $UNIT_T (uid-keyed, no escaping of 'test.user') enabled and active as euid $UID_T beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own"
+pass 4 "test.user: $OWN_COPY (as test.user) gave it its own copy, then orbit register exit 0 without root; $UNIT_T (named by systemd-escape, which leaves 'test.user' as it is) enabled and active as euid $UID_T from /home/test.user/.orbit/bin/orbit beside $UNIT_A — separate processes ($PID_A, $PID_T) in separate cgroups, separate credentials ($ID_A, $ID_T), each heartbeating the control plane on its own; test.user reads its runner's status (active (running)) and log itself"
 
 # --- 5. kill -9 --------------------------------------------------------------------------------
 
 echo "==> 5. kill -9 alice's runner ($PID_A)"
+# docs: "Set up the machine once" — the template's Restart=always.
 t0=$SECONDS
 csh "kill -9 $PID_A" || fail 5 "cannot kill $PID_A" "$UNIT_A"
 wait_until 15 restarted "$UNIT_A" "$PID_A" || fail 5 "$UNIT_A was not active again within 15s of kill -9" "$UNIT_A"
 took=$((SECONDS - t0))
 old_a=$PID_A
 PID_A=$(main_pid "$UNIT_A")
-[ "$(csh "euid $PID_A")" = "$UID_A" ] || fail 5 "the restarted runner runs with euid $(csh "euid $PID_A"), want $UID_A" "$UNIT_A"
+check_own_runner 5 alice "$UID_A" "$UNIT_A"
 restarts=$(unit_prop "$UNIT_A" NRestarts)
 [ "$restarts" -ge 1 ] 2>/dev/null || fail 5 "systemd reports NRestarts=$restarts" "$UNIT_A"
 unit_running "$UNIT_T" && [ "$(main_pid "$UNIT_T")" = "$PID_T" ] || fail 5 "test.user's runner was disturbed" "$UNIT_T"
 check_no_sudo "after kill -9"
-pass 5 "kill -9 of alice's runner (pid $old_a): $UNIT_A active again after ${took}s (Restart=always; new pid $PID_A, euid $UID_A, NRestarts=$restarts); $UNIT_T untouched (pid $PID_T)"
+pass 5 "kill -9 of alice's runner (pid $old_a): $UNIT_A active again after ${took}s (Restart=always; new pid $PID_A, euid $UID_A, exe /home/alice/.orbit/bin/orbit, NRestarts=$restarts); $UNIT_T untouched (pid $PID_T)"
 
-# --- 6. the central update -----------------------------------------------------------------------
+# --- 6. each runner updates its own copy ---------------------------------------------------------
 
-echo "==> 6. the stub publishes $V2; the runners delegate the update to hostd"
-# The witness that the download is never executed as root (stubserver/execwatch.go).
-cx systemd-run --quiet --unit=orbit-e2e-execwatch /opt/orbit-e2e/stubserver execwatch \
-  -prefix "$BIN.new-" -out /var/log/orbit-e2e-execwatch.log || harness_fail "cannot start the exec watcher"
-pre_a=$PID_A
-pre_t=$PID_T
-# Asset first, manifest last, each by rename: what a runner reads is always a whole release.
-csh "cp /opt/orbit-e2e/release-$V2/orbit-linux-x64.gz /srv/orbit-dl/.asset && mv /srv/orbit-dl/.asset /srv/orbit-dl/orbit-linux-x64.gz &&
-  cp /opt/orbit-e2e/release-$V2/version.json /srv/orbit-dl/.manifest && mv /srv/orbit-dl/.manifest /srv/orbit-dl/version.json" ||
-  harness_fail "publishing $V2 failed"
-wait_until 150 machine_version_is "$V2" ||
-  fail 6 "$BIN --version is still $(cx "$BIN" --version) 150s after $V2 was published" orbit-hostd.service "$UNIT_A" "$UNIT_T"
-wait_until 90 restarted "$UNIT_A" "$pre_a" && wait_until 90 restarted "$UNIT_T" "$pre_t" ||
-  fail 6 "the runner instances were not restarted onto $V2" orbit-hostd.service "$UNIT_A" "$UNIT_T"
-PID_A=$(main_pid "$UNIT_A")
-PID_T=$(main_pid "$UNIT_T")
-[ "$(csh "euid $PID_A")" = "$UID_A" ] && [ "$(csh "euid $PID_T")" = "$UID_T" ] ||
-  fail 6 "a restarted runner runs under the wrong account" "$UNIT_A" "$UNIT_T"
+echo "==> 6. the stub publishes $V2; each runner installs it into its own copy"
+publish "$V2"
+wait_until 150 own_copy_is alice "$SHA_V2" && wait_until 150 own_copy_is test.user "$SHA_V2" ||
+  fail 6 "the accounts' own copies are not the $V2 build 150s after it was published" "$UNIT_A" "$UNIT_T"
 wait_until 60 reports_version alice-e2e "$V2" && wait_until 60 reports_version test-user-e2e "$V2" ||
   fail 6 "the runners do not heartbeat $V2 after the update" "$UNIT_A" "$UNIT_T"
-cx systemctl stop orbit-e2e-execwatch.service
-check_machine_binary 6 "$SHA_V2"
-installed=$(cx journalctl -u orbit-hostd.service -o cat --no-pager | grep -F "installed orbit $V2 at $BIN (verified as uid ")
-verifier=$(sed -n 's/.*(verified as uid \([0-9]*\)).*/\1/p' <<<"$installed" | head -1)
-[ "$verifier" = "$UID_A" ] || [ "$verifier" = "$UID_T" ] ||
-  fail 6 "hostd's journal does not say it verified $V2 as one of the accounts: '$installed'" orbit-hostd.service
-delegated=""
+unit_running "$UNIT_A" && unit_running "$UNIT_T" || fail 6 "a runner instance is not running after the update" "$UNIT_A" "$UNIT_T"
+check_own_runner 6 alice "$UID_A" "$UNIT_A"
+check_own_runner 6 test.user "$UID_T" "$UNIT_T"
+check_one_runner 6 "$UID_A" "$UNIT_A"
+check_one_runner 6 "$UID_T" "$UNIT_T"
+PID_A=$(main_pid "$UNIT_A")
+PID_T=$(main_pid "$UNIT_T")
+# Nothing went through hostd: the machine's binary is as setup left it, and nobody delegated.
+machine_version_is "$V1" || fail 6 "$BIN is now $(cx "$BIN" --version); no runner may update it" orbit-hostd.service
+check_machine_binary 6 "$SHA_V1"
+installs=$(cx journalctl -u orbit-hostd.service -o cat --no-pager | grep -F "installed orbit")
+[ -z "$installs" ] || fail 6 "hostd's journal records an install: $installs" orbit-hostd.service
 for u in "$UNIT_A" "$UNIT_T"; do
-  cx journalctl -u "$u" -o cat --no-pager | grep -qF "delegated to the host broker at /run/orbit/host.sock: it is installing orbit $V2" &&
-    delegated="$delegated $u"
+  cx journalctl -u "$u" -o cat --no-pager | grep -qF "delegated to the host broker" &&
+    fail 6 "$u delegated its update to the host broker" "$u"
 done
-[ -n "$delegated" ] || fail 6 "no runner logged delegating the update to the host broker" "$UNIT_A" "$UNIT_T"
-execs=$(cx cat /var/log/orbit-e2e-execwatch.log 2>/dev/null)
-show "$execs"
-[ -n "$execs" ] || fail 6 "the watcher saw no execution of the download, so it cannot vouch it never ran as root"
-grep -vq "uids=$verifier,$verifier,$verifier,$verifier " <<<"$execs" &&
-  fail 6 "the download was executed under some uid other than $verifier: $(tr '\n' ' ' <<<"$execs")"
+# docs: "Known limitations" — root installs a release into the machine's binary with
+# `sudo /usr/local/bin/orbit upgrade`, which replaces it where it is and restarts no runner...
+out=$(cx "$BIN" upgrade 2>&1)
+rc=$?
+show "$out"
+[ "$rc" -eq 0 ] || fail 6 "orbit upgrade (root) exited $rc"
+grep -qxF "✓ orbit is now $V2" <<<"$out" || fail 6 "orbit upgrade (root) did not report $V2 installed"
+machine_version_is "$V2" || fail 6 "$BIN is $(cx "$BIN" --version) after orbit upgrade, want $V2"
+check_machine_binary 6 "$SHA_V2"
+[ "$(main_pid "$UNIT_A")" = "$PID_A" ] && [ "$(main_pid "$UNIT_T")" = "$PID_T" ] ||
+  fail 6 "orbit upgrade restarted a runner instance" "$UNIT_A" "$UNIT_T"
+own_copy_is alice "$SHA_V2" && own_copy_is test.user "$SHA_V2" || fail 6 "orbit upgrade changed an account's own copy"
+# ...and `sudo systemctl restart 'orbit-runner@*'` brings each runner back, on its own copy still.
+cx systemctl restart 'orbit-runner@*' || fail 6 "systemctl restart 'orbit-runner@*' failed" "$UNIT_A" "$UNIT_T"
+wait_until 30 restarted "$UNIT_A" "$PID_A" && wait_until 30 restarted "$UNIT_T" "$PID_T" ||
+  fail 6 "the runner instances did not come back after systemctl restart" "$UNIT_A" "$UNIT_T"
+# The glob reaches every instance systemd has loaded: neither root's nor an account's older
+# orbit-runner@<uid> may be one it starts.
+[ -z "$(csh "runner_pids 0")" ] && [ "$(unit_prop orbit-runner@root.service ActiveState)" = inactive ] ||
+  fail 6 "systemctl restart 'orbit-runner@*' left a runner running as root" orbit-runner@root.service
+check_one_runner 6 "$UID_A" "$UNIT_A"
+check_one_runner 6 "$UID_T" "$UNIT_T"
+check_own_runner 6 alice "$UID_A" "$UNIT_A"
+check_own_runner 6 test.user "$UID_T" "$UNIT_T"
+wait_until 60 reports_version alice-e2e "$V2" && wait_until 60 reports_version test-user-e2e "$V2" ||
+  fail 6 "the runners do not heartbeat $V2 after the restart" "$UNIT_A" "$UNIT_T"
+pre_a=$PID_A
+pre_t=$PID_T
+PID_A=$(main_pid "$UNIT_A")
+PID_T=$(main_pid "$UNIT_T")
 check_no_sudo "after the update"
-pass 6 "stub published $V2 → delegated by${delegated} → hostd installed it: $BIN --version = $V2 (root-owned regular file, sha256 of the $V2 build); $UNIT_A (pid $pre_a → $PID_A) and $UNIT_T (pid $pre_t → $PID_T) restarted, active, heartbeating $V2; the download was executed $(wc -l <<<"$execs") time(s), every time as uid $verifier, never as root"
+pass 6 "stub published $V2 → each runner installed it into its own copy: /home/alice/.orbit/bin/orbit and /home/test.user/.orbit/bin/orbit are the $V2 build, each its account's regular file, $UNIT_A and $UNIT_T running from them as euid $UID_A and $UID_T, one runner per account, heartbeating $V2; $BIN stayed $V1, hostd logged no install and no runner delegated; root's orbit upgrade then made $BIN $V2 and restarted no runner, and systemctl restart 'orbit-runner@*' brought both back ($pre_a → $PID_A, $pre_t → $PID_T) on their own copies, one runner per account and none as root"
 
 # --- 7. alice unregisters ------------------------------------------------------------------------
 
 echo "==> 7. alice: orbit unregister"
 beats_t=$(stub_field test-user-e2e 4)
+# docs: "Register each account's runner" — `orbit unregister --yes`.
 out=$(as alice "orbit unregister --yes" 2>&1)
 rc=$?
 show "$out"
@@ -451,6 +697,7 @@ install_legacy_unit test.user orbit-runner-test_user.service || fail 8 "cannot i
 wait_until 15 unit_running orbit-runner-test_user.service || fail 8 "orbit-runner-test_user.service did not start" orbit-runner-test_user.service
 [ "$(unit_prop orbit-runner-test_user.service User)" = test.user ] || fail 8 "orbit-runner-test_user.service does not run as User=test.user"
 legacy_pid=$(main_pid orbit-runner-test_user.service)
+# docs: "Migrating from per-user units" — unregistering takes the account's legacy unit down too.
 out=$(as test.user "orbit unregister --yes" 2>&1)
 rc=$?
 show "$out"
@@ -471,5 +718,5 @@ pass 8 "test.user: orbit unregister exit 0 without root; $UNIT_T disabled and in
 
 # --- 9. no sudo, throughout ----------------------------------------------------------------------
 
-pass 9 "no sudo anywhere: absent from the image and from root's, alice's and test.user's PATH at all $SUDO_CHECKS checkpoints from before setup to the last unregister, and no register/unregister fell back to the sudo path"
-echo "==> all 9 assertions passed"
+pass 9 "no sudo anywhere: absent from the image and from root's, alice's and test.user's PATH at all $SUDO_CHECKS checkpoints from before setup to the last unregister, and no register or unregister by alice or test.user fell back to the sudo path"
+echo "==> all 11 assertions passed"

@@ -1,0 +1,4 @@
+ios-diagram-light-figure: in view after 6 drag(s) at (0.0, 195.66666666666652, 402.0, 528.0)
+ios-diagram-light-drawn: in view after 0 drag(s) at (0.0, 195.66666666666652, 402.0, 528.0)
+ios-diagram-light: drawn figure: 43 label="Diagram" value="" frame=(0.0, 195.66666666666652, 402.0, 528.0) hittable=true
+ios-diagram-light: a vertical move started on the diagram took its top from 195.66666666666652 to 89.99999999999989

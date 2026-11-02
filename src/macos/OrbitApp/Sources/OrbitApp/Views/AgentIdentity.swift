@@ -181,7 +181,9 @@ struct EngineSwitchSheet: View {
     private func trailing(_ engine: EngineChoice, greyed: Bool) -> String {
         guard let provider = engine.provider, !Self.reasonBelowName(engine) else { return "" }
         guard let reason = engine.unavailable else { return provider.note ?? provider.modelLabel }
-        return greyed ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine, unavailable: reason))"
+        // The runner's Claude region names no fix: the row still opens the machine's page, which explains.
+        return greyed || engine.regionBlocked
+            ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine, unavailable: reason))"
     }
 
     /// Whether a row says why it can't run under its name rather than at its end: DeepSeek Harness with

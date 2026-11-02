@@ -301,6 +301,48 @@ describe('the opened conversation over a recapped session', { timeout: 60_000 },
     expect(recapCard()).toBeNull();
   });
 
+  it('hides its recap with ×, on this device and only in this conversation, until a newer one is written', async () => {
+    // A working storage for this test: the hidden recap is remembered in it across a reopen.
+    const stored = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => void stored.set(key, value),
+      removeItem: (key: string) => void stored.delete(key),
+    });
+    vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);
+    await mountList(RECAPPED_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(recapCard()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    const hide = recapCard()!.querySelector<HTMLButtonElement>('.chat-recap-hide')!;
+    expect(hide.getAttribute('aria-label')).toBe('Hide recap');
+    await act(async () => {
+      hide.click();
+    });
+    expect(recapCard()).toBeNull();
+    // The list row keeps the recap: × hides the conversation's footnote, nothing else.
+    expect(line(RECAPPED.title).textContent).toBe(RECAP_TEXT);
+
+    // Opened again later on this device: still hidden.
+    const [previousRoot, previousClient, previousNode] = [root, client, container];
+    await act(async () => previousRoot?.unmount());
+    previousClient?.clear();
+    previousNode?.remove();
+    await mountList(RECAPPED_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('.chat-assistant')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    expect(recapCard()).toBeNull();
+
+    // The server writes a newer recap: that one is drawn.
+    recappedDetail = { ...RECAPPED, recapText: 'A newer recap.', recapAt: new Date(Date.now() + 60_000).toISOString() };
+    await refetch();
+    await act(async () => {
+      await vi.waitFor(() => expect(recapCard()?.querySelector('.chat-recap-text')?.textContent).toBe('A newer recap.'),
+        { timeout: 20_000, interval: 20 });
+    });
+  });
+
   it('draws no card when the account turned Session recaps off', async () => {
     mePreferences = { recaps: false };
     vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);

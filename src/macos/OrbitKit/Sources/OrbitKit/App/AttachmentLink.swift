@@ -4,8 +4,9 @@ import Foundation
 ///
 ///   • `orbit-attachment:<id>` — what the runner rewrites an uploaded file to (`[label](orbit-attachment:id "name")`).
 ///     The bytes are bearer-guarded, so a client fetches them through the API rather than opening a URL.
-///   • an absolute path on the runner's disk (`/root/…`, `/home/…`, `/tmp/…`, `/Users/…`) — a file the
-///     runner never uploaded. No client can reach it; web draws an inert file chip instead of a link.
+///   • an absolute path on the runner's disk (`/root/…`, `/home/…`, `/tmp/…`, `/Users/…`, and a Mac's
+///     `/private/…` and `/var/…`) — a file the runner never uploaded. No client can reach it; web draws an
+///     inert file chip instead of a link.
 ///
 /// Pure parsing so both clients (and the tests) share one reading of a link; the view layer decides
 /// what to draw. Mirrors web's `attachmentIdFromSrc` / `isLocalFileSrc` in Transcript.tsx.
@@ -44,15 +45,16 @@ public enum AttachmentLink {
     }
 
     /// True for a link that names a file on the runner's disk rather than something a client can
-    /// open. Deliberately limited to the roots web chips (`/root`, `/home`, `/tmp`, `/Users`), so an
-    /// ordinary site-relative link isn't mistaken for one.
+    /// open. Deliberately limited to the roots web chips (`/root`, `/home`, `/tmp`, `/Users`, `/private`,
+    /// `/var`), so an ordinary site-relative link isn't mistaken for one. `/private` and `/var` are a Mac
+    /// runner's temp files: `/tmp` resolves to `/private/tmp` and `$TMPDIR` sits under `/var/folders`.
     public static func isRunnerLocalPath(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased()
         guard scheme == nil || scheme == "file" else { return false }
         let raw = url.absoluteString
         guard !raw.contains("?"), !raw.contains("#") else { return false }
         let path = url.path.isEmpty ? raw : url.path
-        return ["/root/", "/home/", "/tmp/", "/Users/"].contains { path.hasPrefix($0) }
+        return ["/root/", "/home/", "/tmp/", "/Users/", "/private/", "/var/"].contains { path.hasPrefix($0) }
     }
 
     /// True for a Markdown destination that represents a file rather than a web page. In addition

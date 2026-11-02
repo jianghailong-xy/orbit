@@ -188,6 +188,27 @@ class MachineSetupTest {
         assertFalse(MachineSetup.updatesItself(json("""{"id":"r","name":"m","selfUpdate":{"state":"dirNotWritable"}}""")))
     }
 
+    /** What the server reads for a machine whose `orbit run` has not beaten yet (contract §2). */
+    @Test fun approvedAndNeverHeardFromAMachineIsStillConnecting() {
+        assertTrue(MachineSetup.isConnecting(json("""{"id":"r","name":"m","online":false,"lastHeartbeatAt":null,"capabilities":[]}"""), nowMs))
+        assertTrue(MachineSetup.isConnecting(json("""{"id":"r","name":"m","online":false}"""), nowMs))
+    }
+
+    @Test fun heardFromOnceAMachineIsOfflineOrOnlineNeverConnecting() {
+        val seen = java.time.Instant.ofEpochMilli(nowMs - 3 * 86_400_000L).toString()
+        assertFalse(MachineSetup.isConnecting(json("""{"id":"r","name":"m","online":false,"lastHeartbeatAt":"$seen"}"""), nowMs))
+        assertFalse(MachineSetup.isConnecting(json("""{"id":"r","name":"m","online":true,"lastHeartbeatAt":"${java.time.Instant.ofEpochMilli(nowMs)}"}"""), nowMs))
+        // Online is its own heartbeat's word, whatever else the row has yet to carry.
+        assertFalse(MachineSetup.isConnecting(json("""{"id":"r","name":"m","online":true,"lastHeartbeatAt":null}"""), nowMs))
+    }
+
+    /** The card's page reads its machine as often as the web's and iOS's do, and more often while it connects. */
+    @Test fun theCardsPageReadsAConnectingMachineMoreOften() {
+        assertEquals(2_000L, MachineSetup.refreshMs(json("""{"id":"r","name":"m","online":false,"lastHeartbeatAt":null}"""), nowMs))
+        assertEquals(5_000L, MachineSetup.refreshMs(json("""{"id":"r","name":"m","online":true,"lastHeartbeatAt":"${java.time.Instant.ofEpochMilli(nowMs)}"}"""), nowMs))
+        assertEquals(5_000L, MachineSetup.refreshMs(null, nowMs))
+    }
+
     // Rule 3: a new folder
 
     @Test fun aNewFolderTakesTheNamesTheServerTakes() {
@@ -204,6 +225,52 @@ class MachineSetupTest {
         assertEquals("/home/orbit/orbit-repos/app", MachineSetup.newFolderPath("/home/orbit/orbit-repos/", "app"))
         assertEquals("C:\\Users\\orbit\\orbit-repos\\app", MachineSetup.newFolderPath("C:\\Users\\orbit\\orbit-repos", "app"))
         assertEquals("/home/orbit/orbit-repos/", MachineSetup.newFolderPath("/home/orbit/orbit-repos", ""))
+    }
+
+    private fun inReposFolder(exists: Boolean = false, isDir: Boolean = false, isGit: Boolean = false, branch: String? = null,
+                              error: String? = null) =
+        probe(path = "/home/orbit/orbit-repos/app", exists = exists, isDir = isDir, isGit = isGit, branch = branch, error = error)
+
+    @Test fun aNewFolderWithNothingThereStartsEmptyAsTheBoardSays() {
+        assertEquals(
+            FolderVerdict(FolderVerdict.Tone.OK, "Starts empty. Ask for a clone or a new project in your first message.",
+                "new folder · created as the session starts", usable = true),
+            MachineSetup.newFolderVerdict(inReposFolder(), machine),
+        )
+        assertEquals(
+            PickedFolder.New("app", "/home/orbit/orbit-repos/app"),
+            MachineSetup.newFolderPick(inReposFolder(), "app", "/home/orbit/orbit-repos", machine),
+        )
+    }
+
+    @Test fun aNewFolderThatIsThereAlreadyIsUsedWithWhatIsInItAsThatFolder() {
+        val there = inReposFolder(exists = true, isDir = true, isGit = true, branch = "main")
+        assertEquals(
+            FolderVerdict(FolderVerdict.Tone.WARN, "This folder already exists on orbit@austin. Sessions will use what’s in it.",
+                "git repository · main", usable = true),
+            MachineSetup.newFolderVerdict(there, machine),
+        )
+        assertEquals(
+            PickedFolder.Existing("/home/orbit/orbit-repos/app", "git repository · main"),
+            MachineSetup.newFolderPick(there, "app", "/home/orbit/orbit-repos", machine),
+        )
+        assertEquals(
+            "not a git repository — sessions will share it instead of isolating.",
+            MachineSetup.newFolderVerdict(inReposFolder(exists = true, isDir = true), machine).short,
+        )
+    }
+
+    @Test fun aNewFolderOverAFileCantBeAndSaysWhy() {
+        val file = inReposFolder(exists = true)
+        val text = "There’s already a file with this name on orbit@austin. Pick another name."
+        assertEquals(FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false), MachineSetup.newFolderVerdict(file, machine))
+        assertNull(MachineSetup.newFolderPick(file, "app", "/home/orbit/orbit-repos", machine))
+    }
+
+    @Test fun aNewFolderTheRunnerCouldNotLookAtHasNothingToPick() {
+        val failed = inReposFolder(error = "permission denied")
+        assertEquals("Couldn’t check on orbit@austin: permission denied", MachineSetup.newFolderVerdict(failed, machine).text)
+        assertNull(MachineSetup.newFolderPick(failed, "app", "/home/orbit/orbit-repos", machine))
     }
 
     // Rule 4: how a checked path reads
@@ -551,6 +618,19 @@ class MachineSetupTest {
         val script = Script(listOf(DirProbeAnswer(path = "p", status = "pending"), DirProbeAnswer(path = "p", status = "idle")))
         val outcome = runScript(script)
         assertEquals(DirProbeRelay.Outcome.Replaced, outcome)
+    }
+
+    /**
+     * One question at a time per machine: the register directory's, replaced by a path asked before it was answered, is asked again
+     * once nothing else waits, and only while the machine can be asked.
+     */
+    @Test fun aReplacedRegisterQuestionIsAskedAgainOnceNothingElseWaits() {
+        assertTrue(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = true, otherWaiting = false))
+        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = true, otherWaiting = true))
+        assertFalse("offline, what is stored is all", DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = false, otherWaiting = false))
+        assertFalse("still asking", DirProbeRelay.asksAgain(null, online = true, otherWaiting = false))
+        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Unanswered, online = true, otherWaiting = false))
+        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Answered(probe()), online = true, otherWaiting = false))
     }
 
     @Test fun aMachineThatNeverAnswersIsSaidToHaveNot() {

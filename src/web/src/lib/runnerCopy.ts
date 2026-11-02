@@ -381,7 +381,15 @@ export function attentionDiskBelowReserve(free: string, total: string, reserve: 
 
 export const ATTENTION_CANT_UPDATE_ITSELF = 'Can’t update itself';
 export const RUNNER_COPY_COMMAND = 'Copy Command';
+/** The upgrade command when the runner doesn't say where it is installed: one too old to report it. */
 export const RUNNER_UPGRADE_COMMAND = 'sudo orbit upgrade';
+
+/** The upgrade command for a runner that reports its install folder (`selfUpdate.installDir`). sudo runs
+ *  the binary by its path: it looks a bare `orbit` up only on its secure_path, which an account's own
+ *  ~/.orbit/bin is never on. */
+export function runnerUpgradeCommandIn(folder: string): string {
+  return `sudo ${folder}/orbit upgrade`;
+}
 
 export function attentionCantUpdateItselfDetail(version: string, latest: string, command: string): string {
   return `It runs as a regular user, so it can’t replace its own binary — still on ${version}, latest is ${latest}. On that machine, run ${command}.`;

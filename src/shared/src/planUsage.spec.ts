@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount } from './dto';
 import {
   accountOfEnv,
+  antigravityModelBuckets,
   codexAccountOfEnv,
   codexAccountSnapshot,
   planUsageBlockedUntil,
@@ -547,6 +548,99 @@ describe('accountToMoveToAt — when a session whose account hit its limit can g
   });
 });
 
+describe('an account takes no more than its share of the active sessions', () => {
+  const ACCOUNT_2 = '1e84046c';
+  const ACCOUNT_3 = '44bf2acd';
+  const IN_TWO_HOURS = '2026-08-03T15:00:00Z';
+  const IN_FOUR_DAYS = '2026-08-07T13:00:00Z';
+  const IN_A_DAY = new Date('2026-08-04T13:00:00Z').toISOString();
+  const account = (id: string, activeSessions?: number, extra: Partial<RunnerEngineAccount> = {}): RunnerEngineAccount => ({
+    id,
+    home: `/homes/${id}`,
+    auth: 'yes',
+    ...(activeSessions === undefined ? {} : { activeSessions }),
+    ...extra,
+  });
+  const fiveHour = (utilization: number, resetsAt = IN_TWO_HOURS) => ({
+    fiveHour: { utilization, windowDurationMins: 300, resetsAt },
+  });
+  const usage = (def: number, two: number, three: number, defaultResets = IN_TWO_HOURS): PlanUsage => ({
+    claude: {
+      ...fiveHour(def, defaultResets),
+      accounts: { [ACCOUNT_2]: fiveHour(two), [ACCOUNT_3]: fiveHour(three) },
+    },
+  });
+  const spread = (def: number, two: number, three: number) => [account('default', def), account(ACCOUNT_2, two), account(ACCOUNT_3, three)];
+
+  it('moves a spent account\'s sessions onto the others up to an even split, and the rest stay', () => {
+    // 15 sessions over three accounts is five each, so the first-ranked one takes five and no more.
+    expect(accountToMoveTo('claude', spread(15, 0, 0), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_2);
+    expect(accountToMoveTo('claude', spread(11, 4, 0), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_2);
+    expect(accountToMoveTo('claude', spread(10, 5, 0), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_3);
+    expect(accountToMoveTo('claude', spread(6, 5, 4), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_3);
+    expect(accountToMoveTo('claude', spread(5, 5, 5), usage(100, 10, 20), NOW, 'default')).toBeNull();
+  });
+
+  it('still reaches for any account with room when somebody is waiting on this move', () => {
+    const beyondShare = { beyondShare: true };
+    expect(accountToMoveTo('claude', spread(5, 5, 5), usage(100, 10, 20), NOW, 'default', beyondShare)).toBe(ACCOUNT_2);
+    // Within the share comes first all the same.
+    expect(accountToMoveTo('claude', spread(10, 5, 0), usage(100, 10, 20), NOW, 'default', beyondShare)).toBe(ACCOUNT_3);
+    expect(accountToMoveTo('claude', spread(5, 5, 5), usage(100, 100, 100), NOW, 'default', beyondShare)).toBeNull();
+  });
+
+  it('never holds an account back below three sessions, however few are running', () => {
+    expect(accountToMoveTo('claude', spread(1, 2, 2), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_2);
+    expect(accountToMoveTo('claude', spread(1, 3, 2), usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_3);
+    expect(accountToMoveTo('claude', spread(3, 3, 3), usage(100, 10, 20), NOW, 'default')).toBeNull();
+  });
+
+  it('splits among the accounts that are back within five hours, not one out for days', () => {
+    // Back in two hours, the spent account keeps its place in the split: 20 over three is seven each.
+    expect(accountToMoveTo('claude', spread(6, 7, 7), usage(100, 10, 20), NOW, 'default')).toBeNull();
+    // Out for four days it has none: 20 over the two that can run is ten each.
+    expect(accountToMoveTo('claude', spread(6, 7, 7), usage(100, 10, 20, IN_FOUR_DAYS), NOW, 'default')).toBe(ACCOUNT_2);
+    // A long pause is the same, on the account being left or on a third.
+    const paused = [account('default', 6), account(ACCOUNT_2, 7), account(ACCOUNT_3, 7, { pausedUntil: IN_A_DAY })];
+    expect(accountToMoveTo('claude', paused, usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_2);
+  });
+
+  it('holds nothing back while nothing was counted', () => {
+    const uncounted = [account('default'), account(ACCOUNT_2), account(ACCOUNT_3)];
+    expect(accountToMoveTo('claude', uncounted, usage(100, 10, 20), NOW, 'default')).toBe(ACCOUNT_2);
+    expect(accountToStartOn('claude', uncounted, usage(10, 20, 30), NOW)).toBe('default');
+    expect(accountToMoveToAt('claude', uncounted, usage(100, 10, 20), NOW, 'default')).toEqual(NOW);
+  });
+
+  it('starts a new session on the account it would have, until that account has its share', () => {
+    expect(accountToStartOn('claude', spread(2, 0, 0), usage(10, 20, 30), NOW)).toBe('default');
+    // 3 sessions and this one over three accounts is below the floor: three stay on the first, the next spreads.
+    expect(accountToStartOn('claude', spread(3, 0, 0), usage(10, 20, 30), NOW)).toBe(ACCOUNT_2);
+    // 11 and this one make four each.
+    expect(accountToStartOn('claude', spread(4, 4, 3), usage(10, 20, 30), NOW)).toBe(ACCOUNT_3);
+    expect(accountToStartOn('claude', spread(3, 4, 4), usage(10, 20, 30), NOW)).toBe('default');
+  });
+
+  it('does not start a session on a nearly spent account for the sake of the split', () => {
+    // Default is within its share but nearly spent, and the others are full: as ever, it comes after them.
+    expect(accountToStartOn('claude', spread(0, 5, 5), usage(85, 10, 20), NOW)).toBe(ACCOUNT_2);
+  });
+
+  it('starts on the first-ranked account with room when every one is full, and on no spent one', () => {
+    expect(accountToStartOn('claude', spread(4, 4, 4), usage(10, 20, 30), NOW)).toBe('default');
+    expect(accountToStartOn('claude', spread(1, 6, 6), usage(100, 20, 30), NOW)).toBe(ACCOUNT_2);
+  });
+
+  it('says when another account can take a session, by the same split', () => {
+    expect(accountToMoveToAt('claude', spread(10, 5, 0), usage(100, 10, 20), NOW, 'default')).toEqual(NOW);
+    // Every other account is full: no moment to name, and the session's own reset says when.
+    expect(accountToMoveToAt('claude', spread(5, 5, 5), usage(100, 10, 20), NOW, 'default')).toBeNull();
+    // A spent account within its share frees up at its reset; one over it does not count.
+    expect(accountToMoveToAt('claude', spread(11, 5, 2), usage(100, 100, 100), NOW, 'default')).toEqual(new Date(IN_TWO_HOURS));
+    expect(accountToMoveToAt('claude', spread(5, 5, 5), usage(100, 100, 100), NOW, 'default')).toBeNull();
+  });
+});
+
 describe('a runner with more than one Antigravity Google account', () => {
   const WORK = '5c2e91a0';
   const SPARE = 'a81d07e3';
@@ -598,6 +692,46 @@ describe('a runner with more than one Antigravity Google account', () => {
     expect(accountOfEnv('antigravity', { ORBIT_ANTIGRAVITY_GOOGLE_DIR: '/elsewhere' }, accounts)).toBeNull();
     // A Gemini key of the session's own spends no account's subscription.
     expect(accountOfEnv('antigravity', { GEMINI_API_KEY: 'key' }, accounts)).toBeNull();
+  });
+});
+
+describe('antigravityModelBuckets — the buckets a run on one model spends', () => {
+  // agy 1.4.12's /usage on a Pro plan (2026-11-01), as the runner flattens it: Gemini 4 Argon's own
+  // week spent while the Gemini group the Flash models share has plenty left.
+  const buckets = [
+    { id: 'gemini-weekly', window: 'weekly', remainingFraction: 0.97, resetTime: '2026-11-08T12:28:16Z' },
+    { id: 'gemini-5h', window: '5h', remainingFraction: 0.93, resetTime: '2026-11-01T17:28:16Z' },
+    { id: '3p-weekly', window: 'weekly', remainingFraction: 1, resetTime: '2026-11-08T12:40:00Z' },
+    { id: '3p-5h', window: '5h', remainingFraction: 1, resetTime: '2026-11-01T17:40:00Z' },
+    { id: 'gemini-argon-wtu-weekly', window: 'weekly', remainingFraction: 0, resetTime: '2026-11-07T17:41:35Z' },
+  ];
+  const ids = (model: string | null | undefined) => antigravityModelBuckets(buckets, model).map((bucket) => bucket.id);
+
+  it("gives a Gemini Flash or Pro model the Gemini group's, never Argon's", () => {
+    expect(ids('gemini-3.8-flash')).toEqual(['gemini-weekly', 'gemini-5h']);
+    expect(ids('gemini-3.8-flash-high')).toEqual(['gemini-weekly', 'gemini-5h']);
+    expect(ids('gemini-3.1-pro')).toEqual(['gemini-weekly', 'gemini-5h']);
+  });
+
+  it('gives Gemini 4 Argon the group that names it, and the Gemini one where it has none of its own', () => {
+    expect(ids('gemini-4-argon')).toEqual(['gemini-argon-wtu-weekly']);
+    expect(ids('gemini-4-argon-medium')).toEqual(['gemini-argon-wtu-weekly']);
+    // An Ultra plan's Argon draws on the Gemini group, and agy reports no group of its own.
+    expect(antigravityModelBuckets(buckets.slice(0, 4), 'gemini-4-argon').map((bucket) => bucket.id)).toEqual([
+      'gemini-weekly',
+      'gemini-5h',
+    ]);
+  });
+
+  it("gives Claude and GPT-OSS the third-party group's", () => {
+    expect(ids('claude-opus-5-5')).toEqual(['3p-weekly', '3p-5h']);
+    expect(ids('gpt-oss-120b')).toEqual(['3p-weekly', '3p-5h']);
+  });
+
+  it("keeps every bucket for agy's own default model, and for a model no group is", () => {
+    expect(ids('')).toHaveLength(5);
+    expect(ids(null)).toHaveLength(5);
+    expect(antigravityModelBuckets(buckets.slice(0, 2), 'claude-opus-5-5')).toHaveLength(2);
   });
 });
 

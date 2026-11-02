@@ -115,18 +115,26 @@ final class RunnerSelfUpdateTests: XCTestCase {
     // MARK: what each card says
 
     func testDirNotWritableNamesTheFolderAndCopiesTheCommandThatMovesTheInstall() throws {
+        // sudo runs the binary by its path in that folder: it looks a bare `orbit` up only on its secure_path.
         let item = try card(try input("selfUpdate dirNotWritable and behind"))
         XCTAssertEqual(item.detail,
                        "It can’t write to /usr/local/bin, so it can’t replace its own binary — still on 0.1.190, "
-                           + "latest is 0.1.197. On that machine, run sudo orbit upgrade once; after that it updates itself.")
+                           + "latest is 0.1.197. On that machine, run sudo /usr/local/bin/orbit upgrade once; after that "
+                           + "it updates itself.")
         XCTAssertEqual(item.action, RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil,
-                                                          command: "sudo orbit upgrade"))
+                                                          command: "sudo /usr/local/bin/orbit upgrade"))
         XCTAssertEqual(item.params, [
             "version": .string("0.1.190"), "latest": .string("0.1.197"), "state": .string("dirNotWritable"),
             "installDir": .string("/usr/local/bin"),
         ])
-        XCTAssertEqual(RunnerPageFormat.attentionCode(item), ["sudo orbit upgrade"], "the command is set in monospace")
-        // A runner that didn't say which folder.
+        XCTAssertEqual(RunnerPageFormat.attentionCode(item), ["sudo /usr/local/bin/orbit upgrade"],
+                       "the command is set in monospace")
+        // An account's own copy, by its path the same way.
+        let own = try card(try reporting("selfUpdate dirNotWritable and behind",
+                                         ["state": "dirNotWritable", "installDir": "/home/lab/.orbit/bin"]))
+        XCTAssertEqual(own.action, RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil,
+                                                         command: "sudo /home/lab/.orbit/bin/orbit upgrade"))
+        // A runner that didn't say which folder: the command as it always was.
         let unsaid = try card(try reporting("selfUpdate dirNotWritable and behind", ["state": "dirNotWritable"]))
         XCTAssertEqual(unsaid.detail,
                        "It can’t write to its install folder, so it can’t replace its own binary — still on 0.1.190, "

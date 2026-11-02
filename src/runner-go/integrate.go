@@ -329,13 +329,13 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		// The target may legitimately not exist yet (a project branch nobody has pushed), so the
 		// two refs are fetched separately and only upstream's absence is fatal.
 		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
-			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
+			return fetchRefFailure("FETCH", repoRoot, remote, cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
 		// A failure here is not an error — a first landing creates the branch — unless it is a ref
 		// another process was holding: this fetch is what brings the tip the job is about to work
 		// from, and reading it out of a ref nobody just updated is a guess about the remote.
 		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil && isRefLockConflict(err) {
-			return fetchRefFailure("FETCH", cmd.TargetRef, err, "FETCH_FAILED")
+			return fetchRefFailure("FETCH", repoRoot, remote, cmd.TargetRef, err, "FETCH_FAILED")
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -733,11 +733,11 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	report("FETCH", nil)
 	if !local {
 		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
-			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
+			return fetchRefFailure("FETCH", repoRoot, remote, cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
 		if !byCommit {
 			if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
-				return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
+				return fetchRefFailure("FETCH", repoRoot, remote, cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
 			}
 		}
 	}
@@ -1911,14 +1911,15 @@ func isRefLockConflict(err error) bool {
 	return err != nil && strings.Contains(gitStderr(err), "cannot lock ref")
 }
 
-// fetchRefFailure is what a fetch that got nowhere is reported as: `branchCode` for a failure that
-// is about the ref itself — it is not there — and FETCH_FAILED for the one that is about the
-// machinery, a ref lock that outlived its retries. The second is deliberately not a code a reader
-// could act on by going to look at a branch.
-func fetchRefFailure(phase, ref string, err error, branchCode string) integrationResult {
-	code := branchCode
-	if isRefLockConflict(err) {
-		code = "FETCH_FAILED"
+// fetchRefFailure is what a fetch that got nowhere is reported as (J-S1, M-S1): `branchCode` when
+// the remote answered and has no such ref (remoteLacksRef), the one failure that is about the ref
+// itself, and FETCH_FAILED for every other — a remote that could not be reached, a credential it
+// refused, a ref lock that outlived its retries. FETCH_FAILED is deliberately not a code a reader
+// could act on by going to look at a branch; the detail says what happened instead.
+func fetchRefFailure(phase, repoRoot, remote, ref string, err error, branchCode string) integrationResult {
+	code := "FETCH_FAILED"
+	if remoteLacksRef(repoRoot, remote, ref, err) {
+		code = branchCode
 	}
 	return errorResult(phase, code, map[string]any{"ref": ref, "detail": gitStderr(err)})
 }

@@ -44,7 +44,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { withActiveSessions } from '../providers/active-sessions';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
@@ -273,7 +274,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
-import { settleUnrunWakeTurns } from './wake-turn-withdraw';
+import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
   ScheduledWakeupDto,
@@ -1366,10 +1367,10 @@ function isTaskCriterionShapeAdvice(error: unknown): boolean {
 export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] }>;
 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
-export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
+export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique', 'findMany']; runEvent: ['findFirst'] }> & QuotaRetryTransaction;
 
 /** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
-export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
+export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique']; session: ['findMany'] }> & QuotaRetryTransaction;
 
 // The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
 // answered 426 UPGRADE_REQUIRED, but for the six marked StaysOnHttps (runner-link-required.ts).
@@ -6140,6 +6141,7 @@ export class RunnerApiController {
           targetTurnId: true,
           leaseGeneration: true,
           coordinatorContextKey: true,
+          senderSessionId: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -6518,8 +6520,20 @@ export class RunnerApiController {
       // turn is answered by its exit code, and a control turn is acked on delivery.
       //
       // A turn the region check stopped is answered by the stop, as an interrupted one is: never requeued (§10).
+      //
+      // A message from another session owes nobody words (docs/session-request-reply-contract.md): a plain
+      // one asks for no reply — "no reply needed" is a common way to end one — and a request is answered
+      // through session_reply, or closed NO_REPLY below once its turn settles without one (§4.1). So its
+      // turn running to a normal end settles it, said or silent. Put back, it is the same words read again
+      // (2026-11-01: a Codex session told "no reply needed" was handed one note three times, and its run
+      // was then failed as swallowing it). One no engine turn ran (`noEngineTurnRan`, the retry below) is
+      // still owed its delivery, as anyone's is.
+      const noEngineTurnRan = dto.numTurns === 0 && (dto.costUsd ?? 0) === 0;
+      const settledByItsRun =
+        completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
       const unanswered =
         !regionStopped
+        && !settledByItsRun
         && completedTurn?.kind === 'message'
         && (await tx.runEvent.findFirst({
           where: {
@@ -6635,7 +6649,7 @@ export class RunnerApiController {
           // drop. Never over an arm already standing, for the reason that case gives.
           : swallowed && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
-            : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+            : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
@@ -7181,6 +7195,7 @@ export class RunnerApiController {
           },
         });
       }
+      let droppedWakeups: DrainedWakeupDrop[] = [];
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
           includeInFlight: true,
@@ -7209,6 +7224,10 @@ export class RunnerApiController {
           retryArmed: (retryArmAt ?? current.retryAt) != null,
           failedTurnKey: completedTurn?.clientTurnId,
         });
+        // And a wakeup filed onto a `bg-wake:` turn queued behind the failed one, which the drain below
+        // answers unrun: held for the retry armed above or dropped, and taken out of its loop's runs
+        // (wake-turn-withdraw.ts).
+        droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -7256,6 +7275,7 @@ export class RunnerApiController {
         reviewToDeliver,
         reviewsAbandoned,
         repairCheck: repairCheckAfter(current),
+        droppedWakeups,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -7405,6 +7425,9 @@ export class RunnerApiController {
       return { ok: true, status: finalized.status };
     }
     if (finalized.failSession) {
+      // The one-shot wakeups the failure dropped with its session, no retry armed: their owner is told,
+      // once, now that the drop has committed (contract §4).
+      signalDrainedWakeups(this.push, this.logger, finalized.droppedWakeups ?? []);
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {
@@ -8215,7 +8238,7 @@ export class RunnerApiController {
         ? lastRetryableError
         : lastAssistant;
       const retry = lastWord
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null)
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null, lastWord.seq)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
@@ -8887,6 +8910,9 @@ export class RunnerApiController {
         closesRequests: true,
         retryArmed: retryAt != null,
       });
+      // And a wakeup filed onto a `bg-wake:` turn still queued, which the drain below answers unrun: held
+      // for an armed retry or dropped, and taken out of its loop's runs (wake-turn-withdraw.ts).
+      const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
@@ -8969,6 +8995,7 @@ export class RunnerApiController {
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
         repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        droppedWakeups,
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     // A run the region check refused or stopped (§10): the session goes on, so no settlement is announced. Its row
@@ -8982,6 +9009,9 @@ export class RunnerApiController {
       return { ok: true, keepCheckout: outcome.keepCheckout };
     }
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+    // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
+    // told, once, now that the drop has committed (contract §4).
+    signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);
 
     if (
       'taskReclaimed' in outcome
@@ -9182,6 +9212,9 @@ export class RunnerApiController {
     }, loggedRetry(this.logger, 'runnerApi.importResult'));
     // Wake live clients: the imported session just got its real title (or went to Trash).
     if (outcome.announced) this.realtime.publishSessionUpdated(sessionId);
+    // A transcript Claude never titled still reads as its placeholder: name it from its first
+    // prompt, which the events this import just stored hold (SessionsService.nameUntitledImport).
+    if (outcome.applied && !dto.title) void this.sessions?.nameUntitledImport(sessionId);
     return { ok: true, ...outcome };
   }
 
@@ -9880,6 +9913,9 @@ export class RunnerApiController {
    * on Automatic moves off it as below, and only the re-send is left out. Left where it was, its engine
    * stayed on the spent account and every background agent still running in it met the same limit —
    * on 2026-10-02 a session sat there until its owner moved it by hand.
+   *
+   * `seq` is the reply's own place in the session's events, from which the reply before it is found
+   * (waitsForWarmCache).
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
@@ -9887,6 +9923,7 @@ export class RunnerApiController {
     runnerId: string,
     text: string,
     delivered = true,
+    seq: number | null = null,
   ): Promise<{
     retryAt?: Date | null;
     retryAttempts?: number;
@@ -9985,22 +10022,26 @@ export class RunnerApiController {
     // (accountAfterUsageLimitAt), and the retry's dispatch moves it there. Armed for this account's reset
     // alone, it waited out a weekly limit beside an account whose 5 hours came back the same evening —
     // on 2026-10-08, a coordinator was armed five days out.
+    //
+    // Only as far as the other accounts have room for it. Moving costs the account it moves to the whole
+    // conversation (accountShare), so one past its share of the runner's sessions takes no more of them,
+    // and a re-send on its way waits for this account's reset instead, when that comes before the cache
+    // here dies (waitsForWarmCache). A message somebody sends in the meantime moves it all the same
+    // (accountBeforeDispatch).
     let elsewhere: Date | null = null;
     if (session.provider === AgentProvider.CLAUDE) {
-      const runner = await tx.runner.findUnique({
+      const row = await tx.runner.findUnique({
         where: { id: runnerId },
         select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
       });
-      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
-        ? accountAfterUsageLimit(
-            'claude',
-            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
-            session.workspace,
-            runner,
-            new Date(),
-          )
-        : null;
-      if (move && runner) {
+      const now = new Date();
+      const carries = !!row?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1);
+      const runner = row && carries ? await withActiveSessions(tx, runnerId, row, now) : row;
+      const own = { account: session.claudeAccount, pinned: session.claudeAccountPinned };
+      const move = carries ? accountAfterUsageLimit('claude', own, session.workspace, runner, now) : null;
+      const waits = !!move && !move.defaultRemoved && delivered && seq !== null
+        && await this.waitsOutClaudeLimit(tx, sessionId, seq, text, row, move.from, now);
+      if (move && runner && !waits) {
         return {
           ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
@@ -10009,21 +10050,43 @@ export class RunnerApiController {
           poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
-      elsewhere = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
-        ? accountAfterUsageLimitAt(
-            'claude',
-            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
-            session.workspace,
-            runner,
-            new Date(),
-          )
-        : null;
+      elsewhere = carries && !waits ? accountAfterUsageLimitAt('claude', own, session.workspace, runner, now) : null;
     }
     if (!delivered) return {};
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace, elsewhere);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
+  }
+
+  /**
+   * Whether a Claude session its usage limit just stopped on `account` waits for that account's reset
+   * rather than move (waitsForWarmCache). The reset is the moment its retry would be armed for
+   * (quotaRetryAt), and its last answered call the reply before the one that said so: this session's
+   * cache has lived since then, whatever else its turn has done.
+   */
+  private async waitsOutClaudeLimit(
+    tx: RetryPlanTransaction,
+    sessionId: string,
+    seq: number,
+    text: string,
+    runner: { planUsage: unknown; engines: unknown } | null,
+    account: string,
+    now: Date,
+  ): Promise<boolean> {
+    const resetsAt = parseQuotaResetAt(text, now) ?? usageLimitResetsAt(
+      withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
+      AgentProvider.CLAUDE,
+      now,
+      account,
+    );
+    if (!resetsAt) return false;
+    const reply = await tx.runEvent.findFirst({
+      where: { sessionId, type: RunEventType.ASSISTANT, seq: { lt: seq } },
+      orderBy: { seq: 'desc' },
+      select: { createdAt: true },
+    });
+    return waitsForWarmCache(resetsAt, reply?.createdAt ?? null, now);
   }
 
   /**
@@ -10053,7 +10116,7 @@ export class RunnerApiController {
     text: string,
   ): Promise<{ retryAt: Date; move?: { to: string; notice: string; unpin?: boolean } } | null> {
     const now = new Date();
-    const runner = await tx.runner.findUnique({
+    const row = await tx.runner.findUnique({
       where: { id: runnerId },
       select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
     });
@@ -10064,7 +10127,9 @@ export class RunnerApiController {
         })
       : null;
     const own = { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] };
-    const carries = !!runner?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+    const carries = !!row?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+    // As for a Claude session (retryPlanFor), an account past its share of the runner's sessions takes no more.
+    const runner = row && carries ? await withActiveSessions(tx, runnerId, row, now) : row;
     const move = carries
       ? accountAfterUsageLimit(engine, own, workspace, runner, now)
       : null;

@@ -16,7 +16,16 @@ export const WIKI_SYSTEM_MODEL_ENV = {
   apiKey: 'ORBIT_WIKI_MODEL_API_KEY',
   model: 'ORBIT_WIKI_MODEL',
   concurrency: 'ORBIT_WIKI_MODEL_CONCURRENCY',
+  thinking: 'ORBIT_WIKI_MODEL_THINKING',
 } as const;
+
+/**
+ * What ORBIT_WIKI_MODEL_THINKING may say (contract `systemModel.envRules.thinkingValues`): each call's body then
+ * carries `thinking: {type: <value>}`. Unset, empty or any other value sends no `thinking` field, the body of an
+ * endpoint that thinks only when asked (vLLM); `disabled` is for one that thinks unless told not to (DeepSeek V4).
+ */
+export const WIKI_SYSTEM_MODEL_THINKING = ['disabled', 'enabled'] as const;
+export type WikiSystemModelThinking = (typeof WIKI_SYSTEM_MODEL_THINKING)[number];
 
 /** The numbers the worker calls and probes the System model by (contract `systemModel.request`, `.health`, `.status`). */
 export const WIKI_SYSTEM_MODEL = {

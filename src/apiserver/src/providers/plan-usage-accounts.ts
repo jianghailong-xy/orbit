@@ -224,7 +224,8 @@ function removedDefaultMove(
  * account the session ran on, as dispatch resolved it. Null when the session stays and waits for that
  * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account —
  * or no other account with room, when it waits for the first account to free up, that one or another
- * (accountAfterUsageLimitAt).
+ * (accountAfterUsageLimitAt). On a runner whose sessions were counted (withActiveSessions), an account
+ * past its share has no room for it.
  */
 /**
  * Where a session on Automatic goes BEFORE a turn is dispatched to it, when its runner's own snapshot
@@ -257,7 +258,8 @@ export function accountBeforeDispatch(
   const paused = runnerAccountPausedUntil(runner?.accountPauses, engine, from, now) !== null;
   const signedOut = accounts?.find((account) => account.id === from)?.auth === 'no';
   if (!paused && !signedOut && !planUsageBlockedUntil(usage, engine, now, from)) return null;
-  const to = accountToMoveTo(engine, accounts, usage, now, from);
+  // A turn is on its way, and on this account it would only fail: an account past its share still beats that.
+  const to = accountToMoveTo(engine, accounts, usage, now, from, { beyondShare: true });
   return to ? { from, to, ...(paused ? { paused: true } : signedOut ? { signedOut: true } : {}) } : null;
 }
 
@@ -316,6 +318,30 @@ export function accountAfterUsageLimitAt(
   if (!from) return null;
   const usage = weighedPlanUsage(runner?.planUsage, runner?.engines);
   return accountToMoveToAt(engine, accountsOn(engine, runner, now), usage, now, from);
+}
+
+/** The longest a Claude session its usage limit stopped sits out its own account's reset rather than move. */
+export const ACCOUNT_RESET_WAIT_MS = 45 * 60_000;
+
+/**
+ * How long after its last call a Claude conversation's cache can still be relied on at a reset: Claude Code
+ * writes it for an hour, and a little of that goes on the retry's dispatch.
+ */
+const CLAUDE_CACHE_LIFE_MS = 55 * 60_000;
+
+/**
+ * Whether a Claude session its account's usage limit stopped is better off waiting for that account's
+ * reset than moving: the reset is under ACCOUNT_RESET_WAIT_MS away and the conversation's cache will still
+ * be there. Moved, its next call writes all of it again on an account that has never seen it (the price
+ * accountShare gives); back on this one it only reads it, 40 times cheaper on Opus 5.5. A reset past the
+ * cache's life saves nothing, as this account then writes it all again too, and only a wait is lost. Claude
+ * only, the one cache whose life was measured. `lastReplyAt` is the session's last call that was answered,
+ * `resetsAt` when the limit lifts; without either there is nothing to go by, and the session moves.
+ */
+export function waitsForWarmCache(resetsAt: Date | null, lastReplyAt: Date | null, now: Date): boolean {
+  if (!resetsAt || !lastReplyAt) return false;
+  return resetsAt.getTime() - now.getTime() <= ACCOUNT_RESET_WAIT_MS
+    && resetsAt.getTime() - lastReplyAt.getTime() <= CLAUDE_CACHE_LIFE_MS;
 }
 
 /** What an account's name is read from: the runner's report, and the names its accounts were given in

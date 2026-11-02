@@ -1541,6 +1541,19 @@ public struct TranscriptReducer: Sendable, Codable {
     private mutating func appendError(_ ev: RunEvent) {
         turnAccountedFor = true
         let msg = str(ev, "message") ?? str(ev, "error") ?? str(ev, "text") ?? "error"
+        // The Claude region check (docs/claude-region-check-contract.md §9, §10; web `claudeRegionErrorLine`):
+        // a refusal is the held session's card's to say, with its ways out, so it draws no line here and
+        // the turn counts as answered; a turn stopped by a confirmed flip has no card, and says its
+        // sentence without the code.
+        switch ClaudeRegion.errorLine(msg) {
+        case .refusal:
+            return
+        case .stopped(let sentence):
+            state.items.append(.error(id: nextID(), message: sentence))
+            return
+        case .notRegion:
+            break
+        }
         // A signed-out engine is reported as an error event rather than assistant text (there is no
         // model in the loop yet — it never got to spawn), but the remedy is the same human action,
         // so it earns the same card instead of a bare error line (web parity).

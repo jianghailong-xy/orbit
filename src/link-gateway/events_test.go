@@ -360,6 +360,39 @@ func TestCreditFallsWhenTheIngestQueueIsDeepAndComesBack(t *testing.T) {
 	}
 }
 
+// Welcome frees the runner before the connection has started, so a credit change can fall between the two. The runner
+// is told it behind Welcome, and is told the next one too. That gap is too short to hit from a test: the connection is
+// put back in it.
+func TestACreditChangeBetweenWelcomeAndTheConnectionStartingIsToldBehindWelcome(t *testing.T) {
+	h := newLinkHarness(t, []*fakeBackend{newFakeBackend(t, stored)}, func(c *config) {
+		c.link.Credit = creditLevel{Events: 100, Bytes: 64 << 20}
+		c.link.Reduced = creditLevel{Events: 3, Bytes: 8 << 20}
+	})
+	tc, w := h.connectLink(runnerA, processA)
+	granted := creditLevel{Events: w.GetCredit().GetMaxUnackedEvents(), Bytes: w.GetCredit().GetMaxUnackedBytes()}
+	l := h.g.reg.snapshot()[0].link
+	l.mu.Lock()
+	l.credit = creditLevel{}
+	l.mu.Unlock()
+	book := h.g.credit
+	change := func(reduced bool) {
+		book.mu.Lock()
+		book.reduced = reduced
+		book.mu.Unlock()
+		book.announce(reduced)
+	}
+
+	change(true)
+	l.start(granted)
+	if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 3 {
+		t.Fatalf("the change after Welcome: %v", c)
+	}
+	change(false)
+	if c := tc.await("credit", 5*time.Second, nil).GetCredit(); c.GetMaxUnackedEvents() != 100 {
+		t.Fatalf("the change after that: %v", c)
+	}
+}
+
 // A connection that closes with batches queued or in flight gives their place in the ingest queue back.
 func TestAClosedConnectionsEventsLeaveTheIngestQueue(t *testing.T) {
 	backend := newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {

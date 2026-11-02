@@ -1,0 +1,6 @@
+2026-11-01T02:15:36.454583Z fixture at http://localhost:47325/
+2026-11-01T02:15:37.110305Z signed in to the fixture
+2026-11-01T02:15:38.032818Z PASS the held session's card
+2026-11-01T02:15:38.139855Z PASS Check again's POST
+2026-11-01T02:15:40.830375Z PASS the check line moved
+2026-11-01T02:15:40.930840Z PASS the press is back

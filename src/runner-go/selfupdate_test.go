@@ -244,7 +244,7 @@ func TestSelfUpdateAtStartupDelegatesToTheHostBroker(t *testing.T) {
 	if n := restarts.Load(); n != 0 || len(cp.seen(".gz")) != 0 {
 		t.Errorf("restarted %d times after downloading %v; want neither — the broker installs it", n, cp.seen(".gz"))
 	}
-	if strings.Contains(logged, "sudo orbit upgrade") {
+	if strings.Contains(logged, "not writable by this user") {
 		t.Errorf("logged the blocked warning although the update was delegated:\n%s", logged)
 	}
 	assertSelfUpdateState(t, selfUpdateStateDirNotWritable,
@@ -297,7 +297,7 @@ func TestSelfUpdateDelegationReportsTheBrokersAnswer(t *testing.T) {
 				t.Fatal("availableSelfUpdate reported a release this runner cannot install")
 			}
 			assertSelfUpdateState(t, selfUpdateStateDirNotWritable, "delegated to the host broker at "+hostdRunnerSocket+": "+tc.want)
-			if strings.Contains(logged, "sudo orbit upgrade") {
+			if strings.Contains(logged, "not writable by this user") {
 				t.Errorf("logged the blocked warning although there is a broker:\n%s", logged)
 			}
 		})
@@ -384,5 +384,34 @@ func TestAvailableSelfUpdateStillWarnsWhenThereIsNoBroker(t *testing.T) {
 	if !strings.Contains(logged, "not writable by this user") {
 		t.Errorf("a runner with no broker was pinned without saying so:\n%s", logged)
 	}
+	// The command names this binary by its path in the install directory: sudo looks a bare
+	// `orbit` up only on its secure_path, which an account's own ~/.orbit/bin is never on.
+	exe, err := resolvedExecutable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "run `sudo " + filepath.Join("/usr/local/bin", filepath.Base(exe)) + " upgrade`"; !strings.Contains(logged, want) {
+		t.Errorf("the warning must give the command with the binary's path, %q:\n%s", want, logged)
+	}
 	assertSelfUpdateState(t, selfUpdateStateDirNotWritable, "")
+}
+
+// An install directory this process cannot write fails the install before anything is downloaded,
+// with the command that can: the binary by its path, which sudo runs wherever it is.
+func TestInstallReleaseIntoAnUnwritableDirectoryNamesTheBinarysPath(t *testing.T) {
+	// A directory that does not exist is one not even root can write into.
+	exe := filepath.Join(t.TempDir(), "missing", "bin", "orbit")
+	probe := func(string, ...string) ([]byte, error) {
+		t.Error("probed a download that cannot be installed")
+		return nil, nil
+	}
+	var log strings.Builder
+	if installRelease("http://127.0.0.1:1", "linux-x64", Manifest{Version: "0.1.96"}, exe, probe,
+		func(s string) { log.WriteString(s) }) {
+		t.Fatal("installRelease reported a release installed into a directory that does not exist")
+	}
+	want := "cannot write to " + filepath.Dir(exe) + " (permission denied) — re-run with: sudo " + exe + " upgrade\n"
+	if log.String() != want {
+		t.Errorf("logged %q; want %q", log.String(), want)
+	}
 }

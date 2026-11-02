@@ -300,6 +300,16 @@ public struct RunnerRegionView: Codable, Equatable, Sendable {
     public let viaProxy: Bool?
     public let checkedAt: String?
 
+    public init(verdict: String?, country: String? = nil, regionCode: String? = nil, name: String? = nil,
+                viaProxy: Bool? = nil, checkedAt: String? = nil) {
+        self.verdict = verdict
+        self.country = country
+        self.regionCode = regionCode
+        self.name = name
+        self.viaProxy = viaProxy
+        self.checkedAt = checkedAt
+    }
+
     /// Whether this runner's Anthropic-bound Claude turns are gated now.
     public var blocked: Bool { verdict == "blocked" }
 }

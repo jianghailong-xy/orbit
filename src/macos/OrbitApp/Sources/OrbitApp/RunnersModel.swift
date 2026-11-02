@@ -127,6 +127,34 @@ final class RunnersModel {
         await press { _ = try await self.api.requestRunnerSelfUpdate(id) }
     }
 
+    /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
+    /// they asked for is answered.
+    private(set) var regionChecking: Set<String> = []
+
+    /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at
+    /// once, and the answer lands in `Runner.region` like any other check's — so the runners are read
+    /// again every two seconds until that one's `checkedAt` reaches the request, for up to 30 seconds.
+    /// Nil once asked; else why not (offline, too old to check), in the server's words.
+    func checkRegion(_ id: String) async -> String? {
+        guard !regionChecking.contains(id) else { return nil }
+        regionChecking.insert(id)
+        defer { regionChecking.remove(id) }
+        let asked: ClaudeRegionCheckRequest
+        do {
+            asked = try await api.requestRunnerRegionCheck(id)
+        } catch {
+            return APIClient.failureReason(error)
+        }
+        let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
+        let started = Date()
+        while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
+            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await load()
+            if ClaudeRegion.checkAnswered(checkedAt: runner(id)?.region?.checkedAt, askedAt: askedAt) { break }
+        }
+        return nil
+    }
+
     /// A stuck checkout rescued to a branch and put back on its last commit.
     @discardableResult
     func repair(_ workspaceId: String) async -> String? {

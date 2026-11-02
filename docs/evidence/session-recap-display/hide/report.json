@@ -1,0 +1,98 @@
+[
+  {
+    "tree": "before",
+    "name": "desktop-dark-hover",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "1",
+    "hideLabel": null,
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "before",
+    "name": "phone-dark",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "1",
+    "hideLabel": null,
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "0",
+    "hideLabel": "Hide recap",
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-hover",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "1",
+    "hideLabel": "Hide recap",
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-focus",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "1",
+    "hideLabel": "Hide recap",
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-hidden",
+    "card": null,
+    "actionsOpacity": null,
+    "hideLabel": null,
+    "hiddenStored": [
+      [
+        "9t6p1c",
+        "2026-09-28T11:44:00.000Z"
+      ]
+    ],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-reopened",
+    "card": null,
+    "actionsOpacity": null,
+    "hideLabel": null,
+    "hiddenStored": [
+      [
+        "9t6p1c",
+        "2026-09-28T11:44:00.000Z"
+      ]
+    ],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-newer",
+    "card": "Recap· 7:58 PMProbe task filed for Copilot CLI; the common ACP layer waits on your call.",
+    "actionsOpacity": "0",
+    "hideLabel": "Hide recap",
+    "hiddenStored": [
+      [
+        "9t6p1c",
+        "2026-09-28T11:44:00.000Z"
+      ]
+    ],
+    "listLine": "Probe task filed for Copilot CLI; the common ACP layer waits on your call."
+  },
+  {
+    "tree": "after",
+    "name": "phone-dark",
+    "card": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "actionsOpacity": "1",
+    "hideLabel": "Hide recap",
+    "hiddenStored": [],
+    "listLine": "Research done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task."
+  }
+]

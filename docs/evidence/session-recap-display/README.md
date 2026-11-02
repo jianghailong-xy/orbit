@@ -78,3 +78,46 @@ Checks:
 - Android `testDebugUnitTest`, 11/11 green: `RecapCardViewTest` (3), `RecapCardTest` (6) and `SessionRecapShotsTest` (2).
   `RecapCardViewTest` adds a check that the first line's middle is the 48dp Refresh button's middle (24dp).
 - Swift: `swiftc -parse` in `swift:6.1` only. SwiftUI builds on macOS alone, and `client.yml` has not run on this change.
+
+## × hides a recap (2026-11-01, board 06-hide)
+
+The owner asked for a way to close the recap. He chose an × in the conversation: it hides that recap in that conversation, on
+that device, until the server writes a newer one, and the list row keeps it. Following board
+`docs/mocks/session-recap-display/06-hide`, he took both recommendations: on Mac and web the × shows with ↻ (under the pointer,
+on keyboard focus, while a refresh runs), and there is no undo.
+
+What changed on all four clients:
+
+- **The ×.** It sits beside ↻ in the same grey, named `Hide recap` for the pointer's help and for screen readers. That is the
+  one new word, and it is held across clients by the copy-parity tests (web ↔ OrbitKit ↔ Android). iPhone, iPad, Android and
+  hover-less web screens always show it, as they do ↻.
+- **What is remembered.** The hidden recap's write time (`recapAt`), or its words when a recap came with no time
+  (`recapHideKey` / `RecapCard.hideKey`). The key is kept per session on this device: localStorage
+  `orbit.recap.hidden.<id>` on web, UserDefaults on Mac and iOS, and the `orbit.recaps` SharedPreferences on Android. The card
+  is not drawn while the stored key equals the current recap's key, so a newer recap shows again.
+- **Unchanged:** the list row, when the card shows and steps aside, Refresh, and the Session recaps switch.
+
+`hide/capture-hide.mjs` shoots two vite builds (HEAD and the change) over the ui-migration fixtures. `hide/report.json` holds
+what it read on each scene:
+
+| Scene | Card | ↻ × opacity | List line |
+|---|---|---|---|
+| before, hover | shown, ↻ only | 1 | the recap |
+| after, rest | shown | 0 | the recap |
+| after, hover / keyboard focus on × | shown | 1 | the recap |
+| after, × clicked | gone; `orbit.recap.hidden.<id>` = the recap's `recapAt` | — | the recap |
+| after, opened with that key stored | gone | — | the recap |
+| after, a newer recap (another `recapAt`) | shown, the new words | 0 | the new recap |
+| after, phone (no hover) | shown | 1 | the recap |
+
+Checks:
+
+- Web vitest, full suite: 455 files, 6019/6019 green, including the new cases. `SessionRecapCard` checks that × is named
+  `Hide recap` and asks the server nothing. `WorkspaceView.recapRow` checks that × hides the card while the list row keeps the
+  recap, that a reopen with the stored key stays hidden, and that a newer recap is drawn. `tsc --noEmit` is clean.
+- OrbitKit `swift test` in `swift:6.1`: 4158 tests, 0 failures. `RecapCardTests` covers the hide rule (timed and untimed) and
+  the `hide` word against the web file.
+- Android `testDebugUnitTest`, 13/13 green: `RecapCardTest` (7, with the hide rule and the 7-word parity with RecapCard.swift),
+  `RecapCardViewTest` (4, where × reaches `onHide` and does not refresh), and `SessionRecapShotsTest` (2).
+- Mac and iOS views (`RecapCardView`, the `ConsoleView` wiring): `swiftc -parse` only. They compile on macOS through
+  `client.yml`.

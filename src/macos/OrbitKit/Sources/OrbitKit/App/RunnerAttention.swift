@@ -718,12 +718,14 @@ public enum RunnerAttention {
 
     /// Behind the latest release, and not catching up by itself. A runner that reports where its
     /// updates stand is taken at its word: `dirNotWritable` — the user it runs as can't write its
-    /// install folder, and `sudo orbit upgrade` there moves the install, once; `disabledByEnv` — its
+    /// install folder, and `sudo <installDir>/orbit upgrade` moves the install, once (sudo runs the binary
+    /// by that path, since it looks a bare `orbit` up only on its secure_path; a runner that doesn't say
+    /// which folder gets RUNNER_UPGRADE_COMMAND); `disabledByEnv` — its
     /// updater is off, and only a reason naming ORBIT_NO_SELFUPDATE is a switch to turn back;
     /// `failed` — in its own words, with Update Runner Now, so only while it is online. `enabled`,
     /// `waitingForIdle`, `heldByRollout` and a state this client doesn't know raise nothing. One too
     /// old to report it is judged by `runsAsRoot`, as before: a regular user stays on its version
-    /// until someone runs `sudo orbit upgrade` there; unknown (nil) is not flagged, and a root runner
+    /// until someone runs RUNNER_UPGRADE_COMMAND there; unknown (nil) is not flagged, and a root runner
     /// that is behind installs the release itself when no turn is running.
     private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner, _ latestVersion: String?,
                                              offline: Bool) -> RunnerAttentionItem? {
@@ -749,12 +751,16 @@ public enum RunnerAttention {
         switch report.state {
         case "dirNotWritable":
             let summary = RunnerPageCopy.ATTENTION_INSTALL_FOLDER_NOT_WRITABLE
+            var upgrade = command
+            if let folder = report.installDir, !folder.isEmpty {
+                upgrade = RunnerPageCopy.runnerUpgradeCommandIn(folder: folder)
+            }
             return RunnerAttentionItem(
                 kind: .cannotSelfUpdate, tone: .warn, short: summary, title: summary,
                 detail: RunnerPageCopy.attentionInstallFolderNotWritableDetail(
                     folder: report.installDir ?? RunnerPageCopy.RUNNER_INSTALL_FOLDER, version: version,
-                    latest: latestVersion, command: command),
-                action: RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil, command: command),
+                    latest: latestVersion, command: upgrade),
+                action: RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil, command: upgrade),
                 params: [
                     "version": .string(version), "latest": .string(latestVersion), "state": .string(report.state),
                     "installDir": report.installDir.map(JSONValue.string) ?? .null,

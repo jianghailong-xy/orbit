@@ -1,0 +1,53 @@
+# Bodies the client POSTs to {base}/v1/messages, captured at a 127.0.0.1 stub by capture-body.cjs.
+# Build: src/apiserver/build of 572dc25ad86e3fe476d65a368947f03015b1f4c5, compiled by npm test (tsc -p tsconfig.test.json).
+# Captured 2026-11-01T14:59:51Z.
+
+## ORBIT_WIKI_MODEL_THINKING unset
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING=""
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="  "
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="disabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true,"thinking":{"type":"disabled"}}
+sha256 de1cc3b106103127518d4167aaa1275c9fe7ed0dab943d0d9cc56c5f8823c6cb
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="enabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true,"thinking":{"type":"enabled"}}
+sha256 23423ef7394d63738dd8b35a8f75380ffa97e3b2439e36bf9f4fee44cf8c3f8a
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING=" disabled "
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true,"thinking":{"type":"disabled"}}
+sha256 de1cc3b106103127518d4167aaa1275c9fe7ed0dab943d0d9cc56c5f8823c6cb
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="Disabled"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+problem ORBIT_WIKI_MODEL_THINKING="Disabled" is not disabled or enabled: no thinking field is sent
+exit=0
+
+## ORBIT_WIKI_MODEL_THINKING="off"
+{"model":"deepseek-v4-pro","max_tokens":1024,"system":"You extract wiki entries.","messages":[{"role":"user","content":"The dossier."}],"stream":true}
+sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+problem ORBIT_WIKI_MODEL_THINKING="off" is not disabled or enabled: no thinking field is sent
+exit=0
+
+## How many bodies had each sha256: in body-before.txt (the commit before the switch), and above
+before:
+      5 sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+after:
+      1 sha256 23423ef7394d63738dd8b35a8f75380ffa97e3b2439e36bf9f4fee44cf8c3f8a
+      5 sha256 28778350835a98d53261b28dd749275cd85c898b1aa7394d034365cae002d6ea
+      2 sha256 de1cc3b106103127518d4167aaa1275c9fe7ed0dab943d0d9cc56c5f8823c6cb

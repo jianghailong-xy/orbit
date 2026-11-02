@@ -26,10 +26,13 @@ type hostdRequest struct {
 	Verb string `json:"verb"`
 }
 
-// hostdResponse is hostd's half. Data is verb-specific and absent on failure.
+// hostdResponse is hostd's half. Data is verb-specific and absent on failure. Code names a
+// refusal its caller must act on rather than route around; the one there is today is
+// hostdRefusedOwnCopy. A caller that does not know a code reads the refusal as any other.
 type hostdResponse struct {
 	OK    bool           `json:"ok"`
 	Error string         `json:"error,omitempty"`
+	Code  string         `json:"code,omitempty"`
 	Data  map[string]any `json:"data,omitempty"`
 }
 

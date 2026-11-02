@@ -1,0 +1,109 @@
+
+### round 1: workspace rows  (2026-11-01T02:56:08.046Z)
+select w.name, w.work_dir, w.auto_create_work_dir, w.enable_worktree, w.work_dir_exists, w.work_dir_is_git,
+  w.repo_url, (w.deleted_at is not null) as deleted, r.name as runner from workspace w left join runner r on r.id = w.runner_id order by w.created_at
+
+     name     |                       work_dir                       | auto_create_work_dir | enable_worktree | work_dir_exists | work_dir_is_git | repo_url | deleted | runner  
+--------------+------------------------------------------------------+----------------------+-----------------+-----------------+-----------------+----------+---------+---------
+ payments-api | /var/tmp/first-ws-e2e/machine-home/code/payments-api | f                    | f               |                 |                 |          | f       | lab-mac
+(1 row)
+
+
+### round 1: session rows  (2026-11-01T02:56:08.097Z)
+select w.name as workspace, s.created_workspace, w.auto_create_work_dir, w.work_dir, s.status, s.engine, s.provider, s.num_turns,
+  left(s.prompt, 40) as prompt, s.title from session s left join workspace w on w.id = s.workspace_id order by s.created_at
+
+  workspace   | created_workspace | auto_create_work_dir |                       work_dir                       |     status     | engine | provider | num_turns |                  prompt                  |                             title                             
+--------------+-------------------+----------------------+------------------------------------------------------+----------------+--------+----------+-----------+------------------------------------------+---------------------------------------------------------------
+ payments-api | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/payments-api | AWAITING_INPUT | claude | claude   |         1 | List the files in this project and say w | List the files in this project and say where you are running.
+(1 row)
+
+
+### round 2: workspace rows  (2026-11-01T02:57:16.323Z)
+select w.name, w.work_dir, w.auto_create_work_dir, w.enable_worktree, w.work_dir_exists, w.work_dir_is_git,
+  w.repo_url, (w.deleted_at is not null) as deleted, r.name as runner from workspace w left join runner r on r.id = w.runner_id order by w.created_at
+
+     name      |                           work_dir                           | auto_create_work_dir | enable_worktree | work_dir_exists | work_dir_is_git |                     repo_url                      | deleted | runner  
+---------------+--------------------------------------------------------------+----------------------+-----------------+-----------------+-----------------+---------------------------------------------------+---------+---------
+ payments      | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | f                    | f               | t               | t               | https://git.first-ws.invalid/lab/payments-api.git | t       | lab-mac
+ scratch-notes | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | t                    | f               | t               | f               |                                                   | f       | lab-mac
+(2 rows)
+
+
+### round 2: session rows  (2026-11-01T02:57:16.379Z)
+select w.name as workspace, s.created_workspace, w.auto_create_work_dir, w.work_dir, s.status, s.engine, s.provider, s.num_turns,
+  left(s.prompt, 40) as prompt, s.title from session s left join workspace w on w.id = s.workspace_id order by s.created_at
+
+   workspace   | created_workspace | auto_create_work_dir |                           work_dir                           |     status     | engine | provider | num_turns |                  prompt                  |                             title                             
+---------------+-------------------+----------------------+--------------------------------------------------------------+----------------+--------+----------+-----------+------------------------------------------+---------------------------------------------------------------
+ payments      | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | AWAITING_INPUT | claude | claude   |         2 | List the files in this project and say w | List the files in this project and say where you are running.
+ scratch-notes | t                 | t                    | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | AWAITING_INPUT | claude | claude   |         1 | Make a note of what you can see in this  | Make a note of what you can see in this new folder.
+(2 rows)
+
+
+### round 3: workspace rows  (2026-11-01T02:57:33.843Z)
+select w.name, w.work_dir, w.auto_create_work_dir, w.enable_worktree, w.work_dir_exists, w.work_dir_is_git,
+  w.repo_url, (w.deleted_at is not null) as deleted, r.name as runner from workspace w left join runner r on r.id = w.runner_id order by w.created_at
+
+     name      |                           work_dir                           | auto_create_work_dir | enable_worktree | work_dir_exists | work_dir_is_git |                     repo_url                      | deleted | runner  
+---------------+--------------------------------------------------------------+----------------------+-----------------+-----------------+-----------------+---------------------------------------------------+---------+---------
+ payments      | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | f                    | f               | t               | t               | https://git.first-ws.invalid/lab/payments-api.git | t       | lab-mac
+ scratch-notes | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | t                    | f               | t               | f               |                                                   | t       | lab-mac
+ billing-api   | /var/tmp/first-ws-e2e/machine-home/code/billing-api          | f                    | f               |                 |                 |                                                   | f       | lab-mac
+(3 rows)
+
+
+### round 3: session rows  (2026-11-01T02:57:33.895Z)
+select w.name as workspace, s.created_workspace, w.auto_create_work_dir, w.work_dir, s.status, s.engine, s.provider, s.num_turns,
+  left(s.prompt, 40) as prompt, s.title from session s left join workspace w on w.id = s.workspace_id order by s.created_at
+
+   workspace   | created_workspace | auto_create_work_dir |                           work_dir                           |     status     | engine | provider | num_turns |                  prompt                  |                             title                             
+---------------+-------------------+----------------------+--------------------------------------------------------------+----------------+--------+----------+-----------+------------------------------------------+---------------------------------------------------------------
+ payments      | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | AWAITING_INPUT | claude | claude   |         2 | List the files in this project and say w | List the files in this project and say where you are running.
+ scratch-notes | t                 | t                    | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | AWAITING_INPUT | claude | claude   |         1 | Make a note of what you can see in this  | Make a note of what you can see in this new folder.
+ billing-api   | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/billing-api          | AWAITING_INPUT | claude | claude   |         1 | Which branch is this repository on?      | Which branch is this repository on?
+(3 rows)
+
+
+### round 4: workspace rows  (2026-11-01T02:57:37.573Z)
+select w.name, w.work_dir, w.auto_create_work_dir, w.enable_worktree, w.work_dir_exists, w.work_dir_is_git,
+  w.repo_url, (w.deleted_at is not null) as deleted, r.name as runner from workspace w left join runner r on r.id = w.runner_id order by w.created_at
+
+     name      |                           work_dir                           | auto_create_work_dir | enable_worktree | work_dir_exists | work_dir_is_git |                     repo_url                      | deleted | runner  
+---------------+--------------------------------------------------------------+----------------------+-----------------+-----------------+-----------------+---------------------------------------------------+---------+---------
+ payments      | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | f                    | f               | t               | t               | https://git.first-ws.invalid/lab/payments-api.git | t       | lab-mac
+ scratch-notes | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | t                    | f               | t               | f               |                                                   | t       | lab-mac
+ billing-api   | /var/tmp/first-ws-e2e/machine-home/code/billing-api          | f                    | f               |                 |                 |                                                   | t       | lab-mac
+ payments-api  | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | f                    | f               |                 |                 |                                                   | f       | lab-mac
+(4 rows)
+
+
+### round 4: session rows  (2026-11-01T02:57:37.625Z)
+select w.name as workspace, s.created_workspace, w.auto_create_work_dir, w.work_dir, s.status, s.engine, s.provider, s.num_turns,
+  left(s.prompt, 40) as prompt, s.title from session s left join workspace w on w.id = s.workspace_id order by s.created_at
+
+   workspace   | created_workspace | auto_create_work_dir |                           work_dir                           |     status     | engine | provider | num_turns |                  prompt                  |                             title                             
+---------------+-------------------+----------------------+--------------------------------------------------------------+----------------+--------+----------+-----------+------------------------------------------+---------------------------------------------------------------
+ payments      | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | AWAITING_INPUT | claude | claude   |         2 | List the files in this project and say w | List the files in this project and say where you are running.
+ scratch-notes | t                 | t                    | /var/tmp/first-ws-e2e/machine-home/orbit-repos/scratch-notes | AWAITING_INPUT | claude | claude   |         1 | Make a note of what you can see in this  | Make a note of what you can see in this new folder.
+ billing-api   | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/billing-api          | AWAITING_INPUT | claude | claude   |         1 | Which branch is this repository on?      | Which branch is this repository on?
+ payments-api  | t                 | f                    | /var/tmp/first-ws-e2e/machine-home/code/payments-api         | AWAITING_INPUT | claude | claude   |         1 | Back in the first folder.                | Back in the first folder.
+(4 rows)
+
+
+### the runner: register_dir, repos_root, when it first spoke  (2026-11-01T02:57:39.714Z)
+select name, status, register_dir, repos_root, capabilities_reported_at, last_heartbeat_at, dir_probe_status, dir_probe_path,
+    ('create-workdir/v1' = any(capabilities)) as create_workdir, ('dir-probe/v1' = any(capabilities)) as dir_probe from runner
+
+-[ RECORD 1 ]------------+-----------------------------------------------------
+name                     | lab-mac
+status                   | ONLINE
+register_dir             | /var/tmp/first-ws-e2e/machine-home/code/payments-api
+repos_root               | /var/tmp/first-ws-e2e/machine-home/orbit-repos
+capabilities_reported_at | 2026-11-01 02:57:36.777+00
+last_heartbeat_at        | 2026-11-01 02:55:44.538
+dir_probe_status         | done
+dir_probe_path           | /var/tmp/first-ws-e2e/machine-home/code/payments-api
+create_workdir           | t
+dir_probe                | t
+

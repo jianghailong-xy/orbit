@@ -238,7 +238,7 @@ struct ConsoleView: View {
             // two engine-repair cards below when it has something to say — one fact,
             // one card (an engine reason it does not claim is theirs, and the reverse).
             if let runStart = console.runStart {
-                SessionRunStartCardView(console: console, card: runStart)
+                SessionRunStartCardView(console: console, card: runStart, onMove: moveFromCard)
                     .padding(.bottom, .composerBandGap)
             } else if let repair = console.queuedDshRepair {
                 DshRepairCardView(console: console, repair: repair)
@@ -492,9 +492,31 @@ struct ConsoleView: View {
         }
     }
 
+    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
+    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    private var moveFromCard: (() -> Void)? {
+        #if os(iOS)
+        guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
+        return { openMove(session) }
+        #else
+        return nil
+        #endif
+    }
+
     #if os(iOS)
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
+    }
+
+    /// Move…, from the ⋯ menu or the region card: the sheet opens on the folder counts the app already
+    /// holds for the session's workspace, which its own read then replaces.
+    private func openMove(_ session: Session) {
+        let listed = session.effectiveLifecycleState == .completed
+            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
+        moveListed = listed.filter {
+            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
+        }
+        movingSession = session
     }
 
     private func sessionMenu(_ session: Session) -> some View {
@@ -533,14 +555,7 @@ struct ConsoleView: View {
                         Label(session.pinnedAt == nil ? "Pin" : "Unpin",
                               systemImage: session.pinnedAt == nil ? "pin" : "pin.slash")
                     }
-                    Button {
-                        let listed = session.effectiveLifecycleState == .completed
-                            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
-                        moveListed = listed.filter {
-                            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
-                        }
-                        movingSession = session
-                    } label: {
+                    Button { openMove(session) } label: {
                         Label("Move…", systemImage: "folder")
                     }
                     .disabled(sessionWorkspace(session) == nil)
@@ -662,6 +677,10 @@ struct TranscriptView: View {
     /// iPad split keep one console view across sessions (`AgentsView`), so a plain flag would carry
     /// one conversation's choice into the next.
     @State private var recapAsideFor: String?
+    /// The recaps this device hid with the card's × this run, by session (`RecapCard.hideKey`); the
+    /// rest are read from UserDefaults as their session is shown. A hidden recap stays hidden in its
+    /// conversation until the server writes a newer one (the owner, 2026-11-01, 06-hide).
+    @State private var hiddenRecaps: [String: String] = [:]
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -1105,11 +1124,23 @@ struct TranscriptView: View {
     }
 
     /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
-    /// this visit. Read off the session the list and the header read, under the account's Session
-    /// recaps switch, which governs the list row's recap too.
+    /// this visit or this device hid it. Read off the session the list and the header read, under the
+    /// account's Session recaps switch, which governs the list row's recap too.
     private var recapCard: RecapCard? {
         guard recapAsideFor != console.sessionID, let session = app.session(id: console.sessionID) else { return nil }
-        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true)
+        let hidden = hiddenRecaps[console.sessionID]
+            ?? UserDefaults.standard.string(forKey: RecapCard.hiddenDefaultsKey(session: console.sessionID))
+        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true, hidden: hidden)
+    }
+
+    /// The card's ×: this recap, in this conversation, on this device. The list row keeps it.
+    private func hideRecap() {
+        guard let session = app.session(id: console.sessionID),
+              let text = session.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+        else { return }
+        let key = RecapCard.hideKey(recapAt: session.recapAt, text: text)
+        UserDefaults.standard.set(key, forKey: RecapCard.hiddenDefaultsKey(session: console.sessionID))
+        hiddenRecaps[console.sessionID] = key
     }
 
     /// Whether this conversation is at rest for its card right now (`RecapCard.rests`); a session
@@ -1168,7 +1199,7 @@ struct TranscriptView: View {
             ApprovalCard(console: console, approval: approval)
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
-            RecapCardView(card: card, sessionID: console.sessionID)
+            RecapCardView(card: card, sessionID: console.sessionID, onHide: hideRecap)
         case .working:
             WorkingIndicatorView()
         case .queued(let bubble):
@@ -1392,7 +1423,9 @@ struct TranscriptView: View {
 
     private var headerStatus: String {
         let watching = app.watches?.summary(for: console.sessionID)
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching) {
+        // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
+        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
+                                                 machine: console.runnerName) {
             return subtitle
         }
         return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized

@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * A turn Orbit wrote to tell a session about a committed fact (`coordinatorDelivery`, apiserver `readCoordinatorDeliveryCards`): a fact a
@@ -13,9 +14,12 @@ import kotlinx.serialization.json.JsonPrimitive
  * bubble (web `CoordinatorDeliveryLine.tsx`, OrbitKit `CoordinatorDelivery`).
  *
  * The fields are `CoordinatorDeliveryCard`'s in `@orbit/shared`, in its order: what the line says ([kind]), the task the fact names, the
- * evidence revision, what the fact counts, and when this conversation was handed it.
+ * evidence revision, what the fact counts, when this conversation was handed it, and whether this conversation is the project's
+ * coordinator ([toCoordinator]) — false for the owner's answer to a criteria proposal a task's run filed, whose line says "Sent to this
+ * session" instead.
  */
-data class CoordinatorDelivery(val kind: String, val task: Task?, val revision: Long?, val count: Long?, val deliveredAt: String) {
+data class CoordinatorDelivery(val kind: String, val task: Task?, val revision: Long?, val count: Long?, val deliveredAt: String,
+    val toCoordinator: Boolean = true) {
     /** The task the fact is about, by the title the coordinator was told. */
     data class Task(val id: String, val title: String)
 }
@@ -29,9 +33,14 @@ object CoordinatorDeliveryLine {
     const val stickyLabel = "From Orbit"
     /** The link at the foot of the opened line, to the task the fact names (web `COORDINATOR_DELIVERY_ITS_TASK`). */
     const val itsTask = "Its task ↗"
+    /** Where the line says it was sent when this conversation is not the project's coordinator — the owner's answer to a criteria
+     * proposal a task's run filed (web `COORDINATOR_DELIVERY_SENT_TO_SESSION`) — and the heading its words open under
+     * (`COORDINATOR_DELIVERY_SESSION_TOLD`). */
+    const val sentToThisSession = "Sent to this session"
+    const val toldThisSession = "What this session was told"
 
     /** The fields of `CoordinatorDeliveryCard`, in its order: the card above is built in this order. */
-    val fields = listOf("kind", "task", "revision", "count", "deliveredAt")
+    val fields = listOf("kind", "task", "revision", "count", "deliveredAt", "toCoordinator")
 
     /** `COORDINATOR_DELIVERY_KINDS`, in its order: one per sentence a line can say. */
     val kinds = listOf(
@@ -75,7 +84,9 @@ object CoordinatorDeliveryLine {
     /**
      * The card a payload is, read as the web's `parseCoordinatorDelivery` reads it: a kind every client knows, a moment that reads as
      * one, and each field the kind's sentence names — a task with an id and a title, a revision or a count that is a positive whole
-     * number. A field the sentence does not name is left out; a payload missing one it does name is no card, never half a line.
+     * number. A field the sentence does not name is left out; a payload missing one it does name is no card, never half a line. Only the
+     * server's own `false` says this conversation is not the coordinator: a card stored before [CoordinatorDelivery.toCoordinator] existed
+     * was drawn as the coordinator's, and reads as it was.
      */
     fun parse(card: JsonObject): CoordinatorDelivery? {
         fun string(value: Any?) = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
@@ -98,6 +109,7 @@ object CoordinatorDeliveryLine {
             revision.takeIf { "{revision}" in sentence },
             count.takeIf { "{count}" in sentence },
             deliveredAt,
+            (card["toCoordinator"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false,
         )
     }
 
@@ -126,7 +138,13 @@ object CoordinatorDeliveryLine {
     /** The sentence for a payload, or nothing for one that is no card. */
     fun sentence(card: JsonObject): String = parse(card)?.let { sentence(it) }.orEmpty()
 
-    /** "Sent to the coordinator · 08:29": the words and the clock every line handed to the coordinator says (`OwnerAnswerLine.line`). */
-    fun sent(card: CoordinatorDelivery, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
-        CoordinatorQueue.sentLine(OwnerReview.receiptTime(card.deliveredAt, now, zone))
+    /** "Sent to the coordinator · 08:29": the words and the clock every line handed to the coordinator says (`OwnerAnswerLine.line`) —
+     * or "Sent to this session · 08:29" where this conversation is not the project's coordinator, on the same clock. */
+    fun sent(card: CoordinatorDelivery, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String {
+        val time = OwnerReview.receiptTime(card.deliveredAt, now, zone)
+        return if (card.toCoordinator) CoordinatorQueue.sentLine(time) else listOfNotNull(sentToThisSession, time).joinToString(" · ")
+    }
+
+    /** The heading over the words, once the line is opened: what the coordinator was told, or what this session was told. */
+    fun told(card: CoordinatorDelivery): String = if (card.toCoordinator) OwnerAnswerLine.told else toldThisSession
 }

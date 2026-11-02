@@ -166,4 +166,19 @@ describe('a path in the session’s own directories', () => {
     expect(container.querySelector('img.md-image')).toBeNull();
     expect(container.querySelector('.md-image-unavailable')?.textContent).toContain('card.png');
   });
+
+  // A Mac runner's temp files, as the agent names them: `/tmp` resolved to `/private/tmp`, and
+  // `$TMPDIR` under `/var/folders`. These were ordinary links, and a click opened the console on a
+  // page that does not exist.
+  it.each([
+    '/private/tmp/ppt-nev-eight-20261029/renderer/contact-sheet.png',
+    '/var/folders/x1/abc123/T/tmp.q8/contact-sheet.png',
+  ])('leaves a Mac temp file inert rather than a link into the app: %s', async (path) => {
+    await renderReply(`[本地成稿截图总览](${path})\n`);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(container.querySelector('a')).toBeNull();
+    const chip = container.querySelector('.md-image-unavailable');
+    expect(chip?.textContent).toContain('contact-sheet.png');
+    expect(chip?.getAttribute('title')).toBe(path);
+  });
 });

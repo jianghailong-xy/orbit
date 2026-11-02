@@ -95,7 +95,21 @@ class AntigravityAccountsTest {
         assertEquals(100.0, row.utilization, 0.0001)
         assertTrue(row.nearLimit)
         assertTrue(row.remaining)
+        // Spent: its gauge is full (and red), not an empty track at 0% remaining.
+        assertTrue(row.spent)
+        assertEquals(1f, row.gaugeFraction, 0f)
         assertTrue(RunnerPage.engineWindows(fixture("expired"), "antigravity").isEmpty())
+    }
+
+    @Test fun onlyASpentBucketFillsItsGauge() {
+        val rows = usageRows(json("""{"provider":"antigravity","buckets":[
+            {"id":"gemini-weekly","window":"weekly","remainingFraction":1},
+            {"id":"gemini-5h","window":"5h","remainingFraction":0.04},
+            {"id":"gemini-argon-wtu-weekly","window":"weekly","remainingFraction":0}]}"""))
+        assertEquals(listOf(false, false, true), rows.map { it.spent })
+        assertEquals(listOf(1f, 0.04f, 1f), rows.map { it.gaugeFraction })
+        val claude = usageRows(json("""{"provider":"claude","fiveHour":{"utilization":99.6},"sevenDay":{"utilization":100}}"""))
+        assertEquals(listOf(false, true), claude.map { it.spent })
     }
 
     @Test fun googleTermsAreIosWords() {

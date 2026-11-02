@@ -52,10 +52,13 @@ func setupService(orbitHome string, proxyVars []envVar) error {
 // `orbit host setup` done, that is the machine broker: enabling this user's instance is
 // a socket call that needs no root at all. Anything else — no broker, or a broker that
 // will not answer — installs a unit of our own through sudo, so a host that was never
-// set up (or was set up badly) still ends a registration with a live runner.
+// set up (or was set up badly) still ends a registration with a live runner. Except one
+// answer: a broker that refuses because this account has no copy of its own for its
+// instance to run (hostdOwnCopyRefusal) ends the registration's service step with its
+// reason and command, since the sudo path's unit would run another binary instead.
 func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() error) error {
-	if registerViaHostd(socketPath, proxyVars) {
-		return nil
+	if done, err := registerViaHostd(socketPath, proxyVars); done || err != nil {
+		return err
 	}
 	return installLegacy()
 }
@@ -298,16 +301,29 @@ func unitRunsAsUser(svc, username string) bool {
 // unitRunsAsUserIn is unitRunsAsUser with its two touchpoints — where unit files live and
 // how a command is run — passed in, so hostd can apply the identical rule against an
 // injected systemctl and a temporary directory. One implementation, not two: both callers
-// decide the same thing about the same units, and a second copy would drift.
-func unitRunsAsUserIn(unitDir string, stdout func(string, ...string) (string, error), svc, username string) bool {
-	if username == "" {
+// decide the same thing about the same units, and a second copy would drift. users are
+// the User= values that make the unit this account's: its name and, from hostd on a host
+// whose instances are named after accounts, its uid in digits, which systemd reads as the
+// same account. An empty one never matches.
+func unitRunsAsUserIn(unitDir string, stdout func(string, ...string) (string, error), svc string, users ...string) bool {
+	named := false
+	for _, u := range users {
+		named = named || u != ""
+	}
+	if !named {
 		return false
 	}
 	if _, err := os.Stat(filepath.Join(unitDir, svc+".service")); err != nil {
 		return false
 	}
 	out, _ := stdout("systemctl", "show", svc+".service", "-p", "User", "--value")
-	return strings.TrimSpace(out) == username
+	got := strings.TrimSpace(out)
+	for _, u := range users {
+		if u != "" && got == u {
+			return true
+		}
+	}
+	return false
 }
 
 // execStdout runs a command and returns its standard output alone. Values read back out

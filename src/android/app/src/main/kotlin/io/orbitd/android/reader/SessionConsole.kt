@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.*
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.cards.failureReason
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.CursorRuntime
@@ -10,6 +11,7 @@ import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.ProviderOption
 import io.orbitd.android.composer.threeTries
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.EngineAccounts
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.json.*
+import java.time.Instant
 
 /**
  * What a card in the conversation acts through (iOS's `ConsoleModel`, as the Antigravity repair card reads it): the session's
@@ -154,6 +157,47 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
         val origin = handle.account.server.trimEnd('/')
         val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
         return mine.firstOrNull { it.string("slug") == provider }?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/infrastructure#keys"
+    }
+
+    // MARK: the Claude region (docs/claude-region-check-contract.md, iOS ConsoleModel `runnerRegion` and `checkRegionAgain`)
+
+    /** Where this session's machine's Claude connection last came out (`region` on GET /runners), with the effective verdict: the place
+     * the region card names. Null for a runner that doesn't check, and before the runner is read. */
+    val region get() = runner?.get("region") as? JsonObject
+    /** Check again is on its way ([checkRegionAgain]). */
+    var regionChecking by mutableStateOf(false); private set
+
+    /** The credentials this session's engine can move to here, as its Provider menu offers them: every one but its own that can run on
+     * this machine — what the region card's Use another provider lists (iOS `SessionRunStartCardView.otherProviders`). */
+    val otherProviders: List<ProviderOption> get() {
+        val runner = runner ?: return emptyList()
+        val catalog = ComposerCatalog(runner, providers)
+        return catalog.credentials(engine, detail?.let(catalog::antigravityKeyAvailable) ?: false)
+            .filter { it.id != provider && it.unavailable == null }
+    }
+
+    /** Check again, from the region card (§7): the runner checks at once, and its answer lands in `region` like any other check's — so the
+     * runner is read again every two seconds until its `checkedAt` reaches the request, for up to 30 seconds. A held session the check
+     * lets go is claimed by the server, which this page hears as any other claim. Null once asked; else why not (the runner offline, or
+     * too old to check), in the server's words. */
+    suspend fun checkRegionAgain(): String? {
+        val id = runnerId ?: return null
+        if (regionChecking) return null
+        regionChecking = true
+        try {
+            val asked = try { management.post("runners/$id/region-check") as? JsonObject }
+                catch (cancel: CancellationException) { throw cancel } catch (e: Exception) { return failureReason(e) }
+            val askedAt = asked?.string("requestedAt") ?: Instant.now().toString()
+            var polls = ClaudeRegion.CHECK_WAIT_MS / ClaudeRegion.CHECK_POLL_MS
+            while (polls-- > 0) {
+                delay(ClaudeRegion.CHECK_POLL_MS)
+                read { it() }
+                if (ClaudeRegion.checkAnswered(region?.string("checkedAt"), askedAt)) break
+            }
+            // The composer's menu reads the same runner row: its Anthropic rows follow the answer.
+            composer.refreshCatalog()
+            return null
+        } finally { regionChecking = false }
     }
 
     // MARK: Cursor CLI (the board's iOS 5 ⑧)

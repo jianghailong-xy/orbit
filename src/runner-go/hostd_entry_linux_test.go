@@ -39,7 +39,7 @@ func TestHostdEntryServesTheRealVerbsOnASocketItOpensItself(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("status failed: %s", resp.Error)
 	}
-	if got, want := resp.Data["unit"], unitForUid(uint32(os.Getuid())); got != want {
+	if got, want := resp.Data["unit"], unitForAccount("tester"); got != want {
 		t.Errorf("status unit = %v, want %v (this process's own instance)", got, want)
 	}
 	if got := resp.Data["activeState"]; got != "active" {
@@ -131,13 +131,14 @@ func TestHostdEntryForegroundKeepsServingAndReportsItsSocketOnStderr(t *testing.
 
 // hostdEntrySystem is the verbs' surroundings, faked: a systemctl that answers instead
 // of running, and a passwd database that knows whoever is running the tests — the entry
-// tests call over a real socket, so the peer uid is this process's own, not testUID.
+// tests call over a real socket, so the peer uid is this process's own, not testUID — as
+// the account "tester", whose instance is orbit-runner@tester.
 func hostdEntrySystem(t *testing.T) hostdSystem {
 	t.Helper()
 	f, sys := newFakeSystem(t)
 	self := uint32(os.Getuid())
 	sys.lookupUID = fakeLookupUID(map[string]string{strconv.FormatUint(uint64(self), 10): "tester"})
-	f.stdout["systemctl show "+unitForUid(self)+" -p ActiveState -p SubState"] = "ActiveState=active\nSubState=running\n"
+	f.stdout["systemctl show "+unitForAccount("tester")+" -p ActiveState -p SubState -p MainPID"] = "ActiveState=active\nSubState=running\nMainPID=0\n"
 	return sys
 }
 

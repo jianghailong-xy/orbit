@@ -37,6 +37,15 @@
  *       spent one is in (8). A run the runner ended because its account refused the sign-in moves to a
  *       signed-in account, and the message it ended under is re-sent there at once. A pinned session
  *       stays, and nothing is armed for it.
+ *  (13) An account's usage limit moves its sessions only as far as the others have room for their share
+ *       of the runner's sessions; the rest wait for its reset, and a message sent to one still moves it.
+ *  (14) A Claude session waits out a reset under 45 minutes away while its conversation's cache will still
+ *       be there, rather than move; a later reset, a cold cache, or another engine moves it as before.
+ *  (15) A new session on Automatic starts on the account it would have until that account has its share of
+ *       the sessions at work on the runner, counted as they are run, and the runner's list says so.
+ *  (16) The sweep does not re-send a session on a spent account on the strength of an account past its share.
+ *  (17) A session held for a far reset goes when another account has room again, one at a time; one whose
+ *       reset is near, or that is pinned, is left where it is.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -70,6 +79,7 @@ import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
+import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -743,5 +753,241 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
       { account: (await row(pinned)).claude_account, notice: (await row(pinned)).pool_switch_notice, retry: (await row(pinned)).retry_ms },
       { account: WORK, notice: null, retry: null },
     );
+  });
+
+  /** Default's 5 hours spent and back at `back`, Work's at `workUsed`. */
+  const fiveHours = (back: string, workUsed = 10) => ({
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      fiveHour: { utilization: 100, windowDurationMins: 300, resetsAt: back },
+      accounts: {
+        [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: workUsed, windowDurationMins: 300, resetsAt: LATER } },
+      },
+    },
+  }) as unknown as Prisma.InputJsonValue;
+  const limitText = "You've hit your 5-hour limit";
+  /** A Claude turn out on delivery, which answered `replied` ago, if ever, and has now met the limit. */
+  async function hitsLimit(m: { runnerId: string }, id: string, replied: number | null = 60_000) {
+    const turn = await db.conversationTurn.create({
+      data: {
+        sessionId: id,
+        seq: 1,
+        clientTurnId: `turn-${randomUUID()}`,
+        kind: 'message',
+        content: 'and the second one',
+        status: 'IN_FLIGHT',
+        deliveredAt: new Date(),
+        leaseDeadlineAt: new Date(Date.now() + 300_000),
+        leaseGeneration: randomUUID(),
+      },
+      select: { id: true },
+    });
+    const event = (seq: number, text: string, at: Date) => ({
+      seq, type: RunEventType.ASSISTANT, ts: at.toISOString(), turnId: turn.id, payload: { text },
+    });
+    if (replied !== null) {
+      await api.events({ id: m.runnerId }, id, { events: [event(1, 'Looking at the test.', new Date(Date.now() - replied))] });
+    }
+    await api.events({ id: m.runnerId }, id, { events: [event(2, limitText, new Date())] });
+    return turn.id;
+  }
+  const notice = 'Switched to Work — the usage limit on Default is reached';
+  /** The stopped turn ends, somebody writes to the session, and the claim starts it on Work. */
+  async function messageMovesIt(m: { ownerId: string; runnerId: string }, id: string, turnId: string) {
+    await api.turnComplete({ id: m.runnerId }, id, {
+      turnId, status: SharedRunStatus.FAILED, subtype: 'success', result: limitText, numTurns: 1, costUsd: 0,
+    });
+    await sessions.resume(m.ownerId, id, { content: 'go on', clientTurnId: randomUUID() });
+    const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    assert.equal(claimed?.sessionId, id);
+    assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, CLAUDE_WORK_HOME);
+    assert.deepEqual(
+      { account: (await row(id)).claude_account, notice: (await row(id)).pool_switch_notice },
+      { account: WORK, notice },
+    );
+  }
+
+  await t.test('(13) an account’s limit moves its sessions up to the others’ share, and the rest wait', async () => {
+    const m = await machine('herd');
+    const back = new Date(Date.now() + 2 * 3_600_000).toISOString();
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: fiveHours(back) } });
+    const herd: string[] = [];
+    for (let i = 0; i < 8; i += 1) herd.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { engineTurnActive: true }));
+    // A reset two hours out is past the cache's life, so this is the share at work and not the wait.
+    const turns: string[] = [];
+    for (const id of herd) turns.push(await hitsLimit(m, id));
+    const after = await Promise.all(herd.map(row));
+    // Eight sessions over two accounts is four each: Work takes four and no more.
+    assert.deepEqual(after.map((r) => r.claude_account), [WORK, WORK, WORK, WORK, 'default', 'default', 'default', 'default']);
+    for (const r of after.slice(0, 4)) {
+      assert.equal(r.pool_switch_notice, notice);
+      assert.ok(r.retry_ms !== null && r.retry_ms <= Date.now() + 1_000, `not re-sent now: ${r.retry_ms}`);
+    }
+    for (const [i, r] of after.slice(4).entries()) {
+      assert.equal(r.pool_switch_notice, null);
+      assert.ok(r.retry_ms !== null && r.retry_ms >= Date.parse(back) && r.retry_ms < Date.parse(back) + 60_000,
+        `session ${i} armed for ${r.retry_ms}, not for Default's reset`);
+      assert.deepEqual(await reloads(herd[4 + i]), []);
+    }
+    // A message somebody sends to one of them is not held back: an account with room beats the limit it
+    // would meet here. (The rest let go of the runner's slots first, or nothing is claimed at all.)
+    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT } });
+    await messageMovesIt(m, herd[7], turns[7]);
+  });
+
+  await t.test('(14) a Claude session waits out a near reset while its cache lives, and moves otherwise', async () => {
+    const minutes = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
+    const stopped = async (label: string, back: string, replied: number | null) => {
+      const m = await machine(label);
+      await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: fiveHours(back) } });
+      const id = await sessionOn(m, 'claude', RunStatus.RUNNING, { engineTurnActive: true });
+      const turn = await hitsLimit(m, id, replied);
+      return { m, id, turn, after: await row(id) };
+    };
+
+    // Back in half an hour, a minute after a reply: it stays, armed for the reset, with nothing queued.
+    const near = minutes(30);
+    const stays = await stopped('warm', near, 60_000);
+    assert.equal(stays.after.claude_account, 'default');
+    assert.equal(stays.after.pool_switch_notice, null);
+    assert.ok(stays.after.retry_ms !== null && stays.after.retry_ms >= Date.parse(near) && stays.after.retry_ms < Date.parse(near) + 60_000,
+      `armed for ${stays.after.retry_ms}`);
+    assert.deepEqual(await reloads(stays.id), []);
+
+    // Somebody writing to it meanwhile is not made to wait.
+    await messageMovesIt(stays.m, stays.id, stays.turn);
+
+    // A reset further off than the wait: 50 minutes, with the cache alive all the way.
+    assert.equal((await stopped('far', minutes(50), 60_000)).after.claude_account, WORK);
+    // The cache dies first: 40 minutes since the reply, and half an hour to go.
+    assert.equal((await stopped('cooling', near, 40 * 60_000)).after.claude_account, WORK);
+    // No reply to go by: nothing says there is a cache at all.
+    assert.equal((await stopped('cold', near, null)).after.claude_account, WORK);
+    // Only Claude's cache was measured: a Codex session moves as it always has.
+    const codexMachine = await machine('codex-near');
+    await db.runner.update({
+      where: { id: codexMachine.runnerId },
+      data: {
+        planUsage: {
+          codex: {
+            provider: AgentProvider.CODEX,
+            primary: { utilization: 100, windowDurationMins: 300, resetsAt: near },
+            accounts: { [WORK]: { provider: AgentProvider.CODEX, primary: { utilization: 3, windowDurationMins: 300, resetsAt: LATER } } },
+          },
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+    const onCodex = await sessionOn(codexMachine, 'codex', RunStatus.RUNNING, { engineTurnActive: true });
+    const turn = await db.conversationTurn.create({
+      data: {
+        sessionId: onCodex,
+        seq: 1,
+        clientTurnId: `turn-${randomUUID()}`,
+        kind: 'message',
+        content: 'and the second one',
+        status: 'IN_FLIGHT',
+        deliveredAt: new Date(),
+        leaseDeadlineAt: new Date(Date.now() + 300_000),
+        leaseGeneration: randomUUID(),
+      },
+      select: { id: true },
+    });
+    const codexLimit = "You've hit your usage limit. Try again at Oct 11th, 2026 9:11 PM.";
+    await api.turnComplete({ id: codexMachine.runnerId }, onCodex, {
+      turnId: turn.id, status: SharedRunStatus.FAILED, subtype: 'success', error: codexLimit, numTurns: 1, costUsd: 0,
+    });
+    assert.equal((await row(onCodex)).codex_account, WORK);
+  });
+
+  await t.test('(15) a new session goes past an account that has its share, counted as sessions are run', async () => {
+    const usage = {
+      claude: {
+        provider: AgentProvider.CLAUDE,
+        fiveHour: { utilization: 10, windowDurationMins: 300, resetsAt: LATER },
+        sevenDay: { utilization: 10, windowDurationMins: 10080, resetsAt: '2098-01-01T08:00:00Z' },
+        accounts: {
+          [WORK]: {
+            provider: AgentProvider.CLAUDE,
+            fiveHour: { utilization: 10, windowDurationMins: 300, resetsAt: LATER },
+            sevenDay: { utilization: 10, windowDurationMins: 10080, resetsAt: LATER },
+          },
+        },
+      },
+    } as unknown as Prisma.InputJsonValue;
+    const m = await machine('placed');
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: usage } });
+    const start = async () => (await row((await sessions.create(m.ownerId, { prompt: 'hi', workspaceId: m.workspaceId, provider: 'claude' })).id)).claude_account;
+
+    // None of these spends Default now: ended, long idle, deleted, on a key of its own.
+    const longAgo = new Date(Date.now() - 3_600_000);
+    await sessionOn(m, 'claude', RunStatus.SUCCEEDED, { lastTurnAt: new Date() });
+    await sessionOn(m, 'claude', RunStatus.FAILED, { lastTurnAt: new Date() });
+    await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { lastTurnAt: longAgo });
+    await sessionOn(m, 'claude', RunStatus.RUNNING, { deletedAt: new Date() });
+    await sessionOn(m, 'claude', RunStatus.RUNNING, { provider: 'some-key', providerBuiltin: false });
+    await sessionOn(m, 'codex', RunStatus.RUNNING);
+    // Default's week ends first, so it takes the session, three of them being no share to speak of.
+    assert.equal(await start(), 'default');
+
+    // These do: running, about to, waiting out a retry, a turn a minute ago, pinned here by hand.
+    await sessionOn(m, 'claude', RunStatus.PENDING);
+    await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { lastTurnAt: new Date(Date.now() - 60_000) });
+    await sessionOn(m, 'claude', RunStatus.FAILED, { retryAt: new Date(Date.now() + 60_000) });
+    await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccountPinned: true });
+    assert.equal(await start(), WORK, 'six at work on Default and this one make four each');
+
+    // The list says what the pick went by, for a client to ask the same question of the same numbers.
+    const listed = await new RunnersService(prisma, quiet).listRunners(m.ownerId);
+    const accounts = listed[0].engines?.find((entry) => entry.engine === 'claude')?.accounts;
+    assert.deepEqual(accounts?.map((account) => [account.id, account.activeSessions]), [['default', 5], [WORK, 1]]);
+    assert.deepEqual(listed[0].engines?.find((entry) => entry.engine === 'codex')?.accounts?.map((account) => account.activeSessions), [1, 0]);
+  });
+
+  await t.test('(16) the sweep does not re-send a session on the strength of an account past its share', async () => {
+    const m = await machine('sweep-share');
+    const back = new Date(Date.now() + 2 * 3_600_000).toISOString();
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: fiveHours(back) } });
+    const at = new Date(Date.now() + 1_000);
+    const id = await sessionOn(m, 'claude', RunStatus.FAILED, { retryAt: at, lastUserText: 'go on', error: limitText });
+    await db.conversationTurn.create({
+      data: { sessionId: id, seq: 1, clientTurnId: `turn-${randomUUID()}`, kind: 'message', content: 'go on', status: 'ANSWERED' },
+    });
+    const full: string[] = [];
+    for (let i = 0; i < 4; i += 1) full.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK }));
+    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
+    await new AutoRetryService(prisma, sessions, quiet).sweep(new Date(at.getTime() + 1_000));
+    const held = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true } });
+    assert.equal(held.status, RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
+    assert.ok(held.retryAt && held.retryAt.getTime() >= Date.parse(back), `re-armed for ${held.retryAt?.toISOString()}`);
+  });
+
+  await t.test('(17) a held session goes when another account has room again, one at a time', async () => {
+    const m = await machine('held');
+    const back = new Date(Date.now() + 3 * 3_600_000);
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: fiveHours(back.toISOString()) } });
+    const armed = (at: Date, extra: Partial<Prisma.SessionUncheckedCreateInput> = {}) =>
+      sessionOn(m, 'claude', RunStatus.FAILED, { retryAt: at, lastUserText: 'go on', error: limitText, ...extra });
+    const first = await armed(back);
+    const second = await armed(new Date(back.getTime() - 60_000));
+    const near = await armed(new Date(Date.now() + 30 * 60_000));
+    const pinned = await armed(back, { claudeAccountPinned: true });
+    const full: string[] = [];
+    for (let i = 0; i < 4; i += 1) full.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK }));
+    const retries = new AutoRetryService(prisma, sessions, quiet);
+    const armedAt = async (id: string) => (await row(id)).retry_ms;
+    const before = await Promise.all([first, second, near, pinned].map(armedAt));
+
+    // Four running on Work among eight is its share: nobody goes.
+    await retries.releaseHeldRetries();
+    assert.deepEqual(await Promise.all([first, second, near, pinned].map(armedAt)), before);
+
+    // They finish, and Work has room. The furthest reset goes first, and one a pass.
+    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED } });
+    const now = new Date();
+    await retries.releaseHeldRetries(now);
+    const after = await Promise.all([first, second, near, pinned].map(armedAt));
+    assert.equal(after[0], now.getTime(), 'the furthest reset is made due');
+    assert.deepEqual(after.slice(1), before.slice(1), 'one a pass; near a reset or pinned, nothing moves it');
   });
 });

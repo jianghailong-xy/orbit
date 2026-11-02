@@ -35,6 +35,23 @@ final class RecapCardTests: XCTestCase {
         XCTAssertNil(RecapCard.make(for: session(runningSubagentCount: 1), recaps: true), "an agent it started")
     }
 
+    /// The card's × (the owner, 2026-11-01, docs/mocks/session-recap-display/06-hide): the recap this
+    /// device hid stays hidden in that conversation until the server writes a newer one; a recap that
+    /// came with no time is known by its words.
+    func testAHiddenRecapStaysHiddenUntilANewerOneIsWritten() {
+        let written = session(recapAt: "2026-10-22T09:00:00.000Z")
+        let hidden = RecapCard.hideKey(recapAt: written.recapAt, text: recap)
+        XCTAssertNil(RecapCard.make(for: written, recaps: true, hidden: hidden))
+        XCTAssertNotNil(RecapCard.make(for: session(recapAt: "2026-10-22T09:30:00.000Z"), recaps: true, hidden: hidden),
+                        "a newer recap")
+        XCTAssertNotNil(RecapCard.make(for: written, recaps: true, hidden: nil), "nothing hidden")
+        let untimed = RecapCard.hideKey(recapAt: nil, text: recap)
+        XCTAssertNil(RecapCard.make(for: session(), recaps: true, hidden: untimed))
+        XCTAssertNotNil(RecapCard.make(for: session(recapText: "Another recap."), recaps: true, hidden: untimed),
+                        "an untimed recap with other words")
+        XCTAssertEqual(RecapCard.hiddenDefaultsKey(session: "s"), "orbit.recap.hidden.s")
+    }
+
     func testNoCardWithoutARecapOrWithRecapsOff() {
         XCTAssertNil(RecapCard.make(for: session(recapText: nil), recaps: true))
         XCTAssertNil(RecapCard.make(for: session(recapText: "   "), recaps: true))
@@ -89,6 +106,7 @@ final class RecapCardTests: XCTestCase {
         let web = try webSource("src/web/src/components/SessionRecapCard.tsx")
         XCTAssertTrue(web.contains("word: '\(RecapCard.word)'"))
         XCTAssertTrue(web.contains("refresh: '\(RecapCard.refresh)'"))
+        XCTAssertTrue(web.contains("hide: '\(RecapCard.hide)'"))
         XCTAssertTrue(web.contains("upToDate: '\(RecapCard.upToDate)'"))
         XCTAssertTrue(web.contains("tooLittle: \"\(RecapCard.tooLittle)\""))
         XCTAssertTrue(web.contains("unavailable: \"\(RecapCard.unavailable)\""))

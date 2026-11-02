@@ -1,0 +1,4 @@
+mac-diagram-dark: no window after launch; File > New Window
+mac-diagram-dark-figure: never in the band 101.0–673.0; last frame (637.0, 203.0, 337.0, 498.0)
+mac-diagram-dark-drawn: never in the band 101.0–673.0; last frame (637.0, 203.0, 337.0, 498.0)
+mac-diagram-dark: drawn figure: 43 label="Diagram" value="" frame=(637.0, 203.0, 337.0, 498.0) hittable=true

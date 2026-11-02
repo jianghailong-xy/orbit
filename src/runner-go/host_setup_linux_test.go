@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -29,7 +30,8 @@ func TestHostSetupChildRunsMain(t *testing.T) {
 // proves what a shell actually sees — the whole CLI, an euid that really is not root's,
 // and the exit status a provisioning script branches on.
 func TestHostSetupWithoutRootExitsOne(t *testing.T) {
-	cmd := exec.Command(reachableTestBinary(t), "-test.run=^TestHostSetupChildRunsMain$")
+	binary := reachableTestBinary(t)
+	cmd := exec.Command(binary, "-test.run=^TestHostSetupChildRunsMain$")
 	cmd.Env = append(os.Environ(), hostSetupChildEnv+"=1")
 	if os.Geteuid() == 0 {
 		// Drop the child, since a root child would install the units for real. When the
@@ -47,8 +49,14 @@ func TestHostSetupWithoutRootExitsOne(t *testing.T) {
 	if exit.ExitCode() != 1 {
 		t.Errorf("exit code %d, want 1:\n%s", exit.ExitCode(), out)
 	}
-	if !strings.Contains(string(out), "sudo orbit host setup") {
-		t.Errorf("the CLI must print the command to re-run, got:\n%s", out)
+	// Invoked as a bare `orbit`, which sudo would look up only on its secure_path: the line to
+	// re-run names the binary by its own path instead, links resolved.
+	self, err := filepath.EvalSymlinks(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "re-run: sudo " + self + " host setup --server https://orbit.example.com\n"; !strings.Contains(string(out), want) {
+		t.Errorf("the CLI must print the command to re-run, %q, got:\n%s", want, out)
 	}
 	// Refusing early is the whole point: the machine must be exactly as it was.
 	if _, err := os.Stat(hostRunnerTemplatePath); !os.IsNotExist(err) {

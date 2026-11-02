@@ -10,6 +10,9 @@ public enum MachineSetupCopy {
     public static func setupOffline(machine: String) -> String {
         "\(machine) is offline. It can’t check folders or sign in until it’s back."
     }
+    public static func setupConnecting(machine: String) -> String {
+        "Waiting for \(machine) to connect. It can check folders and sign in as soon as it does."
+    }
 
     public static func setupUpdating(machine: String) -> String {
         "\(machine) updates itself first: this version can’t check folders yet. You can sign in meanwhile."
@@ -29,6 +32,12 @@ public enum MachineSetupCopy {
     public static let SETUP_NEW_FOLDER_META = "Starts empty. Ask for a clone or a new project in your first message."
     public static let SETUP_NEW_FOLDER_DONE = "new folder · created as the session starts"
     public static let SETUP_NEW_FOLDER_INVALID = "Use letters, digits, dots, dashes and underscores, up to 64 characters."
+    public static func setupNewFolderExists(machine: String) -> String {
+        "This folder already exists on \(machine). Sessions will use what’s in it."
+    }
+    public static func setupNewFolderIsFile(machine: String) -> String {
+        "There’s already a file with this name on \(machine). Pick another name."
+    }
     public static func setupOtherFolder(machine: String) -> String { "Another folder on \(machine)" }
     /// Board 03 draws it in the platform's title case; the words are the web's.
     public static let SETUP_USE_FOLDER = "Use This Folder"

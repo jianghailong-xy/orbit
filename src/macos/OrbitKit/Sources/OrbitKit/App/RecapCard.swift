@@ -17,12 +17,29 @@ public struct RecapCard: Equatable, Sendable {
 
     /// The card for `session`, or nil while the conversation is not at rest for one (`rests`), in
     /// Trash, with no recap, or with the account's Session recaps switch off — the switch that
-    /// governs the list row's recap governs this too. `now` dates the time, injectable for tests.
-    public static func make(for s: Session, recaps: Bool, now: Date = Date()) -> RecapCard? {
+    /// governs the list row's recap governs this too — or when this device hid that very recap with
+    /// the card's × (`hidden`, the `hideKey` it stored). `now` dates the time, injectable for tests.
+    public static func make(for s: Session, recaps: Bool, hidden: String? = nil, now: Date = Date()) -> RecapCard? {
         guard recaps, s.effectiveLifecycleState != .trash, rests(s),
-              let text = s.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+              let text = s.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty,
+              hidden != hideKey(recapAt: s.recapAt, text: text)
         else { return nil }
         return RecapCard(text: text, when: whenWritten(s.recapAt, now: now))
+    }
+
+    /// What a recap this device hid is remembered by (the owner, 2026-11-01,
+    /// docs/mocks/session-recap-display/06-hide): when it was written, so the next one the server
+    /// writes shows again — or its words, for a recap that came with no time. Web parity:
+    /// `recapHideKey`.
+    public static func hideKey(recapAt: String?, text: String) -> String {
+        if let recapAt, !recapAt.isEmpty { return recapAt }
+        return "text:\(text)"
+    }
+
+    /// Where this device keeps the recap it hid in a session: one UserDefaults entry per session, as
+    /// the web keeps one per session in its browser's storage.
+    public static func hiddenDefaultsKey(session id: String) -> String {
+        "orbit.recap.hidden.\(id)"
     }
 
     /// Whether a conversation is at rest for its card: nothing it is doing or asking outranks the
@@ -77,6 +94,8 @@ public struct RecapCard: Equatable, Sendable {
     public static let word = "Recap"
     /// The refresh button, as VoiceOver and the pointer's help read it.
     public static let refresh = "Refresh recap"
+    /// The × that hides this recap in this conversation on this device, read the same ways.
+    public static let hide = "Hide recap"
     public static let upToDate = "The recap is already up to date."
     public static let tooLittle = "There's too little to recap yet."
     public static let unavailable = "Recaps aren't available on this server."

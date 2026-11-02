@@ -1579,6 +1579,14 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/self-update")
     }
 
+    /// Check again (docs/claude-region-check-contract.md §7): the runner checks its Claude region at
+    /// once, and the answer lands in `Runner.region` like any other check's. Refused while the runner
+    /// is offline, and for one that does not check.
+    @discardableResult
+    public func requestRunnerRegionCheck(_ id: String) async throws -> ClaudeRegionCheckRequest {
+        try await postEmpty("runners/\(id)/region-check")
+    }
+
     // MARK: engine sign-in relay
 
     /// Sign an engine CLI back in on the runner's own machine, without a terminal on that box: the
