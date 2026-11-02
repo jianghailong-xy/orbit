@@ -1097,9 +1097,9 @@ button.toast--pill:focus-visible {
     opacity: 1;
   }
 }
-/* A Workspace row's ⋯ (Configure, Delete): it takes the ⌘N's place while the row is hovered or its
-   menu is open, and always shows in the touch drawer, which has no hover. A right-click on the row
-   opens the same menu. */
+/* A Workspace row's ⋯ (Configure, Delete): it takes the ⌘N's or the needs-you count's place while the
+   row is hovered or its menu is open, and always shows in the touch drawer, which has no hover. A
+   right-click on the row opens the same menu. */
 .tp-workspace-actions {
   display: none;
   flex: none;
@@ -1430,11 +1430,12 @@ button.toast--pill:focus-visible {
   .app-shell .app-nav:not(.collapsed) .tp-item.menu-open .tp-workspace-shortcut {
     display: none;
   }
-  /* A needs-you count holds the ⌘N's slot, and it keeps it while the ⋯ shows: the ⋯ comes in
-     before the count instead of pushing it along. The drawer, which shows every row's ⋯, leaves the
-     ⋯ at the row's end. */
-  .app-shell .app-nav:not(.collapsed) .tp-workspace-label ~ .tp-count.needs-you {
-    order: 1;
+  /* A needs-you count holds the ⌘N's slot, and the ⋯ takes it the same way: the two never share the
+     row, so neither pushes the other along. The drawer, which shows every row's ⋯, keeps the count
+     beside it. */
+  .app-shell .app-nav:not(.collapsed) .tp-item:hover .tp-workspace-label ~ .tp-count.needs-you,
+  .app-shell .app-nav:not(.collapsed) .tp-item.menu-open .tp-workspace-label ~ .tp-count.needs-you {
+    display: none;
   }
   .app-shell .app-nav:not(.collapsed) .tp-nav-shortcut {
     display: inline;

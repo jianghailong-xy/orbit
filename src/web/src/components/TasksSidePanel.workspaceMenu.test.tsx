@@ -264,11 +264,12 @@ describe('where the row’s ⋯ shows', () => {
     expect(styles).toMatch(/@media \(max-width: 960px\) \{\s*\.tp-workspace-actions \{\s*display: flex;/);
   });
 
-  it('comes in before a needs-you count, which keeps the row’s far end instead of moving over for it', () => {
-    const selector = '.app-shell .app-nav:not(.collapsed) .tp-workspace-label ~ .tp-count.needs-you';
-    expect(rule(selector)).toContain('order: 1;');
-    // On the desktop sidebar only: the drawer shows every row's ⋯, so there it stays at the row's end.
-    const at = styles.indexOf(`${selector} {`);
+  it('takes a needs-you count’s place the same way, so nothing on the row moves over for it', () => {
+    const swap =
+      /\.app-shell \.app-nav:not\(\.collapsed\) \.tp-item:hover \.tp-workspace-label ~ \.tp-count\.needs-you,\s*\.app-shell \.app-nav:not\(\.collapsed\) \.tp-item\.menu-open \.tp-workspace-label ~ \.tp-count\.needs-you \{\s*display: none;/;
+    expect(styles).toMatch(swap);
+    // On the desktop sidebar only: the drawer shows every row's ⋯, so there the count stays beside it.
+    const at = styles.search(swap);
     expect(styles.slice(styles.lastIndexOf('@media', at), at)).toMatch(/^@media \(min-width: 961px\) \{/);
   });
 });
