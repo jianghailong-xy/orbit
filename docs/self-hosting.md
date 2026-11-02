@@ -125,6 +125,10 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 - list the proxy's addresses (a CDN's published ranges) in `TRUSTED_PROXIES`, so Orbit sees each visitor's own address
   rather than the proxy's ([configuration](configuration.md));
 - allow long-lived SSE responses without proxy buffering or a short idle timeout;
+- pass on the `Content-Security-Policy` headers of Orbit's pages (`src/web/nginx.conf`), and add no script to the
+  pages: the browser refuses any script but Orbit's own files, so a CDN feature that writes one in (on Cloudflare:
+  Rocket Loader, Zaraz, automatic Web Analytics, JavaScript Detections) reports an error in the console, and can stop
+  the page, until it is turned off;
 - restrict database and control-plane ports so only the gateway can reach them;
 - set `PUBLIC_ORIGIN` to the exact external HTTPS origin and rebuild the web image.
 
