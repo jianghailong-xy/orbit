@@ -256,7 +256,9 @@ the link moves its work here on either signal, and goes back to HTTPS once it is
 - **Not read at all** with `LINK_MODE=link`, which pins `MODE_LINK`, or without `LINK_INTERNAL_API_URLS`, when runners are
   told `MODE_HTTP`. The gateway says which when it starts.
 - **Welcome** states the mode as the connection opens, and that stays the connection's: one opened in `MODE_LINK` has what
-  forwarding needs, one opened in `MODE_HTTP` never forwards.
+  forwarding needs, one opened in `MODE_HTTP` never forwards. A runner refused over HTTPS less than 2 s before it began to
+  open the connection does not take this Welcome's `MODE_HTTP` for the switch, since this gateway may not have read it
+  yet: it closes the connection and opens the next one 2 s after the refusal (docs/runner-link-design.md §15.1).
 - **HeartbeatAck** states the mode now. A runner told `MODE_LINK` on a connection opened in `MODE_HTTP` (its shadow's)
   opens a new connection for its work. Once the switch is off, on a connection opened in `MODE_LINK`, a heartbeat is
   answered at once with `MODE_HTTP` and nothing to apply, and a request is refused `LINK_MODE_HTTP`, both without reaching
