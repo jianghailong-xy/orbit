@@ -56,6 +56,7 @@ func TestStopBackgroundWorkEndsEveryKindExceptTheUsersOwnShell(t *testing.T) {
 	h.startEngine()
 
 	shellOutput := filepath.Join(h.dir, "bei9.output")
+	h.bg.noteToolUse("toolu_shell", "Bash", map[string]interface{}{"run_in_background": true})
 	h.bg.onToolResult("toolu_shell", "Command running in background with ID: bei9. Output is being"+
 		" written to: "+shellOutput+". You will be notified when it completes.")
 	h.bg.onToolResult("toolu_monitor", monitorTimeoutReceipt)

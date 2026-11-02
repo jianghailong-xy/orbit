@@ -43,6 +43,9 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 		// composer stops rejecting them (see slash_registry.go).
 		if msg["subtype"] == "init" {
 			slashReg.learn(stringsFromJSON(msg["slash_commands"]), stringsFromJSON(msg["skills"]))
+			if bg != nil {
+				bg.noteEngineSession(asString(msg["session_id"]))
+			}
 		}
 		// A background agent or workflow reporting how far it has got: relayed live on its own
 		// event rather than as a bare system ping (claude_task_progress.go).
@@ -88,6 +91,9 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 				// placeholder so the block isn't silently missing, like Claude Code Web.
 				emit(evThinking, withParent(map[string]interface{}{"text": "[redacted thinking]", "redacted": true}))
 			case "tool_use":
+				if bg != nil {
+					bg.noteToolUse(asString(block["id"]), asString(block["name"]), block["input"])
+				}
 				emit(evToolUse, withParent(map[string]interface{}{
 					"id": block["id"], "name": block["name"], "input": block["input"],
 				}))

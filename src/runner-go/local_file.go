@@ -21,6 +21,9 @@ import (
 // Orbit's own directory is refused first and whatever the roots say: it holds the machine's credentials, kept in a file
 // so that they stay out of the engine (cmdMcp), and a root can hold it. It is known by what it is, not only by its name
 // (inOrbitsDirectory).
+//
+// A background shell's live output is the one door with a narrower rule of its own: it reads one file the engine made for
+// one of its own calls, and nothing else (bgTailer.onToolResult).
 type localFileScope struct {
 	// Orbit's own directory (machineHome), and what stands there. Nil when nothing could be read of it.
 	home     string
@@ -95,6 +98,40 @@ func worktreeHolding(dir, home string) string {
 		}
 	}
 	return dir
+}
+
+// namedInSessionsOwnDirectory reports whether dir is named in the checkout or the uploads directory of the session that
+// uploads belongs to, whichever way Orbit's directory or the session's id is spelled. The session is known from that
+// directory because only the runner names it, from the claim (uploadsDir). This goes by name, as worktreeHolding does:
+// what stands at the name is sessionRoot's to judge.
+func namedInSessionsOwnDirectory(dir, uploads string) bool {
+	orbits := []string{absPath(machineHome()), realPath(machineHome())}
+	session := ""
+	for _, orbit := range orbits {
+		if filepath.Dir(absPath(uploads)) == filepath.Join(orbit, "uploads") {
+			session = decodeSessionID(filepath.Base(uploads))
+		}
+	}
+	if session == "" {
+		return false
+	}
+	for _, orbit := range orbits {
+		for _, parent := range []string{"worktrees", "uploads"} {
+			if name := nameBelow(filepath.Join(orbit, parent), dir); name != "" && decodeSessionID(name) == session {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// nameBelow is the name dir goes by directly under parent, and "" when dir is parent itself or not under it.
+func nameBelow(parent, dir string) string {
+	rel, err := filepath.Rel(parent, dir)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return strings.Split(rel, string(filepath.Separator))[0]
 }
 
 // refuses says why a path, with its links resolved, may not be read, and "" when it may.
