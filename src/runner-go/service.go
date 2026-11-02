@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // One runner per machine, so the background service has a single fixed name.
@@ -95,7 +96,7 @@ func uninstallService() {
 			}
 		}
 		plistPath := filepath.Join(home, "Library", "LaunchAgents", label+".plist")
-		runQuiet("launchctl", "unload", plistPath)
+		bootoutLaunchd(launchdDomain(), plistPath, label)
 		if err := os.Remove(plistPath); err != nil {
 			if os.IsNotExist(err) {
 				return
@@ -566,16 +567,97 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) (*runnerSe
 			return nil, fmt.Errorf("failed to write %s: %w", plistPath, err)
 		}
 	}
-	runQuiet("launchctl", "unload", plistPath) // best-effort; ignore "not loaded" noise
 	// What the runner logs from here on is this start's (runnerService.logFrom).
 	var logFrom int64
 	if fi, err := os.Stat(logPath); err == nil {
 		logFrom = fi.Size()
 	}
-	if err := run("launchctl", "load", "-w", plistPath); err != nil {
-		return nil, fmt.Errorf("launchctl load failed")
+	if err := startLaunchd(launchdDomain(), plistPath, label); err != nil {
+		return nil, err
 	}
 	return &runnerService{label: label, logPath: logPath, logFrom: logFrom, how: "starts at login"}, nil
+}
+
+// launchdDomain is the GUI session of the account the runner service runs as. A LaunchAgent that
+// belongs to a login must be bootstrapped there, not into whatever bootstrap namespace the
+// command happened to run in: over SSH, and under a root hand-off, that is not the same place.
+func launchdDomain() string {
+	uid := strconv.Itoa(os.Getuid())
+	if u, err := registeringUser(); err == nil && u.Uid != "" {
+		uid = u.Uid
+	}
+	return "gui/" + uid
+}
+
+// bootoutLaunchd removes the agent an earlier registration, or the macOS app, loaded. Both
+// spellings are attempted: bootout is the modern one, unload the one an older launchd has. It is
+// best-effort — launchd fails both when there is no such job — and a removal that is still
+// draining is handled by startLaunchd's retry.
+func bootoutLaunchd(domain, plistPath, label string) {
+	runQuiet("launchctl", "bootout", domain, plistPath)
+	runQuiet("launchctl", "bootout", domain+"/"+label)
+	runQuiet("launchctl", "unload", plistPath)
+}
+
+// launchdBootstrapTries is how long startLaunchd waits for a job bootout just removed to finish
+// exiting: launchd refuses to bootstrap its replacement until it has. The macOS client uses the
+// same one-second rhythm; kept as vars so a test does not spend thirty seconds proving it.
+var (
+	launchdBootstrapTries = 30
+	launchdBootstrapPause = time.Second
+)
+
+// startLaunchd loads the account's LaunchAgent into its own GUI domain.
+//
+// `launchctl load -w` is the pre-Yosemite spelling: it lands wherever launchctl was run from, so
+// over SSH (or from a root hand-off) it can miss the user's GUI session, and it fails outright
+// when a job from an earlier registration is still loaded. `bootout` then `bootstrap gui/<uid>`
+// is the pair the macOS client already uses, and the one that works from a login shell or an SSH
+// session. A bootout leaves the old runner draining for a moment, so bootstrap is retried while
+// launchd says the job is still there; anything else it says is reported as it came.
+func startLaunchd(domain, plistPath, label string) error {
+	bootoutLaunchd(domain, plistPath, label)
+	// A job disabled by an earlier install stays disabled across bootstrap.
+	runQuiet("launchctl", "enable", domain+"/"+label)
+
+	var last string
+	var lastErr error
+	for attempt := 0; attempt < launchdBootstrapTries; attempt++ {
+		var err error
+		last, err = runCapture("launchctl", "bootstrap", domain, plistPath)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !launchdBootstrapRetry(last) {
+			break
+		}
+		if attempt+1 < launchdBootstrapTries {
+			time.Sleep(launchdBootstrapPause)
+		}
+	}
+	msg := "launchctl bootstrap " + domain + " failed"
+	if last != "" {
+		msg += ": " + firstLine(last)
+	} else if lastErr != nil {
+		msg += " (" + firstLine(lastErr.Error()) + ")"
+	}
+	if strings.Contains(last, "125: Domain does not support specified action") {
+		msg += " — this account has no GUI login session on this Mac; log in at its desktop (or enable automatic login), then run `orbit register` again"
+	}
+	return errors.New(msg)
+}
+
+// launchdBootstrapRetry is whether launchd's refusal is the transient one a job that bootout has
+// not finished removing produces. A missing GUI domain, a malformed plist or a disabled service
+// says the same thing on every try; waiting is not going to change it.
+func launchdBootstrapRetry(out string) bool {
+	for _, transient := range []string{"Input/output error", "Operation already in progress", "already bootstrapped"} {
+		if strings.Contains(out, transient) {
+			return true
+		}
+	}
+	return false
 }
 
 // printServiceStarted is the one success line every service path ends with, once the
@@ -634,6 +716,13 @@ var run = func(name string, args ...string) error {
 // nothing to undo.
 var runQuiet = func(name string, args ...string) {
 	_ = exec.Command(name, args...).Run()
+}
+
+// runCapture is run for a command whose refusal has to be reported: launchctl's own sentence is
+// the only thing that says why a LaunchAgent would not load, so it cannot be discarded.
+var runCapture = func(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
 }
 
 // writePlist writes the LaunchAgent plist, creating its directory.

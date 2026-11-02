@@ -61,6 +61,16 @@ var loginURLRe = regexp.MustCompile(`https://claude\.com/[^\s\x1b\x07"']*oauth/a
 // stays valid and the user just needs to fetch a code from it again.
 const loginInvalidCodeMarker = "Invalid code"
 
+// An OSC 8 hyperlink in the PTY stream: the escape's target, then BEL (or ST). The visible label
+// follows it and the URL is scraped from either, but only the label should survive into a message.
+var ansiOSC = regexp.MustCompile("\x1b][^\x07\x1b]*(\x07|\x1b\\\\)")
+
+// What the CLI says when a sign-in failed. The relay already holds the CLI's output, but before
+// this only its exit status reached the card — "exit status 1" is not something a person can act
+// on. These are the words `claude auth login` uses for an OAuth refusal, a rejected code, a token
+// exchange that failed and credentials that could not be saved (2.1.316).
+var loginFailureWordRe = regexp.MustCompile(`(?i)(OAuth error|error|failed|failure|invalid|expire|expired|denied|unable|could not|couldn't|not available|timed out|timeout|needs attention)\b`)
+
 // latestLoginURL returns the LAST authorize URL in the output. Within one run the CLI prints the
 // same URL twice (the OSC 8 hyperlink target and its visible label), so first and last agree;
 // taking the last is simply the safe choice if a future CLI ever does re-issue one.
@@ -760,11 +770,72 @@ poll:
 		report(LoginResultRequest{Status: loginDone})
 		return
 	}
+	// The CLI has already said why; the exit status only says that it did. An exit without a word
+	// (a killed process, an older CLI) falls back to the status it always reported.
 	msg := "sign-in did not complete"
-	if exitErr != nil {
+	if detail := loginFailureDetail(out.String()); detail != "" {
+		msg += ": " + detail
+	} else if exitErr != nil {
 		msg += " (" + firstLine(exitErr.Error()) + ")"
 	}
 	report(LoginResultRequest{Status: loginFailed, Message: msg})
+}
+
+// loginFailureDetail is the CLI's own last word on a failed sign-in, "" when it printed none.
+//
+// The PTY stream holds the greeting, the sign-in link, the prompt and then whatever the CLI said
+// when it gave up. Only the text after the last prompt is considered — the link above it is not an
+// error — and only a line that reads like a failure is kept, so an exit that printed nothing does
+// not turn "Welcome to Claude Code" into one. A rejected paste arrives after the prompt on the same
+// line, behind the PTY's echo of the code, so a line beginning with a bare token is cut at the
+// first failure word.
+//
+// ANSI colours and OSC 8 hyperlink targets are the terminal's, not the user's; both are stripped
+// before the line is shown. The result is capped so a CLI that writes a screenful cannot turn one
+// card into a wall of text.
+func loginFailureDetail(out string) string {
+	if out == "" {
+		return ""
+	}
+	text := stripANSI(out)
+	text = ansiOSC.ReplaceAllString(text, "")
+	// The PTY redraws with carriage returns; treat each as the end of the line it overwrote.
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	const prompt = "Paste code here if prompted >"
+	i := strings.LastIndex(text, prompt)
+	if i < 0 {
+		return ""
+	}
+	lines := strings.Split(text[i+len(prompt):], "\n")
+	for j := len(lines) - 1; j >= 0; j-- {
+		line := strings.TrimSpace(lines[j])
+		if line == "" || strings.HasPrefix(line, "Press ") ||
+			loginURLRe.MatchString(line) || strings.Contains(line, "oauth/authorize") {
+			continue
+		}
+		// A full-screen redraw can leave whatever it painted on the same line before the error.
+		// Start at the CLI's own marker instead of carrying that paint into the message.
+		for _, marker := range []string{"OAuth error:", "Invalid code", "Token exchange failed", "Failed to exchange authorization code"} {
+			if at := strings.Index(line, marker); at > 0 {
+				line = strings.TrimSpace(line[at:])
+				break
+			}
+		}
+		loc := loginFailureWordRe.FindStringIndex(line)
+		if loc == nil {
+			continue
+		}
+		// "OAuth error: …" starts with the reason; "CODEInvalid code…" starts with the echo.
+		if prefix := strings.TrimSpace(line[:loc[0]]); prefix != "" && !strings.ContainsAny(prefix, " \t") {
+			line = strings.TrimSpace(line[loc[0]:])
+		}
+		if r := []rune(line); len(r) > 300 {
+			line = string(r[:300]) + "..."
+		}
+		return line
+	}
+	return ""
 }
 
 // reclaimAddedSlot takes away the slot this attempt added, once the attempt has ended without
