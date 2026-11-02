@@ -2643,7 +2643,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Orbit Files' label (0464, docs/orbit-files-design.md §2.3): one nullable column on `attachment`, which is not a
       // preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions is named, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
-      '0464_attachment_label'],
+      '0464_attachment_label',
+      // Orbit Files' test report summary (0465, docs/orbit-files-design.md §2.5): one nullable JSONB column on
+      // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE.
+      '0465_attachment_test_report_summary'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

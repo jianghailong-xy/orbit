@@ -294,6 +294,7 @@ direction can put it in a commit.
 ```bash
 orbit file upload shots/home.png --label "home page, dark" --json
 orbit file upload shots --label "viewport matrix" --json
+orbit file upload report.json --as test-report --json
 orbit file fetch <id> --json
 orbit file list --json
 orbit file list --task-id <task-id> --json
@@ -325,10 +326,20 @@ the task the session is running, which is what a file counts as anyway; any othe
 and a file reaches another task as an input through `orbit task create --attachment-id`, a folder
 file by file.
 
+`--as test-report` reads one Playwright JSON or JUnit XML report, told by what the file holds and not
+by its name, and keeps a summary with the file: `total`, `passed`, `failed`, `skipped`, `durationMs`,
+and `failedNames` and `skippedNames`, at most 20 of each. `upload` answers it as `testReport`, `fetch`
+and `list` show it, and `orbit task evidence-list` shows it on a citation of the file, in the `label`
+and as `testReport`. It stays after the file has expired. A test that passed on a retry counts as
+passed, and an error outside any test counts as a failed case, so a run that failed cannot read as
+green. Anything else is kept all the same and `note` says why: a file that is no report or only part
+of one, a directory, which stays a plain bundle, or a server that does not read reports.
+
 `fetch` saves the file under the uploads directory, checks it against the sha256 Orbit holds, and
 answers its absolute path as `path`. A link anywhere under that directory refuses the fetch. A session
-fetches only its own files. Given a bundle's id, it
-saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones you
+fetches its own files and those cited by evidence it judges: as the project's coordinator, a judgment
+session opened for the project, the session that dispatched a task in no project, or a verifier of
+the task. Given a bundle's id, it saves the manifest and lists the bundle's files with their ids, so that you fetch only the ones you
 need. `list` answers one task's, one session's or one evidence version's files, newest first, and
 shows a bundle as one row of kind `bundle`; a task's files are its inputs and what the sessions that
 ran it kept with `upload`. An id that names nothing of the account's is refused rather than answered

@@ -1,0 +1,250 @@
+<testsuites id="" name="" tests="14" failures="2" skipped="6" errors="0" time="3.121322">
+<testsuite name="menu-keyboard.spec.ts" timestamp="2026-11-02T07:41:10.459Z" hostname="chromium-light" tests="7" failures="1" skipped="3" time="1.68" errors="0">
+<testcase name="Menu › opens on click" classname="menu-keyboard.spec.ts" time="0.11">
+</testcase>
+<testcase name="Menu › keyboard › moves focus to the first item" classname="menu-keyboard.spec.ts" time="0.124">
+</testcase>
+<testcase name="Menu › keyboard › arrow down moves focus to the next item" classname="menu-keyboard.spec.ts" time="1.198">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light/error-context.md]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light-retry1/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light-retry1/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(locator).toBeFocused() failed" type="expect.toBeFocused">
+<![CDATA[  [chromium-light] › menu-keyboard.spec.ts:21:9 › Menu › keyboard › arrow down moves focus to the next item 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('menuitem', { name: 'Two' })
+    Expected: focused
+    Received: inactive
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('menuitem', { name: 'Two' }) with timeout 500ms
+      - waiting for getByRole('menuitem', { name: 'Two' })
+        7 × locator resolved to <li tabindex="-1" role="menuitem">Two</li>
+          - unexpected value "inactive"
+
+
+      23 |       await page.click('#b');
+      24 |       await page.keyboard.press('ArrowDown');
+    > 25 |       await expect(page.getByRole('menuitem', { name: 'Two' })).toBeFocused({ timeout: 500 });
+         |                                                                 ^
+      26 |     });
+      27 |
+      28 |     test.skip('type-ahead jumps to a matching item', async () => {});
+        at /mnt/data/tmp/t5/pw/tests/menu-keyboard.spec.ts:25:65
+
+    attachment #1: menu-state (text/plain) ─────────────────────────────────────────────────────────
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('menuitem', { name: 'Two' })
+    Expected: focused
+    Received: inactive
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('menuitem', { name: 'Two' }) with timeout 500ms
+      - waiting for getByRole('menuitem', { name: 'Two' })
+        7 × locator resolved to <li tabindex="-1" role="menuitem">Two</li>
+          - unexpected value "inactive"
+
+
+      23 |       await page.click('#b');
+      24 |       await page.keyboard.press('ArrowDown');
+    > 25 |       await expect(page.getByRole('menuitem', { name: 'Two' })).toBeFocused({ timeout: 500 });
+         |                                                                 ^
+      26 |     });
+      27 |
+      28 |     test.skip('type-ahead jumps to a matching item', async () => {});
+        at /mnt/data/tmp/t5/pw/tests/menu-keyboard.spec.ts:25:65
+
+    attachment #1: menu-state (text/plain) ─────────────────────────────────────────────────────────
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-light-retry1/error-context.md
+]]>
+</failure>
+</testcase>
+<testcase name="Menu › keyboard › type-ahead jumps to a matching item" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="skip" value="">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Menu › keyboard › home and end jump to the ends of the list" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="fixme" value="">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Menu › passes on the second try" classname="menu-keyboard.spec.ts" time="0.248">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-passes-on-the-second-try-chromium-light/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-passes-on-the-second-try-chromium-light/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="skipped on this engine" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="skip" value="WebKit only">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+</testsuite>
+<testsuite name="menu-keyboard.spec.ts" timestamp="2026-11-02T07:41:10.459Z" hostname="chromium-dark" tests="7" failures="1" skipped="3" time="1.741" errors="0">
+<testcase name="Menu › opens on click" classname="menu-keyboard.spec.ts" time="0.125">
+</testcase>
+<testcase name="Menu › keyboard › moves focus to the first item" classname="menu-keyboard.spec.ts" time="0.126">
+</testcase>
+<testcase name="Menu › keyboard › arrow down moves focus to the next item" classname="menu-keyboard.spec.ts" time="1.254">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark/error-context.md]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark-retry1/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark-retry1/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(locator).toBeFocused() failed" type="expect.toBeFocused">
+<![CDATA[  [chromium-dark] › menu-keyboard.spec.ts:21:9 › Menu › keyboard › arrow down moves focus to the next item 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('menuitem', { name: 'Two' })
+    Expected: focused
+    Received: inactive
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('menuitem', { name: 'Two' }) with timeout 500ms
+      - waiting for getByRole('menuitem', { name: 'Two' })
+        7 × locator resolved to <li tabindex="-1" role="menuitem">Two</li>
+          - unexpected value "inactive"
+
+
+      23 |       await page.click('#b');
+      24 |       await page.keyboard.press('ArrowDown');
+    > 25 |       await expect(page.getByRole('menuitem', { name: 'Two' })).toBeFocused({ timeout: 500 });
+         |                                                                 ^
+      26 |     });
+      27 |
+      28 |     test.skip('type-ahead jumps to a matching item', async () => {});
+        at /mnt/data/tmp/t5/pw/tests/menu-keyboard.spec.ts:25:65
+
+    attachment #1: menu-state (text/plain) ─────────────────────────────────────────────────────────
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('menuitem', { name: 'Two' })
+    Expected: focused
+    Received: inactive
+    Timeout:  500ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('menuitem', { name: 'Two' }) with timeout 500ms
+      - waiting for getByRole('menuitem', { name: 'Two' })
+        7 × locator resolved to <li tabindex="-1" role="menuitem">Two</li>
+          - unexpected value "inactive"
+
+
+      23 |       await page.click('#b');
+      24 |       await page.keyboard.press('ArrowDown');
+    > 25 |       await expect(page.getByRole('menuitem', { name: 'Two' })).toBeFocused({ timeout: 500 });
+         |                                                                 ^
+      26 |     });
+      27 |
+      28 |     test.skip('type-ahead jumps to a matching item', async () => {});
+        at /mnt/data/tmp/t5/pw/tests/menu-keyboard.spec.ts:25:65
+
+    attachment #1: menu-state (text/plain) ─────────────────────────────────────────────────────────
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/artifacts/menu-keyboard-Menu-keyboar-e1998-oves-focus-to-the-next-item-chromium-dark-retry1/error-context.md
+]]>
+</failure>
+</testcase>
+<testcase name="Menu › keyboard › type-ahead jumps to a matching item" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="skip" value="">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Menu › keyboard › home and end jump to the ends of the list" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="fixme" value="">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Menu › passes on the second try" classname="menu-keyboard.spec.ts" time="0.236">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-passes-on-the-second-try-chromium-dark/test-failed-1.png]]
+
+[[ATTACHMENT|artifacts/menu-keyboard-Menu-passes-on-the-second-try-chromium-dark/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="skipped on this engine" classname="menu-keyboard.spec.ts">
+<properties>
+<property name="skip" value="WebKit only">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+</testsuite>
+</testsuites>
