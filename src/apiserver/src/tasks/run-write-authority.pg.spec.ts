@@ -827,16 +827,23 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       ok(await patch(conversation, lonely, REDECLARE), 'a conversation nobody\'s run opened');
       await redeclared(lonely, 'a conversation nobody\'s run opened');
     });
-    await t.test('its own task keeps the refusal it had, and a conversation it opened gets the same one', async () => {
+    const refusedAsItsOwn = async (session: string, taskId: string, what: string) => {
+      const before = await stands(taskId);
+      const reply = await patch(session, taskId, REDECLARE);
+      assert.deepEqual([reply.status, reply.json?.code], [403, SELF_REWRITE_REFUSED], `${what}: ${reply.text.slice(0, 300)}`);
+      assert.equal(await stands(taskId), before, what);
+    };
+    await t.test('its own task keeps the refusal it had', async () => {
       for (const [place, on] of [['a project', project], ['no project', null]] as const) {
         const run = await workOf(`a run of its own, ${place}, rewriting`, on);
+        await refusedAsItsOwn(run.sessionId, run.taskId, place);
+      }
+    });
+    await t.test('a conversation it opened gets that same refusal on the run\'s task', async () => {
+      for (const [place, on] of [['a project', project], ['no project', null]] as const) {
+        const run = await workOf(`a run whose conversation rewrites, ${place}`, on);
         const conversation = await sessionOf(`its conversation, ${place}, rewriting its task`, undefined, run.sessionId);
-        for (const [who, session] of [['the run', run.sessionId], ['its conversation', conversation]] as const) {
-          const before = await stands(run.taskId);
-          const reply = await patch(session, run.taskId, REDECLARE);
-          assert.deepEqual([reply.status, reply.json?.code], [403, SELF_REWRITE_REFUSED], `${who}, ${place}: ${reply.text.slice(0, 300)}`);
-          assert.equal(await stands(run.taskId), before, `${who}, ${place}`);
-        }
+        await refusedAsItsOwn(conversation, run.taskId, place);
       }
     });
     await t.test('the fields that do not say what settles a task stay as they were', async () => {
