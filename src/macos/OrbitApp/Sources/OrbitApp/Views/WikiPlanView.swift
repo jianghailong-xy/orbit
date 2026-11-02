@@ -20,6 +20,8 @@ struct WikiPlanActions {
     var draft: () -> Void = {}
     /// Redraft…: the sheet with the owner's words.
     var redraft: () -> Void = {}
+    /// Start over…, from the ⋯ menu: its own confirmation, naming the version it would not read.
+    var startOver: (Int) -> Void = { _ in }
     var confirm: (Int) -> Void = { _ in }
     /// A version from the menu; nil for the one the page shows first.
     var pickVersion: (Int?) -> Void = { _ in }
@@ -42,8 +44,8 @@ struct WikiPlanActions {
 
 // MARK: - the plan page
 
-/// The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan and
-/// Redraft…, the job's card, the gate's report, the changes proposed, and the categories and documents —
+/// The plan (mock 22 ②): the title with the version shown, where that version came from, Confirm plan, Redraft…
+/// and the ⋯ menu, the job's card, the gate's report, the changes proposed, and the categories and documents —
 /// `WikiPlanLogic.PageSection`'s order, which is the web phone's.
 struct WikiPlanPage: View {
     let state: WikiPlanState
@@ -125,6 +127,7 @@ struct WikiPlanPage: View {
                         .buttonStyle(.bordered)
                         .disabled(open != nil || busy)
                     }
+                    if let version = WikiPlanLogic.startOver(state) { moreMenu(version) }
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -184,6 +187,20 @@ struct WikiPlanPage: View {
         }
         if let job = open ?? failed { return WikiPlanLogic.jobHead(job) }
         return WikiPlanCopy.none
+    }
+
+    /// The ⋯ menu beside the head's actions: a fresh draft over the version stored, behind its own confirmation.
+    private func moreMenu(_ version: Int) -> some View {
+        Menu {
+            Button(WikiPlanCopy.startOver) { actions.startOver(version) }
+        } label: {
+            Image(systemName: "ellipsis")
+                .frame(minWidth: 30, minHeight: 30)
+                .contentShape(Rectangle())
+        }
+        .fixedSize()
+        .disabled(busy)
+        .accessibilityLabel(WikiPlanCopy.more)
     }
 
     /// The version beside the title: a menu of every version, the shown one ticked, each with where it came from.
@@ -1025,17 +1042,27 @@ struct WikiPlanSectionPage: View {
 
 // MARK: - Redraft…
 
-/// Redraft the plan (mock 22 ⑧): what to change, in the owner's words — empty is a fresh draft — and the
-/// protected documents a redraft keeps as they are.
+/// Redraft the plan (mock 22 ⑧): what to change, in the owner's words, which a version stored needs — a fresh
+/// draft over one is Start over…'s — and the protected documents a redraft keeps as they are. It opens holding
+/// the words of the run that failed.
 struct WikiPlanRedraftSheet: View {
+    let state: WikiPlanState
     let note: String
     let protectedDocs: [String]
     /// Sends it; true once the server took it.
     let redraft: (String) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
-    @State private var words = ""
+    @State private var words: String
     @State private var sending = false
+
+    init(state: WikiPlanState, note: String, protectedDocs: [String], redraft: @escaping (String) async -> Bool) {
+        self.state = state
+        self.note = note
+        self.protectedDocs = protectedDocs
+        self.redraft = redraft
+        _words = State(initialValue: WikiPlanLogic.redraftWords(state))
+    }
 
     var body: some View {
         NavigationStack {
@@ -1077,7 +1104,7 @@ struct WikiPlanRedraftSheet: View {
                             if done { dismiss() }
                         }
                     }
-                    .disabled(sending)
+                    .disabled(sending || !WikiPlanLogic.redraftReady(state, words: words))
                 }
             }
         }

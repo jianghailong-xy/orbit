@@ -121,13 +121,15 @@ private struct WikiPlanEditTarget: Identifiable, Equatable {
 }
 
 /// The plan page, a document of it, or a section of that, over the model's plan read — and every write the
-/// owner makes from them: Draft plan, Redraft…, Confirm plan, Edit, and a change's Accept and Reject.
+/// owner makes from them: Draft plan, Redraft…, Start over…, Confirm plan, Edit, and a change's Accept and Reject.
 struct WikiPlanScreen: View {
     @Environment(AppModel.self) private var model
     let address: WikiPlanAddress
 
     @State private var contentsShown = false
     @State private var redrafting = false
+    /// The version Start over… asks about, while its confirmation is up.
+    @State private var startingOver: Int?
     @State private var editing: WikiPlanEditTarget?
     @State private var refused: [String: [WikiPlanGateError]] = [:]
     @State private var notice: String?
@@ -147,6 +149,12 @@ struct WikiPlanScreen: View {
                 }
                 .sheet(isPresented: $redrafting) { redraftSheet(wiki) }
                 .sheet(item: $editing) { target in editSheet(wiki, target) }
+                .alert(WikiPlanCopy.startOverTitle, isPresented: Binding(get: { startingOver != nil }, set: { if !$0 { startingOver = nil } })) {
+                    Button(WikiPlanCopy.cancel, role: .cancel) { startingOver = nil }
+                    Button(WikiPlanCopy.startOverGo) { Task { _ = await redraft(wiki, nil, failure: WikiCopy.planRedraftFailed) } }
+                } message: {
+                    Text(startingOver.map(WikiPlanCopy.startOverText) ?? "")
+                }
                 .alert(noticeTitle, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                     Button("OK", role: .cancel) { notice = nil }
                 } message: {
@@ -230,6 +238,7 @@ struct WikiPlanScreen: View {
         WikiPlanActions(
             draft: { Task { _ = await redraft(wiki, nil) } },
             redraft: { redrafting = true },
+            startOver: { version in startingOver = version },
             confirm: { version in Task { await confirm(wiki, version) } },
             pickVersion: { version in model.nav.replaceTop(with: .wikiPlan(version: version)) },
             openDoc: { slug in model.push(.wikiPlanDoc(slug: slug, version: address.version)) },
@@ -247,7 +256,7 @@ struct WikiPlanScreen: View {
 
     // MARK: the writes
 
-    /// Draft plan, or Redraft… with the owner's words. True once the server took it.
+    /// Draft plan, Start over…, or Redraft… with the owner's words. True once the server took it.
     private func redraft(_ wiki: WikiModel, _ words: String?, failure: String = WikiCopy.planDraftFailed) async -> Bool {
         let answer = await wiki.redraftPlan(instructions: words)
         if let refusal = answer.refusal {
@@ -319,12 +328,15 @@ struct WikiPlanScreen: View {
 
     @ViewBuilder
     private func redraftSheet(_ wiki: WikiModel) -> some View {
-        let newest = wiki.plan.flatMap(WikiPlanLogic.newest)
-        let protected = newest.map { WikiPlanLogic.fromVersion($0).docs.filter(\.protected).map(\.number) } ?? []
-        WikiPlanRedraftSheet(note: WikiPlanCopy.redraftNote(from: newest.map { version -> (version: Int, inForce: Bool) in
-                                                                (version.version, version.status == .confirmed)
-                                                            }),
-                             protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
+        if let state = wiki.plan {
+            let newest = WikiPlanLogic.newest(state)
+            let protected = newest.map { WikiPlanLogic.fromVersion($0).docs.filter(\.protected).map(\.number) } ?? []
+            WikiPlanRedraftSheet(state: state,
+                                 note: WikiPlanCopy.redraftNote(from: newest.map { version -> (version: Int, inForce: Bool) in
+                                     (version.version, version.status == .confirmed)
+                                 }),
+                                 protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
+        }
     }
 
     /// Edit a document, or one of its sections, of the newest version — the draft waiting, else the one in force.

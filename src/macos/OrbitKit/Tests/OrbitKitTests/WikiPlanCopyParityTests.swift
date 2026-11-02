@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The plan page, a plan document's and section's pages, the changes proposed, Redraft… and Edit, and the
-/// home's plan banner say the web's words, read every state the web reads, and send an edit in the web's
+/// The plan page, a plan document's and section's pages, the changes proposed, Redraft…, Start over… and Edit,
+/// and the home's plan banner say the web's words, read every state the web reads, and send an edit in the web's
 /// shape (criterion 10 revised 2026-09-28 and criterion 11, mocks 22 and 26).
 ///
 /// Three halves, each a failure — never an `XCTSkip` — when its counterpart goes missing:
@@ -11,7 +11,7 @@ import XCTest
 ///   reads too: every state of the plan — no plan, queued, drafting, held (never for the daily limit), a draft
 ///   waiting with or without things to look at, a job that left no draft over whatever stands, changes, the
 ///   documents being written, held or stopped — with its banner, job card, head, gate report and documents;
-///   the version menu; a document's and a section's pages; the changes
+///   the version menu; the two doors to a new draft; a document's and a section's pages; the changes
 ///   proposed and what Accept will do; an edit's request in the draft's shape;
 /// - every `WikiPlanCopy` constant looked up as a declaration in the web source it mirrors;
 /// - the orders of the plan page, a document's page, a section's page and a change's card.
@@ -83,6 +83,15 @@ final class WikiPlanCopyParityTests: XCTestCase {
 
     private struct Fixture: Decodable {
         struct Plan: Decodable {
+            struct Door: Decodable {
+                let about: String
+                let spec: State.Spec
+                let words: String
+                let ready: Bool
+                let boxHolds: String
+                let startOver: Int?
+            }
+
             struct State: Decodable {
                 struct Spec: Decodable {
                     let confirmed: String?
@@ -295,6 +304,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
             }
 
             let versions: [String: WikiPlanVersion]
+            let doors: [Door]
             let proposals: [WikiPlanProposal]
             let jobs: [String: WikiPlanJob]
             let states: [String: State]
@@ -363,7 +373,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
             (WikiPlanCopy.check, "check"), (WikiPlanCopy.changeRejected, "changeRejected"), (WikiPlanCopy.redraftAsked, "redraftAsked"),
             (WikiPlanCopy.redraftAlready, "redraftAlready"), (WikiPlanCopy.acceptRefused, "acceptRefused"),
             (WikiPlanCopy.redraftTitle, "redraftTitle"), (WikiPlanCopy.redraftGo, "redraftGo"),
-            (WikiPlanCopy.redraftPlaceholder, "redraftPlaceholder"), (WikiPlanCopy.editTitleField, "editTitleField"),
+            (WikiPlanCopy.redraftPlaceholder, "redraftPlaceholder"), (WikiPlanCopy.startOver, "startOver"),
+            (WikiPlanCopy.startOverTitle, "startOverTitle"), (WikiPlanCopy.startOverGo, "startOverGo"), (WikiPlanCopy.editTitleField, "editTitleField"),
             (WikiPlanCopy.editKind, "editKind"), (WikiPlanCopy.protectedSwitch, "protectedSwitch"), (WikiPlanCopy.addSection, "addSection"),
             (WikiPlanCopy.saveDraft, "saveDraft"), (WikiPlanCopy.protectedNote, "protectedNote"),
             (WikiPlanCopy.notProtectedNote, "notProtectedNote"),
@@ -419,6 +430,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
         for row in try rows("changeAdded") { XCTAssertEqual(WikiPlanCopy.changeAdded(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("draftSaved") { XCTAssertEqual(WikiPlanCopy.draftSaved(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("andMore") { XCTAssertEqual(WikiPlanCopy.andMore(row["n"] as! Int), row["says"] as? String) }
+        for row in try rows("startOverText") { XCTAssertEqual(WikiPlanCopy.startOverText(row["version"] as! Int), row["says"] as? String) }
     }
 
     /// Every constant, as the web source declares it.
@@ -456,7 +468,9 @@ final class WikiPlanCopyParityTests: XCTestCase {
             ("WIKI_PLAN_CHANGE_REJECTED", WikiPlanCopy.changeRejected), ("WIKI_PLAN_REDRAFT_ASKED", WikiPlanCopy.redraftAsked),
             ("WIKI_PLAN_REDRAFT_ALREADY", WikiPlanCopy.redraftAlready), ("WIKI_PLAN_ACCEPT_REFUSED", WikiPlanCopy.acceptRefused),
             ("WIKI_PLAN_REDRAFT_TITLE", WikiPlanCopy.redraftTitle), ("WIKI_PLAN_REDRAFT_GO", WikiPlanCopy.redraftGo),
-            ("WIKI_PLAN_REDRAFT_PLACEHOLDER", WikiPlanCopy.redraftPlaceholder), ("WIKI_PLAN_EDIT_TITLE_FIELD", WikiPlanCopy.editTitleField),
+            ("WIKI_PLAN_REDRAFT_PLACEHOLDER", WikiPlanCopy.redraftPlaceholder), ("WIKI_PLAN_START_OVER", WikiPlanCopy.startOver),
+            ("WIKI_PLAN_START_OVER_TITLE", WikiPlanCopy.startOverTitle), ("WIKI_PLAN_START_OVER_GO", WikiPlanCopy.startOverGo),
+            ("WIKI_PLAN_EDIT_TITLE_FIELD", WikiPlanCopy.editTitleField),
             ("WIKI_PLAN_EDIT_KIND", WikiPlanCopy.editKind), ("WIKI_PLAN_PROTECTED_SWITCH", WikiPlanCopy.protectedSwitch),
             ("WIKI_PLAN_ADD_SECTION", WikiPlanCopy.addSection), ("WIKI_PLAN_SAVE_DRAFT", WikiPlanCopy.saveDraft),
         ]
@@ -476,6 +490,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
         // The sentences built around a value.
         assertSays(lib, "wikiPlanNotFoundCount = (count: number): string => `${wikiCount(count)} not found`", in: Self.lib)
         assertSays(lib, "const why = job.error ?? 'Its run ended without a draft.';", in: Self.lib)
+        assertSays(lib, "wikiPlanStartOverText = (version: number): string => `\(WikiPlanCopy.startOverText(0).replacingOccurrences(of: "v0", with: "v${version}"))`",
+                   in: Self.lib)
         assertSays(lib, "wikiPlanSaveNote = (next: number): string => `Saving makes draft v${next}; it goes through the plan check again.`", in: Self.lib)
         assertSays(lib, "wikiPlanConfirmed = (version: number): string => `Plan v${version} confirmed`", in: Self.lib)
         assertSays(lib, "wikiPlanChangeAdded = (version: number): string => `Change added to draft v${version}`", in: Self.lib)
@@ -558,6 +574,18 @@ final class WikiPlanCopyParityTests: XCTestCase {
                     return "\(doc.slug) \(doc.number) \(doc.title) \(doc.protected) \(notFound) \(notFound > 0 ? WikiPlanCopy.notFoundCount(notFound) : "-") \(WikiPlanLogic.docLine(doc))"
                 }, want.docs.map { "\($0.slug) \($0.number) \($0.title) \($0.protected) \($0.notFound) \($0.notFoundLabel ?? "-") \($0.line)" }, name)
             }
+        }
+    }
+
+    /// Redraft… and Start over…: when each can be asked, and what the box opens holding.
+    func testTheTwoDoorsAreTheFixtures() throws {
+        let plan = try fixture().plan
+        XCTAssertFalse(plan.doors.isEmpty)
+        for door in plan.doors {
+            let state = self.state(door.spec, plan)
+            XCTAssertEqual(WikiPlanLogic.redraftReady(state, words: door.words), door.ready, door.about)
+            XCTAssertEqual(WikiPlanLogic.redraftWords(state), door.boxHolds, door.about)
+            XCTAssertEqual(WikiPlanLogic.startOver(state), door.startOver, door.about)
         }
     }
 
@@ -726,6 +754,15 @@ final class WikiPlanCopyParityTests: XCTestCase {
         assertSays(webPage, "wikiPlanJobHead(open ?? page.failed!)", in: Self.page)
         assertOrder(webPage, ["{(shown || page.failed) && (", "{shown?.status === 'draft' && (", "{shown?.status !== 'superseded' && (",
                               "{!shown && !open && !page.failed && ("], "the web page's three outcomes")
+        // Start over…: an item of the ⋯ menu after Redraft…, behind its own confirmation, sending no instructions.
+        assertSays(webPage, "...(startOver !== null ? [{ key: 'start-over', label: WIKI_PLAN_START_OVER, onSelect: () => onStartOver(startOver) }] : []),",
+                   in: Self.page)
+        assertSays(webPage, "const draft = useWikiWrite(() => redraftWikiPlan(spaceId, null));", in: Self.page)
+        assertOrder(webPage, ["title: WIKI_PLAN_START_OVER_TITLE,", "description: wikiPlanStartOverText(version),",
+                              "confirmText: WIKI_PLAN_START_OVER_GO,", "cancelText: WIKI_PLAN_CANCEL,",
+                              "onConfirm: async () => { const answer = await draft.mutateAsync(undefined);"],
+                    "the web's Start over confirmation")
+        assertOrder(webPage, ["{WIKI_PLAN_REDRAFT}", "<Menu items={moreItems}", "aria-label=\"\(WikiPlanCopy.more)\""], "the web's ⋯ menu after Redraft…")
         let view = try native("Views/WikiPlanView.swift")
         let nativePage = try slice(view, from: "struct WikiPlanPage: View {", to: "struct WikiPlanJobCardView: View {")
         assertSays(nativePage, "ForEach(WikiPlanLogic.PageSection.allCases, id: \\.self) { section in", in: "WikiPlanView.swift")
@@ -738,6 +775,14 @@ final class WikiPlanCopyParityTests: XCTestCase {
                            "} else if open == nil {", "empty"], "the native page's three outcomes")
         assertSays(try native("Views/WikiDocScreens.swift"), "failed: failed.map { job -> (job: WikiPlanJob, state: WikiPlanState) in (job, state) },",
                    in: "WikiDocScreens.swift")
+        assertOrder(arms, ["Label(WikiPlanCopy.redraft", "if let version = WikiPlanLogic.startOver(state) { moreMenu(version) }"], "the ⋯ menu after Redraft…")
+        assertOrder(nativePage, ["private func moreMenu(_ version: Int) -> some View {", "Button(WikiPlanCopy.startOver) { actions.startOver(version) }",
+                                 ".accessibilityLabel(WikiPlanCopy.more)"], "the native ⋯ menu")
+        let startOver = try native("Views/WikiDocScreens.swift")
+        assertSays(startOver, "startOver: { version in startingOver = version },", in: "WikiDocScreens.swift")
+        assertOrder(startOver, [".alert(WikiPlanCopy.startOverTitle, isPresented:", "Button(WikiPlanCopy.cancel, role: .cancel) { startingOver = nil }",
+                                "Button(WikiPlanCopy.startOverGo) { Task { _ = await redraft(wiki, nil, failure: WikiCopy.planRedraftFailed) } }",
+                                "Text(startingOver.map(WikiPlanCopy.startOverText) ?? \"\")"], "the native Start over confirmation")
         // The empty page: what a plan is, Draft plan, and where and how long it runs — the System model's
         // (`WIKI_PLAN_EMPTY_TEXT`, `WIKI_PLAN_EMPTY_NOTE_SERVER`, `WikiServerExecutionCopyParityTests`).
         let webEmpty = try slice(page, from: "function PlanEmpty(", to: "function PlanGateReport(")
@@ -820,12 +865,15 @@ final class WikiPlanCopyParityTests: XCTestCase {
         // Redraft…: the note, the owner's words, the protected documents kept, Cancel and Redraft.
         let webRedraft = try slice(page, from: "function PlanRedraftModal(", to: "const KIND_OPTIONS")
         for literal in ["{WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(newest ?", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
-                        "{wikiPlanProtectedKept(protectedDocs)}", "{WIKI_PLAN_REDRAFT_TITLE}"] {
+                        "{wikiPlanProtectedKept(protectedDocs)}", "{WIKI_PLAN_REDRAFT_TITLE}",
+                        "useState(() => wikiPlanRedraftWords(plan))", "disabled={!wikiPlanRedraftReady(plan, words)}"] {
             assertSays(webRedraft, literal, in: Self.page)
         }
         let nativeRedraft = try slice(view, from: "struct WikiPlanRedraftSheet: View {", to: "struct WikiPlanEditSheet: View {")
         for literal in ["TextEditor(text: $words)", "Text(WikiPlanCopy.redraftPlaceholder)", "Text(WikiPlanCopy.protectedKept(protectedDocs))",
-                        ".navigationTitle(WikiPlanCopy.redraftTitle)", "Button(WikiPlanCopy.cancel)", "Button(WikiPlanCopy.redraftGo)"] {
+                        ".navigationTitle(WikiPlanCopy.redraftTitle)", "Button(WikiPlanCopy.cancel)", "Button(WikiPlanCopy.redraftGo)",
+                        "_words = State(initialValue: WikiPlanLogic.redraftWords(state))",
+                        ".disabled(sending || !WikiPlanLogic.redraftReady(state, words: words))"] {
             assertSays(nativeRedraft, literal, in: "WikiPlanView.swift")
         }
         let screens = try native("Views/WikiDocScreens.swift")

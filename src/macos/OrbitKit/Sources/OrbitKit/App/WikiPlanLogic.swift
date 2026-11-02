@@ -80,13 +80,18 @@ public enum WikiPlanCopy {
     public static let from = "From"                                         // WIKI_PLAN_FROM
     public static let check = "Check"                                       // WIKI_PLAN_CHECK
     public static let changeRejected = "Change rejected"                    // WIKI_PLAN_CHANGE_REJECTED
-    public static let redraftAsked = "Redraft asked for — it runs as a Wiki maintenance task"   // WIKI_PLAN_REDRAFT_ASKED
+    public static let redraftAsked = "Redraft asked for — it runs on the server with the System model"   // WIKI_PLAN_REDRAFT_ASKED
     public static let redraftAlready = "A draft is already on its way"      // WIKI_PLAN_REDRAFT_ALREADY
     public static let acceptRefused = "This change no longer passes the plan check, so nothing was confirmed:"   // WIKI_PLAN_ACCEPT_REFUSED
     /// Redraft… (mock 22 ⑧).
     public static let redraftTitle = "Redraft the plan"                     // WIKI_PLAN_REDRAFT_TITLE
     public static let redraftGo = "Redraft"                                 // WIKI_PLAN_REDRAFT_GO
-    public static let redraftPlaceholder = "What should change: what to merge, split, move or leave out"   // WIKI_PLAN_REDRAFT_PLACEHOLDER
+    public static let redraftPlaceholder = "What should change: what to merge, add or leave out"   // WIKI_PLAN_REDRAFT_PLACEHOLDER
+    /// Start over…: the ⋯ menu's item, and its confirmation.
+    public static let more = "More"
+    public static let startOver = "Start over…"                             // WIKI_PLAN_START_OVER
+    public static let startOverTitle = "Start over"                         // WIKI_PLAN_START_OVER_TITLE
+    public static let startOverGo = "Start over"                            // WIKI_PLAN_START_OVER_GO
     /// Edit (mock 22 ⑨).
     public static let editTitleField = "Title"                              // WIKI_PLAN_EDIT_TITLE_FIELD
     public static let editKind = "Kind"                                     // WIKI_PLAN_EDIT_KIND
@@ -149,6 +154,11 @@ public enum WikiPlanCopy {
     public static func redraftNote(from: (version: Int, inForce: Bool)?) -> String {
         let base = from.map { $0.inForce ? " from v\($0.version), the plan in force," : " from draft v\($0.version)," } ?? ""
         return "The \(drafterServer) drafts it again\(base) with what you write here."
+    }
+
+    /// What Start over…'s confirmation says of what it costs (`wikiPlanStartOverText`).
+    public static func startOverText(_ version: Int) -> String {
+        "Writes a new plan from the repository. It doesn’t read v\(version): only protected documents stay. Once you confirm it, most documents are written again."
     }
 }
 
@@ -362,6 +372,19 @@ public enum WikiPlanLogic {
 
     /// The newest version the space has stored, draft or confirmed (`wikiPlanNewest`).
     public static func newest(_ state: WikiPlanState) -> WikiPlanVersion? { state.draft ?? state.confirmed }
+
+    /// Whether Redraft can be sent (`wikiPlanRedraftReady`): a redraft reads the version stored, so it needs words;
+    /// with none stored, it may go empty.
+    public static func redraftReady(_ state: WikiPlanState, words: String) -> Bool {
+        newest(state) == nil || !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// What Redraft's box opens holding (`wikiPlanRedraftWords`): the words of the run that failed.
+    public static func redraftWords(_ state: WikiPlanState) -> String { failedJob(state)?.instructions ?? "" }
+
+    /// The version Start over… would leave unread, or nil when the menu has no such item (`wikiPlanStartOver`): only
+    /// with a version stored, and no draft job open. It sends the redraft with no instructions: a fresh draft.
+    public static func startOver(_ state: WikiPlanState) -> Int? { openJob(state) == nil ? newest(state)?.version : nil }
 
     /// The job whose failure the page and the home still show (`wikiPlanFailedJob`): a draft or a revision
     /// that left no draft, with no version stored since it was asked for.
