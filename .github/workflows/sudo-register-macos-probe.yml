@@ -1,0 +1,169 @@
+# One-off probe for task 34pVVKDohkOa6db1Z4vFF, pushed only to probe/sudo-register-macos: the real
+# `orbit register` run by the runner account through `sudo -i` on macOS, once built from the code
+# before the fix (OLD_REF) and once from this commit's parent (the fix), against
+# scripts/hostd-e2e's stub control plane, which approves a device login at its first poll. The fix
+# job then unregisters through `sudo -i` and registers once more against a control plane that
+# approves the machine but never takes a heartbeat (a forced failure).
+name: sudo register probe (macOS)
+on:
+  push:
+    branches: ["probe/sudo-register-macos"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [old, fix]
+    env:
+      OLD_REF: 714c79c4c
+      SERVER: http://127.0.0.1:18080
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 20
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Build orbit (${{ matrix.build }}) and the stub control plane
+        run: |
+          set -eux
+          src=src/runner-go
+          if [ "${{ matrix.build }}" = old ]; then
+            git worktree add --detach "$RUNNER_TEMP/old" "$OLD_REF"
+            src="$RUNNER_TEMP/old/src/runner-go"
+          else
+            git worktree add --detach "$RUNNER_TEMP/fix" HEAD~1
+            src="$RUNNER_TEMP/fix/src/runner-go"
+          fi
+          echo "orbit from $(git -C "$src" rev-parse HEAD)"
+          (cd "$src" && go build -ldflags "-X main.version=0.1.990 -X main.defaultServer=$SERVER" -o "$RUNNER_TEMP/orbit" .)
+          (cd scripts/hostd-e2e/stubserver && go build -o "$RUNNER_TEMP/stubserver" .)
+          mkdir -p "$RUNNER_TEMP/dl"
+          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/orbit" /usr/local/bin/orbit
+          ls -la /usr/local/bin/orbit; ls -ld /usr/local/bin
+      - name: Start the stub control plane
+        run: |
+          nohup "$RUNNER_TEMP/stubserver" serve -addr 127.0.0.1:18080 -dl "$RUNNER_TEMP/dl" >"$RUNNER_TEMP/stub.log" 2>&1 &
+          for i in $(seq 40); do curl -fsS -o /dev/null "$SERVER/stub/runners" && break; sleep 0.5; done
+          echo "stub up"
+      - name: What sudo leaves of HOME
+        run: |
+          id; echo "HOME=$HOME"; sw_vers
+          sudo sh -c 'echo "sudo: HOME=$HOME SUDO_USER=$SUDO_USER"'
+          sudo -i sh -c 'echo "sudo -i: HOME=$HOME SUDO_USER=$SUDO_USER"'
+          launchctl print gui/$(id -u) >/dev/null 2>&1 && echo "gui/$(id -u) domain exists" || echo "no gui/$(id -u) domain"
+      - name: runner$ sudo -i bash -c "orbit register …" at a terminal
+        run: |
+          set +e
+          script -q /dev/null sudo -i bash -c "orbit register --server $SERVER --name mac-sudo-i-${{ matrix.build }}" </dev/null | tr -d '\r'
+          echo "register exit ${PIPESTATUS[0]}"
+      - name: Who runs the LaunchAgent, where the config is, and the heartbeats
+        if: always()
+        run: |
+          set +e
+          sleep 40
+          echo "--- stub runners (name id state heartbeats version seconds-since-last-beat)"
+          "$RUNNER_TEMP/stubserver" get "$SERVER/stub/runners"
+          echo "--- runner orbit processes"
+          ps -axo user,uid,pid,command | grep '[o]rbit run'
+          echo "--- launchctl list com.orbit.runner, as runner"
+          launchctl list com.orbit.runner
+          echo "--- launchctl list com.orbit.runner, as root (system domain)"
+          sudo launchctl list com.orbit.runner
+          echo "--- launchctl print gui/$(id -u)/com.orbit.runner"
+          launchctl print "gui/$(id -u)/com.orbit.runner" | grep -E 'state =|pid =|program =|domain =|last exit|runs =' 
+          echo "--- launchctl print system/com.orbit.runner"
+          sudo launchctl print system/com.orbit.runner | grep -E 'state =|pid =|program =|domain =|last exit|runs ='
+          echo "--- the LaunchAgent plists"
+          for p in "$HOME/Library/LaunchAgents/com.orbit.runner.plist" /var/root/Library/LaunchAgents/com.orbit.runner.plist; do
+            echo "$p:"; sudo ls -la "$p" && sudo plutil -p "$p" | grep -E 'ORBIT_HOME|"HOME"|ProgramArguments|=> "/' 
+          done
+          echo "--- runner config"
+          for f in "$HOME/.orbit" "$HOME/.orbit/config.json" /var/root/.orbit /var/root/.orbit/config.json /usr/local/bin/orbit "$HOME/.orbit/bin/orbit"; do sudo ls -lad "$f"; done
+          echo "--- runner.log tails"
+          tail -n 8 "$HOME/.orbit/runner.log"; sudo tail -n 8 /var/root/.orbit/runner.log
+          echo "--- stub log"
+          tail -n 30 "$RUNNER_TEMP/stub.log"
+      - name: A host the old build registered - the fix's sudo -i orbit unregister removes it
+        if: matrix.build == 'old'
+        run: |
+          set +e
+          git worktree add --detach "$RUNNER_TEMP/fix" HEAD~1 >/dev/null 2>&1
+          (cd "$RUNNER_TEMP/fix/src/runner-go" && go build -ldflags "-X main.version=0.1.990 -X main.defaultServer=$SERVER" -o "$RUNNER_TEMP/orbit-fix" .)
+          sudo rm -f /usr/local/bin/orbit
+          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/orbit-fix" /usr/local/bin/orbit
+          echo "orbit from $(git -C "$RUNNER_TEMP/fix" rev-parse HEAD)"
+          script -q /dev/null sudo -i bash -c "orbit unregister --yes" </dev/null | tr -d '\r'
+          echo "unregister exit ${PIPESTATUS[0]}"
+          echo "--- stub runners"; "$RUNNER_TEMP/stubserver" get "$SERVER/stub/runners"
+          echo "--- launchctl list com.orbit.runner, as root (system domain)"; sudo launchctl list com.orbit.runner
+          sudo ls -la /var/root/Library/LaunchAgents/com.orbit.runner.plist /var/root/.orbit/config.json
+          ps -axo user,uid,pid,command | grep '[o]rbit run'; echo "(no orbit run process above means none)"
+      - name: runner$ sudo -i bash -c "orbit unregister --yes" at a terminal
+        if: matrix.build == 'fix'
+        run: |
+          set +e
+          script -q /dev/null sudo -i bash -c "orbit unregister --yes" </dev/null | tr -d '\r'
+          echo "unregister exit ${PIPESTATUS[0]}"
+          echo "--- stub runners"; "$RUNNER_TEMP/stubserver" get "$SERVER/stub/runners"
+          echo "--- launchctl list com.orbit.runner, as runner"; launchctl list com.orbit.runner
+          ls -la "$HOME/Library/LaunchAgents/com.orbit.runner.plist" "$HOME/.orbit/config.json"
+          ps -axo user,uid,pid,command | grep '[o]rbit run'; echo "(no orbit run process above means none)"
+      - name: Forced failure — a control plane that never hears from the runner
+        if: matrix.build == 'fix'
+        run: |
+          set +e
+          cat >"$RUNNER_TEMP/silent.py" <<'PY'
+          # Approves the device at once and answers /runner/me with no heartbeat; refuses everything
+          # else with 503, so the runner it starts never reaches it.
+          import json, sys
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+          class H(BaseHTTPRequestHandler):
+              def answer(self, code, body):
+                  data = json.dumps(body).encode()
+                  self.send_response(code); self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+              def do_POST(self):
+                  n = int(self.headers.get("Content-Length") or 0); self.rfile.read(n)
+                  if self.path == "/api/runner/device/start":
+                      return self.answer(200, {"deviceCode": "d1", "userCode": "MAC00-MAC00", "interval": 1, "expiresIn": 600})
+                  if self.path == "/api/runner/device/poll":
+                      return self.answer(200, {"status": "approved", "runnerId": "runner-silent", "runnerToken": "tok-silent", "name": "mac-silent"})
+                  self.answer(503, {"error": "this control plane takes no heartbeat"})
+              def do_GET(self):
+                  if self.path == "/api/runner/me":
+                      return self.answer(200, {"id": "runner-silent", "name": "mac-silent", "status": "OFFLINE", "online": False, "lastHeartbeatAt": None, "workspaces": []})
+                  self.answer(503, {"error": "this control plane takes no heartbeat"})
+              def log_message(self, fmt, *args):
+                  sys.stderr.write("%s %s\n" % (self.command, self.path))
+          ThreadingHTTPServer(("127.0.0.1", 18081), H).serve_forever()
+          PY
+          nohup python3 "$RUNNER_TEMP/silent.py" >"$RUNNER_TEMP/silent.log" 2>&1 &
+          for i in $(seq 40); do curl -fsS -o /dev/null http://127.0.0.1:18081/api/runner/me && break; sleep 0.5; done
+          start=$(date +%s)
+          script -q /dev/null sudo -i bash -c "orbit register --server http://127.0.0.1:18081 --name mac-silent" </dev/null | tr -d '\r'
+          echo "register exit ${PIPESTATUS[0]} after $(( $(date +%s) - start )) s"
+          echo "--- launchctl list com.orbit.runner, as runner"; launchctl list com.orbit.runner
+          ps -axo user,uid,pid,command | grep '[o]rbit run'
+          echo "--- what the silent control plane was asked"; sort "$RUNNER_TEMP/silent.log" | uniq -c
+      - name: runner$ sudo orbit register at a terminal (macOS keeps HOME under plain sudo)
+        if: matrix.build == 'fix'
+        run: |
+          set +e
+          script -q /dev/null sudo -i bash -c "orbit unregister --yes" </dev/null | tr -d '\r'
+          echo "unregister (of mac-silent) exit ${PIPESTATUS[0]}"
+          script -q /dev/null sudo /usr/local/bin/orbit register --server "$SERVER" --name mac-plain-sudo </dev/null | tr -d '\r'
+          echo "register exit ${PIPESTATUS[0]}"
+          sleep 35
+          echo "--- stub runners (name id state heartbeats version seconds-since-last-beat)"; "$RUNNER_TEMP/stubserver" get "$SERVER/stub/runners"
+          ps -axo user,uid,pid,command | grep '[o]rbit run'
+          launchctl print "gui/$(id -u)/com.orbit.runner" | grep -E 'state =|pid =|domain ='
+          sudo ls -la "$HOME/.orbit/config.json" "$HOME/Library/LaunchAgents/com.orbit.runner.plist"
+          plutil -p "$HOME/Library/LaunchAgents/com.orbit.runner.plist" | grep -E 'ORBIT_HOME|"HOME"'
+          sudo ls -la /var/root/.orbit/config.json
+          true
