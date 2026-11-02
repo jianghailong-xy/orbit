@@ -104,6 +104,13 @@ sync_ready() {
 # Mirror the archive to another machine. Runs every poll rather than only after a base
 # backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
 sync_archive() {
+  # A real archive holds a base backup and the WAL Postgres writes to it. Anything less is an
+  # empty or wrong mount, say a recreate from another checkout, and --delete would clear the only
+  # off-host copy. WAL too because this loop has already taken a base backup by now, even there.
+  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then
+    log "ERROR: refusing off-host sync to $SYNC_TARGET: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
+    return 1
+  fi
   # --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
@@ -194,6 +201,9 @@ check_archiver() {
 }
 
 mkdir -p "$BASE_DIR" "$WAL_DIR"
+# A base backup cut short when this container stopped: an upgrade recreates it when this script
+# changes. Nothing is running yet, and no later run would come back for this one's disk space.
+rm -rf "$BASE_DIR"/.staging-*
 log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
 while :; do
   if backup_due; then

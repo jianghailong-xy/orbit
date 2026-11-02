@@ -225,6 +225,13 @@ const cases = [
     replaceScript('  if [ -d "$FILES_DIR" ] && [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then\n    return 0\n  fi\n', '')],
   ['a missing files directory taken for an empty one', 'a files directory that is not there is still tried',
     replaceScript('if [ -d "$FILES_DIR" ] && [ -z', 'if [ -z')],
+  // The mirror's --delete on an empty or wrong mount, which would clear the only off-host copy.
+  ['a mirror of an archive with no base backup', 'the mirror refuses an archive that cannot be the real one',
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(ls -A "$WAL_DIR")" ]; then')],
+  ['a mirror of an archive with no WAL', 'the mirror refuses an archive that cannot be the real one',
+    replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR")" ]; then', 'if [ -z "$(list_backups)" ]; then')],
+  ['a base backup cut short that stays', 'a base backup cut short by a stopped container does not outlive it',
+    replaceScript('rm -rf "$BASE_DIR"/.staging-*\n', '')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

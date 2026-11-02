@@ -182,6 +182,49 @@ managed_runner_services_up() {
 }
 # ── end of the managed runners' section ─────────────────────────────────────────────────────────────
 
+# pgbackup is in neither list of services below, and `up` alone would not do for it: Compose bind-mounts its script as a
+# single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and
+# Compose sees no change. Its mounts are relative as well: from any directory but the checkout it runs from, a recreate
+# would bind /archive to that directory's empty ./data/pg-archive. So it is recreated only where it runs from here,
+# which the running container's own /archive says. It is asked for by its fixed name, which finds it from a run whose
+# Compose project is another. A run that will leave it says so now, as a failed `up` further down may end the run, and
+# again as its last words.
+PGBACKUP_HERE=0
+PGBACKUP_NOTICE=""
+pgbackup_preflight() {
+  local archive installed
+  archive="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/archive"}}{{.Source}}{{end}}{{end}}' orbit-pgbackup 2>/dev/null || true)"
+  if [ -n "$($DC ps -q pgbackup 2>/dev/null || true)" ] && [ "$archive" = "$PWD/data/pg-archive" ]; then
+    PGBACKUP_HERE=1
+    return 0
+  fi
+  installed="${archive%/data/pg-archive}"
+  if [ "$PULL_BASE" -eq 1 ] && [ -n "$installed" ] && [ "$installed" != "$PWD" ]; then
+    echo "error: --pull-base recreates postgres and pgbackup, whose relative mounts would bind $PWD/data, not" >&2
+    echo "       $installed/data, where this deployment runs. Run it from there; nothing was built or recreated." >&2
+    exit 1
+  fi
+  PGBACKUP_NOTICE="!!  pgbackup was NOT updated: it is not running from this checkout ($PWD), so its script and mounts
+!!  stay as they were. Recreated from here, its relative mounts would bind this checkout's ./data.
+!!  To update it, run this in ${installed:-the checkout this deployment runs from}:
+!!    git merge --ff-only $DEPLOY_SHA && docker compose up -d --no-deps --force-recreate pgbackup"
+  printf '%s\n' "$PGBACKUP_NOTICE" >&2
+}
+
+# Recreate it if its script is not this checkout's. Otherwise `up` does so for a change of configuration, such as a new
+# mount, and leaves it running if there is none. --no-deps, or `up` would recreate postgres with it.
+pgbackup_up() {
+  local running
+  running="$($DC ps -q pgbackup)"
+  if ! docker exec "$running" cat /usr/local/bin/pg-backup.sh | cmp -s - scripts/pg-backup.sh; then
+    echo "==> Recreating pgbackup to run this checkout's scripts/pg-backup.sh"
+    $DC up -d --wait --no-deps --force-recreate pgbackup
+  else
+    echo "==> Recreating pgbackup if it changed"
+    $DC up -d --wait --no-deps pgbackup
+  fi
+}
+
 LOCK_FILE="/tmp/orbit-upgrade.lock"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -263,6 +306,9 @@ fi
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.
 APISERVERS="$(printf '%s\n' "$COMPOSE_SERVICES" | grep -xE 'apiserver-[0-9]+' | paste -sd ' ' - || true)"
+if printf '%s\n' "$COMPOSE_SERVICES" | grep -x pgbackup >/dev/null; then
+  pgbackup_preflight
+fi
 echo "==> Building images from source ($SERVICES${CHANNEL:+ $CHANNEL})"
 if [ "$NO_CACHE" -eq 1 ]; then
   $DC build --no-cache $SERVICES $CHANNEL
@@ -304,6 +350,9 @@ fi
 if [ -n "$CHANNEL" ]; then
   managed_runner_services_up
 fi
+if [ "$PGBACKUP_HERE" -eq 1 ]; then
+  pgbackup_up
+fi
 
 echo "==> Stack status"
 $DC ps
@@ -314,3 +363,4 @@ if [ "$PRUNE" -eq 1 ]; then
 fi
 
 echo "✓ Upgrade complete — all services healthy."
+[ -z "$PGBACKUP_NOTICE" ] || printf '%s\n' "$PGBACKUP_NOTICE" >&2

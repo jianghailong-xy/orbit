@@ -34,7 +34,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[2]
 INSTALL = "scripts/install-server.sh"
 UPGRADES = [".claude/skills/upgrade/upgrade.sh", ".agents/skills/upgrade/scripts/upgrade.sh"]
-COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml"]
+COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml", "scripts/pg-backup.sh"]
 IMAGE_ID = "sha256:" + "ab" * 32
 GATEWAY = "172.30.0.1"
 SWITCH_LINES = [
@@ -51,9 +51,9 @@ FIREWALL_IMAGE = "orbit-managed-runner-firewall:local"
 # .env switches their profiles on, as Compose does, and `compose config docker-channel` then binds this checkout's
 # data/managed-runners into it as Compose prints a bind; a network exists once created; an image is found by any
 # name. The apiserver's container is replaced by a `compose up` that recreates it: one forced, or any naming it when
-# FAKE_APISERVER_IMAGE_CHANGED says its image changed. Docker's own facts (FAKE_SECURITY, FAKE_FIREWALL_DRIVER,
-# FAKE_IPV6) and the firewall program's answers (FAKE_FIREWALL_BACKEND for its preflight, FAKE_DNS) are the test's to
-# set. A call matching FAKE_FAIL fails.
+# FAKE_APISERVER_IMAGE_CHANGED says its image changed. pgbackup runs from this checkout, on this checkout's script.
+# Docker's own facts (FAKE_SECURITY, FAKE_FIREWALL_DRIVER, FAKE_IPV6) and the firewall program's answers
+# (FAKE_FIREWALL_BACKEND for its preflight, FAKE_DNS) are the test's to set. A call matching FAKE_FAIL fails.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FAKE_DOCKER_LOG"
 if [ -n "${FAKE_FAIL:-}" ] && [[ "$*" == $FAKE_FAIL ]]; then echo "fake docker: failing $*" >&2; exit 1; fi
@@ -73,6 +73,9 @@ case "$*" in
       '          create_host_path: true' '      - type: bind' "        source: $PWD/data/managed-runners" \
       '        target: /var/lib/orbit-managed-runners' '        bind:' '          create_host_path: true' ;;
   "compose ps -q apiserver") cat "$FAKE_DOCKER_LOG.apiserver" 2>/dev/null || echo apiserver-0 ;;
+  "compose ps -q pgbackup") echo pgbackup-0 ;;
+  "inspect --format {{range .Mounts}}"*" orbit-pgbackup") echo "$PWD/data/pg-archive" ;;
+  "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose up "*--force-recreate*apiserver*) apiserver_recreated ;;
   "compose up "*apiserver*) [ -n "${FAKE_APISERVER_IMAGE_CHANGED:-}" ] && apiserver_recreated ;;
   "compose logs apiserver") echo "[ManagedRunners] managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)" ;;
@@ -294,23 +297,37 @@ class NewDeploymentTest(unittest.TestCase):
     # ── the upgrade ───────────────────────────────────────────────────────────────────────────
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
-    # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call.
+    # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
+    # what it asks about pgbackup, before building and after the other services (2026-11-02, Orbit Files' T10).
+    PGBACKUP_PREFLIGHT = [
+        "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-pgbackup",
+        "compose ps -q pgbackup",
+    ]
+    PGBACKUP_UP = [
+        "compose ps -q pgbackup",
+        "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh",
+        "compose up -d --wait --no-deps pgbackup",
+    ]
     BEFORE_IMAGE_UPGRADES = {
         ".claude/skills/upgrade/upgrade.sh": [
             "compose version",
             "inspect --format {{.Image}} orbit-web",
             "compose config --services",
+            *PGBACKUP_PREFLIGHT,
             "compose build apiserver wiki-worker web",
             "compose up -d --wait apiserver wiki-worker web gateway",
+            *PGBACKUP_UP,
             "compose ps",
         ],
         ".agents/skills/upgrade/scripts/upgrade.sh": [
             "compose version",
             "compose config --services",
+            *PGBACKUP_PREFLIGHT,
             "compose build apiserver wiki-worker web",
             "compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "
             "\"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy",
             "compose up -d --wait --no-deps apiserver wiki-worker web gateway",
+            *PGBACKUP_UP,
             "compose ps",
         ],
     }
@@ -348,7 +365,9 @@ class NewDeploymentTest(unittest.TestCase):
         return {path.name: path.read_bytes() for path in sorted(directory.iterdir()) if path.is_file()}
 
     def ups(self):
-        return [c for c in self.calls() if c.startswith("compose up")]
+        # pgbackup's follows these, with nothing of the order they keep: the upgrade's own test holds it
+        # (test/upgrade-source-sha.test.mjs).
+        return [c for c in self.calls() if c.startswith("compose up") and not re.search(r"--no-deps .*pgbackup$", c)]
 
     def test_an_upgrade_rebuilds_the_managed_runner_image_and_names_its_id_in_both_files(self):
         for upgrade in UPGRADES:

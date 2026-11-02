@@ -64,7 +64,12 @@ It will, in order:
    docs/self-hosting.md, "Several apiservers"), and only once `apiserver` is healthy
    and has applied the migrations, so they find none to apply. They run the
    `apiserver` image, so a new one recreates them.
-5. Print `docker compose ps`.
+5. Bring `pgbackup` up to date, last, and only if it runs from this checkout (see
+   [pgbackup](#pgbackup)): `docker compose up -d --wait --no-deps --force-recreate
+   pgbackup` if the script it runs is not this checkout's, otherwise the same without
+   `--force-recreate`, which recreates it for a change of configuration, such as a new
+   mount, and leaves it running if there is none.
+6. Print `docker compose ps`.
 
 On a deployment whose `.env` turns on the `managed-runners-docker` profile, steps
 2 and 3 also cover managed runners: `docker-channel` is built with the rest, the
@@ -100,6 +105,39 @@ which follows the apiserver as above.
 ```bash
 .claude/skills/upgrade/upgrade.sh --prune
 ```
+
+## pgbackup
+
+The backup sidecar needs a step of its own. Compose bind-mounts `scripts/pg-backup.sh` into it
+as a single file, so a new checkout replaces the file under a running container, which keeps the
+one it started on, and Compose sees no change. The script compares what the container has with
+the checkout. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup
+in progress, which it takes again as it starts.
+
+Its mounts are relative. From any directory but the checkout it runs from, a recreate would bind
+`/archive` to that directory's empty `./data/pg-archive`. So it is recreated only where the running
+container's `/archive` is this checkout's `data/pg-archive`, and only if it is running in this
+run's Compose project. Otherwise it is left as it is, and the run says `pgbackup was NOT updated`
+before it builds and again as its last lines, with the command to run in the checkout it runs from.
+`--pull-base` from another directory stops before anything is built.
+
+After an upgrade, confirm it took effect:
+
+```bash
+# The mount, read-only: prints "/var/lib/orbit/files false".
+docker inspect orbit-pgbackup --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' | grep /var/lib/orbit/files
+# The script is this checkout's: prints nothing, and exits 0.
+docker exec orbit-pgbackup cat /usr/local/bin/pg-backup.sh | cmp - scripts/pg-backup.sh
+# Both copies are named and working: "watching" names <target> and <target>-files, with no ERROR after it.
+docker logs orbit-pgbackup 2>&1 | grep -E 'watching|mirrored|ERROR' | tail
+# A file from ./data/files reached the target, within a poll (15 minutes) of the sidecar starting. With
+# ORBIT_BACKUP_SYNC_TARGET=root@backup-host:/data/backup/orbit-pg-archive:
+f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
+ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
+```
+
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to
+show: see the [backup and restore runbook](../../../docs/postgres-backup-restore.md#attachment-files).
 
 ## Requirements
 

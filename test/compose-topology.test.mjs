@@ -99,7 +99,7 @@
 // port or environment is added, and with no ORBIT_BACKUP_SYNC_TARGET nothing reads the mount. (r) pins the line.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -774,9 +774,10 @@ test('(r) ./data/files is the apiserver\'s to write and pgbackup\'s to read, and
  * One round of scripts/pg-backup.sh's loop on a scratch archive and files directory. Every tool it runs is a stub on PATH:
  * rsync records each call and fails for the destination `failing` names, and sleep fails, which ends the script under
  * `set -e` once the round is done, with its status: 7 means the loop got that far. `files`, the entries of the files
- * directory, may be null for a directory that is not there.
+ * directory, may be null for a directory that is not there. `wal` is whether Postgres has written to this archive, and
+ * `backups` whether pg_basebackup works.
  */
-function backupRound({ target = '', files = [], failing = '' } = {}) {
+function backupRound({ target = '', files = [], failing = '', wal = true, backups = true } = {}) {
   const scratch = mkdtempSync(path.join(tmpdir(), 'pg-backup-round-'));
   try {
     const stubs = path.join(scratch, 'stubs');
@@ -785,7 +786,7 @@ function backupRound({ target = '', files = [], failing = '' } = {}) {
     mkdirSync(stubs);
     for (const [name, body] of Object.entries({
       psql: 'echo 0',
-      pg_basebackup: 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}" ;; esac; done',
+      pg_basebackup: backups ? 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}" ;; esac; done' : 'exit 1',
       pg_archivecleanup: ':',
       ssh: ':',
       sleep: 'exit 7',
@@ -797,6 +798,10 @@ for last; do :; done
       mkdirSync(filesDir);
       for (const entry of files) mkdirSync(path.join(filesDir, entry));
     }
+    const cutShort = path.join(scratch, 'archive/base/.staging-20260101T000000Z');
+    mkdirSync(cutShort, { recursive: true });
+    mkdirSync(path.join(scratch, 'archive/wal'));
+    if (wal) writeFileSync(path.join(scratch, 'archive/wal/000000010000000000000001.gz'), '');
     const round = spawnSync('sh', ['scripts/pg-backup.sh'], {
       cwd: repo,
       encoding: 'utf8',
@@ -814,7 +819,7 @@ for last; do :; done
     } catch (error) {
       assert.equal(error.code, 'ENOENT');
     }
-    return { status: round.status, log: round.stdout + round.stderr, rsyncCalls };
+    return { status: round.status, log: round.stdout + round.stderr, rsyncCalls, cutShortLeft: existsSync(cutShort) };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -829,6 +834,12 @@ test('(r) with no off-host target the sidecar copies nothing, whatever the files
   assert.match(log, /completed base backup/);
   assert.doesNotMatch(log, /ERROR/);
   assert.deepEqual(rsyncCalls, []);
+});
+
+test('(r) a base backup cut short by a stopped container does not outlive it', () => {
+  const { status, log, cutShortLeft } = backupRound();
+  assert.equal(status, 7, log);
+  assert.equal(cutShortLeft, false);
 });
 
 test('(r) the sidecar copies the files after the archive, beside its target, with no --delete and without tmp/', () => {
@@ -861,6 +872,19 @@ test('(r) a files directory that is not there is still tried, so that a containe
   const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: null });
   assert.equal(status, 7, log);
   assert.equal(rsyncCalls.length, 2, log);
+});
+
+test('(r) the mirror refuses an archive that cannot be the real one, so that --delete cannot empty its target', () => {
+  // An empty mount under a healthy Postgres: this round's own base backup lands in it, and Postgres writes no WAL there.
+  for (const archive of [{ wal: false }, { backups: false }, { wal: false, backups: false }]) {
+    const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files: ['ab'], ...archive });
+    assert.equal(status, 7, log);
+    assert.ok(log.includes(`ERROR: refusing off-host sync to ${SYNC_TARGET}:`), log);
+    assert.deepEqual(rsyncCalls.filter((call) => call.includes('--delete')), [], log);
+    // The files copy deletes nothing, so it still goes.
+    assert.equal(rsyncCalls.length, 1, log);
+    assert.ok(rsyncCalls[0].endsWith(` ${FILES_SYNC_TARGET}/`), rsyncCalls[0]);
+  }
 });
 
 test('(r) a failed off-host copy is logged and costs neither the other copy nor the base backup', () => {

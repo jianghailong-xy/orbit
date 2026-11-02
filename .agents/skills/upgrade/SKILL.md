@@ -42,7 +42,8 @@ Without `--pull-base`, the helper:
 1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`.
 2. Runs `docker compose up -d --wait apiserver wiki-worker web gateway`.
 3. Where `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on; docs/self-hosting.md, "Several apiservers"), recreates them once `apiserver` is healthy and the migrations are applied, so they find none to apply.
-4. Prints `docker compose ps`.
+4. Brings `pgbackup` up to date, last, and only if it runs from this checkout (see "pgbackup" below).
+5. Prints `docker compose ps`.
 
 Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls `postgres` and `gateway`, then runs a full `up -d --wait` so changed base images take effect.
 
@@ -58,6 +59,29 @@ Where `.env` turns that profile on, the helper also keeps managed runners curren
 A managed runner's container keeps the image it was made from and is never stopped by the upgrade: each runner moves to the new image with its next container, when it wakes after it next sleeps. Nothing deletes the previous image while a container uses it: in Docker's containerd image store it loses its name when the new image takes the tag, and its storage goes with the last container made from it; in the classic store `--prune` removes it once no container, running or stopped, was made from it. `data/managed-runners/.image-switch` marks a switch written and not yet started on, so a run that failed between the two is finished by the next one.
 
 Concurrent upgrades are serialized with `/tmp/orbit-upgrade.lock`; a second invocation exits instead of starting another deployment.
+
+## pgbackup
+
+The backup sidecar needs a step of its own. Compose bind-mounts `scripts/pg-backup.sh` into it as a single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and Compose sees no change. The helper compares what the container has with the checkout: if they differ it runs `docker compose up -d --wait --no-deps --force-recreate pgbackup`, otherwise the same without `--force-recreate`, which recreates it for a change of configuration, such as a new mount, and leaves it running if there is none. `--no-deps` keeps `postgres` out of it, and recreating it cuts short a base backup in progress, which it takes again as it starts.
+
+Its mounts are relative. From any directory but the checkout it runs from, a recreate would bind `/archive` to that directory's empty `./data/pg-archive`. So it is recreated only where the running container's `/archive` is this checkout's `data/pg-archive`, and only if it is running in this run's Compose project. Otherwise it is left as it is, and the helper says `pgbackup was NOT updated` before it builds and again as its last lines, with the command to run in the checkout it runs from. `--pull-base` from another directory stops before anything is built.
+
+After an upgrade, confirm it took effect:
+
+```bash
+# The mount, read-only: prints "/var/lib/orbit/files false".
+docker inspect orbit-pgbackup --format '{{range .Mounts}}{{println .Destination .RW}}{{end}}' | grep /var/lib/orbit/files
+# The script is this checkout's: prints nothing, and exits 0.
+docker exec orbit-pgbackup cat /usr/local/bin/pg-backup.sh | cmp - scripts/pg-backup.sh
+# Both copies are named and working: "watching" names <target> and <target>-files, with no ERROR after it.
+docker logs orbit-pgbackup 2>&1 | grep -E 'watching|mirrored|ERROR' | tail
+# A file from ./data/files reached the target, within a poll (15 minutes) of the sidecar starting. With
+# ORBIT_BACKUP_SYNC_TARGET=root@backup-host:/data/backup/orbit-pg-archive:
+f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
+ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
+```
+
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to show: see the backup and restore runbook, `docs/postgres-backup-restore.md`, "Attachment files".
 
 ## Requirements
 

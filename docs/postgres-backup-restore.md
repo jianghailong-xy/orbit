@@ -71,8 +71,10 @@ Restoring from the mirror is the same runbook — copy a base backup directory a
 rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
 ```
 
-Do this with `pgbackup` stopped, and on a replacement host before `pgbackup` first starts: with
-`--delete`, a sidecar started on an empty archive empties the mirror.
+The mirror refuses an archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so
+an empty or wrong mount cannot clear it. That does not cover a new cluster, whose archive has both: on
+a replacement host, bring the archive back before the stack first starts, because `--delete` would
+replace the old archive with the new one.
 
 ### Attachment files
 
@@ -102,9 +104,9 @@ commits: a round that finishes leaves the copy with the bytes of every row in th
   is not an error. Bytes left in the directory from before a move to a bucket are still copied.
 
 The sidecar gets its read-only mount of `./data/files` when its container is recreated, and until then
-it copies no files. `docker compose up -d --build` recreates it; `/upgrade`'s script does not, so run
-`docker compose up -d --no-deps pgbackup` once after it. `docker logs orbit-pgbackup | grep watching`
-then names both directories.
+it copies no files. `docker compose up -d --build` recreates it, and so does `/upgrade`, from the
+checkout the sidecar runs from; run from anywhere else, `/upgrade` leaves it and says so.
+`docker logs orbit-pgbackup | grep watching` then names both directories.
 
 ## Restore
 
