@@ -325,8 +325,9 @@ internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen
  * The full-height review a preview opens (A08-2; iOS `ApprovalReviewSheet`): the card whole, its buttons pinned under it, a ✕ that
  * closes it. Hosted by the reader outside the transcript's rows; the answers typed in it are kept per card version while it closes
  * and opens again ([states]). After this window's own press it says so — "Sending your answer…", then the record the card became:
- * the card as it was asked, read-only, and where its buttons were, who did what and when; it stays open until closed. A request
- * that went away says that instead of drawing nothing.
+ * the card as it was asked, read-only, and where its buttons were, who did what and when — and about 2 s later it leaves on its own.
+ * A refused answer, an answer from another end and a record opened from the conversation stay until closed. A request that went
+ * away says that instead of drawing nothing, and stays until closed too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -345,6 +346,14 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
     // Read again as it opens: what it shows is the server's now, not the preview's.
     LaunchedEffect(key) { app.realtime.refreshSession() }
     LaunchedEffect(phase) { if (phase == CardPreviews.Phase.CLOSED) cards.close() }
+    // The record confirms the press, and then the review gets out of the way (the owner's call of 2026-11-02; iOS `ApprovalReviewSheet`).
+    // A coordinator's question never reaches RECORDED, and its record reads the same whoever answered, so only the door taking this
+    // press counts: refused because another end answered first, the card is a record all the same, and that one stays to be read.
+    val answeredHere = phase == CardPreviews.Phase.RECORDED ||
+        press?.verb == CardVerb.OWNER_ANSWER && pressResult.settled && card?.family == CardFamily.QUESTION_RECORD
+    // Closing by hand clears `key`, so this function returns at its top and this effect leaves the composition, timer and all: no timer
+    // outlives its review to close the next one.
+    LaunchedEffect(key, answeredHere) { if (answeredHere) { delay(2_000); cards.close() } }
     val title = when {
         record != null -> record.title
         card == null -> CardPreviews.requestClosed

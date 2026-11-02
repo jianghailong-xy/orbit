@@ -73,15 +73,17 @@ class CardsDeviceTest {
         compose.onNodeWithTag(tag).assertIsEnabled().performClick()
     }
     /** The review turned into its record after a press: its [title], the card as it was asked, and where its buttons were, the
-     * line saying who did what ([line] is how it starts) — open until it is closed. */
+     * line saying who did what ([line] is how it starts) — and then it leaves on its own, with nobody closing it. Its 2 s run on the
+     * Compose rule's clock, which moves with the rule's waits and not while this reads, so the reads do not race the close. */
     private fun record(title: String, line: String, name: String) {
         compose.waitUntil(15_000) {
             compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText(line, substring = true)).fetchSemanticsNodes().isNotEmpty()
         }
+        val shown = compose.mainClock.currentTime
         compose.onNodeWithTag("card-review:title").assertTextEquals(title)
         capture("$name-record")
-        File(output, "$name-record.txt").writeText("title=$title\nline=$line\n")
-        closeReview()
+        compose.waitUntil(15_000) { !exists("card-review") }
+        File(output, "$name-record.txt").writeText("title=$title\nline=$line\nleftAfterMs=${compose.mainClock.currentTime - shown}\n")
     }
     private fun closeReview() {
         try { if (exists("card-review:close")) compose.onNodeWithTag("card-review:close").performClick() } catch (_: AssertionError) { /* It closed itself. */ }
@@ -138,7 +140,7 @@ class CardsDeviceTest {
         compose.onNodeWithText("Core").assertIsSelected()
         press("approval:a2:ANSWER")
         compose.waitUntil(15_000) { !http("/__stats").flag("pending") }
-        // The review stays open as the record the question became: what was picked ticked, the words typed in quotes.
+        // The review is the record the question became, until it leaves on its own: what was picked ticked, the words typed in quotes.
         compose.waitUntil(15_000) { exists("card-review:record") }
         compose.onNodeWithTag("approval:a2:question:1:own").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("“Server state”").assertExists()
@@ -323,7 +325,8 @@ class CardsDeviceTest {
             if (kind == "promotion") assertEquals("CONFIRMED", recorded.obj("final")!!.text("state")) // Accepted, not merged.
             semantics(kind)
             capture("business-$kind")
-            closeReview()
+            // A coordinator's question answered here has no RECORDED phase, and its review leaves on its own all the same.
+            if (kind == "q1") compose.waitUntil(15_000) { !exists("card-review") } else closeReview()
         }
     }
 

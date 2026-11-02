@@ -174,8 +174,9 @@ object CardPreviews {
         return text.trim()
     }
 
-    // The record (the owner's boards record-1…8): once this window's own press is recorded the review stays open, its card read-only
-    // as it was asked, and where its buttons were, who did what and when. It lives only while the review is open.
+    // The record (the owner's boards record-1…8): once this window's own press is recorded the review draws it, its card read-only
+    // as it was asked, and where its buttons were, who did what and when. It lives only while the review is open, and the review
+    // leaves on its own about 2 s after it (`CardReviewSheet`, the owner's call of 2026-11-02).
 
     enum class Phase { CARD, SENDING, RECORDED, CLOSED }
 
