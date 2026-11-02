@@ -17,6 +17,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
 
     private static let lib = "src/web/src/lib/wikiReviewMode.ts"
     private static let settingsPage = "src/web/src/components/WikiSettingsPage.tsx"
+    private static let setUpDialog = "src/web/src/components/WikiSetUpDialog.tsx"
     private static let marks = "src/web/src/components/WikiEntryMarks.tsx"
     private static let drawer = "src/web/src/components/WikiEntryDrawer.tsx"
     private static let runPage = "src/web/src/components/WikiRunPage.tsx"
@@ -598,28 +599,35 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let off = try slice(page, from: "<div className=\"wk-maint-off\">", to: "{setUp && (")
         assertOrder(off, ["{WIKI_MAINTENANCE_NAME}", "{WIKI_MAINTENANCE_NOTE_SERVER}",
                           "{WIKI_OFF}", "{WIKI_SET_UP}", "{server && <WikiPrivacyNote />}"], "the web's maintenance off")
-        let on = try slice(page, from: "function MaintenanceOn(", to: "function MaintenanceSetUp(")
+        let on = try slice(page, from: "function MaintenanceOn(", to: "{WIKI_TURN_OFF}")
         assertOrder(on, ["{WIKI_STATUS}", "{WIKI_REPO_FROM}", "{server && (", "<WikiModelLine model={server} />",
                          "{WIKI_DAILY_LIMIT}", "{WIKI_LOOKBACK}",
                          "{wikiLookbackLabel(maintenance.lookbackDays)}", "{server && <WikiPrivacyNote />}",
                          "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"],
                     "the web's maintenance rows")
-        let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Dialog>")
-        assertOrder(form, ["{WIKI_MAINTENANCE_NOTE_SERVER}", "{WIKI_REPO_FROM}",
-                           "{WIKI_REPO_FROM_NOTE}", "{server && (", "{WIKI_MODEL}", "<WikiModelLine model={server} />",
+        // The form left the page: the home's setup card opens it too, and Create wiki is the same form (mock 41).
+        assertSays(page, "<WikiSetUpDialog space={space} onClose={() => setSetUp(false)} />", in: Self.settingsPage)
+        let dialog = try web(Self.setUpDialog)
+        let form = try slice(dialog, from: "function MaintenanceForm(", to: "</Dialog>")
+        assertOrder(form, ["{note}", "{WIKI_REPO_FROM}",
+                           "{workspaceNote}", "{server && (", "{WIKI_MODEL}", "<WikiModelLine model={server} />",
                            "{WIKI_MODEL_NOTE}", "{WIKI_DAILY_LIMIT}", "{WIKI_RUNS_A_DAY}", "{WIKI_DAILY_LIMIT_NOTE}",
                            "{WIKI_LOOKBACK}", "WIKI_LOOKBACK_CHOICES.map(", "{lookback === 'days' && (",
                            "<span>{WIKI_LOOKBACK_UNIT}</span>", "{WIKI_LOOKBACK_NOTE}", "{server && <WikiPrivacyNote />}"],
                     "the web's Set up form")
-        assertSays(form, "{maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
-        assertSays(form, "lookbackDays: wikiLookbackDays(lookback, days)", in: Self.settingsPage)
+        let setUp = try slice(dialog, from: "export function WikiSetUpDialog(", to: "export function WikiCreateDialog(")
+        for prop in ["title={WIKI_SET_UP_TITLE}", "note={WIKI_MAINTENANCE_NOTE_SERVER}", "submit={maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}",
+                     "workspaceNote={WIKI_REPO_FROM_NOTE}"] {
+            assertSays(setUp, prop, in: Self.setUpDialog)
+        }
+        assertSays(form, "lookbackDays: wikiLookbackDays(lookback, days)", in: Self.setUpDialog)
         // Nothing writes a provider, and none is picked or shown.
         XCTAssertFalse(form.contains("provider"), "the web's Set up form still has a provider")
         XCTAssertFalse(on.contains("maintenance.provider"), "the web's maintenance rows still show a provider")
         assertSays(page, "const server = systemModel.data?.executor?.serverExecutes ? systemModel.data : null;", in: Self.settingsPage)
 
         let native = try self.native("Views/WikiSettingsView.swift")
-        let nativePage = try slice(native, from: "struct WikiSettingsPage: View {", to: "struct WikiPickerOption")
+        let nativePage = try slice(native, from: "struct WikiSettingsPage: View {", to: "struct WikiMaintenanceChoice")
         XCTAssertTrue(nativePage.contains("ForEach(WikiModeLogic.SettingsSection.allCases, id: \\.self) { section in"))
         assertOrder(nativePage, ["WikiModeLogic.modeFallback(space.settings)", "ForEach(WikiModeLogic.SettingsSection.allCases"],
                     "the fallback leads the native page")
@@ -645,32 +653,38 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let row = try slice(nativePage, from: "private func modeRow(", to: "private func fallbackBanner(")
         assertOrder(row, ["WikiModeCopy.modeLabel(value)", "WikiModeCopy.modeDefault", "WikiModeCopy.modeNote(value)",
                           "Image(systemName: \"checkmark\")"], "a mode's row")
-        let model = try slice(native, from: "struct WikiModelValue: View {", to: "struct WikiPickerOption")
+        let model = try slice(native, from: "struct WikiModelValue: View {", to: "struct WikiMaintenanceChoice")
         assertOrder(model, ["Text(WikiRunsCopy.systemModelLabel(model.model))", "WikiModelStateText(model: model)"],
                     "the System model, its name over its state")
-        let nativeForm = try slice(native, from: "struct WikiMaintenanceForm: View {", to: "struct WikiSettingsView: View {")
-        assertOrder(nativeForm, ["Text(WikiModeCopy.maintenanceNoteServer)",
+        let nativeForm = try slice(native, from: "struct WikiMaintenanceForm: View {", to: "struct WikiSetUpSheet: View {")
+        assertOrder(nativeForm, ["Text(note)",
                                  "Text(WikiModeCopy.repoFrom)",
-                                 "Text(WikiModeCopy.repoFromNote)",
+                                 "Text(workspaceNote(chosenChoice))",
                                  "if let server {", "LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }",
                                  "Text(WikiModeCopy.model)", "Text(WikiModeCopy.modelNote)", "WikiModeCopy.runsADay(",
                                  "Text(WikiModeCopy.dailyLimitNote)", "Picker(WikiModeCopy.lookback, selection: $choice.lookback)",
                                  "ForEach(WikiModeLogic.LookbackChoice.allCases", "if choice.lookback == .days {",
                                  "Text(WikiModeCopy.lookback)", "Text(WikiModeCopy.lookbackNote)",
                                  "if server != nil { Text(WikiModeCopy.privacyNote) }"], "the native Set up form")
-        assertSays(nativeForm, "Button(enabled ? WikiModeCopy.save : WikiModeCopy.turnOn)", in: "WikiSettingsView.swift")
+        assertSays(nativeForm, "Button(submitLabel)", in: "WikiSettingsView.swift")
+        let setUpSheet = try slice(native, from: "struct WikiSetUpSheet: View {", to: "struct WikiCreateSheet: View {")
+        for argument in ["title: WikiModeCopy.setUpTitle", "note: WikiModeCopy.maintenanceNoteServer",
+                         "submitLabel: current.enabled ? WikiModeCopy.save : WikiModeCopy.turnOn",
+                         "workspaceNote: { _ in WikiModeCopy.repoFromNote }", "server: wiki.serverModel", "await wiki.loadSystemModel()"] {
+            assertSays(setUpSheet, argument, in: "WikiSettingsView.swift")
+        }
         assertSays(nativeForm, "Stepper(value: $choice.dailyRunLimit, in: WikiMaintenanceSettings.dailyRunLimitRange)",
                    in: "WikiSettingsView.swift")
         assertSays(nativeForm, "Stepper(value: $choice.lookbackDays, in: 1...WikiMaintenanceSettings.lookbackDaysRange.upperBound)",
                    in: "WikiSettingsView.swift")
         // All of history goes out as null: a key left out would leave the look-back as it was.
+        assertSays(native, "lookbackDays: .some(WikiModeLogic.lookbackDays(lookback, days: lookbackDays))", in: "WikiSettingsView.swift")
         let screen = try slice(native, from: "struct WikiSettingsView: View {", to: "private func actions(")
-        assertSays(screen, "lookbackDays: .some(WikiModeLogic.lookbackDays(choice.lookback, days: choice.lookbackDays))",
-                   in: "WikiSettingsView.swift")
         // The System model is read with the page, and nothing picks or writes a provider.
         assertSays(screen, "server: wiki.serverModel", in: "WikiSettingsView.swift")
         assertSays(screen, "await wiki.loadSystemModel()", in: "WikiSettingsView.swift")
         XCTAssertFalse(nativeForm.contains("provider"), "the native Set up form still has a provider")
+        XCTAssertFalse(setUpSheet.contains("provider"), "the native Set up sheet still writes a provider")
         XCTAssertFalse(screen.contains("provider"), "the native settings screen still writes a provider")
     }
 

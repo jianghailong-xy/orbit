@@ -12,10 +12,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
-/** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
+/** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). [repoUrl] is the
+ * remote the workspace records, null with none and from a server that does not send it: what makes a wiki of it (mock 41). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null)

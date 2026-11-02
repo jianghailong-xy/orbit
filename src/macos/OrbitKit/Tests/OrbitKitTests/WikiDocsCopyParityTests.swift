@@ -430,8 +430,7 @@ final class WikiDocsCopyParityTests: XCTestCase {
                       "Open the session", "Open the project"] {
             assertSays(lib, "label: '\(label)'", in: Self.lib)
         }
-        // The home's (design §12.3.1): what the space holds under the head, the folded rows, a new space's card.
-        assertDeclares(lib, "WIKI_NO_DOCUMENTS_NOTE", WikiDocCopy.noDocumentsNote, in: Self.lib)
+        // The home's (design §12.3.1): what the space holds under the head, the folded rows.
         assertSays(lib, "wikiDocsWritten = (total: number, written: number): string => "
                    + "`${plural(total, 'document', 'documents')} · ${wikiCount(written)} written`;", in: Self.lib)
         assertSays(lib, "wikiNotWrittenYet = (count: number): string => `+${wikiCount(count)} not written yet`;", in: Self.lib)

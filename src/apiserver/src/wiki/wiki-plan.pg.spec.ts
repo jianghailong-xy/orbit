@@ -33,6 +33,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
 import {
   toUuid,
+  uuidToBase62,
   WIKI_PLAN_ORIGINS,
   WIKI_PLAN_PROPOSAL_STATUSES,
   WIKI_PLAN_RULES,
@@ -422,6 +423,42 @@ async function checkValues(h: Harness, table: string, constraint: string): Promi
 }
 
 // ── 1. the guard ────────────────────────────────────────────────────────────────────────────────
+
+test('one request makes a wiki from a workspace: its repository, maintenance on, and its first draft made (mock 41)', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'owner');
+  await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: 'shop-cli',
+    repoUrl: 'git@github.com:acme/shop-cli.git',
+    // The web's own spelling of an id: what the form that makes a wiki sends.
+    maintenance: { enabled: true, workspaceId: uuidToBase62(ws), dailyRunLimit: 8, lookbackDays: 14 },
+  });
+  expectStatus(made, 201, 'the owner makes the wiki');
+  assert.equal(made.body.repoUrlNorm, 'github.com/acme/shop-cli', 'every spelling of a remote is one repository');
+  const spaceId = toUuid(made.body.id as string);
+  const settings = made.body.settings as { maintenance: { enabled: boolean; workspaceId: string; dailyRunLimit: number; lookbackDays: number } };
+  assert.equal(settings.maintenance.enabled, true, 'maintenance is on from the start');
+  assert.equal(toUuid(settings.maintenance.workspaceId), ws, 'on the workspace the owner picked');
+  assert.deepEqual([settings.maintenance.dailyRunLimit, settings.maintenance.lookbackDays], [8, 14], 'as often and as far back as the form said');
+  const drafts = await h.sql.query<{ state: string; trigger: string; job_id: string | null }>(
+    `SELECT "state", "trigger", "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft'`,
+    [spaceId],
+  );
+  assert.equal(drafts.rowCount, 1, 'one first draft');
+  assert.equal(drafts.rows[0]!.state, 'made', 'made at once: it has a workspace to read through, so it is not held');
+  assert.equal(drafts.rows[0]!.trigger, 'space_created', 'asked for by the wiki being made');
+  assert.ok(drafts.rows[0]!.job_id, 'as a wiki_job of the server');
+  const refused = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: 'nothing',
+    repoUrl: 'https://github.com/acme/other',
+    maintenance: { enabled: true, workspaceId: uuidToBase62('0196e400-0000-7000-8000-000000000001') },
+  });
+  expectStatus(refused, 404, 'a workspace that is not the owner\'s makes nothing');
+  const spaces = await h.sql.query(`SELECT 1 FROM "wiki_space" WHERE "owner_id" = $1`, [owner.id]);
+  assert.equal(spaces.rowCount, 1, 'and the refused request left no wiki behind');
+});
 
 test('with no confirmed plan requireConfirmedPlan refuses — a draft is not enough — and with one it names it', { skip }, async () => {
   const h = await boot();

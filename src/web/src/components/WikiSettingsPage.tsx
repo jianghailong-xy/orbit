@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
 import {
-  WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
-  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   wikiSpaceSettings,
   type WikiMaintenanceSettings,
   type WikiReviewMode,
@@ -14,16 +12,11 @@ import { wikiSpaceWorkspacesQuery, wikiSystemModelQuery, workspacesQuery } from 
 import { useToast } from '../lib/toast';
 import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
 import {
-  WIKI_CANCEL,
   WIKI_DAILY_LIMIT,
-  WIKI_DAILY_LIMIT_NOTE,
   WIKI_DEFAULT_REVIEW_MODE,
   WIKI_FLOORS_LEAD,
   WIKI_FLOORS_NOTE,
   WIKI_LOOKBACK,
-  WIKI_LOOKBACK_CHOICES,
-  WIKI_LOOKBACK_NOTE,
-  WIKI_LOOKBACK_UNIT,
   WIKI_MAINTENANCE,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
@@ -33,31 +26,21 @@ import {
   WIKI_MODE_NOTES,
   WIKI_MODE_ORDER,
   WIKI_MODEL,
-  WIKI_MODEL_NOTE,
-  WIKI_NO_WORKSPACE,
   WIKI_OFF,
   WIKI_ON,
   WIKI_ADD_WORKSPACE,
   WIKI_ADD_WORKSPACE_GROUP,
   WIKI_REPO_FROM,
-  WIKI_REPO_FROM_NOTE,
   WIKI_REVIEW_MODE,
   WIKI_REVIEW_MODE_HINT,
   WIKI_REVIEW_MODE_LEAD,
-  WIKI_RUNS_A_DAY,
-  WIKI_SAVE,
   WIKI_SETTINGS,
   WIKI_SETTINGS_TITLE,
   WIKI_SET_UP,
-  WIKI_SET_UP_TITLE,
   WIKI_SPOT_CHECK,
   WIKI_SPOT_CHECK_NOTE,
   WIKI_STATUS,
   WIKI_TURN_OFF,
-  WIKI_TURN_ON,
-  wikiLookbackChoice,
-  wikiLookbackDays,
-  wikiLookbackDaysOffered,
   wikiLookbackLabel,
   wikiModeFallback,
   wikiRunsADay,
@@ -68,17 +51,14 @@ import {
   WIKI_WORKSPACES_JOIN_NO_REPOSITORY,
   WIKI_WORKSPACES_LEAD,
   wikiWorkspaceLabel,
-  type WikiLookbackChoice,
 } from '../lib/wikiReviewMode';
 import { addWikiWorkspace, leaveWikiWorkspaceOut, updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
+import { WikiSetUpDialog } from './WikiSetUpDialog';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { Dialog } from './ui/Dialog';
 import { Menu } from './ui/Menu';
-import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
-import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
 
 /**
@@ -208,16 +188,7 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
       </Card>
 
       {setUp && (
-        <MaintenanceSetUp
-          maintenance={settings.maintenance}
-          server={server}
-          spaceSlug={space.slug}
-          onClose={() => setSetUp(false)}
-          onSubmit={async (maintenance) => {
-            await write.mutateAsync({ maintenance });
-            toast.success(WIKI_SETTINGS_SAVED);
-          }}
-        />
+        <WikiSetUpDialog space={space} onClose={() => setSetUp(false)} />
       )}
     </div>
   );
@@ -350,151 +321,5 @@ function MaintenanceOn({
         </Button>
       </div>
     </>
-  );
-}
-
-/**
- * Set up maintenance: the workspace it reads the repository from, the System model, how many runs a day it may
- * start and how far back it starts reading — then Turn on (or Save, for one already on).
- *
- * THERE IS NO PROVIDER TO PIN (mock 35 ②): the System model is shown, read-only, nothing writes `provider` —
- * whatever a space named before server execution stays as it was, and the server drops it from any write
- * (contract `space.settings.maintenance.keys.provider`) — and the form ends on where the wiki's material goes.
- */
-function MaintenanceSetUp({
-  maintenance,
-  server,
-  spaceSlug,
-  onClose,
-  onSubmit,
-}: {
-  maintenance: WikiMaintenanceSettings;
-  server: WikiSystemModelStatus | null;
-  spaceSlug: string;
-  onClose: () => void;
-  onSubmit: (maintenance: NonNullable<WikiSpaceUpdate['maintenance']>) => Promise<void>;
-}) {
-  const workspaces = useQuery(workspacesQuery());
-  const rows = (workspaces.data ?? []) as Array<{ id: string; name?: string; runner?: { name?: string; displayName?: string } }>;
-  // A space names a codebase, and so does a workspace's name more often than not: the one called
-  // what the space is called is where its runs most likely belong, so it is the first offered.
-  const [workspaceId, setWorkspaceId] = useState<string | null>(
-    () => maintenance.workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null,
-  );
-  const [limit, setLimit] = useState(maintenance.dailyRunLimit);
-  const [lookback, setLookback] = useState(() => wikiLookbackChoice(maintenance.lookbackDays));
-  const [days, setDays] = useState(() => wikiLookbackDaysOffered(maintenance.lookbackDays));
-  const [saving, setSaving] = useState(false);
-  const [refusal, setRefusal] = useState<string | null>(null);
-  const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
-
-  const submit = async () => {
-    if (!chosen) return;
-    setSaving(true);
-    setRefusal(null);
-    try {
-      await onSubmit({
-        enabled: true,
-        workspaceId: chosen,
-        dailyRunLimit: limit,
-        lookbackDays: wikiLookbackDays(lookback, days),
-      });
-      onClose();
-    } catch (error) {
-      setSaving(false);
-      setRefusal(error instanceof Error ? error.message : 'The server refused it');
-    }
-  };
-
-  return (
-    <Dialog
-      open
-      title={WIKI_SET_UP_TITLE}
-      onClose={onClose}
-      className="wk-setup-dialog"
-      footer={
-        <>
-          <Button onClick={onClose}>{WIKI_CANCEL}</Button>
-          <Button variant="primary" disabled={!chosen} loading={saving} onClick={() => void submit()}>
-            {maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}
-          </Button>
-        </>
-      }
-    >
-      <p className="wk-modal-note">{WIKI_MAINTENANCE_NOTE_SERVER}</p>
-      <div className="wk-setup">
-        <label className="wk-setup-k" htmlFor="wk-setup-workspace">
-          {WIKI_REPO_FROM}
-        </label>
-        <Select
-          id="wk-setup-workspace"
-          value={chosen}
-          placeholder={WIKI_NO_WORKSPACE}
-          onValueChange={(value) => setWorkspaceId(value)}
-          options={rows.map((row) => ({ value: row.id, label: wikiWorkspaceLabel(row) }))}
-          loading={workspaces.isLoading}
-        />
-        <div className="wk-setup-d">{WIKI_REPO_FROM_NOTE}</div>
-
-        {server && (
-          <>
-            <span className="wk-setup-k">{WIKI_MODEL}</span>
-            <div className="wk-setup-model">
-              <WikiModelLine model={server} />
-            </div>
-            <div className="wk-setup-d">{WIKI_MODEL_NOTE}</div>
-          </>
-        )}
-
-        <label className="wk-setup-k" htmlFor="wk-setup-limit">
-          {WIKI_DAILY_LIMIT}
-        </label>
-        <div className="wk-setup-limit">
-          <NumberInput
-            id="wk-setup-limit"
-            min={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min}
-            max={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max}
-            precision={0}
-            value={limit}
-            onValueChange={(value) => setLimit(typeof value === 'number' ? value : maintenance.dailyRunLimit)}
-          />
-          <span>{WIKI_RUNS_A_DAY}</span>
-        </div>
-        <div className="wk-setup-d">{WIKI_DAILY_LIMIT_NOTE}</div>
-
-        <label className="wk-setup-k" htmlFor="wk-setup-lookback">
-          {WIKI_LOOKBACK}
-        </label>
-        <Select<WikiLookbackChoice>
-          id="wk-setup-lookback"
-          value={lookback}
-          onValueChange={(value) => {
-            if (value !== null) setLookback(value);
-          }}
-          options={WIKI_LOOKBACK_CHOICES.map((choice) => ({ value: choice, label: wikiLookbackLabel(wikiLookbackDays(choice, days)) }))}
-        />
-        {lookback === 'days' && (
-          <div className="wk-setup-limit wk-setup-days">
-            <NumberInput
-              aria-label={WIKI_LOOKBACK_UNIT}
-              min={1}
-              max={WIKI_MAINTENANCE_LOOKBACK_DAYS.max}
-              precision={0}
-              value={days}
-              onValueChange={(value) => setDays(typeof value === 'number' ? value : days)}
-            />
-            <span>{WIKI_LOOKBACK_UNIT}</span>
-          </div>
-        )}
-        <div className="wk-setup-d">{WIKI_LOOKBACK_NOTE}</div>
-      </div>
-      {server && <WikiPrivacyNote />}
-      {refusal && (
-        <div className="wk-warn wk-setup-refusal" role="alert">
-          <ExclamationCircleOutlined className="ic" />
-          <span>{refusal}</span>
-        </div>
-      )}
-    </Dialog>
   );
 }
