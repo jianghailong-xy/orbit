@@ -308,3 +308,43 @@ describe('Image', () => {
     expect(dialog()!.querySelector<HTMLElement>('.orbit-image-preview-body')!.style.transformOrigin).toBe('200px 100px');
   });
 });
+
+describe('what a caller adds to the viewer', () => {
+  it('says the position its own way, says what the picture is, and adds its buttons after the zoom', async () => {
+    const onSave = vi.fn();
+    await render(
+      <ImagePreview
+        group
+        open
+        onClose={() => {}}
+        items={ITEMS}
+        current={1}
+        position={(shown, total) => `${shown} of ${total}`}
+        caption={<span className="what-it-is">shots/menu.png</span>}
+        actions={[{ key: 'save', label: 'Download', icon: <i />, onClick: onSave }]}
+      />,
+    );
+    const popup = document.querySelector('.orbit-image-preview')!;
+    expect(popup.querySelector('.orbit-image-preview-progress')?.textContent).toBe('2 of 3');
+    expect(popup.querySelector('.orbit-image-preview-caption .what-it-is')?.textContent).toBe('shots/menu.png');
+    expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(true);
+    const buttons = [...popup.querySelectorAll<HTMLButtonElement>('.orbit-image-preview-action')].map((button) => button.getAttribute('aria-label'));
+    expect(buttons.slice(-2)).toEqual(['Zoom in', 'Download']);
+    await act(async () => popup.querySelector<HTMLButtonElement>('[aria-label="Download"]')!.click());
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws as it always did when a caller adds nothing', async () => {
+    await render(<ImagePreview group open onClose={() => {}} items={ITEMS} current={1} />);
+    const popup = document.querySelector('.orbit-image-preview')!;
+    expect(popup.querySelector('.orbit-image-preview-progress')?.textContent).toBe('2 / 3');
+    expect(popup.querySelector('.orbit-image-preview-caption')).toBeNull();
+    expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(false);
+    expect(popup.querySelectorAll('.orbit-image-preview-action')).toHaveLength(6);
+  });
+
+  it('waits on an empty frame while a picture is being read', async () => {
+    await render(<ImagePreview group open onClose={() => {}} items={[{ alt: 'still reading' }, ...ITEMS]} current={0} />);
+    expect(document.querySelector('.orbit-image-preview-img')?.hasAttribute('src')).toBe(false);
+  });
+});

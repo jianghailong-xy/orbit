@@ -32,6 +32,17 @@
   position: absolute; bottom: 32px; left: 50%; display: flex; flex-direction: column; align-items: center; gap: 16px;
   color: rgba(255, 255, 255, 0.65); transform: translateX(-50%);
 }
+/* A caption is a path and a line of facts, which the 15% of the window under a 70% picture cannot hold: the picture
+   takes the room above the footer instead, and the footer the window's width. It is text to be read, so the page behind
+   it is all but put out, and on a phone the pill gives up its gaps for the extra buttons to fit. */
+.orbit-image-preview-captioned .orbit-image-preview-mask { background: rgba(0, 0, 0, 0.85); }
+.orbit-image-preview-captioned .orbit-image-preview-body { bottom: 196px; top: 56px; }
+.orbit-image-preview-captioned .orbit-image-preview-img { max-height: 100%; }
+.orbit-image-preview-captioned .orbit-image-preview-footer { width: calc(100% - 32px); }
+.orbit-image-preview-caption { max-width: 100%; line-height: 20px; overflow-wrap: anywhere; user-select: text; }
+@media (max-width: 600px) {
+  .orbit-image-preview-captioned .orbit-image-preview-actions { gap: 0; padding: 0 8px; }
+}
 .orbit-image-preview-actions {
   display: flex; gap: 12px; padding: 0 24px; border-radius: 100px; background-color: rgba(0, 0, 0, 0.1); font-size: 18px;
 }

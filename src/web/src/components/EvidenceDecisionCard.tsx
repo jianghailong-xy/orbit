@@ -11,12 +11,14 @@ import { isUsageLimitErrorText } from '@orbit/shared';
 import { Alert } from './ui/Alert';
 import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { citesFiles } from '../lib/evidenceFiles';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { quotaWindowKind, type QuotaWindowKind } from '../lib/quotaWindow';
 import { sessionRunStateOf, type SessionStateSource } from '../lib/sessionState';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
+import { EvidenceFilesArea } from './EvidenceFiles';
 // The word this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module for
 // `decisionReceiptTime`, so a top-level alias would be evaluated while that binding is still in
@@ -205,6 +207,12 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
           )}
         </div>
       </div>
+
+      {/* What the evidence is, right under what it is measured against. It is a block of its own and
+          only when the version cites a file, so a card with none is the card it has always been. */}
+      {citesFiles(row.citations) && (
+        <EvidenceFilesArea taskId={row.taskId} revision={row.evidenceRevision} citations={row.citations} />
+      )}
 
       {/* The body of the card. What the submitter says they did NOT establish is the part most
           likely to change the answer, so a narrow screen gives up everything folded below it
@@ -1238,6 +1246,15 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
                   facts.claim
                 )}
               </div>
+              {/* The one place an older version's files can be seen, and so where they are seen to expire:
+                  the latest version's do not (§2.8), and only the latest is ever a card. */}
+              {answered?.citations && citesFiles(answered.citations) ? (
+                <EvidenceFilesArea
+                  taskId={decided.taskId}
+                  revision={decided.evidenceRevision}
+                  citations={answered.citations}
+                />
+              ) : null}
               <div className="decision-ask-gaps">
                 <div className="decision-ask-gaps-head">
                   {facts.gaps.length === 0

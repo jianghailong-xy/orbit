@@ -1,0 +1,72 @@
+/* The evidence card's file area and the page it opens (EvidenceFiles.tsx). The card's own small heading, grey text and
+   8px corners, on the theme's tokens: nothing here is a colour of its own. */
+.evidence-files { margin-top: 10px; }
+.evidence-files-open {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; border-radius: 8px;
+  color: inherit; background: none; font: inherit; text-align: left; cursor: pointer;
+}
+.evidence-files-open:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+.evidence-files-open:hover .evidence-tile { border-color: var(--border); }
+.evidence-files-head { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--text-3); }
+.evidence-files-quiet { font-size: 12.5px; color: var(--text-3); }
+.evidence-files-row { display: grid; grid-template-columns: repeat(5, minmax(0, 64px)); gap: 8px; }
+
+/* One thumbnail, on the card and on the page. A tile never stretches with its picture: a phone screenshot would be a
+   column, so the picture covers the square from its top, where a page keeps what it is about. */
+.evidence-tile {
+  position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 100%;
+  aspect-ratio: 1; padding: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 8px;
+  color: var(--text-3); background: var(--fill-muted); font: inherit; font-size: 11px; line-height: 1.3; text-align: center;
+}
+.evidence-tile-img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.evidence-tile-empty { width: 100%; height: 100%; }
+.evidence-tile-kind { font-weight: 600; letter-spacing: 0.03em; overflow-wrap: anywhere; padding: 4px; }
+.evidence-tile-expired { padding: 4px; color: var(--text-3); overflow-wrap: anywhere; }
+.evidence-tile:has(> .evidence-tile-expired) { border-style: dashed; border-color: var(--border); background: none; }
+.evidence-tile-more { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.evidence-tile-press { cursor: pointer; }
+.evidence-tile-press:hover { border-color: var(--border); }
+.evidence-tile-press:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+
+/* What a report said: one grey line, and under it the cases that failed. */
+.evidence-report-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-size: 12.5px; color: var(--text-3); }
+.evidence-report-text b { font-weight: 600; color: var(--text-2); }
+.evidence-report-mark { flex: none; font-size: 13px; color: var(--text-3); }
+.evidence-report-mark.is-passed { color: var(--success); }
+.evidence-report-mark.is-failed { color: var(--error); }
+.evidence-report-name {
+  flex-basis: 100%; min-width: 0; padding-left: 19px; overflow: hidden; color: var(--text-2);
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The page. Its heading, its version line and its report, then the groups. */
+.review-card-content.evidence-files-page { display: block; }
+.evidence-files-version { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 16px; font-size: 12.5px; color: var(--text-3); }
+.evidence-report {
+  margin-top: 12px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised);
+}
+.evidence-report-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; width: 100%; padding: 0;
+  border: 0; color: inherit; background: none; font: inherit; text-align: left;
+}
+button.evidence-report-head { cursor: pointer; }
+button.evidence-report-head:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+.evidence-report-title { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.evidence-report-caret { font-size: 10px; color: var(--text-3); }
+.evidence-report-caret.is-open { transform: rotate(90deg); }
+.evidence-report-facts { grid-column: 2 / -1; font-size: 12.5px; color: var(--text-3); }
+.evidence-report-list { margin-top: 8px; padding-left: 21px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.evidence-report-list-head { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--text-3); }
+.evidence-report-list ul { margin: 2px 0 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
+.evidence-report-list-more { color: var(--text-3); }
+
+.evidence-files-group { margin-top: 16px; }
+.evidence-files-group-head { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text-2); overflow-wrap: anywhere; }
+.evidence-files-group-head span { font-weight: 400; color: var(--text-3); }
+.evidence-files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.evidence-page-tile { min-width: 0; }
+.evidence-tile-caption { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
+.evidence-tile-name { overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.evidence-tile-facts { overflow-wrap: anywhere; }
+.evidence-files-showing { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; font-size: 12.5px; color: var(--text-3); }
+.evidence-viewer-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: rgba(255, 255, 255, 0.85); }
