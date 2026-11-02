@@ -51,13 +51,19 @@ export function fileGraceMs(config: Pick<FilesConfig, 'backupRetentionMs'>): num
   return Math.max(MIN_GRACE_MS, config.backupRetentionMs ?? 0);
 }
 
-/** A row evidence holds: an agent's file with no date and no tombstone, naming a version. */
-export const HELD_BY_EVIDENCE = {
-  retention: FILE_UPLOAD_RETENTION,
-  expiresAt: null,
-  expiredAt: null,
-  evidenceId: { not: null },
-} as const satisfies Prisma.AttachmentWhereInput;
+/**
+ * The rows that keep their session in Trash past its 30 days, because a row goes with its session and its bytes follow: one
+ * somebody pinned, of any kind, and an agent's file evidence cites that has no tombstone yet. A date does not let the session
+ * go: the time left on it is the file's own, the 30 days a version gives what it let go of. A tombstone does, and the next
+ * purge takes the row while evidence still cites it, leaving that evidence the sha256 it recorded. A row whose task was
+ * deleted still names the version that went with it, so it holds its session until the sweep has dated and tombstoned it.
+ */
+export const KEEPS_SESSION_IN_TRASH: Prisma.AttachmentWhereInput = {
+  OR: [
+    { pinnedAt: { not: null } },
+    { retention: FILE_UPLOAD_RETENTION, expiredAt: null, evidenceId: { not: null } },
+  ],
+};
 
 /** The date an upload starts with, for the rows `file_upload` writes. */
 export function uploadExpiry(createdAt: Date): Date {

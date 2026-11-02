@@ -135,7 +135,7 @@ newest_segment() { awk '{print $NF}' | LC_ALL=C sort | tail -n1; }
 # The system identifier in a gzipped segment's first page (XLogLongPageHeaderData.xlp_sysid: 8 bytes
 # at offset 24), printed as pg_control_system() prints it. initdb chooses one for a new cluster, and a
 # restored cluster keeps it on every timeline, so it says whose a segment is with nothing written anywhere.
-segment_system_id() { gzip -dc "$1" 2>/dev/null | head -c 32 | od -An -tu8 -j24 -N8 | tr -d ' \n'; }
+segment_system_id() { gzip -dc "$1" 2>/dev/null | head -c 32 | od -An -tu8 -j24 -N8 2>/dev/null | tr -d ' \n'; }
 
 # What an operator can do about a refused target, for the end of a log line.
 replace_target_advice() {
@@ -147,8 +147,9 @@ replace_target_advice() {
 # `docker compose up -d` before a restore would replace the only copy of the old cluster's history.
 # Asked of what any mirror already holds, so it needs no marker there and works for one that predates it:
 #   - nothing Postgres wrote: a first install;
-#   - a segment both sides hold with the same mode, size and time, which is rsync's own test for one file;
-#   - otherwise the system identifier in one of its segments, the smallest, which costs the least to fetch.
+#   - otherwise the system identifier in one of its segments, read every time, because a listing's name, size and time say
+#     nothing of whose a file is. The smallest costs the least to fetch. A torn copy sorts there too and holds no
+#     identifier, so the next is asked, three at most, rather than one bad file stopping the mirror for good.
 # Every refusal is logged, and leaves the target as it was. Moving the old mirror aside on the backup host
 # is how an operator replaces it on purpose: an empty target is a first install.
 target_is_ours() {
@@ -187,22 +188,22 @@ target_is_ours() {
   fi
 
   scratch="$(mktemp -d)"
-  printf '%s\n' "$local_segments" > "$scratch/here"
-  if ! printf '%s\n' "$remote_segments" | grep -Fxq -f "$scratch/here"; then
-    smallest="$(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n1 | awk '{print $NF}')"
-    if ! out="$(rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$smallest" "$scratch/segment" 2>&1)"; then
+  there=""
+  for segment in $(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n 3 | awk '{print $NF}'); do
+    rm -f "$scratch/segment"
+    if ! out="$(rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$segment" "$scratch/segment" 2>&1)"; then
       rm -rf "$scratch"
-      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $smallest from the target: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
+      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $segment from the target: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
       return 1
     fi
     there="$(segment_system_id "$scratch/segment")"
-    if [ "$there" != "$here" ]; then
-      rm -rf "$scratch"
-      log "ERROR: refusing off-host sync to $SYNC_TARGET: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
-      return 1
-    fi
-  fi
+    [ -z "$there" ] || break
+  done
   rm -rf "$scratch"
+  if [ "$there" != "$here" ]; then
+    log "ERROR: refusing off-host sync to $SYNC_TARGET: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
+    return 1
+  fi
 
   # This cluster's, and further on than this archive: a timeline or a segment this archive has never held.
   if [ "$(printf '%s\n%s\n' "$newest_here" "$newest_there" | LC_ALL=C sort | tail -n1)" != "$newest_here" ]; then

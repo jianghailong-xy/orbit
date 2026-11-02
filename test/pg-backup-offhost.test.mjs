@@ -5,16 +5,17 @@
 //   npm run test:pg-backup-offhost
 //
 // The mirror (a fresh cluster must not replace the old cluster's archive): an existing mirror of another cluster is refused
-// and left byte for byte as it was, whether or not its segment names overlap this archive's, and so is one further on than
-// this archive, or a base backup with no WAL to say whose it is; the log says why and what to do. The same cluster, a
-// restored one on a higher timeline, a first install to an empty or missing directory, and a first sync cut short all go on.
-// A segment holds the system identifier Postgres wrote into it, so none of this needs a marker on the target.
+// and left byte for byte as it was, whether or not its segment names overlap this archive's, and however alike its listing
+// reads, and so is one further on than this archive, or a base backup with no WAL to say whose it is; the log says why and
+// what to do. The same cluster, a restored one on a higher timeline, a first install to an empty or missing directory, and a
+// first sync cut short all go on. A segment holds the system identifier Postgres wrote into it, so none of this needs a marker
+// on the target, and one is read from the target before every --delete.
 //
 // The files copy (pruned after the bytes go, never by what the local directory lacks): only names the database says are due
 // go, and an empty or missing local directory, a database it cannot read, or a target the mirror refused removes nothing.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -57,6 +58,31 @@ function archiveIn(dir, { system = CLUSTER, timeline = 1, from = 1, to = 3, base
   }
 }
 
+/** One segment of `system` in `dir`, gzipped from `size` bytes that do not compress, so that the sizes in a listing are in that order. */
+function sizedSegment(dir, { system = CLUSTER, timeline = 1, number, size, at = BEGINNING }) {
+  mkdirSync(path.join(dir, 'wal'), { recursive: true });
+  const file = path.join(dir, 'wal', `${walName(timeline, number)}.gz`);
+  writeFileSync(file, segment(system, randomBytes(size)));
+  utimesSync(file, at, at);
+  return `${walName(timeline, number)}.gz`;
+}
+
+/**
+ * Gives two archives' segment of this name the same size and time. Each keeps its own cluster's bytes, the shorter gzip padded
+ * with the zeros gunzip ignores: real WAL, valid on both sides, that no listing can tell apart.
+ */
+function makeListingsMatch(name, ...archives) {
+  const files = archives.map((dir) => path.join(dir, 'wal', name));
+  const size = Math.max(...files.map((file) => statSync(file).size));
+  const at = new Date('2026-01-01T12:00:00Z');
+  for (const file of files) {
+    writeFileSync(file, Buffer.concat([readFileSync(file), Buffer.alloc(size - statSync(file).size)]));
+    utimesSync(file, at, at);
+  }
+  const lines = files.map((file) => execFileSync('rsync', ['--list-only', file], { encoding: 'utf8' }).trim());
+  assert.equal(new Set(lines).size, 1, `the lines must match, or this proves nothing: ${lines.join(' | ')}`);
+}
+
 /** Every file under `dir`, with what it holds and its time: what "left as it was" is held to. */
 function fingerprint(dir) {
   if (!existsSync(dir)) return null;
@@ -90,6 +116,7 @@ function round({ prepare, system = CLUSTER, due = [], database = 'up', interval 
     const stubs = path.join(scratch, 'stubs');
     mkdirSync(stubs);
     const queries = path.join(scratch, 'psql-queries');
+    const rsyncCalls = path.join(scratch, 'rsync-calls');
     const realRsync = execFileSync('sh', ['-c', 'command -v rsync'], { encoding: 'utf8' }).trim();
     for (const [name, body] of Object.entries({
       psql: `printf '%s\\n' "$*" >> '${queries}'
@@ -103,9 +130,10 @@ esac`,
       pg_archivecleanup: ':',
       ssh: ':',
       sleep: 'exit 7',
-      ...(rsyncFailsOn ? {
-        rsync: `case "$*" in *'${rsyncFailsOn}'*) echo 'ssh: connect to host backup-host port 22: Connection refused' >&2; exit 255 ;; esac; exec '${realRsync}' "$@"`,
-      } : {}),
+      // The real one, with each call written down.
+      rsync: `printf '%s\\n' "$*" >> '${rsyncCalls}'
+${rsyncFailsOn ? `case "$*" in *'${rsyncFailsOn}'*) echo 'ssh: connect to host backup-host port 22: Connection refused' >&2; exit 255 ;; esac` : ''}
+exec '${realRsync}' "$@"`,
     })) writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     const before = { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) };
     const run = spawnSync('sh', ['scripts/pg-backup.sh'], {
@@ -129,6 +157,7 @@ esac`,
       after: { mirror: fingerprint(dirs.target), copy: fingerprint(dirs.filesTarget) },
       archive: fingerprint(dirs.archive),
       queries: existsSync(queries) ? readFileSync(queries, 'utf8') : '',
+      rsyncCalls: existsSync(rsyncCalls) ? readFileSync(rsyncCalls, 'utf8').trim().split('\n') : [],
       dirs,
     };
   } finally {
@@ -137,6 +166,8 @@ esac`,
 }
 
 const mirrored = (result) => assert.deepEqual(result.after.mirror, result.archive, `the mirror is now this archive: ${result.log}`);
+/** The segments this round fetched from the target to read, in order: the one call that has it as source and scratch as destination. */
+const segmentsRead = (result) => result.rsyncCalls.flatMap((call) => call.match(/\/wal\/([0-9A-F]{24}\.gz) \S+\/segment$/)?.[1] ?? []);
 function refused(result, why) {
   assert.deepEqual(result.after.mirror, result.before.mirror, `the mirror stays byte for byte: ${result.log}`);
   assert.match(result.log, why);
@@ -166,6 +197,28 @@ test('nor once its segment numbers have caught up with the old ones', () => {
     },
   });
   refused(result, /its archive belongs to cluster/);
+});
+
+test('nor when one of its segments reads the same in both listings: name, mode, size and time do not say whose it is', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive, { system: CLUSTER, from: 1, to: 5, bases: ['20260301T000000Z'] });
+      archiveIn(target, { system: OTHER_CLUSTER, from: 1, to: 3, bases: ['20260201T000000Z'] });
+      makeListingsMatch(`${walName(1, 3)}.gz`, archive, target);
+    },
+  });
+  refused(result, new RegExp(`its archive belongs to cluster ${OTHER_CLUSTER} .* and this one is ${CLUSTER}`));
+});
+
+test('nor when every segment does', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive, { system: CLUSTER, from: 1, to: 4, bases: ['20260301T000000Z'] });
+      archiveIn(target, { system: OTHER_CLUSTER, from: 1, to: 4, bases: ['20260201T000000Z'] });
+      for (let number = 1; number <= 4; number += 1) makeListingsMatch(`${walName(1, number)}.gz`, archive, target);
+    },
+  });
+  refused(result, new RegExp(`its archive belongs to cluster ${OTHER_CLUSTER} .* and this one is ${CLUSTER}`));
 });
 
 test('nor when the old archive was copied back under a new cluster, whose segments would pass as the target\'s own', () => {
@@ -211,6 +264,90 @@ test('the same cluster mirrors as ever, trimmed retention included', () => {
   });
   mirrored(result);
   assert.doesNotMatch(result.log, /ERROR/);
+});
+
+test('it reads a segment from the target before every --delete, even with every line of the two listings alike', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive);
+      archiveIn(target);
+    },
+  });
+  mirrored(result);
+  assert.doesNotMatch(result.log, /ERROR/);
+  assert.equal(segmentsRead(result).length, 1, result.rsyncCalls.join('\n'));
+  const read = result.rsyncCalls.findIndex((call) => /\/segment$/.test(call));
+  const replaced = result.rsyncCalls.findIndex((call) => call.includes('--delete'));
+  assert.ok(read !== -1 && read < replaced, `the read comes first: ${result.rsyncCalls.join('\n')}`);
+});
+
+test('and the one it reads is the smallest, which costs the least to fetch', () => {
+  let smallest;
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive, { from: 1, to: 6 });
+      // The name that sorts first or last, or the first the listing prints, would be a coincidence.
+      for (const [number, size] of [[1, 4000], [2, 9000], [3, 200], [4, 3000], [5, 12000]]) {
+        const name = sizedSegment(target, { number, size });
+        if (size === 200) smallest = name;
+      }
+    },
+  });
+  mirrored(result);
+  assert.deepEqual(segmentsRead(result), [smallest], result.rsyncCalls.join('\n'));
+});
+
+test('a torn copy holds no identifier, so the next segment is asked, and this cluster\'s mirror heals', () => {
+  for (const torn of [Buffer.alloc(0), segment(CLUSTER, randomBytes(4000)).subarray(0, 10)]) {
+    const result = round({
+      prepare: ({ archive, target }) => {
+        archiveIn(archive);
+        archiveIn(target);
+        writeFileSync(path.join(target, 'wal', `${walName(1, 2)}.gz`), torn);
+      },
+    });
+    mirrored(result);
+    assert.doesNotMatch(result.log, /ERROR/);
+    assert.equal(segmentsRead(result)[0], `${walName(1, 2)}.gz`, 'the torn one sorts first');
+    assert.equal(segmentsRead(result).length, 2, result.rsyncCalls.join('\n'));
+  }
+});
+
+test('another cluster\'s mirror is refused all the same behind a torn copy, on the identifier of the segment after it', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive, { from: 1, to: 5 });
+      archiveIn(target, { system: OTHER_CLUSTER, from: 1, to: 3 });
+      writeFileSync(path.join(target, 'wal', `${walName(1, 1)}.gz`), '');
+      makeListingsMatch(`${walName(1, 3)}.gz`, archive, target);
+    },
+  });
+  refused(result, new RegExp(`its archive belongs to cluster ${OTHER_CLUSTER} .* and this one is ${CLUSTER}`));
+});
+
+test('three torn copies are as far as it looks, and the mirror is refused, not read to the end', () => {
+  const result = round({
+    prepare: ({ archive, target }) => {
+      archiveIn(archive, { from: 1, to: 5 });
+      archiveIn(target, { from: 1, to: 5 });
+      for (const number of [1, 2, 3]) writeFileSync(path.join(target, 'wal', `${walName(1, number)}.gz`), '');
+    },
+  });
+  refused(result, /its archive belongs to cluster unknown /);
+  assert.equal(segmentsRead(result).length, 3, result.rsyncCalls.join('\n'));
+});
+
+test('a segment it cannot fetch stops the round before --delete, however alike the listings read', () => {
+  const result = round({
+    rsyncFailsOn: '/segment',
+    prepare: ({ archive, target }) => {
+      archiveIn(archive);
+      archiveIn(target);
+    },
+  });
+  assert.deepEqual(result.after.mirror, result.before.mirror, result.log);
+  assert.match(result.log, /ERROR: off-host sync to .* failed: could not read [0-9A-F]{24}\.gz from the target: ssh: connect to host backup-host/);
+  assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
 });
 
 test('so does one whose mirror shares no segment with it, after a long outage: the identifier says it is the same cluster', () => {
