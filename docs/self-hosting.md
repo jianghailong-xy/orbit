@@ -183,12 +183,18 @@ account register itself: [Multi-user Linux machines](#multi-user-linux-machines)
 
 ## 5. Back up and monitor
 
-The Compose stack writes Postgres data to `./data/postgres`. A sidecar writes base backups and archived WAL to
-`./data/pg-archive`.
+The Compose stack writes Postgres data to `./data/postgres` and attachment bytes to `./data/files`. A sidecar writes
+base backups and archived WAL to `./data/pg-archive`.
 
 - Set `ORBIT_BACKUP_SYNC_TARGET` (plus `ORBIT_BACKUP_SYNC_SSH_PORT` when it is not 22) so the sidecar mirrors
   `./data/pg-archive` to another host over ssh; give it a directory of its own, since the mirror deletes
   anything else there. A same-disk backup does not protect against disk or host loss.
+- The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/` and
+  never deleting from it. With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
+  in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
+  protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
+- A restore goes Postgres first, then the files, then the apiserver:
+  [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.

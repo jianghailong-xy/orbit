@@ -150,6 +150,9 @@ services:
       # Read-only: the key that reaches the mirror host, and the host keys to check it
       # against. Only read when ORBIT_BACKUP_SYNC_TARGET is set.
       - "${ORBIT_BACKUP_SSH_DIR:-/root/.ssh}:/ssh:ro"
+      # Read-only: the attachment bytes in the apiserver's files directory. Only read when
+      # ORBIT_BACKUP_SYNC_TARGET is set, which copies them to <target>-files, beside the mirror.
+      - ./data/files:/var/lib/orbit/files:ro
 
   apiserver:
     image: orbit-apiserver:local
