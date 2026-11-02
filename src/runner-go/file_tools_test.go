@@ -46,6 +46,8 @@ type fakeFileServer struct {
 	calls  []string
 	fields []map[string]string
 	bundle map[string]interface{}
+	// refuse is what the server says of a file it finds a credential in, by the file's name.
+	refuse map[string]string
 	// Names of file parts as busboy would read them: the raw Content-Disposition.
 	dispositions []string
 	listQueries  []string
@@ -54,8 +56,6 @@ type fakeFileServer struct {
 	corrupt bool
 	// absent is a server from before these doors: every route but the attachments' answers Nest's 404.
 	absent bool
-	// refuse is what the server says of a file it finds a credential in, by the file's name.
-	refuse map[string]string
 	*httptest.Server
 }
 
