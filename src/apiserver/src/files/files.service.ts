@@ -122,12 +122,6 @@ export class FilesService {
     });
   }
 
-  /** Remove an upload's temporary file. Every upload route calls this on its way out: after `store` there is
-   *  nothing left to remove, and on a refusal it is the upload that was never kept. */
-  async discard(upload: { path?: string } | undefined): Promise<void> {
-    if (upload?.path) await removeTempFile(upload.path);
-  }
-
   /**
    * The bytes of the attachment row `where` finds — `where` says whose it may be, which is the caller's
    * to decide — or null when it finds none. From the store the row's sha256 names, or, for a row whose bytes

@@ -23,8 +23,8 @@ export class AttachmentsService {
    * Persist an uploaded file for `ownerId`, optionally scoped to a session OR a task. Validates
    * size, and — when a scope is given — that the row it names belongs to the caller, so an upload
    * can't be parked on another tenant's session or task. Returns the new id. The bytes, already on
-   * disk (FILE_UPLOAD_STORAGE), are kept in the file store only once every check has passed, and the
-   * temporary file is removed on every way out.
+   * disk (FILE_UPLOAD_STORAGE), are kept in the file store only once every check has passed; the
+   * route removes the temporary file of an upload refused here (FileUploadCleanupInterceptor).
    *
    * The two scopes mean different things and cannot be combined. A session scope is a blob in a
    * CONVERSATION: it cascade-deletes with the session and is handed to the runner as part of a
@@ -39,36 +39,32 @@ export class AttachmentsService {
     file: FileUpload | undefined,
     taskId?: string,
   ): Promise<{ id: string }> {
-    try {
-      assertValidUpload(file);
-      if (sessionId && taskId) {
-        throw new BadRequestException('an attachment is scoped to a session or a task, not both');
-      }
-      if (sessionId) {
-        const session = await this.prisma.session.findFirst({
-          where: { id: sessionId, ownerId },
-          select: { id: true, sessionKind: true },
-        });
-        if (!session) throw new NotFoundException('session not found');
-        // An upload scoped to a session is an input to an engine turn; a LANDING takes none
-        // (§2.9 LS6).
-        assertEngineSession(session);
-      }
-      if (taskId) {
-        const task = await this.prisma.task.findFirst({
-          where: { id: taskId, ownerId },
-          select: { id: true },
-        });
-        if (!task) throw new NotFoundException('task not found');
-      }
-      return await this.files.createAttachment(file as FileUpload, {
-        ownerId,
-        sessionId: sessionId ?? null,
-        taskId: taskId ?? null,
-      });
-    } finally {
-      await this.files.discard(file);
+    assertValidUpload(file);
+    if (sessionId && taskId) {
+      throw new BadRequestException('an attachment is scoped to a session or a task, not both');
     }
+    if (sessionId) {
+      const session = await this.prisma.session.findFirst({
+        where: { id: sessionId, ownerId },
+        select: { id: true, sessionKind: true },
+      });
+      if (!session) throw new NotFoundException('session not found');
+      // An upload scoped to a session is an input to an engine turn; a LANDING takes none
+      // (§2.9 LS6).
+      assertEngineSession(session);
+    }
+    if (taskId) {
+      const task = await this.prisma.task.findFirst({
+        where: { id: taskId, ownerId },
+        select: { id: true },
+      });
+      if (!task) throw new NotFoundException('task not found');
+    }
+    return this.files.createAttachment(file as FileUpload, {
+      ownerId,
+      sessionId: sessionId ?? null,
+      taskId: taskId ?? null,
+    });
   }
 
   /**

@@ -173,6 +173,7 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
 import { FilesService, streamable } from '../files/files.service';
 import {
@@ -4661,24 +4662,23 @@ export class RunnerApiController {
    * session attachment. The browser cannot read `/root/...` paths from the runner, so the
    * runner uploads bytes here and rewrites the transcript markdown to `orbit-attachment:<id>`.
    * The upload streams to a temporary file (FILE_UPLOAD_STORAGE) and is kept in the file store
-   * once the session is this runner's; on any refusal the temporary file is removed.
+   * once the session is this runner's; FileUploadCleanupInterceptor removes it on any refusal.
    */
   @UseGuards(RunnerAuthGuard)
   @StaysOnHttps()
   @Post('sessions/:id/attachments')
-  @UseInterceptors(FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  @UseInterceptors(
+    FileUploadCleanupInterceptor,
+    FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
   async uploadAttachment(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: FileUpload | undefined,
   ): Promise<{ id: string }> {
-    try {
-      const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-      assertValidUpload(file);
-      return await this.files.createAttachment(file as FileUpload, { ownerId: session.ownerId, sessionId });
-    } finally {
-      await this.files.discard(file);
-    }
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    assertValidUpload(file);
+    return this.files.createAttachment(file as FileUpload, { ownerId: session.ownerId, sessionId });
   }
 
   @UseGuards(RunnerAuthGuard)
