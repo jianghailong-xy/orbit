@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 )
 
@@ -97,8 +99,23 @@ func handOffUnderSudo(args []string) bool {
 	}
 	fmt.Fprintf(os.Stderr, "note: under sudo, `orbit %s` runs as %s, the account that ran sudo and the one its runner runs as, with the runner's config in %s.\n",
 		args[0], account.Username, home)
+	// main put this process's own engine directories first on PATH, for root's commands. They are
+	// nothing to the account, and where sudo keeps PATH (macOS, a sudoers with no secure_path) the
+	// account's register would bake them into its service's PATH.
+	_ = os.Setenv("PATH", withoutPathDirs(os.Getenv("PATH"), engineInstallerDirs(userHome())))
 	if err := execSudoHandOff(sudoHandOffArgv(sudo, account.Username, exe, args)); err != nil {
 		return fail("could not switch to it: %v", err)
 	}
 	return true
+}
+
+// withoutPathDirs is path with dirs left out.
+func withoutPathDirs(path string, dirs []string) string {
+	var kept []string
+	for _, p := range strings.Split(path, string(os.PathListSeparator)) {
+		if !slices.Contains(dirs, p) {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
 }

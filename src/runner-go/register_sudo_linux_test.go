@@ -304,8 +304,13 @@ func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 		}
 		return user.Lookup(name)
 	}
+	// What main does for root's own commands under `sudo -i`: root's engine directories first on PATH.
+	rootHome := t.TempDir()
+	t.Setenv("HOME", rootHome)
+	t.Setenv("PATH", runnerEnginePath(rootHome, os.Getenv("PATH")))
 	var handedOff []string
-	execSudoHandOff = func(argv []string) error { handedOff = argv; return nil }
+	var handedPath string
+	execSudoHandOff = func(argv []string) error { handedOff, handedPath = argv, os.Getenv("PATH"); return nil }
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -314,6 +319,10 @@ func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 	captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
 	if want := []string{"-H", "-u", "c2b", "--", "env", exe, "unregister", "--yes"}; len(handedOff) != len(want)+1 || !slices.Equal(handedOff[1:], want) {
 		t.Fatalf("unregister under sudo ran %q, want sudo %s", handedOff, strings.Join(want, " "))
+	}
+	// Where sudo keeps PATH, root's engine directories would reach the account's command.
+	if strings.Contains(handedPath, rootHome) {
+		t.Errorf("the hand-off kept root's own directories on PATH: %s", handedPath)
 	}
 }
 
