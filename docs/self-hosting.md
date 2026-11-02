@@ -194,7 +194,9 @@ base backups and archived WAL to `./data/pg-archive`.
   in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
 - A restore goes Postgres first, then the files, then the apiserver:
-  [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files).
+  [Restore the attachment files](postgres-backup-restore.md#restore-the-attachment-files). On a replacement host,
+  restore the archive before the first `docker compose up -d`, or the mirror can overwrite your backup:
+  [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
 - Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
 - Decide an attachment/artifact retention policy appropriate for your deployment.

@@ -62,20 +62,9 @@ a directory of its own**, because anything else living there is deleted. Backups
 written (`.staging-*`) are excluded, host keys are checked against the mounted `known_hosts`, and
 a failure is logged (`ERROR: off-host sync … failed`) without interrupting local backups. The
 sidecar installs `rsync`/`openssh-client` at start, so it needs to reach an Alpine mirror once
-per container start; without that it says so and keeps backing up locally.
-
-Restoring from the mirror is the same runbook — copy a base backup directory and the WAL back
-(or point `restore_command` at a mount of the mirror):
-
-```bash
-mkdir -p data
-rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
-```
-
-The mirror refuses an archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so
-an empty or wrong mount cannot clear it. That does not cover a new cluster, whose archive has both: on
-a replacement host, bring the archive back before the stack first starts, because `--delete` would
-replace the old archive with the new one.
+per container start; without that it says so and keeps backing up locally. It refuses to mirror an
+archive with no base backup or no WAL (`ERROR: refusing off-host sync …`), so an empty or wrong mount
+cannot clear the target.
 
 ### Attachment files
 
@@ -109,7 +98,34 @@ it copies no files. `docker compose up -d --build` recreates it, and so does `/u
 checkout the sidecar runs from; run from anywhere else, `/upgrade` leaves it and says so.
 `docker logs orbit-pgbackup | grep watching` then names both directories.
 
+### Restore on a replacement host
+
+Restoring from the mirror is the same runbook with the archive copied back first (or `restore_command`
+pointed at a mount of the mirror). Follow these steps in order:
+
+1. Put `.env` back **without `ORBIT_BACKUP_SYNC_TARGET`**. With it unset the sidecar makes no off-host
+   copy, so nothing on this host can touch the mirror until the restore is done.
+2. Copy the archive back **before the first `docker compose up -d`**. A new cluster has a real archive
+   of its own, which the sidecar does not refuse, and with a target set the mirror's `--delete` would
+   replace the old archive with it.
+
+   ```bash
+   mkdir -p data
+   rsync -a backup-host:/data/backup/orbit-pg-archive/ data/pg-archive/
+   ```
+
+3. Follow [Restore to the newest state](#restore-to-the-newest-state-diskcorruption-loss), then
+   [Restore the attachment files](#restore-the-attachment-files).
+4. Put `ORBIT_BACKUP_SYNC_TARGET` back in `.env` and recreate the sidecar:
+
+   ```bash
+   docker compose up -d --no-deps pgbackup
+   ```
+
 ## Restore
+
+On a replacement host, where nothing survived, start at
+[Restore on a replacement host](#restore-on-a-replacement-host).
 
 Both paths below replace the live database. Take the deployment down first and keep the damaged
 copy — it is evidence, and a second attempt may need it:
