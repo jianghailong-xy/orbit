@@ -56,32 +56,37 @@ func TestSudoAccountIsTheAccountThatRanSudo(t *testing.T) {
 	}
 }
 
-// sudo resets the environment it starts the account's command with; the hand-off keeps what register still
-// reads, and nothing else. By name: a proxy's URL can hold a password, and sudo logs its command line.
+// The account's command gets what register reads and nothing else of root's environment. Through sudo's
+// environment and -E: a proxy's URL can hold a password, and sudo logs what is on its command line and
+// what --preserve-env names.
 func TestSudoHandOffCarriesWhatRegisterReads(t *testing.T) {
 	for _, k := range sudoHandOffEnv {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
-	args := []string{"register", "--name", "c2b-load-2"}
-	got := sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", args)
-	want := []string{"/usr/bin/sudo", "-H", "-u", "c2b", "--", "/usr/local/bin/orbit", "register", "--name", "c2b-load-2"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("with nothing to keep, sudoHandOffArgv =\n  %q\nwant\n  %q", got, want)
-	}
-
 	t.Setenv("ORBIT_HOME", "/srv/orbit-c2b")
 	t.Setenv("https_proxy", "http://user:secret@proxy.internal:3128")
 	t.Setenv("SSL_CERT_FILE", "/etc/orbit/ca.pem")
+	t.Setenv("TERM", "xterm")
+	t.Setenv("PATH", "/usr/bin:/bin")
 	t.Setenv("ORBIT_SESSION_ID", "not-carried")
-	got = sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", args)
-	want = []string{"/usr/bin/sudo", "-H", "-u", "c2b", "--preserve-env=ORBIT_HOME,https_proxy,SSL_CERT_FILE", "--",
-		"/usr/local/bin/orbit", "register", "--name", "c2b-load-2"}
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "not-carried")
+
+	got := sudoHandOffArgv("/usr/bin/sudo", "c2b", "/usr/local/bin/orbit", []string{"register", "--name", "c2b-load-2"})
+	want := []string{"/usr/bin/sudo", "-E", "-H", "-u", "c2b", "--", "/usr/local/bin/orbit", "register", "--name", "c2b-load-2"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("sudoHandOffArgv =\n  %q\nwant\n  %q", got, want)
 	}
-	if strings.Contains(strings.Join(got, " "), "secret") {
-		t.Fatalf("the proxy's password is on sudo's command line: %q", got)
+	env := sudoHandOffEnviron()
+	for _, kv := range []string{"ORBIT_HOME=/srv/orbit-c2b", "https_proxy=http://user:secret@proxy.internal:3128", "SSL_CERT_FILE=/etc/orbit/ca.pem", "TERM=xterm", "PATH=/usr/bin:/bin"} {
+		if !slices.Contains(env, kv) {
+			t.Errorf("the hand-off's environment lacks %s: %q", kv, env)
+		}
+	}
+	for _, kv := range env {
+		if strings.Contains(kv, "not-carried") {
+			t.Errorf("the hand-off carries %s of root's environment", kv)
+		}
 	}
 }
 

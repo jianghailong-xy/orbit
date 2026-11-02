@@ -70,7 +70,7 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 		if at < 0 {
 			t.Fatalf("the hand-off does not run this binary (%s): %q", exe, argv)
 		}
-		// What `sudo -H -u c2b -- <exe> …` makes of this process: c2b, with c2b's HOME, and
+		// What `sudo -E -H -u c2b -- <exe> …` makes of this process: c2b, with c2b's HOME, and
 		// SUDO_USER naming root.
 		processEUID = func() int { return 4242 }
 		currentUser = func() (*user.User, error) { return account, nil }
@@ -84,9 +84,9 @@ func TestRegisterUnderSudoKeepsTheRunnerInTheAccountsHome(t *testing.T) {
 	out := captureServiceOutput(t, func() { registerCommand(args) })
 	t.Logf("orbit register under sudo printed:\n%s", out)
 
-	if want := []string{"sudo", "-H", "-u", "c2b", "--", exe}; len(handedOff) < len(want) ||
+	if want := []string{"sudo", "-E", "-H", "-u", "c2b", "--", exe}; len(handedOff) < len(want) ||
 		filepath.Base(handedOff[0]) != want[0] || !slices.Equal(handedOff[1:len(want)], want[1:]) {
-		t.Errorf("register under sudo was not handed to c2b as `sudo -H -u c2b -- %s register …`; it ran %q", exe, handedOff)
+		t.Errorf("register under sudo was not handed to c2b as `sudo -E -H -u c2b -- %s register …`; it ran %q", exe, handedOff)
 	} else if got := handedOff[len(want):]; !slices.Equal(got, args) {
 		t.Errorf("the hand-off runs `%s`, want the command as typed: `%s`", strings.Join(got, " "), strings.Join(args, " "))
 	}

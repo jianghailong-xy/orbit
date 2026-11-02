@@ -135,7 +135,7 @@ func TestUnregisterUnderSudoIsHandedToTheAccount(t *testing.T) {
 	}
 
 	captureServiceOutput(t, func() { unregisterCommand([]string{"unregister", "--yes"}) })
-	if want := []string{"-H", "-u", "c2b", "--", exe, "unregister", "--yes"}; len(*handedOff) != len(want)+1 || !slices.Equal((*handedOff)[1:], want) {
+	if want := []string{"-E", "-H", "-u", "c2b", "--", exe, "unregister", "--yes"}; len(*handedOff) != len(want)+1 || !slices.Equal((*handedOff)[1:], want) {
 		t.Fatalf("unregister under sudo ran %q, want sudo %s", *handedOff, strings.Join(want, " "))
 	}
 	// Where sudo keeps PATH, root's engine directories would reach the account's command.

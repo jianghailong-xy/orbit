@@ -64,22 +64,27 @@ func handedOffBySudo() bool {
 	return processEUID() != 0 && os.Getenv("SUDO_USER") == "root"
 }
 
-// sudoHandOffArgv is the command line that runs exe with args as account: sudo -H gives it the
-// account's own HOME, and --preserve-env keeps what this process has of sudoHandOffEnv. By name, not as
-// values on the command line: a proxy's URL can hold a password, and sudo logs its command line.
+// sudoHandOffArgv is the command line that runs exe with args as account: sudo -H gives it the account's
+// own HOME, and -E passes on the environment sudo is started with, sudoHandOffEnviron. Not by name with
+// --preserve-env, whose values sudo logs (ENV=https_proxy=…), nor on the command line, which it logs too and
+// `ps` shows: a proxy's URL can hold a password.
 func sudoHandOffArgv(sudo, account, exe string, args []string) []string {
-	argv := []string{sudo, "-H", "-u", account}
-	var keep []string
-	for _, k := range sudoHandOffEnv {
-		if os.Getenv(k) != "" {
-			keep = append(keep, k)
+	argv := []string{sudo, "-E", "-H", "-u", account, "--", exe}
+	return append(argv, args...)
+}
+
+// sudoHandOffEnviron is the environment sudo is started with: what the account's command reads
+// (sudoHandOffEnv) and what its terminal and browser need, and nothing else of root's, whose shell may
+// hold anything, for a binary that may be the account's to replace. sudo drops what it always drops
+// (LD_*) and sets USER, LOGNAME and HOME for the account.
+func sudoHandOffEnviron() []string {
+	var env []string
+	for _, k := range append([]string{"PATH", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "DISPLAY", "WAYLAND_DISPLAY"}, sudoHandOffEnv...) {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
 		}
 	}
-	if len(keep) > 0 {
-		argv = append(argv, "--preserve-env="+strings.Join(keep, ","))
-	}
-	argv = append(argv, "--", exe)
-	return append(argv, args...)
+	return env
 }
 
 // accountCanRun is whether the account can execute a file, asked as that account. A var so a test can
@@ -105,7 +110,7 @@ func systemSudo() (string, error) {
 
 // execSudoHandOff replaces this process with argv. A var so a test can play the account's side itself.
 var execSudoHandOff = func(argv []string) error {
-	return syscall.Exec(argv[0], argv, os.Environ())
+	return syscall.Exec(argv[0], argv, sudoHandOffEnviron())
 }
 
 // handOffUnderSudo hands a command — args is its name and arguments as typed — to the account sudo was
