@@ -1036,6 +1036,8 @@ describe('the window', () => {
     expect(value(rule('.landings-window-row-line .landings-window-row'), 'max-width')).toBe('calc(100% - 44px)');
     const words = rule('.landings-window-row-text');
     expect(words).not.toMatch(/nowrap|ellipsis|line-clamp/u);
+    // A card's task name is whole too: the column beside the avatar is narrower, and the board wraps it.
+    expect(rule('.landings-window-card-task')).not.toMatch(/nowrap|ellipsis|line-clamp/u);
     expect(value(rule('.landings-window-row-time'), 'font-variant-numeric')).toBe('tabular-nums');
     expect(value(rule('.landings-window-entry.is-outlined .landings-window-row'), 'box-shadow')).toBe('0 0 0 2px var(--brand)');
     expect(value(rule('.landings-window-avatar'), 'width')).toBe('32px');

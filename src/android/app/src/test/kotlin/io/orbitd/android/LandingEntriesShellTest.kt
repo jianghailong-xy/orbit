@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import io.orbitd.android.core.auth.AuthState
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -424,6 +425,25 @@ class LandingEntriesShellTest {
         assertFalse(exists(hasSetTextAction() and hasAnyAncestor(hasTestTag("landings:footer")), unmerged = true))
         compose.onNodeWithTag("landings:open-coordinator").assert(hasText("Open coordinator")).performClick()
         await { exists(hasTestTag("transcript-list")) }
+    }
+
+    /** F⁵‴ · a card's task name is whole, as a bubble's is: the column beside the avatar is narrower, and a long name wraps under the
+     *  card's head (board 02 d) rather than being cut. */
+    @Test fun aCardsLongTaskNameWrapsWhole() {
+        val name = "A task name long enough that no phone draws it on one line beside Orbit's avatar, whatever the window's width"
+        project()
+        ProjectShell.landings = landings(flight = landingRow("l-flight", "Land · $name", flightStarted, "IN_FLIGHT"))
+        openPage()
+        openWindow()
+        await { texts("landing:task-name").contains(name) }
+        val node = compose.onAllNodesWithTag("landing:task-name", useUnmergedTree = true).fetchSemanticsNodes()
+            .first { it.config[SemanticsProperties.Text].joinToString("") { line -> line.text } == name }
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        // Robolectric measures no real glyphs, so any name fits one line here: the cap is what this holds. The emulator's frame `a` shows
+        // the wrap itself.
+        assertEquals("no cap on its lines", Int.MAX_VALUE, layouts.single().layoutInput.maxLines)
+        assertTrue("it wraps", layouts.single().layoutInput.softWrap)
     }
 
     /** F⁵″ · with no coordinator to open, the footer says who decides and draws no door. */

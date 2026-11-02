@@ -20414,11 +20414,9 @@ div.landing-jobs-open {
 .landings-window-card-task {
   display: block;
   margin-top: 8px;
-  overflow: hidden;
   color: var(--text-1);
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 /* A bubble's record opens under it across the column, on the quiet panel a person's bubble opens its
    ⊕ note on (`.chat-user-wrap > .chat-injected-panel`, board 03 e). A card's opens under the card as

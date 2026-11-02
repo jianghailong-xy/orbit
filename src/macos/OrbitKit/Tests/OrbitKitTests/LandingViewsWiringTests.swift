@@ -107,6 +107,11 @@ final class LandingViewsWiringTests: XCTestCase {
         let bar = String(window[footer.lowerBound...].prefix(1_400))
         XCTAssertTrue(bar.contains(".lineLimit(2)"), "the bar's sentence is capped")
         XCTAssertFalse(bar.contains(".fixedSize("), "nothing in the bar is vertically fixed")
+        // A card's task name is whole, as a bubble's is: the column beside the avatar is narrower, and
+        // the board draws a long name wrapping (02 d).
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        let name = try XCTUnwrap(page.range(of: "@ViewBuilder private var titleLine: some View {"))
+        XCTAssertFalse(String(page[name.lowerBound...].prefix(240)).contains(".lineLimit("), "a card's task name is not cut")
         // The avatar is the app icon the sign-in page draws, not a second drawing of it.
         let login = code(try appSource("Views/LoginView.swift"))
         XCTAssertTrue(login.contains("struct OrbitAppIcon: View {"))
