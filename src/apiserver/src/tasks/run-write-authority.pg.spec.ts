@@ -39,7 +39,6 @@ import { Client } from 'pg';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { readCriterionSatisfaction } from '../projects/project-criterion-satisfaction';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -234,6 +233,16 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
     ok(reply, what);
     assert.equal(await decisionsOf(work.taskId), 1, `${what} wrote its decision`);
     assert.equal((await row(work.taskId)).status, 'IN_PROGRESS', `${what} left the task open`);
+  };
+
+  /** One criterion as the project's page reads it: whether it is met, and which clauses hold it up. */
+  const criterionOf = async (on: Project, definitionId: string) => {
+    const read = ok(await call(api, 'GET', `/api/projects/${b62(on.id)}`, bearer), 'the project') as {
+      acceptanceCriteriaItems: Array<{ key: string; satisfied: boolean; unmet: Array<{ clause: string }> }>;
+    };
+    const item = read.acceptanceCriteriaItems.find((criterion) => criterion.key === b62(definitionId));
+    assert.ok(item, 'the project states that criterion');
+    return item;
   };
 
   const project = await projectOf('the project');
@@ -523,8 +532,7 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       const held = await taskOf('holding it up', on);
       const run = await workOf('a run, deleting', on, { criterionDefinitionId: on.secondDefinitionId });
       refused(await remove(run.sessionId, held), DELETE_REFUSED, 'the unfinished work');
-      const [criterion] = await readCriterionSatisfaction(db as never, ownerId, on.id);
-      assert.equal(criterion.satisfied, false);
+      assert.equal((await criterionOf(on, on.definitionId)).satisfied, false);
     });
     await t.test('what it filed itself, in a project or in none', async () => {
       const inNone = await taskOf('its own, in no project', null, filedBy(peer.sessionId));
@@ -657,8 +665,7 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       await settledDecision(await decideAs(on.coordinator, settled.taskId, CONFIRM), settled, 'the coordinator');
       const held = await taskOf(`holding it up, ${title}`, on);
       const run = await workOf(`a run, ${title}`, on, { criterionDefinitionId: on.secondDefinitionId });
-      const satisfied = async () => (await readCriterionSatisfaction(db as never, ownerId, on.id))
-        .find((criterion) => criterion.definitionId === on.definitionId)!.satisfied;
+      const satisfied = async () => (await criterionOf(on, on.definitionId)).satisfied;
       assert.equal(await satisfied(), false, 'held up to begin with');
       return { on, settled, held, run, satisfied };
     };
@@ -685,8 +692,7 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       await settledDecision(await decideAs(on.coordinator, finished.taskId, CONFIRM), finished, 'the coordinator');
       const run = await workOf('a run, naming it', on);
       refused(await patch(run.sessionId, finished.taskId, { criterionKey: b62(on.secondDefinitionId) }), CRITERION_KEY_REFUSED, 'naming it');
-      const criterion = (await readCriterionSatisfaction(db as never, ownerId, on.id)).find((c) => c.definitionId === on.secondDefinitionId)!;
-      assert.equal(criterion.satisfied, false);
+      assert.equal((await criterionOf(on, on.secondDefinitionId)).satisfied, false);
     });
     await t.test('a task\'s own run writes its own', async () => {
       const f = await heldUp('its own');
@@ -728,8 +734,7 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
     const settled = await withEvidence('settled, cancelled under', on);
     await settledDecision(await decideAs(on.coordinator, settled.taskId, CONFIRM), settled, 'the coordinator');
     const run = await workOf('a run, cancelling', on, { criterionDefinitionId: on.secondDefinitionId });
-    const satisfied = async () => (await readCriterionSatisfaction(db as never, ownerId, on.id))
-      .find((criterion) => criterion.definitionId === on.definitionId)!;
+    const satisfied = () => criterionOf(on, on.definitionId);
     const cancelled = await taskOf('cancelled by a run', on);
     ok(await patch(run.sessionId, cancelled, { status: 'CANCELLED' }), 'a run cancelling a serving sibling');
     assert.deepEqual((await satisfied()).unmet.map((reason) => reason.clause), ['SERVING_WORK_UNSETTLED']);

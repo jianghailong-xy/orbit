@@ -1001,7 +1001,6 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   },
   'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'POST /runner/tasks/:id/execute header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: {} })),
-  'DELETE /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.spare.taskId } })),
   'POST /runner/tasks/:id/dependencies body dependsOnTaskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { dependsOnTaskId: of.dependencyTaskId } }),
@@ -1009,8 +1008,9 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/tasks/:id/dependencies header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
     params: { id: mine.taskId }, body: { dependsOnTaskId: mine.dependencyTaskId },
   })),
+  // An edge that is not there: the answer is the task, and this one has no comment to name its tenant.
   'DELETE /runner/tasks/:id/dependencies/:dependsOnTaskId header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
-    params: { id: mine.taskId, dependsOnTaskId: mine.dependencyTaskId },
+    params: { id: mine.dependencyTaskId, dependsOnTaskId: mine.taskId },
   })),
   'POST /runner/tasks/:id/progress header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
     params: { id: mine.taskId }, body: { phase: 'census' },
@@ -1334,6 +1334,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-sessions.controller.ts:222)',
     
   // ── tasks ───────────────────────────────────────────────────────────────────────────────────────
+  'DELETE /runner/tasks/:id header x-orbit-session-id':
+    'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
+    + 'as one naming none, and the only task it can delete is the caller\'s own the path names. Read rather than sent: '
+    + 'each send would take away the task the next one needs (verifier-write-authority.ts:83)',
   'POST /runner/tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press: it keys only the caller\'s own run receipt '
     + '(tasks.service.ts:12768)',
