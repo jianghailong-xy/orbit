@@ -32,7 +32,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
-import { assertSessionMayReach, type SessionAct } from './session-reach';
+import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
   steerWithdrawAnswer,
@@ -2415,6 +2415,11 @@ export class SessionsService {
   ): Promise<{ narrower: boolean }> {
     if (!UUID_SHAPE.test(callerSessionId) || !UUID_SHAPE.test(targetSessionId)) return { narrower: false };
     return assertSessionMayReach(this.prisma, ownerId, callerSessionId, targetSessionId, act, clientTurnId);
+  }
+
+  /** Whether this session may move this task into a project (session-reach.ts), with the same reading of the header. */
+  async assertMayMoveRuns(ownerId: string, callerSessionId: string, taskId: string): Promise<void> {
+    if (UUID_SHAPE.test(callerSessionId)) await assertMayMoveRuns(this.prisma, ownerId, callerSessionId, taskId);
   }
 
   /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */

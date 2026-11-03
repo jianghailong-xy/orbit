@@ -1,7 +1,12 @@
 import { ForbiddenException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PermissionMode, uuidToBase62 } from '@orbit/shared';
-import { isWiderThanStarter, resolvePermissionMode, widerSessionRefusal } from '../common/permission-mode';
+import {
+  isWiderThanStarter,
+  modeLimitsWhatItStarts,
+  resolvePermissionMode,
+  widerSessionRefusal,
+} from '../common/permission-mode';
 
 /**
  * What a session may do to another session that already exists: give it a turn, or end, complete,
@@ -23,7 +28,8 @@ import { isWiderThanStarter, resolvePermissionMode, widerSessionRefusal } from '
  * deliveries never come through here, and a credential with no session in it has no mode to compare.
  *
  * Direct relations are read from the server's own records when the call is made, and nothing a caller
- * sends says what they are (`directlyRelated`).
+ * sends says what they are (`directlyRelated`). Nor can a narrower session write them: the one record it
+ * could reach is which project a task is in, and `assertMayMoveRuns` holds that door.
  *
  * The run of a verification task is held to one rule more, whatever the sender's mode: only its project's
  * coordinator and the judgment sessions opened for that project may write to it, because what it finds is
@@ -192,4 +198,44 @@ export async function assertSessionMayReach(
     ACTS[act].words,
     nextStep(callerMode),
   ));
+}
+
+/**
+ * Moving a task into a project makes that project's coordinator and judgment sessions directly related to every
+ * session of the task, ended ones included, since `resume` brings those back. So a session narrower than one of them
+ * may not do it, whatever it is to them already: it would be making the relation that lets it reach them. A task with
+ * no session is not held here: what its run may be is the ceiling on starting one.
+ */
+export async function assertMayMoveRuns(
+  db: Pick<Prisma.TransactionClient, 'session'>,
+  ownerId: string,
+  callerSessionId: string,
+  taskId: string,
+): Promise<void> {
+  const caller = await db.session.findFirst({
+    where: { id: callerSessionId, ownerId },
+    select: { permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+  });
+  if (!caller) return;
+  const callerMode = resolvePermissionMode(caller.permissionMode, caller.owner);
+  if (!modeLimitsWhatItStarts(callerMode)) return;
+  const runs = await db.session.findMany({
+    where: { ownerId, taskId, id: { not: callerSessionId } },
+    select: { id: true, permissionMode: true, engine: true, owner: { select: { preferences: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  for (const run of runs) {
+    const runMode = resolvePermissionMode(run.permissionMode, run.owner);
+    if (isWiderThanStarter({ mode: callerMode, engine: caller.engine }, runMode, run.engine)) {
+      throw widerSessionRefusal(
+        callerMode,
+        uuidToBase62(run.id),
+        runMode,
+        run.engine,
+        'move its task into a project',
+        "A task's project decides who is directly related to its run, so a narrower session does not choose it. Ask "
+          + "the account owner to move the task, or to switch this session's mode.",
+      );
+    }
+  }
 }

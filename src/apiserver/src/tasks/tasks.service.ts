@@ -9542,6 +9542,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
     }
+    // A task's project decides who is directly related to its runs, so a session narrower than one of
+    // them may not write it (sessions/session-reach.ts). Past the request above, which writes nothing and
+    // goes to the owner. A person's own edit names no session and is not asked.
+    if (actingSessionId && typeof dto.projectId === 'string' && dto.projectId !== before.projectId) {
+      await this.sessions.assertMayMoveRuns(ownerId, actingSessionId, id);
+    }
     // ...and the same request once the account owner's confirmation has moved the task: it is
     // already where it asked to go. See `appliedMoveReplay`; anything it does not recognise as that
     // request goes on below as the ordinary update it is.

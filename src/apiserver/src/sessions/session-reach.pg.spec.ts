@@ -13,7 +13,8 @@
  *
  * Besides the table:
  *   - each direct relation, each way round, read from the server's own records, and what looks like
- *     one and is not; a caller has no way to declare a relation;
+ *     one and is not; a caller has no way to declare a relation, and a narrower session may not move a
+ *     task into a project, which would make one;
  *   - a stored mode that is null reads as the account's default, and a mode that runs as Bypass on its
  *     engine counts as Bypass, by the same comparison the ceiling on starting sessions uses;
  *   - the words of each refusal, and what a refusal leaves behind: nothing;
@@ -700,6 +701,79 @@ test('a session reaches a wider session only as the table says', {
       'after the edit',
     );
     assert.equal(await stateOf(to), before, 'nothing reached the target');
+  });
+
+  // ── a relation is not something a narrower session can write ─────────────────────────────────
+  /** A task with no project, with a run in this mode, and a project coordinated by a session in that one. */
+  async function movable(coordinatorMode: string, runMode: string | null, runShape: Shape = ended) {
+    const coordinator = await sessionIn(coordinatorMode);
+    const projectId = await projectCoordinatedBy(coordinator);
+    // An ordinary task: a session may not take over one only the account owner can settle.
+    const taskId = await taskIn(null, { completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+    const run = runMode ? await sessionIn(runMode, { taskId, ...runShape }) : null;
+    return { coordinator, projectId, taskId, run };
+  }
+  const move = async (taskId: string, projectId: string, from: string) => send(
+    'PATCH', `/runner/tasks/${uuidToBase62(taskId)}`, { projectId: uuidToBase62(projectId) }, { 'x-orbit-session-id': uuidToBase62(from) },
+  );
+  const projectOfTask = async (taskId: string) =>
+    (await prisma.task.findUniqueOrThrow({ where: { id: taskId }, select: { projectId: true } })).projectId;
+
+  for (const [coordinatorMode, runMode] of [['default', 'auto'], ['acceptEdits', 'bypassPermissions'], ['dontAsk', 'bypassPermissions']]) {
+    await t.test(`a ${coordinatorMode} coordinator may not take in a task whose run is ${runMode}, so it stays unrelated`, async () => {
+      const { coordinator, projectId, taskId, run } = await movable(coordinatorMode, runMode);
+      const answer = await move(taskId, projectId, coordinator);
+      assertRefusedAs(answer, WIDER, 'the move');
+      assert.match(String(answer.json.message), /move its task into a project/);
+      assert.match(String(answer.json.message), /account owner/);
+      assert.equal(await projectOfTask(taskId), null, 'the task moved');
+      const before = await stateOf(run!);
+      assertRefusedAs(
+        await send('POST', `${path(run!)}/turns`, { message: 'hello', clientTurnId: randomUUID(), resumeIfEnded: true }, await asSession(coordinator)),
+        WIDER,
+        'the message after the refused move',
+      );
+      assert.equal(await stateOf(run!), before, 'the run was revived');
+    });
+  }
+
+  await t.test('a session of the task that is not the latest counts: an ended one is one resume away', async () => {
+    const { coordinator, projectId, taskId } = await movable('default', 'auto');
+    await sessionIn('default', { taskId, status: RunStatus.SUCCEEDED, completedAt: new Date() });
+    assertRefusedAs(await move(taskId, projectId, coordinator), WIDER, 'the move');
+  });
+
+  await t.test('moving a task in is held to no more than that: no run, a run no wider, Auto, and the owner', async () => {
+    const none = await movable('default', null);
+    const noRun = await move(none.taskId, none.projectId, none.coordinator);
+    assert.equal(noRun.status, 200, noRun.text);
+    assert.equal(await projectOfTask(none.taskId), none.projectId);
+
+    const same = await movable('default', 'default');
+    const noWider = await move(same.taskId, same.projectId, same.coordinator);
+    assert.equal(noWider.status, 200, noWider.text);
+    assert.equal(await projectOfTask(same.taskId), same.projectId);
+
+    const auto = await movable('auto', 'bypassPermissions');
+    const fromAuto = await move(auto.taskId, auto.projectId, auto.coordinator);
+    assert.equal(fromAuto.status, 200, fromAuto.text);
+    assert.equal(await projectOfTask(auto.taskId), auto.projectId);
+
+    const owned = await movable('default', 'auto');
+    await tasks.update(ownerId, owned.taskId, { projectId: owned.projectId } as never);
+    assert.equal(await projectOfTask(owned.taskId), owned.projectId, 'the owner’s own move was refused');
+  });
+
+  await t.test('an edit that does not move the task is not asked', async () => {
+    const { coordinator, projectId, run } = await movable('default', 'auto');
+    const inProject = await taskIn(projectId);
+    await prisma.session.update({ where: { id: run! }, data: { taskId: inProject } });
+    const unchanged = await send(
+      'PATCH', `/runner/tasks/${uuidToBase62(inProject)}`,
+      { projectId: uuidToBase62(projectId), description: 'still here' },
+      { 'x-orbit-session-id': uuidToBase62(coordinator) },
+    );
+    assert.equal(unchanged.status, 200, unchanged.text);
   });
 
   // ── the comparison ───────────────────────────────────────────────────────────────────────────

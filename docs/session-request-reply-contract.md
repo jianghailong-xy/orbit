@@ -155,6 +155,10 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 
 同一个项目的两个 run、同一棵会话树里的非父子、一个 run 开的对话和那个 run 的协调者，都不算。
 
+这些记录比它窄的会话也写不了。任务在哪个项目决定谁和它的 run 直接相关，所以一个会话比这个任务的某个 run 窄时，不能把任务移进
+项目（`task_update` 带 `projectId`），同样是 403 `SESSION_WIDER_THAN_CALLER`。所有者的门不受影响，任务还没有 run 时也不拦，
+新开的 run 归天花板规则管。
+
 **拒绝。** 403 `SESSION_WIDER_THAN_CALLER`，什么都没发生。文字说清下一步：Plan 写进计划或请人切模式，等着它回答的
 对方用 `session_reply`；Default 这一档找自己的协调者或请人切模式。`project_send` 的这个拒绝原样带回，不翻译成
 `COORDINATOR_MESSAGE_UNDELIVERED`。
