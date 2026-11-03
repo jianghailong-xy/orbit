@@ -503,8 +503,9 @@ export function buildCoordinatorDeliveryMessage(
         + `${reading.derived.withheld.join(', ')}. `
         + 'The “every one … is satisfied” above looks only at the serving tasks’ statuses; the projection also '
         + 'asks whether each task counts as finished by the completion criterion it declared itself, whether '
-        + 'what it declared is the current revision of this criterion, and whether the session that wrote this '
-        + 'criterion is also producing its evidence.'
+        + 'the newest independent check of its work passed (a check that concluded FAIL or INCONCLUSIVE is DONE '
+        + 'and does not count), whether what it declared is the current revision of this criterion, and whether '
+        + 'the session that wrote this criterion is also producing its evidence.'
         + (held ? ` Criteria held back:\n${held}` : '')
         + '\n\n'
         + 'What is still missing, and which task it is stuck on, read for yourself: '

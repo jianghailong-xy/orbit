@@ -30,6 +30,7 @@ import { CreatorType, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { deriveTaskCompletionStatus } from '../tasks/task-completion-criterion';
 import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
 import { TasksService } from '../tasks/tasks.service';
 import {
@@ -703,5 +704,504 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(askers, [DONE_REQUEST_DOOR],
       'only the coordinator’s done request is refused on `doneReadiness`, and no write of the '
         + 'owner’s is');
+  });
+});
+
+/**
+ * Clause 2 asked about work a check is pointed at, and about work that was reopened.
+ *
+ * A criterion whose check said FAIL read satisfied, and so did one whose work had been reopened with
+ * its evidence still confirmed, and on 2026-11-03 `project-done-derived.ts` stored that as a project
+ * DONE (`project-done-derived.pg.spec.ts` has the story and the column). This file is about the
+ * answer itself: for each shape, whether the criterion is met, which rows hold it up, and what would
+ * settle each of them. A reader who is told a criterion is unmet because of a check that already has
+ * a verdict, and then told it "needs its verdict recorded", has been told something false.
+ *
+ * WHY ONE CRITERION PER SHAPE
+ * ---------------------------
+ * Each one is read on its own, with its own work, so no shape can pass on another's rows. Facts are
+ * produced at the doors production uses, as everywhere in this file.
+ *
+ * WHICH CHECK ANSWERS, WHEN THERE ARE SEVERAL
+ * -------------------------------------------
+ * A subject's newest live check, for the subject and for every check of it. That is the rule the
+ * dependency gate and the aggregation already hold (`newestLiveCheck`). On production on 2026-11-03,
+ * 13 subjects had two or more checks and 8 of them an older FAIL under a newer PASS, none of those
+ * yet under one criterion, so the shape is ordinary and waiting to arrive here. The alternative, each
+ * check needing its own PASS, wedges it: a FAIL can be retired only by revoking it and cancelling the
+ * row, and a cancelled row is not DONE. An older PASS must not stand over a newer FAIL either, which
+ * is why "any PASS" is not the rule. Both directions are below.
+ */
+test('a check that did not pass, or work that was reopened, does not settle a criterion', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const prisma: PrismaClient = prismaClientFor(url);
+  t.after(async () => {
+    await prisma.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const projects = new ProjectsService(prisma as unknown as PrismaService,
+    new ProjectAcceptanceService(prisma as unknown as PrismaService));
+  const tasks = new TasksService(prisma as never, {} as never, {
+    publishTaskChanged() {},
+    publishForUser() {},
+    publishTaskResync() {},
+  } as never);
+  const evidence = new TaskCompletionEvidenceService(prisma as unknown as PrismaService);
+
+  const ownerId = randomUUID();
+  const projectId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: ownerId,
+      email: `checks-${ownerId}@criterion-satisfaction.invalid`,
+      name: 'Checks',
+      passwordHash: 'x',
+    },
+  });
+  await prisma.project.create({
+    data: { id: projectId, ownerId, title: 'The project of checks and reopened work' },
+  });
+
+  const SHAPES = [
+    'FAIL', 'INCONCLUSIVE', 'NO_VERDICT', 'PASS',
+    'OLDER_FAIL_NEWER_PASS', 'OLDER_PASS_NEWER_FAIL', 'OLDER_PASS_NEWER_RUNNING',
+    'NEWER_CHECK_CANCELLED', 'CHECK_SERVES_NOTHING_FAIL', 'CHECK_SERVES_NOTHING_PASS',
+    'ONLY_THE_CHECK_SERVES_SUBJECT_REOPENED', 'CONFIRMED_THEN_REOPENED_CHECK_PASS',
+    'CONFIRMED_THEN_REOPENED_CHECK_FAIL', 'CONFIRMED_THEN_CANCELLED', 'SUBJECT_REOPENED_WITH_ITS_PASS',
+    'MANUAL_SUBJECT_CHECK_PASSED', 'EXECUTABLE_FAILED',
+  ] as const;
+  type Shape = (typeof SHAPES)[number];
+  const written = await projects.update(ownerId, projectId, {
+    acceptanceCriteriaItems: SHAPES.map((text) => ({ text, verificationMethod: METHOD })),
+  } as never);
+  const criteria = criteriaFromDefinitions(written.acceptanceCriteriaItems);
+  const criterionOf = (shape: Shape) => {
+    const found = criteria.find((row) => row.text === shape);
+    assert.ok(found, `the fixture states ${shape}`);
+    return found;
+  };
+
+  const OBTAIN_PASS = 'OBTAIN_INDEPENDENT_VERIFICATION_PASS';
+  const RECORD_VERDICT = 'RECORD_VERIFICATION_VERDICT';
+  const SUBMIT_EVIDENCE = 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION';
+  const RUN_COMMAND = 'RUN_ACCEPTANCE_COMMAND';
+
+  /** The finished work a shape's check is pointed at. */
+  async function settledWork(shape: Shape, serves = true) {
+    const task = await tasks.create(ownerId, {
+      title: `the work of ${shape}`,
+      projectId,
+      ...(serves ? { criterionKey: criterionOf(shape).key } : {}),
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    } as never);
+    const settled = await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid AND "status" IN ('OPEN', 'IN_PROGRESS')
+          AND "completion_criterion" = 'EXECUTABLE'`,
+      [task.id],
+    );
+    assert.equal(settled.rowCount, 1, 'the EXECUTABLE task must reach DONE through the DONE fence');
+    return task;
+  }
+
+  /**
+   * One check of `subject`, with its verdict written the way a verifier writes one. Created one at a
+   * time, so `created_at` orders them.
+   */
+  async function checkOf(
+    subject: { id: string },
+    shape: Shape,
+    verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null,
+    options: { serves?: boolean; suffix?: string } = {},
+  ) {
+    const check = await tasks.create(ownerId, {
+      title: `the check of ${shape}${options.suffix ?? ''}`,
+      projectId,
+      ...(options.serves === false ? {} : { criterionKey: criterionOf(shape).key }),
+      verifiesTaskId: subject.id,
+    } as never);
+    if (verdict) await tasks.update(ownerId, check.id, { verdict } as never);
+    return check;
+  }
+
+  /** Evidence-judgment work with its one revision confirmed, by a session that did not do it. */
+  async function confirmedWork(shape: Shape) {
+    const task = await tasks.create(ownerId, {
+      title: `the work of ${shape}`,
+      projectId,
+      criterionKey: criterionOf(shape).key,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+    } as never);
+    const workerSessionId = randomUUID();
+    const decidingSessionId = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: workerSessionId,
+        ownerId,
+        creatorId: ownerId,
+        taskId: task.id,
+        title: 'the run that produced the evidence',
+        prompt: 'do the work',
+        startsTaskWork: false,
+      },
+    });
+    await prisma.session.create({
+      data: {
+        id: decidingSessionId,
+        ownerId,
+        creatorId: ownerId,
+        title: 'the run that judges it',
+        prompt: 'read the ledger and decide',
+      },
+    });
+    const toolUseId = `toolu_${randomUUID()}`;
+    await prisma.toolCall.create({
+      data: {
+        sessionId: workerSessionId,
+        name: 'Bash',
+        toolUseId,
+        input: { command: 'true', description: 'the work this evidence cites' },
+        isError: false,
+      },
+    });
+    const actor = { type: CreatorType.USER, id: ownerId } as const;
+    await evidence.submit(ownerId, task.id, actor, {
+      sourceSessionId: workerSessionId,
+      evidence: {
+        claim: `the work of ${shape} is done`,
+        criterion: { key: criterionOf(shape).key, text: shape },
+        checks: [{ kind: 'TOOL_CALL', ref: toolUseId }],
+        gaps: [],
+      },
+    });
+    await evidence.decide(ownerId, task.id, actor, {
+      decidingSessionId,
+      evidenceRevision: '1',
+      decision: 'CONFIRM',
+    });
+    return task;
+  }
+
+  async function answerOf(shape: Shape): Promise<CriterionSatisfaction> {
+    const derived = await readCriterionSatisfaction(prisma, ownerId, projectId);
+    const row = derived.find((entry) => entry.definitionId === criterionOf(shape).definitionId);
+    assert.ok(row, `${shape} must be in the read`);
+    return row;
+  }
+
+  /** Whether it is met, and, when it is not, who holds it up and what would settle each. */
+  async function assertHeldUpBy(
+    shape: Shape,
+    expected: ReadonlyArray<{ task: { id: string }; status: string; requiredAction: string }>,
+  ) {
+    const answer = await answerOf(shape);
+    assert.equal(answer.satisfied, expected.length === 0,
+      `${shape}: satisfied is ${answer.satisfied} and ${expected.length} task(s) were expected to hold it up`);
+    const held = answer.unmet.filter((reason) => reason.clause === 'SERVING_WORK_UNSETTLED')
+      .flatMap((reason) => reason.heldUpBy)
+      .map(({ taskId, status, requiredAction }) => ({ taskId, status, requiredAction }))
+      .sort((a, b) => a.taskId.localeCompare(b.taskId));
+    assert.deepEqual(held, expected
+      .map(({ task, status, requiredAction }) => ({ taskId: task.id, status, requiredAction }))
+      .sort((a, b) => a.taskId.localeCompare(b.taskId)), `${shape}: who holds it up, and why`);
+    assert.deepEqual(answer.unmet.map((reason) => reason.clause),
+      expected.length > 0 ? ['SERVING_WORK_UNSETTLED'] : [], `${shape}: which clauses`);
+  }
+
+  await t.test('a FAIL and an INCONCLUSIVE hold the criterion, and the row says a PASS is missing',
+    async () => {
+      for (const verdict of ['FAIL', 'INCONCLUSIVE'] as const) {
+        const work = await settledWork(verdict);
+        const check = await checkOf(work, verdict, verdict);
+        await assertHeldUpBy(verdict, [
+          // Both rows, for the reason a dependency on `work` is held by the same check: it is the
+          // work that has to change, and the check is the row that said so.
+          { task: work, status: 'DONE', requiredAction: OBTAIN_PASS },
+          { task: check, status: 'DONE', requiredAction: OBTAIN_PASS },
+        ]);
+      }
+    });
+
+  await t.test('a check with no verdict holds it too, and that row does need its verdict', async () => {
+    const work = await settledWork('NO_VERDICT');
+    const check = await checkOf(work, 'NO_VERDICT', null);
+    await assertHeldUpBy('NO_VERDICT', [
+      { task: work, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: check, status: 'OPEN', requiredAction: RECORD_VERDICT },
+    ]);
+  });
+
+  await t.test('the work DONE and its check PASS is what meets it', async () => {
+    const work = await settledWork('PASS');
+    await checkOf(work, 'PASS', 'PASS');
+    await assertHeldUpBy('PASS', []);
+  });
+
+  await t.test('of several checks the newest live one answers, in both directions', async () => {
+    const fixed = await settledWork('OLDER_FAIL_NEWER_PASS');
+    await checkOf(fixed, 'OLDER_FAIL_NEWER_PASS', 'FAIL', { suffix: ' (first)' });
+    await checkOf(fixed, 'OLDER_FAIL_NEWER_PASS', 'PASS', { suffix: ' (re-run)' });
+    await assertHeldUpBy('OLDER_FAIL_NEWER_PASS', []);
+
+    const regressed = await settledWork('OLDER_PASS_NEWER_FAIL');
+    const older = await checkOf(regressed, 'OLDER_PASS_NEWER_FAIL', 'PASS', { suffix: ' (first)' });
+    const newer = await checkOf(regressed, 'OLDER_PASS_NEWER_FAIL', 'FAIL', { suffix: ' (re-run)' });
+    await assertHeldUpBy('OLDER_PASS_NEWER_FAIL', [
+      { task: regressed, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: older, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: newer, status: 'DONE', requiredAction: OBTAIN_PASS },
+    ]);
+
+    const reopened = await settledWork('OLDER_PASS_NEWER_RUNNING');
+    const passed = await checkOf(reopened, 'OLDER_PASS_NEWER_RUNNING', 'PASS', { suffix: ' (first)' });
+    const running = await checkOf(reopened, 'OLDER_PASS_NEWER_RUNNING', null, { suffix: ' (re-run)' });
+    await assertHeldUpBy('OLDER_PASS_NEWER_RUNNING', [
+      { task: reopened, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: passed, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: running, status: 'OPEN', requiredAction: RECORD_VERDICT },
+    ]);
+
+    // A cancelled check answers nothing, so the one before it answers again. It serves nothing
+    // here, because a cancelled row that does serve a criterion holds it for the other reason.
+    const dropped = await settledWork('NEWER_CHECK_CANCELLED');
+    await checkOf(dropped, 'NEWER_CHECK_CANCELLED', 'PASS', { suffix: ' (first)' });
+    const cancelled = await checkOf(dropped, 'NEWER_CHECK_CANCELLED', null, {
+      serves: false, suffix: ' (dropped)',
+    });
+    await assertHeldUpBy('NEWER_CHECK_CANCELLED', [
+      { task: dropped, status: 'DONE', requiredAction: OBTAIN_PASS },
+      { task: { id: (await taskByTitle('the check of NEWER_CHECK_CANCELLED (first)')).id }, status: 'DONE', requiredAction: OBTAIN_PASS },
+    ]);
+    await tasks.update(ownerId, cancelled.id, { status: 'CANCELLED' } as never);
+    await assertHeldUpBy('NEWER_CHECK_CANCELLED', []);
+  });
+
+  async function taskByTitle(title: string): Promise<{ id: string }> {
+    const { rows } = await sql.query<{ id: string }>(
+      `SELECT "id"::text FROM "task" WHERE "project_id" = $1::uuid AND "title" = $2`,
+      [projectId, title],
+    );
+    assert.equal(rows.length, 1, `exactly one task is called ${title}`);
+    return rows[0]!;
+  }
+
+  await t.test('a check that serves no criterion still answers for the work that does', async () => {
+    const failed = await settledWork('CHECK_SERVES_NOTHING_FAIL');
+    await checkOf(failed, 'CHECK_SERVES_NOTHING_FAIL', 'FAIL', { serves: false });
+    await assertHeldUpBy('CHECK_SERVES_NOTHING_FAIL', [
+      { task: failed, status: 'DONE', requiredAction: OBTAIN_PASS },
+    ]);
+
+    const passed = await settledWork('CHECK_SERVES_NOTHING_PASS');
+    await checkOf(passed, 'CHECK_SERVES_NOTHING_PASS', 'PASS', { serves: false });
+    await assertHeldUpBy('CHECK_SERVES_NOTHING_PASS', []);
+  });
+
+  await t.test('a PASS does not stand once the work it passed is reopened, whoever serves what',
+    async () => {
+      const work = await settledWork('ONLY_THE_CHECK_SERVES_SUBJECT_REOPENED', false);
+      const check = await checkOf(work, 'ONLY_THE_CHECK_SERVES_SUBJECT_REOPENED', 'PASS');
+      await assertHeldUpBy('ONLY_THE_CHECK_SERVES_SUBJECT_REOPENED', []);
+
+      await tasks.update(ownerId, work.id, { status: 'OPEN' } as never);
+      await assertHeldUpBy('ONLY_THE_CHECK_SERVES_SUBJECT_REOPENED', [
+        { task: check, status: 'DONE', requiredAction: OBTAIN_PASS },
+      ]);
+    });
+
+  await t.test('a standing CONFIRM does not settle work that was reopened, whatever the check says',
+    async () => {
+      for (const [shape, verdict] of [
+        ['CONFIRMED_THEN_REOPENED_CHECK_PASS', 'PASS'],
+        ['CONFIRMED_THEN_REOPENED_CHECK_FAIL', 'FAIL'],
+      ] as const) {
+        const work = await confirmedWork(shape);
+        const check = await checkOf(work, shape, verdict);
+        await tasks.update(ownerId, work.id, { status: 'OPEN' } as never);
+        await assertHeldUpBy(shape, [
+          { task: work, status: 'OPEN', requiredAction: SUBMIT_EVIDENCE },
+          { task: check, status: 'DONE', requiredAction: OBTAIN_PASS },
+        ]);
+      }
+
+      // And cancelled is not DONE either. Production holds this shape on one OPEN project.
+      const work = await confirmedWork('CONFIRMED_THEN_CANCELLED');
+      await assertHeldUpBy('CONFIRMED_THEN_CANCELLED', []);
+      await tasks.update(ownerId, work.id, { status: 'CANCELLED' } as never);
+      await assertHeldUpBy('CONFIRMED_THEN_CANCELLED', [
+        { task: work, status: 'CANCELLED', requiredAction: SUBMIT_EVIDENCE },
+      ]);
+    });
+
+  await t.test('a VERIFICATION subject reads the same rule: not DONE is not settled', async () => {
+    const [subject, check] = await tasks.createMany(ownerId, {
+      tasks: [
+        {
+          title: 'the subject its check settles',
+          ref: 'reopened-subject',
+          projectId,
+          criterionKey: criterionOf('SUBJECT_REOPENED_WITH_ITS_PASS').key,
+          completionCriterion: 'VERIFICATION',
+          completionPolicy: 'VERIFICATION_PASSED',
+        },
+        {
+          title: 'the check that settled it',
+          ref: 'reopened-check',
+          projectId,
+          criterionKey: criterionOf('SUBJECT_REOPENED_WITH_ITS_PASS').key,
+          verifiesRef: 'reopened-subject',
+        },
+      ],
+    } as never);
+    await tasks.update(ownerId, check.id, { verdict: 'PASS' } as never);
+    await assertHeldUpBy('SUBJECT_REOPENED_WITH_ITS_PASS', []);
+
+    // Taken out of DONE by the row itself, past every door that would put it back: this is the
+    // state, and what the doors do about it is their business.
+    const reopened = await sql.query(
+      `UPDATE "task" SET "status" = 'OPEN' WHERE "id" = $1::uuid AND "status" = 'DONE'`,
+      [subject.id],
+    );
+    assert.equal(reopened.rowCount, 1, 'the subject was DONE on its check’s PASS');
+    await assertHeldUpBy('SUBJECT_REOPENED_WITH_ITS_PASS', [
+      { task: subject, status: 'OPEN', requiredAction: OBTAIN_PASS },
+      { task: check, status: 'DONE', requiredAction: OBTAIN_PASS },
+    ]);
+  });
+
+  await t.test('a MANUAL subject its check passed is not DONE, so it holds until it is declared to be',
+    async () => {
+      // `recompute` leaves MANUAL alone and the DONE fence has no lane for it, so nothing derives this
+      // row's DONE from a PASS. The read used to call it settled anyway, with the task OPEN.
+      const shape = 'MANUAL_SUBJECT_CHECK_PASSED';
+      const [subject, check] = await tasks.createMany(ownerId, {
+        tasks: [
+          {
+            title: 'a work row a check settles',
+            ref: 'manual-subject',
+            projectId,
+            criterionKey: criterionOf(shape).key,
+            completionCriterion: 'VERIFICATION',
+            completionPolicy: 'MANUAL',
+          },
+          {
+            title: 'the check of that work row',
+            ref: 'manual-check',
+            projectId,
+            criterionKey: criterionOf(shape).key,
+            verifiesRef: 'manual-subject',
+          },
+        ],
+      } as never);
+      await tasks.update(ownerId, check.id, { verdict: 'PASS' } as never);
+      await assertHeldUpBy(shape, [
+        { task: subject, status: 'OPEN', requiredAction: OBTAIN_PASS },
+        { task: check, status: 'DONE', requiredAction: OBTAIN_PASS },
+      ]);
+
+      // The way out is an edit anybody allowed to write the task can make.
+      await tasks.update(ownerId, subject.id, { completionPolicy: 'VERIFICATION_PASSED' } as never);
+      await assertHeldUpBy(shape, []);
+    });
+
+  await t.test('a serving task that ended FAILED holds it, as it always has', async () => {
+    const task = await tasks.create(ownerId, {
+      title: 'the work that failed',
+      projectId,
+      criterionKey: criterionOf('EXECUTABLE_FAILED').key,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    } as never);
+    await tasks.update(ownerId, task.id, { status: 'FAILED' } as never);
+    await assertHeldUpBy('EXECUTABLE_FAILED', [
+      { task, status: 'FAILED', requiredAction: RUN_COMMAND },
+    ]);
+  });
+
+  // ═══ what the check itself does is unchanged: this rule is the criterion's, and nobody else's ══
+
+  await t.test('a FAIL still concludes its check, and still blocks what waits on it', async () => {
+    const work = await tasks.create(ownerId, {
+      title: 'the work under a check whose lifecycle is the point',
+      projectId,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    } as never);
+    await sql.query(
+      `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [work.id],
+    );
+    const check = await tasks.create(ownerId, {
+      title: 'the check whose lifecycle is the point',
+      projectId,
+      verifiesTaskId: work.id,
+    } as never);
+    const onTheCheck = await tasks.create(ownerId, {
+      title: 'waits on the check',
+      projectId,
+      dependsOnTaskIds: [check.id],
+      autoRunWhenReady: false,
+    } as never);
+    const onTheWork = await tasks.create(ownerId, {
+      title: 'waits on the work',
+      projectId,
+      dependsOnTaskIds: [work.id],
+      autoRunWhenReady: false,
+    } as never);
+
+    const carrier = async () => {
+      const { rows } = await sql.query<{ status: string; verdict: string | null; revision: string }>(
+        `SELECT "status"::text, "verdict"::text, "verdict_revision"::text AS "revision"
+           FROM "task" WHERE "id" = $1::uuid`,
+        [check.id],
+      );
+      return rows[0]!;
+    };
+
+    // The evaluator every door derives a carrier's own DONE from: any conclusion concludes it.
+    for (const ownVerdict of ['PASS', 'FAIL', 'INCONCLUSIVE'] as const) {
+      assert.equal(deriveTaskCompletionStatus({
+        completionCriterion: 'VERIFICATION',
+        verifiesTaskId: work.id,
+        ownVerdict,
+      }), 'DONE', `${ownVerdict} concludes the carrier`);
+    }
+    assert.equal(deriveTaskCompletionStatus({
+      completionCriterion: 'VERIFICATION',
+      verifiesTaskId: work.id,
+      ownVerdict: null,
+    }), null, 'and no conclusion concludes nothing');
+
+    await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+    assert.deepEqual(await carrier(), { status: 'DONE', verdict: 'FAIL', revision: '1' },
+      'the FAIL is written, the check is DONE and its revision advanced, exactly as before');
+    for (const dependent of [onTheCheck, onTheWork]) {
+      assert.equal((await tasks.get(ownerId, dependent.id)).dependencyState, 'BLOCKED_FAILED',
+        'a task waiting on a check, or on the work it checks, is stopped by the FAIL');
+    }
+
+    // A check holding a FAIL cannot be given another status while the verdict stands.
+    await assert.rejects(
+      tasks.update(ownerId, check.id, { status: 'CANCELLED' } as never),
+      (error: { response?: { code?: string } }) =>
+        error.response?.code === 'VERIFIER_STATUS_DERIVED_FROM_VERDICT',
+      'its status is derived from the verdict, so it has to be revoked first',
+    );
+    await tasks.update(ownerId, check.id, { verdict: null } as never);
+    assert.deepEqual(await carrier(), { status: 'OPEN', verdict: null, revision: '1' },
+      'revoking takes the derived DONE with it and leaves the counter where it was');
+    await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+    assert.deepEqual(await carrier(), { status: 'DONE', verdict: 'FAIL', revision: '2' },
+      'and a second conclusion is a second revision');
   });
 });

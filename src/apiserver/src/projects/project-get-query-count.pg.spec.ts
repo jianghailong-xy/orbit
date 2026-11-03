@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Twenty-eight statements, and every one of them is per RELATION rather than per row:
+ * Thirty statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -79,9 +79,12 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      write by statement triggers on `task` (0282), so this read touches one row per status the
  *      project actually has, and the case below refuses any statement of this read that groups
  *      `task` again;
- *   5  the satisfaction derivation — its criteria, their serving tasks, and, off those tasks, the
- *      verifications pointed at them, their newest completion evidence, and that evidence's
- *      decisions;
+ *   7  the satisfaction derivation — its criteria, their serving tasks, and, off those tasks, the
+ *      verifications pointed at them, their newest completion evidence, that evidence's decisions,
+ *      and, added 2026-11-03, what a serving check verifies and that subject's checks: a check
+ *      settles only while its subject is DONE and the subject's newest live check passed
+ *      (`servingTaskSettled`), and the older check of a re-run cannot answer that from its own row.
+ *      Two levels, not one more query per task, so two statements at either size;
  *   6  the landing lane — its criteria, their serving tasks, those tasks' merge receipts, those same
  *      tasks' integration jobs, the work sessions those jobs were queued for, and the project's own
  *      binding, which says which two branches the receipts have to name
@@ -157,7 +160,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 28;
+const STATEMENTS_PER_READ = 30;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,

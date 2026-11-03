@@ -45,7 +45,9 @@ import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
+import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
+import { SessionsService } from '../sessions/sessions.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -259,8 +261,9 @@ function decisionResponse(row: DecisionRow): TaskEvidenceDecisionDto {
  * no device outbox, no worker. What came back is the ANSWER — `decide` records one independent
  * session's CONFIRM or SEND_BACK as one row, and a CONFIRM of the current revision is the fact the
  * shared evaluator projects onto DONE. Submitting is still only a claim: `submit` derives no
- * status, reads no Task status to decide whether to accept one, and the rows it appends stay
- * immutable.
+ * task status, reads no Task status to decide whether to accept one, and the rows it appends stay
+ * immutable. After their commits both re-project the status of the task's project, because a
+ * revision and its decision are inputs to it (`reprojectProjectStatus`).
  */
 @Injectable()
 export class TaskCompletionEvidenceService {
@@ -274,6 +277,10 @@ export class TaskCompletionEvidenceService {
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly evidenceReviews?: EvidenceReviewService,
     @Optional() files?: FilesService,
+    /** Where the coordinator is told when this edge reopens an owner's DONE. Last and optional for
+     *  the reason the router above is: the fixtures that build this service by hand are about the
+     *  ledger. The module provides it. */
+    @Optional() private readonly sessions?: SessionsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -440,6 +447,8 @@ export class TaskCompletionEvidenceService {
         projectId: task.projectId,
       };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
+
+    await this.reprojectProjectStatus(ownerId, committed.projectId);
 
     try {
       // The revision itself is the trigger. A source Session may still be RUNNING or
@@ -815,7 +824,7 @@ export class TaskCompletionEvidenceService {
         }
         // A replay answers with the receipt the first attempt got. Whatever that decision derived
         // was derived then, under this same lock, so nothing is re-derived here.
-        return { decision: decisionResponse(existing), completed: false };
+        return { decision: decisionResponse(existing), completed: false, projectId: task.projectId };
       }
 
       const written = await tx.taskEvidenceDecision.create({
@@ -878,8 +887,10 @@ export class TaskCompletionEvidenceService {
             ? { userId: actor.id }
             : { sessionId: decidingSession.id });
       }
-      return { decision: decisionResponse(written), completed: settled };
+      return { decision: decisionResponse(written), completed: settled, projectId: task.projectId };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
+
+    await this.reprojectProjectStatus(ownerId, committed.projectId);
 
     // A decided revision leaves the pending-decisions read, and a CONFIRM may have settled the task
     // besides: the same nudge a submission sends, after the same commit.
@@ -909,6 +920,32 @@ export class TaskCompletionEvidenceService {
       });
     }
     return committed.decision;
+  }
+
+  /**
+   * Re-project `project.status`, because a revision and its decision are both inputs to it: a new
+   * revision leaves the CONFIRM a criterion stood on answering a version that was replaced, and a
+   * CONFIRM of a task already DONE settles the criterion again with no task write anywhere. Until
+   * 2026-11-03 neither re-projected, so a project stored DONE stayed DONE until a merge receipt or
+   * a task write happened along, and R8 refuses every session's task writes while it is DONE.
+   *
+   * Before anything is told about the write, so that whoever is handed this revision next reads the
+   * project it is now about. After the commit and outside the transaction, for the reason
+   * `storeDerivedProjectStatus` gives. Logged, never raised: the evidence is recorded either way, and
+   * the next edge re-derives the same answer from the same rows.
+   *
+   * Behind the router check, as the projection's edges on the task and merge-receipt writers are: a
+   * fixture that wires no router is about the ledger, and did not ask for its project's column to
+   * be re-decided.
+   */
+  private async reprojectProjectStatus(ownerId: string, projectId: string | null): Promise<void> {
+    if (!projectId || !this.completionInputs) return;
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((error) =>
+      this.logger.warn(`derived project status not re-projected after completion evidence: ${
+        error instanceof Error ? error.message : error}`),
+    );
   }
 
   /**
