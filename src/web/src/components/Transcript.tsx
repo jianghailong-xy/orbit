@@ -64,6 +64,12 @@ import {
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import {
+  EVIDENCE_FILE_EXPIRED,
+  ExpiredAttachmentError,
+  evidenceExpiryDate,
+  evidenceFileExpiredLine,
+} from '../lib/evidenceFiles';
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
@@ -2958,6 +2964,8 @@ export function AttachmentImage({
       loadingClassName={`${className} chat-image-loading`}
       previewKey={previewKey}
       order={order}
+      // A chip and a tray's row are too small to say it, and hold what a person just sent.
+      saysExpired={variant === 'transcript'}
     />
   );
 }
@@ -3006,6 +3014,21 @@ function resolveFileObjectUrl(
   });
 }
 
+/** What a file whose bytes have gone leaves in a conversation: the grey a card's tile has, in the card's words. */
+function AttachmentExpiredTile({ at, name }: { at: string | null; name: string }) {
+  return (
+    <span className="chat-expired" title={name}>
+      {EVIDENCE_FILE_EXPIRED}
+      {at === null ? null : (
+        <>
+          <br />
+          {evidenceExpiryDate(at)}
+        </>
+      )}
+    </span>
+  );
+}
+
 function ResolvedAttachmentImage({
   id,
   className,
@@ -3013,6 +3036,7 @@ function ResolvedAttachmentImage({
   loadingClassName,
   previewKey,
   order,
+  saysExpired = true,
 }: {
   id: string;
   className: string;
@@ -3020,10 +3044,12 @@ function ResolvedAttachmentImage({
   loadingClassName: string;
   previewKey?: string;
   order?: number;
+  saysExpired?: boolean;
 }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
   const [url, setUrl] = useState<string | null>(null);
+  const [expired, setExpired] = useState<{ id: string; at: string | null } | null>(null);
   useEffect(() => {
     if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
@@ -3037,7 +3063,10 @@ function ResolvedAttachmentImage({
           URL.revokeObjectURL(u); // unmounted before the fetch resolved
         }
       })
-      .catch(() => undefined);
+      // Only a read told the bytes have gone says so. Anything else may come back, and stays as it was.
+      .catch((error: unknown) => {
+        if (active && error instanceof ExpiredAttachmentError) setExpired({ id, at: error.expiredAt });
+      });
     return () => {
       active = false;
       if (made) URL.revokeObjectURL(made);
@@ -3047,6 +3076,7 @@ function ResolvedAttachmentImage({
     const data = exp.images.get(id);
     return data ? <ChatImage src={data} className={className} alt={alt} /> : <span className={loadingClassName} />;
   }
+  if (saysExpired && expired?.id === id) return <AttachmentExpiredTile at={expired.at} name={alt} />;
   if (!url) return <span className={loadingClassName} />;
   return <ChatImage src={url} className={className} alt={alt} previewKey={previewKey} order={order} />;
 }
@@ -3059,6 +3089,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [expired, setExpired] = useState<{ at: string | null } | null>(null);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -3070,16 +3101,30 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
       </span>
     );
   }
+  // Its bytes have gone, so there is nothing to press or to try again.
+  if (expired) {
+    return (
+      <span className="chat-file is-expired" title={label}>
+        <PaperClipOutlined />
+        <span className="chat-file-name">{label}</span>
+        <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
+      </span>
+    );
+  }
   const download = async (): Promise<void> => {
     if (busy) return;
     setFailed(false);
     setBusy(true);
     try {
       saveUserFile(await resolveFileObjectUrl(resolve, id), label);
-    } catch {
-      // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
-      // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
-      setFailed(true);
+    } catch (error) {
+      if (error instanceof ExpiredAttachmentError) {
+        setExpired({ at: error.expiredAt });
+      } else {
+        // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
+        // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
+        setFailed(true);
+      }
     } finally {
       setBusy(false);
     }

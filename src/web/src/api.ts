@@ -28,7 +28,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
-import type { EvidenceFilePinAnswer } from './lib/evidenceFiles';
+import { ExpiredAttachmentError, type EvidenceFilePinAnswer } from './lib/evidenceFiles';
 import type { TrashHold } from './lib/trashNote';
 import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
@@ -657,14 +657,6 @@ export const deleteAttachment = async (id: string): Promise<void> => {
     throw new Error(msg.message || res.statusText);
   }
 };
-
-/** A read of a file whose bytes have gone (410), and when they expired. A server older than the date says only that they went. */
-export class ExpiredAttachmentError extends Error {
-  constructor(public readonly expiredAt: string | null) {
-    super('attachment expired');
-    this.name = 'ExpiredAttachmentError';
-  }
-}
 
 /** The bytes a read of attachment `id` came back with, as a blob. */
 async function attachmentBlob(res: Response, id: string): Promise<Blob> {

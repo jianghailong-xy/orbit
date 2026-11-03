@@ -96,12 +96,18 @@ export interface EvidenceFile {
   pinnedAt?: string | null;
   /** Whether it can be pinned: what `file_upload` kept, while its bytes remain. A server older than this field offers no pin. */
   pinnable?: boolean;
-  /** What `file_upload --as test-report` kept of it. A receipt has no citations, so its page reads its reports off these. */
-  testReport?: EvidenceTestReport | null;
 }
 
 /** What a press of the pin answers, either way: the three dates it may have moved. */
 export type EvidenceFilePinAnswer = Pick<EvidenceFile, 'expiresAt' | 'expiredAt' | 'pinnedAt'>;
+
+/** A read of a file whose bytes have gone (410), and when they expired. A server older than the date says only that they went. */
+export class ExpiredAttachmentError extends Error {
+  constructor(public readonly expiredAt: string | null) {
+    super('attachment expired');
+    this.name = 'ExpiredAttachmentError';
+  }
+}
 
 /** A page of a version's files. The count and the size are the whole list's, whichever page it is. */
 export interface EvidenceFilePage {
@@ -219,12 +225,6 @@ export function evidenceFileExpiredLine(at: string | null, now?: Date): string {
 /** The file after a press of its pin, with what the server answered. */
 export function evidenceFileWithPin(file: EvidenceFile, answer: EvidenceFilePinAnswer): EvidenceFile {
   return { ...file, expiresAt: answer.expiresAt, expiredAt: answer.expiredAt, pinnedAt: answer.pinnedAt };
-}
-
-/** The reports of what a page shows: the citations', and a receipt's, which has none, off the list it has read. */
-export function evidenceReportsOf(citations: readonly EvidenceFileCitation[], files: readonly EvidenceFile[]): EvidenceTestReport[] {
-  const cited = evidenceTestReports(citations);
-  return cited.length > 0 ? cited : files.flatMap((file) => (file.testReport ? [file.testReport] : []));
 }
 
 /** Whether every file has lost its bytes. Only the last page can say so of the whole list. */

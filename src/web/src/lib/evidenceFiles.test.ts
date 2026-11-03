@@ -20,7 +20,6 @@ import {
   evidenceReportCounts,
   evidenceReportFacts,
   evidenceReportTitle,
-  evidenceReportsOf,
   evidenceTestReports,
   isEvidencePicture,
   type EvidenceFile,
@@ -79,15 +78,6 @@ describe('what a file says of being kept', () => {
     expect(isEvidencePicture(pinned)).toBe(true);
     expect(evidenceFileCanPin(pinned)).toBe(true);
     expect(evidenceFileIsPinned(evidenceFileWithPin(pinned, { expiresAt: '2026-10-01T00:00:00.000Z', expiredAt: null, pinnedAt: null }))).toBe(false);
-  });
-});
-
-describe('the reports of a page', () => {
-  it('reads the citations, and off the rows when there are none, as from a receipt', () => {
-    const withReport = file({ testReport: REPORT });
-    expect(evidenceReportsOf([{ kind: 'FILE', testReport: REPORT }], [])).toEqual([REPORT]);
-    expect(evidenceReportsOf([], [file(), withReport])).toEqual([REPORT]);
-    expect(evidenceReportsOf([], [file()])).toEqual([]);
   });
 });
 

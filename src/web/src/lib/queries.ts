@@ -866,9 +866,11 @@ export const taskEvidenceQuery = (taskId: string) =>
  * The files one version of evidence cites, a page at a time: read from rows, so a file reads the same
  * after it has expired. A card draws the first page, and only the page it opens asks for more.
  */
+export const evidenceFilesKey = (taskId: string) => ['task-evidence', taskId, 'files'] as const;
+
 export const evidenceFilesQuery = (taskId: string, revision: string) =>
   infiniteQueryOptions({
-    queryKey: ['task-evidence', taskId, 'files', revision] as const,
+    queryKey: [...evidenceFilesKey(taskId), revision] as const,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api<EvidenceFilePage>(
