@@ -3,11 +3,16 @@ import {
   EVIDENCE_FILES_NO_FOLDER,
   citesFiles,
   evidenceExpiryDate,
+  evidenceFileCanPin,
+  evidenceFileExpiredLine,
   evidenceFileFacts,
   evidenceFileGroups,
+  evidenceFileIsPinned,
+  evidenceFileKeep,
   evidenceFileKind,
   evidenceFilePosition,
   evidenceFileSaveName,
+  evidenceFileWithPin,
   evidenceFilesAllGone,
   evidenceFilesCount,
   evidenceFilesHeadline,
@@ -15,6 +20,7 @@ import {
   evidenceReportCounts,
   evidenceReportFacts,
   evidenceReportTitle,
+  evidenceReportsOf,
   evidenceTestReports,
   isEvidencePicture,
   type EvidenceFile,
@@ -38,6 +44,52 @@ function list(files: EvidenceFile[], over: Partial<EvidenceFileList> = {}): Evid
 const REPORT: EvidenceTestReport = {
   format: 'playwright', total: 48, passed: 46, failed: 0, skipped: 2, durationMs: 38_000, failedNames: [], skippedNames: ['a', 'b'],
 };
+
+describe('what a file says of being kept', () => {
+  const now = new Date('2026-11-03T00:00:00.000Z');
+
+  it('offers a pin only where the server does, and an older server offers none', () => {
+    expect(evidenceFileCanPin(file({ pinnable: true }))).toBe(true);
+    expect(evidenceFileCanPin(file({ pinnable: false }))).toBe(false);
+    expect(evidenceFileCanPin(file())).toBe(false);
+  });
+
+  it('says when it expires, that it is pinned, or nothing', () => {
+    expect(evidenceFileKeep(file({ expiresAt: '2026-11-17T06:00:00.000Z' }), now)).toBe('Expires Nov 17');
+    expect(evidenceFileKeep(file({ expiresAt: '2027-01-05T06:00:00.000Z' }), now)).toBe('Expires Jan 5, 2027');
+    expect(evidenceFileKeep(file({ expiresAt: '2026-11-17T06:00:00.000Z', pinnedAt: '2026-11-02T00:00:00.000Z' }), now)).toBe('Pinned');
+    expect(evidenceFileKeep(file({ expiresAt: null }), now)).toBeNull();
+    expect(evidenceFileKeep(file(), now)).toBeNull();
+  });
+
+  it('leaves what has lost its bytes to its tile', () => {
+    expect(evidenceFileKeep(file({ expiredAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-10-01T00:00:00.000Z' }), now)).toBeNull();
+    expect(evidenceFileKeep(file({ gone: true, pinnedAt: null }), now)).toBeNull();
+  });
+
+  it('dates a placeholder, and does without from a server that does not say when', () => {
+    expect(evidenceFileExpiredLine('2026-09-14T00:00:00.000Z', now)).toBe('Expired Sep 14');
+    expect(evidenceFileExpiredLine(null, now)).toBe('Expired');
+  });
+
+  it('takes what a press answers', () => {
+    const tombstoned = file({ expiredAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-10-01T00:00:00.000Z', pinnable: true });
+    const pinned = evidenceFileWithPin(tombstoned, { expiresAt: '2026-10-01T00:00:00.000Z', expiredAt: null, pinnedAt: '2026-11-03T00:00:00.000Z' });
+    expect(evidenceFileIsPinned(pinned)).toBe(true);
+    expect(isEvidencePicture(pinned)).toBe(true);
+    expect(evidenceFileCanPin(pinned)).toBe(true);
+    expect(evidenceFileIsPinned(evidenceFileWithPin(pinned, { expiresAt: '2026-10-01T00:00:00.000Z', expiredAt: null, pinnedAt: null }))).toBe(false);
+  });
+});
+
+describe('the reports of a page', () => {
+  it('reads the citations, and off the rows when there are none, as from a receipt', () => {
+    const withReport = file({ testReport: REPORT });
+    expect(evidenceReportsOf([{ kind: 'FILE', testReport: REPORT }], [])).toEqual([REPORT]);
+    expect(evidenceReportsOf([], [file(), withReport])).toEqual([REPORT]);
+    expect(evidenceReportsOf([], [file()])).toEqual([]);
+  });
+});
 
 describe('what a card draws', () => {
   it('counts a version as citing files only by a FILE citation, resolved or not', () => {

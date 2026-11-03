@@ -28,6 +28,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
+import type { EvidenceFilePinAnswer } from './lib/evidenceFiles';
 import type { TrashHold } from './lib/trashNote';
 import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
@@ -657,15 +658,36 @@ export const deleteAttachment = async (id: string): Promise<void> => {
   }
 };
 
+/** A read of a file whose bytes have gone (410), and when they expired. A server older than the date says only that they went. */
+export class ExpiredAttachmentError extends Error {
+  constructor(public readonly expiredAt: string | null) {
+    super('attachment expired');
+    this.name = 'ExpiredAttachmentError';
+  }
+}
+
+/** The bytes a read of attachment `id` came back with, as a blob. */
+async function attachmentBlob(res: Response, id: string): Promise<Blob> {
+  if (res.status === 410) {
+    const body = (await res.json().catch(() => null)) as { expiredAt?: unknown } | null;
+    throw new ExpiredAttachmentError(typeof body?.expiredAt === 'string' ? body.expiredAt : null);
+  }
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return res.blob();
+}
+
 /** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in
  *  the transcript after reload. The download endpoint is bearer-guarded, so an `<img src>`
  *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
  *  the caller must revoke (lib/userFile.ts says what kind: an SVG's is a data: URL). */
 export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return userFileUrl(await res.blob());
+  return userFileUrl(await attachmentBlob(res, id));
 };
+
+/** Pin a file, or take its pin away. A pin brings back a file with a tombstone whose bytes remain; once they have gone, 410. */
+export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
+  api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
@@ -1676,8 +1698,7 @@ export const sharedAttachmentUrl = (token: string, id: string): string =>
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */
 export const fetchSharedAttachmentObjectUrl = async (token: string, id: string): Promise<string> => {
   const res = await fetch(sharedAttachmentUrl(token, id));
-  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
-  return userFileUrl(await res.blob());
+  return userFileUrl(await attachmentBlob(res, id));
 };
 
 export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: string): Promise<string> => {

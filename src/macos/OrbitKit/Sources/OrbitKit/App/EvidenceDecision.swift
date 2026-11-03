@@ -300,10 +300,13 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
     /// `USER` when the owner pressed a card, `AGENT` when a run of the deciding session called the
     /// door. The receipt says which, because the two are different events in a conversation.
     public let decidedByType: String
+    /// Whether the version it answered cites a file: what its receipt goes by to offer that version's
+    /// files. A server older than this field offers none, so nil reads as no.
+    public let citesFiles: Bool?
 
     public init(taskId: String, title: String, projectId: String?, evidenceRevision: String,
                 decision: EvidenceDecisionAnswer, note: String?, decidedAt: String,
-                decidedByType: String) {
+                decidedByType: String, citesFiles: Bool? = nil) {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
@@ -312,6 +315,7 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
         self.note = note
         self.decidedAt = decidedAt
         self.decidedByType = decidedByType
+        self.citesFiles = citesFiles
     }
 
     public var recordedByAgent: Bool { decidedByType == "AGENT" }
