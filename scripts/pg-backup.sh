@@ -114,7 +114,7 @@ sync_ready() {
 # Exit 23 is rsync finding nothing at that path, which is what a first install looks like, so it
 # answers as an empty directory. Any other failure says why on the way out, and answers non-zero.
 list_target() {
-  if listing="$(rsync --list-only --timeout=600 -e "ssh $ssh_opts" "$1" 2>&1)"; then
+  if listing="$(rsync --list-only --timeout=600 -e "ssh $ssh_opts" "$@" 2>&1)"; then
     printf '%s\n' "$listing"
     return 0
   else
@@ -160,13 +160,13 @@ target_is_ours() {
     log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_wal"
     return 1
   fi
+  if ! remote_base="$(list_target -r "$SYNC_TARGET/base/")"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
+    return 1
+  fi
+  held="$(printf '%s\n' "$remote_base" | awk 'NF && $NF != "." {sub("/.*", "", $NF); print $NF}' | LC_ALL=C sort -u | tr '\n' ' ' | tail -c 200)"
   remote_segments="$(printf '%s\n' "$remote_wal" | segment_lines)"
   if [ -z "$remote_segments" ]; then
-    if ! remote_base="$(list_target "$SYNC_TARGET/base/")"; then
-      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
-      return 1
-    fi
-    held="$(printf '%s\n' "$remote_base" | awk 'NF && $NF != "." {print $NF}' | tr '\n' ' ' | tail -c 200)"
     if [ -n "$held" ]; then
       log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
       return 1
@@ -214,6 +214,26 @@ target_is_ours() {
   shared_segments="$(printf '%s\n%s\n' "$remote_segments" "$local_segments" | awk '{print $NF}' | LC_ALL=C sort | uniq -d)"
 }
 
+# The base backups of this archive that the target holds whole: none of their files missing from its listing, or there with
+# another size or time. rsync gives a file its name there only once all of it has arrived, so a backup a round was cut short
+# in lacks one. A listing it cannot make here answers none, which only holds deletes back.
+bases_whole_on_target() {
+  here="$(rsync --list-only -r "$BASE_DIR/")" || return 0
+  missing="$(printf '%s\n' "$here" | grep -v '^d' | grep -Fxv -e "$remote_base" | awk '{print $NF}' | cut -d/ -f1)"
+  list_backups | grep -Fxv -e "$missing" || true
+}
+
+# The end of the line a failed round logs while deletes are held back, if what stopped it is the target running out of room.
+# That state lasts until a person acts, so the line that repeats every poll has to say so. Given what rsync said.
+no_room_advice() {
+  [ "$hold_deletes" = yes ] || return 0
+  case "$1" in
+    *'No space left on device'*|*'Disk quota exceeded'*) ;;
+    *) return 0 ;;
+  esac
+  printf '%s' " Nothing was deleted: the target cannot hold its old base backups and this archive at once, and the old ones stay until the new ones have landed. Free room on the backup host, or take the old ones off that disk by hand, and the next poll carries on."
+}
+
 # Mirror the archive to another machine. Runs every poll rather than only after a base
 # backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
 sync_archive() {
@@ -227,21 +247,34 @@ sync_archive() {
     return 1
   fi
   target_is_ours || return 1
+  # A target holding one of this archive's base backups whole keeps it through --delete, wherever a round stops, so --delete
+  # can go first and make room on a nearly full disk. One holding base backups and none of those (ORBIT_BASE_BACKUP_KEEP=1,
+  # fallen behind past retention, or a base backup only partly there) would lose them on the way through, and with no room
+  # for the new one would be left with none. So it is sent the whole archive first, deleting nothing, and --delete runs only
+  # if that finished, which takes room for both at once. --delete-after would not do: when rsync cannot make a directory or a
+  # temporary file it says so, carries on, and deletes all the same.
+  hold_deletes=no
+  if [ -n "$held" ] && [ -z "$(bases_whole_on_target)" ]; then hold_deletes=yes; fi
   # A target sharing a segment with this archive keeps it through --delete. One sharing none, on a first sync or
   # fallen behind past retention, is sent WAL first, on its own and deleting nothing: --delete alone would reach base/
   # first, and clear its old segments before new ones landed. So a target holds a finished segment before it holds a
   # base backup and keeps one from then on, wherever a round is cut short, and the next poll can read whose it is.
+  # WAL goes first while deletes are held back too, so that it keeps landing when the base backup does not fit.
   # Then --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
-  if ! out="$( { [ -n "$shared_segments" ] || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1; } \
-       && rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
+  if ! sent="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1; } \
+       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1; })"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$sent" | tr '\n' ' ' | tail -c 300)$(no_room_advice "$sent")"
+    return 1
+  fi
+  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
        -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1)"; then
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
     return 1
   fi
   MIRRORED=yes
-  changed="$(printf '%s\n' "$out" | grep -c . || true)"
+  changed="$(printf '%s\n%s\n' "$sent" "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
 }
 
