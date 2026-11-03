@@ -11,12 +11,14 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { Workspace, Runner } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from '../workspaces/dto';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { namesWorkspaceCardField, requireWorkspaceWriteApproval } from './runner-workspace-approval';
 
 // The exact create contract shared by the runner HTTP route, MCP agent_create and
 // `orbit agent create`. Keep this as one literal: runner-go's parity test reads it and compares all
@@ -24,8 +26,8 @@ import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer
 // Deliberately EXCLUDES enabled, and every other field a workspace must not control about itself
 // or another workspace. (Orchestration is no workspace field at all: it is the account's own
 // switch, written only through the owner's preferences — a user route no runner token reaches.)
-// `sanitize` iterates this list, so it is also the HTTP route's actual whitelist rather than
-// documentation beside a different implementation.
+// `sanitizeWorkspaceWrite` iterates this list, so it is also the HTTP route's actual whitelist rather
+// than documentation beside a different implementation.
 export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'name',
   'description',
@@ -38,7 +40,7 @@ export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'defaultMergeTarget',
 ] as const;
 
-type OrchestratorWorkspaceInput = {
+export type OrchestratorWorkspaceInput = {
   name?: string;
   description?: string;
   systemPrompt?: string;
@@ -46,7 +48,7 @@ type OrchestratorWorkspaceInput = {
   workDir?: string;
   runnerId?: string;
   enableWorktree?: boolean;
-  env?: unknown;
+  env?: Record<string, string>;
   defaultMergeTarget?: string;
 };
 
@@ -70,7 +72,8 @@ type OrchestratorWorkspaceRecord = Pick<
  * machine's runner token. Tenant scope is the runner's owner. Gated on the CALLING session
  * (X-Orbit-Session-Id) being allowed to orchestrate — the same guard as session_create — so an
  * account with Session orchestration off, or a direct token call without an orchestrating session,
- * is refused.
+ * is refused. What decides a workspace's next session is written only against the account owner's
+ * card (runner-workspace-approval.ts).
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
@@ -79,6 +82,7 @@ export class RunnerAgentsController {
     private readonly workspaces: WorkspacesService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly realtime: RealtimeService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // Both paths are live on purpose: `workspaces` is the name, `agents` is what every already-
@@ -103,10 +107,14 @@ export class RunnerAgentsController {
     @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
-    const sanitized = this.sanitize(body, runner.id);
+    const sanitized = sanitizeWorkspaceWrite(body);
     if (!sanitized.name) throw new BadRequestException('name is required');
+    await requireWorkspaceWriteApproval(this.prisma, scope, null, sanitized);
     // Bind to the calling runner by default so the new workspace can actually run sessions.
-    const workspace = await this.workspaces.create(runner.ownerId, sanitized as CreateWorkspaceDto);
+    const workspace = await this.workspaces.create(
+      runner.ownerId,
+      { ...sanitized, runnerId: sanitized.runnerId ?? runner.id } as CreateWorkspaceDto,
+    );
     // Push it to the owner's control-plane stream so their workspace list shows it live instead of
     // only after a manual reload — the workspace-side mirror of TasksService's publishTaskChanged.
     // Scoped via the calling session, which assertOrchestrator returned as this owner's.
@@ -124,11 +132,13 @@ export class RunnerAgentsController {
     @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
-    const workspace = await this.workspaces.update(
-      runner.ownerId,
-      id,
-      this.sanitize(body) as UpdateWorkspaceDto,
-    );
+    const sanitized = sanitizeWorkspaceWrite(body);
+    if (namesWorkspaceCardField(sanitized)) {
+      // Another account's workspace is not found, card or no card, before anything is said about one.
+      await this.workspaces.get(runner.ownerId, id);
+      await requireWorkspaceWriteApproval(this.prisma, scope, id, sanitized);
+    }
+    const workspace = await this.workspaces.update(runner.ownerId, id, sanitized as UpdateWorkspaceDto);
     // Name/model/runner changes are rendered through Task.assignee, so existing rows may move.
     this.realtime.publishWorkspaceChanged(scope, id, true);
     return this.toOrchestrationView(workspace);
@@ -156,71 +166,69 @@ export class RunnerAgentsController {
         : {}),
     };
   }
+}
 
-  /** Whitelist the caller's fields (drops `enabled` etc. a workspace must not control). On
-   *  create, default runnerId to the calling runner so the workspace can run.
-   *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
-   *  to check — the free-form fields are validated here instead.
-   *
-   *  `runnerId` arrives already decoded: for that same reason `@IsPublicId` cannot reach it, so
-   *  both routes bind `@Body(PublicIdPipe.forFields('runnerId'))`. The CLI and MCP hand back the
-   *  base62 id this API gave them (`PublicIdInterceptor` — this controller is agent-facing, not
-   *  machine protocol), and unconverted that string reached `prisma.runner.findFirst` as a bare
-   *  P2023 500. `defaultRunnerId` is the calling runner's own UUID, so it needs no decoding. */
-  private sanitize(body: unknown, defaultRunnerId?: string): OrchestratorWorkspaceInput {
-    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-      throw new BadRequestException('workspace body must be an object');
-    }
-    const input = body as Record<string, unknown>;
-    const creating = defaultRunnerId !== undefined;
-    const sanitized: Record<string, unknown> = {};
-    for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
-      if (field === 'enableWorktree') {
-        if (input[field] !== undefined && typeof input[field] !== 'boolean') {
-          throw new BadRequestException(`${field} must be a boolean`);
-        }
-        if (input[field] !== undefined) sanitized[field] = input[field];
-        continue;
-      }
-      if (field === 'env') {
-        const env = this.normalizeEnv(input[field]);
-        if (env !== undefined) sanitized[field] = env;
-        continue;
-      }
-      const value = this.optionalString(input, field);
-      if (field === 'name' && value !== undefined && value.length === 0) {
-        throw new BadRequestException('name cannot be empty');
-      }
-      // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test,
-      // so it skips them and they arrive here verbatim. Neither is a spelling of an id.
-      if (field === 'runnerId' && value !== undefined && value.trim() === '') {
-        throw new BadRequestException('invalid runnerId');
-      }
-      if (value !== undefined) sanitized[field] = value;
-    }
-    if (creating && sanitized.runnerId === undefined) sanitized.runnerId = defaultRunnerId;
-    return sanitized as OrchestratorWorkspaceInput;
+/** Whitelist the caller's fields (drops `enabled` etc. a workspace must not control). The write
+ *  and the owner's card about it both read a body through this, so they cannot read it two ways.
+ *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
+ *  to check — the free-form fields are validated here instead.
+ *
+ *  `runnerId` arrives already decoded: for that same reason `@IsPublicId` cannot reach it, so
+ *  both routes bind `@Body(PublicIdPipe.forFields('runnerId'))`. The CLI and MCP hand back the
+ *  base62 id this API gave them (`PublicIdInterceptor` — this controller is agent-facing, not
+ *  machine protocol), and unconverted that string reached `prisma.runner.findFirst` as a bare
+ *  P2023 500. */
+export function sanitizeWorkspaceWrite(body: unknown): OrchestratorWorkspaceInput {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new BadRequestException('workspace body must be an object');
   }
+  const input = body as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+  for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
+    if (field === 'enableWorktree') {
+      if (input[field] !== undefined && typeof input[field] !== 'boolean') {
+        throw new BadRequestException(`${field} must be a boolean`);
+      }
+      if (input[field] !== undefined) sanitized[field] = input[field];
+      continue;
+    }
+    if (field === 'env') {
+      const env = normalizeEnv(input[field]);
+      if (env !== undefined) sanitized[field] = env;
+      continue;
+    }
+    const value = optionalString(input, field);
+    if (field === 'name' && value !== undefined && value.length === 0) {
+      throw new BadRequestException('name cannot be empty');
+    }
+    // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test,
+    // so it skips them and they arrive here verbatim. Neither is a spelling of an id.
+    if (field === 'runnerId' && value !== undefined && value.trim() === '') {
+      throw new BadRequestException('invalid runnerId');
+    }
+    if (value !== undefined) sanitized[field] = value;
+  }
+  return sanitized as OrchestratorWorkspaceInput;
+}
 
-  private optionalString(body: Record<string, unknown>, key: string): string | undefined {
-    const value = body[key];
-    if (value === undefined) return undefined;
-    if (typeof value !== 'string') throw new BadRequestException(`${key} must be a string`);
-    return value;
-  }
+function optionalString(body: Record<string, unknown>, key: string): string | undefined {
+  const value = body[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') throw new BadRequestException(`${key} must be a string`);
+  return value;
+}
 
-  /** The runner decodes `env` into a map[string]string, so a nested/non-string value would
-   *  break every subsequent claim for that workspace. Reject it at the write instead. */
-  private normalizeEnv(env: unknown): Record<string, string> | undefined {
-    if (env === undefined || env === null) return undefined;
-    if (typeof env !== 'object' || Array.isArray(env)) {
-      throw new BadRequestException('env must be an object of string values');
-    }
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
-      if (typeof v !== 'string') throw new BadRequestException(`env.${k} must be a string`);
-      out[k] = v;
-    }
-    return out;
+/** The runner decodes `env` into a map[string]string, so a nested/non-string value would
+ *  break every subsequent claim for that workspace. Reject it at the write instead. */
+function normalizeEnv(env: unknown): Record<string, string> | undefined {
+  if (env === undefined || env === null) return undefined;
+  if (typeof env !== 'object' || Array.isArray(env)) {
+    throw new BadRequestException('env must be an object of string values');
   }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+    if (typeof v !== 'string') throw new BadRequestException(`env.${k} must be a string`);
+    out[k] = v;
+  }
+  return out;
 }

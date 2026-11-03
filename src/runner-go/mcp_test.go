@@ -1100,6 +1100,11 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The env below is put on the owner's card first (agent_write_card_test.go).
+		if strings.Contains(r.URL.Path, "/approvals") {
+			w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		gotPath = r.URL.Path
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Write([]byte(`{"id":"a1"}`))

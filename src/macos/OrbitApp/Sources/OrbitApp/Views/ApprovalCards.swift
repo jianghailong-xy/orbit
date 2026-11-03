@@ -247,6 +247,12 @@ struct ToolApprovalCard: View {
         }
     }
 
+    /// A write of what decides a workspace's next session: what the server read about it when it filed
+    /// the card, and the write itself.
+    private var writing: WorkspaceWritePreview? {
+        approval.input.flatMap { Approvals.workspaceWritePreview(toolName: approval.toolName ?? "", from: $0) }
+    }
+
     /// The field written for the agent that will execute the task, folded to a line that carries its
     /// length. It is the longest thing on the card by an order of magnitude — 1.4k to 3.9k characters
     /// across the last twenty single creates in this deployment — and the one field nobody decides
@@ -425,10 +431,46 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let writing {
+            // A value is on its own block in full: a value cut short would be a yes to something nobody read.
+            ApprovalHeader(symbol: "gearshape", title: writing.heading, tone: .orange, badge: writing.badge)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(writing.name).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(writing.status).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let workDir = writing.workDir {
+                    workspaceWriteBlock(workDir)
+                }
+                if let env = writing.env {
+                    Text(Approvals.workspaceVariables).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if env.isEmpty {
+                        Text(Approvals.workspaceNoVariables).font(.orbitLabel).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ForEach(env) { workspaceWriteBlock($0.line) }
+                }
+                if !writing.envRemoved.isEmpty {
+                    Text(Approvals.workspaceVariablesRemoved).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(writing.envRemoved, id: \.self) { workspaceWriteBlock($0) }
+                }
+                ForEach(writing.fields) { field in
+                    Text(field.caption).font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    workspaceWriteBlock(field.value)
+                }
+                Text(Approvals.workspaceWriteNote).font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                            tone: .orange, badge: approval.toolName ?? "Tool")
-            if let command {
+            if let raw = approval.input.flatMap({ Approvals.workspaceWriteRawInput(toolName: approval.toolName ?? "", from: $0) }) {
+                workspaceWriteBlock(raw)
+            } else if let command {
                 ToolBodyView(kind: .command(command))
             } else if let subject {
                 Text(subject)
@@ -437,6 +479,14 @@ struct ToolApprovalCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    /// One value of a workspace write, whole and selectable, however long it runs.
+    private func workspaceWriteBlock(_ text: String) -> some View {
+        Text(text).font(.orbitMono).foregroundStyle(.primary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// What goes with a runner, by name: the workspaces are what the owner may not have had in mind.
@@ -478,6 +528,7 @@ struct ToolApprovalCard: View {
         if dag != nil { return "Apply changes" }
         if blocker != nil { return "Resolve it" }
         if deleting != nil { return Approvals.deleteAction }
+        if let writing { return writing.action }
         return "Allow"
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
@@ -536,6 +587,7 @@ struct ToolApprovalCard: View {
         if let dag { return dag.listTitle }
         if let blocker { return blocker.declineName }
         if let deleting { return deleting.declineName }
+        if let writing { return writing.declineName }
         return approval.toolName ?? ""
     }
 }
