@@ -2995,9 +2995,9 @@ var errKeepCheckout = errors.New("the checkout stays")
 // A .git file is what a linked worktree has. A directory there is a repository of its own, which no
 // sweep may delete, and with neither `git -C` goes on up and answers for whatever holds this one. A
 // repository nested in the checkout (.git anywhere below its root, a submodule's included) also keeps
-// it, in a dependency directory too: `git status` cannot see the commits in one that is ignored, and
-// they would go with the directory. So does any error. A file gone between listing and reading was
-// being written or removed just then.
+// it: `git status` cannot see the commits in one that is ignored, and they would go with the directory.
+// checkoutHasNothingToLose looks for one in the dependency directories, which this does not enter. So does
+// any error. A file gone between listing and reading was being written or removed just then.
 //
 // The walk stops at the first recent write. It runs on the claim loop, and most of its time would go on
 // checkouts in recent use, where the first file it reads will do: on a host with 157 checkouts at a
@@ -3008,7 +3008,6 @@ func checkoutIdleSince(path string) (time.Time, bool) {
 	}
 	cutoff := time.Now().Add(-resumableCheckoutIdle)
 	var newest time.Time
-	dependencyDir := ""
 	err := filepath.WalkDir(path, func(entry string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -3019,13 +3018,10 @@ func checkoutIdleSince(path string) (time.Time, bool) {
 			}
 			return errKeepCheckout
 		}
-		// Listed only for what the check above looks for: what it writes says nothing, and it is by
-		// far the most files, read here without a stat each.
-		if dependencyDir != "" && strings.HasPrefix(entry, dependencyDir) {
-			return nil
-		}
 		if checkoutDependencyDirs[d.Name()] {
-			dependencyDir = entry + string(filepath.Separator)
+			if d.IsDir() {
+				return fs.SkipDir
+			}
 			return nil
 		}
 		info, err := d.Info()
@@ -3043,11 +3039,30 @@ func checkoutIdleSince(path string) (time.Time, bool) {
 	return newest, err == nil
 }
 
+// holdsRepository says whether a repository is nested anywhere under dir, or that it cannot say.
+func holdsRepository(dir string) bool {
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Name() == ".git" {
+			return errKeepCheckout
+		}
+		return nil
+	})
+	return err != nil
+}
+
 // checkoutHasNothingToLose asks git whether everything in a checkout exists somewhere else or can be made
 // again, and whether it would come back as it is. It stands on branch, the one its session comes back on,
 // with its fork point recorded, no operation half done, nothing uncommitted, unpushed or ignored but a
 // reinstall or a rebuild's output. It only reads, and anything git cannot answer counts as no.
-func checkoutHasNothingToLose(path, branch string) bool {
+//
+// inDependencies also looks for a repository nested in an ignored dependency directory, whose commits
+// nothing else sees. That lists by far the most files in a checkout, which took a first look over this
+// host's 69 idle checkouts from 17 seconds to between 30 and 84, on the claim loop. So only the look at a
+// checkout about to go asks it, and that costs about a second a removal.
+func checkoutHasNothingToLose(path, branch string, inDependencies bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), checkoutProbeTimeout)
 	defer cancel()
 	gitDir, err := gitCtx(ctx, path, "rev-parse", "--absolute-git-dir")
@@ -3092,6 +3107,9 @@ func checkoutHasNothingToLose(path, branch string) bool {
 		entry, ignored := strings.CutPrefix(line, "!! ")
 		name := filepath.Base(entry)
 		if !ignored || !(checkoutDependencyDirs[name] || checkoutBuildOutput[name]) {
+			return false
+		}
+		if inDependencies && checkoutDependencyDirs[name] && holdsRepository(filepath.Join(path, entry)) {
 			return false
 		}
 	}
@@ -3268,7 +3286,7 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 			continue
 		}
 		path := filepath.Join(root, name)
-		if lastWrite, idle := checkoutIdleSince(path); idle && checkoutHasNothingToLose(path, branch) {
+		if lastWrite, idle := checkoutIdleSince(path); idle && checkoutHasNothingToLose(path, branch, false) {
 			candidates = append(candidates, candidate{name: name, lastWrite: lastWrite})
 		}
 	}
@@ -3314,7 +3332,7 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	}
 	path := filepath.Join(root, name)
 	lastWrite, idle := checkoutIdleSince(path)
-	if !idle || !checkoutHasNothingToLose(path, branch) {
+	if !idle || !checkoutHasNothingToLose(path, branch, true) {
 		return false
 	}
 	if _, err := git(path, "update-ref", reclaimedRefName(name), "refs/heads/"+branch); err != nil {

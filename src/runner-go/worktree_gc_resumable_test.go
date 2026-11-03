@@ -388,37 +388,39 @@ func TestResumableSweepKeeps(t *testing.T) {
 	cases := []struct {
 		name    string
 		prepare func(t *testing.T, f *resumableFixture, path, session string)
+		// atTheSecondLook marks the one reason only the second look asks about, for what it costs.
+		atTheSecondLook bool
 	}{
-		{"a modified tracked file", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a modified tracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "base.txt", "changed and not committed\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"a staged file", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a staged file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "staged.txt", "staged\n")
 			mustGit(t, path, "add", "staged.txt")
 			ageCheckout(t, path, 20)
 		}},
-		{"an untracked file", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an untracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "scratch/untracked.txt", "only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an untracked file its repository's config hides from git status", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an untracked file its repository's config hides from git status", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, f.repo, "config", "status.showUntrackedFiles", "no")
 			writeUnder(t, path, "scratch/untracked.txt", "only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"a commit no remote has", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a commit no remote has", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			commitFile(t, path, "unpushed.txt", "local\n", "unpushed")
 			ageCheckout(t, path, 20)
 		}},
-		{"a file written within two weeks, content unchanged", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file written within two weeks, content unchanged", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ageCheckout(t, path, 20)
 			now := time.Now().Add(-13 * 24 * time.Hour)
 			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"build output written within two weeks", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "build output written within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			ageCheckout(t, path, 20)
 			writeUnder(t, path, "dist/deep/app.js", "a recent build is a recent use\n")
@@ -428,7 +430,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 				_ = os.Chtimes(dir, ago, ago)
 			}
 		}},
-		{"a file deleted within two weeks", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a file deleted within two weeks", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			writeUnder(t, path, "dist/deep/app.js", "a build\n")
 			ageCheckout(t, path, 20)
@@ -436,40 +438,40 @@ func TestResumableSweepKeeps(t *testing.T) {
 				t.Fatal(err)
 			}
 		}},
-		{"an ignored .env, however old", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored .env, however old", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, ".env")
 			writeUnder(t, path, ".env", "SECRET=only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an ignored .env further down", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored .env further down", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			commitAndPush(t, path, "src/web/index.txt", "tracked\n")
 			ignoring(t, path, ".env")
 			writeUnder(t, path, "src/web/.env", "SECRET=only here\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an ignored report, however old", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored report, however old", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "reports/")
 			writeUnder(t, path, "reports/march/findings.md", "written by the session, kept nowhere else\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an ignored report beside listed entries", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored report beside listed entries", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "node_modules/", "dist/", "*.report")
 			writeUnder(t, path, "node_modules/x/i.js", "x\n")
 			writeUnder(t, path, "dist/app.js", "x\n")
 			writeUnder(t, path, "findings.report", "written by the session, kept nowhere else\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an ignored report in a directory with a listed name that is not itself ignored", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored report in a directory with a listed name that is not itself ignored", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "*.report")
 			writeUnder(t, path, "build/findings.report", "written by the session, kept nowhere else\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"an ignored file git has to quote the name of", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an ignored file git has to quote the name of", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "*.txt.old")
 			writeUnder(t, path, "my notes.txt.old", "written by the session, kept nowhere else\n")
 			ageCheckout(t, path, 20)
 		}},
-		{"a process working in it", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a process working in it", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			dir := filepath.Dir(writeUnder(t, path, "sub/tracked.txt", "x\n"))
 			commitAndPush(t, path, "sub/tracked.txt", "x\n")
 			cmd := exec.Command("sleep", "600")
@@ -477,7 +479,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			startProcess(t, cmd)
 			ageCheckout(t, path, 20)
 		}},
-		{"a process holding one of its files open from elsewhere", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a process holding one of its files open from elsewhere", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			held, err := os.Create(writeUnder(t, path, "dist/server.log", ""))
 			if err != nil {
@@ -490,7 +492,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			_ = held.Close()
 			ageCheckout(t, path, 20)
 		}},
-		{"a process running an executable from it", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a process running an executable from it", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			sleep, err := exec.LookPath("sleep")
 			if err != nil {
@@ -509,29 +511,29 @@ func TestResumableSweepKeeps(t *testing.T) {
 			startProcess(t, cmd)
 			ageCheckout(t, path, 20)
 		}},
-		{"a background shell of its session", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a background shell of its session", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			f.pool.holdWorktreeForBackgroundJob(session, "toolu_A", "bei1")
 		}},
-		{"a job the runner hosts for its session", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a job the runner hosts for its session", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			f.pool.holdWorktreeForRunnerJob(session, "bgj_A", "bgj_A")
 		}},
-		{"a job adopted for its session across a re-exec, with no supervisor yet", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a job adopted for its session across a re-exec, with no supervisor yet", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			f.pool.keepHostlessJob(session, &bgJob{})
 		}},
-		{"a merge or commit under way", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a merge or commit under way", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			release, admitted := f.pool.beginHeartbeatWorktreeOperation(session, nil, 0, false)
 			if !admitted {
 				t.Fatal("admit an operation")
 			}
 			t.Cleanup(release)
 		}},
-		{"a turn running", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a turn running", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			job := manualWorktreePoolJob(session, "orbit/"+session)
 			if _, added := f.pool.register(job, func() {}, true); !added {
 				t.Fatal("register an active session")
 			}
 		}},
-		{"a warm engine between turns", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a warm engine between turns", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			job := manualWorktreePoolJob(session, "orbit/"+session)
 			live, added := f.pool.register(job, func() {}, true)
 			if !added {
@@ -542,7 +544,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			}
 			parkPoolSession(f.pool, live)
 		}},
-		{"a supervisor being retired", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a supervisor being retired", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			job := manualWorktreePoolJob(session, "orbit/"+session)
 			if _, added := f.pool.register(job, func() {}, false); !added {
 				t.Fatal("register a cold supervisor")
@@ -551,47 +553,47 @@ func TestResumableSweepKeeps(t *testing.T) {
 				t.Fatal("start retiring it")
 			}
 		}},
-		{"a session the control plane says is on its way to an engine", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a session the control plane says is on its way to an engine", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			f.set(func() { f.answers[session] = "kept" })
 		}},
-		{"a lock on the worktree", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a lock on the worktree", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "worktree", "lock", path)
 		}},
-		{"a merge half done", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a merge half done", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			head := mustGit(t, path, "rev-parse", "HEAD")
 			if err := os.WriteFile(filepath.Join(mustGit(t, path, "rev-parse", "--absolute-git-dir"), "MERGE_HEAD"), []byte(head+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"a rebase half done", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a rebase half done", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			if err := os.MkdirAll(filepath.Join(mustGit(t, path, "rev-parse", "--absolute-git-dir"), "rebase-merge"), 0o755); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"a bisect half done", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a bisect half done", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			if err := os.WriteFile(filepath.Join(mustGit(t, path, "rev-parse", "--absolute-git-dir"), "BISECT_LOG"), []byte("x\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"a HEAD detached from any branch", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a HEAD detached from any branch", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "checkout", "-q", "--detach")
 			ageCheckout(t, path, 20)
 		}},
-		{"a HEAD moved to a branch of the agent's own", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a HEAD moved to a branch of the agent's own", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "checkout", "-q", "-b", "feature/"+session)
 			mustGit(t, path, "push", "-q", "origin", "feature/"+session)
 			ageCheckout(t, path, 20)
 		}},
-		{"a HEAD moved to another orbit/ branch, pushed", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a HEAD moved to another orbit/ branch, pushed", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "checkout", "-q", "-b", "orbit/"+session+"-v2")
 			commitFile(t, path, "later.txt", "later\n", "later work, on the other branch")
 			mustGit(t, path, "push", "-q", "origin", "orbit/"+session+"-v2")
 			ageCheckout(t, path, 20)
 		}},
-		{"no base ref to come back to", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "no base ref to come back to", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, f.repo, "update-ref", "-d", baseRefName(session))
 		}},
-		{"an edit under assume-unchanged, which git status does not report", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an edit under assume-unchanged, which git status does not report", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "update-index", "--assume-unchanged", "base.txt")
 			writeUnder(t, path, "base.txt", "an edit git status will not show\n")
 			if status := mustGit(t, path, "status", "--porcelain"); status != "" {
@@ -599,7 +601,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			}
 			ageCheckout(t, path, 20)
 		}},
-		{"an edit under skip-worktree, which git status does not report", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "an edit under skip-worktree, which git status does not report", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			mustGit(t, path, "update-index", "--skip-worktree", "base.txt")
 			writeUnder(t, path, "base.txt", "an edit git status will not show\n")
 			if status := mustGit(t, path, "status", "--porcelain"); status != "" {
@@ -607,7 +609,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			}
 			ageCheckout(t, path, 20)
 		}},
-		{"a clone with commits of its own under a dependency directory", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a clone with commits of its own under a dependency directory", atTheSecondLook: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "vendor/")
 			nested := filepath.Join(path, "vendor", "a-library")
 			if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -619,12 +621,12 @@ func TestResumableSweepKeeps(t *testing.T) {
 			commitFile(t, nested, "patched.txt", "only here\n", "a patch nobody pushed")
 			ageCheckout(t, path, 20)
 		}},
-		{"a mount left inside it", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a mount left inside it", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "node_modules/")
 			ageCheckout(t, path, 20)
 			standOnFakeProcessTable(t, filepath.Join(path, "node_modules"))
 		}},
-		{"a repository with commits of its own under an ignored directory", func(t *testing.T, f *resumableFixture, path, session string) {
+		{name: "a repository with commits of its own under an ignored directory", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, "dist/")
 			nested := filepath.Join(path, "dist", "clone")
 			if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -645,9 +647,11 @@ func TestResumableSweepKeeps(t *testing.T) {
 			neighbour := f.checkout(t, "sess-neighbour")
 			c.prepare(t, f, path, session)
 			// The first look is a judgement of its own, not a draft of the second.
-			f.set(func() {
-				f.atSecondLook[session] = func() { t.Errorf("%s got past the first look", c.name) }
-			})
+			if !c.atTheSecondLook {
+				f.set(func() {
+					f.atSecondLook[session] = func() { t.Errorf("%s got past the first look", c.name) }
+				})
+			}
 
 			sweepOnFullDisk(f)
 
