@@ -746,9 +746,10 @@ func printServiceStarted(how string) {
 // SIGKILL when launchd is what stops it. Measured 2026-11-03 with a job that takes 100 s to leave after
 // SIGTERM, on macOS 26.6.2 and 15.8.2 (GitHub's runners) and 27.2 (a real Mac):
 //   - macOS 26 and 27 cap the key at 60: `launchctl print` reads `exit timeout = 60` for 61 and for
-//     2147483647, and launchd kills the job then. The cap is the same for an Aqua agent in gui/<uid>, a
-//     Background one in user/<uid>, a daemon in system, with or without UserName, and an agent an app
-//     registers through SMAppService. ProcessType and every other key tried leave it alone, MaxExitTimeOut
+//     2147483647, and launchd kills the job then. On macOS 26 the cap is the same for an Aqua agent in
+//     gui/<uid>, a Background one in user/<uid> (the one kind tried on 27.2), a daemon in system, with or
+//     without UserName, and an agent an app registers through SMAppService. ProcessType and every other key
+//     tried leave it alone, MaxExitTimeOut
 //     among them. launchd's own strings also name a boot argument, launch_max_exit_timeout, not tried: it is
 //     the machine owner's to set and not the runner's. macOS 15 honours any value.
 //   - Every macOS: with no key the window is 5 s, and 0, which launchd.plist(5) calls infinity, kills the
