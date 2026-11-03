@@ -177,9 +177,9 @@ twice, the second time immediately before it goes:
   it, a submodule or a clone in a dependency directory included.
 
 **When it looks.** All of this runs on the loop that claims messages, so no message is claimed on that runner
-while it does. Finished sessions' checkouts are looked over every five minutes, however that goes, and with no time
-limit: below the floor every one of them goes in the same sweep. The checkouts of sessions that can resume are
-looked over on the same five minutes, below the floor only, within two limits:
+while it does. Finished sessions' checkouts are looked over every five minutes with no time limit: below the floor
+every one of them goes in the same sweep. The checkouts of sessions that can resume are looked over on the same five
+minutes, below the floor only, within two limits:
 
 - **A look that finds nothing waits an hour.** When the rule has kept every one of these checkouts and the disk is
   still below the floor, the runner logs `gc: no resumable checkout can go and the disk is still under its floor; not
