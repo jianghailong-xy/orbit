@@ -178,8 +178,15 @@ twice, the second time immediately before it goes:
 
 **What comes back.** The session's next message makes a new checkout of its branch at the same path, before the
 engine starts, and the conversation goes on. The branch and its commits were never touched, and the session's
-fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before. A runner restart does
-not bring these checkouts back; only the session's next turn does.
+fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before.
+
+**A runner restart brings back no checkout of a session at rest**, whatever took it: this cleanup, or a person
+with `rm -rf`. While the session's branch exists, the runner registers the session and logs `session <id> — its
+checkout is not on disk and stays away until its next turn`. The session's next message makes the checkout, on
+the fork point in its base ref, or else its pinned commit, or else the merge-base with the shared checkout's
+`HEAD`. So a checkout removed by hand to free space stays removed. Anything uncommitted in it is gone: the
+checkout comes back from the branch. A session with a background job carried across a self-update is at work,
+not at rest, and gets its checkout at once.
 
 **What does not come back.** Installed dependencies and build output, which the agent has to rebuild. These go by
 name, so a file a session put inside `dist` or `node_modules` goes with them.

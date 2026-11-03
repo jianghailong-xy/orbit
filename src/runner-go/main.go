@@ -1132,7 +1132,7 @@ func resumeCommand(sessionID, sessionDir string, meta *sessionMeta) (*exec.Cmd, 
 	}
 	if meta.WorkDir != "" {
 		cmd.Dir = expandTilde(meta.WorkDir)
-		if notice := reclaimedCheckoutNotice(sessionID, cmd.Dir); notice != "" {
+		if notice := absentCheckoutNotice(sessionID, cmd.Dir); notice != "" {
 			return nil, errors.New(notice)
 		}
 	}

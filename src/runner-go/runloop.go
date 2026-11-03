@@ -699,6 +699,9 @@ func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) 
 // checked out.
 func settleSessionCheckout(job *ClaimedSession, execDir string) {
 	if job.WT != nil {
+		if checkoutAbsent(job.WT.Path) {
+			return // a session at rest: its next claim does this (restoreAbsentCheckout)
+		}
 		uncommitParkCheckpoint(job.WT)
 	}
 	syncManagedVolume("the session's checkout", execDir)
@@ -1901,8 +1904,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 		}
 		if initiallyActive {
-			// A cold supervisor stays registered while the sweep takes its checkout: the checkout
-			// comes back before the supervisor wakes in it.
+			// A cold supervisor may stand on a checkout that is not on disk (setupSupervisorCheckout, or
+			// the sweep took it since): it comes back before the supervisor wakes in it.
 			restoreAbsentCheckout(pool, job)
 			if _, ok := pool.activatePrepared(job, stageCredential); ok {
 				return // warm reuse, or wake a cold supervisor for transparent resume
@@ -1932,15 +1935,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		var execDir string
-		outlined := false
-		if !initiallyActive {
-			execDir, outlined = outlineReclaimedCheckout(job, sessionExecDir(job.WorkDir))
-		}
-		if !outlined {
-			execDir = setupWorktree(job, sessionExecDir(job.WorkDir))
-			settleSessionCheckout(job, execDir)
-		}
+		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
+		settleSessionCheckout(job, execDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {
