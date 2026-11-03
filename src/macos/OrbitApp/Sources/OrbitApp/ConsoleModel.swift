@@ -4141,6 +4141,8 @@ final class ConsoleModel {
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
     /// What each version of evidence drawn here cites, by `task#revision` (`evidenceFileRead`).
     private var evidenceFileReads: [String: EvidenceFileRead] = [:]
+    /// The files with a press of their pin on its way.
+    private(set) var pinningEvidenceFiles: Set<String> = []
     /// Where this conversation stands as the coordinator its project's queued evidence waits for —
     /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
     /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
@@ -5317,9 +5319,37 @@ final class ConsoleModel {
         evidenceFileReads[key] = EvidenceFileRead(list: list, reading: true)
         do {
             let page = try await api.evidenceFiles(taskID: taskID, revision: revision, offset: offset)
-            evidenceFileReads[key] = EvidenceFileRead(list: list.appending(page))
+            // The list as it stands now: a pin pressed while the page was on its way stays.
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current.appending(page))
         } catch {
-            evidenceFileReads[key] = EvidenceFileRead(list: list, unread: true)
+            let current = evidenceFileRead(taskID: taskID, revision: revision).list ?? list
+            evidenceFileReads[key] = EvidenceFileRead(list: current, unread: true)
+        }
+    }
+
+    /// Press a file's pin, either way. A file can be cited by several versions of its task, so the answer
+    /// goes into every list read of that task. Told its bytes have gone since the list was read, the file
+    /// stops offering a pin. False when the press did not go through, which the caller says out loud.
+    func pressEvidenceFilePin(taskID: String, file: EvidenceFile) async -> Bool {
+        guard !pinningEvidenceFiles.contains(file.id) else { return true }
+        pinningEvidenceFiles.insert(file.id)
+        defer { pinningEvidenceFiles.remove(file.id) }
+        do {
+            let answer = try await api.setAttachmentPinned(file.id, pinned: !EvidenceFiles.isPinned(file))
+            changeEvidenceFile(taskID: taskID, file.id) { $0.withPin(answer) }
+            await attachments.cameBack(file.id)
+            return true
+        } catch {
+            if ExpiredAttachment(error) != nil { changeEvidenceFile(taskID: taskID, file.id) { $0.notPinnable() } }
+            return false
+        }
+    }
+
+    private func changeEvidenceFile(taskID: String, _ id: String, _ change: (EvidenceFile) -> EvidenceFile) {
+        for (key, read) in evidenceFileReads where key.hasPrefix("\(taskID)#") {
+            guard let list = read.list else { continue }
+            evidenceFileReads[key] = EvidenceFileRead(list: list.updating(id, change), unread: read.unread, reading: read.reading)
         }
     }
 

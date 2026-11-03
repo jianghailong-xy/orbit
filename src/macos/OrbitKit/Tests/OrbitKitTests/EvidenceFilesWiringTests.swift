@@ -138,7 +138,8 @@ final class EvidenceFilesWiringTests: XCTestCase {
     /// bytes does neither.
     func testAPressOnATile() throws {
         let views = try source(Self.viewsPath)
-        let tile = try section(views, from: "private struct EvidencePageTile: View", to: "// MARK: - the viewer")
+        let tile = try section(views, from: "let picture = EvidenceFiles.isPicture(file) && !store.isNotPicture(file.id)",
+                               to: "// MARK: - the viewer")
         XCTAssertLessThan(try offset(of: "if EvidenceFiles.isGone(file) {", in: tile), try offset(of: "Button {", in: tile))
         XCTAssertTrue(tile.contains("if picture { onView(file) } else { onSave(file) }"))
     }
@@ -194,6 +195,94 @@ final class EvidenceFilesWiringTests: XCTestCase {
         XCTAssertTrue(viewer.contains("pager.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()"),
                       "a long picture runs under the caption and the dots")
         XCTAssertTrue(viewer.contains("ImagePagerView.Inset(longerThan: Self.longerThan"))
+    }
+
+    // MARK: the pin
+
+    private func tile() throws -> String {
+        try section(try source(Self.viewsPath), from: "private struct EvidencePageTile: View", to: "// MARK: - the viewer")
+    }
+
+    /// The owner's choice on the board: a picture only says it is pinned on the page, and whatever has no
+    /// viewer keeps a pin on its tile, when the server offers one.
+    func testAPictureIsOnlyMarkedOnThePageAndWhatHasNoViewerHasThePin() throws {
+        let corner = try section(try tile(), from: "private func corner(picture: Bool)", to: "var body: some View {")
+        let picture = try offset(of: "if picture {", in: corner)
+        let mark = try offset(of: "if EvidenceFiles.isPinned(file) {", in: corner)
+        let offered = try offset(of: "} else if EvidenceFiles.canPin(file) {", in: corner)
+        let press = try offset(of: "Button { onPin(file) }", in: corner)
+        XCTAssertLessThan(picture, mark)
+        XCTAssertLessThan(mark, offered)
+        XCTAssertLessThan(offered, press, "the only press is past the server's offer, and past being a picture")
+        XCTAssertEqual(corner.components(separatedBy: "Button {").count - 1, 1)
+    }
+
+    /// In the viewer, beside the way to keep it, and only where the server offers one.
+    func testTheViewerPinsOnlyWhatTheServerOffers() throws {
+        let views = try source(Self.viewsPath)
+        let caption = try section(views, from: "private var caption: some View {", to: "private var pinButton: some View {")
+        XCTAssertLessThan(try offset(of: "if EvidenceFiles.canPin(live) { pinButton }", in: caption), try offset(of: "keep\n", in: caption))
+        XCTAssertTrue(caption.contains("EvidenceFiles.keep(live)"), "how long it stays, in the caption")
+    }
+
+    /// A press goes through one door, and what it answers reaches the list a page and a viewer read.
+    func testAPressGoesThroughTheConsole() throws {
+        let console = try source(Self.consolePath)
+        let press = try section(console, from: "func pressEvidenceFilePin(taskID: String, file: EvidenceFile) async -> Bool {",
+                                to: "private func changeEvidenceFile(")
+        XCTAssertTrue(press.contains("api.setAttachmentPinned(file.id, pinned: !EvidenceFiles.isPinned(file))"))
+        XCTAssertTrue(press.contains("$0.withPin(answer)"))
+        XCTAssertTrue(press.contains("if ExpiredAttachment(error) != nil { changeEvidenceFile(taskID: taskID, file.id) { $0.notPinnable() } }"),
+                      "told the bytes went, it stops offering")
+        XCTAssertEqual(try source(Self.viewsPath).components(separatedBy: "api.setAttachmentPinned").count - 1, 0)
+    }
+
+    /// A page with no citations, as from a receipt, still says what its reports said.
+    func testAPageReadsItsReportsOffTheListToo() throws {
+        let views = try source(Self.viewsPath)
+        let page = try section(views, from: "struct EvidenceFilesPage: View", to: "private struct EvidencePageTile: View")
+        XCTAssertTrue(page.contains("EvidenceFiles.reports(target.citations, files: read.list?.files ?? [])"))
+    }
+
+    // MARK: the receipt
+
+    /// With no FILE citation a receipt is what it has always been, and no receipt reads anything until its
+    /// entry is pressed: `decided` rides every poll.
+    func testAReceiptOffersItsFilesOnlyWhenItCitesThemAndReadsNothing() throws {
+        let cards = try source(Self.cardPath)
+        let receipt = try section(cards, from: "private struct EvidenceDecisionReceiptCard: View",
+                                  to: "/// The settlement gate: whether this set of criteria")
+        XCTAssertTrue(receipt.contains("if decided.citesFiles == true { filesEntry }"))
+        XCTAssertEqual(receipt.components(separatedBy: "filesEntry").count - 1, 2, "gated, and defined")
+        XCTAssertTrue(receipt.contains("openFiles(EvidenceFilesTarget(taskID: decided.taskId, revision: decided.evidenceRevision, citations: []))"))
+        for read in ["console.", ".task {", ".task(id", "api.", "readEvidenceFiles"] {
+            XCTAssertFalse(receipt.contains(read), "a receipt reads nothing: found \(read)")
+        }
+    }
+
+    // MARK: a conversation's placeholder
+
+    /// Told the bytes went comes first, because it is a 4xx as well, and every other 4xx is still a file chip.
+    func testAReadToldTheBytesWentIsNotAFileChip() throws {
+        let store = try source("src/macos/OrbitApp/Sources/OrbitApp/AttachmentImageStore.swift")
+        let load = try section(store, from: "func load(_ id: String) async {", to: "func keep(_ id: String) async {")
+        XCTAssertLessThan(try offset(of: "catch let error where ExpiredAttachment(error) != nil", in: load),
+                          try offset(of: "catch let APIError.http(status, _) where (400..<500).contains(status)", in: load))
+        XCTAssertTrue(store.contains("return entry.image == nil && entry.expired == nil"), "and it is not a file that failed to decode")
+    }
+
+    /// Every view of a conversation's picture asks before it falls back to a chip.
+    func testEveryPictureInAConversationSaysItExpired() throws {
+        let views = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AttachmentViews.swift")
+        let markdown = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/MarkdownView.swift")
+        XCTAssertEqual(views.components(separatedBy: "else if let expired = store.expiry(attachment.id) {").count - 1, 2,
+                       "a single image and a grid's tile")
+        XCTAssertLessThan(try offset(of: "else if let expired = store.expiry(id) {", in: markdown),
+                          try offset(of: "} else if store.isNotImage(id) {", in: markdown))
+        XCTAssertTrue(markdown.contains("private var expired: ExpiredAttachment? { attachmentID.flatMap { store.expiry($0) } }"),
+                      "and a file's card")
+        let viewer = try section(try source(Self.viewerPath), from: "private func attachmentPage", to: "private func pageBody")
+        XCTAssertLessThan(try offset(of: "store.expiry(attachmentID)", in: viewer), try offset(of: "store.isNotImage(attachmentID)", in: viewer))
     }
 
     /// A page whose bytes will never draw says so rather than spinning for as long as it is open.

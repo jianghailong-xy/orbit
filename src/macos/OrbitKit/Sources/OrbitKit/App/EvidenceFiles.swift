@@ -21,8 +21,8 @@ import Foundation
    The list and the summaries are read from rows, so an expired file keeps its name, its size, its
    sha256 and its report. Only its picture goes. The latest version of a task's evidence never expires
    (§2.8) and only the latest is ever a card, so on a card the placeholder real data reaches is the
-   one for a file whose row went (`gone`, with no date). The dated one is drawn from the same fields
-   for whatever the route says.
+   one for a file whose row went (`gone`, with no date). The dated one is met on the page of an older
+   version, which its receipt opens (`RecordedEvidenceDecision.citesFiles`).
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 // MARK: - the rows, as the server publishes them
@@ -341,7 +341,7 @@ public enum EvidenceFiles {
     }
 
     /// The reports of what a page shows: the citations', and a receipt's, which has none, off the list it
-    /// has read (web's `evidenceReportsOf`).
+    /// has read.
     public static func reports(_ citations: [EvidenceDecisionCitation], files: [EvidenceFile]) -> [EvidenceTestReport] {
         let cited = testReports(citations)
         return cited.isEmpty ? files.compactMap(\.testReport) : cited

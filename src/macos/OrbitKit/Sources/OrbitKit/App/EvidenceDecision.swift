@@ -286,7 +286,8 @@ public struct SentToCoordinatorRow: Codable, Equatable, Sendable, Identifiable {
 /// Small on purpose — it rides every poll — and it is the ONLY copy of the answer the console keeps:
 /// the receipt is drawn from it, so a reload, a relaunch or another device shows the same record.
 /// The evidence it answered is not here; the browser fetches that when a reader opens the receipt's
-/// fold, which is a step this client does not need and does not take.
+/// fold, which is a step this client does not need and does not take. Its files are one press away when
+/// it cites any (`citesFiles`), and read on that press.
 public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String
     public let title: String
