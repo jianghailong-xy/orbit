@@ -32,6 +32,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
   steerWithdrawAnswer,
@@ -2397,6 +2398,23 @@ export class SessionsService {
     const engine = await this.engineOfStart(ownerId, target);
     const mode = modeOfNoneNamed(acting.owner, engine);
     if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
+  }
+
+  /**
+   * What a session may do to another that already exists (session-reach.ts). Every runner door that gives
+   * a session a turn or ends one asks here, so an MCP call, the CLI and a bare HTTP request meet one check.
+   * A header value the id middleware could not decode names no session of this owner, and `task_start`'s
+   * header is attribution rather than proof, so it is treated as what it is: nobody to compare.
+   */
+  async assertMayReach(
+    ownerId: string,
+    callerSessionId: string,
+    targetSessionId: string,
+    act: SessionAct,
+    clientTurnId?: string,
+  ): Promise<{ narrower: boolean }> {
+    if (!UUID_SHAPE.test(callerSessionId) || !UUID_SHAPE.test(targetSessionId)) return { narrower: false };
+    return assertSessionMayReach(this.prisma, ownerId, callerSessionId, targetSessionId, act, clientTurnId);
   }
 
   /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */

@@ -586,7 +586,7 @@ EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护�
 - 读过网页的会话，其后的 op 标 `tainted`：不能自动生效，审阅卡上有琥珀警示，接受之后才可推送。
 - 知识以 user 级、「参考而非指令」的形式投递，不进 system 层。
 - `wiki_propose` 本身就是一条持久化通道，由 Review、信任闸和污染标记三道闸约束。
-- 顺带建议（不在本方案范围内）：`tasklist_update` / `agent_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:29`）连权限提示都不弹，是另一条二次持久化路径。
+- 顺带建议（不在本方案范围内）：`tasklist_update` 目前没有确认卡，而且 `ALWAYS_ALLOWED_TOOLS=['mcp__orbit__*']`（`permission-mode.ts:30`）连权限提示都不弹，是另一条二次持久化路径。`agent_update` 写 `systemPrompt`、`appendSystemPrompt`、`env` 这些字段现在要所有者的卡片（`runner-api/runner-workspace-approval.ts`）。
 - **渲染**：markdown 净化；不自动加载远程图片，防 CamoLeak 式外泄。
 
 ### 10.4 Rule of Two

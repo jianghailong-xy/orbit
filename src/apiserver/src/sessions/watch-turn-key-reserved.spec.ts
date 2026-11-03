@@ -61,6 +61,8 @@ function doors() {
       return dto?.content ? { ok: true as const, turnId: 'turn-3', seq: 3 } : { ok: true as const };
     },
     assertHostedByRunner: async () => undefined,
+    // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+    assertMayReach: async () => ({ narrower: false }),
   };
   const projects = {
     sendToCoordinator: async (

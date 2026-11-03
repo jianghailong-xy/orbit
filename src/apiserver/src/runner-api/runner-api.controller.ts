@@ -5304,6 +5304,7 @@ export class RunnerApiController {
               t.senderSessionId,
               content,
               await readRequestForBlock(tx, sessionId, t.id),
+              sessionId,
             )) ?? content;
           }
           // A list's console also carries back what the control plane noticed while nobody was
