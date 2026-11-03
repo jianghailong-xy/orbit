@@ -31,7 +31,6 @@ import {
   INTEGRATION_PROGRESS_V2,
   INTEGRATION_PROGRESS_V2_PROTOCOL,
   LandingWorkSessionFacts,
-  MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
   REPORTABLE_JOB_PHASES,
   REPORTABLE_JOB_STATES,
@@ -122,6 +121,7 @@ import {
   takenOverText,
 } from '../projects/project-integration-event';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { clipCheckTail, redactCheckOutput, redactFailureDetail } from './check-output-redaction';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
@@ -1604,6 +1604,10 @@ async function progressRefusal(
  * A chunk whose seq is already stored is the chunk already stored: the insert is ON CONFLICT DO
  * NOTHING and the answer is still accepted, so a runner that resends after a lost answer does not
  * create a second copy or a failure.
+ *
+ * WHAT IS STORED IS NOT QUITE WHAT WAS SENT: no NUL, which PostgreSQL's text cannot hold and which made
+ * this door answer 500, and nothing `redactCheckOutput` recognises. A chunk is read on its own here, so
+ * a secret split across two of them is the runner's to catch, and it holds output back for that.
  */
 export async function receiveIntegrationJobOutput(
   prisma: PrismaService,
@@ -1673,7 +1677,11 @@ function outputChunk(body: IntegrationJobOutputRequest): {
   if (typeof body.text !== 'string') {
     throw new IntegrationJobRefused('INVALID_RESULT', 'text is the chunk itself');
   }
-  if (Buffer.byteLength(body.text, 'utf8') > INTEGRATION_LOG_MAX_CHUNK_BYTES) {
+  // Measured again once redacted: a marker can be longer than what it replaces, and the table holds
+  // the stored text to this same number. Far past anything a runner's 16 KiB chunk comes to.
+  const tooLong = (text: string): boolean => Buffer.byteLength(text, 'utf8') > INTEGRATION_LOG_MAX_CHUNK_BYTES;
+  const text = tooLong(body.text) ? body.text : redactCheckOutput(body.text);
+  if (tooLong(text)) {
     throw new IntegrationJobRefused(
       'INVALID_RESULT',
       `one chunk carries at most ${INTEGRATION_LOG_MAX_CHUNK_BYTES} bytes`,
@@ -1684,7 +1692,7 @@ function outputChunk(body: IntegrationJobOutputRequest): {
     leaseOwner: body.leaseOwner,
     check: { name, index },
     seq: body.seq,
-    text: body.text,
+    text,
   };
 }
 
@@ -2471,6 +2479,8 @@ export async function applyIntegrationJobResult(
     }
 
     const checks = clipChecks(body.checks ?? []);
+    // The job row and the item's payload store this, and the item's delivery text quotes it.
+    const errorDetail = redactFailureDetail(body.errorDetail ?? null);
     // J-T13's commits, with the control plane's own reading of each one: whether it arrived from
     // outside the landing queue, and which merge of this account's put it there. Written on the job
     // row — never in `errorDetail`, which is copied verbatim into an item's payload and its
@@ -2558,7 +2568,7 @@ export async function applyIntegrationJobResult(
       checks: checks as unknown as Prisma.InputJsonValue,
       conflicts: (body.conflicts ?? []).slice(0, 200),
       errorCode: body.errorCode ?? undefined,
-      errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
+      errorDetail: (errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
       // J-T13's list, enriched above. NULL for every job that did not move the upstream.
       upstreamMovedCommits: (upstreamMovedCommits ?? undefined) as Prisma.InputJsonValue | undefined,
       receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
@@ -2761,7 +2771,7 @@ export async function applyIntegrationJobResult(
           conflicts: body.conflicts ?? [],
           checks,
           errorCode: body.errorCode ?? null,
-          errorDetail: body.errorDetail ?? null,
+          errorDetail,
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
           // does not read it, so the replay it does stays byte-for-byte the same.
           upstreamMovedCommits,
@@ -3571,9 +3581,6 @@ async function outdatedRunnerName(tx: Prisma.TransactionClient, runnerId: string
 function clipChecks(checks: IntegrationCheckResult[]): IntegrationCheckResult[] {
   return checks.slice(0, 8).map((check) => ({
     ...check,
-    outputTail: typeof check.outputTail === 'string'
-      // eslint-disable-next-line no-control-regex
-      ? check.outputTail.replace(/ /g, '').slice(-MAX_CHECK_OUTPUT_TAIL)
-      : '',
+    outputTail: typeof check.outputTail === 'string' ? clipCheckTail(check.outputTail) : '',
   }));
 }

@@ -1180,10 +1180,10 @@ func prepareIntegrationTree(stop context.Context, scratch string, progress *inte
 	}
 	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		return fmt.Errorf("%s did not finish within %s: %s",
-			integrationPrepareScript, integrationPrepareTimeout, tailOf(output.text(), 2000))
+			integrationPrepareScript, integrationPrepareTimeout, tailOf(output.text(progress.redactor()), 2000))
 	}
 	if runErr != nil {
-		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, runErr, tailOf(output.text(), 2000))
+		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, runErr, tailOf(output.text(progress.redactor()), 2000))
 	}
 	logln("integration: prepared", scratch, "with", integrationPrepareScript,
 		fmt.Sprintf("in %dms", time.Since(started).Milliseconds()))
@@ -1334,7 +1334,7 @@ func runIntegrationCheckTracked(stop context.Context, scratch string, spec Integ
 		Command:          spec.Command,
 		ExpectedExitCode: spec.ExpectedExitCode,
 		DurationMs:       time.Since(started).Milliseconds(),
-		OutputTail:       tailOf(output.text(), integrationOutputTail),
+		OutputTail:       output.text(progress.redactor()),
 	}
 	if stopErr != nil {
 		return result, stopErr
@@ -1377,11 +1377,7 @@ func addFailureLines(result *IntegrationCheckResult, output *integrationOutput, 
 	if result.ExitCode != nil && *result.ExitCode == result.ExpectedExitCode {
 		return
 	}
-	redactor := newIntegrationOutputRedactor()
-	if progress != nil && progress.uploads != nil {
-		redactor = progress.uploads.redact
-	}
-	section := output.failureSection(redactor)
+	section := output.failureSection(progress.redactor())
 	if section == "" {
 		return
 	}
@@ -1453,9 +1449,10 @@ func (o *integrationOutput) Write(p []byte) (int, error) {
 	o.bytes += int64(len(p))
 	o.tail = append(o.tail, p...)
 	// Trim in chunks rather than on every write, so a chatty check does not copy its tail once
-	// per line; text() answers exactly the last integrationOutputTail bytes either way.
+	// per line; text() answers the last integrationOutputTail bytes either way, and what it leaves
+	// out of what is kept here is the part this cut may have left without its beginning.
 	if len(o.tail) > 2*integrationOutputTail {
-		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail:]...)
+		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail-integrationOutputCarryMax:]...)
 	}
 	o.failures.write(p)
 	o.mu.Unlock()
@@ -1490,13 +1487,26 @@ func (o *integrationOutput) size() int64 {
 	return o.bytes
 }
 
-func (o *integrationOutput) text() string {
+// text is the end of what this command printed as it may leave this machine: at most the last
+// integrationOutputTail bytes, held to what the log is held to. The control plane redacts it again
+// (src/apiserver/src/runner-api/check-output-redaction.ts), and that does not make this one spare: only
+// this process knows the token it authenticates with and the credentials in its environment.
+//
+// Redacted first and cut after, as the failure lines are: a secret is matched whole or not at all, so
+// the other way round leaves its back half for no rule to recognise. The cut then falls inside a marker
+// at worst. Write's own trim has no such order, because it happens as the output goes by, so once it
+// has run the front of what is kept may start anywhere; it keeps integrationOutputCarryMax more than a
+// tail needs, and that much goes here. A value longer than that is redacted only when it arrives
+// whole, which is the limit the uploader's carry has for the same reason.
+func (o *integrationOutput) text(redactor *integrationOutputRedactor) string {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	if len(o.tail) <= integrationOutputTail {
-		return string(o.tail)
+	kept, trimmed := string(o.tail), o.bytes > int64(len(o.tail))
+	o.mu.Unlock()
+	text := redactor.redact(strings.ReplaceAll(kept, "\x00", ""))
+	if trimmed {
+		text = text[min(integrationOutputCarryMax, len(text)):]
 	}
-	return string(o.tail[len(o.tail)-integrationOutputTail:])
+	return tailOf(text, integrationOutputTail)
 }
 
 // failureSection is what this output's failure lines come to (integrationFailureScan.section).
@@ -1803,6 +1813,16 @@ func (p *integrationProgress) beginStep(phase, step string, check *IntegrationJo
 	p.mu.Unlock()
 	resp, err := p.send(p.sendCtx, p.request())
 	p.handleAnswer(resp, err)
+}
+
+// redactor is what this job's output is held to wherever it goes: the log's on a v2 claim, which
+// knows the runner's token, and otherwise (a legacy claim, a check run with no claim behind it, which
+// is a nil p) one that knows what the environment holds.
+func (p *integrationProgress) redactor() *integrationOutputRedactor {
+	if p != nil && p.uploads != nil {
+		return p.uploads.redact
+	}
+	return newIntegrationOutputRedactor()
 }
 
 // uploadOutput streams this command's writes as the check they belong to (§2.2 J-T4's output

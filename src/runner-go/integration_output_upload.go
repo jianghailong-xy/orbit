@@ -211,6 +211,9 @@ func (u *integrationLogUploader) loop() {
 // text: cutting the raw buffer and redacting only the part that is sent would send the first half of
 // a secret whose second half happened to fall in the carry. What is held back is already redacted,
 // so a later flush concatenating raw bytes after it redacts the same text again harmlessly.
+//
+// A chunk that is refused or lost is passed over and the rest are still sent, unless the claim is gone
+// or the flush's budget has run out.
 func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 	u.mu.Lock()
 	if route == nil {
@@ -233,7 +236,9 @@ func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 	if stopped {
 		return
 	}
-	text := u.redact.redact(string(data))
+	// NUL before anything reads the text: PostgreSQL's text holds none, and a secret one sits inside
+	// (a UTF-16 dump has one in every other byte) would not be recognised around it.
+	text := u.redact.redact(strings.ReplaceAll(string(data), "\x00", ""))
 	keep := ""
 	if !final {
 		cut := len(text)
@@ -284,7 +289,9 @@ func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 				if !noted {
 					logln("integration output: this claim is no longer the control plane's; stopping the upload")
 				}
-			} else if !u.noted {
+				return
+			}
+			if !u.noted {
 				u.mu.Lock()
 				noted := u.noted
 				u.noted = true
@@ -293,7 +300,15 @@ func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 					logln("integration output: a chunk was not delivered, carrying on:", err)
 				}
 			}
-			return
+			// A chunk that did not arrive costs the log that chunk. The next one may well arrive, and
+			// its seq was already its own, so a resend is not owed and the reader just reads on. It is
+			// not held for a later flush either: nothing bounds what a check prints while the control
+			// plane is away, and a runner that runs out of memory stops. The one thing that ends a
+			// flush here is its budget: spent, every send left would fail at once, and it is what
+			// keeps a control plane that has gone away from holding a check's end.
+			if ctx.Err() != nil {
+				return
+			}
 		}
 	}
 }
@@ -364,6 +379,11 @@ type integrationOutputRedactor struct {
 // whose query follows it with no path between (`http://host?to=a@b` reads `http://[redacted]@b`).
 // An `@` after the authority's `/` (`https://example.com/@scope/pkg`) is a path's and is left
 // alone, and so is an empty userinfo (`http://@host`), which holds nothing.
+//
+// The control plane reads a URL the same way at the door a check's output comes in through
+// (URL_USERINFO in src/apiserver/src/runner-api/check-output-redaction.ts), for the runners that were
+// installed before a result's tail was redacted here. The two are one rule in two languages, and
+// testdata/integration-url-credentials.json is one table their tests both read.
 var integrationURLCredential = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^/\s]+@`)
 
 // The end of a text that may still turn out to be a URL's userinfo once more output arrives: a
