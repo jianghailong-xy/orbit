@@ -1909,6 +1909,39 @@ func TestAClaimOnAMissingCheckoutThatCannotComeBackEndsWithTheReason(t *testing.
 	}
 }
 
+// The branch comes from the claim: the control plane may have adopted another since the supervisor registered.
+func TestAClaimRestoresTheCheckoutOnTheBranchItNames(t *testing.T) {
+	prepare := func(t *testing.T) (*resumableFixture, string) {
+		f := newResumableFixture(t)
+		path := f.checkout(t, "sess-away")
+		mustGit(t, f.repo, "branch", "orbit/adopted", "orbit/sess-away")
+		job := &ClaimedSession{SessionID: "sess-away", Branch: "orbit/sess-away",
+			WT: &Worktree{Path: path, Branch: "orbit/sess-away", RepoDir: f.repo, Session: "sess-away"}}
+		if _, added := f.pool.register(job, func() {}, false); !added {
+			t.Fatal("register a cold supervisor")
+		}
+		removeThroughGit(t, f, path)
+		return f, path
+	}
+	cases := map[string]struct{ claimed, want string }{
+		"a branch adopted since":                   {claimed: "orbit/adopted", want: "orbit/adopted"},
+		"none named: the one its supervisor knows": {claimed: "", want: "orbit/sess-away"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			f, path := prepare(t)
+			claim := &ClaimedSession{SessionID: "sess-away", Branch: c.claimed}
+			restoreAbsentCheckout(f.pool, claim)
+			if claim.SourceRefusal != nil {
+				t.Fatalf("refused: %+v", claim.SourceRefusal)
+			}
+			if got := mustGit(t, path, "symbolic-ref", "--short", "HEAD"); got != c.want {
+				t.Fatalf("HEAD is on %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 // A hand removal stopped halfway leaves a directory at the path, and an engine woken there works among the
 // remains. It is not the session's checkout, so the claim treats it as gone: git makes one in a directory
 // that is empty, and refuses one that is not, which ends the run with the reason.
