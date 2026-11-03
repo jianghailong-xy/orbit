@@ -85,6 +85,20 @@ describe('bashSegments', () => {
     expect(bashSegments("ls \\\n#'\ntouch x #'").map((s) => s.trim())).toEqual(['ls \\', 'touch x']);
     expect(bashSegments('ls\\\n#b; c').map((s) => s.trim())).toEqual(['ls\\\n#b', 'c']);
   });
+
+  it("keeps a heredoc's operator and word in the sub-command, and leaves its body out", () => {
+    expect(bashSegments("cat <<'EOF' | wc -l\nls\nEOF\npwd").map((s) => s.trim())).toEqual(["cat <<'EOF'", 'wc -l', 'pwd']);
+    expect(bashSegments('cat <<A <<-B\nls\nA\n\tpwd\n\tB\nc').map((s) => s.trim())).toEqual(['cat <<A <<-B', 'c']);
+  });
+
+  it('reads a body with no terminator to the end of the command', () => {
+    expect(bashSegments('cat <<EOF\nls\npwd').map((s) => s.trim())).toEqual(['cat <<EOF', '']);
+  });
+
+  it('keeps a here-string and a shift in the sub-command they are part of', () => {
+    expect(bashSegments('cat <<<EOF\nls\nEOF').map((s) => s.trim())).toEqual(['cat <<<EOF', 'ls', 'EOF']);
+    expect(bashSegments('echo $((1<<2))\nls').map((s) => s.trim())).toEqual(['echo $((1<<2))', 'ls']);
+  });
 });
 
 describe('readableBashSegments', () => {
@@ -196,6 +210,26 @@ describe('readableBashSegments', () => {
     // Quoted, it is only text.
     expect(trimmed('echo "a\u3000b"')).toEqual(['echo "a\u3000b"']);
   });
+
+  it('refuses a heredoc: its body is not in the segments, and a program can run it or a shell expand it', () => {
+    for (const cmd of [
+      'cat <<EOF\nls\nEOF',
+      "cat <<'EOF'\nls\nEOF",
+      'cat <<-EOF\n\tls\n\tEOF',
+      'cat <<EOF\n$(touch x)\nEOF',
+      'cat <<EOF\n`touch x`\nEOF',
+      "sh <<'EOF'\ntouch x\nEOF",
+      'ls; cat <<EOF\nls\nEOF\nls',
+      'cat <<EOF',
+    ]) {
+      expect(trimmed(cmd), cmd).toBeNull();
+    }
+    // A here-string has no body, and a quoted operator is only text.
+    expect(trimmed('cat <<<EOF')).toEqual(['cat <<<EOF']);
+    expect(trimmed('ls {a<<<b}')).toBeNull();
+    expect(trimmed('echo "<<EOF"')).toEqual(['echo "<<EOF"']);
+    expect(trimmed("echo '<<EOF'")).toEqual(["echo '<<EOF'"]);
+  });
 });
 
 describe('bashPrefix', () => {
@@ -254,6 +288,11 @@ describe('bashCommandRules', () => {
       'a wrapper anywhere in a compound line refuses the whole line',
       'every sub-command of a compound line, not just the leading cd',
       'a quoted separator does not split a sub-command',
+      "a single-quoted heredoc's body is not a sub-command",
+      "an unquoted heredoc's body is not a sub-command",
+      '<<- lets tabs indent the terminator',
+      'more than one heredoc on a line',
+      'a here-string is not a heredoc',
     ]) {
       expect(names.some((n) => n.startsWith(required)), required).toBe(true);
     }
