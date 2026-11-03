@@ -140,7 +140,9 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 
 **管哪些门。** `session_send`（`POST /runner/sessions/:id/turns`，含 `resumeIfEnded`、`expectReply`）；`session_interrupt`
 （带不带消息）；`project_send`（比的是这次解析到的协调者）；`task_start` 接续暂停的 run；`session_end`；
-`session_complete` 和它的旧路由 `archive`；`session_delete`；`session_merge`。
+`session_complete` 和它的旧路由 `archive`；`session_delete`；`session_merge`。从任务这边结束 run 的门也走这张表：`task_update`
+把状态改成 CANCELLED、`task_delete`（连同随它删除的复核任务）、`tasklist_delete`，比的是这次写会结束的每个活着的 run，没有活 run
+或 run 不比调用方宽时照旧；`tasklist_delete` 从带上调用会话的 runner 起生效。
 
 **不管什么。** `session_reply`：是更宽的一方先问的，Plan 也能回复。对自己的操作。所有者自己的门和平台的投递，它们不走这些门。
 新开会话的门有自己的规则（`PERMISSION_MODE_WIDER_THAN_SESSION`）。不带会话的凭证没有模式可比，也不在这条规则里。

@@ -9559,6 +9559,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
       if (replayed) return replayed;
     }
+    // A task written CANCELLED ends the run working it (the reaper's rule for a task gone terminal, which
+    // leaves a session that is only reading it alone), so a session that may not end that run may not do it
+    // from here (sessions/session-reach.ts). Past the two requests above, which write no status. A write that
+    // changes nothing ends nothing, and a person's own edit names no session.
+    if (dto.status === TaskStatus.CANCELLED && before.status !== TaskStatus.CANCELLED) {
+      await this.assertMayStopRuns(ownerId, actingSessionId, { taskId: id, startsTaskWork: true }, 'cancelTask');
+    }
     // Which criterion a task serves is what decides whether that criterion is satisfied: taking the
     // unfinished work off it, or naming it on finished work, satisfies it with nothing done. So a
     // run writes this for its own task and for no other. What settles a task is the same question:
@@ -12835,9 +12842,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     throw new ForbiddenException(taskDeleteFromRunRefusalBody());
   }
 
+  /**
+   * Whether this session may end each live run a write of this door would end (sessions/session-reach.ts). Asked
+   * before the write and not under its locks, like every refusal on these paths, so a run that starts in between
+   * is ended unasked.
+   */
+  private async assertMayStopRuns(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    runs: Prisma.SessionWhereInput,
+    act: 'cancelTask' | 'deleteTask',
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const live = await this.prisma.session.findMany({
+      where: { ...runs, ownerId, status: { in: TASK_OCCUPYING } },
+      select: { id: true },
+    });
+    for (const run of live) await this.sessions.assertMayReach(ownerId, actingSessionId, run.id, act);
+  }
+
   async remove(ownerId: string, id: string, actingSessionId?: string) {
     await this.loadDetail(ownerId, id);
     await this.assertRunMayDelete(ownerId, id, actingSessionId);
+    // The runs `deleteAndStopRuns` ends: those of this task and of every check the delete takes with it.
+    if (actingSessionId) {
+      const doomed = await cascadedTaskClosure(this.prisma, ownerId, [id]);
+      await this.assertMayStopRuns(ownerId, actingSessionId, { taskId: { in: doomed } }, 'deleteTask');
+    }
     const { survivingLinks, projectIds, deletedTaskIds } = await this.deleteAndStopRuns(ownerId, [id]);
     // §2.9 LS3 rule 2: the subject of a deleted task settles DELETED, in its own transaction after
     // the delete committed. History references keep naming the task that is gone.

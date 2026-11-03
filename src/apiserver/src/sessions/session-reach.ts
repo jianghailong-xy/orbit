@@ -31,6 +31,11 @@ import {
  * sends says what they are (`directlyRelated`). Nor can a narrower session write them: the one record it
  * could reach is which project a task is in, and `assertMayMoveRuns` holds that door.
  *
+ * A run also ends with its task, so what its task's doors would stop is asked the same question, with the
+ * same answer: writing the task CANCELLED (`TasksService.update`), deleting it (`TasksService.remove`) and
+ * deleting its list (`TaskListsService.remove`). Those doors ask of each live run they would end, and
+ * of nothing else: a task with no live run, or one no wider than the caller, goes on as it did.
+ *
  * The run of a verification task is held to one rule more, whatever the sender's mode: only its project's
  * coordinator and the judgment sessions opened for that project may write to it, because what it finds is
  * worth only as much as nobody having told it what to find.
@@ -46,6 +51,9 @@ const ACTS = {
   delete: { words: 'delete it', carriesMessage: false },
   merge: { words: 'merge it', carriesMessage: false },
   resumeRun: { words: 'hand it this task', carriesMessage: false },
+  cancelTask: { words: 'end it by cancelling its task', carriesMessage: false },
+  deleteTask: { words: 'end it by deleting its task', carriesMessage: false },
+  deleteList: { words: 'end it by deleting the list its task is in', carriesMessage: false },
 } as const;
 
 export type SessionAct = keyof typeof ACTS;

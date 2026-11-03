@@ -442,7 +442,12 @@ export class RunnerTasksController {
    * cascading — so this discards the grouping and its policy revisions, not the work.
    */
   @Delete('task-lists/:id')
-  deleteList(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.taskLists.remove(runner.ownerId, id);
+  deleteList(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    // A runner that names no session here reads as the owner, as on the task delete above.
+    @Headers('x-orbit-session-id') sessionId?: string,
+  ) {
+    return this.taskLists.remove(runner.ownerId, id, sessionId);
   }
 }

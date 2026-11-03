@@ -8,7 +8,7 @@ import (
 )
 
 // The task writes the control plane answers differently for a run name the session they come from: a
-// delete, an edge, a batch of edges and a progress report, through the MCP tool and the CLI alike, whose
+// delete, a list's delete, an edge, a batch of edges and a progress report, through the MCP tool and the CLI alike, whose
 // callers hold no session of their own to pass. A process in no session names none, which is how the
 // account owner's own terminal reaches those doors, and a read names none either way.
 
@@ -33,6 +33,7 @@ func TestMCPTaskWritesNameTheCallingSession(t *testing.T) {
 		wantPath   string
 	}{
 		{"task_delete", map[string]interface{}{}, http.MethodDelete, "/api/runner/tasks/t1"},
+		{"tasklist_delete", map[string]interface{}{"listId": "list-1"}, http.MethodDelete, "/api/runner/task-lists/list-1"},
 		{"task_dependency_add", map[string]interface{}{"dependsOnTaskId": "p1"}, http.MethodPost, "/api/runner/tasks/t1/dependencies"},
 		{"task_dependency_remove", map[string]interface{}{"dependsOnTaskId": "p1"}, http.MethodDelete, "/api/runner/tasks/t1/dependencies/p1"},
 		{"task_progress_report", map[string]interface{}{"phase": "tests"}, http.MethodPost, "/api/runner/tasks/t1/progress"},
@@ -98,6 +99,9 @@ func TestCLITaskWritesNameTheCallingSession(t *testing.T) {
 		wantPath   string
 	}{
 		{func() error { return cmdTaskCLI([]string{"delete", "t1"}, strings.NewReader(""), &strings.Builder{}) }, http.MethodDelete, "/api/runner/tasks/t1"},
+		{func() error {
+			return cmdTaskListCLI([]string{"delete", "list-1"}, strings.NewReader(""), &strings.Builder{})
+		}, http.MethodDelete, "/api/runner/task-lists/list-1"},
 		{func() error {
 			return cmdTaskCLI([]string{"dependency-add", "t1", "--depends-on", "p1"}, strings.NewReader(""), &strings.Builder{})
 		}, http.MethodPost, "/api/runner/tasks/t1/dependencies"},

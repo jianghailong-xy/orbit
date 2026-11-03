@@ -1348,6 +1348,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
     + 'as one naming none, and the only task it can delete is the caller\'s own the path names. Read rather than sent: '
     + 'each send would take away the task the next one needs (verifier-write-authority.ts:88)',
+  'DELETE /runner/task-lists/:id header x-orbit-session-id':
+    'looked up only by the id and the caller\'s owner, so another account\'s session is not found and the request reads '
+    + 'as one naming none, and the only list it can delete is the caller\'s own the path names. Read rather than sent: '
+    + 'each send would take away the list the next one needs (session-reach.ts:167)',
   'POST /runner/tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press: it keys only the caller\'s own run receipt '
     + '(tasks.service.ts:12768)',
