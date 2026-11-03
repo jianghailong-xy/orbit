@@ -3546,10 +3546,7 @@ function fullyAppliedComment(input: {
   };
 }
 
-/**
- * The runner clips its own output, and this clips it again: a row is not a log file. Nor does a row hold a secret, and
- * this door is what every runner's tail comes through, one installed before it redacted its own included.
- */
+/** The runner clips its own output, and this clips it again: a row is not a log file. */
 function clipChecks(checks: IntegrationCheckResult[]): IntegrationCheckResult[] {
   return checks.slice(0, 8).map((check) => ({
     ...check,
