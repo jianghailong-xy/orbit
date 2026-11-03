@@ -370,7 +370,8 @@ function taskUpdateFixture(
     taskDependency: { findMany: async () => [] },
     task: {
       findFirst: async () => ({ ...task }),
-      findMany: async () => { reads.scope += 1; return []; },
+      // The aggregation scope is the read that walks relations; a row refresh after the write reads other shapes.
+      findMany: async (args?: { where?: { OR?: unknown } }) => { if (args?.where?.OR) reads.scope += 1; return []; },
       count: async () => 0,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);
