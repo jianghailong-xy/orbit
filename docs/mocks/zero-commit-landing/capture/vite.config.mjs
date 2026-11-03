@@ -1,5 +1,5 @@
 // This worktree's own web app on :5871, for the zero-commit landing board (capture.mjs).
-const W = '/root/.orbit/worktrees/01a19d00-fe53-77b5-b996-8f5ce8217f56';
+const W = '/root/.orbit/worktrees/1c275d44-d415-5572-8505-0da4e243125e';
 const { default: react } = await import(`${W}/node_modules/@vitejs/plugin-react/dist/index.js`);
 export default {
   root: `${W}/src/web`,

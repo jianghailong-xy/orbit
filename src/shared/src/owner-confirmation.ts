@@ -45,8 +45,9 @@ export interface OwnerConfirmationBranch {
 /**
  * How the task's work reaches main once it is DONE:
  *
- *  - NONE — confirming lands nothing: the task is in no project, is codeless, or its work took no
- *    branch.
+ *  - NONE — confirming lands nothing: the task is in no project, is codeless, its work took no
+ *    branch, or its branch has no changes (§10.5 O-L8). A DONE on that last one still asks the line
+ *    once; there is just nothing for the line to land.
  *  - LINE_THEN_OWNER — it goes onto the project's integration line, and merging that into main
  *    asks the owner.
  *  - AUTO_MAIN — it goes onto the project's own branch, and with Automatic on the platform merges

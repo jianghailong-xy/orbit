@@ -21,7 +21,12 @@
  *       Automatic off, AUTO_MAIN on a project branch with Automatic on, AGENT_PUSHED on a MAIN line
  *       whose project delivers by AGENT_PUSH (§10.5 O-L2) — and the dependents wait for the landing
  *       until a receipt says the work is on the line;
- *   (6) an item that cannot be read is left out, and the card is still drawn.
+ *   (6) an item that cannot be read is left out, and the card is still drawn;
+ *   (7) a branch with no changes lands nothing (§10.5 O-L8): the runner measured the waiting run's
+ *       `changed_files` as `[]` and nothing says the task has commits. With null, with a work session
+ *       that reported changes, or with a MERGED receipt, the answer is what it was before;
+ *   (8) that is only what the card says: DONE on such a task still queues its check or its landing,
+ *       and its dependents still wait for the line's answer.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/owner-confirmation-if-confirmed.pg.spec.ts
  *
@@ -206,16 +211,44 @@ function onBranch(name: string, extra: Partial<Prisma.SessionUncheckedCreateInpu
 function mergedInto(
   db: PrismaClient,
   w: World,
-  receipt: { sessionId: string; taskId: string; sourceBranch: string; targetBranch: string; projectId?: string },
+  receipt: {
+    sessionId: string;
+    taskId: string;
+    sourceBranch: string;
+    targetBranch: string;
+    projectId?: string;
+    result?: 'MERGED' | 'ALREADY_MERGED';
+  },
 ) {
   return db.sessionMergeReceipt.create({
     data: {
       ownerId: w.ownerId, sessionId: receipt.sessionId, taskId: receipt.taskId,
-      projectId: receipt.projectId ?? null, result: 'MERGED', sourceBranch: receipt.sourceBranch,
+      projectId: receipt.projectId ?? null, result: receipt.result ?? 'MERGED', sourceBranch: receipt.sourceBranch,
       sourceSha: 'a'.repeat(40), targetBranch: receipt.targetBranch, targetShaBefore: 'b'.repeat(40),
       targetShaAfter: 'c'.repeat(40), recordedBy: 'AGENT', idempotencyKey: `merged:${randomUUID()}`,
     },
   });
+}
+
+/** A started project coordinated from the world's workspace, on the line given. */
+async function lineProject(
+  db: PrismaClient,
+  w: World,
+  label: string,
+  line: 'MAIN' | 'PROJECT_BRANCH',
+  automatic: boolean,
+): Promise<string> {
+  const projectId = randomUUID();
+  await db.project.create({
+    data: {
+      id: projectId, ownerId: w.ownerId, title: `${label}-${RUN}`, startedAt: new Date(),
+      coordinatorEnabled: automatic, coordinatorWorkspaceId: w.workspaceId,
+    },
+  });
+  await db.$transaction((tx) => configureProjectIntegration(tx, {
+    ownerId: w.ownerId, projectId, settings: { line },
+  }));
+  return projectId;
 }
 
 const runs = (db: PrismaClient, taskId: string) =>
@@ -427,20 +460,6 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
   const s = connect();
   try {
     const w = await world(s.db, 'landing');
-    /** A started project coordinated from the world's workspace, on the line given. */
-    const lineProject = async (label: string, line: 'MAIN' | 'PROJECT_BRANCH', automatic: boolean) => {
-      const projectId = randomUUID();
-      await s.db.project.create({
-        data: {
-          id: projectId, ownerId: w.ownerId, title: `${label}-${RUN}`, startedAt: new Date(),
-          coordinatorEnabled: automatic, coordinatorWorkspaceId: w.workspaceId,
-        },
-      });
-      await s.db.$transaction((tx) => configureProjectIntegration(tx, {
-        ownerId: w.ownerId, projectId, settings: { line },
-      }));
-      return projectId;
-    };
     const landingOf = async (taskId: string) => {
       const ifConfirmed = (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
       return { landing: ifConfirmed?.landing, startsAfterLanding: ifConfirmed?.startsAfterLanding };
@@ -456,7 +475,7 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     // NONE: in no project — and in a project, a codeless task or one whose run took no branch.
     const outside = await codeTask(null, 'outside-any-project');
     assert.deepEqual(await landingOf(outside.taskId), { landing: 'NONE', startsAfterLanding: false });
-    const mainLine = await lineProject('main-line', 'MAIN', true);
+    const mainLine = await lineProject(s.db, w, 'main-line', 'MAIN', true);
     const codeless = await seedTask(s.db, w, mainLine, 'codeless', {
       completionCriterion: 'OWNER_CONFIRMED', status: TaskStatus.IN_PROGRESS,
       codeless: true, codelessReason: 'a decision, no code',
@@ -473,12 +492,12 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     // branch with Automatic off.
     const onMainLine = await codeTask(mainLine, 'on-a-main-line');
     assert.deepEqual(await landingOf(onMainLine.taskId), { landing: 'LINE_THEN_OWNER', startsAfterLanding: true });
-    const manualBranch = await lineProject('branch-automatic-off', 'PROJECT_BRANCH', false);
+    const manualBranch = await lineProject(s.db, w, 'branch-automatic-off', 'PROJECT_BRANCH', false);
     const onManualBranch = await codeTask(manualBranch, 'on-a-project-branch-automatic-off');
     assert.deepEqual(await landingOf(onManualBranch.taskId), { landing: 'LINE_THEN_OWNER', startsAfterLanding: true });
 
     // AUTO_MAIN: the project's own branch, with Automatic on.
-    const autoBranch = await lineProject('branch-automatic-on', 'PROJECT_BRANCH', true);
+    const autoBranch = await lineProject(s.db, w, 'branch-automatic-on', 'PROJECT_BRANCH', true);
     const onAutoBranch = await codeTask(autoBranch, 'on-a-project-branch-automatic-on');
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: true });
     // Once a receipt puts the work on the line, its dependents no longer wait for the landing.
@@ -490,7 +509,7 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
 
     // AGENT_PUSHED (§10.5 O-L2): an AGENT_PUSH project on its MAIN line builds no candidate, so no merge
     // card follows — and the dependents still wait, for the observation's receipt.
-    const pushedLine = await lineProject('agent-push-main-line', 'MAIN', false);
+    const pushedLine = await lineProject(s.db, w, 'agent-push-main-line', 'MAIN', false);
     await s.db.projectCodebase.updateMany({
       where: { projectId: pushedLine, slot: 'primary' },
       data: { deliveryMode: 'AGENT_PUSH', deliveryModeChosenAt: new Date() },
@@ -568,6 +587,156 @@ test('(6) an item that cannot be read is left out, and the rest of the card is d
       endsSession: { sessionId: run.sessionId, runningBgJobs: 0 },
       mainBranch: null,
     });
+  } finally {
+    await s.db.$disconnect();
+  }
+});
+
+// ═══ (7) (8) a branch with no changes ══════════════════════════════════════════════════════════════
+
+/** A worktree branch the runner measured clean, with its verdict on one that never left its fork:
+ *  `branchMergedInto` answers false for it, so the branch reads as not on main. */
+function noChanges(name: string) {
+  return { ...onBranch(name, { branchMerged: false }), changedFiles: [] };
+}
+
+test('(7) a branch measured empty, on a task nothing says has commits, lands nothing on any line; with '
+  + 'changed_files null, a work session that reported changes, or a MERGED receipt, the answer is what '
+  + 'it was before',
+{ skip, timeout: 300_000 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL!);
+  const s = connect();
+  try {
+    const w = await world(s.db, 'no-changes');
+    const mainLine = await lineProject(s.db, w, 'no-changes-main-line', 'MAIN', false);
+    const running = async (
+      projectId: string,
+      label: string,
+      session: Partial<Prisma.SessionUncheckedCreateInput>,
+    ) => {
+      const taskId = await confirmedTask(s.db, w, projectId, label);
+      const run = await waitingRun(s.db, w, taskId, { declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session });
+      return { taskId, ...run };
+    };
+    const answerOf = async (taskId: string) => {
+      const ifConfirmed = (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
+      return {
+        landing: ifConfirmed?.landing,
+        startsAfterLanding: ifConfirmed?.startsAfterLanding,
+        files: ifConfirmed?.branch?.files,
+        onMain: ifConfirmed?.branch?.onMain,
+      };
+    };
+
+    // The one this is for. `branch` is still sent, which is what the row is drawn from.
+    const empty = noChanges('orbit/no-changes');
+    const emptyRun = await running(mainLine, 'no-changes', empty);
+    assert.deepEqual(await answerOf(emptyRun.taskId),
+      { landing: 'NONE', startsAfterLanding: false, files: 0, onMain: 'NO' });
+    assert.equal((await s.confirmations.read(w.ownerId, emptyRun.taskId)).ifConfirmed?.branch?.name, empty.branch);
+
+    // Null is a runner that has not reported yet, which measures nothing.
+    const unreported = await running(mainLine, 'not-reported-yet',
+      { ...noChanges('orbit/not-reported-yet'), changedFiles: Prisma.DbNull });
+    assert.deepEqual(await answerOf(unreported.taskId),
+      { landing: 'LINE_THEN_OWNER', startsAfterLanding: true, files: 0, onMain: 'NO' });
+
+    // An earlier run reported the work, and the run now waiting has nothing on its own branch.
+    const retried = await confirmedTask(s.db, w, mainLine, 'retried');
+    await waitingRun(s.db, w, retried, {
+      declared: DECLARED_REPORT, stopped: DECLARED_REPORT,
+      session: { ...onBranch('orbit/retried-first-run'), status: RunStatus.SUCCEEDED, completedAt: new Date() },
+    });
+    await waitingRun(s.db, w, retried, {
+      declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: noChanges('orbit/retried-second-run'),
+    });
+    assert.deepEqual(await answerOf(retried),
+      { landing: 'LINE_THEN_OWNER', startsAfterLanding: true, files: 0, onMain: 'NO' });
+
+    // A MERGED receipt moved a target, wherever it went: on main the dependents no longer wait for
+    // a landing, and anywhere else they do.
+    const merged = noChanges('orbit/merged-to-main');
+    const mergedRun = await running(mainLine, 'merged-to-main', merged);
+    await mergedInto(s.db, w, {
+      sessionId: mergedRun.sessionId, taskId: mergedRun.taskId, projectId: mainLine,
+      sourceBranch: merged.branch, targetBranch: 'main',
+    });
+    assert.deepEqual(await answerOf(mergedRun.taskId),
+      { landing: 'LINE_THEN_OWNER', startsAfterLanding: false, files: 0, onMain: 'YES' });
+    const released = noChanges('orbit/merged-to-release');
+    const releasedRun = await running(mainLine, 'merged-to-release', released);
+    await mergedInto(s.db, w, {
+      sessionId: releasedRun.sessionId, taskId: releasedRun.taskId, projectId: mainLine,
+      sourceBranch: released.branch, targetBranch: 'release',
+    });
+    assert.deepEqual(await answerOf(releasedRun.taskId),
+      { landing: 'LINE_THEN_OWNER', startsAfterLanding: true, files: 0, onMain: 'NO' });
+
+    // ALREADY_MERGED is the line's word for nothing moving: no evidence of a commit.
+    const already = noChanges('orbit/already-merged');
+    const alreadyRun = await running(mainLine, 'already-merged', already);
+    await mergedInto(s.db, w, {
+      sessionId: alreadyRun.sessionId, taskId: alreadyRun.taskId, projectId: mainLine,
+      sourceBranch: already.branch, targetBranch: 'main', result: 'ALREADY_MERGED',
+    });
+    assert.deepEqual(await answerOf(alreadyRun.taskId),
+      { landing: 'NONE', startsAfterLanding: false, files: 0, onMain: 'YES' });
+
+    // Whatever the line would have done with work: Automatic's branch, and an AGENT_PUSH line.
+    const autoBranch = await lineProject(s.db, w, 'no-changes-automatic', 'PROJECT_BRANCH', true);
+    const onAutoBranch = await running(autoBranch, 'no-changes-automatic', noChanges('orbit/no-changes-automatic'));
+    assert.deepEqual(await answerOf(onAutoBranch.taskId),
+      { landing: 'NONE', startsAfterLanding: false, files: 0, onMain: 'UNKNOWN' });
+    const pushedLine = await lineProject(s.db, w, 'no-changes-agent-push', 'MAIN', false);
+    await s.db.projectCodebase.updateMany({
+      where: { projectId: pushedLine, slot: 'primary' },
+      data: { deliveryMode: 'AGENT_PUSH', deliveryModeChosenAt: new Date() },
+    });
+    const onPushedLine = await running(pushedLine, 'no-changes-agent-push', noChanges('orbit/no-changes-agent-push'));
+    assert.deepEqual(await answerOf(onPushedLine.taskId),
+      { landing: 'NONE', startsAfterLanding: false, files: 0, onMain: 'NO' });
+  } finally {
+    await s.db.$disconnect();
+  }
+});
+
+test('(8) DONE on a branch with no changes queues the check or the landing it always did, and its '
+  + 'dependents wait for the line\'s answer',
+{ skip, timeout: 300_000 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL!);
+  const s = connect();
+  try {
+    const w = await world(s.db, 'no-changes-done');
+    for (const [line, kind] of [['MAIN', 'CHECK_PROMOTION'], ['PROJECT_BRANCH', 'LAND_TASK']] as const) {
+      const projectId = await lineProject(s.db, w, `no-changes-done-${line}`, line, false);
+      const taskId = await confirmedTask(s.db, w, projectId, `no-changes-done-${line}`);
+      const branch = noChanges(`orbit/no-changes-done-${line}`);
+      const { requestId } = await waitingRun(s.db, w, taskId, {
+        declared: DECLARED_REPORT, stopped: DECLARED_REPORT, session: branch,
+      });
+      const dependent = await seedTask(s.db, w, projectId, `after-no-changes-${line}`, { autoRunWhenReady: true });
+      await s.db.taskDependency.create({ data: { taskId: dependent, dependsOnTaskId: taskId } });
+
+      const card = (await s.confirmations.read(w.ownerId, taskId)).ifConfirmed;
+      assert.equal(card?.landing, 'NONE', `CONTROL: the card says nothing lands on a ${line} line`);
+      assert.deepEqual(card?.startsTasks?.map((task) => task.id), [dependent]);
+      assert.equal(await s.db.projectIntegrationJob.count({ where: { projectId } }), 0,
+        `CONTROL: nothing is queued on a ${line} line before the DONE`);
+
+      const receipt = await s.confirmations.decide(
+        w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM', requestId },
+      );
+      assert.equal(receipt.completed, true, 'CONTROL: the confirmation settled the task');
+      assert.deepEqual(
+        await s.db.projectIntegrationJob.findMany({
+          where: { projectId },
+          select: { kind: true, state: true, sourceRef: true },
+        }),
+        [{ kind, state: 'QUEUED', sourceRef: `refs/heads/${branch.branch}` }],
+        `DONE on a ${line} line asks the line once, as it does for a branch with work`,
+      );
+      assert.equal(await runs(s.db, dependent), 0, 'the dependent started before the line answered');
+    }
   } finally {
     await s.db.$disconnect();
   }

@@ -1,7 +1,7 @@
 // Zero-commit landing board: the real confirmation card and the real open-item row, in this worktree's
 // web app, drawn from REST fixtures. usage: unshare -n ./run-ns.sh capture.mjs
 import fs from 'node:fs';
-const W = '/root/.orbit/worktrees/01a19d00-fe53-77b5-b996-8f5ce8217f56';
+const W = '/root/.orbit/worktrees/1c275d44-d415-5572-8505-0da4e243125e';
 const { chromium } = await import(`${W}/node_modules/playwright/index.mjs`);
 const { installFixtures, installFixedDate, FIXTURE_IDS, FIXED_NOW } = await import(`${W}/src/web/ui-migration/fixtures.mjs`);
 const { CARD_IDS, CARDS_PATH, installCardFixtures } = await import(`${W}/src/web/ui-migration/p43b-cards-fixtures.mjs`);
@@ -47,14 +47,6 @@ for (const [name, ifConfirmed] of Object.entries(CARDS)) {
   await card.waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(500);
-  if (name === 'card-stated') {
-    // The row the clients do not draw yet, in the page's own classes (`ifConfirmedRows`).
-    await page.evaluate((b) => {
-      const row = document.querySelector('[data-case="owner"] .owner-confirmation-if-row.is-branch');
-      row.querySelector('.owner-confirmation-if-lead').textContent = 'No changes on this branch, so nothing lands';
-      row.querySelector('.owner-confirmation-if-detail').textContent = b;
-    }, BRANCH);
-  }
   await page.waitForTimeout(150);
   await card.screenshot({ path: `${OUT}/${name}.png` });
   log[name] = { errors, rows: await page.locator('[data-case="owner"] .owner-confirmation-if-row').allInnerTexts() };
