@@ -2126,6 +2126,8 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 - 投递给协调会话的文字，在错误码一句之后加：`Runner <name> does not declare integration-observe/v1, so it looked for this task's branch on the remote by name. That says nothing about whether the task has work to land. Update the runner, then run integration_retry on this candidate.`
 - `integrationItemTitle`：`TASK_BRANCH` 来源的作业不再说 `the project branch`（`MAIN` 线没有这条分支），改为 `merging “<task title>” into <main>`；`PROJECT_BRANCH` 来源不变。这一条对该来源的三种失败都生效，不限于旧 runner。
 
+任务分支候选失败时的文字（修订 33）：结果事务在 `payload` 顶层记 `sourceKind = TASK_BRANCH`，待办和协调会话的文字据此说这个任务的分支，不说项目分支，也不说这个待办背后没有任务；没有这个字段的项目分支候选和旧待办，文字一字不变。冲突的解法和 §4.7 第 2 行、X-D4 第 5 条写的项目分支不同：任务分支靠 rebase 落地，合并提交解不了冲突，要开一个新任务把这份工作放到 upstream 的 tip 上，用普通提交解决冲突。这个新任务是它自己的候选，有它自己的卡，落地后不动原候选和原待办，等工作上了 upstream，用 `open_item_resolve` 关掉原待办。
+
 升级之后的门是现成的：`integration_retry` 带 `promotionId` 重跑检查（owner 走同一扇门的路由），按提交答 `ALREADY_LANDED`，回执退役候选并关待办（O-L6、M-T13）。升级不了时可以用 `merge_receipt`（`ALREADY_MERGED`）记下这个事实；协调会话记的这条回执不带 `detail.empty`，`MAIN` 线上会给 owner 开一条 `LANDED_WITHOUT_CONFIRMATION`。不要先声明 codeless：声明后这个任务不再是待观测任务，`task_update` 也不结束已 BLOCKED 的候选。
 
 ### 10.6 观测作业 `OBSERVE_LANDING`

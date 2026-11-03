@@ -2283,14 +2283,15 @@ export async function applyIntegrationJobResult(
       };
     }
 
-    // J-S3's answer about a branch with nothing of the task's own on it (0300). It is not a landing,
+    // The answer about a branch with nothing of the task's own on it (0300), which a runner gives before
+    // J-S2 since contract revision 33 (§2.4), and from inside J-S3 before that. It is not a landing,
     // so the receipt below is not automatic: what a reader of a receipt asks is "is this task's work
     // on that target", and this answer says the branch it was handed holds none of it. It is written
     // only when the task has no work of its own ANYWHERE — where the honest answer is that there is
     // nothing of this task's to land, which is the fact §2.5 J9 releases dependents on.
     //
     // TWO SPELLINGS REACH HERE, and both are the same fact. A runner of 0300's vintage reports
-    // NOTHING_TO_LAND outright. A runner older than that reports ALREADY_LANDED — which J-S3 reaches
+    // NOTHING_TO_LAND outright. A runner older than that reports ALREADY_LANDED — which its J-S3 reached
     // by asking whether the source tip is contained in the base, and an EMPTY branch is contained in
     // everything: its tip is the commit it forked at. That spelling is recognised from the row rather
     // than from git, because the row holds both halves: a source tip equal to the session's own base
@@ -2776,6 +2777,7 @@ export async function applyIntegrationJobResult(
           // does not read it, so the replay it does stays byte-for-byte the same.
           upstreamMovedCommits,
           outdatedRunner,
+          candidateSourceKind: candidateRow?.sourceKind ?? null,
           // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
           // card reads them, the delivery text never does.
           landingSessionId,
@@ -3494,6 +3496,8 @@ function fullyAppliedComment(input: {
     upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
     /** §10.5 O-L8: the runner a TASK_BRANCH check's SOURCE_BRANCH_MISSING came from, when it is out of date. */
     outdatedRunner: string | null;
+    /** §10.5 O-L8: the source of the candidate this job is about, when it is about one. */
+    candidateSourceKind: string | null;
     /** §2.9 LS1: the landing session this attempt belongs to; null for a job with no subject.
      *  Top-level, never inside `errorDetail`, and never read by the delivery text (G6). */
     landingSessionId: string | null;
@@ -3529,6 +3533,9 @@ function fullyAppliedComment(input: {
     // so these never go inside it.
     landingSessionId: detail.landingSessionId,
     round: detail.round,
+    // §10.5 O-L8: a candidate that is one task's branch, recorded for the words its item is written in.
+    // The delivery text reads this one, so a project branch's payload stays without it (G6).
+    ...(detail.candidateSourceKind === 'TASK_BRANCH' ? { sourceKind: detail.candidateSourceKind } : {}),
     ...(detail.retry ? { retry: detail.retry } : {}),
     ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };
