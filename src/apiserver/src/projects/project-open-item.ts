@@ -477,6 +477,8 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
     if (failureClass === 'CHECK_TIMED_OUT') {
       return `The project branch cannot reach ${main} until this check finishes — re-run it with a reason or ask the coordinator to fix it.`;
     }
+    const outdatedRunner = outdatedRunnerOf(row.payload);
+    if (outdatedRunner) return `Update runner ${outdatedRunner}, then run this check again.`;
     return `The project branch cannot reach ${main} until this integration is repaired — re-run it or ask the coordinator to fix it.`;
   }
   if (failureClass === 'CONFLICT') {
@@ -2047,6 +2049,19 @@ interface IntegrationItemPayload {
   /** The round inside the claim that failed, from 1, as the v2 reports named it (§2.2 J-T4). Its own
    *  top-level field, not read by the delivery text. */
   round?: number | null;
+  /**
+   * §10.5 O-L8: the runner whose check of a task's branch answered SOURCE_BRANCH_MISSING without
+   * declaring integration-observe/v1, by the name its owner knows it by. The delivery text DOES read
+   * this one, and the replay stays byte for byte (G6): an item is written once, and one opened before
+   * this field has none.
+   */
+  outdatedRunner?: string;
+}
+
+/** §10.5 O-L8: the out-of-date runner an item's payload names, or null for every other item. */
+export function outdatedRunnerOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  return filled((payload as { outdatedRunner?: unknown }).outdatedRunner);
 }
 
 /**
@@ -2153,8 +2168,15 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     ];
   }
   const detail = payload.errorDetail == null ? null : JSON.stringify(payload.errorDetail);
+  const outdatedRunner = outdatedRunnerOf(payload);
   return [
     `The integration job ended with an error: ${payload.errorCode ?? 'no error code recorded'}.`,
+    // §10.5 O-L8: the code alone reads as "this task has nothing to land", which it does not say.
+    ...(outdatedRunner
+      ? [`Runner ${outdatedRunner} does not declare integration-observe/v1, so it looked for this task's branch on the remote by name. `
+        + 'That says nothing about whether the task has work to land. '
+        + 'Update the runner, then run integration_retry on this candidate.']
+      : []),
     ...(detail ? [`Error detail: ${clip(detail)}`] : []),
   ];
 }

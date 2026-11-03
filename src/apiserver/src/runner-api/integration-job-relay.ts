@@ -2692,11 +2692,14 @@ export async function applyIntegrationJobResult(
     // `applyPromotionJobResult` kept the answer it had for that reason, and the report is on the job
     // row written above; an item opened about it would be a todo nothing is left to close, escalated
     // to the owner and counted against the project's next candidate by M-T11.
-    const candidateMovedOn = itemKind !== null && job.promotionId !== null
-      && !LIVE_PROMOTION_STATES.includes((await tx.projectPromotion.findUnique({
+    const candidateRow = itemKind !== null && job.promotionId !== null
+      ? await tx.projectPromotion.findUnique({
         where: { id: job.promotionId },
-        select: { state: true },
-      }))?.state as PromotionState);
+        select: { state: true, sourceKind: true, taskId: true },
+      })
+      : null;
+    const candidateMovedOn = itemKind !== null && job.promotionId !== null
+      && !LIVE_PROMOTION_STATES.includes(candidateRow?.state as PromotionState);
     // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
     // failure it reports before it gets the stop is a fact about work nobody is waiting for any
     // more — the task was reopened or taken away, the candidate was superseded or retired — and an
@@ -2716,6 +2719,16 @@ export async function applyIntegrationJobResult(
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
         : mainBranchOf(await readProjectCodebase(tx, job.projectId));
+      // §10.5 O-L8: a TASK_BRANCH candidate's merge is its task's, and a promotion's job row names no
+      // task, so the title comes through the candidate. `task_id` is a history reference there too.
+      const candidateTask = candidateRow?.sourceKind === 'TASK_BRANCH' && candidateRow.taskId
+        ? await tx.task.findFirst({ where: { id: candidateRow.taskId }, select: { title: true } })
+        : null;
+      // §10.5 O-L8: a runner that does not declare integration-observe/v1 is handed this check with no
+      // commit (`handOut`), so all this code says is that the branch is not on the remote by that name.
+      const outdatedRunner = checkedSourceKind === 'TASK_BRANCH' && body.errorCode === 'SOURCE_BRANCH_MISSING' && job.runnerId
+        ? await outdatedRunnerName(tx, job.runnerId)
+        : null;
       // §4.2 / §2.9 LS1: the landing session this attempt belongs to. Read from the landing row —
       // its session id is pre-generated when the subject opens, so it exists even before the claim
       // inserted the session itself. The item's card opens it (`OPEN_LANDING`).
@@ -2734,7 +2747,8 @@ export async function applyIntegrationJobResult(
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, task?.title ?? 'a task', mainBranch),
+        title: integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
+          candidateRow?.sourceKind ?? null),
         dedupeKey: integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
@@ -2751,6 +2765,7 @@ export async function applyIntegrationJobResult(
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
           // does not read it, so the replay it does stays byte-for-byte the same.
           upstreamMovedCommits,
+          outdatedRunner,
           // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
           // card reads them, the delivery text never does.
           landingSessionId,
@@ -3467,6 +3482,8 @@ function fullyAppliedComment(input: {
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
      *  top-level field, never inside `errorDetail` (which the delivery text quotes verbatim). */
     upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
+    /** §10.5 O-L8: the runner a TASK_BRANCH check's SOURCE_BRANCH_MISSING came from, when it is out of date. */
+    outdatedRunner: string | null;
     /** §2.9 LS1: the landing session this attempt belongs to; null for a job with no subject.
      *  Top-level, never inside `errorDetail`, and never read by the delivery text (G6). */
     landingSessionId: string | null;
@@ -3532,8 +3549,22 @@ function fullyAppliedComment(input: {
     errorCode: detail.errorCode,
     errorDetail: detail.errorDetail,
     ...(detail.upstreamMovedCommits ? { upstreamMovedCommits: detail.upstreamMovedCommits } : {}),
+    ...(detail.outdatedRunner ? { outdatedRunner: detail.outdatedRunner } : {}),
     ...classified,
   };
+}
+
+/**
+ * §10.5 O-L8: the name to put on the item when this runner does not declare integration-observe/v1 at
+ * this moment — its display name, else its name — or null when it does, or is gone.
+ */
+async function outdatedRunnerName(tx: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
+  const runner = await tx.runner.findFirst({
+    where: { id: runnerId },
+    select: { name: true, displayName: true, capabilities: true },
+  });
+  if (!runner || runner.capabilities.includes(INTEGRATION_OBSERVE_CLAIM)) return null;
+  return runner.displayName || runner.name;
 }
 
 /** The runner clips its own output, and this clips it again: a row is not a log file. */
