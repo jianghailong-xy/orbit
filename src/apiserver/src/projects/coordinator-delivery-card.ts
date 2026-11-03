@@ -164,6 +164,8 @@ export function coordinatorDeliveryCardOf(
       return named('TASK_DISPATCH_REFUSED', detail.taskTitle);
     case 'PROJECT_BLOCKER_RAISED':
       return named('PROJECT_BLOCKER_RAISED', detail.taskTitle);
+    case 'TASK_RUN_STOPPED':
+      return named('TASK_RUN_STOPPED', detail.title);
     case 'CRITERION_UNLANDED':
       return counting('CRITERION_UNLANDED', counted(detail.taskCount));
     case 'PROJECT_ACCEPTANCE_LANDED': {

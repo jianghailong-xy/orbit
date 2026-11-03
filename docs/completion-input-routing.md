@@ -32,6 +32,15 @@ agent. `AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVI
 consumers are people and use the request/inbox surface. Only VERIFICATION uses its deterministic
 verifier Task and the ordinary one-shot task execution machinery.
 
+**Since 0467, a run that has stopped is a fact, and this paragraph's contract still holds.**
+`AWAITING_INPUT` alone is still read as nothing. What `TaskRunStoppedProducer` reads is a committed
+turn's end, on a session with no wake source (`sessionWakeSourceSql`), of an unsettled
+EVIDENCE_JUDGMENT task with no revision waiting for a decision: the same reading
+`closeUnansweredRequests` makes at the same moment. It delivers `TASK_RUN_STOPPED` to the project's
+coordinator (`docs/project-integration-line-contract.md`, revision 32), because the three facts that
+could otherwise reach it all need something a stopped run never produces: a revision, a terminal
+status, or the run ending.
+
 The one clock added by the integration-line contract writes only what the account owner reads. It
 escalates an unhandled open item to the owner, closes items nobody owes any more, and opens one
 owner item when an integration job's lease has been expired for fifteen minutes, so that the owner

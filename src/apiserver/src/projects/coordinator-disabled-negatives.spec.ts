@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Eleven kinds, twenty-one controls. The mapping is many-to-one in both directions on purpose: one
+ * Twelve kinds, twenty-two controls. The mapping is many-to-one in both directions on purpose: one
  * kind is reached by more than one write path and is controlled once per path, one control can
  * cover two kinds when the same run drives both, and one PRODUCER can build two kinds when which
  * fact a committed world justifies is the thing it decides.
@@ -291,6 +291,21 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'projects/blocker-disposition.pg.spec.ts',
         test: 'a switched-off coordinator stops nothing and raises nothing: each of the four facts leaves exactly one REFUSED row, no blocker and no session',
+      },
+    ],
+  },
+  {
+    // A run that stopped with its task still owed something, delivered by its own producer from the
+    // turn's completion. The control is the same stop as the case beside it, with the switch off.
+    event: 'TASK_RUN_STOPPED',
+    producedBy: [
+      'projects/coordinator-wake.ts#taskRunStoppedFact',
+      'projects/task-run-stopped.producer.ts#factFor',
+    ],
+    negatives: [
+      {
+        spec: 'projects/task-run-stopped.pg.spec.ts',
+        test: 'a run that stops under a switched-off coordinator is refused once, told nothing, and opens nothing',
       },
     ],
   },

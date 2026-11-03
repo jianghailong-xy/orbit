@@ -111,6 +111,7 @@ const EVERY_KIND: Array<{ card: CoordinatorDeliveryCard; says: string }> = [
   { card: { ...CARD, kind: 'DEPENDENT_READY', revision: null }, says: `Can start now: ${TITLE}` },
   { card: { ...CARD, kind: 'TASK_DISPATCH_REFUSED', revision: null }, says: `Could not start: ${TITLE}` },
   { card: { ...CARD, kind: 'PROJECT_BLOCKER_RAISED', revision: null }, says: `Blocker raised: ${TITLE}` },
+  { card: { ...CARD, kind: 'TASK_RUN_STOPPED', revision: null }, says: `Run stopped: ${TITLE}` },
   { card: { ...CARD, kind: 'CRITERION_UNLANDED', task: null, revision: null, count: 3 }, says: 'Work not on main yet: 3 tasks' },
   { card: { ...CARD, kind: 'ACCEPTANCE_LANDED', task: null, revision: null, count: 9 }, says: 'All 9 criteria landed' },
   {

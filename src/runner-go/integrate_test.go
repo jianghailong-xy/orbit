@@ -626,7 +626,7 @@ func TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip(t *testing.T) {
 }
 
 // TestIntegrationTheUpstreamTipIsNotAnAbsorb: a branch that IS the upstream tip contains both tips
-// when the line is behind main, and still has nothing of its own. It stays J-S3's NOTHING_TO_LAND,
+// when the line is behind main, and still has nothing of its own. It stays NOTHING_TO_LAND,
 // measured on the upstream (0300, 0346), and is not landed as a bare main sync.
 func TestIntegrationTheUpstreamTipIsNotAnAbsorb(t *testing.T) {
 	t.Parallel()
@@ -855,9 +855,9 @@ func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
 }
 
 // TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits is the control for the case
-// above: the same J-S3 path, the same claim naming a base, and a branch whose tip is a DESCENDANT
-// of that base. There is a commit of the task's on it and the target already contains it, so the
-// answer stays the positive one.
+// above: the same claim naming a base, and a branch whose tip is a DESCENDANT of that base. There
+// is a commit of the task's on it and the target already contains it, so the answer stays the
+// positive one.
 func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.T) {
 	t.Parallel()
 	r := newIntegrationRepo(t)
@@ -1048,8 +1048,8 @@ func TestIntegrationNothingToLandWhenEveryCommitIsAlreadyOnTheTarget(t *testing.
 // (another branch's work) and committed nothing. J-S3's "already contained" does not fire for that
 // tip, and J-S4 replays an empty range. Before this, the result was pushed (a push that moved
 // nothing), verified, and reported LANDED, with a receipt for work the branch never carried. It is
-// NOTHING_TO_LAND, measured as NOT applied, so the control plane reads it exactly as it reads J-S3's
-// empty branch (0300, 0346).
+// NOTHING_TO_LAND, measured as NOT applied, so the control plane reads it exactly as it reads the
+// empty branch answered before J-S2 (0300, 0346).
 func TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks(t *testing.T) {
 	t.Parallel()
 	r := newIntegrationRepo(t)
@@ -1087,6 +1087,327 @@ func TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks(t *testing.T) {
 	if got := r.originRev("refs/heads/project/line"); got != before {
 		t.Fatalf("the target moved: %s -> %s", before, got)
 	}
+}
+
+// The lines a landing below is handed to, by what absorbing main into them would do. Each leaves main
+// checked out, and a case names where its branch stands as a revision of what the line built.
+
+// lineInStep is a project branch at main's tip: there is nothing to absorb.
+func lineInStep(t *testing.T, r *integrationRepo) {
+	t.Helper()
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	r.checkout("main")
+}
+
+// lineBehindCleanly is a project branch and a main that have each moved on since the branch was cut,
+// in different files, so the absorb is clean. What the two share is main~1.
+func lineBehindCleanly(t *testing.T, r *integrationRepo) {
+	t.Helper()
+	r.checkoutNew("project/line", "main")
+	r.write("line.txt", "on the line\n")
+	r.commit("project branch")
+	r.push("project/line")
+	r.checkout("main")
+	r.write("upstream.txt", "main moved on\n")
+	r.commit("main moved")
+	r.push("main")
+}
+
+// lineBehindWithNothingOfItsOwn is a project branch main has moved past twice, so the absorb is clean
+// and the line is what the two share. main~1 is an upstream commit the line does not have, and not the
+// upstream's tip.
+func lineBehindWithNothingOfItsOwn(t *testing.T, r *integrationRepo) {
+	t.Helper()
+	lineInStep(t, r)
+	for _, name := range []string{"first.txt", "second.txt"} {
+		r.write(name, "main moved on\n")
+		r.commit("main moved: " + name)
+	}
+	r.push("main")
+}
+
+// lineBehindConflicting is contestedLine as a line a case can name: whatever a task carries, absorbing
+// main into this line's tip conflicts on the ledger. What the two share is main~1.
+func lineBehindConflicting(t *testing.T, r *integrationRepo) {
+	t.Helper()
+	contestedLine(t, r)
+}
+
+// emptyBranchAt is a session that started at a commit and made nothing: its branch never moved off it.
+// It answers that commit, which is the session's base.
+func emptyBranchAt(t *testing.T, r *integrationRepo, at string) string {
+	t.Helper()
+	base := r.rev(at)
+	r.checkoutNew("orbit/empty", base)
+	r.checkout("main")
+	return base
+}
+
+// landOntoTheLine lands a branch on project/line under a check that fails if it ever runs and drops a
+// marker when it does. It answers what the job came to, the steps it reported and whether the check
+// ran. No case here may move the line, whichever way it ends, so that is asserted for all of them.
+func landOntoTheLine(t *testing.T, r *integrationRepo, branch, sessionBase string) (integrationResult, []string, bool) {
+	t.Helper()
+	marker := filepath.Join(t.TempDir(), "check-ran")
+	check := IntegrationCheckSpec{
+		Name:             "MERGE_CHECK",
+		Command:          "touch " + marker + "; exit 1",
+		ExpectedExitCode: 0,
+		TimeoutSeconds:   60,
+	}
+	before := r.originRev("refs/heads/project/line")
+	command := r.command(branch, "project/line", check)
+	command.SessionBaseSha = sessionBase
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Errorf("the target moved: %s -> %s", before, got)
+	}
+	_, err := os.Stat(marker)
+	return result, phases, err == nil
+}
+
+// TestIntegrationEmptyBranchSkipsTheMainSync is the owner's rule of 2026-11-03: a landing that finds no
+// code changed skips the integration test and the merge. A branch whose tip is its session's base, on
+// the target or on the upstream, is answered before J-S2, so the answer does not depend on how that
+// absorb would have gone. On a conflicting line it used to be CONFLICT at MAIN_SYNC: somebody got a red
+// item about a conflict that was not the task's. Where the tip is stays measured (0346), and the branch
+// is measured as carrying nothing (0410).
+func TestIntegrationEmptyBranchSkipsTheMainSync(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		line func(t *testing.T, r *integrationRepo)
+		// Where the empty branch stands.
+		at             string
+		wantOnUpstream bool
+	}{
+		{name: "in step with the upstream", line: lineInStep, at: "main", wantOnUpstream: true},
+		{name: "behind, clean absorb, the tip on both sides", line: lineBehindCleanly, at: "main~1", wantOnUpstream: true},
+		{name: "behind, clean absorb, the tip on the line alone", line: lineBehindCleanly, at: "project/line", wantOnUpstream: false},
+		{name: "behind, clean absorb, the tip on the upstream alone", line: lineBehindCleanly, at: "main", wantOnUpstream: true},
+		{name: "behind, clean absorb, a line with nothing of its own", line: lineBehindWithNothingOfItsOwn, at: "project/line", wantOnUpstream: true},
+		{name: "behind, conflicting absorb, the tip on both sides", line: lineBehindConflicting, at: "main~1", wantOnUpstream: true},
+		{name: "behind, conflicting absorb, the tip on the line alone", line: lineBehindConflicting, at: "project/line", wantOnUpstream: false},
+		{name: "behind, conflicting absorb, the tip on the upstream alone", line: lineBehindConflicting, at: "main", wantOnUpstream: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			tc.line(t, r)
+			base := emptyBranchAt(t, r, tc.at)
+
+			result, phases, checkRan := landOntoTheLine(t, r, "orbit/empty", base)
+			if result.State != "NOTHING_TO_LAND" || result.Phase != "REBASE" {
+				t.Fatalf("state = %s / %s (%s, conflicts %v), want NOTHING_TO_LAND / REBASE",
+					result.State, result.Phase, result.ErrorCode, result.Conflicts)
+			}
+			if result.SourceOnUpstream == nil || *result.SourceOnUpstream != tc.wantOnUpstream {
+				t.Errorf("sourceOnUpstream = %v, want a measured %v", result.SourceOnUpstream, tc.wantOnUpstream)
+			}
+			if result.SourceFullyApplied == nil || *result.SourceFullyApplied {
+				t.Errorf("sourceFullyApplied = %v, want a measured false: the branch carried no commit of its own",
+					result.SourceFullyApplied)
+			}
+			if checkRan || len(result.Checks) != 0 {
+				t.Errorf("the check ran (%v): %+v", checkRan, result.Checks)
+			}
+			if !slices.Equal(phases, []string{"FETCH"}) {
+				t.Errorf("phases = %v: nothing past FETCH is for a branch with nothing of its own", phases)
+			}
+			if result.MainSyncSha != "" || result.TestedSha != "" || result.LandedSha != "" {
+				t.Errorf("main sync %q, tested %q, landed %q: nothing was merged, checked or pushed",
+					result.MainSyncSha, result.TestedSha, result.LandedSha)
+			}
+		})
+	}
+}
+
+// keptPath is what a landing the empty-branch answer leaves alone comes to.
+type keptPath struct {
+	state, phase string
+	phases       []string
+	// Whether the answer names the absorb it made.
+	mainSync  bool
+	conflicts []string
+	checkRan  bool
+}
+
+// assert compares what a job came to with its path. A NOTHING_TO_LAND here is always a tip off the
+// upstream that carries nothing (J-S4); every other answer measures neither.
+func (want keptPath) assert(t *testing.T, result integrationResult, phases []string, checkRan bool) {
+	t.Helper()
+	if result.State != want.state || result.Phase != want.phase {
+		t.Errorf("state = %s / %s (%s), want %s / %s", result.State, result.Phase, result.ErrorCode, want.state, want.phase)
+	}
+	if !slices.Equal(phases, want.phases) {
+		t.Errorf("phases = %v, want %v", phases, want.phases)
+	}
+	if named := result.MainSyncSha != ""; named != want.mainSync {
+		t.Errorf("main sync %q, want one named: %v", result.MainSyncSha, want.mainSync)
+	}
+	if !slices.Equal(result.Conflicts, want.conflicts) {
+		t.Errorf("conflicts = %v, want %v", result.Conflicts, want.conflicts)
+	}
+	if checkRan != want.checkRan {
+		t.Errorf("the check ran: %v, want %v", checkRan, want.checkRan)
+	}
+	if want.state == "NOTHING_TO_LAND" {
+		if result.SourceOnUpstream == nil || *result.SourceOnUpstream {
+			t.Errorf("sourceOnUpstream = %v, want a measured false", result.SourceOnUpstream)
+		}
+		if result.SourceFullyApplied == nil || *result.SourceFullyApplied {
+			t.Errorf("sourceFullyApplied = %v, want a measured false", result.SourceFullyApplied)
+		}
+	} else if result.SourceOnUpstream != nil || result.SourceFullyApplied != nil {
+		t.Errorf("%s reported measurements nobody asked it for: on upstream %v, applied %v",
+			result.State, result.SourceOnUpstream, result.SourceFullyApplied)
+	}
+}
+
+// Every path the cases below keep that stops at the line's conflict.
+var keptMainSyncConflict = keptPath{
+	state: "CONFLICT", phase: "MAIN_SYNC", phases: []string{"FETCH", "MAIN_SYNC"}, conflicts: []string{"ledger.txt"},
+}
+
+// TestIntegrationMainSyncConflictStandsForABranchWithCommits is the control for the case above: the same
+// conflicting line, and a branch with commits of its own, so the conflict is not lost. That goes for a
+// tip the line already holds too: being on the line says nothing of a branch whose tip is not its base.
+func TestIntegrationMainSyncConflictStandsForABranchWithCommits(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// Builds the branch, and answers the commit its session started at.
+		branch func(r *integrationRepo) string
+	}{
+		{
+			name: "a commit the line does not have",
+			branch: func(r *integrationRepo) string {
+				base := r.rev("project/line")
+				r.checkoutNew("task/source", base)
+				r.write("work.txt", "the task's own work\n")
+				r.commit("task work")
+				return base
+			},
+		},
+		{
+			name: "a commit the line already has",
+			branch: func(r *integrationRepo) string {
+				r.checkoutNew("task/source", "project/line")
+				return r.rev("project/line~1")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			lineBehindConflicting(t, r)
+			base := tc.branch(r)
+			r.checkout("main")
+
+			result, phases, checkRan := landOntoTheLine(t, r, "task/source", base)
+			keptMainSyncConflict.assert(t, result, phases, checkRan)
+		})
+	}
+}
+
+// TestIntegrationWithoutASessionBaseKeepsItsPath: a claim that names no base cannot tell an empty branch
+// from a landing that already happened (`merge-base S T` answers S in both), so it gets no empty-branch
+// answer. A tip on either side is ALREADY_LANDED after the absorb, and a conflicting absorb stands. The
+// two rows on an upstream commit are what keeps sourceCarriesTheAbsorb and sourceCarriesAnEarlierAbsorb
+// from pushing a bare main sync, now that a tip named as its own base never reaches either.
+func TestIntegrationWithoutASessionBaseKeepsItsPath(t *testing.T) {
+	t.Parallel()
+	alreadyLanded := keptPath{state: "ALREADY_LANDED", phase: "REBASE", phases: []string{"FETCH", "MAIN_SYNC"}, mainSync: true}
+	for _, tc := range []struct {
+		name string
+		line func(t *testing.T, r *integrationRepo)
+		at   string
+		want keptPath
+	}{
+		{
+			name: "in step with the upstream", line: lineInStep, at: "main",
+			want: keptPath{state: "ALREADY_LANDED", phase: "REBASE", phases: []string{"FETCH"}},
+		},
+		{name: "behind, clean absorb, the tip on both sides", line: lineBehindCleanly, at: "main~1", want: alreadyLanded},
+		{name: "behind, clean absorb, the tip on the line alone", line: lineBehindCleanly, at: "project/line", want: alreadyLanded},
+		{name: "behind, clean absorb, the upstream's tip", line: lineBehindWithNothingOfItsOwn, at: "main", want: alreadyLanded},
+		{name: "behind, clean absorb, an upstream commit before its tip", line: lineBehindWithNothingOfItsOwn, at: "main~1", want: alreadyLanded},
+		{name: "behind, conflicting absorb", line: lineBehindConflicting, at: "main~1", want: keptMainSyncConflict},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			tc.line(t, r)
+			emptyBranchAt(t, r, tc.at)
+
+			result, phases, checkRan := landOntoTheLine(t, r, "orbit/empty", "")
+			tc.want.assert(t, result, phases, checkRan)
+		})
+	}
+}
+
+// TestIntegrationEmptyTipOnNeitherSideKeepsItsPath: a session that started on a commit neither the line
+// nor the upstream holds, and made nothing. Its tip is its base, and that commit is still news to the
+// line, so nothing here is answered before J-S2. With a plain history J-S4 replays an empty range; a
+// conflicting absorb stands, because the line must take it before that commit can land; and a tip that
+// carries a merge is merged and checked, which is where the failing check gets to run.
+func TestIntegrationEmptyTipOnNeitherSideKeepsItsPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		line func(t *testing.T, r *integrationRepo)
+		// Builds the commit the session started on, from what the line built.
+		tip  func(t *testing.T, r *integrationRepo) string
+		want keptPath
+	}{
+		{
+			name: "in step with the upstream",
+			line: lineInStep,
+			tip:  func(t *testing.T, r *integrationRepo) string { return anotherBranchsCommit(t, r, "main") },
+			want: keptPath{state: "NOTHING_TO_LAND", phase: "REBASE", phases: []string{"FETCH", "REBASE"}},
+		},
+		{
+			name: "behind, clean absorb",
+			line: lineBehindCleanly,
+			tip:  func(t *testing.T, r *integrationRepo) string { return anotherBranchsCommit(t, r, "main~1") },
+			want: keptPath{state: "NOTHING_TO_LAND", phase: "REBASE", phases: []string{"FETCH", "MAIN_SYNC", "REBASE"}, mainSync: true},
+		},
+		{
+			name: "behind, conflicting absorb",
+			line: lineBehindConflicting,
+			tip:  func(t *testing.T, r *integrationRepo) string { return anotherBranchsCommit(t, r, "main~1") },
+			want: keptMainSyncConflict,
+		},
+		{
+			name: "a merge of both tips",
+			line: lineBehindConflicting,
+			tip: func(t *testing.T, r *integrationRepo) string {
+				r.checkoutNew("other/resolution", "project/line")
+				return absorbMain(t, r)
+			},
+			want: keptPath{state: "CHECK_FAILED", phase: "CHECK", phases: []string{"FETCH", "MERGE", "CHECK"}, checkRan: true},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			tc.line(t, r)
+			tip := tc.tip(t, r)
+			r.checkout("main")
+			base := emptyBranchAt(t, r, tip)
+
+			result, phases, checkRan := landOntoTheLine(t, r, "orbit/empty", base)
+			tc.want.assert(t, result, phases, checkRan)
+		})
+	}
+}
+
+// anotherBranchsCommit is one commit neither main nor the line holds.
+func anotherBranchsCommit(t *testing.T, r *integrationRepo, from string) string {
+	t.Helper()
+	r.checkoutNew("other/work", from)
+	r.write("other.txt", "another branch's work\n")
+	return r.commit("another branch's commit")
 }
 
 // TestIntegrationJobReportsTheTipOnTheUpstream: the measurement is only a fact once the control

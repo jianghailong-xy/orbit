@@ -189,7 +189,7 @@ func TestObserveLandingOnAMainLineAsksOneQuestion(t *testing.T) {
 
 // TestObserveLandingSeesAnEmptyBranch: a task whose delivered commit is its base made nothing of its
 // own (O-L7). empty says so wherever that base is — on the upstream, or on the line only — and
-// fullyApplied is false, as J-S3 answers the same branch: nothing of it was applied anywhere.
+// fullyApplied is false, as a landing answers the same branch: nothing of it was applied anywhere.
 func TestObserveLandingSeesAnEmptyBranch(t *testing.T) {
 	t.Parallel()
 	r := newIntegrationRepo(t)

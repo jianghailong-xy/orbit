@@ -21,6 +21,7 @@ import {
   projectAcceptanceLandedFact,
   projectBlockerRaisedFact,
   projectTasksSettledFact,
+  taskRunStoppedFact,
 } from './coordinator-wake';
 import {
   criterionKeyOf,
@@ -404,6 +405,27 @@ test('the conversation a person opens still opens the way 60dece5e restored it',
 });
 
 /** The reducer owns no clock; a separately supervised courier may re-deliver its durable fact. */
+test('a stopped run is told as a task nobody is working on, in the run\'s own words, with what to do about it', () => {
+  const fact = taskRunStoppedFact({
+    projectId: PROJECT,
+    taskId: TASK,
+    taskTitle: 'P4-T7 new content blocks',
+    sessionId: SESSION,
+    stopKey: 'turn',
+    lastWords: 'The work is finished.\nSomeone needs to submit the evidence.',
+  });
+  const message = buildCoordinatorDeliveryMessage(fact, 'Layout library');
+  assert.match(message, /^From Orbit · project “Layout library” has a task nobody is working on/);
+  assert.ok(message.includes(`P4-T7 new content blocks” (${uuidToBase62(TASK)})`), 'the task is named');
+  assert.ok(message.includes(`session_send (sessionId: ${uuidToBase62(SESSION)})`), 'the way to reach the run is named');
+  assert.match(message, /> The work is finished\.\n> Someone needs to submit the evidence\./);
+  assert.match(message, /EVIDENCE_NO_RESOLVABLE_CITATION/);
+  assert.match(message, /bg_run/);
+
+  const silent = buildCoordinatorDeliveryMessage({ ...fact, detail: { title: 'Quiet', sessionId: SESSION } }, 'Layout library');
+  assert.ok(!silent.includes('What the run said last'), 'a run that said nothing is not quoted as if it had');
+});
+
 test('the judgment reducer owns no timer', () => {
   const here = path.resolve(__dirname, '..', '..', 'src', 'projects');
   for (const file of [
