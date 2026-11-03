@@ -682,10 +682,12 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 	revived := branchExists(repoRoot, job.Branch)
 	if revived {
 		// A revived session whose checkout went away: the branch already holds its work, and its fork
-		// point heals like any other checkout's (see resolveBaseSha), from the base ref when there is
-		// one, else from the pin.
+		// point heals like any other checkout's (see resolveBaseSha), from the base ref when that is in
+		// the branch's history, else from the pin.
 		if persisted, err := git(repoRoot, "rev-parse", "--verify", "--quiet", baseRefName(job.SessionID)); err == nil && persisted != "" {
-			base = persisted
+			if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, job.Branch); err == nil {
+				base = persisted
+			}
 		}
 		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, base)
 		if atRest && checkoutAbsent(wtPath) {
@@ -3398,15 +3400,18 @@ func leaveCheckoutAbsent(job *ClaimedSession, repoRoot, wtPath, execDir, base st
 	if base != "" {
 		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
 	}
-	_, _ = git(repoRoot, "update-ref", absentRefName(job.SessionID), "refs/heads/"+job.Branch)
+	if _, err := git(repoRoot, "update-ref", absentRefName(job.SessionID), "refs/heads/"+job.Branch); err != nil {
+		logln(fmt.Sprintf("session %s — could not record that its checkout is away, so ending it before its next turn reports a capture failure it did not have: %v", job.SessionID, err))
+	}
 	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 	job.IsolationStatus = isoWorktree
 	logln(fmt.Sprintf("session %s — its checkout is not on disk and stays away until its next turn (branch %s)", job.SessionID, job.Branch))
 	return execDir
 }
 
-// absentCheckout is the checkout this session's supervisor stands on, when that is not on disk. Nil
-// otherwise.
+// absentCheckout is the checkout this session's supervisor stands on, when that is not on disk: nothing
+// at its path, or a directory there that is no checkout, which a hand removal stopped halfway leaves. An
+// engine woken in one of those works in a directory that holds none of the session's files. Nil otherwise.
 func (p *sessionPool) absentCheckout(id string) *Worktree {
 	p.mu.Lock()
 	var wt *Worktree
@@ -3414,7 +3419,7 @@ func (p *sessionPool) absentCheckout(id string) *Worktree {
 		wt = s.job.WT
 	}
 	p.mu.Unlock()
-	if wt == nil || !checkoutAbsent(wt.Path) {
+	if wt == nil || !checkoutAbsent(filepath.Join(wt.Path, ".git")) {
 		return nil
 	}
 	return wt

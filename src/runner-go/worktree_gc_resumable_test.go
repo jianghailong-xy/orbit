@@ -1397,35 +1397,48 @@ func TestARestartLeavesAMissingCheckoutAwayHoweverItWent(t *testing.T) {
 
 // The fork point it will come back on, worked out the way a revival works it out.
 func TestARestartReadsTheForkPointOfAMissingCheckoutFromTheBaseRefOrThePin(t *testing.T) {
+	removeBaseRef := func(t *testing.T, f *resumableFixture) {
+		mustGit(t, f.repo, "update-ref", "-d", baseRefName("sess-away"))
+	}
+	// moveMain gives main a commit outside the branch's history, and returns it.
+	moveMain := func(t *testing.T, f *resumableFixture) string {
+		commitFile(t, f.repo, "main-later.txt", "later\n", "main later")
+		return mustGit(t, f.repo, "rev-parse", "main")
+	}
+	mergeBase := func(t *testing.T, f *resumableFixture) string {
+		return mustGit(t, f.repo, "merge-base", "HEAD", "orbit/sess-away")
+	}
 	cases := []struct {
 		name string
-		pin  bool
-		// prepare may move the base ref; it returns the base wanted.
-		prepare func(t *testing.T, f *resumableFixture, fork string) string
+		// prepare returns the base wanted, and the pin of a pinned run, "" for a plain session.
+		prepare func(t *testing.T, f *resumableFixture, fork string) (want, pin string)
 	}{
-		{name: "its base ref", prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			return fork
+		{name: "its base ref", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			return fork, ""
 		}},
-		{name: "no base ref: the merge-base with the branch", prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			mustGit(t, f.repo, "update-ref", "-d", baseRefName("sess-away"))
-			return mustGit(t, f.repo, "merge-base", "HEAD", "orbit/sess-away")
+		{name: "no base ref: the merge-base with the branch", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			removeBaseRef(t, f)
+			return mergeBase(t, f), ""
 		}},
-		{name: "a base ref outside the branch's history is healed", prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			commitFile(t, f.repo, "main-later.txt", "later\n", "main later")
-			mustGit(t, f.repo, "update-ref", baseRefName("sess-away"), "main")
-			return mustGit(t, f.repo, "merge-base", "HEAD", "orbit/sess-away")
+		{name: "a base ref outside the branch's history is healed", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			mustGit(t, f.repo, "update-ref", baseRefName("sess-away"), moveMain(t, f))
+			return mergeBase(t, f), ""
 		}},
-		{name: "pinned: its base ref over the pin", pin: true, prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			return fork
+		{name: "pinned: its base ref over the pin", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			return fork, mustGit(t, f.repo, "rev-parse", "main")
 		}},
-		{name: "pinned, no base ref: the pin", pin: true, prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			mustGit(t, f.repo, "update-ref", "-d", baseRefName("sess-away"))
-			return fork
+		{name: "pinned, no base ref: the pin", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			removeBaseRef(t, f)
+			return fork, fork
 		}},
-		{name: "pinned: a base ref outside the branch's history is healed", pin: true, prepare: func(t *testing.T, f *resumableFixture, fork string) string {
-			commitFile(t, f.repo, "main-later.txt", "later\n", "main later")
-			mustGit(t, f.repo, "update-ref", baseRefName("sess-away"), "main")
-			return mustGit(t, f.repo, "merge-base", "HEAD", "orbit/sess-away")
+		{name: "pinned: a base ref outside the branch's history gives way to the pin", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			mustGit(t, f.repo, "update-ref", baseRefName("sess-away"), moveMain(t, f))
+			return fork, fork
+		}},
+		{name: "pinned, no base ref: a pin outside the branch's history is healed", prepare: func(t *testing.T, f *resumableFixture, fork string) (string, string) {
+			removeBaseRef(t, f)
+			pin := moveMain(t, f)
+			return mergeBase(t, f), pin
 		}},
 	}
 	for _, c := range cases {
@@ -1434,14 +1447,9 @@ func TestARestartReadsTheForkPointOfAMissingCheckoutFromTheBaseRefOrThePin(t *te
 			fork := forkOffALine(t, f)
 			path := f.checkoutFrom(t, f.repo, "sess-away", "project/line")
 			mustGit(t, f.repo, "worktree", "remove", "--force", path)
-			want := c.prepare(t, f, fork)
+			want, pin := c.prepare(t, f, fork)
 			job := &ClaimedSession{SessionID: "sess-away", Branch: "orbit/sess-away"}
-			if c.pin {
-				// A pin older than the base ref's answer would say so; the one with no base ref is the fork.
-				pin := fork
-				if strings.Contains(c.name, "over the pin") {
-					pin = mustGit(t, f.repo, "rev-parse", "main")
-				}
+			if pin != "" {
 				job.Source = &SessionSource{State: sourceStatePinned, BaseSha: pin}
 			}
 
@@ -1457,6 +1465,28 @@ func TestARestartReadsTheForkPointOfAMissingCheckoutFromTheBaseRefOrThePin(t *te
 				t.Fatalf("the base ref is %s, want %s: the next door reads it from there", got, want)
 			}
 		})
+	}
+}
+
+// Nothing can record that the checkout is away, on the disk this is all about. The session still registers,
+// and the log says what will read wrongly later.
+func TestARestartSaysWhenItCouldNotRecordThatACheckoutIsAway(t *testing.T) {
+	f := newResumableFixture(t)
+	path := f.checkout(t, "sess-away")
+	removeThroughGit(t, f, path)
+	// A file where the ref's directory has to go.
+	writeFile(t, filepath.Join(mustGit(t, f.repo, "rev-parse", "--absolute-git-dir"), "refs", "orbit-absent"), "in the way\n")
+
+	job := &ClaimedSession{SessionID: "sess-away", Branch: "orbit/sess-away"}
+	var execDir string
+	logs := captureLogs(t, func() { execDir = f.pool.setupSupervisorCheckout(job, f.repo, false) })
+
+	if execDir != path || job.WT == nil {
+		t.Fatalf("execDir %q, WT %+v: it registers all the same", execDir, job.WT)
+	}
+	requireCheckoutReclaimed(t, path, "a restart must not make it")
+	if !strings.Contains(logs, "could not record that its checkout is away") {
+		t.Fatalf("the log must say so, got:\n%s", logs)
 	}
 }
 
@@ -1877,6 +1907,62 @@ func TestAClaimOnAMissingCheckoutThatCannotComeBackEndsWithTheReason(t *testing.
 	if _, err := git(f.repo, "rev-parse", "--verify", "--quiet", absentRefName("sess-away")); err != nil {
 		t.Fatalf("it is still away, and the mark says so: %v", err)
 	}
+}
+
+// A hand removal stopped halfway leaves a directory at the path, and an engine woken there works among the
+// remains. It is not the session's checkout, so the claim treats it as gone: git makes one in a directory
+// that is empty, and refuses one that is not, which ends the run with the reason.
+func TestAClaimDoesNotTakeADirectoryForTheCheckout(t *testing.T) {
+	prepare := func(t *testing.T) (*resumableFixture, string, *ClaimedSession) {
+		f := newResumableFixture(t)
+		path := f.checkout(t, "sess-away")
+		job := &ClaimedSession{SessionID: "sess-away", Branch: "orbit/sess-away",
+			WT: &Worktree{Path: path, Branch: "orbit/sess-away", RepoDir: f.repo, Session: "sess-away"}}
+		if _, added := f.pool.register(job, func() {}, false); !added {
+			t.Fatal("register a cold supervisor")
+		}
+		removeThroughGit(t, f, path)
+		return f, path, &ClaimedSession{SessionID: "sess-away", Branch: "orbit/sess-away"}
+	}
+	t.Run("an empty one", func(t *testing.T) {
+		f, path, claim := prepare(t)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		restoreAbsentCheckout(f.pool, claim)
+		if claim.SourceRefusal != nil || !isGitRepo(path) {
+			t.Fatalf("refusal %+v, a checkout at %s: %v", claim.SourceRefusal, path, isGitRepo(path))
+		}
+		if got := mustGit(t, path, "symbolic-ref", "--short", "HEAD"); got != "orbit/sess-away" {
+			t.Fatalf("HEAD is on %q", got)
+		}
+	})
+	t.Run("one with something left in it", func(t *testing.T) {
+		f, path, claim := prepare(t)
+		left := writeUnder(t, path, "left/behind.txt", "x\n")
+		restoreAbsentCheckout(f.pool, claim)
+		if _, ok := f.pool.activatePrepared(claim, nil); !ok {
+			t.Fatal("the claim must still reach its supervisor, to end the run")
+		}
+		if claim.SourceRefusal == nil || claim.SourceRefusal.Code != sourceRefusalWorktreeRequired {
+			t.Fatalf("no engine may start among the remains, refusal %+v", claim.SourceRefusal)
+		}
+		if _, err := os.Stat(left); err != nil {
+			t.Fatalf("what was left there is not this runner's to remove: %v", err)
+		}
+	})
+	t.Run("a real checkout is left alone", func(t *testing.T) {
+		f := newResumableFixture(t)
+		path := f.checkout(t, "sess-here")
+		job := &ClaimedSession{SessionID: "sess-here", Branch: "orbit/sess-here",
+			WT: &Worktree{Path: path, Branch: "orbit/sess-here", RepoDir: f.repo, Session: "sess-here"}}
+		if _, added := f.pool.register(job, func() {}, false); !added {
+			t.Fatal("register a cold supervisor")
+		}
+		if f.pool.absentCheckout("sess-here") != nil {
+			t.Fatal("it is standing")
+		}
+	})
 }
 
 // A session ended while its checkout stayed away after a restart: nothing was lost at that moment, because
