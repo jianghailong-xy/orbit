@@ -132,7 +132,7 @@ export async function readTurnCards(
   const requestOfTurn = await readTurnRequestIds(db, session.id, signed.map((turn) => turn.id));
   for (const turn of signed) {
     const sessionMessage = await readSessionMessageCard(
-      db, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
+      db, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id), session.id,
     );
     if (sessionMessage) add(turn.id, { sessionMessage });
   }

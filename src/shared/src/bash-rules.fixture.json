@@ -109,6 +109,81 @@
       "name": "newlines separate sub-commands",
       "command": "git status\nnpm test",
       "rules": ["git status", "npm test"]
+    },
+    {
+      "name": "a backslash inside single quotes closes nothing early and hides nothing after it",
+      "command": "ls '\\'; git status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "an ordinary backslash inside single quotes stays one sub-command",
+      "command": "grep -rn 'a\\|b' src",
+      "rules": ["grep"]
+    },
+    {
+      "name": "a quote inside single quotes, the shell's own way, stays one sub-command",
+      "command": "echo 'it'\\''s; fine'",
+      "rules": ["echo"]
+    },
+    {
+      "name": "ANSI-C quoting, where a backslash does escape",
+      "command": "printf $'it\\'s; fine'; git status",
+      "rules": ["printf", "git status"]
+    },
+    {
+      "name": "a comment ends at its newline, and what follows is a sub-command",
+      "command": "ls #'\ngit status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "an apostrophe in a comment opens no quote",
+      "command": "git add -A # don't push\ngit status",
+      "rules": ["git add", "git status"]
+    },
+    {
+      "name": "a separator in a comment splits nothing",
+      "command": "git status # then; git push",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a line that is only a comment remembers nothing",
+      "command": "# look first\ngit status",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a # inside a word is not a comment",
+      "command": "ls a#b; git status",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "a quoted # is not a comment",
+      "command": "grep \"#\" notes.txt; git status",
+      "rules": ["grep", "git status"]
+    },
+    {
+      "name": "a line continuation does not start a word",
+      "command": "ls\\\n#b; git status",
+      "rules": ["git status"]
+    },
+    {
+      "name": "a comment after a line continuation is still a comment",
+      "command": "ls \\\n#'\ngit status #'",
+      "rules": ["ls", "git status"]
+    },
+    {
+      "name": "a shell keyword alone is never remembered: it names no program",
+      "command": "for f in a b\ndo\n  ./run.sh\ndone",
+      "rules": ["for f", "./run.sh", "done"]
+    },
+    {
+      "name": "a keyword ahead of something that is no clean word is never remembered either",
+      "command": "if ./check.sh; then ./run.sh; fi",
+      "rules": ["fi"]
+    },
+    {
+      "name": "a keyword ahead of a program word names that program",
+      "command": "for f in a; do echo x; done",
+      "rules": ["for f", "do echo", "done"]
     }
   ]
 }

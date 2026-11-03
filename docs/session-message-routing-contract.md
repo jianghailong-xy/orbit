@@ -39,6 +39,8 @@ POST /api/sessions/{sessionId}/resume
 只有**浏览器/客户端这道门**会路由。runner 的 `session send`（`resumeIfEnded`）、auto-retry 补发、
 任务派发、coordinator 投递一律保持原来的 409 —— 它们的消息属于它被写下的那段对话，
 不该被塞进任务碰巧在跑的那一轮。
+`session send` 和 `task_start` 接续暂停的 run 还要先过会话之间的那条规则
+（`docs/session-request-reply-contract.md` §2.5），过不去时是 403，不会走到这里。
 
 ---
 

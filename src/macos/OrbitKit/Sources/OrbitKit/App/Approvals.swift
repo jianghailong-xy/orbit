@@ -262,7 +262,7 @@ public enum Approvals {
         var seen = Set<String>()
         var rules: [PermissionRule] = []
         for segment in segments {
-            if let prefix = bashPrefix(segment), seen.insert(prefix).inserted {
+            if let prefix = bashPrefix(segment), !isBashCommandKeyword(prefix), seen.insert(prefix).inserted {
                 rules.append(PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*"))
             }
         }
@@ -271,54 +271,88 @@ public enum Approvals {
 
     /// A shell line's top-level sub-commands, split at unquoted `;` `&&` `||` `|` and newlines.
     /// Quote- and backslash-aware, so an operator inside a quoted string stays literal (the `|` in
-    /// `grep "a\|b"`). Best-effort, not a full shell parser. A port of `bashSegments` in
-    /// `@orbit/shared`, walked by scalar like the web walks by code unit — a `\r\n` is one
-    /// `Character`, and the newline in it must still split.
+    /// `grep "a\|b"`): nothing escapes inside single quotes, a backslash escapes in double quotes and
+    /// outside them, and a `#` where a word could start runs to the end of the line and is dropped.
+    /// Best-effort, not a full shell parser. A port of `bashSegments` in `@orbit/shared`, walked by
+    /// scalar like the web walks by code unit — a `\r\n` is one `Character`, and the newline in it
+    /// must still split.
     public static func bashSegments(_ command: String) -> [String] {
         let chars = Array(command.unicodeScalars)
         var out: [String] = []
         var cur = String.UnicodeScalarView()
+        // The quote that is open: `'` and `"` as themselves, `$` for ANSI-C `$'…'`, which closes on `'`.
         var quote: Unicode.Scalar?
+        var atWordStart = true
         var i = 0
+        func endSegment() {
+            out.append(String(cur))
+            cur = String.UnicodeScalarView()
+            atWordStart = true
+        }
         while i < chars.count {
             let c = chars[i]
-            if c == "\\", i + 1 < chars.count {
+            if quote == "'" {
                 cur.append(c)
-                cur.append(chars[i + 1])
-                i += 2
+                if c == "'" { quote = nil }
+                i += 1
                 continue
             }
             if let open = quote {
+                if c == "\\", i + 1 < chars.count {
+                    cur.append(c)
+                    cur.append(chars[i + 1])
+                    i += 2
+                    continue
+                }
                 cur.append(c)
-                if c == open { quote = nil }
+                if c == (open == "$" ? "'" : open) { quote = nil }
                 i += 1
+                continue
+            }
+            if c == "\\", i + 1 < chars.count {
+                cur.append(c)
+                cur.append(chars[i + 1])
+                // A line continuation is as if neither character were there, so the word state stays.
+                if chars[i + 1] != "\n" { atWordStart = false }
+                i += 2
                 continue
             }
             if c == "\"" || c == "'" {
                 quote = c
                 cur.append(c)
+                atWordStart = false
                 i += 1
                 continue
             }
+            if c == "$", i + 1 < chars.count, chars[i + 1] == "'" {
+                quote = "$"
+                cur.append(c)
+                cur.append(chars[i + 1])
+                atWordStart = false
+                i += 2
+                continue
+            }
+            if c == "#", atWordStart {
+                while i < chars.count, chars[i] != "\n" { i += 1 }
+                continue
+            }
             if c == ";" || c == "\n" {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 1
                 continue
             }
             if c == "&" || c == "|", i + 1 < chars.count, chars[i + 1] == c {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 2
                 continue
             }
             if c == "|" {
-                out.append(String(cur))
-                cur = String.UnicodeScalarView()
+                endSegment()
                 i += 1
                 continue
             }
             cur.append(c)
+            atWordStart = c == " " || c == "\t" || c == "&" || c == "(" || c == ")" || c == "<" || c == ">"
             i += 1
         }
         out.append(String(cur))
@@ -338,6 +372,12 @@ public enum Approvals {
         let prog = toks[i]
         if i + 1 < toks.count, isSubcommand(toks[i + 1]) { return "\(prog) \(toks[i + 1])" }
         return prog
+    }
+
+    /// A shell keyword that a command follows is no program, and a rule naming one would cover every
+    /// command after it. A port of `isBashCommandKeyword` in `@orbit/shared`.
+    public static func isBashCommandKeyword(_ prefix: String) -> Bool {
+        ["if", "then", "elif", "else", "while", "until", "do", "time", "coproc"].contains(prefix)
     }
 
     /// Whether one sub-command runs a shell with `-c`/`-lc`-style command execution. Codex wraps

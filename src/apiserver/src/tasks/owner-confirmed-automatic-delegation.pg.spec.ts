@@ -104,7 +104,7 @@ suite('in an Automatic project a session cannot hand a task to the owner unless 
 
     // The service the API wires, over the real client. The two constructor arguments it does not
     // reach here are the session service and the realtime publisher.
-    const service = new TasksService(prisma as never, {} as never, {
+    const service = new TasksService(prisma as never, { assertMayMoveRuns: async () => undefined } as never, {
       publishTaskChanged: () => undefined,
       publishForUser: () => undefined,
     } as never);

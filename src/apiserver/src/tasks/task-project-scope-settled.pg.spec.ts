@@ -120,7 +120,7 @@ test('a session whose project has settled can still write down what it noticed',
   // Nothing is stubbed: the service the API wires, over the real client, as the sibling scope specs
   // build it. The two constructor arguments unused here are the session service and the realtime
   // publisher.
-  const service = new TasksService(prisma as never, {} as never, {
+  const service = new TasksService(prisma as never, { assertMayMoveRuns: async () => undefined } as never, {
     publishTaskChanged() {},
     publishForUser() {},
   } as never);
