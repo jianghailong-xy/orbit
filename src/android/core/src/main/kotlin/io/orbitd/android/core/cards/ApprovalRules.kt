@@ -16,6 +16,7 @@ object ApprovalRules {
         "orbit_provider_update", "orbit_provider_delete", mergeCheckChange, DeleteCards.runnerTool, DeleteCards.workspaceTool,
         WorkspaceWriteCards.createTool, WorkspaceWriteCards.updateTool)
     private val shells = setOf("bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh", "zsh", "/bin/zsh", "/usr/bin/zsh")
+    private val commandKeywords = setOf("if", "then", "elif", "else", "while", "until", "do", "time", "coproc")
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()
         tool == "Bash" -> bash(input.text("command") ?: "")
@@ -31,19 +32,30 @@ object ApprovalRules {
     fun bash(command: String): List<PermissionRule> {
         val segments = mutableListOf<String>()
         val part = StringBuilder()
+        // The quote that is open: ' and " as themselves, $ for ANSI-C $'...', which closes on '.
         var quote: Char? = null
+        var wordStart = true
         var i = 0
         while (i < command.length) {
             val c = command[i++]
             when {
-                c == '\\' && i < command.length -> { part.append(c); part.append(command[i++]) }
-                quote != null -> { part.append(c); if (c == quote) quote = null }
-                c == '\'' || c == '"' -> { quote = c; part.append(c) }
+                quote == '\'' -> { part.append(c); if (c == '\'') quote = null }
+                quote != null && c == '\\' && i < command.length -> { part.append(c); part.append(command[i++]) }
+                quote != null -> { part.append(c); if (c == (if (quote == '$') '\'' else quote)) quote = null }
+                c == '\\' && i < command.length -> {
+                    part.append(c)
+                    // A line continuation is as if neither character were there, so the word state stays.
+                    if (command[i] != '\n') wordStart = false
+                    part.append(command[i++])
+                }
+                c == '\'' || c == '"' -> { quote = c; part.append(c); wordStart = false }
+                c == '$' && command.getOrNull(i) == '\'' -> { quote = '$'; part.append(c); part.append(command[i++]); wordStart = false }
+                c == '#' && wordStart -> while (i < command.length && command[i] != '\n') i++
                 c == ';' || c == '\n' || c == '|' || (c == '&' && command.getOrNull(i) == '&') -> {
                     if ((c == '&' || c == '|') && command.getOrNull(i) == c) i++
-                    segments += part.toString(); part.clear()
+                    segments += part.toString(); part.clear(); wordStart = true
                 }
-                else -> part.append(c)
+                else -> { part.append(c); wordStart = c in " \t&()<>" }
             }
         }
         segments += part.toString()
@@ -55,6 +67,6 @@ object ApprovalRules {
             val program = words.firstOrNull()?.takeIf { Regex("^[A-Za-z./_-][\\w./-]*$").matches(it) } ?: return@mapNotNull null
             val sub = words.getOrNull(1)?.takeIf { Regex("^[A-Za-z][\\w-]*$").matches(it) }
             if (sub == null) program else "$program $sub"
-        }.distinct().map { PermissionRule("Bash", "$it:*") }
+        }.filter { it !in commandKeywords }.distinct().map { PermissionRule("Bash", "$it:*") }
     }
 }
