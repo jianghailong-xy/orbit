@@ -16,6 +16,7 @@ import { attemptEndedUnsettledFact } from './coordinator-wake';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { sha256 } from './project-acceptance';
+import { AGGREGATION_SCOPE_MAX_TASKS } from './task-aggregation-writer';
 
 /**
  * Unit T6, where it actually bites: the SERVICE.
@@ -370,8 +371,11 @@ function taskUpdateFixture(
     taskDependency: { findMany: async () => [] },
     task: {
       findFirst: async () => ({ ...task }),
-      // The aggregation scope is the read that walks relations; a row refresh after the write reads other shapes.
-      findMany: async (args?: { where?: { OR?: unknown } }) => { if (args?.where?.OR) reads.scope += 1; return []; },
+      // The aggregation scope is the read bounded by its own cap; a row refresh after the write reads other shapes.
+      findMany: async (args?: { take?: number }) => {
+        if (args?.take === AGGREGATION_SCOPE_MAX_TASKS + 1) reads.scope += 1;
+        return [];
+      },
       count: async () => 0,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);

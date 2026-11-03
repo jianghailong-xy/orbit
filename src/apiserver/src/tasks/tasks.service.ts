@@ -10304,9 +10304,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // this write really moves one of these, so nothing else spends the read: a rename, or the owner's own edit.
     const statusAfter = (data.status as TaskStatus | undefined) ?? before.status;
     const parentTaskIdAfter = dto.parentTaskId === undefined ? before.parentTaskId : (dto.parentTaskId ?? null);
+    // As the write leaves them: the two locals above read as a verifier's for any edit of one, and only a declaration writes them.
+    const completionPolicyAfter = touchesCompletionDeclaration ? completionPolicy : before.completionPolicy;
+    const completionCriterionAfter = touchesCompletionDeclaration ? completionCriterion : before.completionCriterion;
     const movesAggregationFacts = statusAfter !== before.status
-      || completionPolicy !== before.completionPolicy
-      || completionCriterion !== before.completionCriterion
+      || completionPolicyAfter !== before.completionPolicy
+      || completionCriterionAfter !== before.completionCriterion
       || concludedVerdict !== before.verdict
       || verifiesTaskIdAfter !== before.verifiesTaskId
       || parentTaskIdAfter !== before.parentTaskId
@@ -10317,8 +10320,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertMaySettle(db, ownerId, actingSessionId, aggregationSeeds, (facts) => facts.map((fact) => (fact.id !== id ? fact : {
         ...fact,
         status: statusAfter as AggregationTaskStatus,
-        completionPolicy,
-        completionCriterion,
+        completionPolicy: completionPolicyAfter,
+        completionCriterion: completionCriterionAfter as TaskCompletionCriterionValue,
         verdict: concludedVerdict,
         verifiesTaskId: verifiesTaskIdAfter,
         parentTaskId: parentTaskIdAfter,
