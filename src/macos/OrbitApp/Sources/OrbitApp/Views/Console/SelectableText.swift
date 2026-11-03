@@ -400,7 +400,11 @@ extension SelectableText {
                 // exists to answer (offline, or an attachment the server no longer holds).
                 guard let data = await attachments.data(for: id), !data.isEmpty,
                       let file = Self.writeToTemp(data, id: id) else {
-                    self?.app?.showToast("Couldn't download that file", tone: .error)
+                    if let expired = attachments.expiry(id) {
+                        self?.app?.showToast(EvidenceFiles.expiredLine(expired.expiredAt), tone: .neutral)
+                    } else {
+                        self?.app?.showToast("Couldn't download that file", tone: .error)
+                    }
                     return
                 }
                 Self.share(file, from: view)

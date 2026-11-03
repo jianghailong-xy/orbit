@@ -133,6 +133,30 @@ class EvidenceFilesStore internal constructor(private val auth: AuthSession, pri
     fun version(task: String, revision: String) = versions.getOrPut("$task:$revision") { EvidenceFileVersion(auth, handle, scope, task, revision) }
     /** What the conversation reads again when it reconnects: the lists that could not be read before. */
     fun readAgain() = versions.values.forEach { if (it.unread) it.read() }
+
+    /** The files with a press of their pin on its way. */
+    internal val pinning = mutableStateSetOf<String>()
+
+    /**
+     * Press a file's pin, either way. A file can be cited by several versions of its task, so the answer goes into every list read of that
+     * task. Told its bytes have gone since the list was read, the file stops offering a pin. [refused] says what a press that did not go through says.
+     */
+    internal fun pressPin(task: String, file: EvidenceFile, refused: (String) -> Unit) {
+        if (!pinning.add(file.id)) return
+        val pin = !EvidenceFiles.isPinned(file)
+        fun change(update: (EvidenceFile) -> EvidenceFile) =
+            versions.forEach { (key, version) -> if (key.startsWith("$task:")) version.change(file.id, update) }
+        scope.launch {
+            try {
+                val answer = Wire.decode(auth.request(handle, EvidenceFiles.pinRequest(file.id, pin)).body, EvidenceFilePinAnswer.serializer())
+                change { EvidenceFiles.withPin(it, answer) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (failure: Exception) {
+                if (EvidenceFiles.isExpiredRead(failure)) change { it.copy(pinnable = false) }
+                refused(if (pin) EvidenceFiles.pinFailed else EvidenceFiles.unpinFailed)
+            } finally { pinning -= file.id }
+        }
+    }
 }
 
 /** One version's list, a page at a time. The heading's count and size are the whole list's on every page. */
@@ -150,6 +174,9 @@ class EvidenceFileVersion internal constructor(private val auth: AuthSession, pr
         val body = auth.request(handle, EvidenceFiles.request(task, revision, offset)).body
         return withContext(Dispatchers.Default) { Wire.decode(body, EvidenceFilePage.serializer()) }
     }
+
+    /** One file changed, wherever the list holds it. */
+    internal fun change(id: String, update: (EvidenceFile) -> EvidenceFile) { list = list?.updating(id, update) }
 
     /** Reads the first page, unless it has been read or is on its way. */
     fun read() {
@@ -215,14 +242,20 @@ private val tileShape = RoundedCornerShape(8.dp)
 
 /** One thumbnail, on the card and on the page. A tile never stretches with its picture: an expired one has the board's dashed outline. */
 @Composable
-private fun Tile(modifier: Modifier, dashed: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+private fun Tile(modifier: Modifier, dashed: Boolean = false, square: Boolean = true, content: @Composable BoxScope.() -> Unit) {
     val outline = MaterialTheme.colorScheme.outline
     val edge = if (dashed) Modifier.drawWithContent {
         drawContent()
         drawRoundRect(outline, cornerRadius = CornerRadius(8.dp.toPx()),
             style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))))
     } else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, tileShape)
-    Box(modifier.aspectRatio(1f).then(edge).clip(tileShape).background(tileFill()), contentAlignment = Alignment.Center, content = content)
+    Box((if (square) modifier.aspectRatio(1f) else modifier).then(edge).clip(tileShape).background(tileFill()), contentAlignment = Alignment.Center, content = content)
+}
+
+/** What a file whose bytes have gone leaves in a conversation: a card's expired tile, at the size [modifier] gives it. No date from a server that does not say when. */
+@Composable
+internal fun ExpiredAttachmentFace(at: String?, modifier: Modifier = Modifier) = Tile(modifier, dashed = true, square = false) {
+    TileWords(listOfNotNull(EvidenceFiles.expired, at?.let { EvidenceFiles.expiryDate(it) }).joinToString("\n"))
 }
 
 @Composable
@@ -351,7 +384,8 @@ fun EvidenceFilesSheet(cards: SessionCardsModel) {
                 }
             }
             HorizontalDivider()
-            EvidenceFilesPage(revision, version, remember(card.source) { EvidenceFiles.reports(card.source.objects("citations")) },
+            val listed = version.list?.files.orEmpty()
+            EvidenceFilesPage(store, task, revision, version, remember(card.source, listed) { EvidenceFiles.reports(card.source.objects("citations"), listed) },
                 remember(resources, store) { EvidencePictures(resources, store) }, store.scope)
         }
     }
@@ -374,6 +408,9 @@ private class FileDoors(private val pictures: EvidencePictures, private val cont
     var busy by mutableStateOf(false); private set
     var notice by mutableStateOf<String?>(null); private set
     var refused by mutableStateOf(false); private set
+
+    /** What a press elsewhere on the page said, where the eye looks for what these say. */
+    fun refuse(words: String) { notice = words; refused = true }
 
     private fun hand(scope: CoroutineScope, id: String, done: String?, failure: String, undo: () -> Unit = {}, action: suspend (ByteArray) -> Unit) {
         busy = true; notice = null; refused = false
@@ -418,7 +455,7 @@ private fun FileDoorsMenu(expanded: Boolean, enabled: Boolean, dismiss: () -> Un
 }
 
 @Composable
-private fun EvidenceFilesPage(revision: String, version: EvidenceFileVersion, reports: List<EvidenceTestReport>, pictures: EvidencePictures, conversation: CoroutineScope) {
+private fun EvidenceFilesPage(store: EvidenceFilesStore, task: String, revision: String, version: EvidenceFileVersion, reports: List<EvidenceTestReport>, pictures: EvidencePictures, conversation: CoroutineScope) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val doors = remember(pictures, context, scope) { FileDoors(pictures, context, scope, conversation) }
@@ -434,6 +471,7 @@ private fun EvidenceFilesPage(revision: String, version: EvidenceFileVersion, re
         saving = file.id
         saveTo.launch(SaveFileRequest(EvidenceFiles.saveName(file), file.mimeType ?: ANY_BYTES))
     }
+    val pin = { file: EvidenceFile -> store.pressPin(task, file, doors::refuse) }
     val list = version.list
     val groups = remember(list) { EvidenceFiles.groups(list?.files.orEmpty()) }
     val quiet = list != null && EvidenceFiles.allGone(list)
@@ -464,7 +502,7 @@ private fun EvidenceFilesPage(revision: String, version: EvidenceFileVersion, re
                     }, Modifier.padding(top = 8.dp).testTag("evidence-files:group:${group.name}"), style = small)
                 }
                 items(group.files, { "file:${it.id}" }) { file ->
-                    PageTile(file, pictures, doors.busy, view = { viewing = file.id }, save = { save(file) }, share = { doors.share(file) })
+                    PageTile(file, pictures, doors.busy, file.id in store.pinning, view = { viewing = file.id }, save = { save(file) }, share = { doors.share(file) }, pin = { pin(file) })
                 }
             }
             if (list?.nextOffset != null) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -475,7 +513,7 @@ private fun EvidenceFilesPage(revision: String, version: EvidenceFileVersion, re
             }
         }
     }
-    if (shown != null) EvidenceFileViewer(paged, shown, pictures, doors, view = { viewing = it }, close = { viewing = null }, save = save)
+    if (shown != null) EvidenceFileViewer(paged, shown, pictures, doors, store, view = { viewing = it }, close = { viewing = null }, save = save, pin = pin)
 }
 
 /** Two short lines on one line when they fit, the first starting it and the second ending it, one under the other when they don't. */
@@ -515,10 +553,22 @@ private fun ReportBlock(report: EvidenceTestReport, quiet: Boolean, tag: String)
     }
 }
 
-/** A tile on the page. A picture opens the viewer, and any other file with bytes offers its two doors, because neither an SVG nor a page
- * may be opened. An expired one does neither, and says what it was. */
+/** A file's pin as a tile's corner draws it: a press where the tile has no viewer to pin it from, and on a picture only the mark that it is pinned. */
 @Composable
-private fun PageTile(file: EvidenceFile, pictures: EvidencePictures, busy: Boolean, view: () -> Unit, save: () -> Unit, share: () -> Unit) {
+private fun PinFace(pinned: Boolean, modifier: Modifier = Modifier) {
+    val edge = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Box(modifier.size(26.dp).background(MaterialTheme.colorScheme.surface, CircleShape).border(1.dp, edge, CircleShape), contentAlignment = Alignment.Center) {
+        Icon(painterResource(if (pinned) R.drawable.ic_pin_filled else R.drawable.ic_pin), null, Modifier.size(15.dp),
+            tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A tile on the page. A picture opens the viewer, and any other file with bytes offers its two doors, because neither an SVG nor a page
+ * may be opened. An expired one does neither, and says what it was.
+ *
+ * A picture is pinned from the viewer, so here it only says that it is. Everything else has no viewer: its pin is on the tile, as long as the server offers one. */
+@Composable
+private fun PageTile(file: EvidenceFile, pictures: EvidencePictures, busy: Boolean, pinning: Boolean, view: () -> Unit, save: () -> Unit, share: () -> Unit, pin: () -> Unit) {
     val gone = EvidenceFiles.isGone(file)
     val picture = EvidenceFiles.isPicture(file) && file.id !in pictures.failed
     val name = EvidenceFiles.name(file)
@@ -533,10 +583,19 @@ private fun PageTile(file: EvidenceFile, pictures: EvidencePictures, busy: Boole
             }
             Tile(Modifier.fillMaxWidth().clip(tileShape).then(press).testTag(tag), dashed = gone) { TileFace(file, pictures) }
             if (!gone && !picture) FileDoorsMenu(doors, !busy, { doors = false }, save, share)
+            val pinned = EvidenceFiles.isPinned(file)
+            if (picture) {
+                if (pinned) PinFace(true, Modifier.align(Alignment.TopEnd).padding(6.dp).testTag("$tag:pinned").semantics { contentDescription = EvidenceFiles.pinned })
+            } else if (file.pinnable) {
+                val word = if (pinned) EvidenceFiles.unpin else EvidenceFiles.pin
+                Box(Modifier.align(Alignment.TopEnd).size(44.dp).clickable(enabled = !pinning, role = Role.Button, onClick = pin).testTag("$tag:pin")
+                    .semantics { contentDescription = word }, contentAlignment = Alignment.TopEnd) { PinFace(pinned, Modifier.padding(6.dp)) }
+            }
         }
         if (!picture) Column {
             Text(EvidenceFiles.saveName(file), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(EvidenceFiles.facts(file), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EvidenceFiles.keep(file)?.let { Text(it, Modifier.testTag("$tag:keep"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -559,8 +618,8 @@ private fun decodeViewerImage(data: ByteArray): ViewerImage {
  * theme, as a picture's surround is.
  */
 @Composable
-private fun EvidenceFileViewer(paged: List<EvidenceFile>, shown: EvidenceFile, pictures: EvidencePictures, doors: FileDoors, view: (String) -> Unit, close: () -> Unit,
-    save: (EvidenceFile) -> Unit) {
+private fun EvidenceFileViewer(paged: List<EvidenceFile>, shown: EvidenceFile, pictures: EvidencePictures, doors: FileDoors, store: EvidenceFilesStore, view: (String) -> Unit, close: () -> Unit,
+    save: (EvidenceFile) -> Unit, pin: (EvidenceFile) -> Unit) {
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { OrbitTheme(darkTheme = true) {
         // Black to the screen's edge, so the status bar's icons are the light ones whatever the theme.
         val root = LocalView.current
@@ -596,6 +655,14 @@ private fun EvidenceFileViewer(paged: List<EvidenceFile>, shown: EvidenceFile, p
                         fontFamily = FontFamily.Monospace, color = light, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(EvidenceFiles.facts(current, size?.first, size?.second), Modifier.testTag("evidence-viewer:facts"),
                         style = MaterialTheme.typography.bodySmall, color = quiet)
+                    EvidenceFiles.keep(current)?.let { Text(it, Modifier.testTag("evidence-viewer:keep"), style = MaterialTheme.typography.bodySmall, color = quiet) }
+                }
+                if (current.pinnable) {
+                    val pinned = EvidenceFiles.isPinned(current)
+                    IconButton(onClick = { pin(current) }, Modifier.testTag("evidence-viewer:pin"), enabled = current.id !in store.pinning) {
+                        Icon(painterResource(if (pinned) R.drawable.ic_pin_filled else R.drawable.ic_pin),
+                            if (pinned) EvidenceFiles.unpin else EvidenceFiles.pin, tint = if (pinned) MaterialTheme.colorScheme.primary else light)
+                    }
                 }
                 var open by remember { mutableStateOf(false) }
                 Box {

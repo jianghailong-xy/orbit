@@ -36,7 +36,7 @@ import {
  * jsdom lays nothing out and decodes nothing, so how it looks is the screenshots' business.
  */
 
-vi.mock('../api', () => ({ api: vi.fn(), fetchAttachmentObjectUrl: vi.fn() }));
+vi.mock('../api', () => ({ api: vi.fn(), fetchAttachmentObjectUrl: vi.fn(), setAttachmentPinned: vi.fn() }));
 vi.mock('../lib/userFile', async (original) => ({
   ...(await original<typeof import('../lib/userFile')>()),
   saveUserFile: vi.fn(),
@@ -45,10 +45,11 @@ vi.mock('../lib/toast', () => {
   const toast = { error: vi.fn() };
   return { useToast: () => toast };
 });
-const { api, fetchAttachmentObjectUrl } = await import('../api');
+const { api, fetchAttachmentObjectUrl, setAttachmentPinned } = await import('../api');
 const { useToast } = await import('../lib/toast');
 const apiMock = vi.mocked(api);
 const bytesMock = vi.mocked(fetchAttachmentObjectUrl);
+const pinMock = vi.mocked(setAttachmentPinned);
 const saveMock = vi.mocked(saveUserFile);
 
 const SESSION_ID = '34MOJw69NzKSq2X0exxf9';
@@ -135,6 +136,7 @@ afterEach(async () => {
   apiMock.mockReset();
   bytesMock.mockReset();
   saveMock.mockReset();
+  pinMock.mockReset();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
@@ -493,6 +495,153 @@ describe('expired files', () => {
     await openPage(node);
     expect(sheet().querySelector('.evidence-tile-name')?.textContent).toBe(gone.id);
     expect(sheet().querySelector('.evidence-tile-facts')?.textContent).toBe('sha256 3f9a1c07');
+  });
+});
+
+describe('a file being kept', () => {
+  const PINNED_AT = '2026-11-03T01:00:00.000Z';
+  const DATE = '2026-11-17T06:00:00.000Z';
+  const pictureFiles = (): EvidenceFile[] => [
+    file('kept', { pinnable: true, expiresAt: DATE }),
+    file('held', { pinnable: true, pinnedAt: PINNED_AT, expiresAt: null }),
+    file('foreign', { pinnable: false, name: 'chromium-light-phone/foreign.png' }),
+  ];
+  const pinOn = (name: string): HTMLButtonElement | null => {
+    const holder = [...sheet().querySelectorAll<HTMLElement>('.evidence-page-tile')]
+      .find((each) => each.querySelector(`[aria-label="${name}"]`) || each.querySelector(`[title="${name}"]`))!;
+    return holder.querySelector<HTMLButtonElement>('button.evidence-tile-pin');
+  };
+  const markOn = (name: string): HTMLElement | null => {
+    const holder = [...sheet().querySelectorAll<HTMLElement>('.evidence-page-tile')]
+      .find((each) => each.querySelector(`[aria-label="${name}"]`))!;
+    return holder.querySelector<HTMLElement>('span.evidence-tile-pin');
+  };
+  const viewerAction = (label: string): HTMLButtonElement | null =>
+    viewer().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+
+  it('marks only a pinned picture on the page, and offers it nothing to press there', async () => {
+    serve(page(pictureFiles()));
+    const node = await mount(card());
+    await openPage(node);
+    expect(markOn('chromium-light-phone/held.png')?.getAttribute('aria-label')).toBe('Pinned');
+    expect(markOn('chromium-light-phone/kept.png')).toBeNull();
+    expect(sheet().querySelector('button.evidence-tile-pin'), 'a picture is pinned from the viewer').toBeNull();
+    expect(pinMock).not.toHaveBeenCalled();
+  });
+
+  it('pins and unpins a picture in the viewer, beside the download, and says how long it stays', async () => {
+    serve(page(pictureFiles()));
+    const node = await mount(card());
+    await openPage(node);
+    await click(tile('chromium-light-phone/kept.png'));
+    const caption = (): string => viewer().querySelector('.orbit-image-preview-caption')!.textContent!;
+    expect(caption()).toContain('Expires Nov 17');
+    const actions = [...viewer().querySelectorAll('.orbit-image-preview-action')].map((action) => action.getAttribute('aria-label'));
+    expect(actions.slice(-2)).toEqual(['Download', 'Pin']);
+
+    pinMock.mockResolvedValueOnce({ expiresAt: DATE, expiredAt: null, pinnedAt: PINNED_AT });
+    await click(viewerAction('Pin')!);
+    expect(pinMock).toHaveBeenLastCalledWith('kept', true);
+    expect(caption()).toContain('Pinned');
+    expect(caption()).not.toContain('Expires');
+    expect(viewerAction('Pin')).toBeNull();
+    expect(markOn('chromium-light-phone/kept.png'), 'and the page behind it says so').not.toBeNull();
+
+    pinMock.mockResolvedValueOnce({ expiresAt: DATE, expiredAt: null, pinnedAt: null });
+    await click(viewerAction('Unpin')!);
+    expect(pinMock).toHaveBeenLastCalledWith('kept', false);
+    expect(caption()).toContain('Expires Nov 17');
+    expect(markOn('chromium-light-phone/kept.png')).toBeNull();
+  });
+
+  it('offers no pin in the viewer on what the server does not offer one', async () => {
+    serve(page(pictureFiles()));
+    const node = await mount(card());
+    await openPage(node);
+    await click(tile('chromium-light-phone/foreign.png'));
+    expect(viewerAction('Pin')).toBeNull();
+    expect(viewerAction('Unpin')).toBeNull();
+    expect(viewerAction('Download')).not.toBeNull();
+  });
+
+  it('reads a server older than the field as no pin anywhere', async () => {
+    serve(page(FILES));
+    const node = await mount(card());
+    await openPage(node);
+    expect(sheet().querySelector('.evidence-tile-pin')).toBeNull();
+    await click(tile('chromium-light-phone/light-open.png'));
+    expect(viewerAction('Pin')).toBeNull();
+  });
+
+  it('keeps the pin on the tile of a file with no viewer, and takes it off again', async () => {
+    serve(page([file('page', { name: 'notes/page.html', mimeType: 'text/html', pinnable: true, expiresAt: DATE })]));
+    const node = await mount(card());
+    await openPage(node);
+    const facts = (): string => sheet().querySelector('.evidence-tile-caption')!.textContent!;
+    expect(facts()).toContain('Expires Nov 17');
+    const pin = sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!;
+    expect(pin.getAttribute('aria-label')).toBe('Pin');
+    expect(pin.getAttribute('aria-pressed')).toBe('false');
+    pinMock.mockResolvedValueOnce({ expiresAt: DATE, expiredAt: null, pinnedAt: PINNED_AT });
+    await click(pin);
+    expect(pinMock).toHaveBeenLastCalledWith('page', true);
+    expect(saveMock, 'pressing the pin saves nothing').not.toHaveBeenCalled();
+    const pressed = sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!;
+    expect(pressed.getAttribute('aria-label')).toBe('Unpin');
+    expect(pressed.className).toContain('is-pinned');
+    expect(facts()).toContain('Pinned');
+  });
+
+  it('brings a tombstoned picture back from its tile, where it then has a viewer and only a mark', async () => {
+    serve(page([file('old', { pinnable: true, expiredAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-10-01T00:00:00.000Z' })]));
+    const node = await mount(card());
+    await openPage(node);
+    expect(sheet().querySelector('.evidence-tile-expired')).not.toBeNull();
+    expect(bytesMock, 'an expired tile reads nothing').not.toHaveBeenCalled();
+    pinMock.mockResolvedValueOnce({ expiresAt: '2026-10-01T00:00:00.000Z', expiredAt: null, pinnedAt: PINNED_AT });
+    await click(sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!);
+    expect(sheet().querySelector('.evidence-tile-expired')).toBeNull();
+    expect(sheet().querySelector('button.evidence-tile-pin')).toBeNull();
+    expect(markOn('chromium-light-phone/old.png')).not.toBeNull();
+    expect(bytesMock).toHaveBeenCalledWith('old');
+  });
+
+  it('has no pin on a file whose bytes have gone, nor on a row that went', async () => {
+    serve(page([
+      file('went', { pinnable: false, expiredAt: '2026-10-01T00:00:00.000Z' }),
+      file('row', { name: null, gone: true, mimeType: null, sizeBytes: null, pinnable: false }),
+    ]));
+    const node = await mount(card());
+    await openPage(node);
+    expect(sheet().querySelectorAll('.evidence-tile-expired')).toHaveLength(2);
+    expect(sheet().querySelector('.evidence-tile-pin')).toBeNull();
+  });
+
+  it('stops offering when a press is told the bytes went, and says so', async () => {
+    const error = useToast().error as ReturnType<typeof vi.fn>;
+    error.mockClear();
+    serve(page([file('old', { pinnable: true, expiredAt: '2026-10-01T00:00:00.000Z' })]));
+    const node = await mount(card());
+    await openPage(node);
+    pinMock.mockRejectedValueOnce(Object.assign(new Error('this file expired and its bytes have been deleted'), { status: 410 }));
+    await click(sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!);
+    expect(error).toHaveBeenCalledWith("Couldn't pin the file", 'this file expired and its bytes have been deleted');
+    expect(sheet().querySelector('button.evidence-tile-pin')).toBeNull();
+    expect(sheet().querySelector('.evidence-tile-expired')).not.toBeNull();
+  });
+
+  it('keeps the pin when a press fails any other way', async () => {
+    const error = useToast().error as ReturnType<typeof vi.fn>;
+    error.mockClear();
+    serve(page([file('page', { name: 'notes/page.html', mimeType: 'text/html', pinnable: true, pinnedAt: PINNED_AT })]));
+    const node = await mount(card());
+    await openPage(node);
+    pinMock.mockRejectedValueOnce(Object.assign(new Error('502'), { status: 502 }));
+    await click(sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!);
+    expect(error).toHaveBeenCalledWith("Couldn't unpin the file", '502');
+    const pin = sheet().querySelector<HTMLButtonElement>('button.evidence-tile-pin')!;
+    expect(pin.disabled).toBe(false);
+    expect(pin.getAttribute('aria-label')).toBe('Unpin');
   });
 });
 

@@ -159,7 +159,7 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
                                   to: "/// Answer one revision of a task's evidence at the decision door")
-        XCTAssertTrue(refresh.contains("guard !isDraft, !loadingEvidence else { return }"),
+        XCTAssertTrue(refresh.contains("guard !isDraft else { return }"),
                       "every conversation reads it, not only a coordinator: a task a session "
                           + "dispatched outside any project has its card in a session that coordinates nothing")
         XCTAssertTrue(refresh.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
@@ -229,6 +229,46 @@ final class EvidenceDecisionWiringTests: XCTestCase {
                       "one adoption, for a read and for the landing alike")
         XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue, projectId: project, sessionId: here), [row],
                        "the same queue, once the project is known, is this conversation's card")
+    }
+
+    /// A forced read means something just moved, and the read on its way may have been answered before
+    /// it did. Dropped, the card waited for the next event, which may not come. `ConsoleModel` does not
+    /// compile here, so this walks the order through its source: the moved row's force finds a read on
+    /// its way, is owed, and is read when that read is back.
+    func testAForcedEvidenceReadIsOwedWhileAnotherIsOnItsWay() throws {
+        let console = try source(Self.consolePath)
+        let read = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                               to: "/// Draw what a read of the queue lists for this conversation.")
+        let inFlight = try XCTUnwrap(read.range(of: "if loadingEvidence {"), "a read on its way is what is asked about")
+        let owed = try XCTUnwrap(read.range(of: "if force { evidenceReadOwed = true }"), "and a force is remembered")
+        XCTAssertLessThan(inFlight.lowerBound, owed.lowerBound)
+        let throttle = try XCTUnwrap(read.range(of: "if !force, Date().timeIntervalSince(lastEvidenceRead)"))
+        XCTAssertLessThan(owed.lowerBound, throttle.lowerBound,
+                          "and that comes before the throttle, which a forced read does not answer to")
+        let loop = try section(read, from: "repeat {", to: "} while evidenceReadOwed && !Task.isCancelled")
+        XCTAssertTrue(loop.contains("evidenceReadOwed = false"), "each read pays what was owed before it asks")
+        XCTAssertTrue(loop.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
+                      "and the read that is owed is the same read")
+        XCTAssertTrue(loop.contains("adoptEvidenceQueue(queue)"), "drawn the same way")
+    }
+
+    /// The row names the project and the task, and `loadContext` reads it once. A first read that did not
+    /// come back left both nil, so no project card and no owner confirmation, until the console was
+    /// restarted: a reconnect re-read everything but the row.
+    func testARowThatWasNotReadIsReadAgainOnAReconnectAndOnTheMinute() throws {
+        let console = try source(Self.consolePath)
+        let load = try section(console, from: "private func loadContext() async {", to: "adoptServerSnapshot(s)")
+        let read = try XCTUnwrap(load.range(of: "guard let s = try? await api.session(sessionID) else { return }"))
+        let marked = try XCTUnwrap(load.range(of: "contextLoaded = true"), "only a read that came back counts")
+        XCTAssertLessThan(read.lowerBound, marked.lowerBound)
+        XCTAssertTrue(load.contains("guard !loadingContext else { return }"), "and one read at a time")
+        let again = try section(console, from: "private func loadContextIfUnread() async {",
+                                to: "/// List seeds and the later detail read")
+        XCTAssertTrue(again.contains("if !contextLoaded { await loadContext() }"), "read again until it is known")
+        let run = try section(console, from: "func run() async {", to: "isReconnect = true")
+        XCTAssertTrue(run.contains("await self?.loadContextIfUnread()"), "on a reconnect")
+        let minute = try section(console, from: "runnerPollTask = Task { [weak self] in", to: "evidencePollTask = Task")
+        XCTAssertTrue(minute.contains("await self.loadContextIfUnread()"), "and on the minute: the stream may never drop")
     }
 
     /// The arming half of the handoff, on the console's side: the press hands the ROW over and

@@ -25,12 +25,17 @@ import UIKit
 @MainActor
 @Observable
 final class AttachmentImageStore {
-    /// One resolved answer about an attachment: the decoded image, or `nil` for "the server served
-    /// these bytes and they aren't a renderable image" (render a file chip). Both answers share the
-    /// cache so a session full of PDFs can't grow an unbounded set of ids either.
+    /// One resolved answer about an attachment: the decoded image, `nil` for "the server served these
+    /// bytes and they aren't a renderable image" (render a file chip), or that its bytes have gone (draw
+    /// the placeholder). All three share the cache so a session full of PDFs can't grow an unbounded set
+    /// of ids either.
     private final class Entry {
         let image: PlatformImage?
-        init(_ image: PlatformImage?) { self.image = image }
+        let expired: ExpiredAttachment?
+        init(_ image: PlatformImage?, expired: ExpiredAttachment? = nil) {
+            self.image = image
+            self.expired = expired
+        }
     }
 
     private let api: APIClient
@@ -80,7 +85,13 @@ final class AttachmentImageStore {
     func isNotImage(_ id: String) -> Bool {
         _ = revision
         guard let entry = cache.object(forKey: id) else { return false }
-        return entry.image == nil
+        return entry.image == nil && entry.expired == nil
+    }
+
+    /// What a read of `id` was told, once it was told its bytes have gone.
+    func expiry(_ id: String) -> ExpiredAttachment? {
+        _ = revision
+        return cache.object(forKey: id)?.expired
     }
 
     /// Whether `id` has an answer — of either kind — still in the cache.
@@ -100,7 +111,21 @@ final class AttachmentImageStore {
     /// shares. It hands off the file itself (any type, image or not), so the decoded-image cache
     /// above is the wrong shape for it and a one-off fetch is cheaper than holding another copy.
     func data(for id: String) async -> Data? {
-        try? await api.downloadAttachment(id)
+        do {
+            return try await api.downloadAttachment(id)
+        } catch {
+            if let expired = ExpiredAttachment(error) { remember(id, nil, expired: expired) }
+            return nil
+        }
+    }
+
+    /// A pin brought back a file a read was told had gone. Asked again, for whatever is drawing its
+    /// placeholder; a file nothing has asked about has nothing to redraw.
+    func cameBack(_ id: String) async {
+        guard expiry(id) != nil else { return }
+        cache.removeObject(forKey: id)
+        revision &+= 1
+        await load(id)
     }
 
     /// Bytes of a file a transcript named by *path* rather than by attachment id — what a row asks
@@ -130,6 +155,9 @@ final class AttachmentImageStore {
         let data: Data
         do {
             data = try await api.downloadAttachment(id)
+        } catch let error where ExpiredAttachment(error) != nil {
+            remember(id, nil, expired: ExpiredAttachment(error))     // its bytes have gone, and it can say so
+            return
         } catch let APIError.http(status, _) where (400..<500).contains(status) {
             remember(id, nil)     // the server won't serve it — gone or not ours; asking again won't help
             return
@@ -154,8 +182,8 @@ final class AttachmentImageStore {
 
     /// The one way in, so every path (seed and load alike) is charged the same cost and every landing
     /// entry re-renders the views waiting on it.
-    private func remember(_ id: String, _ image: PlatformImage?) {
-        cache.setObject(Entry(image), forKey: id, cost: image.map(Self.bitmapBytes) ?? Self.markerCost)
+    private func remember(_ id: String, _ image: PlatformImage?, expired: ExpiredAttachment? = nil) {
+        cache.setObject(Entry(image, expired: expired), forKey: id, cost: image.map(Self.bitmapBytes) ?? Self.markerCost)
         revision &+= 1
     }
 

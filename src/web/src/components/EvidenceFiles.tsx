@@ -7,9 +7,16 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { CheckCircleFilled, CloseCircleFilled, DownloadOutlined, RightOutlined } from '@ant-design/icons';
-import { fetchAttachmentObjectUrl } from '../api';
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  DownloadOutlined,
+  PushpinFilled,
+  PushpinOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
+import { fetchAttachmentObjectUrl, setAttachmentPinned } from '../api';
 import {
   EVIDENCE_FILES_HEADING,
   EVIDENCE_FILES_LOADING,
@@ -19,18 +26,27 @@ import {
   EVIDENCE_FILE_DOWNLOAD,
   EVIDENCE_FILE_DOWNLOAD_FAILED,
   EVIDENCE_FILE_EXPIRED,
+  EVIDENCE_FILE_PIN,
+  EVIDENCE_FILE_PINNED,
+  EVIDENCE_FILE_PIN_FAILED,
+  EVIDENCE_FILE_UNPIN,
+  EVIDENCE_FILE_UNPIN_FAILED,
   EVIDENCE_REPORT_FAILED,
   EVIDENCE_REPORT_NAMES_SHOWN,
   EVIDENCE_REPORT_SKIPPED,
   evidenceExpiryDate,
+  evidenceFileCanPin,
   evidenceFileDownloadName,
   evidenceFileFacts,
   evidenceFileGroups,
   evidenceFileIsGone,
+  evidenceFileIsPinned,
+  evidenceFileKeep,
   evidenceFileKind,
   evidenceFileName,
   evidenceFilePosition,
   evidenceFileSaveName,
+  evidenceFileWithPin,
   evidenceFilesAllGone,
   evidenceFilesCount,
   evidenceFilesHeadline,
@@ -49,9 +65,10 @@ import {
   type EvidenceFile,
   type EvidenceFileCitation,
   type EvidenceFileList,
+  type EvidenceFilePage,
   type EvidenceTestReport,
 } from '../lib/evidenceFiles';
-import { evidenceFilesQuery } from '../lib/queries';
+import { evidenceFilesKey, evidenceFilesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { saveUserFile } from '../lib/userFile';
@@ -137,6 +154,49 @@ function useSeen(element: RefObject<Element | null>): boolean {
     return () => observer.disconnect();
   }, [element, seen]);
   return seen;
+}
+
+interface FilePins {
+  /** The files with a press on its way. */
+  pinning: ReadonlySet<string>;
+  press: (file: EvidenceFile) => void;
+}
+
+/**
+ * A press of a file's pin, and what comes back of it. A file can be cited by several versions of its task, so the answer goes
+ * into every list read of that task. Told the bytes have gone since the list was read, the file stops offering a pin.
+ */
+function useFilePins(taskId: string): FilePins {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [pinning, setPinning] = useState<ReadonlySet<string>>(() => new Set());
+  const change = (id: string, update: (file: EvidenceFile) => EvidenceFile): void => {
+    qc.setQueriesData<InfiniteData<EvidenceFilePage>>({ queryKey: evidenceFilesKey(taskId) }, (read) => read && {
+      ...read,
+      pages: read.pages.map((page) => ({
+        ...page,
+        files: page.files.map((file) => (file.id === id ? update(file) : file)),
+      })),
+    });
+  };
+  const press = (file: EvidenceFile): void => {
+    const pin = !evidenceFileIsPinned(file);
+    setPinning((previous) => new Set(previous).add(file.id));
+    setAttachmentPinned(file.id, pin)
+      .then(
+        (answer) => change(file.id, (each) => evidenceFileWithPin(each, answer)),
+        (error: Error & { status?: number }) => {
+          if (error.status === 410) change(file.id, (each) => ({ ...each, pinnable: false }));
+          toast.error(pin ? EVIDENCE_FILE_PIN_FAILED : EVIDENCE_FILE_UNPIN_FAILED, error.message);
+        },
+      )
+      .finally(() => setPinning((previous) => {
+        const next = new Set(previous);
+        next.delete(file.id);
+        return next;
+      }));
+  };
+  return { pinning, press };
 }
 
 /** What fills a tile: the picture, the grey that takes its place once it has expired, or the file's kind. */
@@ -243,6 +303,7 @@ export function EvidenceFilesArea({ taskId, revision, citations }: {
       <EvidenceFilesSheet
         open={open}
         onClose={() => setOpen(false)}
+        taskId={taskId}
         revision={revision}
         list={list}
         unread={read.isError}
@@ -256,6 +317,7 @@ export function EvidenceFilesArea({ taskId, revision, citations }: {
 }
 
 interface EvidenceFilesPageProps {
+  taskId: string;
   revision: string;
   /** Null until the list is read. */
   list: EvidenceFileList | null;
@@ -329,11 +391,34 @@ function ReportBlock({ report, quiet }: { report: EvidenceTestReport; quiet: boo
   );
 }
 
+/** A file's pin on a tile. A tile holding one of these has no viewer to pin it from. */
+function PinButton({ file, pins }: { file: EvidenceFile; pins: FilePins }): JSX.Element {
+  const pinned = evidenceFileIsPinned(file);
+  const label = pinned ? EVIDENCE_FILE_UNPIN : EVIDENCE_FILE_PIN;
+  return (
+    <button
+      type="button"
+      className={`evidence-tile-pin${pinned ? ' is-pinned' : ''}`}
+      aria-label={label}
+      aria-pressed={pinned}
+      title={label}
+      disabled={pins.pinning.has(file.id)}
+      onClick={() => pins.press(file)}
+    >
+      {pinned ? <PushpinFilled aria-hidden /> : <PushpinOutlined aria-hidden />}
+    </button>
+  );
+}
+
 /** A tile on the page. A picture opens the viewer and any other file with bytes is saved, because neither
- *  an SVG nor a page may be opened. An expired one does neither, and says what it was. */
-function PageTile({ file, files, onView, onSave }: {
+ *  an SVG nor a page may be opened. An expired one does neither, and says what it was.
+ *
+ *  A picture is pinned from the viewer, so here it only says that it is. Everything else has no viewer: its
+ *  pin is on the tile, as long as the server offers one. */
+function PageTile({ file, files, pins, onView, onSave }: {
   file: EvidenceFile;
   files: FileUrls;
+  pins: FilePins;
   onView: (file: EvidenceFile, event: ReactMouseEvent<HTMLElement>) => void;
   onSave: (file: EvidenceFile) => void;
 }): JSX.Element {
@@ -346,6 +431,7 @@ function PageTile({ file, files, onView, onSave }: {
   }, [seen, picture, read, file.id]);
   const name = evidenceFileName(file);
   const face = <TileFace file={file} files={files} />;
+  const keep = evidenceFileKeep(file);
   return (
     <div ref={tile} className="evidence-page-tile">
       {evidenceFileIsGone(file) ? (
@@ -361,10 +447,17 @@ function PageTile({ file, files, onView, onSave }: {
           {face}
         </button>
       )}
+      {picture ? null : evidenceFileCanPin(file) ? <PinButton file={file} pins={pins} /> : null}
+      {picture && evidenceFileIsPinned(file) ? (
+        <span className="evidence-tile-pin is-pinned" role="img" aria-label={EVIDENCE_FILE_PINNED} title={EVIDENCE_FILE_PINNED}>
+          <PushpinFilled aria-hidden />
+        </span>
+      ) : null}
       {picture ? null : (
         <div className="evidence-tile-caption">
           <div className="evidence-tile-name" title={name}>{evidenceFileSaveName(file)}</div>
           <div className="evidence-tile-facts">{evidenceFileFacts(file)}</div>
+          {keep === null ? null : <div className="evidence-tile-facts">{keep}</div>}
         </div>
       )}
     </div>
@@ -379,9 +472,10 @@ function PageTile({ file, files, onView, onSave }: {
  * Focus can rest on this page's popup, and a bare Enter there would otherwise reach the card it was
  * opened from and press `Confirm done`.
  */
-function EvidenceFilesPage({ revision, list, unread, reports, quiet, fetchingMore, onMore }: EvidenceFilesPageProps): JSX.Element {
+function EvidenceFilesPage({ taskId, revision, list, unread, reports, quiet, fetchingMore, onMore }: EvidenceFilesPageProps): JSX.Element {
   const urls = useFileUrls();
   const toast = useToast();
+  const pins = useFilePins(taskId);
   const [viewing, setViewing] = useState<{ id: string; origin: { x: number; y: number } } | null>(null);
   const suspendKeys = useCallback((): void => refreshCardKeys(), []);
   const groups = evidenceFileGroups(list?.files ?? []);
@@ -416,7 +510,7 @@ function EvidenceFilesPage({ revision, list, unread, reports, quiet, fetchingMor
           </h3>
           <div className="evidence-files-grid">
             {group.files.map((file) => (
-              <PageTile key={file.id} file={file} files={urls} onView={view} onSave={save} />
+              <PageTile key={file.id} file={file} files={urls} pins={pins} onView={view} onSave={save} />
             ))}
           </div>
         </section>
@@ -436,6 +530,7 @@ function EvidenceFilesPage({ revision, list, unread, reports, quiet, fetchingMor
           onView={(file) => setViewing({ ...viewing, id: file.id })}
           onClose={() => setViewing(null)}
           onSave={save}
+          pins={pins}
         />
       ) : null}
     </div>
@@ -459,7 +554,7 @@ function usePictureSize(file: EvidenceFile, url: string | undefined): { width: n
 }
 
 /** The viewer, paging the pictures in the order the page shows them, and reading ahead one either way. */
-function EvidenceFileViewer({ pictures, file, origin, urls, onView, onClose, onSave }: {
+function EvidenceFileViewer({ pictures, file, origin, urls, onView, onClose, onSave, pins }: {
   pictures: EvidenceFile[];
   file: EvidenceFile;
   origin: { x: number; y: number };
@@ -467,6 +562,7 @@ function EvidenceFileViewer({ pictures, file, origin, urls, onView, onClose, onS
   onView: (file: EvidenceFile) => void;
   onClose: () => void;
   onSave: (file: EvidenceFile) => void;
+  pins: FilePins;
 }): JSX.Element {
   const { read } = urls;
   const current = pictures.indexOf(file);
@@ -474,6 +570,8 @@ function EvidenceFileViewer({ pictures, file, origin, urls, onView, onClose, onS
     for (const each of pictures.slice(Math.max(0, current - 1), current + 2)) read(each.id);
   }, [pictures, current, read]);
   const size = usePictureSize(file, urls.urls.get(file.id));
+  const pinned = evidenceFileIsPinned(file);
+  const keep = evidenceFileKeep(file);
   return (
     <ImagePreview
       group
@@ -488,14 +586,24 @@ function EvidenceFileViewer({ pictures, file, origin, urls, onView, onClose, onS
         <>
           <div className="evidence-viewer-path">{evidenceFileName(file)}</div>
           <div>{evidenceFileFacts(file, size)}</div>
+          {keep === null ? null : <div>{keep}</div>}
         </>
       )}
-      actions={[{
-        key: 'download',
-        label: EVIDENCE_FILE_DOWNLOAD,
-        icon: <DownloadOutlined aria-hidden />,
-        onClick: () => onSave(file),
-      }]}
+      actions={[
+        {
+          key: 'download',
+          label: EVIDENCE_FILE_DOWNLOAD,
+          icon: <DownloadOutlined aria-hidden />,
+          onClick: () => onSave(file),
+        },
+        ...(evidenceFileCanPin(file) ? [{
+          key: 'pin',
+          label: pinned ? EVIDENCE_FILE_UNPIN : EVIDENCE_FILE_PIN,
+          icon: pinned ? <PushpinFilled className="evidence-viewer-pinned" aria-hidden /> : <PushpinOutlined aria-hidden />,
+          disabled: pins.pinning.has(file.id),
+          onClick: () => pins.press(file),
+        }] : []),
+      ]}
     />
   );
 }

@@ -1,5 +1,8 @@
 package io.orbitd.android.core.cards
 
+import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.Wire
 import java.time.Instant
 import java.time.ZoneId
@@ -152,6 +155,77 @@ class EvidenceFilesTest {
         val page = list(listOf(expired("2026-12-02T12:00:00.000Z")), fileCount = 3000, nextOffset = 1000)
         assertFalse(EvidenceFiles.allGone(page))
         assertEquals("FILES · 3000 · 1.8 MB", EvidenceFiles.headline(page, now, zone))
+    }
+
+    // ---- Being kept, and the pin: the web's `evidenceFileKeep` and its neighbours, case for case. ----
+
+    private val inNovember = Instant.parse("2026-11-03T00:00:00Z")
+
+    @Test fun anOlderRoutesAnswerOffersNoPinAndANewOneReadsItsFields() {
+        val row = { extra: String -> Wire.json.decodeFromString(EvidenceFile.serializer(), """{"id":"a","gone":false$extra}""") }
+        assertFalse(row("").pinnable)
+        assertNull(row("").pinnedAt)
+        val full = row(""","expiresAt":"2026-11-17T06:00:00.000Z","pinnedAt":"2026-11-02T00:00:00.000Z","pinnable":true,"testReport":null""")
+        assertTrue(full.pinnable)
+        assertTrue(EvidenceFiles.isPinned(full))
+        assertEquals("2026-11-17T06:00:00.000Z", full.expiresAt)
+    }
+
+    @Test fun aFileSaysHowLongItStays() {
+        fun keep(file: EvidenceFile) = EvidenceFiles.keep(file, inNovember, zone)
+        assertEquals("Expires Nov 17", keep(EvidenceFile("a", expiresAt = "2026-11-17T06:00:00.000Z")))
+        assertEquals("Expires Jan 5, 2027", keep(EvidenceFile("a", expiresAt = "2027-01-05T06:00:00.000Z")))
+        assertEquals("Pinned", keep(EvidenceFile("a", expiresAt = "2026-11-17T06:00:00.000Z", pinnedAt = "2026-11-02T00:00:00.000Z")))
+        assertNull("evidence holds it, or it never expires", keep(EvidenceFile("a")))
+        assertNull("what has lost its bytes is its tile's to say", keep(EvidenceFile("a", expiredAt = "2026-10-01T00:00:00.000Z", expiresAt = "2026-10-01T00:00:00.000Z")))
+        assertNull(keep(EvidenceFile("a", gone = true)))
+    }
+
+    @Test fun aPlaceholderIsDatedWhenTheServerSaysWhen() {
+        assertEquals("Expired Sep 14", EvidenceFiles.expiredLine("2026-09-14T00:00:00.000Z", inNovember, zone))
+        assertEquals("Expired", EvidenceFiles.expiredLine(null, inNovember, zone))
+    }
+
+    @Test fun aPressTakesWhatTheServerAnswered() {
+        val tombstoned = EvidenceFile("a", "a.png", mimeType = "image/png", expiredAt = "2026-10-01T00:00:00.000Z", expiresAt = "2026-10-01T00:00:00.000Z", pinnable = true)
+        assertFalse(EvidenceFiles.isPicture(tombstoned))
+        val pinned = EvidenceFiles.withPin(tombstoned, EvidenceFilePinAnswer(expiresAt = "2026-10-01T00:00:00.000Z", pinnedAt = "2026-11-03T00:00:00.000Z"))
+        assertTrue(EvidenceFiles.isPinned(pinned))
+        assertTrue(EvidenceFiles.isPicture(pinned))
+        assertTrue(pinned.pinnable)
+        assertFalse(EvidenceFiles.isPinned(EvidenceFiles.withPin(pinned, EvidenceFilePinAnswer(expiresAt = "2026-10-01T00:00:00.000Z"))))
+        val both = list(listOf(file("a"), file("b"))).updating("b") { EvidenceFiles.withPin(it, EvidenceFilePinAnswer(pinnedAt = "2026-11-03T00:00:00.000Z")) }
+        assertEquals(listOf(false, true), both.files.map(EvidenceFiles::isPinned))
+    }
+
+    @Test fun thePinAsksItsDoor() {
+        val on = EvidenceFiles.pinRequest("a1", true)
+        assertEquals(listOf("attachments", "a1", "pin"), on.path)
+        assertEquals(HttpMethod.PUT, on.method)
+        assertEquals(HttpMethod.DELETE, EvidenceFiles.pinRequest("a1", false).method)
+    }
+
+    @Test fun a410SaysWhenAndEveryOtherFailureSaysNothing() {
+        val dated = ApiError.parse(410, """{"statusCode":410,"message":"gone","expiredAt":"2026-09-14T00:00:00.000Z"}""".encodeToByteArray())
+        assertTrue(EvidenceFiles.isExpiredRead(dated))
+        assertEquals("2026-09-14T00:00:00.000Z", EvidenceFiles.expiredAtOf(dated))
+        // A server older than the date, and a body nobody can read, say only that the bytes went.
+        val older = ApiError.parse(410, """{"statusCode":410,"message":"this file expired on 2026-09-14"}""".encodeToByteArray())
+        assertTrue(EvidenceFiles.isExpiredRead(older))
+        assertNull(EvidenceFiles.expiredAtOf(older))
+        assertTrue(EvidenceFiles.isExpiredRead(ApiError.parse(410, "<html>".encodeToByteArray())))
+        for (other in listOf(ApiError.parse(404, "{}".encodeToByteArray()), ApiError.parse(500, "{}".encodeToByteArray()), NetworkException(), IllegalStateException())) {
+            assertFalse("$other is what it always was", EvidenceFiles.isExpiredRead(other))
+        }
+    }
+
+    @Test fun aPageReadsItsReportsOffTheRowsWhenItHasNoCitations() {
+        val summary = buildJsonObject { put("format", "junit"); put("total", 1); put("passed", 1); put("failed", 0); put("skipped", 0) }
+        val rows = listOf(file("a"), file("r").copy(testReport = summary))
+        assertEquals(listOf("junit"), EvidenceFiles.reports(emptyList(), rows).map { it.format })
+        val cited = citation("""{"kind":"FILE","testReport":{"format":"playwright","total":1,"passed":1,"failed":0,"skipped":0}}""")
+        assertEquals(listOf("playwright"), EvidenceFiles.reports(listOf(cited), rows).map { it.format })
+        assertEquals(emptyList<EvidenceTestReport>(), EvidenceFiles.reports(emptyList(), listOf(file("a"))))
     }
 
     @Test fun aReportReadsAsTheDesignSpellsIt() {

@@ -55,6 +55,11 @@ final class EvidenceFilesCopyParityTests: XCTestCase {
         assertDeclares(web, "EVIDENCE_FILE_DOWNLOAD_FAILED", EvidenceFiles.downloadFailed)
         assertDeclares(web, "EVIDENCE_FILES_LOADING", EvidenceFiles.loading)
         assertDeclares(web, "EVIDENCE_FILES_UNREAD", EvidenceFiles.unread)
+        assertDeclares(web, "EVIDENCE_FILE_PIN", EvidenceFiles.pin)
+        assertDeclares(web, "EVIDENCE_FILE_UNPIN", EvidenceFiles.unpin)
+        assertDeclares(web, "EVIDENCE_FILE_PINNED", EvidenceFiles.pinned)
+        assertDeclares(web, "EVIDENCE_FILE_PIN_FAILED", EvidenceFiles.pinFailed)
+        assertDeclares(web, "EVIDENCE_FILE_UNPIN_FAILED", EvidenceFiles.unpinFailed)
         assertDeclares(web, "EVIDENCE_REPORT_FAILED", EvidenceFiles.reportFailed)
         assertDeclares(web, "EVIDENCE_REPORT_SKIPPED", EvidenceFiles.reportSkipped)
     }
@@ -81,6 +86,11 @@ final class EvidenceFilesCopyParityTests: XCTestCase {
                        "how much of a long list is shown")
         assertContains(web, "`\(template(EvidenceFiles.reportList("W", count: 7), [("W", "${word}"), ("7", "${count}")]))`",
                        "a report's list heading")
+        // An address that is no date comes back as itself, so each sentence renders with the web's own hole in it.
+        let date = "${evidenceExpiryDate(at, now)}"
+        assertContains(web, "`\(EvidenceFiles.expires(date))`", "when a file expires")
+        assertContains(web, "`\(EvidenceFiles.expiredLine(date).replacingOccurrences(of: EvidenceFiles.fileExpired, with: "${EVIDENCE_FILE_EXPIRED}"))`",
+                       "a placeholder on one line")
     }
 
     /// A report's lines, rendered here and compared whole with what the web's template says.

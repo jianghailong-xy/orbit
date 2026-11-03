@@ -1,6 +1,8 @@
 package io.orbitd.android.core.cards
 
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import java.time.Instant
 import java.time.ZoneId
@@ -8,13 +10,26 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** One file of a version of evidence, as `GET /tasks/:taskId/evidence/:revision/files` lists it: read from rows, so an expired file
  * reads as it always did. When [gone] is true the row itself no longer exists, and only [id], [sha256] and an image's size are left. */
 @Serializable
 data class EvidenceFile(val id: String, val name: String? = null, val folder: String? = null, val mimeType: String? = null,
     val sizeBytes: Long? = null, val sha256: String? = null, val width: Int? = null, val height: Int? = null,
-    val expiredAt: String? = null, val gone: Boolean = false)
+    val expiredAt: String? = null, val gone: Boolean = false,
+    /** When it expires, while nothing holds it. Null while evidence does, and on a file that never expires. */
+    val expiresAt: String? = null,
+    /** When it was pinned, which keeps it past [expiresAt]. */
+    val pinnedAt: String? = null,
+    /** Whether it can be pinned: what `file_upload` kept, while its bytes remain. A server older than this field offers no pin. */
+    val pinnable: Boolean = false,
+    /** What `file_upload --as test-report` kept of it, read on its own: a receipt has no citations, so its page reads its reports off these. */
+    val testReport: JsonObject? = null)
+
+/** What a press of the pin answers, either way (`PUT` and `DELETE /attachments/:id/pin`): the three dates it may have moved. */
+@Serializable
+data class EvidenceFilePinAnswer(val expiresAt: String? = null, val expiredAt: String? = null, val pinnedAt: String? = null)
 
 /** A page of a version's files. The count and the size are the whole list's, whichever page it is. */
 @Serializable
@@ -23,6 +38,8 @@ data class EvidenceFilePage(val revision: String, val submittedAt: String, val f
 
 /** The pages read so far of a version's files, as one. */
 data class EvidenceFileList(val submittedAt: String, val fileCount: Int, val totalBytes: Long, val files: List<EvidenceFile>, val nextOffset: Int? = null) {
+    /** With one file changed, wherever the list holds it. */
+    fun updating(id: String, change: (EvidenceFile) -> EvidenceFile) = copy(files = files.map { if (it.id == id) change(it) else it })
     /** A file cited twice is one entry on one page; a later page never draws it again. */
     operator fun plus(page: EvidenceFilePage) = EvidenceFileList(page.submittedAt, page.fileCount, page.totalBytes,
         (files + page.files).distinctBy { it.id }, page.nextOffset)
@@ -68,6 +85,14 @@ object EvidenceFiles {
     /** What the area says while the list is read, and when it could not be. */
     const val loading = "Reading…"
     const val unread = "The files could not be read just now."
+    /** What presses a file's pin, either way. */
+    const val pin = "Pin"
+    const val unpin = "Unpin"
+    /** What a pinned file says of how long it stays, where one with a date says when it expires. */
+    const val pinned = "Pinned"
+    /** What a press that did not go through says. */
+    const val pinFailed = "Couldn't pin the file"
+    const val unpinFailed = "Couldn't unpin the file"
     /** The two lists a test report opens into. */
     const val reportFailed = "Failed"
     const val reportSkipped = "Skipped"
@@ -97,6 +122,9 @@ object EvidenceFiles {
     fun request(task: String, revision: String, offset: Int = 0) = ApiRequest(listOf("tasks", task, "evidence", revision, "files"),
         query = if (offset > 0) listOf("offset" to "$offset") else emptyList())
 
+    /** Pin a file or take its pin away. A pin brings back a file with a tombstone whose bytes remain, and once they have gone it answers 410. */
+    fun pinRequest(id: String, pinned: Boolean) = ApiRequest(listOf("attachments", id, "pin"), if (pinned) HttpMethod.PUT else HttpMethod.DELETE)
+
     /** `+5`, on the tile after the last thumbnail. */
     fun more(rest: Int) = "+$rest"
     /** `3 of 8`, in the viewer. */
@@ -118,6 +146,15 @@ object EvidenceFiles {
     fun reports(citations: List<JsonObject>): List<EvidenceTestReport> = citations.mapNotNull { citation ->
         citation.obj("testReport")?.let { runCatching { Wire.json.decodeFromJsonElement(EvidenceTestReport.serializer(), it) }.getOrNull() }
     }
+
+    /** The reports of what a page shows: the citations', and a receipt's, which has none, off the list it has read. */
+    fun reports(citations: List<JsonObject>, files: List<EvidenceFile>): List<EvidenceTestReport> =
+        reports(citations).ifEmpty { files.mapNotNull { file -> file.testReport?.let { runCatching { Wire.json.decodeFromJsonElement(EvidenceTestReport.serializer(), it) }.getOrNull() } } }
+
+    /** Whether this file is pinned. */
+    fun isPinned(file: EvidenceFile) = file.pinnedAt != null
+    /** This file after a press of its pin, with what the server answered. */
+    fun withPin(file: EvidenceFile, answer: EvidenceFilePinAnswer) = file.copy(expiresAt = answer.expiresAt, expiredAt = answer.expiredAt, pinnedAt = answer.pinnedAt)
 
     /** What a file is called where one name is needed. */
     fun name(file: EvidenceFile) = file.name ?: file.id
@@ -157,6 +194,25 @@ object EvidenceFiles {
     fun expiryDate(at: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? = instant(at)?.atZone(zone)?.let { date ->
         DateTimeFormatter.ofPattern(if (date.year == now.atZone(zone).year) "MMM d" else "MMM d, yyyy", Locale.US).format(date)
     }
+
+    /** `Expires Dec 2`. */
+    fun expires(at: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()) = expiryDate(at, now, zone)?.let { "Expires $it" }
+
+    /** How long a file with its bytes stays: `Pinned`, `Expires Dec 2`, or nothing where evidence holds it or it never expires. */
+    fun keep(file: EvidenceFile, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? = when {
+        isGone(file) -> null
+        isPinned(file) -> pinned
+        else -> file.expiresAt?.let { expires(it, now, zone) }
+    }
+
+    /** `Expired Dec 2`, on one line, or `Expired` from a server that does not say when. */
+    fun expiredLine(at: String?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()) =
+        listOfNotNull(expired, at?.let { expiryDate(it, now, zone) }).joinToString(" ")
+
+    /** Whether a read of a file was told its bytes have gone (410). Every other failure is what it always was. */
+    fun isExpiredRead(failure: Throwable) = (failure as? ApiError)?.status == 410
+    /** When they expired, from a server that says. */
+    fun expiredAtOf(failure: Throwable) = (((failure as? ApiError)?.body as? JsonObject)?.get("expiredAt") as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     /** Whether every file has lost its bytes. Only the last page can say so of the whole list. */
     fun allGone(list: EvidenceFileList) = list.nextOffset == null && list.files.isNotEmpty() && list.files.all(::isGone)

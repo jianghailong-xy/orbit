@@ -259,6 +259,23 @@ export interface RecordedEvidenceDecision {
   decidedAt: Date;
   /** USER when the owner pressed the card; AGENT when a run of this session called the door. */
   decidedByType: CreatorType;
+  /** Whether the version it answered cites a file, which is all a receipt needs to offer that version's files. */
+  citesFiles: boolean;
+}
+
+/**
+ * Which of these versions cite a file. This rides every poll of the pending read, and a coordinator's receipts can be hundreds,
+ * so it is answered from migration 0468's partial index and opens no envelope. That index is proved by this exact predicate:
+ * change one and the other goes with it, or the read falls back to reading every envelope in the table.
+ */
+async function versionsCitingFiles(tx: PrismaTypes.TransactionClient, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+      FROM task_completion_evidence
+     WHERE id = ANY(${ids}::uuid[])
+       AND evidence @> '{"checks":[{"kind":"FILE"}]}'::jsonb`;
+  return new Set(rows.map((row) => row.id));
 }
 
 function ageSeconds(readAt: Date, submittedAt: Date): number {
@@ -562,9 +579,10 @@ export async function readPendingEvidenceJudgments(
       decidedAt: true,
       decidedByType: true,
       task: { select: { id: true, title: true, projectId: true } },
-      evidence: { select: { revision: true } },
+      evidence: { select: { id: true, revision: true } },
     },
   });
+  const citing = await versionsCitingFiles(tx, recorded.map((row) => row.evidence.id));
 
   return {
     readAt,
@@ -584,6 +602,7 @@ export async function readPendingEvidenceJudgments(
       note: row.note,
       decidedAt: row.decidedAt,
       decidedByType: row.decidedByType,
+      citesFiles: citing.has(row.evidence.id),
     })),
   };
 }

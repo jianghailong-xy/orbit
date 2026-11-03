@@ -286,7 +286,8 @@ public struct SentToCoordinatorRow: Codable, Equatable, Sendable, Identifiable {
 /// Small on purpose — it rides every poll — and it is the ONLY copy of the answer the console keeps:
 /// the receipt is drawn from it, so a reload, a relaunch or another device shows the same record.
 /// The evidence it answered is not here; the browser fetches that when a reader opens the receipt's
-/// fold, which is a step this client does not need and does not take.
+/// fold, which is a step this client does not need and does not take. Its files are one press away when
+/// it cites any (`citesFiles`), and read on that press.
 public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String
     public let title: String
@@ -300,10 +301,13 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
     /// `USER` when the owner pressed a card, `AGENT` when a run of the deciding session called the
     /// door. The receipt says which, because the two are different events in a conversation.
     public let decidedByType: String
+    /// Whether the version it answered cites a file: what its receipt goes by to offer that version's
+    /// files. A server older than this field offers none, so nil reads as no.
+    public let citesFiles: Bool?
 
     public init(taskId: String, title: String, projectId: String?, evidenceRevision: String,
                 decision: EvidenceDecisionAnswer, note: String?, decidedAt: String,
-                decidedByType: String) {
+                decidedByType: String, citesFiles: Bool? = nil) {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
@@ -312,6 +316,7 @@ public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiab
         self.note = note
         self.decidedAt = decidedAt
         self.decidedByType = decidedByType
+        self.citesFiles = citesFiles
     }
 
     public var recordedByAgent: Bool { decidedByType == "AGENT" }
