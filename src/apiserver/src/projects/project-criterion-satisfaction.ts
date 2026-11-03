@@ -5,15 +5,12 @@ import {
   taskCompletionRequiredAction,
 } from '../tasks/task-completion-criterion';
 import type { EvidenceDecisionValue } from '../tasks/task-evidence-decision';
+import { newestLiveCheck } from '../tasks/verification-dependency';
 import {
   criterionDeclarations,
   type CriterionServingTask,
 } from './project-criterion-declaration-staleness';
-import {
-  verificationIsLive,
-  type AggregationTaskStatus,
-  type TaskVerdictValue,
-} from './task-aggregation';
+import type { TaskVerdictValue } from './task-aggregation';
 
 /**
  * T3: "is criterion C satisfied?", answered entirely from the WORK side.
@@ -50,10 +47,10 @@ import {
  *    serving tasks has settled" is true and means nothing, which is the same vacuous truth the
  *    child/verification aggregation already refuses in `task-aggregation`: a criterion nobody has
  *    done anything about is not a criterion that has been met.
- *  - `SERVING_WORK_UNSETTLED` — some task that serves it has not settled BY ITS OWN DECLARED
- *    CRITERION. A conjunction, not a disjunction: one finished task among five does not make the
- *    stated condition true, and each of the five is judged by the criterion it declared rather
- *    than by a blanket `status = 'DONE'`.
+ *  - `SERVING_WORK_UNSETTLED` — some task that serves it has not settled: it is not DONE, or not by
+ *    its own declared criterion, or a check of it has not passed. A conjunction, not a disjunction:
+ *    one finished task among five does not make the stated condition true, and each of the five is
+ *    judged by the criterion it declared as well as by `status = 'DONE'`.
  *  - `DECLARATION_STALE` — some task declared a revision that is not the one the criterion carries
  *    today. T2 owns that comparison; this clause is its fold, not a second copy of it.
  */
@@ -94,6 +91,16 @@ export interface CriterionSatisfaction {
   unmet: CriterionUnmetReason[];
 }
 
+/** One check pointed at a task: what picks the newest live one, and what it concluded. */
+export interface ServingCheckFacts {
+  id: string;
+  createdAt: Date;
+  status: string;
+  verdict: TaskVerdictValue | null;
+  terminalReason: string | null;
+  supersededByTaskId: string | null;
+}
+
 /** The settlement facts of one serving task, on top of the declaration facts T2 already reads. */
 export interface ServingTaskFacts {
   id: string;
@@ -107,13 +114,10 @@ export interface ServingTaskFacts {
   verifiesTaskId: string | null;
   /** A carrier's own conclusion. */
   verdict: TaskVerdictValue | null;
-  /** The independent checks pointed at this task, whose PASS settles it as a subject. */
-  verifiedBy: ReadonlyArray<{
-    status: string;
-    verdict: TaskVerdictValue | null;
-    terminalReason: string | null;
-    supersededByTaskId: string | null;
-  }>;
+  /** The independent checks pointed at this task, whose newest live one answers for it. */
+  verifiedBy: ReadonlyArray<ServingCheckFacts>;
+  /** What a carrier checks: whether that work is DONE now, and every check of it. Null otherwise. */
+  verifies: { status: string; verifiedBy: ReadonlyArray<ServingCheckFacts> } | null;
   /**
    * The head of this task's completion-evidence ledger — newest first, and only ever one row —
    * carrying the decision made about it. A list because that is the shape the query answers with;
@@ -134,43 +138,76 @@ export interface CriterionWithSettlementFacts {
 }
 
 /**
- * Whether one serving task has settled BY ITS OWN DECLARED CRITERION.
+ * Whether one serving task has settled.
  *
- * The switch is the substance of clause 2. `status = 'DONE'` would be one sentence shorter and
- * would say something else — that a projection agreed — where this asks each task the question it
- * declared it would be asked. The three arms are peers and each names the fact it reads:
+ * THREE QUESTIONS, ASKED IN THIS ORDER
+ * ------------------------------------
+ *  1. Is it DONE? Whatever it declared, a task that is not DONE has not settled. Two of the arms
+ *     below stand on facts that outlive a reopen, a CONFIRM and a PASS, and a reopened task's
+ *     CONFIRM answers for the work before the reopen. On 2026-11-03 that stored a project DONE with
+ *     one of its tasks being reworked (`project-done-derived.pg.spec.ts`). CANCELLED and FAILED are
+ *     not DONE either: a project resting on work somebody dropped has not been proven, and a task
+ *     that no longer belongs under the criterion moves off it.
+ *  2. Is it a check, or does a check answer for it? A carrier settles only on a PASS, and only while
+ *     the work it passed is still DONE. Any verdict concludes a carrier, and that stays
+ *     `evaluateTaskCompletion`'s answer, because it is what makes the carrier itself DONE and what
+ *     its dependents read. It is not this question's answer: a FAIL is a finished check and
+ *     unfinished work. Work a check is pointed at is held by that check whether or not the check
+ *     serves the criterion, which is also how a dependency on that work is held.
+ *  3. Did it settle by its own declared criterion? The switch below, each arm reading its own fact.
  *
- *  - EXECUTABLE: `status = 'DONE'` IS its stored settlement fact, and this arm is not a shortcut
- *    to the other two. 0230 restored the exit-code comparison in `runnerApi.turnComplete`, where
- *    it happens under the task's row lock and is then dropped — the owner's instruction was
+ * WHICH CHECK ANSWERS, WHEN THERE ARE SEVERAL
+ * -------------------------------------------
+ * The subject's newest live check (`newestLiveCheck`), for the subject and for every check of it.
+ * It is §13.3's rule, and the dependency gate and the aggregation already decide on that row, so a
+ * criterion cannot disagree with them about which check counts:
+ *
+ *  - An older FAIL under a newer PASS is met. That is fix-and-re-run. Counting each check's own
+ *    verdict instead would wedge it, because a concluded check cannot name a successor: its verdict
+ *    has to be revoked before it can be cancelled, and a cancelled row is not DONE. On production on
+ *    2026-11-03, 13 subjects had two or more checks and 8 of them an older FAIL under a newer PASS.
+ *    None of those yet had both checks serving one criterion, so this rule moved nothing there.
+ *  - An older PASS under a newer FAIL, or under a check still running, is not met. A newer check
+ *    re-opens the question, which is why "any PASS" is not the rule either.
+ *  - A cancelled or retired check answers nothing: the one before it answers again.
+ *
+ * A subject with no live check at all has nothing answering for it, so a VERIFICATION subject stays
+ * unsettled and any other is judged by its own criterion alone.
+ *
+ * THE ARMS OF QUESTION 3
+ * ----------------------
+ *  - EXECUTABLE: `status = 'DONE'` IS its stored settlement fact, so question 1 was all of it. 0230
+ *    restored the exit-code comparison in `runnerApi.turnComplete`, where it happens under the
+ *    task's row lock and is then dropped — the owner's instruction was
  *    "根据 exit code 来简单判断，不需要实际记录数据" — so no exit code is stored anywhere for this
  *    read to compare. The compare-and-set that write performs is the only thing that puts an
  *    EXECUTABLE task into DONE, and 0193's fence stands behind it, so DONE here is the trace of a
  *    comparison that happened and agreed.
- *  - VERIFICATION: a live PASS from an independent check, or, for a carrier, its own verdict.
- *    Both are rows this read can go and look at, so it hands them to the shared evaluator.
+ *  - OWNER_CONFIRMED: the same, for EXECUTABLE's reason. The account owner's CONFIRM is the only
+ *    thing that writes it (`TaskOwnerConfirmationService`), and 0267's lane in the DONE fence admits
+ *    the write only while the owner's newest decision about the task is that CONFIRM, so DONE here
+ *    is the trace of the owner's own word.
+ *  - VERIFICATION: question 2 has already read the newest live check, and only a PASS settles.
  *  - EVIDENCE_JUDGMENT: a CONFIRM decision standing on the newest revision of this task's
- *    completion evidence. Two rows this read can go and look at, like VERIFICATION's, handed to
- *    the same evaluator rather than compared here. Until 2026-09-04 this arm could not be
- *    satisfied at all, so a criterion any such task served was held up by it forever, whatever
- *    the work had done — which is why the arm is written as facts read rather than as a constant.
- *  - OWNER_CONFIRMED: `status = 'DONE'`, for EXECUTABLE's reason. The account owner's CONFIRM is
- *    the only thing that writes it (`TaskOwnerConfirmationService`), and 0267's lane in the DONE
- *    fence admits the write only while the owner's newest decision about the task is that CONFIRM,
- *    so DONE here is the trace of the owner's own word.
+ *    completion evidence. DONE alone cannot stand in for it, because an aggregate policy can write
+ *    DONE with nobody having judged anything. Two rows this read can go and look at, handed to the
+ *    shared evaluator rather than compared here. Until 2026-09-04 this arm could not be satisfied
+ *    at all, so a criterion any such task served was held up by it forever, whatever the work had
+ *    done — which is why the arm is written as facts read rather than as a constant.
  */
 export function servingTaskSettled(task: ServingTaskFacts): boolean {
+  if (task.status !== 'DONE') return false;
+  if (task.verifiesTaskId != null) {
+    return task.verifies?.status === 'DONE' && checkAnswer(task.verifies.verifiedBy) === 'PASSED';
+  }
+  const checks = checkAnswer(task.verifiedBy);
+  if (checks === 'NOT_PASSED') return false;
   switch (task.completionCriterion) {
     case 'EXECUTABLE':
     case 'OWNER_CONFIRMED':
-      return task.status === 'DONE';
+      return true;
     case 'VERIFICATION':
-      return evaluateTaskCompletion({
-        completionCriterion: 'VERIFICATION',
-        verifiesTaskId: task.verifiesTaskId,
-        ownVerdict: task.verdict,
-        verificationVerdict: livePassVerdict(task.verifiedBy),
-      }).satisfied;
+      return checks === 'PASSED';
     case 'EVIDENCE_JUDGMENT': {
       const [latest] = task.completionEvidence;
       return evaluateTaskCompletion({
@@ -185,17 +222,38 @@ export function servingTaskSettled(task: ServingTaskFacts): boolean {
 }
 
 /**
- * The one PASS that counts, with the liveness rule the aggregation and 0193's fence already use:
- * a cancelled, retired or superseded check is not the check that settles anything.
+ * What a subject's checks say: its newest live check, with the liveness rule the epoch and 0193's
+ * fence already use, asked of the evaluator that says what settles a subject. `NO_LIVE_CHECK` is
+ * not `NOT_PASSED`: a subject whose checks were all cancelled or replaced has no check holding it.
  */
-function livePassVerdict(
-  verifiedBy: ServingTaskFacts['verifiedBy'],
-): TaskVerdictValue | null {
-  const passed = verifiedBy.some((check) => check.verdict === 'PASS' && verificationIsLive({
-    status: check.status as AggregationTaskStatus,
+function checkAnswer(
+  checks: ReadonlyArray<ServingCheckFacts>,
+): 'PASSED' | 'NOT_PASSED' | 'NO_LIVE_CHECK' {
+  const newest = newestLiveCheck(checks.map((check) => ({
+    ...check,
     retired: check.terminalReason != null || check.supersededByTaskId != null,
-  }));
-  return passed ? 'PASS' : null;
+  })));
+  if (newest === null) return 'NO_LIVE_CHECK';
+  return evaluateTaskCompletion({
+    completionCriterion: 'VERIFICATION',
+    verificationVerdict: newest.verdict,
+  }).satisfied ? 'PASSED' : 'NOT_PASSED';
+}
+
+/**
+ * What would settle one task, as the completion table says it: by its role, except that work
+ * which has done its part and a check that has already concluded are both waiting on the same
+ * thing, a pass. The table's own line for a concluded carrier would read "needs its verdict
+ * recorded" about a row whose verdict is what is holding the criterion up.
+ */
+function settlingAction(task: ServingTaskFacts): string {
+  const waitingOnAPass = task.verifiesTaskId != null
+    ? task.verdict != null
+    : task.status === 'DONE' && checkAnswer(task.verifiedBy) === 'NOT_PASSED';
+  return taskCompletionRequiredAction(
+    waitingOnAPass ? 'VERIFICATION' : task.completionCriterion,
+    { verifiesTaskId: waitingOnAPass ? null : task.verifiesTaskId },
+  ).requiredAction;
 }
 
 /**
@@ -259,13 +317,21 @@ function blockingTask(
     title: task.title,
     status: task.status,
     completionCriterion: task.completionCriterion,
-    requiredAction: taskCompletionRequiredAction(task.completionCriterion, {
-      verifiesTaskId: task.verifiesTaskId,
-    }).requiredAction,
+    requiredAction: settlingAction(task),
     criterionRevision: task.criterionRevision,
     criterionRevisionStale: declaration.criterionRevisionStale,
   };
 }
+
+/** One check, as the fold reads it: spelled once, for the checks of a task and of its subject. */
+const SERVING_CHECK_SELECT = {
+  id: true,
+  createdAt: true,
+  status: true,
+  verdict: true,
+  terminalReason: true,
+  supersededByTaskId: true,
+} as const;
 
 /**
  * Every criterion this project states, in the order it states them, and whether the work filed
@@ -299,14 +365,8 @@ export async function readCriterionSatisfaction(
           completionCriterion: true,
           verifiesTaskId: true,
           verdict: true,
-          verifiedBy: {
-            select: {
-              status: true,
-              verdict: true,
-              terminalReason: true,
-              supersededByTaskId: true,
-            },
-          },
+          verifiedBy: { select: SERVING_CHECK_SELECT },
+          verifies: { select: { status: true, verifiedBy: { select: SERVING_CHECK_SELECT } } },
           // Only the newest revision: an older one is a claim a later submission replaced, and the
           // criterion is about the claim standing now.
           completionEvidence: {
