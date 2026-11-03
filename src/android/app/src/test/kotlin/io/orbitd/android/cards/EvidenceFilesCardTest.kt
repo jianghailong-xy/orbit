@@ -77,12 +77,14 @@ internal object EvidenceFilesServer {
     @Volatile var pending = true
     /** While set, the bytes of a file wait on it. */
     @Volatile var holdBytes: CompletableDeferred<Unit>? = null
+    /** The bytes of these files wait on their own: which picture comes first is the server's to say. */
+    val holdFile = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     /** How many messages the conversation holds above its cards. */
     @Volatile var messages = 0
     val bytes = ConcurrentHashMap<String, ByteArray>()
     val calls = CopyOnWriteArrayList<String>()
 
-    fun reset() { citations = ""; pages = emptyMap(); hold = null; holdBytes = null; pending = true; messages = 0; bytes.clear(); calls.clear() }
+    fun reset() { citations = ""; pages = emptyMap(); hold = null; holdBytes = null; pending = true; messages = 0; holdFile.clear(); bytes.clear(); calls.clear() }
     fun attachmentReads() = calls.filter { it.startsWith("GET attachments/") }.map { it.removePrefix("GET attachments/") }
     fun routeReads() = calls.filter { it.startsWith("GET tasks/$TASK/evidence/2/files") }
 
@@ -134,6 +136,7 @@ internal object EvidenceFilesServer {
             }
             path.startsWith("attachments/") -> {
                 holdBytes?.await()
+                holdFile[path.removePrefix("attachments/")]?.await()
                 bytes[path.removePrefix("attachments/")]?.let { ApiResponse(200, it) } ?: ApiResponse(404, """{"message":"attachment not found"}""".encodeToByteArray())
             }
             path == "users/me" -> ok("""{"id":"u1","email":"owner@t8.test","name":"Owner"}""")
@@ -491,12 +494,23 @@ class EvidenceFilesCardTest {
         assertTrue("back on the page", exists(hasTestTag("evidence-files")))
     }
 
-    /** Pinched, a finger moves the picture rather than turning the page, until it is pinched back. */
+    /**
+     * Pinched, a finger moves the picture rather than turning the page, until it is pinched back. The pager also reads the next picture,
+     * and either can come first. A pinch before the one under it is drawn has nothing to hold, and the swipe turns the page: CI went red
+     * that way (runs 41531514937, 41554340716). So this makes the neighbour come first every time, and pinches the picture on screen.
+     */
     @Test fun aPinchedPictureIsMovedRatherThanPagedUntilItIsLetBack() {
         serveTheBoard()
         openPage()
+        await { exists(hasTestTag(pictureOf(EvidenceFilesServer.LIGHT_OPEN)), unmerged = true) }
+        val onScreen = CompletableDeferred<Unit>()
+        server.holdFile[EvidenceFilesServer.LIGHT_OPEN] = onScreen
         compose.onNodeWithTag(tileOnPage(EvidenceFilesServer.LIGHT_OPEN)).performClick()
         await { text("evidence-viewer:position") == "1 of 8" && exists(hasTestTag("evidence-viewer:image"), unmerged = true) }
+        val itself = hasTestTag("evidence-viewer:image") and hasContentDescription("chromium-light-phone/menu-open.png")
+        assertFalse("the neighbour came first", exists(itself, unmerged = true))
+        onScreen.complete(Unit)
+        await { exists(itself, unmerged = true) }
         val pager = compose.onNodeWithTag("evidence-viewer:pager")
         pager.performTouchInput { pinch(center - Offset(40f, 0f), center - Offset(320f, 0f), center + Offset(40f, 0f), center + Offset(320f, 0f)) }
         pager.performTouchInput { swipeLeft() }
