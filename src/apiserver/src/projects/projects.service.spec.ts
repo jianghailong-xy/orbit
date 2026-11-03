@@ -816,10 +816,17 @@ test('an update writes only the fields it was sent, and null clears one', async 
   // Settling a project must not blank the goal that says what it was for. Since 0229 DONE is an
   // ordinary field write too — it is asserted separately, in the removal suites. A status other
   // than DONE takes the DONE record with it (migration 0345): who recorded a DONE is a fact about a
-  // DONE, so it is part of the same write rather than a field of its own.
+  // DONE, so it is part of the same write rather than a field of its own. And a status other than
+  // OPEN takes any Reopen press with it (migration 0469), since a press is about an OPEN project.
   await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.CANCELLED } as never);
   assert.deepEqual(writes[0], {
-    status: 'CANCELLED', doneBy: null, doneAt: null, doneCriteriaDigest: null, acceptedGaps: [],
+    status: 'CANCELLED',
+    doneBy: null,
+    doneAt: null,
+    doneCriteriaDigest: null,
+    acceptedGaps: [],
+    reopenedAt: null,
+    reopenedFacts: Prisma.DbNull,
   });
 
   await service.update(OWNER_ID, PROJECT_ID, { goal: null, title: 'Renamed' } as never);

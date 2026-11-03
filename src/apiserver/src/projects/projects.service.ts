@@ -192,9 +192,11 @@ import {
 } from './project-criterion-independence';
 import {
   NO_DONE_RECORD,
+  NO_REOPEN_RECORD,
   criterionLandingWithReasons,
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
+  reopenRecordOfPress,
   storeDerivedProjectStatus,
 } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
@@ -581,7 +583,13 @@ export interface CriteriaDecisionResult {
   reply: CriteriaDecisionReply | null;
 }
 
+/** One digest per task serving a criterion, which only the projection reads: nothing a person or a
+ *  coordinator could use, and it would cost every `project_get` context for as long as a press stands.
+ *  `reopenedAt` is what says a press is on record. */
+const NOT_IN_THE_PROJECT_DOCUMENT = { reopenedFacts: true } as const satisfies Prisma.ProjectOmit;
+
 type ProjectMutationPayload = Prisma.ProjectGetPayload<{
+  omit: typeof NOT_IN_THE_PROJECT_DOCUMENT;
   include: typeof COORDINATION_INCLUDE & {
     acceptanceCriterionDefinitions: typeof ACCEPTANCE_DEFINITIONS_INCLUDE;
   };
@@ -1099,6 +1107,35 @@ export class ProjectsService {
   ): void {
     const refusal = refuseProjectStatusWrite(dto.status, actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
+  }
+
+  /**
+   * What a write of `status` does to the record of the owner's Reopen project (migration 0469), which
+   * is what `storeDerivedProjectStatus` leaves standing.
+   *
+   * Only the account owner signed in, taking the row out of DONE or CANCELLED, is the press. A session
+   * never gets this far (`assertStatusIsNotWrittenFromASession`) and neither does a token
+   * (`refuseOwnerFieldsToToken`). The runner credential with no session header still writes the column
+   * as it always has, and that is not the owner's press: the projection answers it on its next edge.
+   * `{ "status": "OPEN" }` on a project already OPEN reopens nothing, so it leaves any press as it was.
+   * Any other status takes the row out of OPEN, and a press is about an OPEN project.
+   *
+   * Under the project lock, after any criteria this same write stated: what is recorded is what the
+   * press was made over.
+   */
+  private static async reopenRecord(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    id: string,
+    requested: UpdateProjectDto['status'],
+    current: string,
+    credential: AuthCredential | undefined,
+  ): Promise<Prisma.ProjectUpdateInput> {
+    if (requested === undefined) return {};
+    if (requested !== SharedProjectStatus.OPEN) return NO_REOPEN_RECORD;
+    if (current === SharedProjectStatus.OPEN) return {};
+    if (credential?.kind !== 'LOGIN') return NO_REOPEN_RECORD;
+    return reopenRecordOfPress(tx, ownerId, id);
   }
 
   /**
@@ -2608,6 +2645,7 @@ export class ProjectsService {
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
+      omit: NOT_IN_THE_PROJECT_DOCUMENT,
       include: {
         // No `_count: { select: { tasks: true } }`. That relation aggregate is a second pass over
         // this project's own task rows, and the tally below has already walked them; the total is
@@ -3547,7 +3585,9 @@ export class ProjectsService {
    * on who asks: refused whole when an acting session is on the request, written verbatim when
    * there is none, for `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says:
    * that is projected from rows already committed by `projects/project-done-derived.ts`, on this
-   * method's own post-commit edge as much as anywhere else.
+   * method's own post-commit edge as much as anywhere else. The one write it leaves standing is the
+   * owner's Reopen project (`reopenRecord`): the project stays OPEN until the owner records it done,
+   * the criteria change, or the facts of the work serving them do.
    *
    * `credential` is the user door's. A personal access token is refused `status`, `integration` and
    * `acceptanceCriteriaItems` whole, and the authorization set and `coordinatorAgentId`, as the
@@ -3744,9 +3784,13 @@ export class ProjectsService {
           pausedAt: locked.paused_at,
           pausedReason: locked.paused_reason,
         }, new Date());
+        const reopen = await ProjectsService.reopenRecord(
+          tx, ownerId, id, dto.status, locked.status, credential,
+        );
         const project = await tx.project.update({
           where: { id },
-          data: pause ? { ...data, ...pause } : data,
+          data: { ...data, ...pause, ...reopen },
+          omit: NOT_IN_THE_PROJECT_DOCUMENT,
           include: {
             ...COORDINATION_INCLUDE,
             acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
@@ -4017,7 +4061,8 @@ export class ProjectsService {
    * know: the criteria are the only input to that projection any field of `UpdateProjectDto`
    * reaches, and re-projecting after an ordinary rename would also re-decide the column behind an
    * owner who had just written it by hand — a write r2 still allows, and not this method's to take
-   * back.
+   * back. An edit that moves the criteria also ends any Reopen press standing on the old ones, which
+   * the projection reads for itself.
    *
    * AFTER THE COMMIT and outside every transaction, for the reason `storeDerivedProjectStatus`
    * gives at length: it reads rows that have already committed, and anything landing between its
