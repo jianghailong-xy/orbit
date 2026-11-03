@@ -71,6 +71,26 @@ past retention, is sent `wal/` first, on its own and deleting nothing, and only 
 holds a finished segment before it holds a base backup, and keeps one from then on, so a sync cut short at any point is
 carried on by the next poll with nobody acting.
 
+`--delete` does not take the target's last base backup before another has landed. A target holding one of this archive's base
+backups whole keeps that one through `--delete`, which can then make room first: at the default `ORBIT_BASE_BACKUP_KEEP=2`, a
+target in step always holds one. A target holding base backups and none of those whole (`ORBIT_BASE_BACKUP_KEEP=1`, fallen behind
+past retention, or the one it shares only partly there) is sent the whole archive first, deleting nothing, and `--delete` runs
+only if that finished. For that round its disk needs room for what it holds and the whole archive at once. At
+`ORBIT_BASE_BACKUP_KEEP=1` that is every new base backup, so give that disk room for two.
+
+**A target that cannot hold both stops until a person acts.** Nothing is deleted, the old base backups stay whole, and the same
+failure is logged every poll:
+
+```text
+ERROR: off-host sync to … failed: … No space left on device … Nothing was deleted: the target cannot hold its old base backups and this archive at once, and the old ones stay until the new ones have landed. Free room on the backup host, or take the old ones off that disk by hand, and the next poll carries on.
+```
+
+While it lasts the mirror does not follow this archive: WAL keeps landing until it fills the disk too, but the new base backup
+does not, and WAL trimmed here since the last sync never reaches the target. There are two ways out, and the next poll takes up
+either with nobody else acting. Free room on that disk, enough for both, and the old base backups go only after the new ones
+have landed. Or take the old base backups off that disk by hand, when it can never hold both: that is a person's choice to have no
+complete base backup on the target until the next sync has finished, which is why the sidecar does not make it.
+
 **It also reads the target first, and leaves another cluster's archive alone.** A new cluster has a real
 base backup and real WAL of its own, so one started before a restore would otherwise replace the only copy
 of the old history. Each poll, before `--delete`, the sidecar lists the target's `wal/` and `base/`:
