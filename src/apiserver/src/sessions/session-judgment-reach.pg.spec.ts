@@ -1144,6 +1144,15 @@ test('what a session answers about a run reaches the run only as the table says'
     });
   }
 
+  await t.test('a verdict changed on a verifier already DONE is asked about the subject’s run when the change settles it', async () => {
+    const pair = await subjectAndCheck('auto');
+    assertWent(await writeVerdict(pair.check, 'FAIL', await sessionIn('auto')), 'a FAIL from Auto');
+    assert.deepEqual([await statusOf(pair.check), await statusOf(pair.subject)], ['DONE', 'OPEN']);
+    const before = await twoTasks(pair);
+    assertRefused(await writeVerdict(pair.check, 'PASS', await sessionIn('plan')), 'the PASS that settles the subject');
+    assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+  });
+
   await t.test('a verdict on a check that is a parent’s last child settles the parent too, which has no run to ask about: the database keeps a work session off it', async () => {
     const parent = await taskIn({ ...judged, completionPolicy: 'ALL_CHILDREN_DONE' });
     const check = await aCheck(await taskIn(), { parentTaskId: parent });
