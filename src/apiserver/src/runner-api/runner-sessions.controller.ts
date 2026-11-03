@@ -487,13 +487,7 @@ export class RunnerSessionsController {
     const clientTurnId = provided || randomUUID();
     // With a message or without, one door and one rule (session-reach.ts): stopping a session's turn is as
     // much what a narrower session may not do as writing it the next one.
-    await this.sessions.assertMayReach(
-      runner.ownerId,
-      senderSessionId,
-      id,
-      followUp ? 'interruptWithMessage' : 'interrupt',
-      followUp ? provided : undefined,
-    );
+    await this.sessions.assertMayReach(runner.ownerId, senderSessionId, id, followUp ? 'interruptWithMessage' : 'interrupt');
     return this.sessions.interrupt(
       runner.ownerId,
       id,

@@ -57,7 +57,7 @@ const REACH_SELECT = {
   engine: true,
   parentSessionId: true,
   owner: { select: { preferences: true } },
-  task: { select: { id: true, projectId: true, verifiesTaskId: true, creatorSessionId: true } },
+  task: { select: { projectId: true, verifiesTaskId: true, creatorSessionId: true } },
 } as const;
 
 interface ReachRow {
@@ -66,7 +66,7 @@ interface ReachRow {
   engine: string | null;
   parentSessionId: string | null;
   owner: { preferences: unknown };
-  task: { id: string; projectId: string | null; verifiesTaskId: string | null; creatorSessionId: string | null } | null;
+  task: { projectId: string | null; verifiesTaskId: string | null; creatorSessionId: string | null } | null;
 }
 
 /** Whether this session coordinates that project: its coordinator, or a judgment session a wake opened for it. */
@@ -131,10 +131,11 @@ function nextStep(callerMode: string): string {
  * Refuse what the rule above refuses. Answers whether the caller is the narrower of the two, which is what
  * makes a message it goes on to send say so (session-message.ts) when that message has no block of its own.
  *
- * `clientTurnId` is the key of the message, when the act is one. A retry of a message already filed from
- * this session is answered with the turn it filed, whatever has changed since (`createTurn`): a committed
- * operation owns its key, so only a new one is held to this. Read only when about to refuse, so it costs an
- * ordinary send nothing.
+ * `clientTurnId` is the key of a message sent by `createTurn` or `resume`. A retry of one already filed from this
+ * session is answered with the turn it filed, whatever has changed since: a committed operation owns its key, so
+ * only a new one is held to this, and both of those verbs write nothing for a key they already hold. Read only when
+ * about to refuse, so it costs an ordinary send nothing. An interrupt passes none: its verb acts on any key it has
+ * no interrupt under, so a message filed under that key says nothing about whether this call is a retry.
  *
  * A caller or a target this account does not have is left to the door, whose own answer that is.
  */

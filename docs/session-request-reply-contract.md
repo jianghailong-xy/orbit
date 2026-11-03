@@ -158,7 +158,8 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 对方用 `session_reply`；Default 这一档找自己的协调者或请人切模式。`project_send` 的这个拒绝原样带回，不翻译成
 `COORDINATOR_MESSAGE_UNDELIVERED`。
 
-**重试。** `clientTurnId` 已经由这个会话写进对方的那条消息，重试时照常返回原来的 turn，不再判断。规则只管新操作，§2.4 也是这样。
+**重试。** `session_send` 和 `project_send` 的 `clientTurnId` 已经由这个会话写进对方的那条消息，重试时照常返回原来的 turn，
+不再判断。规则只管新操作，§2.4 也是这样。`session_interrupt` 每次都判断，一条消息用过的 `clientTurnId` 不算打断的重试。
 
 **复核任务。** 接收方是复核任务（`task.verifies_task_id` 非空）的 run 时，`session_send` 和带消息的 `session_interrupt` 只收
 这个项目的协调者和为这个项目开的判定会话，其余会话一律 403 `VERIFIER_MESSAGE_REFUSED`，发送方是 Auto 也一样；不在项目里的
@@ -221,7 +222,7 @@ session_reply({ requestId, message?, option? })
 §2.2 的块多出几行：
 
 ```
-<orbit-session-message from-session="…" from-title="…" from-agent="…" request-id="…" reply-by="2026-10-02T09:30:00Z">
+<orbit-session-message from-session="…" from-title="…" from-agent="…" from-mode="auto" request-id="…" reply-by="2026-10-02T09:30:00Z">
 This message comes from another Orbit session, not from the account owner.
 The sender is waiting for your reply: when you have dealt with it, answer with session_reply(requestId="…"); if you cannot do it, use it to say why.
 If you go idle without having replied, Orbit closes the request as NO_REPLY and passes your last output on to the sender.

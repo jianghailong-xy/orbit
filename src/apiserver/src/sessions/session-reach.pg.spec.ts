@@ -764,7 +764,7 @@ test('a session reaches a wider session only as the table says', {
     assert.match(words, /your plan/);
     assert.match(words, /account owner/);
     assert.match(words, /session_reply/);
-    assert.doesNotMatch(words, /[一-鿿]/);
+    assert.doesNotMatch(words, /[\u4e00-\u9fff]/);
   });
 
   await t.test('Default is told to go to its coordinator or ask for its mode to be switched', async () => {
@@ -778,7 +778,7 @@ test('a session reaches a wider session only as the table says', {
       assert.match(words, new RegExp(`"${mode}"`));
       assert.match(words, /coordinator/);
       assert.match(words, /account owner/);
-      assert.doesNotMatch(words, /[一-鿿]/);
+      assert.doesNotMatch(words, /[\u4e00-\u9fff]/);
     }
   });
 
@@ -882,9 +882,17 @@ test('a session reaches a wider session only as the table says', {
     assert.equal(await prisma.conversationTurn.count({ where: { sessionId: to, clientTurnId } }), 1);
     // A new message from the same session is what the rule answers.
     assertRefusedAs(await send('POST', `${path(to)}/turns`, { message: 'hello again', clientTurnId: randomUUID() }, headers), WIDER, 'a new message');
+    // The same key with other words is no retry, and writes nothing.
+    const reworded = await send('POST', `${path(to)}/turns`, { message: 'something else', clientTurnId }, headers);
+    assert.equal(reworded.status, 409, reworded.text);
+    assert.equal(await prisma.conversationTurn.count({ where: { sessionId: to, clientTurnId } }), 1);
     // Somebody else's key is not a way in: the key belongs to the turn it was filed under, and to its sender.
     const stranger = await sessionIn('plan');
     assertRefusedAs(await send('POST', `${path(to)}/turns`, { message: 'hello', clientTurnId }, await asSession(stranger)), WIDER, 'another session’s key');
+    // Nor is a message's key a way to interrupt: that verb would act on a key it has no interrupt under.
+    const before = await stateOf(to);
+    assertRefusedAs(await send('POST', `${path(to)}/interrupt`, { message: 'hello', clientTurnId }, headers), WIDER, 'an interrupt under a message’s key');
+    assert.equal(await stateOf(to), before, 'the interrupt went through under the message’s key');
   });
 
   await t.test('a credential with no session in it reads as no session: this rule does not reach it', async () => {
@@ -951,10 +959,18 @@ test('a session reaches a wider session only as the table says', {
     assert.equal(stored.sessionMessage?.fromMode, 'default');
   });
 
-  await t.test('a narrower message written into a running turn carries the block too', async () => {
+  await t.test('a narrower message written into a running turn carries the same block', async () => {
     const parent = await sessionIn('default');
     const child = await sessionIn('auto', { parentSessionId: parent });
-    await send('POST', `${path(child)}/turns`, { message: 'hello', clientTurnId: randomUUID() }, await asSession(parent));
+    // The child in the middle of a turn: the owner's message, handed to its engine.
+    await sessions.createTurn(ownerId, child, { content: 'the work', clientTurnId: randomUUID() } as never);
+    await deliveredTo(child);
+    const sent = await send('POST', `${path(child)}/turns`, { message: 'hello', clientTurnId: randomUUID() }, await asSession(parent));
+    assert.equal(sent.json.placement, 'steer', sent.text);
+    const steer = await send('GET', `${path(child)}/inbox?acceptsSteer=1`);
+    assert.equal(steer.json.kind, 'steer', steer.text);
+    assert.match(String(steer.json.content), /from-mode="default"/);
+    assert.match(String(steer.json.content), /The sender runs in default, which is narrower than this session's auto\./);
     const turn = await prisma.conversationTurn.findFirstOrThrow({ where: { sessionId: child, senderSessionId: parent } });
     assert.equal(turn.content, 'hello', 'the block is not stored as the sender’s words');
   });
