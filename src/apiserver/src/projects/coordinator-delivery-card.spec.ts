@@ -18,6 +18,7 @@ import {
   projectSettledUnmergedFact,
   projectTasksSettledFact,
   taskDispatchRefusedFact,
+  taskRunStoppedFact,
 } from './coordinator-wake';
 import {
   criteriaDecisionReplyIntentOf,
@@ -77,6 +78,9 @@ test('each fact the coordinator is told is the card its line is drawn from', () 
       projectId: PROJECT, blockerId: randomUUID(), taskId: TASK,
       detail: { taskTitle: 'Blocked me', blockerKind: 'SCOPE', requiredAction: 'Rule on it.' },
     }), card({ kind: 'PROJECT_BLOCKER_RAISED', task: { id: TASK, title: 'Blocked me' } })],
+    ['a run that stopped', taskRunStoppedFact({
+      projectId: PROJECT, taskId: TASK, taskTitle: 'Stopped me', sessionId: randomUUID(), stopKey: 'turn', lastWords: 'Stuck.',
+    }), card({ kind: 'TASK_RUN_STOPPED', task: { id: TASK, title: 'Stopped me' } })],
     ['work not on main', criterionUnlandedFact(PROJECT, 'k'.repeat(16), [
       { taskId: TASK, status: 'DONE' }, { taskId: randomUUID(), status: 'DONE' }, { taskId: randomUUID(), status: 'DONE' },
     ], 'ON_INTEGRATION_LINE')!, card({ kind: 'CRITERION_UNLANDED', count: 3 })],

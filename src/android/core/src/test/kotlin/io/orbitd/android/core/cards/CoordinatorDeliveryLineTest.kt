@@ -37,6 +37,7 @@ class CoordinatorDeliveryLineTest {
             "DEPENDENT_READY" to "Can start now: $title",
             "TASK_DISPATCH_REFUSED" to "Could not start: $title",
             "PROJECT_BLOCKER_RAISED" to "Blocker raised: $title",
+            "TASK_RUN_STOPPED" to "Run stopped: $title",
             "CRITERION_UNLANDED" to "Work not on main yet: 3 tasks",
             "ACCEPTANCE_LANDED" to "All 3 criteria landed",
             "ACCEPTANCE_LANDED_HELD" to "All 3 criteria landed, Done held back",
