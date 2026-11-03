@@ -2383,7 +2383,7 @@ func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "DELETE", "/runner/task-lists/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "DELETE", "/runner/task-lists/"+url.PathEscape(id), nil, &out, taskOpTimeout, callingSessionHeader())
 	return out, err
 }
 

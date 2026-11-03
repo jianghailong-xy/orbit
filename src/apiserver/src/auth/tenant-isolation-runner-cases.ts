@@ -1039,6 +1039,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'PATCH /runner/task-lists/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.listId }, body: { title: 'renamed by the census' } })),
   'PATCH /runner/task-lists/:id header x-orbit-workspace-id': fromTheirWorkspace('x-orbit-workspace-id', (mine) => ({ params: { id: mine.listId }, body: { title: 'renamed by the census' } })),
   'PATCH /runner/task-lists/:id header x-orbit-agent-id': fromTheirWorkspace('x-orbit-agent-id', (mine) => ({ params: { id: mine.listId }, body: { title: 'renamed by the census' } })),
+  'DELETE /runner/task-lists/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.spare.listId } })),
   'POST /runner/task-lists/:id/dag-preview body ops[].taskId': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.listId }, body: { ops: [{ op: 'add', taskId: of.runner.listTaskId, dependsOnTaskId: mine.dependencyTaskId }] } }),
