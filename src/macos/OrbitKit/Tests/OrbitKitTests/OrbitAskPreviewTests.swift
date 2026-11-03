@@ -29,7 +29,8 @@ final class OrbitAskPreviewTests: XCTestCase {
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
                      "orbit_provider_delete", "orbit_project_update_integration",
-                     "orbit_runner_delete", "orbit_agent_delete"] {
+                     "orbit_runner_delete", "orbit_agent_delete",
+                     "orbit_agent_create", "orbit_agent_update"] {
             XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
                            "\(tool) must not offer Allow & remember")
         }
@@ -120,6 +121,91 @@ final class OrbitAskPreviewTests: XCTestCase {
             XCTAssertEqual(Approvals.decliningPrefix(toolName: tool), "Keeping it: ")
             XCTAssertEqual(Approvals.kind(toolName: tool), .tool, "drawn by the tool card")
         }
+    }
+
+    // MARK: a workspace write
+
+    private func workspaceWrite(_ tool: String = "orbit_agent_update", changes: String, removed: String = "[]") -> WorkspaceWritePreview? {
+        Approvals.workspaceWritePreview(toolName: tool, from: json("""
+            {"agentId":"w1","name":"nightly-build","workDir":"/srv/build",
+             "runner":{"id":"r1","name":"instance-1","displayName":"Build box"},
+             "envRemoved":\(removed),"writeSalt":"salt","writeDigest":"digest","changes":\(changes)}
+            """))
+    }
+
+    func testAWorkspaceWriteCardNamesTheWorkspaceAndEachVariableWhole() throws {
+        let long = "sk-" + String(repeating: "x", count: 4000)
+        let card = try XCTUnwrap(workspaceWrite(changes: #"{"env":{"REGION":"eu","API_KEY":"\#(long)"}}"#,
+                                                removed: #"["OLD_TOKEN"]"#))
+        XCTAssertFalse(card.isCreate)
+        XCTAssertEqual(card.heading, "Change this workspace?")
+        XCTAssertEqual(card.action, "Save changes")
+        XCTAssertEqual(card.name, "nightly-build")
+        XCTAssertEqual(card.status, "On Build box")
+        XCTAssertEqual(card.workDir, "/srv/build")
+        XCTAssertEqual(card.env?.map(\.line), ["API_KEY=\(long)", "REGION=eu"], "sorted, and not one character short")
+        XCTAssertEqual(card.envRemoved, ["OLD_TOKEN"])
+        XCTAssertEqual(card.fields, [])
+    }
+
+    func testAWorkspaceWriteCardSaysWhatElseItChanges() throws {
+        let card = try XCTUnwrap(workspaceWrite(changes: """
+            {"workDir":"/srv/other","systemPrompt":"Answer in French.","appendSystemPrompt":"And briefly.",
+             "runner":{"id":"r2","name":"gpu-2","displayName":null},"enableWorktree":false,
+             "name":"renamed","description":"builds at night","defaultMergeTarget":"develop"}
+            """))
+        XCTAssertNil(card.env, "a write that leaves the variables alone says nothing of them")
+        XCTAssertEqual(card.fields.map(\.caption), ["Working directory", "System prompt", "Appended system prompt", "Runner",
+                                                    "Worktree", "Name", "Description", "Merge target"])
+        XCTAssertEqual(card.fields.map(\.value), ["/srv/other", "Answer in French.", "And briefly.", "gpu-2",
+                                                  "Sessions run in the shared folder", "renamed", "builds at night", "develop"])
+    }
+
+    func testAWorkspaceWriteCardSaysSoWhenAFieldIsCleared() throws {
+        let card = try XCTUnwrap(workspaceWrite(changes: #"{"env":{},"systemPrompt":""}"#, removed: #"["A","B"]"#))
+        XCTAssertEqual(card.env, [])
+        XCTAssertEqual(card.envRemoved, ["A", "B"])
+        XCTAssertEqual(card.fields, [.init(caption: "System prompt", value: "Cleared")])
+    }
+
+    func testACreateReadsAsACreate() throws {
+        let card = try XCTUnwrap(Approvals.workspaceWritePreview(toolName: "orbit_agent_create", from: json("""
+            {"agentId":null,"name":"one-off","workDir":null,"runner":{"id":"r1","name":"hpc","displayName":null},
+             "envRemoved":[],"changes":{"name":"one-off","env":{"FCM_KEY":"k"},"enableWorktree":true}}
+            """)))
+        XCTAssertTrue(card.isCreate)
+        XCTAssertEqual(card.heading, "Create this workspace?")
+        XCTAssertEqual(card.action, "Create it")
+        XCTAssertEqual(card.status, "On hpc")
+        XCTAssertNil(card.workDir)
+        XCTAssertEqual(card.env?.map(\.line), ["FCM_KEY=k"])
+        XCTAssertEqual(card.fields, [.init(caption: "Worktree", value: "Each session gets its own git worktree")],
+                       "the name is the card's own row on a create")
+    }
+
+    func testOnlyTheWriteCardsAreWriteCardsAndSayingNoIsAConversation() {
+        XCTAssertNil(Approvals.workspaceWritePreview(toolName: "orbit_agent_delete", from: json("{}")))
+        XCTAssertNil(Approvals.workspaceWritePreview(toolName: "Bash", from: json("{}")))
+        for tool in ["orbit_agent_create", "orbit_agent_update"] {
+            XCTAssertTrue(Approvals.isOrbitAsk(toolName: tool), tool)
+            XCTAssertEqual(Approvals.kind(toolName: tool), .tool, "drawn by the tool card")
+        }
+        XCTAssertEqual(Approvals.decliningPrefix(toolName: "orbit_agent_update"), "Leaving it as it is: ")
+        XCTAssertEqual(Approvals.decliningPrefix(toolName: "orbit_agent_create"), "Not creating: ")
+        XCTAssertEqual(Approvals.workspaceWritePreview(toolName: "orbit_agent_update", from: json(#"{"runner":null,"changes":{}}"#))?.declineName,
+                       "this workspace")
+        XCTAssertEqual(Approvals.workspaceWritePreview(toolName: "orbit_agent_update", from: json(#"{"runner":null,"changes":{}}"#))?.status,
+                       "On no runner")
+    }
+
+    func testACardAServerThatPredatesItFiledShowsAllItHolds() throws {
+        let filed = json(#"{"agentId":"w1","env":{"API_KEY":"sk-1"},"workDir":"/srv/other"}"#)
+        XCTAssertNil(Approvals.workspaceWritePreview(toolName: "orbit_agent_update", from: filed))
+        let raw = try XCTUnwrap(Approvals.workspaceWriteRawInput(toolName: "orbit_agent_update", from: filed))
+        for words in ["API_KEY", "sk-1", "/srv/other"] { XCTAssertTrue(raw.contains(words), words) }
+        XCTAssertNil(Approvals.workspaceWriteRawInput(toolName: "Bash", from: filed))
+        XCTAssertNil(Approvals.workspaceWriteRawInput(toolName: "orbit_agent_update", from: json(#"{"changes":{}}"#)),
+                     "the server's own card has its preview")
     }
 
     // MARK: ending a blocker

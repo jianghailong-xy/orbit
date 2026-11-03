@@ -181,7 +181,7 @@ object CardPreviews {
 
     private val allows = setOf(CardVerb.ALLOW, CardVerb.REMEMBER, CardVerb.ANSWER, CardVerb.APPROVE_PLAN, CardVerb.CREATE_TASK,
         CardVerb.CREATE_AND_START, CardVerb.CREATE_PROJECT, CardVerb.CREATE_BATCH, CardVerb.CHANGE_DAG, CardVerb.RESOLVE_BLOCKER,
-        CardVerb.DELETE_IT)
+        CardVerb.DELETE_IT, CardVerb.SAVE_CHANGES, CardVerb.CREATE_WORKSPACE)
     private val denies = setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)
 
     /**

@@ -47,6 +47,8 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { RUNNER_DELETE_APPROVAL_TOOL_NAME, WORKSPACE_DELETE_APPROVAL_TOOL_NAME } from '../runner-api/runner-delete-approval';
+import { workspaceWriteDigest } from '../runner-api/runner-workspace-approval';
+import { WORKSPACE_CREATE_APPROVAL_TOOL_NAME, WORKSPACE_UPDATE_APPROVAL_TOOL_NAME } from '../sessions/workspace-write-card-values';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { type Tenant, type TenantRequest } from './tenant-isolation-cases';
 import {
@@ -235,6 +237,21 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     ] as const) {
       await db.approval.create({
         data: { sessionId: callingSessionId, toolName, input, status: 'ALLOWED', decidedAt: new Date(), decidedById: ownerId },
+      });
+    }
+    // The same for the writes the census sends that name a runner: its own request, one yes each, since
+    // each spends the card it finds (runner-api/runner-workspace-approval.ts). PATCH goes under both names.
+    for (const [toolName, workspaceId, write] of [
+      [WORKSPACE_CREATE_APPROVAL_TOOL_NAME, null, { name: 'census workspace', runnerId: of.runnerId }],
+      [WORKSPACE_CREATE_APPROVAL_TOOL_NAME, null, { name: 'census agent', runnerId: of.runnerId }],
+      [WORKSPACE_UPDATE_APPROVAL_TOOL_NAME, of.workspaceId, { runnerId: of.runnerId }],
+      [WORKSPACE_UPDATE_APPROVAL_TOOL_NAME, of.workspaceId, { runnerId: of.runnerId }],
+    ] as const) {
+      await db.approval.create({
+        data: {
+          sessionId: callingSessionId, toolName, status: 'ALLOWED', decidedAt: new Date(), decidedById: ownerId,
+          input: { writeSalt: 'census', writeDigest: workspaceWriteDigest('census', workspaceId, write) },
+        },
       });
     }
     const artifactRequestId = await turnOf(machineSessionId, {

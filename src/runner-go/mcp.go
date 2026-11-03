@@ -1708,6 +1708,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"name": name}
 		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
+		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, "", body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
+		}
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -1726,6 +1731,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		copyIfPresent(body, args, "name", "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
+		}
+		if declined, err := askBeforeAgentWrite(s.t, s.sessionID, id, body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this write, and nothing was written: "+declined, false)
 		}
 		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
@@ -1829,6 +1839,9 @@ var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeo
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
 func waitsForTheOwner(name string, args map[string]interface{}) bool {
+	if name == "agent_create" || name == "agent_update" {
+		return agentWriteNeedsCard(args)
+	}
 	if name == "project_update" {
 		// An update asks only when it proposes a merge check and nothing else. A title, a goal or a
 		// set of instructions is an agent's own to write; a LINE field is refused by the server
@@ -4650,6 +4663,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"additionalProperties": str,
 			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map. Existing values are intentionally secret and are not returned by agent_list, so provide the complete desired map.",
 		}
+		// What agent_create and agent_update say about the owner's card. The server refuses these fields
+		// without one, so an agent reads it here rather than in a refusal.
+		agentCardNote := " `env`, `workDir`, `systemPrompt`, `appendSystemPrompt`, `runnerId` and `enableWorktree` decide what this agent's next session runs and where, so a call naming any of them first puts the write — the agent, each variable's name and value, what each field becomes — on a confirmation card in front of the account owner, in every permission mode, and BLOCKS until they answer: nothing is written if they decline. `name`, `description` and `defaultMergeTarget` alone need no card."
+
 		mergeTargetProp := map[string]interface{}{
 			"type":        "string",
 			"description": "Branch this agent's sessions merge into by default. Omit to leave the runner's auto-detect (main, else master).",
@@ -4758,7 +4775,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_create",
-				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no engine or provider of its own, so pass `engine` and/or `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no engine or provider of its own, so pass `engine` and/or `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI." + agentCardNote,
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
@@ -4773,7 +4790,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI).",
+				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI)." + agentCardNote,
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,

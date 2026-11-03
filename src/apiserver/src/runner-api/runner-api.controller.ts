@@ -213,6 +213,7 @@ import {
   reapApprovalsOfReturnedCalls,
   reapApprovalsOfReturnedCallsIn,
 } from '../sessions/abandoned-approvals';
+import { WORKSPACE_WRITE_APPROVAL_TOOL_NAMES, withoutEnvValuesInToolUse } from '../sessions/workspace-write-card-values';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_INTERRUPTED_REASON,
@@ -488,6 +489,8 @@ import {
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
+import { sanitizeWorkspaceWrite } from './runner-agents.controller';
+import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -5804,6 +5807,12 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
+    // So does a workspace write's, and the write goes through only against it (runner-workspace-approval.ts).
+    if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(toolName)) {
+      const write = sanitizeWorkspaceWrite(PublicIdPipe.forFields('runnerId').transform(input, { type: 'body' }));
+      const writing = await workspaceWriteCardInput(this.prisma, { ownerId, runnerId: asker.runnerId }, toolName, input.agentId, write);
+      return writing as unknown as Prisma.InputJsonValue;
+    }
     if (toolName !== RunnerApiController.taskCreateApprovalToolName) return input as Prisma.InputJsonValue;
     const { acceptsStartAfterCreate: _assertedByTheAsker, ...body } = input;
     const card = acceptsStartAfterCreate ? { ...body, acceptsStartAfterCreate: true } : body;
@@ -5845,6 +5854,8 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // The same for a workspace write: each one is its own question, about values no rule has read.
+    if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // A card that names only a server may be about any of its tools, and a rule cannot have been
     // given for a tool nobody named.
     if (reachesPastOneMcpTool(dto.toolName)) return false;
@@ -7623,7 +7634,7 @@ export class RunnerApiController {
     // replaces the runner's top-level monotonic seq with the live-only seq 0 sentinel (retaining
     // it as payload.snapshotSeq for snapshot ordering). An older client that ignores the unknown
     // event therefore cannot advance its durable resume cursor past an event we never store.
-    const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent);
+    const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent).map(withoutEnvValuesInToolUse);
     await this.ingestEvents(runner, sessionId, leaseOwner, events);
     return { ok: true };
   }

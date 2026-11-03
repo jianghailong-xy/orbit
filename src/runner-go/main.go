@@ -727,6 +727,9 @@ func startService(cfg *RunnerConfig, proxyVars []envVar) registerOutcome {
 		return serviceNotOnline
 	}
 	printServiceStarted(svc.how)
+	for _, note := range svc.notes {
+		fmt.Println("      " + note)
+	}
 	return serviceOnline
 }
 

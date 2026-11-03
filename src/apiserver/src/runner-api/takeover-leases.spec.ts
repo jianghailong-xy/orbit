@@ -60,6 +60,8 @@ function harness(
       if (!sql(args).includes('set_config(')) executeCalls.push(args);
       return 1;
     },
+    // A collected card that holds a workspace write's values loses them (workspace-write-card-values.ts): none here does.
+    approval: { findMany: async () => [] },
   };
   const prisma = {
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
