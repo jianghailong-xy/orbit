@@ -554,6 +554,22 @@ test('a target with no base backup in common keeps its old one when the new one 
   }
 });
 
+test('what a failed round leaves of the new base backup does not count on the next poll, though the target now has that name', () => {
+  // The first file sorts first and fits, and at a long interval the next poll has the same stamp. Counting it as shared would
+  // take the old base backup then, one poll after keeping it.
+  const result = round({
+    cut: { on: '.staging-*', holdsBack: `${NEW_BASE}/base.tar.gz`, says: NO_ROOM, everyPoll: true },
+    prepare: (dirs) => {
+      noBaseInCommon(dirs);
+      writeFileSync(path.join(dirs.archive, 'base', NEW_BASE, 'backup_manifest'), 'its manifest');
+    },
+  });
+  assert.ok(namesIn(result.cutShort.mirror).includes(`base/${NEW_BASE}/backup_manifest`), 'the first file landed');
+  assert.equal(baseLine(result.after.mirror, OLD_BASE), baseLine(result.before.mirror, OLD_BASE), result.log);
+  assert.match(result.log, STOPPED);
+  assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
+});
+
 test('a full quota says the same', () => {
   const result = round({ cut: { on: '.staging-*', holdsBack: `${NEW_BASE}/base.tar.gz`, says: OVER_QUOTA }, prepare: noBaseInCommon });
   assert.ok(baseLine(result.cutShort.mirror, OLD_BASE), result.cutShort.log);
