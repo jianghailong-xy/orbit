@@ -81,6 +81,10 @@ Don't Ask），这句后面多说一句它实际按什么跑。这两样只是�
 `sender_session_id`：它还是任务简报，所以 `taskStart` 卡片照旧，也不算发给这个会话的消息，不计入 §2.4。不比 run 窄时没有块，
 和以前一样。这条路上的调用方来自 `X-Orbit-Session-Id`，那个头是归属，不是凭证。
 
+`<orbit-evidence-send-back>` 和 `<orbit-confirmation-return>` 带的也是调用方的话，只是它们是平台轮次，这一轮不写
+`sender_session_id`，也不算发给这个会话的消息。所以这两个块自己带 `from-session`、`from-mode`，调用方比接收方窄时带同一句话，
+走同一段代码（`session-message.ts` 的 `readBlockSender`）。所有者在应用里按的退回不带，块里写 `the account owner`。
+
 块必须放在正文之后：`controlPlaneNoteOf` 靠「回显以作者原文开头」切出平台追加的部分
 （`src/apiserver/src/runner-api/control-plane-note.ts`）。放在前面会让切分失效，块就会被记成发送者的原话。
 
@@ -144,7 +148,21 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 把状态改成 CANCELLED、`task_delete`（连同随它删除的复核任务）、`tasklist_delete`，比的是这次写会结束的每个活着的 run，没有活 run
 或 run 不比调用方宽时照旧；`tasklist_delete` 从带上调用会话的 runner 起生效。
 
+回答 run 的工作的四个门也走这张表，都在写之前判，排在这个门原有的每个拒绝之后：
+
+| 门 | 什么时候问 | 比的是谁 |
+|---|---|---|
+| `task_evidence_decide` CONFIRM | 这次确认会让任务变 DONE | 做这个任务的每个活 run（`starts_task_work`，reaper 结束的就是这些），不管证据是谁提交的 |
+| `task_update {verdict}` | 这次写会让复核任务变 DONE。PASS、FAIL、INCONCLUSIVE 都会 | 这个复核任务上做事的每个活 run |
+| `task_evidence_decide` SEND_BACK | 这次退回会给一轮 | 提交这个版本的会话 |
+| `task_confirmation_return` | 这次退回会给一轮 | 这份确认请求所在的 run |
+
+不结束 run 也不给一轮的写不问：任务已经 DONE、CANCELLED 或 FAILED 时的 CONFIRM；别的判据的任务上的 CONFIRM；撤销结论；已有同样结论的重写；
+已经 DONE 的复核任务改结论；提交证据的会话已经结束时的 SEND_BACK（不投递，也不恢复它，note 留在这个版本上）；所有者确认之后的退回（记成
+PROBLEMS，不给 run 一轮）。
+
 **不管什么。** `session_reply`：是更宽的一方先问的，Plan 也能回复。对自己的操作。所有者自己的门和平台的投递，它们不走这些门。
+所有者在应用里按证据卡片（用户门，不带会话头）也不问，不管这一下点的是哪个会话的卡片。
 新开会话的门有自己的规则（`PERMISSION_MODE_WIDER_THAN_SESSION`）。不带会话的凭证没有模式可比，也不在这条规则里。
 
 **直接相关**由服务端在调用时从自己的记录查，调用方的请求里没有任何东西能声明它：
@@ -155,26 +173,30 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 - 发起任务的会话（`task.creator_session_id`）和那个任务的 run，双向。
 - 对方有一个开着的请求在等这个会话回答（§3）。这一条是单向的。
 
-同一个项目的两个 run、同一棵会话树里的非父子、一个 run 开的对话和那个 run 的协调者，都不算。
+同一个项目的两个 run、同一棵会话树里的非父子、一个 run 开的对话和那个 run 的协调者、复核任务的 run 和被复核任务的 run，都不算。
 
 这些记录比它窄的会话也写不了。任务在哪个项目决定谁和它的 run 直接相关，所以一个会话比这个任务的某个 run 窄时，不能把任务移进
 项目（`task_update` 带 `projectId`），同样是 403 `SESSION_WIDER_THAN_CALLER`。所有者的门不受影响，任务还没有 run 时也不拦，
 新开的 run 归天花板规则管。
 
 **拒绝。** 403 `SESSION_WIDER_THAN_CALLER`，什么都没发生。文字说清下一步：Plan 写进计划或请人切模式，等着它回答的
-对方用 `session_reply`；Default 这一档找自己的协调者或请人切模式。`project_send` 的这个拒绝原样带回，不翻译成
-`COORDINATOR_MESSAGE_UNDELIVERED`。
+对方用 `session_reply`；Default 这一档找自己的协调者或请人切模式。`task_confirmation_return` 被拒时，文字说用
+`task_confirmation_review` 把要改的写进 `needsYou` 或 `notChecked`：那个门不给 run 一轮，所有者在卡片上看得到。`project_send`
+的这个拒绝原样带回，不翻译成 `COORDINATOR_MESSAGE_UNDELIVERED`。
 
 **重试。** `session_send` 和 `project_send` 的 `clientTurnId` 已经由这个会话写进对方的那条消息，重试时照常返回原来的 turn，
 不再判断。规则只管新操作，§2.4 也是这样。`session_interrupt` 每次都判断，一条消息用过的 `clientTurnId` 不算打断的重试。
+一个已经判过的证据版本，重复回答仍是“说同样的话返回原来的决定，说别的就 409”，同一轮里重试的退回返回原来的记录，都不再判断。
 
-**复核任务。** 接收方是复核任务（`task.verifies_task_id` 非空）的 run 时，`session_send` 和带消息的 `session_interrupt` 只收
-这个项目的协调者和为这个项目开的判定会话，其余会话一律 403 `VERIFIER_MESSAGE_REFUSED`，发送方是 Auto 也一样；不在项目里的
-复核任务不收任何会话的消息。协调者和判定会话还要过上面那张表。复核任务的结论的价值，在于没有人告诉它该得出什么。
-不带消息的 `session_interrupt` 和结束、完成、删除、合并只按上面那张表。
+**复核任务。** 接收方是复核任务（`task.verifies_task_id` 非空）的 run 时，`session_send`、带消息的 `session_interrupt`、
+`task_evidence_decide` SEND_BACK 和 `task_confirmation_return` 只收这个项目的协调者和为这个项目开的判定会话，其余会话一律 403
+`VERIFIER_MESSAGE_REFUSED`，发送方是 Auto 也一样；不在项目里的复核任务不收任何会话的消息。协调者和判定会话还要过上面那张表。
+复核任务的结论的价值，在于没有人告诉它该得出什么。不带消息的 `session_interrupt`、结束、完成、删除、合并、CONFIRM 和写结论只按上面那张表。
 
 **这条规则挡不住的。** 不带会话的 runner 凭证；带 `mentions` 的评论；相关的 Auto 会话把话转给别人；Auto 发 Auto；
 Auto 的会话结束运行中的复核任务；`task_update` 改描述（对方读 `task_get` 才看到）；模型读到 §2.2 那句话之后怎么做。
+任何不是 run、不代表项目的 Auto 对话判项目里任务的证据：这张表只比模式，谁该判证据是决定门自己的规则。写结论时只问复核任务上的 run：
+`VERIFICATION_PASSED` 的被复核任务因此变 DONE 时，它上面的 run 被结束，不问。检查在写的事务里，不锁会话：检查之后才开始的 run 不会被问到。
 
 ---
 
