@@ -1,0 +1,73 @@
+package main
+
+import "testing"
+
+// Throwaway measurement for the zero-commit landing design: an unpublished task branch that never
+// moved off its fork point, which is also the upstream tip. Run against a copy of runner-go, not
+// kept in the repository.
+
+func zeroCommitRepo(t *testing.T) (*integrationRepo, string) {
+	t.Helper()
+	r := newIntegrationRepo(t)
+	base := r.rev("main")
+	r.checkoutNew("orbit/task-data-repair", "main")
+	r.checkout("main")
+	if got := r.originRev("refs/heads/orbit/task-data-repair"); got != "" {
+		t.Fatalf("the task branch is on the origin (%s): this case is about one that never was", got)
+	}
+	return r, base
+}
+
+func TestZeroCommitNamedByCommitOnMainLine(t *testing.T) {
+	r, base := zeroCommitRepo(t)
+	cmd := r.promotionCommand("CHECK_PROMOTION", "orbit/task-data-repair", "TASK_BRANCH")
+	cmd.SourceSha = base
+	cmd.SessionBaseSha = base
+	got := runIntegrationJob(cmd, silent)
+	t.Logf("current runner, named by commit: state=%s phase=%s code=%s source=%s", got.State, got.Phase, got.ErrorCode, got.SourceSha)
+	if got.State != "ALREADY_LANDED" {
+		t.Fatalf("want ALREADY_LANDED, got %s %s %v", got.State, got.ErrorCode, got.ErrorDetail)
+	}
+}
+
+func TestZeroCommitByBranchOnMainLine(t *testing.T) {
+	r, base := zeroCommitRepo(t)
+	cmd := r.promotionCommand("CHECK_PROMOTION", "orbit/task-data-repair", "TASK_BRANCH")
+	cmd.SessionBaseSha = base
+	got := runIntegrationJob(cmd, silent)
+	t.Logf("no commit named, as a runner before integration-observe/v1 runs it: state=%s phase=%s code=%s detail=%v", got.State, got.Phase, got.ErrorCode, got.ErrorDetail)
+	if got.ErrorCode != "SOURCE_BRANCH_MISSING" {
+		t.Fatalf("want SOURCE_BRANCH_MISSING, got %s %s", got.State, got.ErrorCode)
+	}
+}
+
+func TestZeroCommitLandTaskBranchHeldLocally(t *testing.T) {
+	r, base := zeroCommitRepo(t)
+	cmd := r.command("orbit/task-data-repair", "project/line")
+	cmd.SessionBaseSha = base
+	got := runIntegrationJob(cmd, silent)
+	onUpstream := "<nil>"
+	if got.SourceOnUpstream != nil {
+		if *got.SourceOnUpstream {
+			onUpstream = "true"
+		} else {
+			onUpstream = "false"
+		}
+	}
+	t.Logf("project line, branch held locally: state=%s phase=%s code=%s sourceOnUpstream=%s", got.State, got.Phase, got.ErrorCode, onUpstream)
+	if got.State != "NOTHING_TO_LAND" {
+		t.Fatalf("want NOTHING_TO_LAND, got %s %s %v", got.State, got.ErrorCode, got.ErrorDetail)
+	}
+}
+
+func TestZeroCommitLandTaskBranchGoneLocally(t *testing.T) {
+	r, base := zeroCommitRepo(t)
+	mustRun(t, r.work, "git", "branch", "-D", "orbit/task-data-repair")
+	cmd := r.command("orbit/task-data-repair", "project/line")
+	cmd.SessionBaseSha = base
+	got := runIntegrationJob(cmd, silent)
+	t.Logf("project line, branch gone from this machine: state=%s phase=%s code=%s", got.State, got.Phase, got.ErrorCode)
+	if got.ErrorCode != "SOURCE_BRANCH_MISSING" {
+		t.Fatalf("want SOURCE_BRANCH_MISSING, got %s %s", got.State, got.ErrorCode)
+	}
+}

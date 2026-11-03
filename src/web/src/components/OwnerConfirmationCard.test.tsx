@@ -16,6 +16,7 @@ import {
   IF_CONFIRMED_AUTO_MAIN,
   IF_CONFIRMED_ENDS_SESSION,
   IF_CONFIRMED_LINE_THEN_OWNER,
+  IF_CONFIRMED_NO_CHANGES,
   IF_CONFIRMED_NO_RECORD_ON_MAIN,
   IF_CONFIRMED_NOT_ON_MAIN,
   IF_YOU_CONFIRM,
@@ -497,6 +498,57 @@ describe('If you confirm, by the project’s main branch', () => {
       expect(leads({ branch: unplaced, landing: 'AUTO_MAIN', mainBranch }), String(mainBranch))
         .toEqual([IF_CONFIRMED_NO_RECORD_ON_MAIN, IF_CONFIRMED_AUTO_MAIN]);
     }
+  });
+});
+
+/** A branch with no changes lands nothing, and the row says so by the branch's name alone (§10.5 O-L8). */
+describe('If you confirm, on a branch with no changes', () => {
+  const NAME = 'orbit/task-backfill-order-stats-1b5d7d';
+  const empty = { name: NAME, linesAdded: 0, linesRemoved: 0, files: 0, onMain: 'NO' } as const;
+  const said = { kind: 'BRANCH', lead: IF_CONFIRMED_NO_CHANGES, added: null, detail: NAME };
+
+  it('says nothing lands, with the branch name alone under it, wherever the branch is not known to be on main', () => {
+    expect(IF_CONFIRMED_NO_CHANGES).toBe('No changes on this branch, so nothing lands');
+    expect(ifConfirmedRows({ branch: empty, landing: 'NONE', mainBranch: 'develop' })).toEqual([said]);
+    expect(ifConfirmedRows({ branch: { ...empty, onMain: 'UNKNOWN' }, landing: 'NONE' })).toEqual([said]);
+  });
+
+  it('draws it on the card, with neither of the lines for work that has to land', () => {
+    const html = card({
+      view: view({
+        ifConfirmed: {
+          startsTasks: [{ id: 't2', title: 'Verify the backfill', starts: 'NOW' }],
+          startsAfterLanding: false,
+          branch: empty,
+          landing: 'NONE',
+          endsSession: { sessionId: SESSION_ID, runningBgJobs: 0 },
+          mainBranch: 'develop',
+        },
+      }),
+    });
+    expect(html).toContain(`>${IF_CONFIRMED_NO_CHANGES}<`);
+    expect(html).toContain(`title="${NAME}">${NAME}<`);
+    expect(html).toContain('Starts 1 task waiting on this one');
+    expect(html).not.toContain('Not on develop yet');
+    expect(html).not.toContain('Goes onto the integration line');
+    expect(html).not.toContain('once this lands');
+    expect(html).not.toContain(escaped('confirming doesn’t merge it'));
+  });
+
+  it('leaves a branch known to be on main without a row: its work may have landed through it', () => {
+    expect(ifConfirmedRows({ branch: { ...empty, onMain: 'YES' }, landing: 'NONE' })).toEqual([]);
+  });
+
+  it('keeps every other answer as it was', () => {
+    const leads = (ifConfirmed: OwnerConfirmationIfConfirmed) => ifConfirmedRows(ifConfirmed).map((row) => row.lead);
+    // A changed file is work, whatever the landing says.
+    expect(leads({ branch: { ...empty, files: 1 }, landing: 'NONE' })).toEqual([IF_CONFIRMED_NOT_ON_MAIN]);
+    // A landing that was not read says nothing about what lands.
+    expect(leads({ branch: empty })).toEqual([IF_CONFIRMED_NOT_ON_MAIN]);
+    // A landing that still happens: this branch reads no files, and the task's work is elsewhere or not reported yet.
+    expect(leads({ branch: empty, landing: 'LINE_THEN_OWNER' })).toEqual([IF_CONFIRMED_NOT_ON_MAIN, IF_CONFIRMED_LINE_THEN_OWNER]);
+    expect(leads({ branch: empty, landing: 'AUTO_MAIN' })).toEqual([IF_CONFIRMED_NOT_ON_MAIN, IF_CONFIRMED_AUTO_MAIN]);
+    expect(leads({ branch: empty, landing: 'AGENT_PUSHED' })).toEqual([IF_CONFIRMED_NOT_ON_MAIN, IF_CONFIRMED_AGENT_PUSHED]);
   });
 });
 
