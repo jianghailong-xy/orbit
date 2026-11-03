@@ -686,6 +686,24 @@ func TestResumableSweepReadsAMountPointWithASpaceInItsPath(t *testing.T) {
 	requireCheckoutReclaimed(t, neighbour, "its neighbour goes, so the sweep did run")
 }
 
+// A status git cannot give is no answer, even with every other git command working: a value git rejects
+// in the repository's own status settings does exactly that.
+func TestResumableSweepKeepsACheckoutGitCannotGiveAStatusFor(t *testing.T) {
+	f := newResumableFixture(t)
+	path := f.checkout(t, "sess-parked")
+	mustGit(t, f.repo, "config", "status.showUntrackedFiles", "not-a-mode")
+	if _, err := git(path, "status", "--porcelain"); err == nil {
+		t.Fatal("the point of this case is a status that fails")
+	}
+	if _, err := git(path, "ls-files", "-v"); err != nil {
+		t.Fatalf("and only that, but ls-files failed too: %v", err)
+	}
+
+	sweepOnFullDisk(f)
+
+	requireCheckoutOnDisk(t, path, "git could not say what is in it")
+}
+
 // With no remote there is nowhere its commits could have been pushed to, so rev-list counts them all.
 func TestResumableSweepKeepsACheckoutOfARepositoryWithNoRemote(t *testing.T) {
 	f := newResumableFixture(t)
