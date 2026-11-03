@@ -162,8 +162,8 @@ func TestSweepReclaimsAnEligibleCheckoutUnderPressureAndLeavesItsBranchRebuildab
 	}
 }
 
-// Safety property, unchanged and not for sale: an Open session's checkout is kept however tight
-// the disk gets, because it is where a resume picks the work back up.
+// This half of the sweep keeps an Open session's checkout however tight the disk gets. Only
+// gcResumableCheckouts takes one, and only one with nothing in it to lose.
 func TestSweepNeverReclaimsAResumableCheckoutHoweverTightTheDisk(t *testing.T) {
 	for _, ending := range []string{"idle-park", "user-end", "cancel"} {
 		t.Run(ending, func(t *testing.T) {
