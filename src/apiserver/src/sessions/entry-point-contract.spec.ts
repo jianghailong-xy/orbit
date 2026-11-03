@@ -66,6 +66,8 @@ function doors() {
       };
     },
     assertHostedByRunner: async () => undefined,
+    // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+    assertMayReach: async () => ({ narrower: false }),
   };
   const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(sessions as never, {

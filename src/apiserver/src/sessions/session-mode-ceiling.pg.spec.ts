@@ -159,6 +159,7 @@ test('a session cannot start a session wider than itself', {
           spawnFromSession: sessions.spawnFromSession.bind(sessions),
           createTurn: sessions.createTurn.bind(sessions),
           resume: sessions.resume.bind(sessions),
+          assertMayReach: sessions.assertMayReach.bind(sessions),
         },
       },
       {
@@ -515,7 +516,7 @@ test('a session cannot start a session wider than itself', {
     assert.doesNotMatch(answer.text, /plan/);
   });
 
-  await t.test('task_start handing a paused run the task decides no mode, so it is not refused', async () => {
+  await t.test('task_start handing a paused run the task decides no mode, so this ceiling does not refuse it', async () => {
     await accountDefault(null);
     const taskId = await taskFor('a paused run');
     const paused = await sessionIn('auto', 'claude', {
@@ -525,7 +526,8 @@ test('a session cannot start a session wider than itself', {
       runtimeSessionId: randomUUID(),
       numTurns: 1,
     });
-    const answer = await taskStart(taskId, await sessionIn('plan'));
+    // No wider than the caller here: what a narrower session may do to a paused run is session-reach.pg.spec.ts.
+    const answer = await taskStart(taskId, await sessionIn('dontAsk'));
     assert.equal(answer.status, 201, answer.text);
     assert.equal(answer.json.sessionId, uuidToBase62(paused), answer.text);
     assert.deepEqual((await runsOf(taskId)).map((run) => run.id), [paused], 'no session was built');
@@ -724,15 +726,17 @@ test('a session cannot start a session wider than itself', {
     });
   }
 
-  await t.test('a live coordinator is handed back, and takes a message, from any session', async () => {
+  await t.test('a live coordinator is handed back to any session, and opens nothing', async () => {
     await accountDefault(null);
     const { projectId, coordinator } = await projectWithCoordinator('live');
-    const headers = await asSession(await sessionIn('plan'));
-    const ensured = await send('POST', ensureRoute(projectId), undefined, headers);
-    assert.equal(ensured.status, 201, ensured.text);
-    assert.equal(ensured.json.sessionId, uuidToBase62(coordinator!), ensured.text);
-    assert.equal(ensured.json.created, false, ensured.text);
-    const sent = await send('POST', messageRoute(projectId), { message: 'hello' }, headers);
+    for (const mode of ['plan', 'default', 'auto']) {
+      const ensured = await send('POST', ensureRoute(projectId), undefined, await asSession(await sessionIn(mode)));
+      assert.equal(ensured.status, 201, ensured.text);
+      assert.equal(ensured.json.sessionId, uuidToBase62(coordinator!), ensured.text);
+      assert.equal(ensured.json.created, false, ensured.text);
+    }
+    // Who may then write to it is session-reach.pg.spec.ts: not this ceiling's question.
+    const sent = await send('POST', messageRoute(projectId), { message: 'hello' }, await asSession(await sessionIn('auto')));
     assert.equal(sent.status, 201, sent.text);
     assert.equal(sent.json.sessionId, uuidToBase62(coordinator!), sent.text);
     assert.equal(await pointerOf(projectId), coordinator);

@@ -9542,6 +9542,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       && projectScopeMode() === 'enforce') {
       return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
     }
+    // A task's project decides who is directly related to its runs, so a session narrower than one of
+    // them may not write it (sessions/session-reach.ts). Past the request above, which writes nothing and
+    // goes to the owner. A person's own edit names no session and is not asked.
+    if (actingSessionId && typeof dto.projectId === 'string' && dto.projectId !== before.projectId) {
+      await this.sessions.assertMayMoveRuns(ownerId, actingSessionId, id);
+    }
     // ...and the same request once the account owner's confirmation has moved the task: it is
     // already where it asked to go. See `appliedMoveReplay`; anything it does not recognise as that
     // request goes on below as the ordinary update it is.
@@ -15090,12 +15096,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // cannot have — landing between them is refused by the database, and arrives here as a typed
     // marker rather than as a session. Translated so the caller sees the same 409 either way,
     // instead of a 500 that depends on how narrowly it lost the race.
-    const planned = await this.planWorkspaceRun(
+    const plannedRun = await this.planWorkspaceRun(
       ownerId,
       task,
       { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
       runRequestToken,
     );
+    // A paused run answers in its own mode, so handing it this brief is giving it a turn, and a session
+    // reaches it as `session_send` would (sessions/session-reach.ts). Let through narrower, who pressed is
+    // frozen with the plan and said in the block §2.2 delivers after the brief. The turn stays the task's
+    // brief and is not signed: a signed turn is a session's message to every reader of that column, and
+    // this one is drawn and settled as a brief. No wider than the run, it is as it was.
+    const planned: TaskRunPlan = actingSessionId && plannedRun.kind === 'RESUME'
+      && (await this.sessions.assertMayReach(ownerId, actingSessionId, plannedRun.sessionId, 'resumeRun')).narrower
+      ? { ...plannedRun, narrowerSessionId: actingSessionId }
+      : plannedRun;
     // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
     // recorded either way; only an Agent with smart selection on is dispatched with it — any other
     // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never

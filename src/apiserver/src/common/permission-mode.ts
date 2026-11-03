@@ -119,6 +119,13 @@ export function modesItMayStart(starter: SessionModeStarter, engine: string | nu
 
 export const PERMISSION_MODE_WIDER_THAN_SESSION = 'PERMISSION_MODE_WIDER_THAN_SESSION';
 
+/** What a mode comes to on an engine that runs it as Bypass, said after the sentence naming it. */
+export function whatItRunsAs(mode: string, engine: string | null): string {
+  return runsAsBypass(mode, engine)
+    ? ` On ${ENGINE_CLI_NAMES[engine as AgentProvider]} that mode runs as ${PermissionMode.BYPASS}: nothing is reviewed or sandboxed.`
+    : '';
+}
+
 /** The refusal every door answers with: what was asked for, and `next`, the door's own way forward. */
 export function widerModeRefusal(
   starterMode: string,
@@ -126,13 +133,34 @@ export function widerModeRefusal(
   engine: string | null,
   next: string,
 ): ForbiddenException {
-  const why = runsAsBypass(mode, engine)
-    ? ` On ${ENGINE_CLI_NAMES[engine as AgentProvider]} that mode runs as ${PermissionMode.BYPASS}: nothing is reviewed or sandboxed.`
-    : '';
   return new ForbiddenException({
     statusCode: 403,
     error: 'Forbidden',
     code: PERMISSION_MODE_WIDER_THAN_SESSION,
-    message: `This session runs in "${starterMode}", so a session it starts may not run in "${mode}".${why} ${next}`,
+    message: `This session runs in "${starterMode}", so a session it starts may not run in "${mode}".${whatItRunsAs(mode, engine)} ${next}`,
+  });
+}
+
+export const SESSION_WIDER_THAN_CALLER = 'SESSION_WIDER_THAN_CALLER';
+
+/**
+ * The same refusal for a session that already exists (sessions/session-reach.ts): `act` finishes
+ * "may not ...", and `next` is what this caller can do instead.
+ */
+export function widerSessionRefusal(
+  callerMode: string,
+  target: string,
+  mode: string,
+  engine: string | null,
+  act: string,
+  next: string,
+): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    error: 'Forbidden',
+    code: SESSION_WIDER_THAN_CALLER,
+    message:
+      `This session runs in "${callerMode}", and session ${target} runs in "${mode}", which is wider, so this session may `
+      + `not ${act}. Nothing was changed.${whatItRunsAs(mode, engine)} ${next}`,
   });
 }

@@ -675,7 +675,7 @@ Task 的 `assigneeAgentId` 写入时必须全部通过，任一失败即 400/403
 | REST `/agents` | **Agent**（新表） | v1 新增 |
 | REST `/projects/:id/team` | **Project Member** | v1 新增 |
 | REST `/projects/:id/workspaces` | **Project Workspace** | v1 新增 |
-| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **冻结 + deprecated**，行为一字不改 |
+| MCP `agent_list` / `agent_create` / `agent_update` | **Workspace**（Legacy agent alias） | **deprecated**，指向不变。写 `env`、`workDir`、`systemPrompt`、`appendSystemPrompt`、`runnerId`、`enableWorktree` 要所有者的卡片（`runner-api/runner-workspace-approval.ts`），其余行为不变 |
 | CLI `orbit agent …` | **Workspace**（Legacy agent alias） | **冻结 + deprecated** |
 | CLI `orbit workspace …` | Workspace | v1 新增，`orbit agent` 的推荐拼法 |
 | MCP `team_list` / `team_add` / `team_remove`、CLI `orbit project team …` | Project Member + Agent | v1 新增 |
