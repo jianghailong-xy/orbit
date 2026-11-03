@@ -32,6 +32,7 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
   readSteerWithdrawRequest,
   steerWithdrawAnswer,
@@ -2397,6 +2398,28 @@ export class SessionsService {
     const engine = await this.engineOfStart(ownerId, target);
     const mode = modeOfNoneNamed(acting.owner, engine);
     if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
+  }
+
+  /**
+   * What a session may do to another that already exists (session-reach.ts). Every runner door that gives
+   * a session a turn or ends one asks here, so an MCP call, the CLI and a bare HTTP request meet one check.
+   * A header value the id middleware could not decode names no session of this owner, and `task_start`'s
+   * header is attribution rather than proof, so it is treated as what it is: nobody to compare.
+   */
+  async assertMayReach(
+    ownerId: string,
+    callerSessionId: string,
+    targetSessionId: string,
+    act: SessionAct,
+    clientTurnId?: string,
+  ): Promise<{ narrower: boolean }> {
+    if (!UUID_SHAPE.test(callerSessionId) || !UUID_SHAPE.test(targetSessionId)) return { narrower: false };
+    return assertSessionMayReach(this.prisma, ownerId, callerSessionId, targetSessionId, act, clientTurnId);
+  }
+
+  /** Whether this session may move this task into a project (session-reach.ts), with the same reading of the header. */
+  async assertMayMoveRuns(ownerId: string, callerSessionId: string, taskId: string): Promise<void> {
+    if (UUID_SHAPE.test(callerSessionId)) await assertMayMoveRuns(this.prisma, ownerId, callerSessionId, taskId);
   }
 
   /** The engine a session started this way would run on, by create()'s own rule; null when it would be refused there. */

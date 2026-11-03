@@ -7,7 +7,9 @@ import {
   modeLimitsWhatItStarts,
   modesItMayStart,
   PERMISSION_MODE_WIDER_THAN_SESSION,
+  SESSION_WIDER_THAN_CALLER,
   widerModeRefusal,
+  widerSessionRefusal,
 } from './permission-mode';
 
 const { PLAN, DEFAULT, ACCEPT_EDITS, AUTO, DONT_ASK, BYPASS } = PermissionMode;
@@ -88,4 +90,18 @@ test('the refusal carries its code, the two modes and the door\'s way forward', 
   assert.match(body.message, /Ask the owner\.$/);
   const plain = widerModeRefusal(PLAN, AUTO, AgentProvider.CLAUDE, 'Ask the owner.');
   assert.doesNotMatch((plain.getResponse() as { message: string }).message, /runs as/);
+});
+
+test('the refusal for a session that already exists names both modes, the act, and what to do next', () => {
+  const refusal = widerSessionRefusal(DEFAULT, 'target-id', AUTO, AgentProvider.CLAUDE, 'end it', 'Ask your coordinator.');
+  assert.ok(refusal instanceof ForbiddenException);
+  const body = refusal.getResponse() as { statusCode: number; code: string; message: string };
+  assert.equal(body.statusCode, 403);
+  assert.equal(body.code, SESSION_WIDER_THAN_CALLER);
+  assert.equal(
+    body.message,
+    `This session runs in "${DEFAULT}", and session target-id runs in "${AUTO}", which is wider, so this session may not end it. Nothing was changed. Ask your coordinator.`,
+  );
+  const onKimi = widerSessionRefusal(DONT_ASK, 'target-id', AUTO, AgentProvider.KIMI, 'end it', 'Ask.');
+  assert.match((onKimi.getResponse() as { message: string }).message, /On Kimi[^.]* that mode runs as bypassPermissions/);
 });

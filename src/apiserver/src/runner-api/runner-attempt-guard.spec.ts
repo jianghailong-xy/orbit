@@ -32,6 +32,8 @@ function makeController(refuse?: { guard: 'end' | 'steer'; code: string }) {
   const serviceCalls: string[] = [];
   const sessions = new Proxy({}, {
     get: (_t, prop: string) => async (...args: unknown[]) => {
+      // The rule on who may reach whom is sessions/session-reach.pg.spec.ts's, not this spec's.
+      if (prop === 'assertMayReach') return { narrower: false };
       serviceCalls.push(prop);
       if (prop === 'createTurn') {
         const callback = (args[3] as {
