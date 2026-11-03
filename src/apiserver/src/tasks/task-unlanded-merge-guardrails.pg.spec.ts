@@ -194,6 +194,7 @@ async function connect(options: { silent?: boolean } = {}): Promise<Stack> {
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
     routeReadyDependents: async () => [],
+    routeStoppedRun: async () => null,
   } as unknown as CompletionInputRouter;
   const tasks = new TasksService(
     prisma, sessions, realtime, undefined, options.silent ? silent : router,
