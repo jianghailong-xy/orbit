@@ -177,9 +177,13 @@ export const EVIDENCE_FILES_PAGE = MAX_BUNDLE_FILES;
 /** The largest revision a `bigint` column holds. */
 const MAX_REVISION = 9_223_372_036_854_775_807n;
 
-const EVIDENCE_FILE_SELECT = FILE_VIEW_SELECT;
+const EVIDENCE_FILE_SELECT = {
+  ...FILE_VIEW_SELECT,
+  retention: true,
+  blob: { select: { bytesDeletedAt: true } },
+} as const satisfies Prisma.AttachmentSelect;
 
-type EvidenceFileRow = FileViewRow;
+type EvidenceFileRow = Prisma.AttachmentGetPayload<{ select: typeof EVIDENCE_FILE_SELECT }>;
 
 /**
  * One file of a version of evidence, as an evidence card reads it: `FileView`, and what a card wants beside it. The id is
@@ -198,6 +202,12 @@ export interface EvidenceFileView extends Omit<FileView, 'mimeType' | 'sizeBytes
   width: number | null;
   height: number | null;
   gone: boolean;
+  /**
+   * Whether a person can pin it: what `file_upload` kept, while its bytes remain, so a file with a tombstone qualifies and its
+   * pin brings it back. `expiresAt` and `pinnedAt` cannot say this: evidence holding a file and a file that can never expire
+   * both have no date, and a tombstone looks the same before and after the bytes go.
+   */
+  pinnable: boolean;
 }
 
 /** One page of a version's files. `fileCount` and `totalBytes` are the whole list's, whichever page this is. */
@@ -404,9 +414,13 @@ export class FilesService implements OnApplicationBootstrap {
     if (storeFailure) throw storeFailure;
     // Not something gone wrong, so nothing is logged: what is left of the file is what its row says.
     if (row.expiredAt) {
-      throw new GoneException(
-        `this file expired on ${row.expiredAt.toISOString().slice(0, 10)} and its bytes have been deleted; its name, size and sha256 remain`,
-      );
+      throw new GoneException({
+        statusCode: 410,
+        error: 'Gone',
+        message: `this file expired on ${row.expiredAt.toISOString().slice(0, 10)} and its bytes have been deleted; its name, size and sha256 remain`,
+        // For a client's placeholder, which words the date in the reader's own time as a card's does.
+        expiredAt: row.expiredAt.toISOString(),
+      });
     }
     this.logger.error(
       `attachment ${row.id} names bytes ${row.sha256} that the ${row.blob?.storage ?? 'configured'} file store does not hold`,
@@ -965,7 +979,7 @@ function membersOf(ownerId: string, folder: EvidenceFileRow): Prisma.AttachmentW
 
 /** A row as `evidenceFiles` answers it. A manifest's name is the folder's with `.json` after it (`createBundle`). */
 function evidenceFile(
-  row: EvidenceFileRow,
+  { retention, blob, ...row }: EvidenceFileRow,
   folder: EvidenceFileRow | null,
   check?: Pick<EvidenceCheck, 'width' | 'height'>,
 ): EvidenceFileView {
@@ -976,6 +990,7 @@ function evidenceFile(
     width: check?.width ?? null,
     height: check?.height ?? null,
     gone: false,
+    pinnable: retention === FILE_UPLOAD_RETENTION && !blob?.bytesDeletedAt,
   };
 }
 
@@ -1001,6 +1016,7 @@ function goneFile({ ref, sha256, width, height }: EvidenceCheck): EvidenceFileVi
     expiredAt: null,
     pinnedAt: null,
     gone: true,
+    pinnable: false,
   };
 }
 

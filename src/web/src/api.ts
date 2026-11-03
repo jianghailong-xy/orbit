@@ -28,6 +28,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import type { CodexLogin } from './lib/codexLogin';
+import type { TrashHold } from './lib/trashNote';
 import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
@@ -1795,6 +1796,8 @@ export interface SessionDetail {
   /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
    *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
   landing?: SessionLandingView | null;
+  /** What keeps this session in Trash past its 30 days, when it is there. Optional, because an older server does not send it. */
+  trashHold?: TrashHold | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;

@@ -15,7 +15,8 @@
  *   (5) a page holds at most a whole folder, nothing is cut or repeated across pages, and the count stays the whole list's;
  *   (6) a revision that does not exist, in any spelling, is a 404, and a bad offset is a 400;
  *   (7) another account gets the same 404 as a task that does not exist;
- *   (8) a version citing no file answers an empty list, and reading any of this writes nothing.
+ *   (8) a version citing no file answers an empty list, and reading any of this writes nothing;
+ *   (9) `pinnable` says what a client's pin button goes by: what file_upload kept, while its bytes remain.
  *
  * Not destructive: every row belongs to users this run creates.
  */
@@ -274,6 +275,7 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
     assert.deepEqual(readdirSync(path.join(dir, shot.sha256.slice(0, 2))).includes(shot.sha256), false);
     const gone = await fetch(`http://127.0.0.1:${api.port}/api/attachments/${shot.publicId}`, { headers: { authorization: `Bearer ${owner.bearer}` } });
     assert.equal(gone.status, 410, 'the bytes are gone');
+    assert.equal((await gone.json() as { expiredAt: string }).expiredAt, date.toISOString(), 'and it says when');
     const after = await read(work.taskId, revision);
     assert.deepEqual(
       after.files.map(({ expiredAt, expiresAt, ...file }: { expiredAt: string; expiresAt: string }) => file),
@@ -286,6 +288,47 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
       [before.fileCount, before.totalBytes, before.files[1].testReport.failedNames],
       'and so does the whole list\'s count',
     );
+  });
+
+  await t.test('(9) a pin is offered on what file_upload kept, while its bytes remain', async () => {
+    const pins = await workOf('files and pins');
+    const held = await uploaded(pins, 'held.png', 'image/png', png(10, 10));
+    const tombstoned = await uploaded(pins, 'tombstoned.png', 'image/png', png(11, 11));
+    const went = await uploaded(pins, 'went.png', 'image/png', png(12, 12));
+    const deleted = await uploaded(pins, 'deleted.png', 'image/png', png(13, 13));
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(png(14, 14))], { type: 'image/png' }), 'input.png');
+    const input = await fetch(`http://127.0.0.1:${api.port}/api/attachments?taskId=${b62(pins.taskId)}`, {
+      method: 'POST', headers: { authorization: `Bearer ${owner.bearer}` }, body: form,
+    });
+    assert.equal(input.status, 201);
+    const inputId = (await input.json() as { id: string }).id;
+    const version = await submit(pins, [held, tombstoned, went, deleted, { publicId: b62(toUuid(inputId)) }].map(asFile));
+    const date = new Date('2026-12-02T09:30:00.000Z');
+    await db.attachment.updateMany({ where: { id: { in: [tombstoned.id, went.id] } }, data: { expiresAt: date, expiredAt: date } });
+    await db.fileBlob.update({ where: { sha256: went.sha256 }, data: { bytesDeletedAt: date } });
+    await db.attachment.delete({ where: { id: deleted.id } });
+    const list = await read(pins.taskId, version);
+    const offered = Object.fromEntries(list.files.map((file: { name: string | null; pinnable: boolean }) => [file.name ?? 'gone', file.pinnable]));
+    assert.deepEqual(offered, {
+      'held.png': true,
+      'tombstoned.png': true,
+      'went.png': false,
+      gone: false,
+      'input.png': false,
+    }, 'a tombstone with its bytes yes; bytes deleted, a row that went, and what file_upload did not keep no');
+    for (const file of list.files) {
+      assert.equal('retention' in file, false, 'the rule\'s inputs stay on the server');
+      assert.equal('blob' in file, false);
+    }
+    const pinned = await call(api, 'PUT', `/api/attachments/${tombstoned.publicId}/pin`, owner.bearer);
+    assert.equal(pinned.status, 200, 'and what is offered can be pinned, which brings it back');
+    assert.equal(pinned.json.expiredAt, null);
+    assert.ok(pinned.json.pinnedAt);
+    assert.equal((await read(pins.taskId, version)).files.find((file: { name: string }) => file.name === 'tombstoned.png').pinnable, true, 'and still can be taken off');
+    const bytes = await fetch(`http://127.0.0.1:${api.port}/api/attachments/${tombstoned.publicId}`, { headers: { authorization: `Bearer ${owner.bearer}` } });
+    assert.equal(bytes.status, 200);
+    assert.equal(sha256(Buffer.from(await bytes.arrayBuffer())), tombstoned.sha256);
   });
 
   await t.test('(4) a cited row that no longer exists comes back from what the version recorded', async () => {
@@ -305,7 +348,7 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
       {
         id: a.publicId, kind: 'file', name: null, label: null, mimeType: null, sizeBytes: null, sha256: a.sha256,
         sessionId: null, taskId: null, fileBundleId: null, testReport: null, createdAt: null, folder: null,
-        width: 20, height: 21, expiresAt: null, expiredAt: null, pinnedAt: null, gone: true,
+        width: 20, height: 21, expiresAt: null, expiredAt: null, pinnedAt: null, gone: true, pinnable: false,
         // Every id field of an answer has its public spelling beside it.
         sessionPublicId: null, taskPublicId: null, fileBundlePublicId: null,
       },

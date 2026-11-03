@@ -270,6 +270,7 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     const read = await bytesOf(file, session);
     assert.equal(read.status, 410, 'a read says they went');
     assert.match(read.text, /expired on \d{4}-\d{2}-\d{2} and its bytes have been deleted/);
+    assert.equal(JSON.parse(read.text).expiredAt, tombstone.toISOString(), 'and when, for a client\'s placeholder');
     const described = await call(api, 'GET', `/api/runner/sessions/${b62(session)}/files/${file.publicId}`, owner.token);
     assert.equal(described.status, 200, 'what describes the file is all still there');
     assert.equal(described.json.sha256, file.sha256);
@@ -1141,6 +1142,75 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await sweepAt((await row(member.id)).expiresAt!);
     await purgeTrash();
     assert.equal(await sessionStays(work.runId), false);
+  });
+
+  await t.test('(24) a Trash note is told what the purge goes by, and only in Trash', async () => {
+    const noteOf = async (sessionId: string) => {
+      const reply = await call(api, 'GET', `/api/sessions/${b62(sessionId)}`, owner.bearer);
+      assert.equal(reply.status, 200, reply.text.slice(0, 300));
+      return reply.json.trashHold;
+    };
+    // Both rows of the rule at once, and each going in turn: the note and the purge read the same thing at every step.
+    const work = await workOf('a pin and a citation in one session');
+    const pinned = await kept(work.runId);
+    const cited = await kept(work.runId);
+    const version = await cite(work, cited.publicId);
+    await pin(pinned);
+    assert.equal(await noteOf(work.runId), null, 'not in Trash, nothing to say');
+    await toTrash(work.runId);
+    assert.equal(await noteOf(work.runId), 'PINNED_FILE', 'with both, the one only a person can end');
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), true);
+
+    await unpin(pinned);
+    assert.equal(await noteOf(work.runId), 'CITED_FILE', 'the pin gone, evidence still holds it');
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), true);
+
+    const decidedAt = await decide(work, version.revision, 'SEND_BACK');
+    await sweepAt(later(decidedAt, LET_GO_RETENTION_MS + 1));
+    assert.ok((await row(cited.id)).expiredAt, 'the citation\'s date has passed');
+    assert.equal(await noteOf(work.runId), null, 'a tombstone holds nothing');
+    await purgeTrash();
+    assert.equal(await sessionStays(work.runId), false, 'and the purge agrees');
+
+    // A pin on a row that is no agent's file holds as well.
+    const replied = await sessionOf('a reply\'s image, pinned');
+    const image = await upload(api, 'POST', `/api/runner/sessions/${b62(replied)}/attachments`, { authorization: `Bearer ${owner.token}` }, { name: 'shot.txt', type: 'text/plain', content: fresh('a reply') });
+    assert.equal(image.status, 201, image.text.slice(0, 300));
+    await pin({ publicId: b62(toUuid(image.json.id)) });
+    await toTrash(replied);
+    assert.equal(await noteOf(replied), 'PINNED_FILE');
+
+    const loose = await sessionOf('nothing holds this one');
+    await kept(loose);
+    await toTrash(loose);
+    assert.equal(await noteOf(loose), null);
+    assert.equal((await call(api, 'GET', `/api/sessions/${b62(loose)}`, stranger.bearer)).status, 404, 'and another account is told nothing');
+  });
+
+  await t.test('(25) a receipt says whether the version it answered cites a file, and nothing more', async () => {
+    const withFile = await workOf('its evidence cites a file');
+    const file = await kept(withFile.runId);
+    const version = await cite(withFile, file.publicId);
+    await decide(withFile, version.revision, 'SEND_BACK');
+    const withoutFile = await workOf('its evidence cites a tool call');
+    const toolUseId = `toolu_${randomUUID()}`;
+    await db.toolCall.create({ data: { sessionId: withoutFile.runId, name: 'Bash', toolUseId, input: { command: 'true' }, isError: false } });
+    const submitted = await call(api, 'POST', `/api/runner/tasks/${b62(withoutFile.taskId)}/evidence`, owner.token, {
+      evidence: { claim: 'ran', criterion: { key: b62(withoutFile.taskId), text: STANDARD }, checks: [{ kind: 'TOOL_CALL', ref: toolUseId }], gaps: [] },
+    }, asRun(withoutFile));
+    assert.equal(submitted.status, 201, submitted.text.slice(0, 300));
+    await decide(withoutFile, submitted.json.revision, 'CONFIRM');
+
+    const queue = await call(api, 'GET', `/api/tasks/evidence-decisions/pending?decidingSessionId=${b62(dispatcher)}`, owner.bearer);
+    assert.equal(queue.status, 200, queue.text.slice(0, 300));
+    const receipt = (work: Work) => queue.json.decided.find((row: { taskId: string }) => row.taskId === b62(work.taskId));
+    assert.equal(receipt(withFile).citesFiles, true);
+    assert.equal(receipt(withoutFile).citesFiles, false);
+    assert.deepEqual(Object.keys(receipt(withFile)).sort(), [
+      'citesFiles', 'decidedAt', 'decidedByType', 'decision', 'evidenceRevision', 'note', 'projectId', 'projectPublicId', 'taskId', 'taskPublicId', 'title',
+    ], 'no citation, no envelope');
   });
 
   await t.test('(23) a person\'s act takes the file: emptying Trash by hand, and deleting a task', async () => {

@@ -5674,6 +5674,8 @@ model TaskCompletionEvidence {
   @@unique([taskId, revision], map: "task_completion_evidence_task_revision_key")
   @@unique([taskId, actorType, actorId, sourceSessionId, criterionRevision, evidenceDigest], map: "task_completion_evidence_stable_fact_key")
   @@index([taskId, submittedAt, id], map: "task_completion_evidence_task_submitted_idx")
+  // One more index is in migration 0468 and not here, because schema.prisma cannot express a partial index:
+  // task_completion_evidence_cites_files_idx (id, the versions citing a file).
   @@map("task_completion_evidence")
 }
 
