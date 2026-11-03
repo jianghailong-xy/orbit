@@ -316,6 +316,7 @@ function taskUpdateFixture(
   splitState?: { verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' },
 ) {
   const writes: Array<Record<string, unknown>> = [];
+  const reads = { scope: 0 };
   const task = {
     id: TASK,
     ownerId: OWNER,
@@ -369,7 +370,7 @@ function taskUpdateFixture(
     taskDependency: { findMany: async () => [] },
     task: {
       findFirst: async () => ({ ...task }),
-      findMany: async () => [],
+      findMany: async () => { reads.scope += 1; return []; },
       count: async () => 0,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);
@@ -384,6 +385,7 @@ function taskUpdateFixture(
   return {
     service,
     writes,
+    reads,
     conclude: (verdict: string) =>
       service.update(OWNER, TASK, { verdict } as never, SESSION),
   };
@@ -418,6 +420,20 @@ test('the same PASS from a USER-origin session is written', async () => {
 
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].verdict, 'PASS');
+});
+
+test('what a write settles is worked out only for a session, and only when the write moves what the plan reads', async () => {
+  const renamed = taskUpdateFixture(SessionDispatchOrigin.USER);
+  await renamed.service.update(OWNER, TASK, { title: 'A rename from a session' } as never, SESSION);
+  assert.equal(renamed.reads.scope, 0, 'a rename reads no scope');
+
+  const concluded = taskUpdateFixture(SessionDispatchOrigin.USER);
+  await concluded.conclude('PASS');
+  assert.equal(concluded.reads.scope, 2, 'a verdict from a session reads it to ask, and once more to recompute');
+
+  const owners = taskUpdateFixture(SessionDispatchOrigin.USER);
+  await owners.service.update(OWNER, TASK, { verdict: 'PASS' } as never);
+  assert.equal(owners.reads.scope, 1, 'the owner’s own only reads it to recompute');
 });
 
 test('an agent-held runner credential with no acting session can write task verdict=PASS', async () => {

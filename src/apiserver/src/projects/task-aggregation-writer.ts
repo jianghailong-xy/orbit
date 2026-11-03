@@ -175,21 +175,26 @@ export async function collectAggregationScope(
 }
 
 /**
- * Which tasks a write of one task would settle: the moves to DONE of the plan `recomputeAggregates` runs once that write has
- * committed, over the facts as they stand now with that task as the write leaves it. A PASS settles the subject that declares
- * VERIFICATION_PASSED when the check is its newest. That is the plan's to say, so the answer cannot drift from what the write
- * goes on to do, and a scope too big to plan settles nothing here as it settles nothing there.
+ * Which tasks a write would settle: what the plan `recomputeAggregates` runs once that write has committed moves to DONE over
+ * the facts as the write leaves them, and would not have moved over the facts as they stand. A PASS settles the subject that
+ * declares VERIFICATION_PASSED when the check is its newest; cancelling or deleting a newer check leaves an older PASS the newest;
+ * a policy moved onto a PASS already there reads it. Which of those holds is the plan's to say, so the answer cannot drift from
+ * what the write goes on to do, and a scope too big to plan settles nothing here as it settles nothing there.
+ *
+ * Only what this write adds: a run reporting its own task FAILED settles nothing, whatever the plan already wanted of somebody else.
  */
 export async function tasksSettledBy(
   db: AggregationScopeTransaction,
   ownerId: string,
   seedTaskIds: readonly string[],
-  written: Pick<AggregationTaskFact, 'id' | 'status' | 'verdict' | 'verifiesTaskId' | 'parentTaskId' | 'retirement'>,
+  leaves: (facts: AggregationTaskFact[]) => AggregationTaskFact[],
 ): Promise<string[]> {
   const scope = await collectAggregationScope(db, ownerId, seedTaskIds);
   if (scope.truncated) return [];
-  const plan = planTaskAggregation(scope.facts.map((fact) => (fact.id === written.id ? { ...fact, ...written } : fact)));
-  return plan.aggregations.filter((move) => move.to === 'DONE').map((move) => move.taskId);
+  const movedToDone = (facts: AggregationTaskFact[]): string[] =>
+    planTaskAggregation(facts).aggregations.filter((move) => move.to === 'DONE').map((move) => move.taskId);
+  const already = new Set(movedToDone(scope.facts));
+  return movedToDone(leaves(scope.facts)).filter((taskId) => !already.has(taskId));
 }
 
 /**

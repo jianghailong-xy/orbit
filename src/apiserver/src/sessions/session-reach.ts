@@ -37,9 +37,12 @@ import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
  * deleting its list (`TaskListsService.remove`). Those doors ask of each live run they would end, and
  * of nothing else: a task with no live run, or one no wider than the caller, goes on as it did.
  *
+ * So does what settles another task. Writing or deleting a task can make the plan that recomputes tasks from
+ * each other (projects/task-aggregation.ts) move a different task to DONE, and the run working that one ends with it:
+ * those doors ask of it with the plan itself (`tasksSettledBy`), a run writing its own task included.
+ *
  * So does what answers a run's work. A CONFIRM (`TaskCompletionEvidenceService.decide`) or a verdict
- * (`TasksService.update`) that settles a task ends the run working it, and a verdict can settle more than its own
- * verifier: the subject that waits on its PASS. A SEND_BACK and a confirmation return
+ * (`TasksService.update`) that settles a task ends the run working it. A SEND_BACK and a confirmation return
  * (`OwnerConfirmationReviewService.returnToRun`) hand the run the caller's words as its next turn. Each asks last,
  * inside the transaction that writes it and past every refusal of its own, so a refused answer writes nothing and a
  * version already answered keeps the answer it had. An answer that ends nothing and gives no turn asks nothing.
@@ -64,7 +67,7 @@ const ACTS = {
   deleteList: { words: 'end it by deleting the list its task is in', carriesMessage: false },
   confirmEvidence: { words: 'end it by confirming its evidence', carriesMessage: false },
   writeVerdict: { words: 'end it by writing its verdict', carriesMessage: false },
-  settleByVerdict: { words: 'end it by writing the verdict that settles its task', carriesMessage: false },
+  settleTask: { words: 'end it by settling its task', carriesMessage: false },
   sendBackEvidence: { words: 'send its evidence back to it', carriesMessage: true },
   returnConfirmation: { words: 'return its confirmation request to it', carriesMessage: true },
 } as const;
@@ -236,7 +239,7 @@ export async function assertMayEndWorkingRuns(
   ownerId: string,
   callerSessionId: string,
   taskId: string,
-  act: 'confirmEvidence' | 'writeVerdict' | 'settleByVerdict',
+  act: 'confirmEvidence' | 'writeVerdict' | 'settleTask',
 ): Promise<void> {
   const runs = await db.session.findMany({
     where: { ownerId, taskId, startsTaskWork: true, status: { in: TASK_OCCUPYING } },

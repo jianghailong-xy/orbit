@@ -153,13 +153,25 @@ P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一�
 | 门 | 什么时候问 | 比的是谁 |
 |---|---|---|
 | `task_evidence_decide` CONFIRM | 这次确认会让任务变 DONE | 做这个任务的每个活 run（`starts_task_work`，reaper 结束的就是这些），不管证据是谁提交的 |
-| `task_update {verdict}` | 这次写会结算任务：复核任务自己（PASS、FAIL、INCONCLUSIVE 都会），和等它 PASS 的被复核任务（`VERIFICATION_PASSED`，这个 check 是最新的）。用的是写之后真正跑的那份计划（`tasksSettledBy`） | 这些任务上做事的每个活 run。复核任务自己的 run 也一样：它窄、被复核任务的 run 更宽时被拒，这两个 run 不直接相关 |
+| `task_update {verdict}` | 这次写会让复核任务变 DONE。PASS、FAIL、INCONCLUSIVE 都会 | 这个复核任务上做事的每个活 run |
 | `task_evidence_decide` SEND_BACK | 这次退回会给一轮 | 提交这个版本的会话 |
 | `task_confirmation_return` | 这次退回会给一轮 | 这份确认请求所在的 run |
 
 不结束 run 也不给一轮的写不问：任务已经 DONE、CANCELLED 或 FAILED 时的 CONFIRM；别的判据的任务上的 CONFIRM；撤销结论；已有同样结论的重写；
-已经 DONE 的复核任务改结论，除非改完让被复核任务变 DONE；提交证据的会话已经结束时的 SEND_BACK（不投递，也不恢复它，note 留在这个版本上）；
-所有者确认之后的退回（记成 PROBLEMS，不给 run 一轮）。
+已经 DONE 的复核任务改结论；提交证据的会话已经结束时的 SEND_BACK（不投递，也不恢复它，note 留在这个版本上）；所有者确认之后的退回（记成
+PROBLEMS，不给 run 一轮）。
+
+**结算别的任务。** 写或删一个任务，会让那份从任务互相推状态的计划（`projects/task-aggregation.ts`）把别的任务移到 DONE，那个任务上的 run 一样被
+结束。典型的是等 check PASS 的被复核任务（`VERIFICATION_PASSED`，最新的 check 说了 PASS）：写 PASS、取消或删除更新的 check、把策略改成
+`VERIFICATION_PASSED`，都会结算它。所以 `task_update` 动了这份计划读的字段（状态、策略、判据、结论、指向、父任务、退休）时，和 `task_delete`，先用同一份计划
+（`tasksSettledBy`，写之后 `recomputeAggregates` 跑的就是它）算这次写新结算了哪些任务，问那些任务上做事的每个活 run，动作文字是
+`end it by settling its task`。没带会话或没动这些字段的写不算这份计划。
+
+run 写自己的任务也问这一条：窄的 run 把自己写成 CANCELLED、因此结算了别的任务、上面的 run 更宽时被拒，和那个 run 不直接相关，下一步是找协调者或请人切模式。
+复核任务的 run 给自己写结论也一样。写 FAILED 结算不了别的任务，所以 run 写 FAILED 的保守出路不受影响。
+
+有子任务的 `ALL_CHILDREN_DONE`、`VERIFICATION_PASSED` 父任务没有 run 可问：数据库不让这样的任务上有做事的活会话（`TASK_AGGREGATE_PARENT_ACTIVATION`）。
+CONFIRM 写完不跑这份计划，所以不结算别的任务。
 
 **不管什么。** `session_reply`：是更宽的一方先问的，Plan 也能回复。对自己的操作。所有者自己的门和平台的投递，它们不走这些门。
 所有者在应用里按证据卡片（用户门，不带会话头）也不问，不管这一下点的是哪个会话的卡片。

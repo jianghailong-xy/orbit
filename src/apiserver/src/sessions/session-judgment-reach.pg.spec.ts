@@ -13,8 +13,9 @@
  * Besides the table:
  *   - each direct relation, and what looks like one and is not;
  *   - only what the door would end or give a turn to is asked: a run that has ended, a write that ends nothing, go on as they did;
- *   - a verdict ends more than its verifier's run when it settles more than its verifier: the subject that waits on its PASS,
- *     by the plan the write goes on to run;
+ *   - a write ends more than its own task's run when it settles more than its own task: the subject that waits on a check's PASS.
+ *     A verdict, cancelling or deleting a newer check, and moving the subject's policy are asked of that run by the plan the write goes
+ *     on to run, a run writing its own task included, and a run's own FAILED stays open to it;
  *   - every refusal the door already had comes first, in its own words, and so does a version already answered;
  *   - a run of a verification task takes the two doors that carry words only as `session_send` does;
  *   - a stored mode that is null reads as the account's default, and a mode that runs as Bypass on its engine counts as Bypass;
@@ -183,7 +184,7 @@ test('what a session answers about a run reaches the run only as the table says'
   await app.listen(0, '127.0.0.1');
   const base = await app.getUrl();
 
-  async function send(method: 'PATCH' | 'POST', route: string, body?: unknown, headers: Record<string, string> = {}): Promise<Answer> {
+  async function send(method: 'PATCH' | 'POST' | 'DELETE', route: string, body?: unknown, headers: Record<string, string> = {}): Promise<Answer> {
     const response = await fetch(`${base}/api${route}`, {
       method,
       headers: {
@@ -1040,7 +1041,7 @@ test('what a session answers about a run reaches the run only as the table says'
     assertRefused(answer, 'a Plan coordinator');
     const words = String(answer.json.message);
     assert.ok(words.includes(`session ${uuidToBase62(pair.run)} runs in "auto"`), words);
-    assert.ok(words.includes('so this session may not end it by writing the verdict that settles its task. Nothing was changed.'), words);
+    assert.ok(words.includes('so this session may not end it by settling its task. Nothing was changed.'), words);
     assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
   });
 
@@ -1158,6 +1159,227 @@ test('what a session answers about a run reaches the run only as the table says'
     const check = await aCheck(await taskIn(), { parentTaskId: parent });
     assertWent(await writeVerdict(check, 'FAIL', await sessionIn('plan')), 'a verdict from Plan');
     assert.deepEqual([await statusOf(check), await statusOf(parent)], ['DONE', 'DONE']);
+  });
+
+  // ── what else settles a subject: the plan's other inputs ─────────────────────────────────────
+  /** A subject with a run of its own in a mode, an older check with a PASS, and a newer check that has said nothing: the subject waits on the newer one. */
+  async function waitingOnANewerCheck(mode: string | null, extra: TaskShape = {}, run: Shape = {}): Promise<{ subject: string; run: string; check: string }> {
+    const subject = await taskIn({ ...gate, completionPolicy: 'MANUAL', ...extra });
+    const session = await sessionIn(mode, { taskId: subject, startsTaskWork: true, ...run });
+    const inProject: TaskShape = extra.projectId ? { projectId: extra.projectId } : {};
+    const older = await aCheck(subject, { ...inProject, createdAt: new Date(Date.now() - 60_000) });
+    await tasks.update(ownerId, older, { verdict: 'PASS' } as never);
+    const newer = await aCheck(subject, inProject);
+    await prisma.task.update({ where: { id: subject }, data: { completionPolicy: 'VERIFICATION_PASSED' } });
+    return { subject, run: session, check: newer };
+  }
+  /** A MANUAL subject with a run of its own and a check that has a PASS, so nothing settled it. `check` is the subject here: it is what the write names. */
+  async function aPassNothingReadsYet(mode: string | null, extra: TaskShape = {}, run: Shape = {}): Promise<{ subject: string; run: string; check: string }> {
+    const subject = await taskIn({ ...gate, completionPolicy: 'MANUAL', ...extra });
+    const session = await sessionIn(mode, { taskId: subject, startsTaskWork: true, ...run });
+    const check = await aCheck(subject, extra.projectId ? { projectId: extra.projectId } : {});
+    await tasks.update(ownerId, check, { verdict: 'PASS' } as never);
+    return { subject, run: session, check };
+  }
+  const SETTLING_WRITES: Array<{
+    name: string;
+    stage: typeof waitingOnANewerCheck;
+    write: (pair: { subject: string; check: string }, from?: string) => Promise<Answer>;
+  }> = [
+    {
+      name: 'writing the newer check CANCELLED',
+      stage: waitingOnANewerCheck,
+      write: (pair, from) => send('PATCH', `/runner/tasks/${uuidToBase62(pair.check)}`, { status: 'CANCELLED' }, from ? asSession(from) : {}),
+    },
+    {
+      name: 'deleting the newer check',
+      stage: waitingOnANewerCheck,
+      write: (pair, from) => send('DELETE', `/runner/tasks/${uuidToBase62(pair.check)}`, undefined, from ? asSession(from) : {}),
+    },
+    {
+      name: 'moving the subject to VERIFICATION_PASSED',
+      stage: aPassNothingReadsYet,
+      write: (pair, from) => send('PATCH', `/runner/tasks/${uuidToBase62(pair.subject)}`, { completionPolicy: 'VERIFICATION_PASSED' }, from ? asSession(from) : {}),
+    },
+  ];
+  for (const { name, stage, write } of SETTLING_WRITES) {
+    await t.test(`${name} settles the subject: a Plan coordinator is refused, is told what it would end, and nothing is written`, async () => {
+      const coordinator = await sessionIn('plan');
+      const pair = await stage('auto', { projectId: await projectCoordinatedBy(coordinator) });
+      const before = await twoTasks(pair);
+      const answer = await write(pair, coordinator);
+      assertRefused(answer, name);
+      const words = String(answer.json.message);
+      assert.ok(words.includes(`session ${uuidToBase62(pair.run)} runs in "auto"`), words);
+      assert.ok(words.includes('so this session may not end it by settling its task. Nothing was changed.'), words);
+      assert.ok(words.includes('Write what you want done into your plan'), words);
+      assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+    });
+
+    await t.test(`${name} settles the subject: a Default coordinator is directly related to its run, so it goes through`, async () => {
+      const coordinator = await sessionIn('default');
+      const pair = await stage('auto', { projectId: await projectCoordinatedBy(coordinator) });
+      assertWent(await write(pair, coordinator), name);
+      assert.equal(await statusOf(pair.subject), 'DONE');
+    });
+
+    await t.test(`${name} settles the subject: an Auto coordinator goes through, and so does one its run is no wider than`, async () => {
+      const auto = await sessionIn('auto');
+      const wide = await stage('bypassPermissions', { projectId: await projectCoordinatedBy(auto) });
+      assertWent(await write(wide, auto), `${name} from Auto`);
+      assert.equal(await statusOf(wide.subject), 'DONE');
+      const narrow = await sessionIn('default');
+      const same = await stage('default', { projectId: await projectCoordinatedBy(narrow) });
+      assertWent(await write(same, narrow), `${name} with a run no wider`);
+      assert.equal(await statusOf(same.subject), 'DONE');
+    });
+
+    await t.test(`${name} settles the subject: with no live run, or only a session reading it, there is nothing to ask, even from Plan`, async () => {
+      const first = await sessionIn('plan');
+      const ended = await stage('auto', { projectId: await projectCoordinatedBy(first) }, { status: RunStatus.SUCCEEDED, finishedAt: new Date() });
+      assertWent(await write(ended, first), `${name} past a run that has ended`);
+      assert.equal(await statusOf(ended.subject), 'DONE');
+      const second = await sessionIn('plan');
+      const reader = await stage('auto', { projectId: await projectCoordinatedBy(second) }, { startsTaskWork: false });
+      assertWent(await write(reader, second), `${name} past a reader`);
+      assert.equal(await statusOf(reader.subject), 'DONE');
+    });
+
+    await t.test(`${name} settles the subject: a credential with no session in it is not asked`, async () => {
+      const pair = await stage('bypassPermissions', { projectId: await projectCoordinatedBy(await sessionIn('auto')) });
+      assertWent(await write(pair), `${name} with no session`);
+      assert.equal(await statusOf(pair.subject), 'DONE');
+    });
+  }
+
+  for (const { name, write } of SETTLING_WRITES.slice(0, 2)) {
+    await t.test(`${name} settles the subject: an unrelated Default is refused, in no project`, async () => {
+      const pair = await waitingOnANewerCheck('auto');
+      const before = await twoTasks(pair);
+      const answer = await write(pair, await sessionIn('default'));
+      assertRefused(answer, name);
+      assert.ok(String(answer.json.message).includes('Ask your own coordinator to do this'), answer.text);
+      assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+    });
+  }
+
+  await t.test('moving the subject to VERIFICATION_PASSED in no project is refused as it was: the door’s own refusal comes first', async () => {
+    const pair = await aPassNothingReadsYet('auto');
+    const before = await twoTasks(pair);
+    const answer = await send('PATCH', `/runner/tasks/${uuidToBase62(pair.subject)}`, { completionPolicy: 'VERIFICATION_PASSED' }, asSession(await sessionIn('plan')));
+    assert.equal(answer.status, 400, answer.text);
+    assert.equal(answer.json.code, 'VERIFICATION_SUBJECT_REQUIRES_PROJECT', answer.text);
+    assert.equal(await twoTasks(pair), before);
+  });
+
+  await t.test('a person’s own edit and delete that settle the subject are not asked', async () => {
+    const cancelled = await waitingOnANewerCheck('bypassPermissions');
+    await tasks.update(ownerId, cancelled.check, { status: 'CANCELLED' } as never);
+    assert.equal(await statusOf(cancelled.subject), 'DONE');
+    const deleted = await waitingOnANewerCheck('bypassPermissions');
+    await tasks.remove(ownerId, deleted.check);
+    assert.equal(await statusOf(deleted.subject), 'DONE');
+  });
+
+  await t.test('writing the newer check FAILED settles nothing: a check that failed is still the newest, so nothing is asked, even from Plan', async () => {
+    const pair = await waitingOnANewerCheck('auto');
+    assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(pair.check)}`, { status: 'FAILED' }, asSession(await sessionIn('plan'))), 'FAILED from Plan');
+    assert.deepEqual([await statusOf(pair.check), await statusOf(pair.subject)], ['FAILED', 'OPEN']);
+  });
+
+  await t.test('a write that moves nothing the plan reads, or moves it without settling anything, goes on as it did, even from Plan', async () => {
+    const pair = await waitingOnANewerCheck('auto');
+    const plan = await sessionIn('plan');
+    for (const edit of [{ title: 'renamed' }, { description: 'more' }, { status: 'IN_PROGRESS' }, { status: 'OPEN' }]) {
+      assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(pair.check)}`, edit, asSession(plan)), `task_update ${JSON.stringify(edit)}`);
+    }
+    assert.deepEqual([await statusOf(pair.check), await statusOf(pair.subject)], ['OPEN', 'OPEN']);
+  });
+
+  // ── a narrow run writing its own task ────────────────────────────────────────────────────────
+  for (const [mode, nextStep] of [['default', 'Ask your own coordinator to do this'], ['acceptEdits', 'Ask your own coordinator to do this'], ['plan', 'Write what you want done into your plan']] as const) {
+    await t.test(`a ${mode} run writing its own task CANCELLED, which would settle a task with a wider run, is refused, nothing is written, and it is told where to go`, async () => {
+      const pair = await waitingOnANewerCheck('bypassPermissions');
+      const own = await sessionIn(mode, { taskId: pair.check, startsTaskWork: true });
+      const before = await twoTasks(pair);
+      const answer = await send('PATCH', `/runner/tasks/${uuidToBase62(pair.check)}`, { status: 'CANCELLED' }, asSession(own));
+      assertRefused(answer, `a ${mode} run cancelling itself`);
+      const words = String(answer.json.message);
+      assert.ok(words.includes(`session ${uuidToBase62(pair.run)} runs in "bypassPermissions"`), words);
+      assert.ok(words.includes('so this session may not end it by settling its task. Nothing was changed.'), words);
+      assert.ok(words.includes(nextStep), words);
+      assert.equal(await twoTasks(pair), before, 'a refusal changes nothing');
+      assert.equal(await statusOf(pair.check), 'OPEN');
+    });
+  }
+
+  await t.test('a narrow run writing its own task CANCELLED goes through when what it settles has a run no wider, and when it settles nothing', async () => {
+    const same = await waitingOnANewerCheck('default');
+    const own = await sessionIn('default', { taskId: same.check, startsTaskWork: true });
+    assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(same.check)}`, { status: 'CANCELLED' }, asSession(own)), 'over a run no wider');
+    assert.equal(await statusOf(same.subject), 'DONE');
+    const alone = await taskIn();
+    const mine = await sessionIn('plan', { taskId: alone, startsTaskWork: true });
+    assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(alone)}`, { status: 'CANCELLED' }, asSession(mine)), 'a run of a task nothing reads');
+    assert.equal(await statusOf(alone), 'CANCELLED');
+  });
+
+  await t.test('a run deleting its own task is refused as it was: a run’s own refusal comes first', async () => {
+    const pair = await waitingOnANewerCheck('auto');
+    const own = await sessionIn('default', { taskId: pair.check, startsTaskWork: true });
+    const answer = await send('DELETE', `/runner/tasks/${uuidToBase62(pair.check)}`, undefined, asSession(own));
+    assertRefused(answer, 'a run deleting its own check', 'TASK_DELETE_FROM_RUN_REFUSED');
+  });
+
+  for (const mode of ['default', 'acceptEdits', 'dontAsk', 'plan']) {
+    await t.test(`a ${mode} run’s own FAILED stays open to it, whatever a wider run is doing elsewhere`, async () => {
+      // A check that failed is still the newest, so the subject goes on waiting.
+      const newest = await waitingOnANewerCheck('bypassPermissions');
+      const own = await sessionIn(mode, { taskId: newest.check, startsTaskWork: true });
+      assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(newest.check)}`, { status: 'FAILED' }, asSession(own)), `a ${mode} run failing the newest check`);
+      assert.deepEqual([await statusOf(newest.check), await statusOf(newest.subject)], ['FAILED', 'OPEN']);
+
+      // The plan already wants the subject DONE, through no doing of this write: the older check’s run is not what settles it.
+      const stale = await taskIn({ ...gate });
+      await sessionIn('bypassPermissions', { taskId: stale, startsTaskWork: true });
+      const passed = await aCheck(stale);
+      await prisma.task.update({ where: { id: passed }, data: { verdict: 'PASS', status: 'DONE', verdictRevision: 1n } });
+      const earlier = await aCheck(stale, { createdAt: new Date(Date.now() - 60_000) });
+      const mine = await sessionIn(mode, { taskId: earlier, startsTaskWork: true });
+      assertWent(await send('PATCH', `/runner/tasks/${uuidToBase62(earlier)}`, { status: 'FAILED' }, asSession(mine)), `a ${mode} run failing an older check`);
+      assert.equal(await statusOf(earlier), 'FAILED');
+    });
+  }
+
+  // ── a parent its children settle ─────────────────────────────────────────────────────────────
+  async function aDoneChildOf(parent: string): Promise<void> {
+    const check = await aCheck(await taskIn(), { parentTaskId: parent });
+    await tasks.update(ownerId, check, { verdict: 'PASS' } as never);
+  }
+  await t.test('cancelling or deleting a parent’s last outstanding child settles the parent, which has no run to ask about: the database keeps one off it', async () => {
+    for (const [what, write] of [
+      ['cancelling', (child: string, from: string) => send('PATCH', `/runner/tasks/${uuidToBase62(child)}`, { status: 'CANCELLED' }, asSession(from))],
+      ['deleting', (child: string, from: string) => send('DELETE', `/runner/tasks/${uuidToBase62(child)}`, undefined, asSession(from))],
+    ] as const) {
+      const parent = await taskIn({ ...judged, completionPolicy: 'ALL_CHILDREN_DONE' });
+      const last = await taskIn({ parentTaskId: parent });
+      await aDoneChildOf(parent);
+      assert.equal(await statusOf(parent), 'OPEN', 'it waits on the last child');
+      assertWent(await write(last, await sessionIn('plan')), `${what} the last child from Plan`);
+      assert.equal(await statusOf(parent), 'DONE');
+    }
+    const working = await taskIn({ ...judged, completionPolicy: 'ALL_CHILDREN_DONE' });
+    await sessionIn('auto', { taskId: working, startsTaskWork: true });
+    await assert.rejects(taskIn({ parentTaskId: working }), /TASK_AGGREGATE_PARENT_ACTIVATION/);
+  });
+
+  await t.test('a CONFIRM runs no such plan: settling a parent’s last outstanding child leaves the parent as it was, so there is nothing more to ask', async () => {
+    const parent = await taskIn({ ...judged, completionPolicy: 'ALL_CHILDREN_DONE' });
+    const stop = await CONFIRM.stage('auto', { parentTaskId: parent });
+    await aDoneChildOf(parent);
+    assert.equal(await statusOf(parent), 'OPEN', 'it waits on the last child');
+    assertWent(await CONFIRM.call(stop, await sessionIn('auto')), 'a CONFIRM of the last child');
+    assert.deepEqual([await statusOf(stop.taskId), await statusOf(parent)], ['DONE', 'OPEN']);
   });
 
   // ── the run of a verification task ───────────────────────────────────────────────────────────

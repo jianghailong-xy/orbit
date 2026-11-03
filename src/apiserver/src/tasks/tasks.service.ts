@@ -59,6 +59,7 @@ import {
   type AgentProviderSeed,
 } from '../workspaces/workspace-provider';
 import {
+  type AggregationTaskFact,
   type AggregationTaskStatus,
   foremanPolicyConflict,
   planTaskAggregation,
@@ -10297,13 +10298,41 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       before.supersededByTaskId,
       dto.supersededByTaskId ?? undefined,
     ].filter((taskId): taskId is string => !!taskId);
+    // ...and what the plan reads of this task, as this write leaves it. Moving it can settle another task, whose run ends with it
+    // just the same, so a session that may not end that run may not do it from here (sessions/session-reach.ts), by that same
+    // plan (`tasksSettledBy`). Past every refusal of this write, on whichever branch writes it. Only for a session, and only when
+    // this write really moves one of these, so nothing else spends the read: a rename, or the owner's own edit.
+    const statusAfter = (data.status as TaskStatus | undefined) ?? before.status;
+    const parentTaskIdAfter = dto.parentTaskId === undefined ? before.parentTaskId : (dto.parentTaskId ?? null);
+    const movesAggregationFacts = statusAfter !== before.status
+      || completionPolicy !== before.completionPolicy
+      || completionCriterion !== before.completionCriterion
+      || concludedVerdict !== before.verdict
+      || verifiesTaskIdAfter !== before.verifiesTaskId
+      || parentTaskIdAfter !== before.parentTaskId
+      || supersededByTaskIdAfter !== before.supersededByTaskId
+      || terminalReasonAfter !== before.terminalReason;
+    const assertMaySettleWhatThisMoves = async (db: Prisma.TransactionClient): Promise<void> => {
+      if (!actingSessionId || !movesAggregationFacts) return;
+      await this.assertMaySettle(db, ownerId, actingSessionId, aggregationSeeds, (facts) => facts.map((fact) => (fact.id !== id ? fact : {
+        ...fact,
+        status: statusAfter as AggregationTaskStatus,
+        completionPolicy,
+        completionCriterion,
+        verdict: concludedVerdict,
+        verifiesTaskId: verifiesTaskIdAfter,
+        parentTaskId: parentTaskIdAfter,
+        supersededByTaskId: supersededByTaskIdAfter,
+        retirement: taskRetirement({ terminalReason: terminalReasonAfter, supersededByTaskId: supersededByTaskIdAfter }),
+      })));
+    };
     const updated = await (
       // `scopeFence` joins the two conditions that already force the transaction branch, and for
       // the same kind of reason: a scope re-check that runs outside the transaction it is meant to
       // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
       // project therefore takes the transaction; nothing else changes shape.
       !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
-        ? this.prisma.task.update({ where: { id }, data })
+        ? assertMaySettleWhatThisMoves(this.prisma).then(() => this.prisma.task.update({ where: { id }, data }))
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
         // conflict there leaves the global 503 boundary to answer it
@@ -10524,21 +10553,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             if (actingSessionId && projectedVerifierStatus === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
               await assertMayEndWorkingRuns(tx, ownerId, actingSessionId, id, 'writeVerdict');
             }
-            // ...and it can settle more than its own verifier, by the plan `recomputeAggregates` runs below once this
-            // has committed: the subject that waits on its PASS, whose run ends with it just the same.
-            if (actingSessionId && concludesVerdict && verifiesTaskId) {
-              const settles = await tasksSettledBy(tx, ownerId, aggregationSeeds, {
-                id,
-                status: (projectedVerifierStatus ?? before.status) as AggregationTaskStatus,
-                verdict: dto.verdict ?? null,
-                verifiesTaskId,
-                parentTaskId: dto.parentTaskId === undefined ? before.parentTaskId : (dto.parentTaskId ?? null),
-                retirement: taskRetirement({ terminalReason: terminalReasonAfter, supersededByTaskId: supersededByTaskIdAfter }),
-              });
-              for (const settled of settles) {
-                await assertMayEndWorkingRuns(tx, ownerId, actingSessionId, settled, 'settleByVerdict');
-              }
-            }
+            await assertMaySettleWhatThisMoves(tx);
             // WHICH SIDE of the status write this goes on is not a style choice: one PATCH
             // routinely does both, and 0128's trigger judges every statement on its own.
             //
@@ -12867,6 +12882,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     throw new ForbiddenException(taskDeleteFromRunRefusalBody());
   }
 
+  /** Whether this session may end the runs of what this write would settle besides (`tasksSettledBy`, sessions/session-reach.ts). */
+  private async assertMaySettle(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    actingSessionId: string,
+    seeds: readonly string[],
+    leaves: (facts: AggregationTaskFact[]) => AggregationTaskFact[],
+  ): Promise<void> {
+    for (const settled of await tasksSettledBy(db, ownerId, seeds, leaves)) {
+      await assertMayEndWorkingRuns(db, ownerId, actingSessionId, settled, 'settleTask');
+    }
+  }
+
   /**
    * Whether this session may end each live run a write of this door would end (sessions/session-reach.ts). Asked
    * before the write and not under its locks, like every refusal on these paths, so a run that starts in between
@@ -12889,10 +12917,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async remove(ownerId: string, id: string, actingSessionId?: string) {
     await this.loadDetail(ownerId, id);
     await this.assertRunMayDelete(ownerId, id, actingSessionId);
-    // The runs `deleteAndStopRuns` ends: those of this task and of every check the delete takes with it.
+    // The runs `deleteAndStopRuns` ends: those of this task and of every check the delete takes with it. And those of what
+    // is settled by these tasks leaving, which is the recomputation below, by the same plan.
     if (actingSessionId) {
       const doomed = await cascadedTaskClosure(this.prisma, ownerId, [id]);
       await this.assertMayStopRuns(ownerId, actingSessionId, { taskId: { in: doomed } }, 'deleteTask');
+      await this.assertMaySettle(this.prisma, ownerId, actingSessionId, doomed, (facts) => facts.filter((fact) => !doomed.includes(fact.id)));
     }
     const { survivingLinks, projectIds, deletedTaskIds } = await this.deleteAndStopRuns(ownerId, [id]);
     // §2.9 LS3 rule 2: the subject of a deleted task settles DELETED, in its own transaction after
