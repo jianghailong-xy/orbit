@@ -189,6 +189,9 @@ func ageCheckout(t *testing.T, path string, days int) {
 // commitAndPush commits and pushes in a checkout.
 func commitAndPush(t *testing.T, path, name, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(path, name)), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	commitFile(t, path, name, content, "add "+name)
 	branch := mustGit(t, path, "rev-parse", "--abbrev-ref", "HEAD")
 	mustGit(t, path, "push", "-q", "origin", branch)
@@ -415,23 +418,56 @@ func TestResumableSweepKeeps(t *testing.T) {
 				t.Fatal(err)
 			}
 		}},
-		{"an ignored file written within two weeks", func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "out/")
+		{"build output written within two weeks", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, "dist/")
 			ageCheckout(t, path, 20)
-			writeUnder(t, path, "out/deep/report.txt", "a report\n")
+			writeUnder(t, path, "dist/deep/app.js", "a recent build is a recent use\n")
 			// Only the file itself is new: its directories say nothing.
 			ago := time.Now().Add(-20 * 24 * time.Hour)
-			for _, dir := range []string{path, filepath.Join(path, "out"), filepath.Join(path, "out", "deep")} {
+			for _, dir := range []string{path, filepath.Join(path, "dist"), filepath.Join(path, "dist", "deep")} {
 				_ = os.Chtimes(dir, ago, ago)
 			}
 		}},
 		{"a file deleted within two weeks", func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "out/")
-			writeUnder(t, path, "out/deep/report.txt", "a report\n")
+			ignoring(t, path, "dist/")
+			writeUnder(t, path, "dist/deep/app.js", "a build\n")
 			ageCheckout(t, path, 20)
-			if err := os.Remove(filepath.Join(path, "out", "deep", "report.txt")); err != nil {
+			if err := os.Remove(filepath.Join(path, "dist", "deep", "app.js")); err != nil {
 				t.Fatal(err)
 			}
+		}},
+		{"an ignored .env, however old", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, ".env")
+			writeUnder(t, path, ".env", "SECRET=only here\n")
+			ageCheckout(t, path, 20)
+		}},
+		{"an ignored .env further down", func(t *testing.T, f *resumableFixture, path, session string) {
+			commitAndPush(t, path, "src/web/index.txt", "tracked\n")
+			ignoring(t, path, ".env")
+			writeUnder(t, path, "src/web/.env", "SECRET=only here\n")
+			ageCheckout(t, path, 20)
+		}},
+		{"an ignored report, however old", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, "reports/")
+			writeUnder(t, path, "reports/march/findings.md", "written by the session, kept nowhere else\n")
+			ageCheckout(t, path, 20)
+		}},
+		{"an ignored report beside listed entries", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, "node_modules/", "dist/", "*.report")
+			writeUnder(t, path, "node_modules/x/i.js", "x\n")
+			writeUnder(t, path, "dist/app.js", "x\n")
+			writeUnder(t, path, "findings.report", "written by the session, kept nowhere else\n")
+			ageCheckout(t, path, 20)
+		}},
+		{"an ignored report in a directory with a listed name that is not itself ignored", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, "*.report")
+			writeUnder(t, path, "build/findings.report", "written by the session, kept nowhere else\n")
+			ageCheckout(t, path, 20)
+		}},
+		{"an ignored file git has to quote the name of", func(t *testing.T, f *resumableFixture, path, session string) {
+			ignoring(t, path, "*.txt.old")
+			writeUnder(t, path, "my notes.txt.old", "written by the session, kept nowhere else\n")
+			ageCheckout(t, path, 20)
 		}},
 		{"a process working in it", func(t *testing.T, f *resumableFixture, path, session string) {
 			dir := filepath.Dir(writeUnder(t, path, "sub/tracked.txt", "x\n"))
@@ -442,8 +478,8 @@ func TestResumableSweepKeeps(t *testing.T) {
 			ageCheckout(t, path, 20)
 		}},
 		{"a process holding one of its files open from elsewhere", func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "out/")
-			held, err := os.Create(writeUnder(t, path, "out/server.log", ""))
+			ignoring(t, path, "dist/")
+			held, err := os.Create(writeUnder(t, path, "dist/server.log", ""))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -455,7 +491,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			ageCheckout(t, path, 20)
 		}},
 		{"a process running an executable from it", func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "out/")
+			ignoring(t, path, "dist/")
 			sleep, err := exec.LookPath("sleep")
 			if err != nil {
 				t.Fatal(err)
@@ -464,7 +500,7 @@ func TestResumableSweepKeeps(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			copied := writeUnder(t, path, "out/sleep", string(content))
+			copied := writeUnder(t, path, "dist/sleep", string(content))
 			if err := os.Chmod(copied, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -589,8 +625,8 @@ func TestResumableSweepKeeps(t *testing.T) {
 			standOnFakeProcessTable(t, filepath.Join(path, "node_modules"))
 		}},
 		{"a repository with commits of its own under an ignored directory", func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "out/")
-			nested := filepath.Join(path, "out", "clone")
+			ignoring(t, path, "dist/")
+			nested := filepath.Join(path, "dist", "clone")
 			if err := os.MkdirAll(nested, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -687,8 +723,7 @@ func TestResumableSweepKeepsADirectoryThatIsARepositoryOfItsOwn(t *testing.T) {
 }
 
 // Writes in a dependency directory are the exception, wherever in the tree it is: they say nothing a
-// reinstall would not put back. Anything else ignored and old goes with the checkout, as it does for
-// a finished session.
+// reinstall would not put back.
 func TestResumableSweepDoesNotCountWritesInDependencyDirectories(t *testing.T) {
 	names := make([]string, 0, len(checkoutDependencyDirs))
 	for name := range checkoutDependencyDirs {
@@ -696,8 +731,8 @@ func TestResumableSweepDoesNotCountWritesInDependencyDirectories(t *testing.T) {
 	}
 	f := newResumableFixture(t)
 	path := f.checkout(t, "sess-deps")
-	ignoring(t, path, append(append([]string{}, names...), "old-output/")...)
-	writeUnder(t, path, "old-output/report.txt", "old\n")
+	commitAndPush(t, path, "src/web/index.txt", "tracked\n")
+	ignoring(t, path, names...)
 	for _, name := range names {
 		writeUnder(t, path, name+"/at-the-top", "x\n")
 		writeUnder(t, path, "src/web/"+name+"/further-down", "x\n")
@@ -715,6 +750,55 @@ func TestResumableSweepDoesNotCountWritesInDependencyDirectories(t *testing.T) {
 	sweepOnFullDisk(f)
 
 	requireCheckoutReclaimed(t, path, "a write in a dependency directory is not a write in the checkout")
+}
+
+// What may be ignored in a checkout that goes, spelled out here and not read off the code: whatever is
+// on these lists is deleted unread, so adding a name should take a second look at this test. Each is
+// tried alone, at the top of the tree and further down.
+func TestResumableSweepTakesACheckoutHoldingOnlyEntriesARebuildPutsBack(t *testing.T) {
+	directories := []string{"node_modules", ".venv", "venv", "__pycache__", "vendor", "Pods", ".gradle",
+		"dist", "build", ".build", "target", ".next", ".turbo", "coverage"}
+	files := []string{"tsconfig.tsbuildinfo"}
+	if got, want := len(checkoutDependencyDirs)+len(checkoutBuildOutput), len(directories)+len(files); got != want {
+		t.Fatalf("the code lists %d names and this test %d: a name that decides what is deleted unread needs a reason here too", got, want)
+	}
+	for _, name := range append(append([]string{}, directories...), files...) {
+		t.Run(name, func(t *testing.T) {
+			f := newResumableFixture(t)
+			path := f.checkout(t, "sess-parked")
+			commitAndPush(t, path, "src/web/index.txt", "tracked\n")
+			ignoring(t, path, name)
+			for _, at := range []string{name, "src/web/" + name} {
+				if name == "tsconfig.tsbuildinfo" {
+					writeUnder(t, path, at, "{}\n")
+				} else {
+					writeUnder(t, path, at+"/something", "x\n")
+				}
+			}
+			ageCheckout(t, path, 20)
+			if entries := mustGit(t, path, "status", "--porcelain", "--ignored=matching", "--untracked-files=normal"); strings.Count(entries, "!! ") != 2 {
+				t.Fatalf("this case means two ignored entries, got:\n%s", entries)
+			}
+
+			sweepOnFullDisk(f)
+
+			requireCheckoutReclaimed(t, path, "everything ignored in it comes back with a rebuild")
+		})
+	}
+	t.Run("all of them together", func(t *testing.T) {
+		f := newResumableFixture(t)
+		path := f.checkout(t, "sess-parked")
+		ignoring(t, path, append(append([]string{}, directories...), files...)...)
+		for _, name := range directories {
+			writeUnder(t, path, name+"/something", "x\n")
+		}
+		writeUnder(t, path, "tsconfig.tsbuildinfo", "{}\n")
+		ageCheckout(t, path, 20)
+
+		sweepOnFullDisk(f)
+
+		requireCheckoutReclaimed(t, path, "everything ignored in it comes back with a rebuild")
+	})
 }
 
 // The disk gate: a roomy disk, no reading and no floor are all "not short", and none of them even asks.
@@ -905,6 +989,16 @@ func TestResumableSweepLooksAgainImmediatelyBeforeItRemoves(t *testing.T) {
 			commitFile(t, path, "late.txt", "late\n", "late")
 			ageCheckout(t, path, 20)
 		}},
+		{"an ignored file appeared, and was dated back", func(t *testing.T, f *resumableFixture, path string) {
+			// Out of the tree, so that nothing but the ignored file itself is new: git reads this one
+			// from the repository, not from the worktree.
+			writeUnder(t, gitCommonDir(path), "info/exclude", ".env\n")
+			writeUnder(t, path, ".env", "SECRET=only here\n")
+			ageCheckout(t, path, 20)
+			if status, err := git(path, "status", "--porcelain"); err != nil || status != "" {
+				t.Errorf("the point of this case is a clean status, got %q (%v)", status, err)
+			}
+		}},
 		{"a process moved in", func(t *testing.T, f *resumableFixture, path string) {
 			cmd := exec.Command("sleep", "600")
 			cmd.Dir = path
@@ -973,10 +1067,10 @@ func TestResumableSweepFencesOutACommitWhileItTakesTheCheckout(t *testing.T) {
 func TestAReclaimedCheckoutIsNeverSeenHalfGoneAtItsPath(t *testing.T) {
 	f := newResumableFixture(t)
 	path := f.checkout(t, "sess-parked")
-	ignoring(t, path, "*.pad")
+	ignoring(t, path, "dist/")
 	var sample []string
 	for i := 0; i < 3000; i++ {
-		file := writeUnder(t, path, "f"+strconv.Itoa(i)+".pad", "x")
+		file := writeUnder(t, path, "dist/f"+strconv.Itoa(i)+".pad", "x")
 		if i%50 == 0 {
 			sample = append(sample, file)
 		}
@@ -1496,6 +1590,47 @@ func TestTheMarkGoesWhenTheCheckoutComesBack(t *testing.T) {
 		sweepOnFullDisk(f)
 		requireCheckoutOnDisk(t, path, "there was nowhere to move it")
 		requireNoMark(t, f, "sess-parked")
+	})
+}
+
+// `orbit resume` starts its CLI in the checkout, and a missing one used to end it with exit 1 and no word.
+// It says what happened and what brings the checkout back, for every engine that opens in a terminal.
+func TestResumeOnAReclaimedCheckoutSaysWhatHappenedAndWhatBringsItBack(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	const sessionID = "01a113f1-eec1-77dc-b73f-d222d66a53e5"
+	checkout := filepath.Join(worktreesDir(), sessionID)
+	meta := func(provider, workDir string) *sessionMeta {
+		return &sessionMeta{Provider: provider, SessionUUID: "a068effa-91bd-4ef4-9949-cd7e5d095546",
+			RuntimeSessionID: "a068effa-91bd-4ef4-9949-cd7e5d095546", WorkDir: workDir}
+	}
+	for _, workDir := range []string{checkout, filepath.Join(checkout, "src", "app")} {
+		_, err := resumeCommand(sessionID, t.TempDir(), meta(providerClaude, workDir))
+		if err == nil {
+			t.Fatalf("resumed in %s, which is not there", workDir)
+		}
+		for _, want := range []string{"is not on this machine", workDir, "keeps its branch",
+			"orbit session send " + publicID(sessionID) + " --message TEXT --resume-if-ended", "orbit resume " + publicID(sessionID)} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("the refusal must say %q, got: %v", want, err)
+			}
+		}
+	}
+	t.Run("a checkout that is there", func(t *testing.T) {
+		if err := os.MkdirAll(checkout, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(checkout) })
+		cmd, err := resumeCommand(sessionID, t.TempDir(), meta(providerClaude, checkout))
+		if err != nil || cmd == nil || cmd.Dir != checkout {
+			t.Fatalf("resume must go on as it did: cmd %v, err %v", cmd, err)
+		}
+	})
+	t.Run("a directory that is no checkout of this session", func(t *testing.T) {
+		for _, workDir := range []string{filepath.Join(t.TempDir(), "gone"), filepath.Join(worktreesDir(), sessionID+"-other")} {
+			if cmd, err := resumeCommand(sessionID, t.TempDir(), meta(providerClaude, workDir)); err != nil || cmd == nil || cmd.Dir != workDir {
+				t.Fatalf("%s is not this session's checkout, so this says nothing about it: cmd %v, err %v", workDir, cmd, err)
+			}
+		}
 	})
 }
 

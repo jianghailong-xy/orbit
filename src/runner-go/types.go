@@ -1674,9 +1674,10 @@ type RunFinalizeRequest struct {
 // RunFinalizeResponse is the control plane's reply when the runner finalizes a run through
 // /runner/sessions/:id/finalize. KeepCheckout is false only when the Session is Completed or
 // in Trash; for any resumable end it is true, so the isolated worktree checkout is preserved
-// for the resume. False means the checkout has become ELIGIBLE for reclamation, not that the
-// runner removes it here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable)
-// on every sweep and is the only thing that acts on it.
+// for the resume, unless the disk runs short and it has nothing to lose (gcResumableCheckouts).
+// False means the checkout has become ELIGIBLE for reclamation, not that the runner removes it
+// here: gcWorktrees re-asks the same judgement (sessions/worktrees-removable) on every sweep and
+// is the only thing that acts on it.
 type RunFinalizeResponse struct {
 	Ok           bool `json:"ok"`
 	KeepCheckout bool `json:"keepCheckout"`

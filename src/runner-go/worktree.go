@@ -2968,6 +2968,22 @@ var checkoutDependencyDirs = map[string]bool{
 	".gradle":      true,
 }
 
+// checkoutBuildOutput are the ignored names a rebuild puts back. With checkoutDependencyDirs they are the
+// only ignored entries a checkout may hold and still go (checkoutHasNothingToLose): anything else ignored
+// may be something a session wrote and means to come back to, a report or a local config, and no copy of
+// it exists. Add a name only with a reason, because whatever it names is deleted unread. A write under one of
+// these still counts as recent use (checkoutIdleSince).
+var checkoutBuildOutput = map[string]bool{
+	"dist":                 true,
+	"build":                true,
+	".build":               true,
+	"target":               true,
+	".next":                true,
+	".turbo":               true,
+	"coverage":             true,
+	"tsconfig.tsbuildinfo": true,
+}
+
 // errKeepCheckout ends a walk of a checkout that has already said it stays.
 var errKeepCheckout = errors.New("the checkout stays")
 
@@ -3027,10 +3043,10 @@ func checkoutIdleSince(path string) (time.Time, bool) {
 	return newest, err == nil
 }
 
-// checkoutHasNothingToLose asks git whether everything in a checkout exists somewhere else, and whether
-// it would come back as it is. It stands on branch, the one its session comes back on, with its fork
-// point recorded, no operation half done, nothing uncommitted and nothing unpushed. It only reads, and
-// anything git cannot answer counts as no.
+// checkoutHasNothingToLose asks git whether everything in a checkout exists somewhere else or can be made
+// again, and whether it would come back as it is. It stands on branch, the one its session comes back on,
+// with its fork point recorded, no operation half done, nothing uncommitted, unpushed or ignored but a
+// reinstall or a rebuild's output. It only reads, and anything git cannot answer counts as no.
 func checkoutHasNothingToLose(path, branch string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), checkoutProbeTimeout)
 	defer cancel()
@@ -3057,11 +3073,27 @@ func checkoutHasNothingToLose(path, branch string) bool {
 	if _, err := gitCtx(ctx, path, "rev-parse", "--verify", "--quiet", baseRefName(filepath.Base(path))); err != nil {
 		return false
 	}
-	// Spelled out because a repository's own configuration can turn this answer off:
+	// Any line but an ignored entry on the lists is something that exists nowhere else. A name git has to
+	// quote is off the lists too, and only keeps a checkout that could have gone. --untracked-files is
+	// spelled out because a repository's own configuration can turn that answer off:
 	// status.showUntrackedFiles=no reads a checkout full of new files as clean.
-	status, err := gitCtx(ctx, path, "status", "--porcelain", "--untracked-files=normal")
-	if err != nil || status != "" {
+	//
+	// --ignored=matching and not plain --ignored, which walks every ignored directory to see what is in it
+	// (over 159 checkouts here 55 seconds against 7, and 12 for the slowest, on the claim loop), and calls a
+	// directory holding nothing but ignored files by that directory's name, which may be one on the lists.
+	status, err := gitCtx(ctx, path, "status", "--porcelain", "--ignored=matching", "--untracked-files=normal")
+	if err != nil {
 		return false
+	}
+	for _, line := range strings.Split(status, "\n") {
+		if line == "" {
+			continue
+		}
+		entry, ignored := strings.CutPrefix(line, "!! ")
+		name := filepath.Base(entry)
+		if !ignored || !(checkoutDependencyDirs[name] || checkoutBuildOutput[name]) {
+			return false
+		}
 	}
 	// `git status` says nothing about a file marked assume-unchanged or skip-worktree, whatever has been
 	// done to it. Anything but H in this listing is one.
@@ -3191,8 +3223,8 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 // gcResumableCheckouts is the second half of a sweep, and runs only while the disk is still under
 // its floor after gcWorktrees: it reclaims the checkouts of sessions that can resume, oldest first,
 // and stops as soon as the disk is back above the floor. A session comes back from one of these with a
-// new checkout of its branch, so what it loses is what git does not track: installed dependencies and
-// build output. Nothing that exists nowhere else goes.
+// new checkout of its branch, so what it loses is installed dependencies and build output, which a reinstall
+// and a rebuild put back. Nothing that exists nowhere else goes.
 //
 // A checkout goes only if all of these hold: the control plane answers that its session is resumable
 // (worktreesResumable; that half is the only thing asked of it), nothing of the session is at work here
@@ -3411,6 +3443,22 @@ func restoreAbsentCheckout(pool *sessionPool, job *ClaimedSession) {
 	logln(fmt.Sprintf("session %s — restored its reclaimed checkout %s (branch %s)", job.SessionID, wt.Path, branch))
 	uncommitParkCheckpoint(wt)
 	syncManagedVolume("the session's checkout", wt.Path)
+}
+
+// reclaimedCheckoutNotice is what `orbit resume` says instead of failing to start in workDir, the
+// checkout of this session that is not on disk, and "" for any other directory. The session's next
+// message brings the checkout back (setupWorktree, restoreAbsentCheckout).
+func reclaimedCheckoutNotice(sessionID, workDir string) string {
+	checkout := filepath.Join(worktreesDir(), sessionID)
+	if workDir != checkout && !strings.HasPrefix(workDir, checkout+string(filepath.Separator)) {
+		return ""
+	}
+	if _, err := os.Lstat(workDir); !errors.Is(err, os.ErrNotExist) {
+		return ""
+	}
+	return fmt.Sprintf("this session's checkout is not on this machine (%s): the runner removes an idle session's checkout when the disk is short, and keeps its branch. "+
+		"Its next message brings the checkout back: `orbit session send %s --message TEXT --resume-if-ended`, then run `orbit resume %s` again",
+		workDir, publicID(sessionID), publicID(sessionID))
 }
 
 // gcUploads removes per-session attachment scratch dirs (writeUpload) whose session is no

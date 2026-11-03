@@ -166,6 +166,10 @@ twice, the second time immediately before it goes:
   dependency directory: `node_modules`, `.venv`, `venv`, `__pycache__`, `vendor`, `Pods` or `.gradle`.
 - `git status` reports nothing, untracked files included, whatever the repository's own settings say, and no
   file is marked assume-unchanged or skip-worktree.
+- Every ignored file or directory it holds can be made again, going by its name: the dependency directories
+  above, or the build output `dist`, `build`, `.build`, `target`, `.next`, `.turbo`, `coverage` or
+  `tsconfig.tsbuildinfo`. Anything else ignored, such as a local `.env` or a report, keeps the checkout, however
+  old it is.
 - `git rev-list HEAD --not --remotes` is empty: every commit is on a remote. A repository with no remote
   keeps its checkouts.
 - `HEAD` is on the session's own branch and its fork point is on record, no merge, rebase, cherry-pick, revert or
@@ -177,14 +181,13 @@ engine starts, and the conversation goes on. The branch and its commits were nev
 fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before. A runner restart does
 not bring these checkouts back; only the session's next turn does.
 
-**What does not come back.** Whatever git does not track: installed dependencies and build output, which the
-agent has to rebuild, and any other ignored file, such as a local `.env`. Keep something the session must not
-lose committed, or written within the last 14 days.
+**What does not come back.** Installed dependencies and build output, which the agent has to rebuild. These go by
+name, so a file a session put inside `dist` or `node_modules` goes with them.
 
 **If the checkout cannot come back**, for example because the disk is still too full or the branch is checked
 out somewhere else, the run ends with an error giving git's reason. It never runs in the shared working directory
-instead. Free the space or the branch and send the message again.
-`orbit resume` in a terminal needs the checkout to be there, so send the session a message first.
+instead. Free the space or the branch and send the message again. `orbit resume` in a terminal needs the checkout
+to be there, so it says so and gives the command that sends the message.
 
 **Mixed versions.** Neither direction reclaims more than the older side would:
 
