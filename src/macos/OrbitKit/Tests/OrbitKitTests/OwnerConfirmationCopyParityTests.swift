@@ -167,6 +167,8 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
                        "the branch nobody can place on main")
         assertDeclares(web, "IF_CONFIRMED_DOES_NOT_MERGE", OwnerConfirmations.doesNotMerge,
                        "what confirming does not do to the branch")
+        assertDeclares(web, "IF_CONFIRMED_NO_CHANGES", OwnerConfirmations.noChanges,
+                       "a branch with no changes (§10.5 O-L8)")
         assertDeclares(web, "IF_CONFIRMED_LINE_THEN_OWNER", OwnerConfirmations.lineThenOwner,
                        "the integration line's landing")
         assertDeclares(web, "IF_CONFIRMED_AUTO_MAIN", OwnerConfirmations.autoMain,

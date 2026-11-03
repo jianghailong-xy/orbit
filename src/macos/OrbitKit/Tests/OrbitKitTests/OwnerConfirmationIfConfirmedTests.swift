@@ -131,6 +131,33 @@ final class OwnerConfirmationIfConfirmedTests: XCTestCase {
         XCTAssertEqual(garbled.ifConfirmed?.landing, .autoMain)
     }
 
+    /// A branch with no changes lands nothing, and the row says so with the branch's name alone
+    /// (§10.5 O-L8). Every other answer keeps the rows it had.
+    func testABranchWithNoChangesSaysNothingLands() throws {
+        func rows(files: Int, onMain: OwnerConfirmationOnMain,
+                  landing: OwnerConfirmationLanding?) -> [OwnerConfirmations.IfConfirmedRow] {
+            OwnerConfirmations.ifConfirmedRows(OwnerConfirmationIfConfirmed(
+                branch: OwnerConfirmationBranch(name: "orbit/x", linesAdded: 0, linesRemoved: 0, files: files,
+                                                onMain: onMain),
+                landing: landing, mainBranch: "develop"))
+        }
+        let nothingLands = OwnerConfirmations.IfConfirmedRow(
+            kind: .branch, lead: OwnerConfirmations.noChanges, detail: "orbit/x")
+        XCTAssertEqual(OwnerConfirmations.noChanges, "No changes on this branch, so nothing lands")
+        XCTAssertEqual(rows(files: 0, onMain: .no, landing: .landsNothing), [nothingLands])
+        XCTAssertEqual(rows(files: 0, onMain: .unknown, landing: .landsNothing), [nothingLands])
+
+        // A branch known to be on main still draws no row: its work may have landed through it.
+        XCTAssertEqual(rows(files: 0, onMain: .yes, landing: .landsNothing), [])
+        // A changed file is work, whatever the landing says.
+        XCTAssertEqual(rows(files: 1, onMain: .no, landing: .landsNothing).first?.lead, "Not on develop yet")
+        // A landing that was not read, or that still happens, keeps the rows it had.
+        XCTAssertEqual(rows(files: 0, onMain: .no, landing: nil).map(\.lead), ["Not on develop yet"])
+        for landing in [OwnerConfirmationLanding.lineThenOwner, .autoMain, .agentPushed] {
+            XCTAssertFalse(rows(files: 0, onMain: .no, landing: landing).contains(nothingLands))
+        }
+    }
+
     func testAnOlderServerOrNothingWaitingIsNoBlock() throws {
         XCTAssertNil(try decodeView(view(ifConfirmed: nil)).ifConfirmed)
         XCTAssertNil(try decodeView(view(ifConfirmed: "null")).ifConfirmed)

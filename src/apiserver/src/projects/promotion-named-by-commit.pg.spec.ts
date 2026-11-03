@@ -31,6 +31,7 @@ import {
 import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl } from './project-integration-line';
 import { landingFailureClass } from './project-integration-job';
+import { openItemMessage, readOpenItemDeliveryCard } from './project-open-item';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
 
@@ -60,7 +61,11 @@ import { ProjectPromotionService } from './project-promotion.service';
  *  (5) §10.9 4: the owner's own Merge opens no LANDED_WITHOUT_CONFIRMATION, while a Merge pressed from a
  *      session does — both retiring the candidate (M-T13);
  *  (6) O-L2: an AGENT_PUSH project's DONE builds no candidate and queues no CHECK_PROMOTION — the
- *      observation carries the work — and the DONE that starts its line back-fills none either.
+ *      observation carries the work — and the DONE that starts its line back-fills none either;
+ *  (7) §10.5 O-L8: a TASK_BRANCH check's SOURCE_BRANCH_MISSING from a runner that does not declare
+ *      integration-observe/v1 at that moment names that runner on its title, detail line, next step and
+ *      delivery text, with its state, code, class and doors unmoved, and the rerun it asks for retires
+ *      the candidate; every other SOURCE_BRANCH_MISSING keeps its words, a project branch its title.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows.
  */
@@ -159,6 +164,8 @@ async function world(
     started?: boolean;
     /** Whether a DONE already started the line (L3); false leaves the line to the next DONE. */
     lineStarted?: boolean;
+    /** A branch of its own for the line, instead of main: its candidates are PROJECT_BRANCH ones. */
+    projectBranch?: boolean;
   } = {},
 ): Promise<World> {
   const db = stack.db;
@@ -196,7 +203,8 @@ async function world(
   await db.projectCodebase.create({
     data: {
       ownerId, projectId, canonicalRepoUrl: canonicalRepoUrl(repoUrl)!, upstreamRef: 'refs/heads/main',
-      integrationRef: 'refs/heads/main', refAuthority: 'REMOTE', remoteName: 'origin',
+      integrationRef: options.projectBranch ? `refs/heads/project/${projectId}` : 'refs/heads/main',
+      refAuthority: 'REMOTE', remoteName: 'origin',
       integrationRefSource: 'EXPLICIT', deliveryMode: options.deliveryMode ?? 'PLATFORM',
       ...(options.lineStarted === false ? {} : { integrationStartedAt: new Date() }),
     },
@@ -382,7 +390,7 @@ function itemsOf(stack: Stack, w: World, kind: string) {
     where: { projectId: w.projectId, kind },
     orderBy: { createdAt: 'asc' },
     select: {
-      id: true, state: true, resolution: true, assignee: true, assigneeReason: true, dedupeKey: true,
+      id: true, title: true, state: true, resolution: true, assignee: true, assigneeReason: true, dedupeKey: true,
       taskId: true, promotionId: true, integrationJobId: true, payload: true, handlingJobId: true,
     },
   });
@@ -800,6 +808,258 @@ test('(6) O-L2: an AGENT_PUSH project\'s DONE builds no candidate and queues no 
       assert.ok(line.integrationStartedAt, 'CONTROL: this DONE started the line');
       const [promotions, promotionJobs] = await routes(fresh);
       assert.deepEqual([promotions, promotionJobs], [0, 0], 'nothing back-filled as a candidate');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (7) O-L8: the out-of-date runner's item ═════════════════════════════════════════════════
+
+/** What a fetch of a branch the remote does not have answers (M-S1, `fetchRefFailure`). */
+const branchMissing = (ref: string) => ({
+  state: 'ERROR', phase: 'FETCH', errorCode: 'SOURCE_BRANCH_MISSING',
+  errorDetail: { ref, detail: `fatal: couldn't find remote ref ${ref}` },
+});
+
+/** The next step this item's failure has today, on a project on main. */
+const REPAIR = 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.';
+
+/** The one sentence the delivery text gains, for a runner of this name. */
+const doesNotDeclare = (name: string) => `Runner ${name} does not declare integration-observe/v1, so it looked for this task's `
+  + 'branch on the remote by name. That says nothing about whether the task has work to land. '
+  + 'Update the runner, then run integration_retry on this candidate.';
+
+/**
+ * The project's one INTEGRATION_ERROR, as each door serves it: its row, the open items read, the
+ * delivery card and the turn its coordinator is told in.
+ */
+async function servedError(stack: Stack, w: World) {
+  const [item, ...more] = await itemsOf(stack, w, 'INTEGRATION_ERROR');
+  assert.ok(item, 'CONTROL: the failure opened an item');
+  assert.equal(more.length, 0, 'one failure, one item');
+  const listed = await stack.openItems.list(w.ownerId, w.projectId);
+  const row = [...listed.needsYou, ...listed.withCoordinator].find((each) => each.itemId === item.id);
+  assert.ok(row, 'CONTROL: the open items read lists it');
+  const card = await readOpenItemDeliveryCard(stack.prisma, item.id, w.ownerId);
+  assert.ok(card, 'CONTROL: it reads as a card');
+  assert.equal(card.requiredAction, row.requiredAction, 'the card and the list say one next step');
+  const told = openItemMessage({
+    id: item.id, kind: 'INTEGRATION_ERROR', title: item.title, projectId: w.projectId, taskId: item.taskId,
+    promotionId: item.promotionId, payload: item.payload,
+  });
+  return { item, row, told, payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown } };
+}
+
+/** The check of a TASK_BRANCH candidate for a task whose branch was never pushed and never moved off `base`. */
+async function checkOfAnEmptyBranch(stack: Stack, w: World, label: string, capabilities: string[]) {
+  const t = await finishedTask(stack, w, 'Backfill order stats', {
+    branch: `orbit/${label}`, branchSha: sha('b'), baseSha: sha('b'), changedFiles: [],
+  });
+  const candidate = await candidateOf(stack, t.taskId);
+  const check = await handed(stack, w.runnerId, `${label}-1`, capabilities, candidate.checkJobId);
+  assert.ok(check, 'CONTROL: the source session\'s runner is handed the check');
+  return { ...t, candidate, check };
+}
+
+test('(7) §10.5 O-L8: a TASK_BRANCH check\'s SOURCE_BRANCH_MISSING from a runner that does not declare integration-observe/v1 names that runner, with its state, code, class and doors unmoved, and the rerun it asks for retires the candidate',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const old = await world(stack, 'outdated', { capabilities: LEGACY });
+      const { taskId, candidate, check } = await checkOfAnEmptyBranch(stack, old, 'outdated', LEGACY);
+      assert.equal(check.sourceSha, undefined, 'CONTROL: this runner is handed no commit, so it looks for the branch by name');
+      await report(stack, old, check, branchMissing('refs/heads/orbit/outdated'));
+
+      const outdated = await servedError(stack, old);
+      assert.equal(outdated.item.title, 'Integration error: merging “Backfill order stats” into main');
+      assert.equal(outdated.row.detailLine, 'Runner outdated-runner is out of date: update it, then run this check again.');
+      assert.equal(outdated.row.requiredAction, 'Update runner outdated-runner, then run this check again.');
+      assert.equal(outdated.payload.outdatedRunner, 'outdated-runner', 'at the payload\'s top level');
+      assert.ok(outdated.told.includes(`The integration job ended with an error: SOURCE_BRANCH_MISSING.\n${doesNotDeclare('outdated-runner')}\n`),
+        `the sentence follows the error code:\n${outdated.told}`);
+
+      // A runner that declares it: the same failure of the same kind of candidate, which is what the
+      // new case's state, code, class and doors are held against. Its title is its source's (O-L8 names
+      // the source there, not the runner), and nothing else about it changes.
+      const current = await world(stack, 'declares');
+      const named = await checkOfAnEmptyBranch(stack, current, 'declares', CURRENT);
+      await report(stack, current, named.check, branchMissing('refs/heads/orbit/declares'));
+      const today = await servedError(stack, current);
+      assert.equal(today.item.title, 'Integration error: merging “Backfill order stats” into main');
+      assert.equal(today.row.detailLine, '');
+      assert.equal(today.row.requiredAction, REPAIR);
+      assert.equal(today.payload.outdatedRunner, undefined);
+      assert.doesNotMatch(today.told, /does not declare|out of date/);
+
+      for (const [what, served, jobId, taskIdOf] of [
+        ['the out-of-date runner', outdated, check.jobId, taskId],
+        ['the current runner', today, named.check.jobId, named.taskId],
+      ] as const) {
+        const job = await jobOf(stack, jobId);
+        assert.deepEqual([job.state, job.errorCode, landingFailureClass(job)], ['ERROR', 'SOURCE_BRANCH_MISSING', 'ERROR'], what);
+        assert.deepEqual([served.item.state, served.item.assignee, served.item.assigneeReason, served.payload.errorCode, served.payload.failureClass],
+          ['OPEN', 'COORDINATOR', 'DEFAULT', 'SOURCE_BRANCH_MISSING', 'ERROR'], what);
+        const blocked = await candidateOf(stack, taskIdOf);
+        assert.deepEqual([blocked.state, blocked.blockedReason, blocked.sourceSha], ['BLOCKED', 'ERROR', sha('b')],
+          `${what}: a candidate still named by the commit it delivered`);
+      }
+      assert.deepEqual([outdated.row.kind, outdated.row.actions, outdated.row.primaryAction, outdated.row.facts?.errorCode],
+        [today.row.kind, today.row.actions, today.row.primaryAction, today.row.facts?.errorCode], 'the same doors');
+      assert.ok(outdated.row.actions.includes('RETRY'), 'CONTROL: and they include the rerun it asks for');
+
+      // Its promise: the runner is updated, the rerun checks by the commit, and the line answers.
+      await stack.db.runner.update({ where: { id: old.runnerId }, data: { capabilities: CURRENT } });
+      const retried = await stack.openItems.retryPromotionCheck(
+        old.ownerId, old.projectId, candidate.id, { reason: 'the runner is updated' }, old.coordinatorSessionId,
+      );
+      const byCommit = await handed(stack, old.runnerId, 'outdated-2', CURRENT, retried.jobId);
+      assert.equal(byCommit?.sourceSha, sha('b'), 'the rerun names the commit');
+      await report(stack, old, byCommit!, alreadyThere(sha('b')));
+      assert.equal((await candidateOf(stack, taskId)).state, 'SUPERSEDED');
+      const [closed] = await itemsOf(stack, old, 'INTEGRATION_ERROR');
+      assert.deepEqual([closed.id, closed.state, closed.resolution], [outdated.item.id, 'RESOLVED', 'PROMOTION_MOVED_ON']);
+      const [receipt] = await receiptsOf(stack, taskId);
+      assert.deepEqual(receipt?.detail, { integrationJobId: retried.jobId, observed: true, empty: true });
+
+      // The same code over real work: what it said about the task was indeed nothing. The rerun's check
+      // passes, the owner is asked about the merge, and the item's settled row asks nothing any more.
+      const working = await world(stack, 'outdated-work', { capabilities: LEGACY });
+      const fix = await finishedTask(stack, working, 'Fix the order totals', {
+        branch: 'orbit/outdated-work', branchSha: sha('a'), baseSha: sha('b'), changedFiles: [{ path: 'totals.ts' }],
+      });
+      const fixCandidate = await candidateOf(stack, fix.taskId);
+      const firstCheck = await handed(stack, working.runnerId, 'outdated-work-1', LEGACY, fixCandidate.checkJobId);
+      await report(stack, working, firstCheck!, branchMissing('refs/heads/orbit/outdated-work'));
+      const failed = await servedError(stack, working);
+      assert.equal(failed.row.requiredAction, 'Update runner outdated-work-runner, then run this check again.');
+      await stack.db.runner.update({ where: { id: working.runnerId }, data: { capabilities: CURRENT } });
+      const rerun = await stack.openItems.retryPromotionCheck(
+        working.ownerId, working.projectId, fixCandidate.id, { reason: 'the runner is updated' }, working.coordinatorSessionId,
+      );
+      const secondCheck = await handed(stack, working.runnerId, 'outdated-work-2', CURRENT, rerun.jobId);
+      assert.equal(secondCheck?.sourceSha, sha('a'));
+      await report(stack, working, secondCheck!, passed(sha('a')));
+      assert.equal((await candidateOf(stack, fix.taskId)).state, 'READY');
+      const { settled } = await stack.openItems.list(working.ownerId, working.projectId);
+      const settledRow = settled.find((each) => each.itemId === failed.item.id);
+      assert.ok(settledRow, 'CONTROL: the rerun handled the item, so it reads as settled');
+      assert.equal(settledRow.outcome?.resolution, 'HANDLED');
+      assert.equal(settledRow.detailLine, '');
+      assert.equal(settledRow.requiredAction, 'This item is already settled — no action is required.');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(7) §10.5 O-L8: the name is the runner\'s display name, else its name, and it is read at the moment of the result',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const shown = await world(stack, 'shown', { capabilities: LEGACY });
+      await stack.db.runner.update({ where: { id: shown.runnerId }, data: { displayName: 'DeskMac' } });
+      const first = await checkOfAnEmptyBranch(stack, shown, 'shown', LEGACY);
+      await report(stack, shown, first.check, branchMissing('refs/heads/orbit/shown'));
+      const served = await servedError(stack, shown);
+      assert.equal(served.payload.outdatedRunner, 'DeskMac');
+      assert.equal(served.row.detailLine, 'Runner DeskMac is out of date: update it, then run this check again.');
+      assert.equal(served.row.requiredAction, 'Update runner DeskMac, then run this check again.');
+      assert.match(served.told, /Runner DeskMac does not declare integration-observe\/v1/);
+
+      // Updated between the claim and the result: it is not out of date any more, so it is not called so.
+      const updated = await world(stack, 'updated', { capabilities: LEGACY });
+      const second = await checkOfAnEmptyBranch(stack, updated, 'updated', LEGACY);
+      await stack.db.runner.update({ where: { id: updated.runnerId }, data: { capabilities: CURRENT } });
+      await report(stack, updated, second.check, branchMissing('refs/heads/orbit/updated'));
+      const notAnyMore = await servedError(stack, updated);
+      assert.equal(notAnyMore.payload.outdatedRunner, undefined);
+      assert.equal(notAnyMore.row.requiredAction, REPAIR);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(7) §10.5 O-L8: every other SOURCE_BRANCH_MISSING from such a runner keeps its words, a project branch its title, and an item already open what it says',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      /** No field, no line, today's next step and text: only the title differs by case. */
+      const keepsItsWords = (served: Awaited<ReturnType<typeof servedError>>, requiredAction: string) => {
+        assert.equal(served.payload.outdatedRunner, undefined);
+        assert.equal(served.row.detailLine, '');
+        assert.equal(served.row.requiredAction, requiredAction);
+        assert.doesNotMatch(served.told, /does not declare|out of date/);
+      };
+
+      // A task branch's check, on such a runner, for another reason.
+      const otherCode = await world(stack, 'other-code', { capabilities: LEGACY });
+      const fetchFailed = await checkOfAnEmptyBranch(stack, otherCode, 'other-code', LEGACY);
+      await report(stack, otherCode, fetchFailed.check, {
+        state: 'ERROR', phase: 'FETCH', errorCode: 'FETCH_FAILED', errorDetail: { detail: 'the remote hung up' },
+      });
+      const failedFetch = await servedError(stack, otherCode);
+      keepsItsWords(failedFetch, REPAIR);
+      assert.equal(failedFetch.item.title, 'Integration error: merging “Backfill order stats” into main');
+
+      // A task branch's landing: O-L8 is about the check, and the title is about the source.
+      const landing = await world(stack, 'landing', { capabilities: LEGACY });
+      const passing = await checkOfAnEmptyBranch(stack, landing, 'landing', LEGACY);
+      await report(stack, landing, passing.check, passed(sha('c')));
+      await stack.promotions.confirm({ userId: landing.ownerId }, landing.projectId, passing.candidate.id, sha('c'));
+      const land = await handed(stack, landing.runnerId, 'landing-2', LEGACY,
+        (await candidateOf(stack, passing.taskId)).landJobId);
+      assert.equal(land?.kind, 'LAND_PROMOTION');
+      await report(stack, landing, land!, branchMissing('refs/heads/orbit/landing'));
+      const failedLanding = await servedError(stack, landing);
+      keepsItsWords(failedLanding, REPAIR);
+      assert.equal(failedLanding.item.title, 'Integration error: merging “Backfill order stats” into main');
+
+      // A project branch's candidate: the branch the title names is there, and the code is about it.
+      const line = await world(stack, 'project-line', { capabilities: LEGACY, projectBranch: true });
+      const t = await finishedTask(stack, line, 'lands on the project branch', {
+        branch: 'orbit/project-line', branchSha: sha('a'), baseSha: sha('b'),
+      });
+      const onTheLine = (await dispatch(stack, line.runnerId, 'project-line-1', LEGACY)).find((command) => command.kind === 'LAND_TASK');
+      assert.ok(onTheLine, 'CONTROL: the DONE queued a landing on the project branch');
+      await report(stack, line, onTheLine, {
+        state: 'LANDED', phase: 'VERIFY', sourceSha: sha('a'), targetShaBefore: UPSTREAM, upstreamSha: UPSTREAM,
+        testedSha: sha('c'), testedTreeSha: sha('e'), landedSha: sha('c'), landedTreeSha: sha('e'), aheadOfUpstream: 1,
+      });
+      assert.deepEqual((await receiptsOf(stack, t.taskId)).map((receipt) => receipt.result), ['MERGED'], 'CONTROL: it landed');
+      const made = await stack.promotions.considerCandidate(line.projectId);
+      assert.ok(made, 'CONTROL: the landing made a candidate');
+      const lineCheck = (await dispatch(stack, line.runnerId, 'project-line-2', LEGACY)).find((command) => command.kind === 'CHECK_PROMOTION');
+      assert.equal(lineCheck?.promotionSourceKind, 'PROJECT_BRANCH');
+      await report(stack, line, lineCheck!, branchMissing(`refs/heads/project/${line.projectId}`));
+      const failedLine = await servedError(stack, line);
+      keepsItsWords(failedLine, REPAIR);
+      assert.equal(failedLine.item.title, 'Integration error: merging the project branch into main');
+
+      // A task's own landing on that line: named after the task, as it always was.
+      const own = await world(stack, 'own-landing', { capabilities: LEGACY, projectBranch: true });
+      await finishedTask(stack, own, 'lands by itself', { branch: 'orbit/own-landing', branchSha: sha('a'), baseSha: sha('b') });
+      const ownLanding = (await dispatch(stack, own.runnerId, 'own-landing-1', LEGACY)).find((command) => command.kind === 'LAND_TASK');
+      assert.ok(ownLanding, 'CONTROL: the DONE queued its landing');
+      await report(stack, own, ownLanding, branchMissing('refs/heads/orbit/own-landing'));
+      const [ownItem] = await itemsOf(stack, own, 'INTEGRATION_ERROR');
+      assert.equal(ownItem?.title, 'Integration error: lands by itself');
+      assert.equal((ownItem?.payload as { outdatedRunner?: unknown }).outdatedRunner, undefined);
+
+      // An item opened before this revision keeps the title it was opened with and says nothing new.
+      const before = await world(stack, 'opened-before', { capabilities: LEGACY });
+      const opened = await checkOfAnEmptyBranch(stack, before, 'opened-before', LEGACY);
+      const now = new Date();
+      await stack.db.projectOpenItem.create({
+        data: {
+          projectId: before.projectId, ownerId: before.ownerId, kind: 'INTEGRATION_ERROR', state: 'OPEN',
+          assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', promotionId: opened.candidate.id,
+          dedupeKey: `IE:${randomUUID()}`, title: 'Integration error: merging the project branch into main',
+          payload: { jobKind: 'CHECK_PROMOTION', errorCode: 'SOURCE_BRANCH_MISSING', errorDetail: null, failureClass: 'ERROR', generation: 1 },
+          waitingSince: now, assignedAt: now,
+        },
+      });
+      const stillOpen = await servedError(stack, before);
+      keepsItsWords(stillOpen, REPAIR);
+      assert.equal(stillOpen.item.title, 'Integration error: merging the project branch into main');
     } finally {
       await stack.db.$disconnect();
     }

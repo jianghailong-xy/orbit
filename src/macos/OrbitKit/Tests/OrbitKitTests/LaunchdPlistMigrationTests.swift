@@ -78,9 +78,63 @@ final class LaunchdPlistMigrationTests: XCTestCase {
         XCTAssertNil(LaunchdPlist.migrated(from: nil))
     }
 
+    /// What this app wrote before it set ExitTimeOut, and what `orbit register` wrote before the CLI
+    /// did, which can carry a proxy: launchd kills the runner 5 s into any stop of one of these
+    /// (measured on macOS 15, 26 and 27, runner-go's launchdExitTimeOutSeconds). The rewrite adds the
+    /// key and keeps every other line.
+    private static let withoutExitTimeOut = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>Label</key><string>com.orbit.runner</string>
+          <key>ProgramArguments</key>
+          <array>
+            <string>\(program)</string>
+            <string>run</string>
+          </array>
+          <key>EnvironmentVariables</key>
+          <dict>
+            <key>ORBIT_HOME</key><string>\(orbitHome)</string>
+            <key>HOME</key><string>\(home)</string>
+            <key>PATH</key><string>\(path)</string>
+            <key>HTTPS_PROXY</key><string>http://proxy.example:3128</string>
+          </dict>
+          <key>RunAtLoad</key><true/>
+          <key>KeepAlive</key><true/>
+          <key>StandardOutPath</key><string>\(log)</string>
+          <key>StandardErrorPath</key><string>\(log)</string>
+        </dict>
+        </plist>
+        """
+
+    func testAPlistWithNoExitTimeOutGetsItAndKeepsEverythingElse() throws {
+        let rewritten = try XCTUnwrap(LaunchdPlist.migrated(from: Self.withoutExitTimeOut))
+        let read = { (text: String) throws -> [String: Any] in
+            try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(text.utf8), format: nil) as? [String: Any])
+        }
+        let after = try read(rewritten)
+        XCTAssertEqual(after["ExitTimeOut"] as? Int, LaunchdPlist.exitTimeOut)
+        let before = try read(Self.withoutExitTimeOut)
+        XCTAssertEqual(NSDictionary(dictionary: after.filter { $0.key != "ExitTimeOut" }), NSDictionary(dictionary: before))
+        XCTAssertNil(LaunchdPlist.migrated(from: rewritten), "once rewritten, there is nothing left to do")
+    }
+
+    /// Whatever a plist came to, once rewritten launchd gives the runner the window its stop fits in.
+    func testEveryPlistThisAppWritesAsksForTheWindow() throws {
+        let frozen = try XCTUnwrap(LaunchdPlist.migrated(from: Self.frozen))
+        let made = LaunchdPlist.make(label: "com.orbit.runner", programPath: Self.program, orbitHome: Self.orbitHome,
+                                     home: Self.home, path: Self.path, logPath: Self.log)
+        for text in [frozen, made] {
+            let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(text.utf8), format: nil)
+                                        as? [String: Any])
+            XCTAssertEqual(plist["ExitTimeOut"] as? Int, 60)
+        }
+    }
+
     /// `orbit register` installs the same label at the same path (runner-go renderLaunchdPlist) and
-    /// never sets ORBIT_NO_SELFUPDATE. Its plist carries what this app's doesn't (ExitTimeOut, a
-    /// proxy), and the app mustn't replace it.
+    /// never sets ORBIT_NO_SELFUPDATE. Its plist carries what this app's doesn't (a proxy, a larger
+    /// ExitTimeOut from an older register), and the app mustn't replace it.
     func testTheCLIsPlistIsLeftAlone() {
         let cli = """
             <?xml version="1.0" encoding="UTF-8"?>

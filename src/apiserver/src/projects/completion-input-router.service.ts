@@ -39,6 +39,7 @@ import {
   TASK_EXCEPTION_CONSUMER,
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
+import { TaskRunStoppedProducer, type RunStop } from './task-run-stopped.producer';
 import { WakeDispositionService, type WakeSpend } from './wake-disposition.service';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
@@ -117,6 +118,11 @@ export class CompletionInputRouter {
      * is what the evidence door did for every project before it. The module provides it.
      */
     @Optional() private readonly evidence?: CompletionEvidenceProducer,
+    /**
+     * The ninth door's producer. `@Optional()` and last, for the reason the seventh gives: for a
+     * router built by hand without it, a run that stops tells nobody, as it always did.
+     */
+    @Optional() private readonly stoppedRuns?: TaskRunStoppedProducer,
   ) {}
 
   /**
@@ -412,6 +418,19 @@ export class CompletionInputRouter {
   ): Promise<DependentReadyDelivery[]> {
     if (!this.dependents) return [];
     return this.dependents.afterCommit(taskIds);
+  }
+
+  /**
+   * The ninth door: a task's run that has stopped working with its task still owed something.
+   *
+   * Not through `spend`, for the seventh door's reason: read by the coverage of the criterion its
+   * task serves, this is either work still on its way (recorded, told to nobody) or a stranded
+   * criterion (a judgment session opened beside a run that can still be spoken to). Neither is what
+   * this fact says: the one conversation that can move the task has to be told, so the producer
+   * hands it there itself.
+   */
+  async routeStoppedRun(sessionId: string, stop: RunStop): Promise<CoordinatorDeliveryOutcome | null> {
+    return this.stoppedRuns ? this.stoppedRuns.afterStop(sessionId, stop) : null;
   }
 
   /**

@@ -673,9 +673,10 @@ func bootoutLaunchd(domain, label string) bool {
 
 // How long startLaunchd goes on past a bootstrap launchd refuses for a job still there. bootout
 // returns at once, while the old runner drains, and bootstrap fails until it has exited: for up to
-// launchdDrainTries when bootout removed a job, ExitTimeOut and a margin, though launchd may stop it
-// sooner (at 60 s on macOS 26 and 27.2). With nothing removed there is no such wait to sit through, and
-// launchd says the same words for an agent it will never load. Vars so a test need not sit through them.
+// launchdDrainTries when bootout removed a job, the 180 s ExitTimeOut an older register wrote and a
+// margin, though launchd may stop it sooner (at 60 s on macOS 26 and 27.2). With nothing removed there is
+// no such wait to sit through, and launchd says the same words for an agent it will never load. Vars so a
+// test need not sit through them.
 var (
 	launchdBootstrapTries = 3
 	launchdDrainTries     = 190
@@ -741,6 +742,32 @@ func printServiceStarted(how string) {
 		"      Stop or remove it later with `orbit unregister`.\n", user, how)
 }
 
+// launchdExitTimeOutSeconds is the plist's ExitTimeOut: what launchd gives the runner between SIGTERM and
+// SIGKILL when launchd is what stops it. Measured 2026-11-03 with a job that takes 100 s to leave after
+// SIGTERM, on macOS 26.6.2 and 15.8.2 (GitHub's runners) and 27.2 (a real Mac):
+//   - macOS 26 and 27 cap the key at 60: `launchctl print` reads `exit timeout = 60` for 61 and for
+//     2147483647, and launchd kills the job then. On macOS 26 the cap is the same for an Aqua agent in
+//     gui/<uid>, a Background one in user/<uid> (the one kind tried on 27.2), a daemon in system, with or
+//     without UserName, and an agent an app registers through SMAppService. ProcessType and every other key
+//     tried leave it alone, MaxExitTimeOut
+//     among them. launchd's own strings also name a boot argument, launch_max_exit_timeout, not tried: it is
+//     the machine owner's to set and not the runner's. macOS 15 honours any value.
+//   - Every macOS: with no key the window is 5 s, and 0, which launchd.plist(5) calls infinity, kills the
+//     job at once with no SIGTERM. So does EnableTransactions.
+//   - The clock runs only for launchd's own stop: bootout, kickstart -k, stop, remove, unload. A SIGTERM from
+//     anybody else (kill, launchctl kill) starts none, and KeepAlive restarts the job when it leaves, even a
+//     job `launchctl disable` has disabled. A bootout after such a SIGTERM starts the 60 s from the bootout.
+//   - bootout with a service target returns at once. bootout with a plist path, kickstart -k and unload wait
+//     for the job to be gone.
+//   - A job killed at the limit leaves behind what runs in a process group of its own, as every engine and
+//     every check does (configureSessionProcessTree), so a runner that is killed orphans them.
+//
+// So every Mac is asked for the same 60 s, which every macOS measured gives, and the runner's whole stop
+// stays inside it (THE BUDGETS, shutdown_drain.go). Signalling the runner first would buy time only on the
+// paths Orbit runs itself: launchd's own stops, a logout or a shutdown among them by launchd.plist(5), would
+// still be held to this, and the runner cannot tell one SIGTERM from another.
+const launchdExitTimeOutSeconds = 60
+
 func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, background bool, proxyVars []envVar) string {
 	session := ""
 	if background {
@@ -764,14 +791,14 @@ func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, ba
 %s  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <!-- Keep launchd's SIGTERM-to-SIGKILL window above the runner's complete
-       provider-drain, lease-release, event-flush, and finalization envelope. -->
-  <key>ExitTimeOut</key><integer>180</integer>
+  <!-- launchd's SIGTERM-to-SIGKILL window. macOS 26 and later read anything above 60 as 60, and a
+       plist with no key gets 5 s. The runner's whole stop stays inside this. -->
+  <key>ExitTimeOut</key><integer>%d</integer>
   <key>StandardOutPath</key><string>%s</string>
   <key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, label, session, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
+`, label, session, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), launchdExitTimeOutSeconds, logPath, logPath)
 }
 
 // run and runQuiet are vars, not plain funcs, so a test can record what a path shells

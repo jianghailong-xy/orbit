@@ -187,6 +187,103 @@ func TestALandingTheStopEndsMidCheckIsHandedBack(t *testing.T) {
 	}
 }
 
+// A project's scratch tree can take longer to delete than a Mac's stop has left, and the hand-back is what the next
+// process waits for. So it goes while the worktree is still being removed. A `git` in front of the real one holds
+// `worktree remove` until the control plane has the claim back: with the hand-back behind the removal, the two wait
+// for each other until the stand-in gives up and says so.
+func TestAStoppedLandingIsHandedBackWithoutWaitingForItsWorktreeToGo(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	fastIntegrationResultRetry(t)
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	r.checkoutNew("task/stopped", "main")
+	r.write("stopped.txt", "the task's work\n")
+	r.commit("task work")
+	r.push("task/stopped")
+	r.checkout("main")
+
+	bin := t.TempDir()
+	stopping := filepath.Join(bin, "stopping")
+	handedBack := filepath.Join(bin, "handed-back")
+	gaveUp := filepath.Join(bin, "gave-up")
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shim := fmt.Sprintf(`#!/bin/sh
+case " $* " in
+*" worktree remove "*)
+  if [ -e %[1]q ]; then
+    i=0
+    while [ ! -e %[2]q ]; do
+      i=$((i + 1))
+      if [ "$i" -gt 200 ]; then : > %[3]q; break; fi
+      sleep 0.05
+    done
+  fi
+  ;;
+esac
+exec %[4]q "$@"
+`, stopping, handedBack, gaveUp, realGit)
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(shim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	job := r.command("task/stopped", "project/line", IntegrationCheckSpec{
+		Name: "MERGE_CHECK", Command: childOfACheck(pidFile), ExpectedExitCode: 0, TimeoutSeconds: 600,
+	})
+	job.JobID = "job-with-a-slow-worktree"
+	job.ClaimGeneration = "3"
+	job.LeaseOwner = "the-stopping-process"
+	cp := &integrationControlPlane{}
+	srv := cp.serve(t)
+
+	stop, stopOperations := context.WithCancel(context.Background())
+	defer stopOperations()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runIntegrationJobAndReport(stop, context.Background(), NewTransport(srv.URL, "tok"), job)
+	}()
+	waitForPID(t, pidFile)
+	scratch := r.scratchPath(job.JobID)
+
+	if err := os.WriteFile(stopping, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stopOperations()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		cp.mu.Lock()
+		released := len(cp.releases)
+		cp.mu.Unlock()
+		if released > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the landing never handed its claim back")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.WriteFile(handedBack, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the landing did not stop")
+	}
+	if _, err := os.Stat(gaveUp); err == nil {
+		t.Fatal("the hand-back waited for the worktree to be removed")
+	}
+	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
+		t.Fatalf("the scratch worktree is still on disk (%v): the job returned without waiting for its removal", err)
+	}
+}
+
 // The fallback when a stop could not clean up — the process was killed before it got that far: the
 // same job id names the same scratch path, and the rerun the next process is handed removes what the
 // killed attempt left there before it stages its own, as the entry removal promises. The leftover is

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>没有东西可落地的任务：确认卡与旧 runner 的待办</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; color: #1f2329;
+         font: 15px/1.6 Inter, "PingFang SC", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .board { width: 1880px; padding: 48px 52px 56px; background: #f4f4f6; }
+  h1 { margin: 0; font-size: 30px; line-height: 1.3; letter-spacing: -.01em; }
+  .lede { margin: 12px 0 0; max-width: 1500px; font-size: 16.5px; color: #3c4149; }
+  .lede b { color: #1f2329; }
+  .meta { margin-top: 8px; font-size: 13px; color: #7a7f88; }
+  h2 { margin: 44px 0 6px; font-size: 21px; }
+  h2 span { margin-left: 8px; font-size: 14px; font-weight: 500; color: #7a7f88; }
+  .sub { margin: 0 0 16px; color: #555a63; font-size: 14.5px; max-width: 1500px; }
+  code { font: 12.5px/1.4 "JetBrains Mono", SFMono-Regular, monospace; background: #e8e9ee; padding: 1px 5px; border-radius: 4px; color: #30343b; }
+  .frames { display: flex; gap: 24px; align-items: flex-start; }
+  figure { margin: 0; flex: 1 1 0; min-width: 0; }
+  .tag { display: inline-block; margin-bottom: 9px; padding: 2px 10px; border-radius: 6px; font-size: 13px; font-weight: 700; }
+  .tag.now { background: #dedee3; color: #4b4f57; }
+  .tag.rec { background: #d6ebff; color: #0a5ca8; }
+  .tag.alt { background: #ececf0; color: #4b4f57; border: 1px solid #cfd1d7; }
+  .shot { position: relative; line-height: 0; }
+  .shot img { width: 100%; display: block; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.09); background: #fff; }
+  .mark { position: absolute; left: -11px; width: 23px; height: 23px; margin-top: -12px; border-radius: 50%;
+          background: #e8590c; color: #fff; font: 700 13px/23px Inter, sans-serif; text-align: center;
+          box-shadow: 0 0 0 2px #f4f4f6; }
+  figcaption { margin-top: 12px; font-size: 14px; color: #3c4149; }
+  figcaption ol, figcaption ul { margin: 6px 0 0; padding-left: 20px; }
+  figcaption li { margin-top: 4px; }
+  .num { display: inline-block; width: 19px; height: 19px; border-radius: 50%; background: #e8590c; color: #fff;
+         font: 700 11.5px/19px Inter, sans-serif; text-align: center; margin-right: 5px; vertical-align: 1px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,.07); font-size: 14px; }
+  th { text-align: left; padding: 9px 14px; background: #eeeff2; font-size: 13px; font-weight: 600; color: #4b4f57; }
+  td { padding: 9px 14px; border-top: 1px solid #eceef1; vertical-align: top; }
+  td.big { font-weight: 600; white-space: nowrap; }
+  .two { display: flex; gap: 24px; align-items: flex-start; }
+  .two > div { flex: 1 1 0; min-width: 0; }
+  .panel { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.07); font-size: 14px; }
+  .panel h3 { margin: 0 0 8px; font-size: 15px; }
+  .panel ul { margin: 0; padding-left: 18px; }
+  .panel li { margin-top: 5px; }
+  .decide { border: 2px solid #e8590c; }
+  .decide h3 { color: #c2470a; }
+  .mute { color: #7a7f88; }
+</style>
+<body>
+<div class="board">
+  <h1>没有东西可落地的任务：确认卡与旧 runner 的待办</h1>
+  <p class="lede"><b>结论：</b>落地这一层的规则已经对了，不需要新规则。这种任务现行 runner 上会安静地过去。还差两处说得不对：确认卡说这个分支要落地，旧 runner 的报错把人引向错误的结论。</p>
+  <div class="meta">对应契约修订 33（<code>docs/project-integration-line-contract.md</code> §10.5 O-L8）。卡片和待办行都是真实组件的截图；方案 B 的那一行是在真实卡片上改的 DOM，其余都是真实组件用方案数据渲染。生产数据取自 2026-11-02 16:40Z。</div>
+
+  <h2>① 确认卡<span>零改动分支的任务，Automatic 关闭</span></h2>
+  <p class="sub">卡片现在只看「任务跑过分支」，分支上有没有东西都按有工作来写。做数据修复这类事的任务，确认时读到的三句都不成立。</p>
+  <div class="frames">
+    <figure>
+      <span class="tag now">今天</span>
+      <div class="shot">
+        <img src="shots/card-today.png" alt="today">
+        <span class="mark" style="top:50.2%">1</span>
+        <span class="mark" style="top:58.2%">2</span>
+        <span class="mark" style="top:66.2%">3</span>
+      </div>
+      <figcaption>
+        <div><span class="num">1</span>没有东西要落地，下游等的只是线答一句。</div>
+        <div><span class="num">2</span>说得像有工作没上去，其实分支上什么都没有。</div>
+        <div><span class="num">3</span>什么都不会上线，也不会再问你合并。</div>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag rec">方案 B · owner 已选</span>
+      <div class="shot"><img src="shots/card-stated.png" alt="proposal B"></div>
+      <figcaption>
+        去掉三句不成立的话，明说分支上没有改动。<br>
+        这句是人发现「agent 本该写代码却没写」的地方，落地这一层分不出这两种情况。<br>
+        <span class="mute">要改 web 和 Apple 客户端；native 下个版本才显示这一行。</span>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag alt">方案 A · 只删不加（未选）</span>
+      <div class="shot"><img src="shots/card-removed.png" alt="proposal A"></div>
+      <figcaption>
+        只改服务端，各端今天就能这样画，不用发版。<br>
+        代价：卡片不再提这个分支，读的人要自己想到「这次没改代码」。
+      </figcaption>
+    </figure>
+  </div>
+
+  <h2 style="margin-top:36px">② 旧 runner 的待办<span>不声明 <code>integration-observe/v1</code> 的 runner，任务分支没推送过</span></h2>
+  <p class="sub">这种 runner 只能按分支名去远端找，所以答 <code>SOURCE_BRANCH_MISSING</code>。标题说的「project branch」在 MAIN 线上并不存在，错误码也不告诉人该做什么。这次的查证结论就是被这个码带偏的。</p>
+  <div class="two">
+    <div>
+      <span class="tag now">今天</span>
+      <div class="shot"><img src="shots/item-today.png" alt="item today"></div>
+    </div>
+    <div>
+      <span class="tag rec">方案</span>
+      <div class="shot"><img src="shots/item-proposed.png" alt="item proposed"></div>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:12px">只改服务端写的字，各端不用发版。协调会话收到的通知同时写明：这说明不了任务有没有东西要落地，升级 runner 后用 <code>integration_retry</code> 重跑这次检查。状态机、错误码、红色待办都不变：这确实要人动手。</p>
+
+  <h2>③ 规则</h2>
+  <table>
+    <tr><th style="width:600px">事实</th><th style="width:370px">服务端发给卡片</th><th>说明</th></tr>
+    <tr>
+      <td>没有 <code>MERGED</code> 回执，所有工作会话都没报告过改动（<code>readTaskCommitEvidence</code> 为空），等待中的会话 <code>changed_files</code> 是测过的 <code>[]</code></td>
+      <td><code>landing: NONE</code>，<code>startsAfterLanding: false</code>；方案 B 照发 <code>branch</code>（<code>files: 0</code>），方案 A 发 <code>branch: null</code></td>
+      <td>方案 B 的新行；旧 native 客户端显示 <code>Not on … yet</code>，不再说要上线。入队不变，DONE 照旧问线一次</td>
+    </tr>
+    <tr>
+      <td>等待中的会话 <code>changed_files</code> 是 <code>null</code>（runner 还没报过）</td>
+      <td>和今天一样</td>
+      <td>没量过不算没改动</td>
+    </tr>
+    <tr>
+      <td>有会话报告过改动，或有 <code>MERGED</code> 回执</td>
+      <td>和今天一样</td>
+      <td>工作是真的，要走落地</td>
+    </tr>
+    <tr>
+      <td><code>CHECK_PROMOTION</code> + <code>TASK_BRANCH</code> 答 <code>SOURCE_BRANCH_MISSING</code>，领取的 runner 没声明 <code>integration-observe/v1</code></td>
+      <td>待办标题带任务名，<code>detailLine</code> 和 <code>requiredAction</code> 说 runner 过期</td>
+      <td>其余 <code>SOURCE_BRANCH_MISSING</code> 不变，也不读成「没东西可落」</td>
+    </tr>
+  </table>
+
+  <h2>④ 依据<span>上一轮我提的四点被数据推翻，在这里收回</span></h2>
+  <div class="two">
+    <div>
+      <table>
+        <tr><th style="width:290px">上一轮的提议</th><th>查到的</th><th style="width:70px">结论</th></tr>
+        <tr>
+          <td><code>LAND_TASK</code> 也按提交问线</td>
+          <td><code>SOURCE_BRANCH_MISSING</code> 历史 21 次全是 <code>CHECK_PROMOTION</code>，<code>LAND_TASK</code> 0 次</td>
+          <td class="big">不做</td>
+        </tr>
+        <tr>
+          <td>线答不上来就交给观测，不报红</td>
+          <td>rollout 后 5 次全来自同一台不声明能力的 <code>dev</code> runner，它领不了观测；线上有 2 条观测已 <code>QUEUED</code> 5 天。会把看得见的错变成无声的等</td>
+          <td class="big">不做</td>
+        </tr>
+        <tr>
+          <td>按 <code>delivered_sha = delivered_base_sha</code> 另立「判空」规则</td>
+          <td>8 个相等的任务里 3 个有会话报告过改动，至少 1 个代码已直推上 upstream。相等只说明分支在 base 之外没有东西。线上的规则已经是「测量 + 没报告过工作」</td>
+          <td class="big">不做</td>
+        </tr>
+        <tr>
+          <td>卡片写 <code>This run made no commits</code></td>
+          <td>同上，这句对直推的任务是假话</td>
+          <td class="big">改字</td>
+        </tr>
+      </table>
+    </div>
+    <div>
+      <table>
+        <tr><th style="width:300px">同一个空分支，问法不同</th><th>答案</th><th style="width:210px">怎么量的</th></tr>
+        <tr>
+          <td>MAIN 线，按提交（新 runner）</td>
+          <td><code>ALREADY_LANDED</code>，写空回执，候选 <code>SUPERSEDED</code>，不开待办</td>
+          <td>真实 git 仓库；pg spec 第 4 例</td>
+        </tr>
+        <tr>
+          <td>项目分支线，分支在本机</td>
+          <td><code>NOTHING_TO_LAND</code>，<code>sourceOnUpstream=true</code></td>
+          <td>真实 git 仓库；生产 2 次</td>
+        </tr>
+        <tr>
+          <td>MAIN 线，按分支名（旧 runner）</td>
+          <td><code>ERROR / SOURCE_BRANCH_MISSING</code>，<code>couldn't find remote ref</code></td>
+          <td>真实 git 仓库；生产 rollout 后 5 次，其中空分支 2 次</td>
+        </tr>
+      </table>
+      <p class="sub" style="margin-top:10px">新 runner 上空任务走 MAIN 线这条，生产还没有样本，只有测试覆盖。生产 7 台 runner（近 7 天）里 6 台 0.1.243 都声明了能力，只有那台 <code>dev</code> 没有。样本量小，只能说明方向，不能当比例用。</p>
+    </div>
+  </div>
+
+  <div class="two" style="margin-top:24px">
+    <div class="panel">
+      <h3>会改的文件</h3>
+      <ul>
+        <li>确认卡：<code>src/apiserver/src/tasks/owner-confirmation-if-confirmed.ts</code>；方案 B 另有 <code>src/web/src/components/OwnerConfirmationCard.tsx</code>、<code>src/macos/OrbitKit/Sources/OrbitKit/App/OwnerConfirmation.swift</code> 和它们的文案对齐测试</li>
+        <li>待办：<code>src/apiserver/src/runner-api/integration-job-relay.ts</code>、<code>src/apiserver/src/projects/project-integration-job.ts</code>（<code>integrationItemTitle</code>）、<code>project-open-item.ts</code>（通知文字）、<code>project-open-item.service.ts</code>（<code>detailLine</code>、<code>requiredAction</code>）</li>
+      </ul>
+      <h3 style="margin-top:14px">这里不动</h3>
+      <ul>
+        <li>状态机、错误码、作业入队，以及 <code>codeless</code>（继续可选）</li>
+      </ul>
+    </div>
+    <div class="panel decide">
+      <h3>owner 2026-11-03 已定</h3>
+      <ul>
+        <li><b>确认卡选方案 B。</b>多一行就能让人看出这次没改代码；要动 web 和 Apple 客户端，native 要等发版。</li>
+        <li><b>旧 runner 的待办做。</b>只改服务端的字。目前生产只影响那 1 台 <code>dev</code> runner；这次报告的部署如果也是旧 runner，就直接对症。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
