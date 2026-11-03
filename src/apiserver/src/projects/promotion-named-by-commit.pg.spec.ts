@@ -1207,6 +1207,8 @@ test('(8) §10.5 O-L8: a TASK_BRANCH candidate\'s failure, in each class, says w
           `${failureClass}: the same doors`);
         assert.equal(served.row.actions.includes('RETRY'), failureClass !== 'CONFLICT', `${failureClass}: a conflict has no rerun, and its words offer none`);
         assert.deepEqual((await candidateOf(stack, ofTask.taskId)).state, 'BLOCKED', what);
+        const { status } = await stack.db.task.findUniqueOrThrow({ where: { id: ofTask.taskId }, select: { status: true } });
+        assert.equal(status, TaskStatus.DONE, `${what}: the failure does not change the task's status, as its words say`);
       }
 
       // The other job a candidate has: the landing, recorded the same way.
