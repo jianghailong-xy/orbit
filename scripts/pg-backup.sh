@@ -223,6 +223,17 @@ bases_whole_on_target() {
   list_backups | grep -Fxv -e "$missing" || true
 }
 
+# The end of the line a failed round logs while deletes are held back, if what stopped it is the target running out of room.
+# That state lasts until a person acts, so the line that repeats every poll has to say so. Given what rsync said.
+no_room_advice() {
+  [ "$hold_deletes" = yes ] || return 0
+  case "$1" in
+    *'No space left on device'*|*'Disk quota exceeded'*) ;;
+    *) return 0 ;;
+  esac
+  printf '%s' " Nothing was deleted: the target cannot hold its old base backups and this archive at once, and the old ones stay until the new ones have landed. Free room on the backup host, or take the old ones off that disk by hand, and the next poll carries on."
+}
+
 # Mirror the archive to another machine. Runs every poll rather than only after a base
 # backup, so the off-host copy trails the live one by minutes instead of a whole day of WAL.
 sync_archive() {
@@ -252,16 +263,18 @@ sync_archive() {
   # Then --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
   # still being written, so it never ships.
-  if ! out="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1; } \
-       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1; } \
-       && rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
+  if ! sent="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>&1; } \
+       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1; })"; then
+    log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$sent" | tr '\n' ' ' | tail -c 300)$(no_room_advice "$sent")"
+    return 1
+  fi
+  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
        -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>&1)"; then
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(printf '%s' "$out" | tr '\n' ' ' | tail -c 300)"
-    [ "$hold_deletes" = no ] || log "WARN: $SYNC_TARGET keeps the base backups it holds (${held% }) until the whole archive has landed beside them. If that disk is out of room, free some, or take them off it by hand."
     return 1
   fi
   MIRRORED=yes
-  changed="$(printf '%s\n' "$out" | grep -c . || true)"
+  changed="$(printf '%s\n%s\n' "$sent" "$out" | grep -c . || true)"
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
 }
 

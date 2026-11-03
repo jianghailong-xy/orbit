@@ -467,6 +467,9 @@ test('WAL goes first, on its own and deleting nothing, to a target that shares n
 
 const [OLD_BASE, SHARED_BASE, NEW_BASE] = ['20260101T000000Z', '20260201T000000Z', '20260301T000000Z'];
 const NO_ROOM = 'rsync: [receiver] write failed on "base.tar.gz": No space left on device (28)';
+const OVER_QUOTA = 'rsync: [receiver] write failed on "base.tar.gz": Disk quota exceeded (122)';
+/** The line that repeats every poll while a target cannot hold both, all of it on one line: nothing went, why, and what to do. */
+const STOPPED = /ERROR: off-host sync to .* failed: .*(No space left on device|Disk quota exceeded).* Nothing was deleted: the target cannot hold its old base backups and this archive at once, and the old ones stay until the new ones have landed\. Free room on the backup host, or take the old ones off that disk by hand, and the next poll carries on\.$/m;
 /** A base backup's file, in a fingerprint or for --exclude. */
 const baseFile = (stamp) => `base/${stamp}/base.tar.gz`;
 
@@ -484,7 +487,7 @@ test('a target that shares a segment and a whole base backup has the one pass it
   const writes = writesToMirror(result);
   assert.equal(writes.length, 1, result.rsyncCalls.join('\n'));
   assert.match(writes[0], /--delete/);
-  assert.doesNotMatch(result.log, /ERROR|WARN/);
+  assert.doesNotMatch(result.log, /ERROR/);
 });
 
 test('and keeps that segment wherever the pass is cut, so the next poll has it to read', () => {
@@ -504,7 +507,20 @@ test('and keeps that base backup when the new one does not fit: --delete costs i
   });
   assert.deepEqual(namesIn(result.after.mirror), [baseFile(SHARED_BASE), ...segmentsAt(3, 4, 5)]);
   assert.match(result.log, /ERROR: off-host sync to .* failed: .*No space left on device/);
-  assert.doesNotMatch(result.log, /WARN/, 'nothing is being held back');
+  assert.doesNotMatch(result.log, /Nothing was deleted/, 'the older one went');
+});
+
+test('and with WAL that does not fit and nothing held back, it does not send anyone to take base backups away', () => {
+  const result = round({
+    cut: { on: '/archive/wal ', holdsBack: '*', says: NO_ROOM, everyPoll: true },
+    prepare: ({ archive, target }) => {
+      archiveIn(target, { from: 1, to: 3, bases: [SHARED_BASE] });
+      archiveIn(archive, { from: 50, to: 53, bases: [SHARED_BASE] });
+    },
+  });
+  assert.deepEqual(result.after.mirror, result.before.mirror, result.log);
+  assert.match(result.log, /ERROR: off-host sync to .* failed: .*No space left on device/);
+  assert.doesNotMatch(result.log, /Nothing was deleted/);
 });
 
 /** ORBIT_BASE_BACKUP_KEEP=1 just after a base backup: the target's only one has left this archive. It still shares a segment. */
@@ -520,7 +536,7 @@ const fallenBehind = ({ archive, target }) => {
 /** The target's base backup as it was, what it holds and its time, in a fingerprint. */
 const baseLine = (mirror, stamp) => mirror.find((line) => line.startsWith(`${baseFile(stamp)} `));
 
-test('a target with no base backup in common keeps its old one when the new one does not fit, and says what to do, every poll', () => {
+test('a target with no base backup in common keeps its old one when the new one does not fit, and says so and what to do, every poll', () => {
   for (const [prepare, oldBases, oldSegments, wal] of [[noBaseInCommon, [OLD_BASE], segmentsAt(1, 2, 3), segmentsAt(4, 5)], [fallenBehind, [OLD_BASE, SHARED_BASE], segmentsAt(1, 2, 3), segmentsAt(50, 51, 52, 53)]]) {
     const result = round({
       cut: { on: '.staging-*', holdsBack: `${NEW_BASE}/base.tar.gz`, says: NO_ROOM, everyPoll: true },
@@ -529,12 +545,17 @@ test('a target with no base backup in common keeps its old one when the new one 
     for (const [state, log] of [[result.cutShort.mirror, result.cutShort.log], [result.after.mirror, result.log]]) {
       // Its old base backups, its old segments and all that did fit, and the only thing missing is what had no room.
       assert.deepEqual(namesIn(state), [...oldBases.map(baseFile), ...oldSegments, ...wal], log);
-      assert.match(log, /ERROR: off-host sync to .* failed: .*No space left on device/);
-      assert.match(log, new RegExp(`WARN: .* keeps the base backups it holds \\(${oldBases.join(' ')} ?(${NEW_BASE})?\\) until the whole archive has landed beside them\\. If that disk is out of room, free some, or take them off it by hand\\.`));
+      assert.match(log, STOPPED);
     }
     for (const stamp of oldBases) assert.ok(baseLine(result.after.mirror, stamp), `${stamp} is still whole: ${result.log}`);
     assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
   }
+});
+
+test('a full quota says the same', () => {
+  const result = round({ cut: { on: '.staging-*', holdsBack: `${NEW_BASE}/base.tar.gz`, says: OVER_QUOTA }, prepare: noBaseInCommon });
+  assert.ok(baseLine(result.cutShort.mirror, OLD_BASE), result.cutShort.log);
+  assert.match(result.cutShort.log, STOPPED);
 });
 
 test('and when there is room again the next poll carries on and ends equal to the archive', () => {
@@ -542,7 +563,7 @@ test('and when there is room again the next poll carries on and ends equal to th
     const result = round({ cut: { on: '.staging-*', holdsBack: `${NEW_BASE}/base.tar.gz`, says: NO_ROOM }, prepare });
     assert.ok(baseLine(result.cutShort.mirror, OLD_BASE), result.cutShort.log);
     mirrored(result);
-    assert.doesNotMatch(result.log, /ERROR|WARN/);
+    assert.doesNotMatch(result.log, /ERROR/);
   }
 });
 
@@ -550,7 +571,7 @@ test('with room for both it goes through in one round: WAL, then everything with
   for (const prepare of [noBaseInCommon, fallenBehind]) {
     const result = round({ prepare });
     mirrored(result);
-    assert.doesNotMatch(result.log, /ERROR|WARN/);
+    assert.doesNotMatch(result.log, /ERROR/);
     const writes = writesToMirror(result);
     assert.equal(writes.length, 3, result.rsyncCalls.join('\n'));
     assert.ok(writes[0].includes('/archive/wal '), writes[0]);
@@ -566,6 +587,31 @@ test('a pass that holds deletes back and fails stops the round before --delete',
   assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
   assert.ok(baseLine(result.after.mirror, OLD_BASE), result.log);
   assert.match(result.log, /ERROR: off-host sync to .* failed: .*ssh: connect to host backup-host/);
+  assert.doesNotMatch(result.log, /Nothing was deleted/, 'room is not what stopped it');
+});
+
+test('a pass that rsync reports a failure in and carries on from, to exit 23, stops the round too: real rsync, no --delete, the old base backup kept', () => {
+  // A full disk does this when a directory or a temporary file cannot be made, and --delete-after deletes all the same. Making
+  // that here would take a real full disk, so this is the same exit from another cause: a directory where a file has to go.
+  const result = round({
+    prepare: (dirs) => {
+      noBaseInCommon(dirs);
+      mkdirSync(path.join(dirs.target, 'base', NEW_BASE, 'base.tar.gz'), { recursive: true });
+      writeFileSync(path.join(dirs.target, 'base', NEW_BASE, 'base.tar.gz', 'in the way'), '');
+    },
+  });
+  assert.match(result.log, /ERROR: off-host sync to .* failed: .*\(code 23\)/);
+  assert.deepEqual(result.rsyncCalls.filter((call) => call.includes('--delete')), [], result.rsyncCalls.join('\n'));
+  assert.equal(baseLine(result.after.mirror, OLD_BASE), baseLine(result.before.mirror, OLD_BASE), result.log);
+  assert.ok(result.after.mirror.some((line) => line.startsWith(segmentsAt(5)[0])), 'what could land did');
+});
+
+test('once --delete has run it does not say that nothing was deleted', () => {
+  // The WAL and everything else landed, a new segment had no room, and the old base backup has gone on the way.
+  const result = round({ cut: { on: '--delete', holdsBack: 'no such file', says: NO_ROOM, everyPoll: true }, prepare: noBaseInCommon });
+  assert.equal(baseLine(result.after.mirror, OLD_BASE), undefined, result.log);
+  assert.match(result.log, /ERROR: off-host sync to .* failed: .*No space left on device/);
+  assert.doesNotMatch(result.log, /Nothing was deleted/);
 });
 
 test('WAL keeps landing while a base backup does not fit, with a segment in common or not', () => {
@@ -641,6 +687,7 @@ test('a first sync cut short in its base backups has its WAL there already, and 
   assert.deepEqual(namesIn(result.cutShort.mirror), segmentsAt(1, 2, 3));
   mirrored(result);
   assert.doesNotMatch(result.log, /ERROR/);
+  assert.match(result.log, /mirrored \d+ change\(s\) to /, 'what the first pass sent counts, though --delete had nothing left to do');
 });
 
 test('on a mirror that has fallen behind, a cut costs it nothing: its segments stay until this archive\'s are there', () => {
