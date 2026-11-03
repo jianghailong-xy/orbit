@@ -85,12 +85,20 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ProjectStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import {
+  CreatorType,
+  type Prisma,
+  ProjectStatus,
+  RunStatus,
+  SessionDispatchOrigin,
+  type PrismaClient,
+} from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
 import { TasksService } from '../tasks/tasks.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -98,9 +106,17 @@ import {
 } from './coordinator-pg-test-safety';
 import type { CompletionInputRouter } from './completion-input-router.service';
 import { classifyCriteriaEdit } from './criteria-edit-classification';
+import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
+import { projectAcceptanceLandedFact } from './coordinator-wake';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { readDerivedProjectDone, type DerivedDoneWithheld } from './project-done-derived';
+import {
+  readDerivedProjectDone,
+  readDerivedProjectDoneReading,
+  type DerivedDoneWithheld,
+} from './project-done-derived';
+import { doneReadiness, readDoneState } from './project-done-request';
+import { readProjectFinish } from './project-looks-finished';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -1030,4 +1046,500 @@ test('the clause for a criterion its own evidence wrote takes its place in order
         + 'the same edge that settled this project at the top of the file — so the projection ran '
         + 'here and declined to settle, which is a different fact from a column nothing touched');
   });
+});
+
+/** The two criteria of the third timeline: one nobody touches, and the one a check is pointed at. */
+const STEADY = 'the criterion whose work nobody touches again';
+const CHECKED = 'the criterion whose work an independent check is pointed at';
+
+/**
+ * A check that did not pass, and work reopened after it settled.
+ *
+ * WHAT HAPPENED, AND WHY THIS TIMELINE EXISTS
+ * -------------------------------------------
+ * On 2026-11-03 a project was stored DONE (`done_by = 'DERIVED'`) at 00:17:43Z while its task T9 was
+ * reopened and being reworked and the check V9 pointed at it had concluded FAIL. Nobody decided
+ * that. `servingTaskSettled` took V9's FAIL for a settled task, because any verdict concludes a
+ * carrier, and took the reopened T9 for one too, because its newest evidence still had a CONFIRM. So
+ * the criterion read satisfied, and the next merge receipt stored the answer. Once a project is
+ * DONE, R8 refuses every session's task writes, so the coordinator could not even revoke the
+ * verdict: T9 had to submit a new revision and wait for another merge receipt, 1 h 53 min later.
+ *
+ * Case (4) of the first timeline says a reopen takes DONE back, and it does, for EXECUTABLE. That
+ * criterion's settlement fact IS the status, which is why the case could not see this.
+ *
+ * WHY THE SUBJECT IS AN `EVIDENCE_JUDGMENT` TASK
+ * ----------------------------------------------
+ * Because that is T9's shape, and the shape whose settlement fact outlives a reopen. The check is
+ * codeless, as every real check is, so it takes no part in the landing conjunction: with the steady
+ * criterion and the subject's own branch both on main, "every criterion has landed" holds in every
+ * reading below, and whatever withholds DONE is the satisfaction lane.
+ *
+ * WHY THE EDGES ARE THE PRODUCT'S OWN
+ * -----------------------------------
+ * As everywhere in this file the projection is never called. Each reading follows a verdict written
+ * through `TasksService.update`, a receipt recorded through `MergeReceiptService.record`, a revision
+ * submitted or decided through `TaskCompletionEvidenceService`. The stored column is read with SQL.
+ */
+test('a check that did not pass, and work reopened after it settled, do not store DONE', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const prisma: PrismaClient = prismaClientFor(url);
+  t.after(async () => {
+    await prisma.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const acceptance = new ProjectAcceptanceService(prisma as unknown as PrismaService);
+  const projects = new ProjectsService(prisma as unknown as PrismaService, acceptance);
+  /** The router the post-commit edges are held behind; the first timeline says why a stand-in that
+   *  answers with nothing is what a fixture building these services directly needs. */
+  const completionInputs = {
+    routeSettledUnmerged: async () => [],
+    routeSettledProjects: async () => [],
+    routeReadyCriteria: async () => [],
+    routeUnlandedCriteria: async () => [],
+    routeReadyDependents: async () => [],
+    routeTaskExceptions: async () => [],
+    routeCompletionEvidence: async () => ({}),
+  } as unknown as CompletionInputRouter;
+
+  const receipts = new MergeReceiptService(prisma as unknown as PrismaService, completionInputs);
+  const tasks = new TasksService(
+    prisma as never,
+    {} as never,
+    { publishTaskChanged() {}, publishForUser() {}, publishTaskResync() {} } as never,
+    undefined,
+    completionInputs,
+  );
+  const evidence = new TaskCompletionEvidenceService(
+    prisma as unknown as PrismaService,
+    tasks,
+    completionInputs,
+  );
+
+  const ownerId = randomUUID();
+  const projectId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: ownerId,
+      email: `checked-${ownerId}@project-done.invalid`,
+      name: 'The account owner',
+      passwordHash: 'x',
+    },
+  });
+  await prisma.project.create({
+    data: { id: projectId, ownerId, title: 'The project whose check did not pass' },
+  });
+
+  // ── the fixture's own vocabulary ───────────────────────────────────────────────────────────────
+
+  async function storedRow(): Promise<{ status: string; done_by: string | null }> {
+    const { rows } = await sql.query<{ status: string; done_by: string | null }>(
+      `SELECT "status"::text, "done_by" FROM "project" WHERE "id" = $1::uuid`, [projectId],
+    );
+    assert.equal(rows.length, 1, 'the project must still exist');
+    return rows[0]!;
+  }
+
+  async function storedStatus(): Promise<string> {
+    return (await storedRow()).status;
+  }
+
+  async function withheld(): Promise<DerivedDoneWithheld[]> {
+    return (await readDerivedProjectDone(prisma as unknown as PrismaService, ownerId, projectId))
+      .withheld;
+  }
+
+  /** What a project stored DONE before this rule existed looks like: the column, and only it. */
+  async function storeDoneByHand() {
+    await sql.query(
+      `UPDATE "project"
+          SET "status" = 'DONE', "done_by" = 'DERIVED', "done_at" = now(),
+              "done_criteria_digest" = repeat('a', 64)
+        WHERE "id" = $1::uuid`,
+      [projectId],
+    );
+    assert.equal(await storedStatus(), ProjectStatus.DONE, 'the fixture stores DONE');
+  }
+
+  const DECLARATION = {
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'true',
+    acceptanceExpectedExitCode: 0,
+  };
+
+  async function settle(taskId: string) {
+    const written = await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid
+          AND "status" IN ('OPEN', 'IN_PROGRESS')
+          AND "completion_criterion" = 'EXECUTABLE'
+          AND "acceptance_command" = 'true'
+          AND "acceptance_expected_exit_code" = 0`,
+      [taskId],
+    );
+    assert.equal(written.rowCount, 1, 'the EXECUTABLE task must reach DONE through the DONE fence');
+  }
+
+  async function workSession(taskId: string, branch: string) {
+    const id = randomUUID();
+    await prisma.session.create({
+      data: {
+        id,
+        ownerId,
+        creatorId: ownerId,
+        taskId,
+        title: `ran ${branch}`,
+        prompt: 'do the work',
+        status: RunStatus.SUCCEEDED,
+        branch,
+        isolationStatus: 'worktree',
+      },
+    });
+    return id;
+  }
+
+  /** A NEW receipt each call, so every reading after one is a statement about a real edge: the
+   *  door is idempotent, and a re-report would re-project nothing a reader could tell apart. */
+  let landings = 0;
+  async function aNewReceipt(sessionId: string) {
+    landings += 1;
+    const recorded = await receipts.record(ownerId, sessionId, {
+      result: 'MERGED',
+      sourceSha: landings.toString(16).padStart(40, '0'),
+      targetBranch: 'main',
+      targetShaBefore: sha('a'),
+      targetShaAfter: sha('b'),
+    }, 'AGENT');
+    assert.equal(recorded.created, true, 'the door recorded no new receipt');
+  }
+
+  async function taskFingerprint(): Promise<Array<Record<string, string>>> {
+    const { rows } = await sql.query<Record<string, string>>(
+      `SELECT "id"::text, "title", "status"::text, "verdict"::text, "updated_at"::text
+         FROM "task" WHERE "project_id" = $1::uuid ORDER BY "id"`,
+      [projectId],
+    );
+    return rows;
+  }
+
+  // ── the starting position: both criteria stated, the steady one met and landed ─────────────────
+
+  const [steady, checked] = criteriaFromDefinitions(
+    (await projects.update(ownerId, projectId, {
+      acceptanceCriteriaItems: [STEADY, CHECKED].map((text) => ({
+        text, verificationMethod: METHOD,
+      })),
+    } as never)).acceptanceCriteriaItems,
+  );
+  assert.ok(steady && checked, 'the fixture states two criteria');
+
+  const steadyWork = await tasks.create(ownerId, {
+    title: 'the work under the steady criterion',
+    projectId, criterionKey: steady.key, ...DECLARATION,
+  } as never);
+  const steadyRun = await workSession(steadyWork.id, 'orbit/steady');
+  await settle(steadyWork.id);
+  await aNewReceipt(steadyRun);
+
+  // The subject: an evidence-judgment task, confirmed through the decision door by a session that
+  // did not do the work, and landed.
+  const subject = await tasks.create(ownerId, {
+    title: 'the work the check is pointed at',
+    projectId, criterionKey: checked.key, completionCriterion: 'EVIDENCE_JUDGMENT',
+  } as never);
+  const subjectRun = await workSession(subject.id, 'orbit/subject');
+  const judge = randomUUID();
+  await prisma.session.create({
+    data: {
+      id: judge,
+      ownerId,
+      creatorId: ownerId,
+      title: 'the run that judges it',
+      prompt: 'read the ledger and decide',
+    },
+  });
+  await prisma.toolCall.create({
+    data: {
+      sessionId: subjectRun,
+      name: 'Bash',
+      toolUseId: 'toolu_checked_subject',
+      input: { command: 'true', description: 'the work this evidence cites' },
+      isError: false,
+    },
+  });
+  const actor = { type: CreatorType.USER, id: ownerId } as const;
+  let revisions = 0;
+  /** One more version of the subject's evidence, through the door a run submits it through. */
+  async function aNewRevision(): Promise<string> {
+    revisions += 1;
+    await evidence.submit(ownerId, subject.id, actor, {
+      sourceSessionId: subjectRun,
+      evidence: {
+        claim: `the work under the checked criterion is done, attempt ${revisions}`,
+        criterion: { key: checked.key, text: CHECKED },
+        checks: [{ kind: 'TOOL_CALL', ref: 'toolu_checked_subject' }],
+        gaps: [],
+      },
+    });
+    return String(revisions);
+  }
+  async function decide(revision: string, decision: 'CONFIRM' | 'SEND_BACK') {
+    await evidence.decide(ownerId, subject.id, actor, {
+      decidingSessionId: judge,
+      evidenceRevision: revision,
+      decision,
+      ...(decision === 'SEND_BACK' ? { note: 'try again' } : {}),
+    });
+  }
+  /** Back to DONE from a reopened subject: a new revision, and a CONFIRM of it. */
+  async function settleSubjectAgain() {
+    await decide(await aNewRevision(), 'CONFIRM');
+    const { rows } = await sql.query<{ status: string }>(
+      `SELECT "status"::text FROM "task" WHERE "id" = $1::uuid`, [subject.id],
+    );
+    assert.equal(rows[0]!.status, 'DONE', 'a CONFIRM of the current revision settles the subject');
+  }
+  await settleSubjectAgain();
+  await aNewReceipt(subjectRun);
+
+  // The check, serving the same criterion, and codeless as a real one is.
+  const check = await tasks.create(ownerId, {
+    title: 'the independent check of that work',
+    projectId,
+    criterionKey: checked.key,
+    verifiesTaskId: subject.id,
+    codeless: true,
+    codelessReason: 'a check reads the work and commits nothing',
+  } as never);
+
+  const standing = await acceptance.standardSetConfirmation(ownerId, projectId);
+  await acceptance.confirmStandardSet(ownerId, projectId, {
+    criteriaDigest: standing.currentVersion.digest,
+  });
+
+  // ═══ (8) every criterion landed and confirmed, and the check has concluded nothing ════════════
+
+  await t.test('(8) a check with no conclusion withholds DONE, and a receipt does not change that',
+    async () => {
+      assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED'],
+        'the only thing missing is the check: the steady criterion is met, everything has landed '
+          + 'and the owner confirmed this version');
+      assert.equal(await storedStatus(), ProjectStatus.OPEN);
+
+      await aNewReceipt(steadyRun);
+      assert.equal(await storedStatus(), ProjectStatus.OPEN,
+        'the edge that stored the false DONE on 2026-11-03 runs here and stores nothing');
+    });
+
+  // ═══ (9) the check concludes FAIL ═════════════════════════════════════════════════════════════
+
+  await t.test('(9) a FAIL withholds DONE at its own write, and after the next receipt', async () => {
+    await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'a check that said no is the opposite of settled work, and it must not settle the project '
+        + 'at the very write that recorded the no');
+    assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED']);
+
+    await aNewReceipt(steadyRun);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'this is the edge that did it on 2026-11-03: T7’s promotion landed and DONE was stored ten '
+        + 'seconds later, over V9’s FAIL');
+  });
+
+  // ═══ (10) the check concludes INCONCLUSIVE ════════════════════════════════════════════════════
+
+  await t.test('(10) an INCONCLUSIVE withholds DONE as a FAIL does', async () => {
+    await tasks.update(ownerId, check.id, { verdict: 'INCONCLUSIVE' } as never);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'it concluded that it could not conclude, and only a PASS settles anything');
+    assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED']);
+
+    await aNewReceipt(steadyRun);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN);
+  });
+
+  // ═══ (11) the check passes ════════════════════════════════════════════════════════════════════
+
+  await t.test('(11) the subject DONE and its check PASS is what stores DONE', async () => {
+    await tasks.update(ownerId, check.id, { verdict: 'PASS' } as never);
+    assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'DERIVED' },
+      'the positive this file requires of every negative above: without it, all of them would be '
+        + 'equally true of a projection that never stores DONE');
+    assert.deepEqual(await withheld(), []);
+  });
+
+  // ═══ (12) the subject is reopened with the check's PASS standing ══════════════════════════════
+
+  await t.test('(12) reopening the subject takes DONE back with its CONFIRM and the PASS standing',
+    async () => {
+      await tasks.update(ownerId, subject.id, { status: 'OPEN' } as never);
+      assert.equal(await storedStatus(), ProjectStatus.OPEN,
+        'the newest revision still has its CONFIRM and the check still says PASS, and neither is '
+          + 'about the work now in progress');
+      assert.equal((await storedRow()).done_by, null);
+      assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED']);
+
+      await aNewReceipt(steadyRun);
+      assert.equal(await storedStatus(), ProjectStatus.OPEN);
+    });
+
+  // ═══ (13) the subject is reopened and the check says FAIL: the state of 2026-11-03 ════════════
+
+  await t.test('(13) the subject reopened with the check’s FAIL standing stays OPEN', async () => {
+    await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN);
+
+    await aNewReceipt(steadyRun);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'T9 reopened, V9 at FAIL, the last promotion landing: exactly what was stored DONE');
+    assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED']);
+  });
+
+  // ═══ (14) DONE stored by the old rule goes back at the next write, whichever write it is ══════
+
+  await t.test('(14) a DONE already stored over these facts goes back at the next write', async () => {
+    // The rows production holds. Each edge below finds a column the facts no longer support.
+    await storeDoneByHand();
+    await tasks.update(ownerId, steadyWork.id, { title: 'the steady work, renamed' } as never);
+    assert.deepEqual(await storedRow(), { status: ProjectStatus.OPEN, done_by: null },
+      'a task write that moved no fact still re-derives the column');
+
+    await storeDoneByHand();
+    await aNewReceipt(steadyRun);
+    assert.deepEqual(await storedRow(), { status: ProjectStatus.OPEN, done_by: null },
+      'and so does a merge receipt');
+
+    // Now the subject is DONE again and only the check is wrong: the other half of the state.
+    await settleSubjectAgain();
+    assert.equal(await storedStatus(), ProjectStatus.OPEN, 'the FAIL still stands');
+    await storeDoneByHand();
+    await aNewReceipt(steadyRun);
+    assert.deepEqual(await storedRow(), { status: ProjectStatus.OPEN, done_by: null },
+      'a stored DONE over a standing FAIL goes back as well');
+
+    await tasks.update(ownerId, check.id, { verdict: 'PASS' } as never);
+    assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'DERIVED' });
+  });
+
+  // ═══ (15) a new revision of evidence is an edge of its own ════════════════════════════════════
+
+  await t.test('(15) a new revision takes DONE back by itself, and its decision answers by itself',
+    async () => {
+      assert.equal(await storedStatus(), ProjectStatus.DONE, 'this case starts from a stored DONE');
+      const before = await taskFingerprint();
+
+      const sentBack = await aNewRevision();
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.OPEN, done_by: null },
+        'the CONFIRM the criterion stood on answers a version a later submission replaced, so the '
+          + 'column may not go on saying DONE until somebody happens to write something else');
+      assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED']);
+      assert.deepEqual(await taskFingerprint(), before,
+        'a task row moved, so the OPEN above says nothing about the submission');
+
+      await decide(sentBack, 'SEND_BACK');
+      assert.equal(await storedStatus(), ProjectStatus.OPEN, 'a send-back settles nothing');
+
+      await decide(await aNewRevision(), 'CONFIRM');
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'DERIVED' },
+        'a CONFIRM of a task already DONE completes nothing and dispatches nothing, so the door '
+          + 'itself is what puts the column back');
+      assert.deepEqual(await taskFingerprint(), before,
+        'and no task row moved for that either');
+    });
+
+  // ═══ (16) what everybody who reads the answer is told about a FAIL, with every task finished ══
+
+  await t.test('(16) every reader of the answer says the same about a check that said FAIL', async () => {
+    await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+    assert.equal(await storedStatus(), ProjectStatus.OPEN);
+
+    // The project page and `project_get`: the criterion, who holds it up, and what would settle them.
+    const read = await projects.get(ownerId, projectId) as unknown as {
+      derivedDone: { done: boolean; withheld: string[] };
+      acceptanceCriteriaItems: Array<{
+        id: string;
+        satisfied: boolean;
+        unmet: Array<{ clause: string; heldUpBy: Array<{ taskId: string; requiredAction: string }> }>;
+      }>;
+    };
+    assert.deepEqual(read.derivedDone.withheld, ['CRITERION_UNSATISFIED']);
+    const item = read.acceptanceCriteriaItems.find((row) => row.id === checked.definitionId)!;
+    assert.equal(item.satisfied, false);
+    assert.deepEqual(
+      item.unmet.flatMap((reason) => reason.heldUpBy.map((held) => [held.taskId, held.requiredAction]))
+        .sort(),
+      [subject.id, check.id].map((id) => [id, 'OBTAIN_INDEPENDENT_VERIFICATION_PASS']).sort(),
+      'the words every client already has for this code read "needs an independent verification '
+        + 'pass", where the code a carrier used to get reads "needs its verdict recorded"');
+
+    // The closing guardrail: this is not a project that looks finished, so nobody is told it does,
+    // and the owner's "Record as done…" does not come up by itself.
+    const finish = await readProjectFinish(prisma as unknown as Parameters<typeof readProjectFinish>[0], projectId);
+    assert.equal(finish.state, 'NOT_FINISHED');
+
+    // The coordinator's request to record it done: refused, naming the criterion and the work.
+    const doneState = await readDoneState(prisma as unknown as Prisma.TransactionClient, ownerId, projectId, null);
+    const refusal = doneReadiness(doneState, [])
+      .find((finding) => finding.code === 'DONE_CRITERION_UNSATISFIED');
+    assert.ok(refusal, 'a criterion whose check said no is one the coordinator may not ask to close');
+    assert.equal(refusal.severity, 'REFUSE');
+    assert.equal(refusal.criterion?.key, checked.key);
+    assert.deepEqual(refusal.tasks.map((task) => task.taskId).sort(), [subject.id, check.id].sort());
+
+    // The coordinator's notification. `PROJECT_ACCEPTANCE_LANDED` is derived from the tasks'
+    // statuses, so a FAIL does not stop the fact, and what it says is the projection's: the same
+    // words the project page gives, and DONE only when the projection says DONE.
+    const reading = await readDerivedProjectDoneReading(
+      prisma as unknown as PrismaService, ownerId, projectId,
+    );
+    const fact = projectAcceptanceLandedFact(
+      projectId,
+      (await taskFingerprint()).map((row) => ({ taskId: row.id!, status: row.status! })),
+      [steady, checked].map((criterion) => ({
+        key: criterion.key,
+        text: criterion.text,
+        satisfied: true,
+        landing: 'LANDED' as const,
+        serving: [],
+      })),
+    );
+    assert.ok(fact, 'every task is terminal and every criterion is on main, by status');
+    const message = buildCoordinatorDeliveryMessage(fact, 'the project', reading);
+    assert.match(message, /has not been projected DONE/u);
+    assert.match(message, /CRITERION_UNSATISFIED/u);
+    assert.match(message, /SERVING_WORK_UNSETTLED/u);
+    assert.doesNotMatch(message, /is recorded as DONE/u);
+  });
+
+  // ═══ (17) the owner's record is a decision, and evidence does not overrule it ═════════════════
+
+  await t.test('(17) a DONE the owner recorded stands through a new revision and its decision',
+    async () => {
+      await tasks.update(ownerId, check.id, { verdict: 'FAIL' } as never);
+      assert.equal(await storedStatus(), ProjectStatus.OPEN, 'the check has said no again');
+
+      const { currentVersion } = await acceptance.standardSetConfirmation(ownerId, projectId);
+      await acceptance.recordProjectDone(ownerId, projectId, {
+        criteriaDigest: currentVersion.digest,
+        acceptedGaps: [],
+      });
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'OWNER' },
+        'the owner may record it done over a criterion that is not met');
+
+      const revision = await aNewRevision();
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'OWNER' },
+        'neither of the two facts the owner decided about moved: not the criteria, and no task '
+          + 'serving one was reopened');
+      await decide(revision, 'SEND_BACK');
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'OWNER' });
+      await aNewReceipt(steadyRun);
+      assert.deepEqual(await storedRow(), { status: ProjectStatus.DONE, done_by: 'OWNER' });
+    });
 });

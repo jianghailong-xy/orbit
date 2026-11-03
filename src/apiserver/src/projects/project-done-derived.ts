@@ -122,7 +122,8 @@ export type DerivedDoneWithheld =
    *  "Every one of zero criteria holds" is the same vacuous truth `NO_WORK_SERVES_IT` refuses one
    *  level down, and a project would otherwise settle itself the moment it was confirmed empty. */
   | 'NO_CRITERIA_STATED'
-  /** Some criterion's serving work has not settled by its own declared completion criterion. */
+  /** Some criterion's serving work has not settled: it is not DONE, not by its own declared
+   *  completion criterion, or a check of it has not passed. */
   | 'CRITERION_UNSATISFIED'
   /** Some criterion has no merge receipt onto the default branch. `UNKNOWN` is absence of
    *  evidence, never evidence of absence — so this withholds DONE, and asserts nothing. */

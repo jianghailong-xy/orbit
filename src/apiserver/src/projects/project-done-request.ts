@@ -383,7 +383,8 @@ export function doneReadiness(
           + 'serving it has not settled'
         : `criterion ${ordinal} is not met: no task serves it`,
       criterion.heldUpBy.length > 0
-        ? 'Settle the work named here — each task by its own completion criterion — then ask again.'
+        ? 'Settle the work named here — each task by its own completion criterion, and work with a '
+          + 'check by a PASS of its newest check — then ask again.'
         : `File a task for it, or point one at it: criterionKey ${criterion.stated.key} on task_create `
           + 'or task_update.',
       { criterion: criterionRef(criterion), tasks: criterion.heldUpBy });
