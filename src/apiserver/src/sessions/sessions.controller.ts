@@ -419,11 +419,14 @@ export class SessionsController {
     };
     // The Open list is polled every few seconds with the last ETag. Answer that from the data
     // version (open-list-version.ts) before building anything: on a hit nothing is read or
-    // serialized. The 304 is ended here rather than left to Express's `req.fresh`, which refuses
-    // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one);
-    // what Nest sends after it is a no-op on a finished response. Other views keep Express's
-    // body-hash ETag. A landing-aware read is a different list, so it has its own version scope:
-    // an insert or a settlement moves that one and leaves the plain list's where it was.
+    // serialized. The 304 is decided here rather than left to Express's `req.fresh`, which refuses
+    // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one).
+    // It is only set, not ended: Nest calls `res.send()` once this handler returns, and that call
+    // sends the 304. Had the response already ended, that call would throw ERR_HTTP_HEADERS_SENT
+    // (`send` removes headers from every 304), and ExceptionsHandler would log it on each poll.
+    // Other views keep Express's body-hash ETag. A landing-aware read is a different list, so it
+    // has its own version scope: an insert or a settlement moves that one and leaves the plain
+    // list's where it was.
     // A plain project read (`projectId` without `includeLanding`) is built every time instead: a
     // workspace list sends one for each project it shows, every 4 s while its stream is down, and
     // the version reads the whole account (~230 ms on 6.7k sessions) to spare a few rows that take
@@ -440,7 +443,7 @@ export class SessionsController {
       });
       res.setHeader('ETag', etag);
       if (ifNoneMatchHits(ifNoneMatch, etag)) {
-        res.status(304).end();
+        res.status(304);
         return undefined;
       }
     }
