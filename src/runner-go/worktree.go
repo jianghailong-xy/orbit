@@ -3001,7 +3001,7 @@ var errKeepCheckout = errors.New("the checkout stays")
 //
 // The walk stops at the first recent write. It runs on the claim loop, and most of its time would go on
 // checkouts in recent use, where the first file it reads will do: on a host with 157 checkouts at a
-// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17.
+// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17 to 25.
 func checkoutIdleSince(path string) (time.Time, bool) {
 	if info, err := os.Lstat(filepath.Join(path, ".git")); err != nil || !info.Mode().IsRegular() {
 		return time.Time{}, false
@@ -3059,9 +3059,9 @@ func holdsRepository(dir string) bool {
 // reinstall or a rebuild's output. It only reads, and anything git cannot answer counts as no.
 //
 // inDependencies also looks for a repository nested in an ignored dependency directory, whose commits
-// nothing else sees. That lists by far the most files in a checkout, which took a first look over this
-// host's 69 idle checkouts from 17 seconds to between 30 and 84, on the claim loop. So only the look at a
-// checkout about to go asks it, and that costs about a second a removal.
+// nothing else sees. That lists by far the most files in a checkout, which took a first look over 69 idle
+// checkouts from about 28 seconds to between 33 and 88, on the claim loop. So only the look at a checkout
+// about to go asks it.
 func checkoutHasNothingToLose(path, branch string, inDependencies bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), checkoutProbeTimeout)
 	defer cancel()
