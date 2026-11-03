@@ -102,6 +102,7 @@ of the old history. Each poll, before `--delete`, the sidecar lists the target's
 | Segments whose smallest has this cluster's system identifier | The same cluster, restored or back after an outage too: it syncs |
 | Segments with another system identifier | Refused |
 | WAL further on than here, on a later timeline or a later segment | Refused: `--delete` would remove it |
+| A `wal/` or `base/` it cannot list all of, or something else in its place | A failure: nothing is sent or deleted |
 
 It also refuses if the newest WAL here is not this running cluster's own, which is what a new cluster started
 over an archive copied back looks like. A restored cluster keeps its system identifier on every timeline, so
@@ -130,6 +131,23 @@ with one:
   ```bash
   ssh backup-host mv /data/backup/orbit-pg-archive /data/backup/orbit-pg-archive.old
   ```
+
+**A target it cannot read is not an empty one.** Only a path that is not there reads as empty. Anything else that stops the
+listing, such as a directory the ssh user may not read, is logged every poll until it is put right on the backup host, with what
+rsync said:
+
+```text
+ERROR: off-host sync to … failed: could not read the target: …
+```
+
+The mirror sends and deletes nothing that round. Base backups carry on, and so does the [files copy](#attachment-files). What the ssh client
+prints on the way, such as OpenSSH's warning about a server with no post-quantum key exchange, is not read as part of a listing or
+counted as a change, and reaches the log only with a failure.
+
+rsync exits with the same code for a path that is not there as for one it may not read, so when a listing fails the sidecar asks
+again with `--ignore-missing-args`, and goes by the answer rather than the wording. That option needs rsync 3.1.0 or newer on the
+backup host. Behind an older one, or a restricted command that fails on a missing path itself, as Debian's `rrsync` does, a first
+install logs `could not read the target` until you create the target's `wal/` and `base/` by hand.
 
 The sidecar runs the script it started with, so a newer `scripts/pg-backup.sh` does nothing until the container is
 recreated. `/upgrade` does that when the two differ; by hand it is `docker compose up -d --no-deps --force-recreate
