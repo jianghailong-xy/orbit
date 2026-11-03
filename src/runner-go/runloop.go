@@ -1900,6 +1900,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 		}
 		if initiallyActive {
+			// A cold supervisor stays registered while the sweep takes its checkout: the checkout
+			// comes back before the supervisor wakes in it.
+			restoreAbsentCheckout(pool, job)
 			if _, ok := pool.activatePrepared(job, stageCredential); ok {
 				return // warm reuse, or wake a cold supervisor for transparent resume
 			}
@@ -1928,8 +1931,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
-		settleSessionCheckout(job, execDir)
+		var execDir string
+		outlined := false
+		if !initiallyActive {
+			execDir, outlined = outlineReclaimedCheckout(job, sessionExecDir(job.WorkDir))
+		}
+		if !outlined {
+			execDir = setupWorktree(job, sessionExecDir(job.WorkDir))
+			settleSessionCheckout(job, execDir)
+		}
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {
@@ -2041,7 +2051,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
-		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
+		pressure := measureWorktreePressure(diskFloorMb.Load())
+		gcWorktrees(t, liveSet, pressure)
+		gcResumableCheckouts(t, pool, pressure)
 		gcUploads(liveSet)
 	}
 
@@ -2119,7 +2131,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// out is exactly when its disk gets tight. It costs one round trip plus a directory
 		// listing when nothing is due, and the claim long-poll guarantees a lap every 35 seconds.
 		if worktreeGC.due(time.Now()) {
-			gcWorktrees(t, pool.ids(), measureWorktreePressure(diskFloorMb.Load()))
+			pressure := measureWorktreePressure(diskFloorMb.Load())
+			gcWorktrees(t, pool.ids(), pressure)
+			gcResumableCheckouts(t, pool, pressure)
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is
