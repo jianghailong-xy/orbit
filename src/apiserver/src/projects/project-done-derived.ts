@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Logger } from '@nestjs/common';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import type { ProjectDoneBy } from '@orbit/shared';
@@ -23,6 +25,7 @@ import {
 import {
   criterionLanding,
   readLandingBranches,
+  receiptIsLandingEvidence,
   type CriterionLanding,
   type CriterionLandingAnswer,
   type LandingBranches,
@@ -113,7 +116,8 @@ import { tellCoordinatorProjectReopened, type ProjectReopenReason } from './proj
  * One principal does, for the one case the facts cannot settle: the account owner, in person, on
  * `POST /projects/:id/done` (`ProjectAcceptanceService.recordProjectDone`, migration 0345). That
  * record is a decision rather than a reading, and `storeDerivedProjectStatus` says below what does
- * and does not take it away.
+ * and does not take it away. The owner's other press, Reopen project, is a decision too (migration
+ * 0469), and the same function says what ends it.
  */
 
 /** Why the projection is withholding DONE. Empty exactly when it is not. */
@@ -513,10 +517,37 @@ export async function readStandardSetConfirmationState(
  * projection takes the row back — OPEN, or DONE recorded DERIVED when the facts now prove it by
  * themselves — and when that reopens the project, the coordinator is told why.
  *
+ * AN OWNER'S REOPEN IS A DECISION TOO, AND THE OTHER FACE OF THE SAME RULE
+ * ------------------------------------------------------------------------
+ * The account owner decided on 2026-11-03 that pressing Reopen project has to hold. Until then the
+ * next task write, merge receipt or decision stored DONE again whenever the facts still proved it,
+ * and R8 then refused the very task the owner had reopened the project to add. So where the owner's
+ * DONE stands until what it was about moves, the owner's OPEN does as well: while the seal and the
+ * facts of the work serving the criteria are the ones the press was made over (`readReopenFacts`),
+ * this function does not store DONE. It goes on storing DONE once any of them has moved and the facts
+ * prove it, recorded DERIVED, and an owner's record replaces the press. Filing or editing a task that
+ * serves no criterion moves none of them.
+ *
+ * This holds back only the write of DONE, and only over a press. `readDerivedProjectDone` still says
+ * what the facts say, so `derivedDone` and the stored status can differ for as long as the press
+ * stands: the first is the facts, the second is the owner's decision. Who reads which:
+ *
+ *   * `project_get`'s `derivedDone`, the coordinator's messages and the closing check read the facts.
+ *   * R8, the project list and everything else that asks whether a project is open read the column,
+ *     so a coordinator can write tasks throughout.
+ *   * `project_request_done` needs an OPEN project and met criteria, so the coordinator can still ask
+ *     the owner, and the owner's answer records DONE (`project-done-request.ts`).
+ *   * `readProjectFinish` reads NOT_FINISHED, as it does for any project the facts prove: Orbit does
+ *     not bring the question back to the owner by itself (`project-looks-finished.ts`).
+ *   * `PROJECT_ACCEPTANCE_LANDED` tells the coordinator the owner reopened it, rather than that it is
+ *     recorded DONE or that a confirmation will make it so (`readStandingOwnerReopen`,
+ *     `buildCoordinatorDeliveryMessage`).
+ *
  * The compare-and-set is in the WHERE clause rather than in a read taken first: two concurrent
  * post-commit edges deriving the same answer write the row once, and the loser learns it wrote
  * nothing instead of racing to write the same value again. It names the record as well as the
- * status, so an owner's DONE committed between this read and this write is never projected over.
+ * status, so an owner's DONE or Reopen committed between this read and this write is never projected
+ * over.
  */
 export async function storeDerivedProjectStatus(
   prisma: DerivationClient,
@@ -529,7 +560,14 @@ export async function storeDerivedProjectStatus(
   const seal = reading.standing.currentVersion.digest;
   const stored = await prisma.project.findFirst({
     where: { id: projectId, ownerId },
-    select: { status: true, doneBy: true, doneAt: true, doneCriteriaDigest: true },
+    select: {
+      status: true,
+      doneBy: true,
+      doneAt: true,
+      doneCriteriaDigest: true,
+      reopenedAt: true,
+      reopenedFacts: true,
+    },
   });
   if (!stored || stored.status === ProjectStatus.CANCELLED) return derived;
 
@@ -538,6 +576,12 @@ export async function storeDerivedProjectStatus(
     reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
     if (reopenedBy === null) return derived;
   } else if (stored.status === derived.status) {
+    return derived;
+  } else if (
+    derived.done
+    && stored.reopenedAt !== null
+    && await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
+  ) {
     return derived;
   }
 
@@ -548,16 +592,20 @@ export async function storeDerivedProjectStatus(
       status: stored.status,
       doneBy: stored.doneBy,
       doneAt: stored.doneAt,
+      reopenedAt: stored.reopenedAt,
     },
-    data: derived.done
-      ? {
-        status: ProjectStatus.DONE,
-        doneBy: 'DERIVED' satisfies ProjectDoneBy,
-        doneAt: new Date(),
-        doneCriteriaDigest: seal,
-        acceptedGaps: [],
-      }
-      : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD },
+    data: {
+      ...(derived.done
+        ? {
+          status: ProjectStatus.DONE,
+          doneBy: 'DERIVED' satisfies ProjectDoneBy,
+          doneAt: new Date(),
+          doneCriteriaDigest: seal,
+          acceptedGaps: [],
+        }
+        : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD }),
+      ...NO_REOPEN_RECORD,
+    },
   });
 
   if (written.count === 1 && reopenedBy !== null && !derived.done && options.sessions) {
@@ -581,6 +629,179 @@ export const NO_DONE_RECORD = {
   doneCriteriaDigest: null,
   acceptedGaps: [],
 } as const satisfies Prisma.ProjectUpdateManyMutationInput;
+
+/** The record of a project with no Reopen press on it (`project.reopened_*`, migration 0469). */
+export const NO_REOPEN_RECORD = {
+  reopenedAt: null,
+  reopenedFacts: Prisma.DbNull,
+} as const satisfies Prisma.ProjectUpdateManyMutationInput;
+
+/** What a Reopen press is recorded over: the seal of the criteria, and each task serving one at that
+ *  moment by a digest of its facts (`project.reopened_facts`). */
+interface ReopenFacts {
+  seal: string;
+  tasks: Record<string, string>;
+}
+
+/** The same as the rows stand now, with the newest date each serving task's facts carry. */
+interface ReopenFactsNow extends ReopenFacts {
+  newestFactAt: Record<string, number>;
+}
+
+type ReopenFactsClient = Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectCodebase'>;
+
+/** What a check has concluded about the work it is pointed at. A check that has concluded nothing is
+ *  no fact yet, so filing one, or cancelling it unconcluded, moves nothing. */
+const CHECK_CONCLUSION_SELECT = { id: true, verdict: true, verdictRevision: true } as const;
+
+/**
+ * The seal of the criteria and the facts of each task serving one: what a Reopen press is recorded
+ * over, and what it is compared with to see whether it still stands.
+ *
+ * WHY THE FACTS, AND NOT A TIME
+ * -----------------------------
+ * `ownerRecordReopenedBy` below can ask a timestamp, because the one task fact it needs has one: the
+ * start of a lifecycle epoch. This needs a task's status too, and no row says when that moved:
+ * `task.updated_at` moves on a rename, which must not end the press. So this compares what the facts
+ * are, with no clock, the way a done request compares its `stateDigest`.
+ *
+ * WHAT IS A FACT
+ * --------------
+ * The owner's list, and only that: a task's status, with the lifecycle epoch so that a task reopened
+ * and finished again is not the same fact; every revision of its evidence and every decision about
+ * one; its verdict, and each conclusion of a check pointed at it; and each merge receipt that says its
+ * work landed (`receiptIsLandingEvidence`), since a failed merge says nothing did. A title, a
+ * description or a progress report is not one. Changing this fold ends every press standing on the old
+ * one, so it should change as rarely as the list does.
+ *
+ * WHOSE FACTS
+ * -----------
+ * Only a task that serves a criterion, and each is compared with itself. So which task serves which
+ * criterion is not a fact of its own: pointing a finished task at a criterion, moving one off or
+ * deleting one moves nothing, and a session could otherwise store DONE over the owner's press by doing
+ * it. Nor is the work a serving check is pointed at, which serves nothing itself.
+ *
+ * A task pointed at a criterion after the press has no digest on record to compare with, so it counts
+ * by what its rows can date (`newestFactAt`): filed after the press, or a lifecycle epoch, a revision,
+ * a decision or a landing newer than it. A status change on such a task that leaves no dated row cannot
+ * be seen, and leaves the press standing, which is the direction that keeps the owner's decision.
+ */
+async function readReopenFacts(
+  prisma: ReopenFactsClient,
+  ownerId: string,
+  projectId: string,
+): Promise<ReopenFactsNow> {
+  // One after the other: `ProjectsService.update` reads this inside its transaction.
+  const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
+    where: { projectId, project: { ownerId } },
+    orderBy: { ordinal: 'asc' },
+    select: {
+      id: true,
+      ordinal: true,
+      text: true,
+      verificationMethod: true,
+      completionCriterionOverrideReason: true,
+      revision: true,
+      contentHash: true,
+      servingTasks: {
+        where: { ownerId },
+        select: {
+          id: true,
+          createdAt: true,
+          status: true,
+          verdict: true,
+          verdictRevision: true,
+          progress: { select: { lifecycleEpoch: true, epochStartedAt: true } },
+          verifiedBy: { select: CHECK_CONCLUSION_SELECT },
+          completionEvidence: { select: { id: true, submittedAt: true } },
+          evidenceDecisions: { select: { id: true, decidedAt: true } },
+          mergeReceipts: { select: { id: true, createdAt: true, result: true, targetBranch: true } },
+        },
+      },
+    },
+  });
+  const branches = await readLandingBranches(prisma, projectId);
+  const ids = (rows: ReadonlyArray<{ id: string }>) => rows.map((row) => row.id).sort();
+
+  const tasks: Record<string, string> = {};
+  const newestFactAt: Record<string, number> = {};
+  for (const task of definitions.flatMap((definition) => definition.servingTasks)) {
+    const landed = task.mergeReceipts.filter((receipt) => receiptIsLandingEvidence(receipt, branches));
+    tasks[task.id] = createHash('sha256').update(JSON.stringify({
+      status: task.status,
+      epoch: task.progress?.lifecycleEpoch ?? 0,
+      verdict: `${task.verdict ?? ''}:${task.verdictRevision}`,
+      checks: task.verifiedBy
+        .filter((check) => check.verdictRevision > 0n)
+        .map((check) => `${check.id}:${check.verdict ?? ''}:${check.verdictRevision}`)
+        .sort(),
+      evidence: ids(task.completionEvidence),
+      decisions: ids(task.evidenceDecisions),
+      receipts: ids(landed),
+    })).digest('hex');
+    newestFactAt[task.id] = Math.max(
+      task.createdAt.getTime(),
+      task.progress?.epochStartedAt?.getTime() ?? 0,
+      ...task.completionEvidence.map((row) => row.submittedAt.getTime()),
+      ...task.evidenceDecisions.map((row) => row.decidedAt.getTime()),
+      ...landed.map((row) => row.createdAt.getTime()),
+    );
+  }
+  return {
+    seal: standardSetVersion(criteriaFromDefinitions(definitions)).digest,
+    tasks,
+    newestFactAt,
+  };
+}
+
+/** What the owner's press writes: when, and the facts as they stand. */
+export async function reopenRecordOfPress(
+  prisma: ReopenFactsClient,
+  ownerId: string,
+  projectId: string,
+): Promise<{ reopenedAt: Date; reopenedFacts: Prisma.InputJsonValue }> {
+  const { seal, tasks } = await readReopenFacts(prisma, ownerId, projectId);
+  return {
+    reopenedAt: new Date(),
+    reopenedFacts: { seal, tasks } satisfies ReopenFacts,
+  };
+}
+
+/** Whether nothing a press was made over has moved: see `readReopenFacts` for what that means. */
+async function reopenStands(
+  prisma: ReopenFactsClient,
+  ownerId: string,
+  projectId: string,
+  pressedAt: Date,
+  recorded: Prisma.JsonValue,
+): Promise<boolean> {
+  const { seal, tasks } = recorded as unknown as ReopenFacts;
+  const now = await readReopenFacts(prisma, ownerId, projectId);
+  if (now.seal !== seal) return false;
+  return Object.entries(now.tasks).every(([taskId, digest]) => {
+    const pressed = tasks[taskId];
+    return pressed !== undefined ? pressed === digest : now.newestFactAt[taskId]! <= pressedAt.getTime();
+  });
+}
+
+/**
+ * When the owner's Reopen press that still stands was made, or null when none does. For a reader that
+ * has to say why a project the facts prove is not recorded DONE, or that confirming it will not close it.
+ */
+export async function readStandingOwnerReopen(
+  prisma: ReopenFactsClient & Pick<PrismaService, 'project'>,
+  ownerId: string,
+  projectId: string,
+): Promise<Date | null> {
+  const stored = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: { status: true, reopenedAt: true, reopenedFacts: true },
+  });
+  if (stored?.status !== ProjectStatus.OPEN || stored.reopenedAt === null) return null;
+  return await reopenStands(prisma, ownerId, projectId, stored.reopenedAt, stored.reopenedFacts)
+    ? stored.reopenedAt
+    : null;
+}
 
 /**
  * Why an owner's DONE no longer stands, or null while it does — the two facts the owner's decision

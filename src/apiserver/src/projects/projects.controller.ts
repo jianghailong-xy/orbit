@@ -717,7 +717,9 @@ export class ProjectsController {
   }
 
   /**
-   * Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`.
+   * Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. And how its
+   * owner reopens one: `{ "status": "OPEN" }` on a project that is DONE or CANCELLED, signed in, is
+   * the press the projection leaves standing (`ProjectsService.reopenRecord`).
    *
    * `acceptanceCriteriaItems` is classified before it is written, and this door is no gentler for
    * being the owner's own. An edit that plainly tightens the ruler replaces the criteria where the
