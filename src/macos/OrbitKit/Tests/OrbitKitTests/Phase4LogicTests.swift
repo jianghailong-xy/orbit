@@ -58,9 +58,44 @@ final class Phase4LogicTests: XCTestCase {
     }
 
     func testLaunchctlCommands() {
-        XCTAssertEqual(Launchctl.bootstrap(uid: 501, plistPath: "/p.plist"), ["bootstrap", "gui/501", "/p.plist"])
-        XCTAssertEqual(Launchctl.bootout(uid: 501, plistPath: "/p.plist"), ["bootout", "gui/501", "/p.plist"])
-        XCTAssertEqual(Launchctl.kickstartRestart(uid: 501), ["kickstart", "-k", "gui/501/com.orbit.runner"])
+        XCTAssertEqual(Launchctl.bootstrap(domain: "gui/501", plistPath: "/p.plist"), ["bootstrap", "gui/501", "/p.plist"])
+        XCTAssertEqual(Launchctl.bootout(domain: "user/502", plistPath: "/p.plist"), ["bootout", "user/502", "/p.plist"])
+        XCTAssertEqual(Launchctl.kickstartRestart(domain: "gui/501"), ["kickstart", "-k", "gui/501/com.orbit.runner"])
+        XCTAssertEqual(Launchctl.kickstartRestart(domain: "user/502"), ["kickstart", "-k", "user/502/com.orbit.runner"])
+    }
+
+    // MARK: where the agent is
+
+    /// `renderLaunchdPlist` for an account with no desktop session (runner-go/service.go), which
+    /// `orbit register` writes over SSH: the app has to act on it in the domain it is really in.
+    private static let backgroundPlist = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+      <key>Label</key><string>com.orbit.runner</string>
+      <key>LimitLoadToSessionType</key><string>Background</string>
+      <key>ProgramArguments</key>
+      <array>
+        <string>/Users/austin/.orbit/bin/orbit</string>
+        <string>run</string>
+      </array>
+      <key>RunAtLoad</key><true/>
+      <key>KeepAlive</key><true/>
+    </dict>
+    </plist>
+    """
+
+    func testAnAgentLimitedToTheBackgroundSessionIsInTheUserDomain() {
+        XCTAssertEqual(LaunchdPlist.domain(installed: Self.backgroundPlist, uid: 502), "user/502")
+    }
+
+    func testEveryOtherAgentIsInTheGUIDomain() {
+        let aqua = LaunchdPlist.make(label: "com.orbit.runner", programPath: "/o/bin/orbit", orbitHome: "/o",
+                                     home: "/h", path: "/usr/bin", logPath: "/o/runner.log")
+        XCTAssertEqual(LaunchdPlist.domain(installed: aqua, uid: 501), "gui/501")
+        XCTAssertEqual(LaunchdPlist.domain(installed: nil, uid: 501), "gui/501", "no service installed")
+        XCTAssertEqual(LaunchdPlist.domain(installed: "not a plist", uid: 501), "gui/501")
     }
 
     func testRunnerStatusLine() {

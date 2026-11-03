@@ -44,6 +44,11 @@ final class RunnerControl {
     /// stopped service still counts as installed (so the UI shows Start, not "Install service").
     var serviceInstalled: Bool { FileManager.default.fileExists(atPath: paths.plistFile.path) }
 
+    /// Where launchd has the agent on disk: its plist says (`LaunchdPlist.domain`).
+    private var domain: String {
+        LaunchdPlist.domain(installed: try? String(contentsOf: paths.plistFile, encoding: .utf8), uid: uid)
+    }
+
     /// Re-read config + log, query the service state, and (if enrolled) the server-side record.
     func refresh() async {
         config = RunnerEnvironment.readConfig(at: paths)
@@ -63,17 +68,17 @@ final class RunnerControl {
             await installService()
             return
         }
-        _ = await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: paths.plistFile.path))
+        _ = await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: paths.plistFile.path))
         await refresh()
     }
 
     func stop() async {
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: paths.plistFile.path))
+        _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: paths.plistFile.path))
         await refresh()
     }
 
     func restart() async {
-        _ = await Self.launchctl(Launchctl.kickstartRestart(uid: uid))
+        _ = await Self.launchctl(Launchctl.kickstartRestart(domain: domain))
         await refresh()
     }
 
@@ -90,6 +95,7 @@ final class RunnerControl {
         installError = nil
         message = nil
         defer { installing = false }
+        let staleDomain = domain   // the plist below replaces the record of where the old agent is
         do {
             let machine = Self.machineArchitecture()
             guard let platformKey = RunnerDownload.platformKey(machine: machine) else {
@@ -115,8 +121,8 @@ final class RunnerControl {
         }
         // bootout any stale instance first so a reinstall replaces it cleanly; bootstrap loads +
         // starts (RunAtLoad). bootout failing (nothing loaded) is expected and ignored.
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: paths.plistFile.path))
-        let r = await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: paths.plistFile.path))
+        _ = await Self.launchctl(Launchctl.bootout(domain: staleDomain, plistPath: paths.plistFile.path))
+        let r = await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: paths.plistFile.path))
         await refresh()
         if status.running {
             message = "Runner service installed and started."
@@ -150,11 +156,12 @@ final class RunnerControl {
         let list = await Self.launchctl(Launchctl.list())
         guard Launchctl.parseList(list.output).loaded else { return }
         let plistPath = paths.plistFile.path
-        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: plistPath))
+        let domain = self.domain
+        _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: plistPath))
         // bootout can return while the runner is still draining, and bootstrap fails until it has
         // exited (launchd SIGKILLs it after 20s by default), so keep trying a little longer.
         for _ in 0..<30 {
-            if await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: plistPath)).status == 0 { break }
+            if await Self.launchctl(Launchctl.bootstrap(domain: domain, plistPath: plistPath)).status == 0 { break }
             try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
         await refresh()

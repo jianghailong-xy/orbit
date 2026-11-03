@@ -2136,7 +2136,12 @@ final class ConsoleModel {
         // The project this conversation coordinates, if any. It is what decides whether the
         // standing questions that project puts to its owner are asked here at all — an ordinary
         // session has no project and makes none of those reads.
+        let projectMoved = projectID != s.projectId
         projectID = s.projectId
+        // The queue's first read can already be back: the list row's count kicks it, before anything
+        // here knew the project, so it dropped that project's rows and the read below is throttled
+        // for having just been made. The queue it left is drawn now, with no request of its own.
+        if projectMoved, let evidenceDecisions { adoptEvidenceQueue(evidenceDecisions) }
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
         // A conversation that coordinates nothing can still hold an evidence card: a task it
         // dispatched outside any project is settled here, and the owner's card for it is drawn
@@ -5183,31 +5188,38 @@ final class ConsoleModel {
         // Scoped to THIS session: every row says whether the door would take an answer from here.
         if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
             evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
-                let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
-                                                                       evidenceRevision: row.evidenceRevision)
-                engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
-                deliver(kind)
-            }
-            // The versions this conversation's coordinator holds or is owed, in the slot today's
-            // card goes in and the same kind of card: one per version, which the card draws as one
-            // line once it is handed over, folded while it waits, and as the question it is if it
-            // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
-            for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
-            }
-            for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
-                                                              sessionId: sessionID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            decisionCards.removeAll { card in
-                guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
-                return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
-                                                engaged: engagedEvidence.contains(card.id))
-            }
-            adoptEvidenceReceipts(queue)
+            adoptEvidenceQueue(queue)
             lastEvidenceRead = Date()
         }
+    }
+
+    /// Draw what a read of the queue lists for this conversation. Which rows those are depends on
+    /// the project as well, which arrives by a read of its own in either order, so `loadContext`
+    /// asks for this again when the project lands.
+    private func adoptEvidenceQueue(_ queue: EvidenceDecisionQueue) {
+        for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
+        }
+        // The versions this conversation's coordinator holds or is owed, in the slot today's
+        // card goes in and the same kind of card: one per version, which the card draws as one
+        // line once it is handed over, folded while it waits, and as the question it is if it
+        // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
+        for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
+            deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
+        }
+        for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
+                                                          sessionId: sessionID) {
+            deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+        }
+        decisionCards.removeAll { card in
+            guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
+            return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
+                                            engaged: engagedEvidence.contains(card.id))
+        }
+        adoptEvidenceReceipts(queue)
     }
 
     /// Decide it myself: the reader opened a version that waits for the coordinator, to decide it

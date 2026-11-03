@@ -133,12 +133,13 @@ public enum Launchctl {
         return .notLoaded
     }
 
-    // Modern launchctl (macOS 11+). `uid` is the GUI domain (e.g. 501).
-    public static func bootstrap(uid: Int, plistPath: String) -> [String] { ["bootstrap", "gui/\(uid)", plistPath] }
-    public static func bootout(uid: Int, plistPath: String) -> [String] { ["bootout", "gui/\(uid)", plistPath] }
-    public static func kickstartRestart(uid: Int) -> [String] { ["kickstart", "-k", "gui/\(uid)/\(label)"] }
+    // Modern launchctl (macOS 11+). `domain` is where the agent is: `LaunchdPlist.domain`. launchd
+    // refuses every one of these in the wrong domain.
+    public static func bootstrap(domain: String, plistPath: String) -> [String] { ["bootstrap", domain, plistPath] }
+    public static func bootout(domain: String, plistPath: String) -> [String] { ["bootout", domain, plistPath] }
+    public static func kickstartRestart(domain: String) -> [String] { ["kickstart", "-k", "\(domain)/\(label)"] }
     public static func list() -> [String] { ["list"] }
-    public static func printService(uid: Int) -> [String] { ["print", "gui/\(uid)/\(label)"] }
+    public static func printService(domain: String) -> [String] { ["print", "\(domain)/\(label)"] }
 }
 
 /// Builds the runner's LaunchAgent plist. Like `orbit register`'s `installLaunchd` (runner-go) it
@@ -174,6 +175,21 @@ public enum LaunchdPlist {
         </dict>
         </plist>
         """
+    }
+
+    /// The launchd domain of the agent `installed` describes, the plist on disk (nil when there is
+    /// none). `orbit register` over SSH, on an account with no desktop session, limits the agent to
+    /// the Background session, which loads in `user/<uid>` and nowhere else, so it stays there when
+    /// that account later opens this app. Every other agent is an Aqua one, in the GUI domain.
+    /// The same answer as runner-go's `launchdDomain`, and the same reason to read it from the plist.
+    public static func domain(installed: String?, uid: Int) -> String {
+        if let installed,
+           let plist = try? PropertyListSerialization.propertyList(from: Data(installed.utf8), format: nil)
+            as? [String: Any],
+           plist["LimitLoadToSessionType"] as? String == "Background" {
+            return "user/\(uid)"
+        }
+        return "gui/\(uid)"
     }
 
     /// The LaunchAgent an older app left, rewritten so its runner updates itself. Apps that bundled

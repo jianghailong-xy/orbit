@@ -325,10 +325,12 @@ UI can do this.
 - **Detect:** read `~/.orbit/config.json` (`{server, runnerId, name, …}`) and
   `$ORBIT_HOME` (default `~/.orbit`).
 - **Service status / control:** the launchd label is `com.orbit.runner`, plist at
-  `~/Library/LaunchAgents/com.orbit.runner.plist`. Status via
-  `launchctl print gui/$(id -u)/com.orbit.runner` (or `launchctl list`); start/stop via
-  `launchctl bootstrap|bootout gui/$(id -u) <plist>` (modern) or `launchctl load -w|unload`
-  (as the runner installer uses); restart-to-self-update via `launchctl kickstart -k`.
+  `~/Library/LaunchAgents/com.orbit.runner.plist`. Status via `launchctl list`, which finds the
+  agent from any session; start/stop via `launchctl bootstrap|bootout <domain> <plist>`;
+  restart-to-self-update via `launchctl kickstart -k <domain>/com.orbit.runner`. `<domain>` is
+  `gui/$(id -u)`, or `user/$(id -u)` for an agent the plist limits to the Background session,
+  which `orbit register` writes over SSH for an account with no desktop session. launchd refuses
+  every one of these in the wrong domain, so it is read from the plist (`LaunchdPlist.domain`).
 - **Logs:** live-tail `$ORBIT_HOME/runner.log` (`FileHandle` + `DispatchSource` file watch)
   in a console pane.
 - **Enroll in-app:** since the app is already authenticated as the user, it can complete the
