@@ -172,6 +172,7 @@ import {
 } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { trashHoldOf } from '../files/file-retention';
 import { FilesService } from '../files/files.service';
 import { attachmentDisposition } from '../files/user-file-response';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
@@ -4175,6 +4176,8 @@ export class SessionsService {
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
       // tell (docs/provider-engine-contract.md §6.1).
       engine: await sessionEngine(this.prisma, session),
+      // What its Trash note says when a file is keeping it there past the 30 days.
+      trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
         ...session.workspace,
         antigravityKeyAvailableByRunner: assignedRunner ? {

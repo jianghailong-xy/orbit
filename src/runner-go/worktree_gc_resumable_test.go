@@ -30,7 +30,10 @@ import (
 //   - it comes back: on its branch, on the right fork point, and from every door a resting session
 //     wakes through (TestAReclaimedCheckout*);
 //   - a restart makes no resting session's missing checkout, whatever took it, and the session's next claim
-//     does (TestARestart*, TestAMissingCheckout*).
+//     does (TestARestart*, TestAMissingCheckout*);
+//   - when it runs: a look that found nothing waits an hour, one that could not run does not, and a sweep stops
+//     between two checkouts once its budget is spent (TestResumableSweepWait*, TestResumableLook*,
+//     TestResumableSweepBudget*).
 
 // resumableFixture is a runner's worktrees root, a repository with an origin, a real pool, and a fake
 // control plane in front of them. The fake answers the real endpoint's two lists: an id it was told
@@ -55,6 +58,8 @@ type resumableFixture struct {
 	// sweep's second look, and before it answers.
 	atSecondLook map[string]func()
 	timesAsked   map[string]int
+	// atRequest runs on every question, with the sessions it names, before it is answered.
+	atRequest func(ids []string)
 	// alsoAnswer is what the reply calls resumable besides, asked or not.
 	alsoAnswer []string
 }
@@ -98,7 +103,11 @@ func (f *resumableFixture) answer(w http.ResponseWriter, r *http.Request) {
 			hooks = append(hooks, hook)
 		}
 	}
+	atRequest := f.atRequest
 	f.mu.Unlock()
+	if atRequest != nil {
+		atRequest(req.IDs)
+	}
 	for _, hook := range hooks {
 		hook()
 	}
@@ -2237,6 +2246,794 @@ func TestResumeOnAReclaimedCheckoutSaysWhatHappenedAndWhatBringsItBack(t *testin
 	})
 }
 
+const (
+	resumableWaitLine   = "not looking again until "
+	resumableBudgetLine = "gc: stopping this sweep of resumable checkouts"
+)
+
+// resumableSchedule drives the second half the way the run loop does, on a clock the test moves. The rule's two
+// weeks go by the real clock, so ageCheckout still means what it says.
+type resumableSchedule struct {
+	*resumableFixture
+	t       *testing.T
+	clock   *fakePoolClock
+	sweeper worktreeSweeper
+}
+
+func newResumableSchedule(t *testing.T) *resumableSchedule {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	f := newResumableFixture(t)
+	clock := newFakePoolClock()
+	f.pool = newSessionPoolWithClock(4, clock)
+	return &resumableSchedule{resumableFixture: f, t: t, clock: clock}
+}
+
+// sweepAfter moves the clock on and runs the second half on this reading. It answers what that logged, and whether
+// it looked: the first thing a look does is ask the control plane, so a schedule with no checkout at all is no use.
+func (s *resumableSchedule) sweepAfter(d time.Duration, pressure worktreeGCPressure) (string, bool) {
+	s.t.Helper()
+	s.clock.Advance(d)
+	asked := s.queryCount()
+	logs := captureLogs(s.t, func() { s.sweeper.sweepResumable(s.transport, s.pool, pressure) })
+	return logs, s.queryCount() != asked
+}
+
+// checkoutTheRuleKeeps is a checkout every look reads and none takes: it holds a commit no remote has.
+func (s *resumableSchedule) checkoutTheRuleKeeps(session string) string {
+	s.t.Helper()
+	path := s.checkout(s.t, session)
+	commitFile(s.t, path, "unpushed.txt", "local\n", "unpushed")
+	ageCheckout(s.t, path, 20)
+	return path
+}
+
+// checkoutAged is a checkout that can go, last written this many days ago.
+func (s *resumableSchedule) checkoutAged(session string, days int) string {
+	s.t.Helper()
+	path := s.checkout(s.t, session)
+	ageCheckout(s.t, path, days)
+	return path
+}
+
+// startAWait is a look that finds nothing, and the wait it starts.
+func (s *resumableSchedule) startAWait() {
+	s.t.Helper()
+	logs, looked := s.sweepAfter(0, diskUnderTheFloor())
+	if !looked {
+		s.t.Fatal("the sweep did not look")
+	}
+	if !strings.Contains(logs, resumableWaitLine) {
+		s.t.Fatalf("a look that found nothing starts a wait and says so, got:\n%s", logs)
+	}
+}
+
+// requireALookFindingNothingStartsAWait ends a case in which no wait started: the next look, which has nothing
+// left to find, does start one, and the sweep after that does not look. So what kept the wait away in that case was
+// what the case says, and not that nothing here ever waits.
+func (s *resumableSchedule) requireALookFindingNothingStartsAWait() {
+	s.t.Helper()
+	logs, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor())
+	if !looked {
+		s.t.Fatal("no wait had started, so a look was due")
+	}
+	if !strings.Contains(logs, resumableWaitLine) {
+		s.t.Fatalf("this look found nothing and should have started a wait, got:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); looked {
+		s.t.Fatal("the sweep after a look that found nothing looked again")
+	}
+}
+
+// removalsTaking is a disk that stays under its floor, read by a sweep right after every removal. So that is when
+// the clock moves on by what the checkout that has just gone cost.
+func (s *resumableSchedule) removalsTaking(costs map[string]time.Duration) worktreeGCPressure {
+	var read func() worktreeGCPressure
+	read = func() worktreeGCPressure {
+		for path, cost := range costs {
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				s.clock.Advance(cost)
+				delete(costs, path)
+			}
+		}
+		reading := diskUnderTheFloor()
+		reading.reread = read
+		return reading
+	}
+	return read()
+}
+
+// A host with nothing to take stays under its floor: one look, then an hour without one, down to the second, so
+// that what a look would find stays until the hour is up.
+func TestResumableSweepWaitsAnHourAfterALookThatFoundNothing(t *testing.T) {
+	s := newResumableSchedule(t)
+	kept := s.checkoutTheRuleKeeps("sess-kept")
+	// The hour runs from when the look ended, however long it took.
+	s.set(func() { s.atRequest = func([]string) { s.clock.Advance(30 * time.Second) } })
+
+	logs, looked := s.sweepAfter(0, diskUnderTheFloor())
+
+	s.set(func() { s.atRequest = nil })
+	if !looked {
+		t.Fatal("the first sweep looks")
+	}
+	requireCheckoutOnDisk(t, kept, "the rule keeps it")
+	want := resumableWaitLine + s.clock.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	if !strings.Contains(logs, want) || strings.Count(logs, "\n") != 1 {
+		t.Fatalf("one line, saying until when (%q), got:\n%s", want, logs)
+	}
+
+	later := s.checkoutAged("sess-later", 20)
+	for elapsed := worktreeGCInterval; elapsed < time.Hour; elapsed += worktreeGCInterval {
+		logs, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor())
+		if looked || logs != "" {
+			t.Fatalf("%s into the wait it looked (%v), or logged:\n%s", elapsed, looked, logs)
+		}
+	}
+	if _, looked := s.sweepAfter(4*time.Minute+59*time.Second, diskUnderTheFloor()); looked {
+		t.Fatal("it looked a second before the hour was up")
+	}
+	requireCheckoutOnDisk(t, later, "nothing looked for an hour")
+
+	if _, looked := s.sweepAfter(time.Second, diskUnderTheFloor()); !looked {
+		t.Fatal("the hour is up, and it did not look")
+	}
+	requireCheckoutReclaimed(t, later, "the first look after the hour finds it")
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// A wait is only for a disk that stays short. Room on it ends the wait: nothing happens while there is room, as
+// ever, and the next time it runs short the sweep looks at once.
+func TestResumableSweepWaitEndsOnceTheDiskIsBackAboveTheFloor(t *testing.T) {
+	stale := diskUnderTheFloor()
+	stale.reread = roomyDisk
+	for name, reading := range map[string]worktreeGCPressure{
+		"room on the disk":              roomyDisk(),
+		"exactly at the floor":          {freeBytes: 4096 * 1024 * 1024, measured: true, floorMb: 4096},
+		"no floor any more":             {freeBytes: 0, measured: true, floorMb: 0},
+		"the first half has just freed": stale,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newResumableSchedule(t)
+			s.checkoutTheRuleKeeps("sess-kept")
+			s.startAWait()
+			later := s.checkoutAged("sess-later", 20)
+
+			logs, looked := s.sweepAfter(worktreeGCInterval, reading)
+
+			if looked || logs != "" {
+				t.Fatalf("with no need of a look it looked (%v), or logged:\n%s", looked, logs)
+			}
+			requireCheckoutOnDisk(t, later, name)
+
+			if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+				t.Fatal("the disk came back above its floor, which ends the wait, and the sweep did not look")
+			}
+			requireCheckoutReclaimed(t, later, "short again, with no wait in the way")
+		})
+	}
+}
+
+// Anything short of room on the disk leaves the wait where it is. A reading that failed says nothing about the disk,
+// and the run loop's reading is taken before the first half: the wait goes by a fresh one.
+func TestResumableSweepWaitStandsWithoutRoomOnTheDisk(t *testing.T) {
+	failedAtStart := worktreeGCPressure{measured: false, floorMb: 4096}
+	failsWhenReadAgain := roomyDisk()
+	failsWhenReadAgain.reread = func() worktreeGCPressure { return failedAtStart }
+	shortWhenReadAgain := roomyDisk()
+	shortWhenReadAgain.reread = diskUnderTheFloor
+	for name, reading := range map[string]worktreeGCPressure{
+		"a reading that failed":         failedAtStart,
+		"a fresh reading that failed":   failsWhenReadAgain,
+		"a fresh reading, still short":  shortWhenReadAgain,
+		"a reading that is still short": diskUnderTheFloor(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newResumableSchedule(t)
+			s.checkoutTheRuleKeeps("sess-kept")
+			s.startAWait()
+			later := s.checkoutAged("sess-later", 20)
+
+			if _, looked := s.sweepAfter(worktreeGCInterval, reading); looked {
+				t.Fatal("it looked during the wait")
+			}
+			if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); looked {
+				t.Fatalf("%s ended the wait", name)
+			}
+			requireCheckoutOnDisk(t, later, name)
+		})
+	}
+}
+
+// The wait is in memory, and what starts a runner starts with none.
+func TestResumableSweepWaitIsForgottenByARestart(t *testing.T) {
+	s := newResumableSchedule(t)
+	s.checkoutTheRuleKeeps("sess-kept")
+	s.startAWait()
+	later := s.checkoutAged("sess-later", 20)
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); looked {
+		t.Fatal("it looked during the wait")
+	}
+
+	s.sweeper = worktreeSweeper{interval: worktreeGCInterval, armed: true}
+
+	if _, looked := s.sweepAfter(0, diskUnderTheFloor()); !looked {
+		t.Fatal("a restart looks at once")
+	}
+	requireCheckoutReclaimed(t, later, "a restart forgot the wait")
+}
+
+// The wait is the second half's. Over an hour of laps with a wait in force the first half runs every five minutes,
+// on its own schedule, and takes what is its to take.
+func TestResumableSweepWaitLeavesTheFirstHalfItsFiveMinutes(t *testing.T) {
+	if worktreeGCInterval != 5*time.Minute {
+		t.Fatalf("the first half's interval is %s, and it keeps five minutes", worktreeGCInterval)
+	}
+	s := newResumableSchedule(t)
+	s.checkoutTheRuleKeeps("sess-kept")
+	s.sweeper = worktreeSweeper{interval: worktreeGCInterval, armed: true}
+	var finished string
+	laps, looks := 0, 0
+	start := s.clock.Now()
+	for s.clock.Now().Before(start.Add(time.Hour)) {
+		if s.sweeper.due(s.clock.Now()) {
+			laps++
+			gcWorktrees(s.transport, s.pool.ids(), diskUnderTheFloor())
+			if _, looked := s.sweepAfter(0, diskUnderTheFloor()); looked {
+				looks++
+			}
+			if laps == 3 {
+				finished = s.checkout(t, "sess-finished")
+				s.set(func() { delete(s.answers, "sess-finished") })
+			}
+			if laps == 4 {
+				requireCheckoutReclaimed(t, finished, "the first half takes a finished session's checkout during a wait")
+			}
+		}
+		s.clock.Advance(worktreeGCInterval / 2)
+	}
+	if laps != 12 {
+		t.Fatalf("%d sweeps of the first half in an hour, want 12", laps)
+	}
+	if looks != 1 {
+		t.Fatalf("the second half looked %d times in that hour, want the one that started the wait", looks)
+	}
+}
+
+// A look that could not run says nothing about what can go, so the next sweep looks, and takes what it finds.
+func TestResumableLookThatCouldNotRunStartsNoWait(t *testing.T) {
+	const session = "sess-parked"
+	blind := func(t *testing.T) func() {
+		previous := procDir
+		procDir = filepath.Join(t.TempDir(), "no-proc")
+		t.Cleanup(func() { procDir = previous })
+		return func() { procDir = previous }
+	}
+	cases := []struct {
+		name string
+		// inTheWay stands in the way of this one look, and answers what clears it.
+		inTheWay func(t *testing.T, s *resumableSchedule, path string) func()
+		// says is what the log has to show that it was this and nothing else, where there is a line for it.
+		says string
+	}{
+		{
+			name: "the first question failed",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				s.set(func() { s.failNext = true })
+				return func() {}
+			},
+			says: "keeping every resumable checkout",
+		},
+		{
+			name: "no process table at the first look",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				return blind(t)
+			},
+			says: "cannot tell what else is in a checkout here",
+		},
+		{
+			name: "the second question failed",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				s.set(func() {
+					s.atSecondLook[session] = func() { s.set(func() { s.failNext = true }) }
+				})
+				return func() {}
+			},
+			says: "keeping checkout " + session,
+		},
+		{
+			name: "no process table at the second look",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				var clear func()
+				s.set(func() {
+					s.atSecondLook[session] = func() { clear = blind(t) }
+				})
+				return func() {
+					if clear == nil {
+						t.Fatal("the sweep never reached its second look")
+					}
+					clear()
+				}
+			},
+		},
+		{
+			name: "the mark could not be written",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				// A file where the ref's directory has to go.
+				blocker := filepath.Join(mustGit(t, s.repo, "rev-parse", "--absolute-git-dir"), "refs", "orbit-absent")
+				writeFile(t, blocker, "in the way\n")
+				return func() { _ = os.Remove(blocker) }
+			},
+			says: "marking it reclaimed failed",
+		},
+		{
+			name: "it could not be moved aside",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				// A directory with something in it where it has to go.
+				blocker := filepath.Join(worktreesDir(), reclaimingCheckoutPrefix+session)
+				writeUnder(t, blocker, "left", "in the way\n")
+				return func() { _ = os.RemoveAll(blocker) }
+			},
+			says: "moving it aside failed",
+		},
+		{
+			name: "the worktrees root could not be read",
+			inTheWay: func(t *testing.T, s *resumableSchedule, path string) func() {
+				root := worktreesDir()
+				if err := os.Rename(root, root+".away"); err != nil {
+					t.Fatal(err)
+				}
+				writeFile(t, root, "in the way\n")
+				return func() {
+					_ = os.Remove(root)
+					if err := os.Rename(root+".away", root); err != nil {
+						t.Fatal(err)
+					}
+				}
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := newResumableSchedule(t)
+			s.checkoutTheRuleKeeps("sess-kept")
+			path := s.checkoutAged(session, 20)
+			clear := c.inTheWay(t, s, path)
+
+			logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+			clear()
+			requireCheckoutOnDisk(t, path, c.name)
+			if !strings.Contains(logs, c.says) {
+				t.Fatalf("the log should show %q, got:\n%s", c.says, logs)
+			}
+			if strings.Contains(logs, resumableWaitLine) {
+				t.Fatalf("%s, and that started a wait:\n%s", c.name, logs)
+			}
+			if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+				t.Fatal("no wait, so the next sweep looks")
+			}
+			requireCheckoutReclaimed(t, path, "the next sweep takes what this one could not")
+			s.requireALookFindingNothingStartsAWait()
+		})
+	}
+}
+
+// One checkout the look could not judge is enough, whatever it went on to say about the rest.
+func TestResumableLookThatCouldNotJudgeOneCheckoutStartsNoWait(t *testing.T) {
+	s := newResumableSchedule(t)
+	unjudged := s.checkoutAged("sess-a-unjudged", 60)
+	kept := s.checkoutAged("sess-b-kept", 40)
+	s.set(func() {
+		s.atSecondLook["sess-a-unjudged"] = func() { s.set(func() { s.failNext = true }) }
+		s.atSecondLook["sess-b-kept"] = func() { s.set(func() { s.answers["sess-b-kept"] = "kept" }) }
+	})
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	requireCheckoutOnDisk(t, unjudged, "the control plane could not be asked")
+	requireCheckoutOnDisk(t, kept, "the control plane said no")
+	if strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("one checkout went unjudged, and that started a wait:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, unjudged, "the next sweep judges it")
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// A checkout the second look keeps is the rule keeping it, not a look that could not run, and the host still has
+// nothing to give. Each case keeps it at a different point of that look, and on a path of its own.
+func TestResumableLookThatTheSecondLookKeptStartsAWait(t *testing.T) {
+	const session = "sess-b-kept"
+	cases := []struct {
+		name    string
+		between func(t *testing.T, s *resumableSchedule, path string)
+	}{
+		{"a job started in it", func(t *testing.T, s *resumableSchedule, path string) {
+			s.pool.holdWorktreeForBackgroundJob(session, "toolu_A", "bei1")
+		}},
+		{"a merge or commit is under way in it", func(t *testing.T, s *resumableSchedule, path string) {
+			release, _, admitted := s.pool.beginManualWorktreeOperation(session, nil, 0, false, "commit")
+			if !admitted {
+				t.Error("the commit was not admitted")
+				return
+			}
+			t.Cleanup(release)
+		}},
+		{"the session got a message", func(t *testing.T, s *resumableSchedule, path string) {
+			s.set(func() { s.answers[session] = "kept" })
+		}},
+		{"a process moved in", func(t *testing.T, s *resumableSchedule, path string) {
+			cmd := exec.Command("sleep", "600")
+			cmd.Dir = path
+			startProcess(t, cmd)
+		}},
+		{"a file was written", func(t *testing.T, s *resumableSchedule, path string) {
+			now := time.Now()
+			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
+				t.Error(err)
+			}
+		}},
+		{"a repository turned up in a dependency directory, which only this look searches", func(t *testing.T, s *resumableSchedule, path string) {
+			ignoring(t, path, "node_modules/")
+			nested := filepath.Join(path, "node_modules", "dep")
+			if err := os.MkdirAll(nested, 0o755); err != nil {
+				t.Error(err)
+				return
+			}
+			mustGit(t, nested, "init", "-q", "-b", "main")
+			ageCheckout(t, path, 20)
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := newResumableSchedule(t)
+			first := s.checkoutAged("sess-a-first", 60)
+			path := s.checkoutAged(session, 40)
+			reached := false
+			s.set(func() {
+				s.atSecondLook["sess-a-first"] = func() {
+					reached = true
+					s.set(func() { s.answers["sess-a-first"] = "kept" })
+					c.between(t, s, path)
+				}
+			})
+
+			logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+			if !reached {
+				t.Fatal("the sweep never reached the second look of the checkout ahead of this one")
+			}
+			requireCheckoutOnDisk(t, first, "the control plane said no")
+			requireCheckoutOnDisk(t, path, c.name)
+			if !strings.Contains(logs, resumableWaitLine) {
+				t.Fatalf("nothing could go, which starts a wait, got:\n%s", logs)
+			}
+			if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); looked {
+				t.Fatal("it looked during the wait")
+			}
+		})
+	}
+}
+
+// The wait is for a disk still under its floor when the look ends: not for one back above it, and not for one a
+// failed reading says nothing about.
+func TestResumableLookStartsNoWaitUnlessTheDiskIsStillShort(t *testing.T) {
+	for name, reading := range map[string]worktreeGCPressure{
+		"the disk came back meanwhile": roomyDisk(),
+		"the last reading failed":      {measured: false, floorMb: 4096},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newResumableSchedule(t)
+			s.checkoutTheRuleKeeps("sess-kept")
+			pressure := diskUnderTheFloor()
+			pressure.reread = func() worktreeGCPressure {
+				if s.queryCount() > 0 {
+					return reading
+				}
+				short := diskUnderTheFloor()
+				short.reread = pressure.reread
+				return short
+			}
+
+			logs, looked := s.sweepAfter(0, pressure)
+
+			if !looked {
+				t.Fatal("the disk was short when the sweep began, so it looks")
+			}
+			if strings.Contains(logs, resumableWaitLine) {
+				t.Fatalf("%s, and that started a wait:\n%s", name, logs)
+			}
+			s.requireALookFindingNothingStartsAWait()
+		})
+	}
+}
+
+// Taking something is what a sweep is for, whatever else it did, and a look that took something is not one that
+// found nothing.
+func TestResumableLookThatTookSomethingStartsNoWait(t *testing.T) {
+	s := newResumableSchedule(t)
+	s.checkoutTheRuleKeeps("sess-kept")
+	path := s.checkoutAged("sess-parked", 20)
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	requireCheckoutReclaimed(t, path, "nothing stood in its way")
+	if strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("it took a checkout, and that started a wait:\n%s", logs)
+	}
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// Fifty-nine seconds in, a sweep goes on, and at sixty it stops, with one line, and starts no wait. The next one
+// goes on with the oldest left, until there is nothing left, which is no stop at all however long the last took.
+func TestResumableSweepBudgetStopsItBetweenCheckouts(t *testing.T) {
+	s := newResumableSchedule(t)
+	s.checkoutTheRuleKeeps("sess-kept")
+	first := s.checkoutAged("sess-a-first", 60)
+	second := s.checkoutAged("sess-b-second", 50)
+	third := s.checkoutAged("sess-c-third", 40)
+	fourth := s.checkoutAged("sess-d-fourth", 30)
+
+	logs, _ := s.sweepAfter(0, s.removalsTaking(map[string]time.Duration{first: 59 * time.Second, second: time.Second}))
+
+	requireCheckoutReclaimed(t, first, "the oldest goes first")
+	requireCheckoutReclaimed(t, second, "59 seconds in, there is budget left")
+	requireCheckoutOnDisk(t, third, "60 seconds in, there is none")
+	requireCheckoutOnDisk(t, fourth, "the sweep has stopped")
+	if want := "after 1m0s, its budget is 1m0s; the next sweep goes on with the oldest of the 2 left"; !strings.Contains(logs, want) {
+		t.Fatalf("the log should say %q, got:\n%s", want, logs)
+	}
+	if got := strings.Count(logs, resumableBudgetLine); got != 1 {
+		t.Fatalf("%d lines about the budget, want one:\n%s", got, logs)
+	}
+	if strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("a sweep that stopped on its budget took something, and that started a wait:\n%s", logs)
+	}
+
+	logs, looked := s.sweepAfter(worktreeGCInterval, s.removalsTaking(map[string]time.Duration{third: time.Minute}))
+
+	if !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, third, "the next sweep goes on with the oldest left")
+	requireCheckoutOnDisk(t, fourth, "and it has a budget of its own, which that one spent")
+	if !strings.Contains(logs, "the oldest of the 1 left") {
+		t.Fatalf("this one stopped on its budget too, got:\n%s", logs)
+	}
+
+	logs, _ = s.sweepAfter(worktreeGCInterval, s.removalsTaking(map[string]time.Duration{fourth: 10 * time.Minute}))
+
+	requireCheckoutReclaimed(t, fourth, "the last one left")
+	if strings.Contains(logs, resumableBudgetLine) || strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("nothing was left to stop before, and it took something, got:\n%s", logs)
+	}
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// The budget is read between checkouts. Here it is running already, and it is spent at this checkout's second look,
+// before its mark, its move and its removal, and the checkout still goes, whole.
+func TestResumableSweepBudgetNeverCutsACheckoutShort(t *testing.T) {
+	s := newResumableSchedule(t)
+	kept := s.checkoutTheRuleKeeps("sess-kept")
+	first := s.checkoutAged("sess-a-first", 60)
+	slow := s.checkoutAged("sess-b-slow", 50)
+	next := s.checkoutAged("sess-c-next", 40)
+	tip := mustGit(t, slow, "rev-parse", "HEAD")
+	s.set(func() {
+		s.atSecondLook["sess-b-slow"] = func() { s.clock.Advance(10 * time.Minute) }
+	})
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	requireCheckoutReclaimed(t, first, "the oldest goes first")
+	requireCheckoutReclaimed(t, slow, "it was on this one when the budget ran out")
+	requireCheckoutOnDisk(t, next, "the sweep stops before the next one")
+	requireCheckoutOnDisk(t, kept, "the rule keeps it")
+	if got := mustGit(t, s.repo, "rev-parse", "orbit/sess-b-slow"); got != tip {
+		t.Fatalf("its branch must stay where it was, at %s, got %s", tip, got)
+	}
+	if _, err := git(s.repo, "rev-parse", "--verify", absentRefName("sess-b-slow")); err != nil {
+		t.Fatalf("it must be marked as away, like any other that goes: %v", err)
+	}
+	if out := mustGit(t, s.repo, "worktree", "list"); strings.Contains(out, "sess-b-slow") {
+		t.Fatalf("git must not go on listing it:\n%s", out)
+	}
+	if entries, _ := os.ReadDir(worktreesDir()); len(entries) != 2 {
+		t.Fatalf("nothing of it may be left behind, the root holds %v", entries)
+	}
+	if !strings.Contains(logs, "after 10m0s") {
+		t.Fatalf("the line says how long it took, got:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, next, "the next sweep goes on")
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// The budget starts with the first checkout that goes, that checkout's second look included. Neither the first look
+// nor what the rule kept ahead of it counts, however long those took: 59 seconds on, it goes on, and at 60 it stops.
+func TestResumableSweepBudgetStartsWithTheFirstCheckoutThatGoes(t *testing.T) {
+	s := newResumableSchedule(t)
+	refused := s.checkoutAged("sess-a-refused", 70)
+	first := s.checkoutAged("sess-b-first", 60)
+	second := s.checkoutAged("sess-c-second", 50)
+	third := s.checkoutAged("sess-d-third", 40)
+	advanceAtSecondLook := func(session string, d time.Duration) {
+		s.atSecondLook[session] = func() { s.clock.Advance(d) }
+	}
+	s.set(func() {
+		// The first look asks about all of them in one question, and the second about one at a time.
+		s.atRequest = func(ids []string) {
+			if len(ids) > 1 {
+				s.clock.Advance(10 * time.Minute)
+			}
+		}
+		s.atSecondLook["sess-a-refused"] = func() {
+			s.set(func() { s.answers["sess-a-refused"] = "kept" })
+			s.clock.Advance(10 * time.Minute)
+		}
+		advanceAtSecondLook("sess-b-first", 59*time.Second)
+		advanceAtSecondLook("sess-c-second", time.Second)
+	})
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	s.set(func() { s.atRequest = nil })
+	requireCheckoutOnDisk(t, refused, "the control plane said no")
+	requireCheckoutReclaimed(t, first, "ten minutes of looking and of a refusal are no part of the budget")
+	requireCheckoutReclaimed(t, second, "59 seconds of the budget are gone, and one is left")
+	requireCheckoutOnDisk(t, third, "60 seconds are gone")
+	if !strings.Contains(logs, "after 1m0s") {
+		t.Fatalf("the line says what the budget counted, got:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, third, "the next sweep goes on")
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// Back above the floor is the end of a sweep, and has nothing to do with its budget.
+func TestResumableSweepBudgetSaysNothingOnceTheDiskIsBackAboveTheFloor(t *testing.T) {
+	s := newResumableSchedule(t)
+	s.checkoutTheRuleKeeps("sess-kept")
+	first := s.checkoutAged("sess-a-first", 60)
+	second := s.checkoutAged("sess-b-second", 40)
+	pressure := diskUnderTheFloor()
+	pressure.reread = func() worktreeGCPressure {
+		if _, err := os.Stat(first); os.IsNotExist(err) {
+			s.clock.Advance(10 * time.Minute)
+			return roomyDisk()
+		}
+		reading := diskUnderTheFloor()
+		reading.reread = pressure.reread
+		return reading
+	}
+
+	logs, _ := s.sweepAfter(0, pressure)
+
+	requireCheckoutReclaimed(t, first, "the disk was short")
+	requireCheckoutOnDisk(t, second, "the disk is not any more")
+	if strings.Contains(logs, resumableBudgetLine) || strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("the floor ended this sweep, and it should say nothing about that, got:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, second, "short again")
+	s.requireALookFindingNothingStartsAWait()
+}
+
+// Checkouts the second look keeps ahead of the first to go do not spend the budget. If they did, they would stop this
+// sweep and the next at the same place, and what is behind them would go one a sweep at best.
+func TestResumableSweepBudgetIsNotSpentOnWhatTheRuleKeeps(t *testing.T) {
+	refuseAt := func(s *resumableSchedule, session string) {
+		s.set(func() {
+			s.atSecondLook[session] = func() {
+				s.set(func() { s.answers[session] = "kept" })
+				s.clock.Advance(5 * time.Minute)
+			}
+		})
+	}
+	t.Run("what is behind them goes, on a budget of its own", func(t *testing.T) {
+		s := newResumableSchedule(t)
+		refused := s.checkoutAged("sess-a-refused", 60)
+		taken := s.checkoutAged("sess-b-taken", 50)
+		behind := s.checkoutAged("sess-c-behind", 40)
+		refuseAt(s, "sess-a-refused")
+
+		logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+		requireCheckoutOnDisk(t, refused, "the control plane said no")
+		requireCheckoutReclaimed(t, taken, "five minutes on a refusal do not stop the sweep")
+		requireCheckoutReclaimed(t, behind, "nor do they count once one has gone")
+		if strings.Contains(logs, resumableBudgetLine) {
+			t.Fatalf("no removal took any time, got:\n%s", logs)
+		}
+		s.requireALookFindingNothingStartsAWait()
+	})
+	t.Run("with nothing but those, it is a look that found nothing", func(t *testing.T) {
+		s := newResumableSchedule(t)
+		first := s.checkoutAged("sess-a-refused", 60)
+		second := s.checkoutAged("sess-b-refused", 40)
+		refuseAt(s, "sess-a-refused")
+		refuseAt(s, "sess-b-refused")
+
+		logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+		requireCheckoutOnDisk(t, first, "the control plane said no")
+		requireCheckoutOnDisk(t, second, "the control plane said no")
+		if strings.Contains(logs, resumableBudgetLine) {
+			t.Fatalf("it has taken nothing and the rule kept everything, so it did not stop on its budget:\n%s", logs)
+		}
+		if !strings.Contains(logs, resumableWaitLine) {
+			t.Fatalf("nothing could go, which starts a wait, got:\n%s", logs)
+		}
+	})
+}
+
+// A look that cannot judge or take what it finds has a bound too, or a control plane gone quiet after the first look
+// holds the loop for its 15 seconds a checkout, over every checkout there is. It starts no wait, as any such look.
+func TestResumableSweepBudgetStopsALookThatCouldNotFinish(t *testing.T) {
+	s := newResumableSchedule(t)
+	unjudged := s.checkoutAged("sess-a-unjudged", 60)
+	behind := s.checkoutAged("sess-b-behind", 40)
+	s.set(func() {
+		s.atSecondLook["sess-a-unjudged"] = func() {
+			s.set(func() { s.failNext = true })
+			s.clock.Advance(time.Minute)
+		}
+	})
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	requireCheckoutOnDisk(t, unjudged, "the control plane could not be asked")
+	requireCheckoutOnDisk(t, behind, "the budget has gone")
+	asked := 0
+	s.set(func() { asked = s.timesAsked["sess-b-behind"] })
+	if asked != 1 {
+		t.Fatalf("it was asked about %d times, want only the first look's: a stopped sweep gives it no second look", asked)
+	}
+	if !strings.Contains(logs, "the oldest of the 1 left") {
+		t.Fatalf("that is a stop on the budget, got:\n%s", logs)
+	}
+	if strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("it could not finish, and that started a wait:\n%s", logs)
+	}
+	if _, looked := s.sweepAfter(worktreeGCInterval, diskUnderTheFloor()); !looked {
+		t.Fatal("no wait, so the next sweep looks")
+	}
+	requireCheckoutReclaimed(t, unjudged, "the next sweep takes them")
+	requireCheckoutReclaimed(t, behind, "the next sweep takes them")
+}
+
+// Once a sweep has taken something the budget is read between any two checkouts, whichever way the last one went.
+func TestResumableSweepBudgetIsReadAfterACheckoutTheSecondLookKept(t *testing.T) {
+	s := newResumableSchedule(t)
+	taken := s.checkoutAged("sess-a-taken", 60)
+	refused := s.checkoutAged("sess-b-refused", 50)
+	behind := s.checkoutAged("sess-c-behind", 40)
+	s.set(func() {
+		s.atSecondLook["sess-b-refused"] = func() {
+			s.set(func() { s.answers["sess-b-refused"] = "kept" })
+			s.clock.Advance(5 * time.Minute)
+		}
+	})
+
+	logs, _ := s.sweepAfter(0, diskUnderTheFloor())
+
+	requireCheckoutReclaimed(t, taken, "the oldest goes first")
+	requireCheckoutOnDisk(t, refused, "the control plane said no")
+	requireCheckoutOnDisk(t, behind, "the budget had gone by the time the sweep got here")
+	if !strings.Contains(logs, "the oldest of the 1 left") {
+		t.Fatalf("that is a stop on the budget, got:\n%s", logs)
+	}
+}
+
 // Asked of the source, as the file beside this one asks it: a later edit breaks these silently, and all
 // anyone sees is a session that fails to start, or a disk that stays full, months on.
 func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
@@ -2245,8 +3042,32 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(source)
-	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 2 {
-		t.Errorf("the startup sweep and the claim loop's sweep must both run the second half, found %d calls", got)
+	// The first half first and on nothing but the sweeper's schedule, and the second behind it, both times.
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\tliveSet := pool.ids()\n\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\tgcWorktrees(t, liveSet, pressure)\n\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+		t.Error("the startup sweep must run the first half, then the second, whenever a sweep is due")
+	}
+	if !strings.Contains(body, "if worktreeGC.due(time.Now()) {\n\t\t\tpressure := measureWorktreePressure(diskFloorMb.Load())\n\t\t\tgcWorktrees(t, pool.ids(), pressure)\n\t\t\tworktreeGC.sweepResumable(t, pool, pressure)\n") {
+		t.Error("the claim loop's sweep must run the first half, then the second, whenever a sweep is due")
+	}
+	if got := strings.Count(body, "gcResumableCheckouts(t, pool, pressure)"); got != 1 {
+		t.Errorf("sweepResumable must be the one door to the second half, or it runs past a wait: found %d calls", got)
+	}
+	// One sweeper, for as long as the process runs, which starts it with no wait: that is what a restart forgetting
+	// the wait comes to, and nothing but sweepResumable may touch it.
+	if !strings.Contains(body, "worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}\n") {
+		t.Error("a runner must start with one sweeper and no wait")
+	}
+	if got := strings.Count(body, "worktreeGC := "); got != 1 {
+		t.Errorf("a copy of the sweeper loses the wait: found %d", got)
+	}
+	if door := strings.Index(body, "func (s *worktreeSweeper) sweepResumable("); door < 0 {
+		t.Error("sweepResumable is the one door to the second half, and the one thing that has the wait")
+	} else {
+		end := door + strings.Index(body[door:], "\n}\n")
+		rest := strings.Replace(body[:door]+body[end:], "\tresumableWaitUntil time.Time\n", "", 1)
+		if strings.Contains(strings.Replace(rest, "while resumableWaitUntil is ahead", "", 1), "resumableWaitUntil") {
+			t.Error("nothing but sweepResumable may read or write the wait")
+		}
 	}
 	restore := strings.Index(body, "restoreAbsentCheckout(pool, job)")
 	activate := strings.Index(body, "pool.activatePrepared(job, stageCredential)")

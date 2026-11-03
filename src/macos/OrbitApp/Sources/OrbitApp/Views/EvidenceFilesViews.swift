@@ -19,7 +19,8 @@ import UniformTypeIdentifiers
 struct EvidenceFilesTarget: Identifiable {
     let taskID: String
     let revision: String
-    /// The summaries of its reports are read off these: they need no second request.
+    /// The summaries of its reports are read off these: they need no second request. A receipt has none,
+    /// and its page reads them off the list (`EvidenceFiles.reports`).
     let citations: [EvidenceDecisionCitation]
 
     var id: String { "\(taskID)#\(revision)" }
@@ -124,8 +125,18 @@ private struct EvidenceFileTile: View {
             }
     }
 
-    /// Grey with a dashed outline, the board's: no date when the row went and took it along.
-    private var expired: some View {
+    private var expired: some View { ExpiredAttachmentFace(at: file.expiredAt) }
+}
+
+/// What takes a file's picture once its bytes have gone, on a card, on its page and in a conversation:
+/// grey with a dashed outline, the board's. No date when the row went and took it along, or a server does
+/// not say.
+struct ExpiredAttachmentFace: View {
+    let at: String?
+
+    private static let shape = RoundedRectangle(cornerRadius: 8)
+
+    var body: some View {
         Self.shape.fill(.quaternary)
             .overlay {
                 Self.shape.strokeBorder(.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -133,7 +144,7 @@ private struct EvidenceFileTile: View {
             .overlay {
                 VStack(spacing: 0) {
                     Text(EvidenceFiles.fileExpired)
-                    if let at = file.expiredAt { Text(EvidenceFiles.expiryDate(at)) }
+                    if let at { Text(EvidenceFiles.expiryDate(at)) }
                 }
                 .font(.orbitMeta)
                 .foregroundStyle(.secondary)
@@ -142,6 +153,25 @@ private struct EvidenceFileTile: View {
                 .minimumScaleFactor(0.7)
                 .padding(4)
             }
+    }
+}
+
+/// A file's pin, as a tile's corner draws it: a button where the tile has no viewer to pin it from, and on a
+/// picture only the mark that it is pinned.
+private struct EvidencePinMark: View {
+    let pinned: Bool
+
+    var body: some View {
+        Image(systemName: pinned ? "pin.fill" : "pin")
+            .font(.orbitMeta)
+            .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
+            .frame(width: 26, height: 26)
+            .background(.background, in: Circle())
+            .overlay {
+                Circle().strokeBorder(pinned ? Color.accentColor : Color.primary.opacity(0.12))
+            }
+            .shadow(color: .black.opacity(0.14), radius: 1, y: 1)
+            .padding(6)
     }
 }
 
@@ -411,9 +441,11 @@ struct EvidenceFilesPage: View {
     let target: EvidenceFilesTarget
     @State private var viewing: EvidenceViewerTarget?
     @State private var saveFailed = false
+    @State private var pinFailed: String?
 
     /// Three tiles across a phone at any width it comes in, as many as fit in a window.
-    private static let columns = [GridItem(.adaptive(minimum: 104), spacing: 8)]
+    /// `.top`: a pinned picture has no caption, and beside a file that has one it would otherwise sit halfway down the row.
+    private static let columns = [GridItem(.adaptive(minimum: 104), spacing: 8, alignment: .top)]
 
     private var read: EvidenceFileRead {
         console.evidenceFileRead(taskID: target.taskID, revision: target.revision)
@@ -436,6 +468,9 @@ struct EvidenceFilesPage: View {
         .alert(EvidenceFiles.downloadFailed, isPresented: $saveFailed) {
             Button("OK") { saveFailed = false }
         }
+        .alert(pinFailed ?? "", isPresented: Binding(get: { pinFailed != nil }, set: { if !$0 { pinFailed = nil } })) {
+            Button("OK") { pinFailed = nil }
+        }
         #if os(iOS)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -446,15 +481,16 @@ struct EvidenceFilesPage: View {
         #endif
     }
 
-    private func viewer(_ target: EvidenceViewerTarget) -> some View {
-        EvidenceFileViewer(pictures: target.pictures, startIndex: target.index, store: console.attachments)
+    private func viewer(_ viewing: EvidenceViewerTarget) -> some View {
+        EvidenceFileViewer(pictures: viewing.pictures, startIndex: viewing.index, store: console.attachments,
+                           console: console, target: target)
     }
 
     // Lazy all the way down, so a folder of a thousand asks only for what is on screen.
     private func content(_ read: EvidenceFileRead) -> some View {
         LazyVStack(alignment: .leading, spacing: 16) {
             versionLine(read.list)
-            let reports = EvidenceFiles.testReports(target.citations)
+            let reports = EvidenceFiles.reports(target.citations, files: read.list?.files ?? [])
             let quiet = read.list.map(EvidenceFiles.allGone) ?? false
             ForEach(Array(reports.enumerated()), id: \.offset) { _, report in
                 EvidenceReportBlock(report: report, quiet: quiet)
@@ -490,7 +526,8 @@ struct EvidenceFilesPage: View {
             LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
                 ForEach(group.files) { file in
                     EvidencePageTile(file: file, store: console.attachments,
-                                     onView: { view($0, in: list) }, onSave: save)
+                                     pinning: console.pinningEvidenceFiles.contains(file.id),
+                                     onView: { view($0, in: list) }, onSave: save, onPin: pin)
                 }
             }
         }
@@ -531,36 +568,73 @@ struct EvidenceFilesPage: View {
             if await !EvidenceFileHandoff.save(file, store: console.attachments) { saveFailed = true }
         }
     }
+
+    private func pin(_ file: EvidenceFile) {
+        PlatformHaptics.tap()
+        Task {
+            if await !console.pressEvidenceFilePin(taskID: target.taskID, file: file) {
+                pinFailed = EvidenceFiles.isPinned(file) ? EvidenceFiles.unpinFailed : EvidenceFiles.pinFailed
+            }
+        }
+    }
 }
 
 /// A tile on the page. A picture opens the viewer and any other file with bytes is saved, because neither
 /// an SVG nor a page may be opened. An expired one does neither, and says what it was.
+///
+/// A picture is pinned from the viewer, so here it only says that it is. Everything else has no viewer: its
+/// pin is on the tile, as long as the server offers one.
 private struct EvidencePageTile: View {
     let file: EvidenceFile
     let store: AttachmentImageStore
+    let pinning: Bool
     let onView: (EvidenceFile) -> Void
     let onSave: (EvidenceFile) -> Void
+    let onPin: (EvidenceFile) -> Void
+
+    @ViewBuilder private func corner(picture: Bool) -> some View {
+        if picture {
+            if EvidenceFiles.isPinned(file) {
+                EvidencePinMark(pinned: true).accessibilityLabel(EvidenceFiles.pinned)
+            }
+        } else if EvidenceFiles.canPin(file) {
+            let pinned = EvidenceFiles.isPinned(file)
+            Button { onPin(file) } label: {
+                EvidencePinMark(pinned: pinned)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .topTrailing)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(pinning)
+            .accessibilityLabel(pinned ? EvidenceFiles.unpin : EvidenceFiles.pin)
+            .help(pinned ? EvidenceFiles.unpin : EvidenceFiles.pin)
+        }
+    }
 
     var body: some View {
         let name = EvidenceFiles.name(file)
         let picture = EvidenceFiles.isPicture(file) && !store.isNotPicture(file.id)
         VStack(alignment: .leading, spacing: 4) {
-            if EvidenceFiles.isGone(file) {
-                EvidenceFileTile(file: file, store: store)
-            } else {
-                Button {
-                    if picture { onView(file) } else { onSave(file) }
-                } label: {
-                    EvidenceFileTile(file: file, store: store).contentShape(Rectangle())
+            Group {
+                if EvidenceFiles.isGone(file) {
+                    EvidenceFileTile(file: file, store: store)
+                } else {
+                    Button {
+                        if picture { onView(file) } else { onSave(file) }
+                    } label: {
+                        EvidenceFileTile(file: file, store: store).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(picture ? name : EvidenceFiles.downloadName(name))
+                    .help(picture ? name : EvidenceFiles.downloadName(name))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(picture ? name : EvidenceFiles.downloadName(name))
-                .help(picture ? name : EvidenceFiles.downloadName(name))
             }
+            .overlay(alignment: .topTrailing) { corner(picture: picture) }
             if !picture {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(EvidenceFiles.saveName(file)).lineLimit(1).truncationMode(.middle)
                     Text(EvidenceFiles.facts(file)).foregroundStyle(.secondary)
+                    if let keep = EvidenceFiles.keep(file) { Text(keep).foregroundStyle(.secondary) }
                 }
                 .font(.orbitMeta)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -581,10 +655,13 @@ private struct EvidenceFileViewer: View {
     @Environment(\.dismiss) private var dismiss
     let pictures: [EvidenceFile]
     let store: AttachmentImageStore
+    let console: ConsoleModel
+    let target: EvidenceFilesTarget
     private let startIndex: Int
     @State private var index: Int
     @State private var handingOn = false
     @State private var saveFailed = false
+    @State private var pinFailed: String?
 
     /// A dot a picture while they fit a line and mean something. The position says it either way.
     private static let dotsUpTo = 12
@@ -592,14 +669,24 @@ private struct EvidenceFileViewer: View {
     /// any phone's screen it is a page, which opens at its top and scrolls.
     private static let longerThan = 2.4
 
-    init(pictures: [EvidenceFile], startIndex: Int, store: AttachmentImageStore) {
+    init(pictures: [EvidenceFile], startIndex: Int, store: AttachmentImageStore, console: ConsoleModel,
+         target: EvidenceFilesTarget) {
         self.pictures = pictures
         self.startIndex = startIndex
         self.store = store
+        self.console = console
+        self.target = target
         _index = State(initialValue: startIndex)
     }
 
     private var file: EvidenceFile { pictures[index] }
+
+    /// The shown file as the list has it now: `pictures` is what the viewer opened on, and a press of the
+    /// pin moves only the list.
+    private var live: EvidenceFile {
+        console.evidenceFileRead(taskID: target.taskID, revision: target.revision).list?.files
+            .first { $0.id == file.id } ?? file
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -612,6 +699,9 @@ private struct EvidenceFileViewer: View {
         .environment(\.colorScheme, .dark)
         .alert(EvidenceFiles.downloadFailed, isPresented: $saveFailed) {
             Button("OK") { saveFailed = false }
+        }
+        .alert(pinFailed ?? "", isPresented: Binding(get: { pinFailed != nil }, set: { if !$0 { pinFailed = nil } })) {
+            Button("OK") { pinFailed = nil }
         }
         #if os(iOS)
         // What the status bar goes by, which the environment above does not reach: dark on black it
@@ -713,11 +803,44 @@ private struct EvidenceFileViewer: View {
                     .font(.orbitMono).foregroundStyle(.white)
                     .lineLimit(2).truncationMode(.middle)
                 Text(facts).font(.orbitLabel).foregroundStyle(.white.opacity(0.6))
+                if let line = EvidenceFiles.keep(live) {
+                    Text(line).font(.orbitLabel).foregroundStyle(.white.opacity(0.6))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if EvidenceFiles.canPin(live) { pinButton }
             keep
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    private var pinButton: some View {
+        let shown = live
+        let pinned = EvidenceFiles.isPinned(shown)
+        let pinning = console.pinningEvidenceFiles.contains(shown.id)
+        return Button {
+            PlatformHaptics.tap()
+            Task {
+                if await !console.pressEvidenceFilePin(taskID: target.taskID, file: shown) {
+                    pinFailed = pinned ? EvidenceFiles.unpinFailed : EvidenceFiles.pinFailed
+                }
+            }
+        } label: {
+            Group {
+                if pinning {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: pinned ? "pin.fill" : "pin").font(.orbitControlGlyph)
+                        .foregroundStyle(pinned ? Color.accentColor : Color.white)
+                }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(pinning)
+        .accessibilityLabel(pinned ? EvidenceFiles.unpin : EvidenceFiles.pin)
+        .help(pinned ? EvidenceFiles.unpin : EvidenceFiles.pin)
     }
 
     @ViewBuilder private var keep: some View {

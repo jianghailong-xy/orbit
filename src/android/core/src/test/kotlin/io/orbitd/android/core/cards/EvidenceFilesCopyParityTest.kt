@@ -32,6 +32,11 @@ class EvidenceFilesCopyParityTest {
             "EVIDENCE_FILE_DOWNLOAD_FAILED" to EvidenceFiles.downloadFailed,
             "EVIDENCE_FILES_LOADING" to EvidenceFiles.loading,
             "EVIDENCE_FILES_UNREAD" to EvidenceFiles.unread,
+            "EVIDENCE_FILE_PIN" to EvidenceFiles.pin,
+            "EVIDENCE_FILE_UNPIN" to EvidenceFiles.unpin,
+            "EVIDENCE_FILE_PINNED" to EvidenceFiles.pinned,
+            "EVIDENCE_FILE_PIN_FAILED" to EvidenceFiles.pinFailed,
+            "EVIDENCE_FILE_UNPIN_FAILED" to EvidenceFiles.unpinFailed,
             "EVIDENCE_REPORT_FAILED" to EvidenceFiles.reportFailed,
             "EVIDENCE_REPORT_SKIPPED" to EvidenceFiles.reportSkipped,
         ).forEach { (name, value) ->
@@ -60,6 +65,11 @@ class EvidenceFilesCopyParityTest {
         assertSays("export const evidenceReportTitle = (report: EvidenceTestReport): string => `\${evidenceReportFormat(report)} report`;")
         assertEquals("Failed · 2", EvidenceFiles.reportList(EvidenceFiles.reportFailed, 2))
         assertSays("export const evidenceReportList = (word: string, count: number): string => `\${word} · \${count}`;")
+        val now = java.time.Instant.parse("2026-11-03T00:00:00Z")
+        assertEquals("Expires Nov 17", EvidenceFiles.expires("2026-11-17T06:00:00Z", now, java.time.ZoneOffset.UTC))
+        assertSays("export const evidenceFileExpires = (at: string, now?: Date): string => `Expires \${evidenceExpiryDate(at, now)}`;")
+        assertEquals("Expired Sep 14", EvidenceFiles.expiredLine("2026-09-14T06:00:00Z", now, java.time.ZoneOffset.UTC))
+        assertSays("`\${EVIDENCE_FILE_EXPIRED} \${evidenceExpiryDate(at, now)}`")
     }
 
     /** The lines the web composes, each beside what Kotlin composes for the same values. */

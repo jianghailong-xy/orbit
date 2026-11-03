@@ -479,10 +479,15 @@ const worktreeGCInterval = 5 * time.Minute
 // sweep would delete the checkouts it is about to reattach to. A reclaim that set sessions aside
 // is the same hazard — those rows have no local supervisor either — so the deferred retry is
 // what arms it.
+//
+// That schedule is the first half's, and it does not change. The second half (gcResumableCheckouts) runs on it
+// too, except while resumableWaitUntil is ahead (sweepResumable). That is in memory on purpose: a restart looks
+// at once.
 type worktreeSweeper struct {
-	interval time.Duration
-	armed    bool
-	nextAt   time.Time
+	interval           time.Duration
+	armed              bool
+	nextAt             time.Time
+	resumableWaitUntil time.Time
 }
 
 // due reports whether a sweep should run now, advancing the schedule when it says yes. An unarmed
@@ -494,6 +499,25 @@ func (s *worktreeSweeper) due(now time.Time) bool {
 	}
 	s.nextAt = now.Add(s.interval)
 	return true
+}
+
+// sweepResumable runs the second half of a sweep, unless a look that found nothing is still waiting out its
+// resumableSweepWait, which only a disk back above its floor ends early. A reading that failed says nothing about
+// the disk, so it leaves the wait as it is. This decides when anybody looks and never what may go.
+func (s *worktreeSweeper) sweepResumable(t *Transport, pool *sessionPool, pressure worktreeGCPressure) {
+	if pool.clock.Now().Before(s.resumableWaitUntil) {
+		pressure = pressure.again()
+		if !pressure.measured || pressure.belowFloor() {
+			return
+		}
+		s.resumableWaitUntil = time.Time{}
+	}
+	if !gcResumableCheckouts(t, pool, pressure) {
+		return
+	}
+	s.resumableWaitUntil = pool.clock.Now().Add(resumableSweepWait)
+	logln(fmt.Sprintf("gc: no resumable checkout can go and the disk is still under its floor; not looking again until %s, or sooner once the disk is back above its floor",
+		s.resumableWaitUntil.UTC().Format(time.RFC3339)))
 }
 
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
@@ -2050,7 +2074,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		liveSet := pool.ids()
 		pressure := measureWorktreePressure(diskFloorMb.Load())
 		gcWorktrees(t, liveSet, pressure)
-		gcResumableCheckouts(t, pool, pressure)
+		worktreeGC.sweepResumable(t, pool, pressure)
 		gcUploads(liveSet)
 	}
 
@@ -2130,7 +2154,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		if worktreeGC.due(time.Now()) {
 			pressure := measureWorktreePressure(diskFloorMb.Load())
 			gcWorktrees(t, pool.ids(), pressure)
-			gcResumableCheckouts(t, pool, pressure)
+			worktreeGC.sweepResumable(t, pool, pressure)
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is

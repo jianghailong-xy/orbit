@@ -68,6 +68,18 @@ final class SessionMessageTests: XCTestCase {
             fromTaskId: Self.task))
     }
 
+    func testReadsTheSendersModeWhenTheCardCarriesIt() throws {
+        let narrower = try XCTUnwrap(SessionMessage.parse(try sent(
+            "{\"fromSessionId\": \"\(Self.sender)\", \"fromMode\": \"plan\", \"fromModeNarrower\": true}").payload))
+        XCTAssertEqual(narrower.fromMode, "plan")
+        XCTAssertEqual(narrower.fromModeNarrower, true)
+        // An event stored before the card carried it, or a sender that is not narrower.
+        let older = try XCTUnwrap(SessionMessage.parse(try sent(
+            "{\"fromSessionId\": \"\(Self.sender)\", \"fromMode\": \"\", \"fromModeNarrower\": false}").payload))
+        XCTAssertNil(older.fromMode)
+        XCTAssertNil(older.fromModeNarrower)
+    }
+
     func testIsACardOnlyWithTheSessionThatSentIt() throws {
         for bad in ["{\"fromTitle\": \"Worker\"}", "{\"fromSessionId\": \"\"}", "{\"fromSessionId\": 42}",
                     "\"from a session\"", "null"] {

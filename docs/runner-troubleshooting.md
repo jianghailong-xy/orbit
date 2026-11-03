@@ -176,6 +176,34 @@ twice, the second time immediately before it goes:
   bisect is half done, the worktree is not locked (`git worktree lock`), and no other repository is nested in
   it, a submodule or a clone in a dependency directory included.
 
+**When it looks.** All of this runs on the loop that claims messages, so no message is claimed on that runner
+while it does. Finished sessions' checkouts are looked over every five minutes with no time limit: below the floor
+every one of them goes in the same sweep. The checkouts of sessions that can resume are looked over on the same five
+minutes, below the floor only, within two limits:
+
+- **A look that finds nothing waits an hour.** When the rule has kept every one of these checkouts and the disk is
+  still below the floor, the runner logs `gc: no resumable checkout can go and the disk is still under its floor; not
+  looking again until <time>` and leaves them alone until then. Sweeps come every five minutes, so the next look is
+  the first sweep after that time, 60 to 66 minutes after this one ended. A checkout that reaches 14 days during a
+  wait goes at the next look. A git command that fails or times out on a checkout counts as the rule keeping it.
+  The wait ends early once a sweep finds free space back above the floor: the next time the disk is short, the runner
+  looks at once. A look that could not finish starts no wait, and the next sweep looks again: the control plane
+  did not answer, `/proc` could not be read, or a checkout could not be marked or moved aside. The wait is only in
+  memory, so restarting the runner forgets it.
+- **Taking checkouts has a budget of 60 seconds a sweep.** It starts with the first checkout that goes, or that could
+  not be judged or taken, and it is read between checkouts, never during one, so a sweep can pass it by as long as
+  the checkout in hand takes. Once it is spent the runner logs `gc: stopping this sweep of resumable checkouts after
+  <time>` and stops, and that starts no wait. The next sweep, five minutes after this one began or at once if this
+  one took longer, looks again and goes on with the oldest left. Checkouts the second look keeps ahead of the first
+  one to go do not count against the budget, and a sweep with nothing but those ends by itself and waits.
+
+What that holds the loop for, below the floor:
+
+| The host | How long the loop is held |
+| --- | --- |
+| Nothing can go | One look every 60 to 66 minutes, where it used to be one every five. A look over 149 checkouts at a load of about 21 took about 28 seconds, so that is at most about 28 seconds an hour, down from about 5.6 minutes. Add a second look for each checkout that passes the first look and not the second. |
+| Checkouts can go | A sweep every five minutes until the disk is back above the floor or nothing is left: one look, a second look for each checkout the rule keeps, then up to about 60 seconds of removals, plus the rest of the checkout in hand. |
+
 **What comes back.** The session's next message makes a new checkout of its branch at the same path, before the
 engine starts, and the conversation goes on. The branch and its commits were never touched, and the session's
 fork point is kept in `refs/orbit-base/<session id>`, so its diff is the same as before.

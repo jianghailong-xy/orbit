@@ -8282,6 +8282,24 @@ button.chat-jump-start:hover {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
 }
+/* What a file whose bytes have gone leaves where its picture was: the grey dashed tile an evidence card draws. */
+.chat-expired {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 120px;
+  height: 90px;
+  margin: 10px 0;
+  padding: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+}
 /* A result image whose bytes the server dropped from the preview (see MAX_IMAGE_PAYLOAD): the card
    opens on the image block, so until the untrimmed payload lands there is a picture-shaped hole
    where the picture is going. Reserve that slot — the cap .chat-result .chat-image itself lands
@@ -8807,9 +8825,23 @@ button.chat-jump-start:hover {
 .chat-file.is-error:hover {
   background: var(--error-bg);
 }
+.chat-file.is-expired {
+  border-style: dashed;
+  border-color: var(--border);
+  background: var(--fill-muted);
+  color: var(--text-3);
+  cursor: default;
+}
+.chat-file.is-expired:hover {
+  background: var(--fill-muted);
+}
 .chat-file-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-file-expired {
+  flex: none;
   white-space: nowrap;
 }
 /* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
