@@ -595,7 +595,7 @@ type IntegrationJobCommand struct {
 	outputRedactor   *integrationOutputRedactor
 	// onInterrupted is told when the runner's stop has ended a job that staged a scratch worktree, before
 	// that worktree is removed (runIntegrationJobAndReport). Never on the wire.
-	onInterrupted func()
+	onInterrupted func(phase string)
 }
 
 // IntegrationObserveTask is one task an OBSERVE_LANDING looks for (§10.6 O-S2): the commit its work

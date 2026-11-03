@@ -165,14 +165,14 @@ final class RunnerControl {
         let plistPath = paths.plistFile.path
         let domain = self.domain
         // The reload is launchd's own stop, which the plist being replaced may limit to 5 s. A SIGTERM
-        // from here starts no clock: the runner finishes what it can and leaves, launchd starts it again
-        // (KeepAlive), and the bootout then stops one with nothing to finish.
+        // from here starts no clock, so the runner finishes what it can and leaves. launchd then starts
+        // it again at once (KeepAlive), and that one heartbeats and is handed work within half a second
+        // (measured), so the bootout goes the moment the first has left, before there is anything to cut off.
         if let running = service.pid {
             _ = await Self.launchctl(Launchctl.terminate(domain: domain))
-            for _ in 0..<LaunchdPlist.exitTimeOut {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                let now = await Self.launchctl(Launchctl.list())
-                if Launchctl.parseList(now.output).pid != running { break }
+            let giveUp = Date().addingTimeInterval(TimeInterval(LaunchdPlist.exitTimeOut))
+            while kill(pid_t(running), 0) == 0, Date() < giveUp {
+                try? await Task.sleep(nanoseconds: 50_000_000)
             }
         }
         _ = await Self.launchctl(Launchctl.bootout(domain: domain, plistPath: plistPath))

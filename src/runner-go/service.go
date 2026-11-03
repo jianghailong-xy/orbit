@@ -747,15 +747,15 @@ func printServiceStarted(how string) {
 // SIGTERM, on macOS 26.6.2 and 15.8.2 (GitHub's runners) and 27.2 (a real Mac):
 //   - macOS 26 and 27 cap the key at 60: `launchctl print` reads `exit timeout = 60` for 61 and for
 //     2147483647, and launchd kills the job then. The cap is the same for an Aqua agent in gui/<uid>, a
-//     Background one in user/<uid> and a daemon in system, with or without UserName, and ProcessType and
-//     every other key tried leave it alone. launchd's own strings call it MaxExitTimeOut, and the one thing
-//     that raises it is a boot argument (launch_max_exit_timeout), which is the machine's owner's to set and
-//     not the runner's. macOS 15 honours any value.
+//     Background one in user/<uid>, a daemon in system, with or without UserName, and an agent an app
+//     registers through SMAppService. ProcessType and every other key tried leave it alone, MaxExitTimeOut
+//     among them. launchd's own strings also name a boot argument, launch_max_exit_timeout, not tried: it is
+//     the machine owner's to set and not the runner's. macOS 15 honours any value.
 //   - Every macOS: with no key the window is 5 s, and 0, which launchd.plist(5) calls infinity, kills the
 //     job at once with no SIGTERM. So does EnableTransactions.
 //   - The clock runs only for launchd's own stop: bootout, kickstart -k, stop, remove, unload. A SIGTERM from
-//     anybody else (kill, launchctl kill) starts none, and KeepAlive restarts the job when it leaves. A
-//     bootout after such a SIGTERM starts the 60 s from the bootout.
+//     anybody else (kill, launchctl kill) starts none, and KeepAlive restarts the job when it leaves, even a
+//     job `launchctl disable` has disabled. A bootout after such a SIGTERM starts the 60 s from the bootout.
 //   - bootout with a service target returns at once. bootout with a plist path, kickstart -k and unload wait
 //     for the job to be gone.
 //   - A job killed at the limit leaves behind what runs in a process group of its own, as every engine and

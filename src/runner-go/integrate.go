@@ -281,7 +281,7 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 	}
 	defer func() {
 		if result.Interrupted && cmd.onInterrupted != nil {
-			cmd.onInterrupted()
+			cmd.onInterrupted(result.Phase)
 		}
 		removeIntegrationWorktree(repoRoot, scratch)
 	}()
@@ -2106,8 +2106,10 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 	// goes as soon as the job knows it stopped.
 	var startHandBack sync.Once
 	handedBack := make(chan struct{})
-	beginHandBack := func() {
+	beginHandBack := func(phase string) {
 		startHandBack.Do(func() {
+			logln("integration job", job.JobID, "stopped in", phase,
+				"because this runner is stopping; nothing was pushed, so it is handed back to be run again")
 			go func() {
 				defer close(handedBack)
 				handBackIntegrationJob(handBack, t, job)
@@ -2128,9 +2130,7 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		})
 	}, sender)
 	if result.Interrupted {
-		logln("integration job", job.JobID, "stopped in", result.Phase,
-			"because this runner is stopping; nothing was pushed, so it is handed back to be run again")
-		beginHandBack()
+		beginHandBack(result.Phase)
 		<-handedBack
 		return
 	}
