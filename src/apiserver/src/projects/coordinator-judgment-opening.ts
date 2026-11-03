@@ -443,6 +443,12 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  *   * not confirmed, or confirmed about criteria that have since been edited — reads exactly as it
  *     always has.
  *
+ * And a fourth reading since 2026-11-03: the facts prove DONE and the account owner's Reopen press
+ * still stands (`reopenedAt`, `storeDerivedProjectStatus`). The project is OPEN, so saying DONE would
+ * be false. It says who is holding it and that `project_request_done` is the way to ask. Where the
+ * facts do not prove DONE, the other two readings stand and say the same in a note of their own
+ * (`ownerReopenedNote`), because each goes on to say what would make the server project DONE.
+ *
  * WHAT IS NOT DELIVERED HERE ANY MORE
  * ===================================
  * Until 2026-09-10 two more facts had a branch here: `COMPLETION_EVIDENCE_REVISED`, whose message
@@ -479,8 +485,9 @@ export function buildCoordinatorDeliveryMessage(
   /** The projection and the standing it was folded from. Only `PROJECT_ACCEPTANCE_LANDED` and
    *  `PROJECT_TASKS_SETTLED` read it, and absent reads as not confirmed. */
   reading?: DerivedProjectDoneReading | null,
-  /** The project's `exceptionEscalationSeconds`, which `PROJECT_TASKS_SETTLED` quotes. */
-  options: { escalationSeconds?: number } = {},
+  /** The project's `exceptionEscalationSeconds`, which `PROJECT_TASKS_SETTLED` quotes; and when the
+   *  account owner pressed Reopen, while that press still stands. */
+  options: { escalationSeconds?: number; reopenedAt?: Date | null } = {},
 ): string {
   const projectId = uuidToBase62(fact.projectId);
   if (fact.event === 'PROJECT_TASKS_SETTLED' && reading) {
@@ -516,6 +523,31 @@ export function buildCoordinatorDeliveryMessage(
         + 'DONE is not a column anybody writes: once what is missing is supplied, the server projects it by '
         + 'itself. You cannot write status with project_update either: a request that carries a session and '
         + 'writes that field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE).\n\n'
+        + ownerReopenedNote(options.reopenedAt, projectId)
+        + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+        + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+        + 'database yourself.'
+      );
+    }
+    if (reading?.derived.done && options.reopenedAt) {
+      return (
+        `From Orbit · project “${projectTitle}”${ACCEPTANCE_LANDED_REOPENED_HEAD}\n\n`
+        + `${describeWakeFact(fact)}\n\n`
+        + 'The facts prove it done: every criterion is satisfied and landed, under the version of the standard '
+        + 'set the account owner confirmed. Orbit is not recording it DONE because the account owner reopened '
+        + `this project at ${options.reopenedAt.toISOString()} and nothing it was reopened over has changed.\n\n`
+        + 'It stays open, and you can keep writing tasks, until the account owner records it done, its criteria '
+        + 'change, or a task serving a criterion changes: its status, a new evidence revision or decision, a new '
+        + 'verdict or a new merge receipt. A task that serves no criterion changes none of that.\n\n'
+        + 'If the owner reopened it for more work, carry on with that work. If you judge the goal is reached, ask: '
+        + `call project_request_done (projectId: ${projectId}) with a sentence or two of judgment. Orbit runs its `
+        + 'closing check first, and only if that passes does it put an “Is this project done?” card in front of '
+        + 'the account owner in this conversation; recording Done is the account owner’s to do.\n\n'
+        + 'You cannot write status with project_update: a request that carries a session and writes that field is '
+        + 'refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE).\n\n'
+        + `Read the full state yourself: project_get (projectId: ${projectId}) returns derivedDone, which reads `
+        + 'the facts, and status, which is the owner’s decision, and '
+        + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
         + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
         + 'you are reading it only after that turn ended, so go by the state you have just read from the '
         + 'database yourself.'
@@ -568,6 +600,7 @@ export function buildCoordinatorDeliveryMessage(
       + 'field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE). DONE is not a column anybody writes '
       + 'either — every criterion above satisfied and LANDED, plus the account owner’s confirmation of this '
       + 'version of the standard set, and the server projects it by itself.\n\n'
+      + ownerReopenedNote(options.reopenedAt, projectId)
       + 'Read the full state yourself; the list above is a snapshot from the moment the fact became true: '
       + `project_get (projectId: ${projectId}) reads the goal and acceptance criteria, and `
       + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
@@ -781,25 +814,40 @@ export function buildCoordinatorDeliveryMessage(
   );
 }
 
+/** The owner's press beside a reading that says what would make the project DONE. Empty without one. */
+function ownerReopenedNote(reopenedAt: Date | null | undefined, projectId: string): string {
+  if (!reopenedAt) return '';
+  return (
+    `The account owner also reopened this project at ${reopenedAt.toISOString()}. It stays open until they `
+    + 'record it done, its criteria change, or a task serving a criterion changes: its status, a new evidence '
+    + 'revision or decision, a new verdict or a new merge receipt. A confirmation alone does not end that. To ask '
+    + `them to close it, call project_request_done (projectId: ${projectId}).\n\n`
+  );
+}
+
 /**
- * Which of its three readings a `PROJECT_ACCEPTANCE_LANDED` message was written in, read back off
- * its first line: not confirmed (the owner is to be asked), confirmed with DONE still held back, or
+ * Which of its readings a `PROJECT_ACCEPTANCE_LANDED` message was written in, read back off its
+ * first line: not confirmed (the owner is to be asked), confirmed with DONE still held back, or
  * recorded DONE. The reading is the projection at the moment the words were written
  * (`buildCoordinatorDeliveryMessage`), which no row keeps, so the words are where a client's line
  * (`CoordinatorDeliveryCard`) learns which one the coordinator was told. Each ending is the one the
- * builder above writes, and `coordinator-delivery-card.spec.ts` builds all three to hold them to it.
+ * builder above writes, and `coordinator-delivery-card.spec.ts` builds them all to hold them to it.
  * Words no reading wrote — a message from before these — read as not confirmed, the reading every
- * such message had.
+ * such message had. A project the owner reopened reads HELD: its DONE is held back, by them, and
+ * clients already know that line.
  */
 export function acceptanceLandedReadingOf(content: string | null): 'ASKED' | 'HELD' | 'DONE' {
   const head = (content ?? '').split('\n', 1)[0]!;
   if (head.endsWith(ACCEPTANCE_LANDED_HELD_HEAD)) return 'HELD';
+  if (head.endsWith(ACCEPTANCE_LANDED_REOPENED_HEAD)) return 'HELD';
   if (head.endsWith(ACCEPTANCE_LANDED_DONE_HEAD)) return 'DONE';
   return 'ASKED';
 }
 
 const ACCEPTANCE_LANDED_HELD_HEAD = ': its acceptance criteria have all landed and this version is confirmed, '
   + 'but the project has not been projected DONE';
+const ACCEPTANCE_LANDED_REOPENED_HEAD = ': its acceptance criteria are all satisfied and landed, but the account '
+  + 'owner reopened it, so it stays open';
 const ACCEPTANCE_LANDED_DONE_HEAD = ': its acceptance criteria are all satisfied and landed, and it is recorded '
   + 'as DONE on the account owner’s confirmation';
 

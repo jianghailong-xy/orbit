@@ -20,7 +20,7 @@ import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening'
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
-import { readDerivedProjectDoneReading } from './project-done-derived';
+import { readDerivedProjectDoneReading, readStandingOwnerReopen } from './project-done-derived';
 import { conversationIsOver, sessionHasEnded } from './project-open-item';
 
 export { DELIVERY_COORDINATOR_PAUSED } from './coordinator-evidence-queue';
@@ -598,8 +598,13 @@ export class CoordinatorDeliveryService {
     const reading = fact.event === 'PROJECT_ACCEPTANCE_LANDED' || fact.event === 'PROJECT_TASKS_SETTLED'
       ? await readDerivedProjectDoneReading(this.prisma, project.ownerId, fact.projectId)
       : null;
+    // Every reading of this fact says what makes the project DONE, and the owner's press changes that.
+    const reopenedAt = fact.event === 'PROJECT_ACCEPTANCE_LANDED'
+      ? await readStandingOwnerReopen(this.prisma, project.ownerId, fact.projectId)
+      : null;
     return buildCoordinatorDeliveryMessage(fact, project.title, reading, {
       escalationSeconds: project.exceptionEscalationSeconds,
+      reopenedAt,
     });
   }
 
