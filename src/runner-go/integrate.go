@@ -171,7 +171,7 @@ type integrationResult struct {
 	AheadOfUpstream *int
 	// SourceOnUpstream is set with NOTHING_TO_LAND, and only there: whether the source tip is an
 	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
-	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
+	// plane lets such an answer out of a criterion's landing on — see the empty branch below.
 	SourceOnUpstream *bool
 	// SourceFullyApplied is set with NOTHING_TO_LAND too, and only there: true when the branch carried
 	// commits of its own and the base already had every one of them, false when it carried none
@@ -223,8 +223,9 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 // done (runloop.go's shutdown). When stop ends, the job stops at the first step that would otherwise
 // keep it: a round not yet begun is not begun, and the tree's recipe or a check still running is ended
 // with its whole process tree. The job then answers Interrupted, and its scratch worktree goes as on
-// every other exit. Git steps are not cut short, and a job whose checks have passed goes on to its
-// push and its verification: those take seconds, and finishing them is cheaper than doing it all again.
+// every other exit, once onInterrupted has been told. Git steps are not cut short, and a job whose
+// checks have passed goes on to its push and its verification: those take seconds, and finishing them
+// is cheaper than doing it all again.
 func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, report integrationReporter) integrationResult {
 	return runIntegrationJobUntilWithProgress(stop, cmd, report, nil)
 }
@@ -243,7 +244,7 @@ type integrationProgressSender func(ctx context.Context, req IntegrationJobProgr
 // The job's own context is a CHILD of stop with a cause (context.WithCancelCause), because the two
 // ways a job ends early are not the same fact: the runner stopping hands the claim back to be run
 // again (J-T11), while a cancellation the control plane asked for is answered CANCELLED (J-T12).
-func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJobCommand, report integrationReporter, sender integrationProgressSender) integrationResult {
+func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJobCommand, report integrationReporter, sender integrationProgressSender) (result integrationResult) {
 	if cmd.CancelRequested {
 		return integrationResult{State: "CANCELLED", Phase: "FETCH"}
 	}
@@ -301,7 +302,12 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 	if legacy := legacyIntegrationScratchPath(workDir, cmd.JobID); legacy != scratch {
 		removeIntegrationWorktree(repoRoot, legacy)
 	}
-	defer removeIntegrationWorktree(repoRoot, scratch)
+	defer func() {
+		if result.Interrupted && cmd.onInterrupted != nil {
+			cmd.onInterrupted(result.Phase)
+		}
+		removeIntegrationWorktree(repoRoot, scratch)
+	}()
 
 	one := integrateOnce
 	if cmd.Kind == "CHECK_PROMOTION" || cmd.Kind == "LAND_PROMOTION" {
@@ -394,6 +400,45 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		})
 	}
 
+	// ── The empty branch, before J-S2 ─────────────────────────────────────────────────────────
+	// THE EMPTY BRANCH FIRST, because J-S3's "already contained" is trivially true of one: its tip is
+	// the commit it forked at, and every fork point is in the target it forked from. A branch
+	// whose tip IS the commit its session started at carries nothing of the task's own, and
+	// answering ALREADY_LANDED for it is what wrote a receipt for a delivery that did not exist
+	// (2026-09-23, project 34Tq39ByZ0rV4c6pJkfw7): the landing had been queued for a retry
+	// session that died on a 429 without a commit, the branch tip was the upstream, and the
+	// promotion card counted the task as work the merge did not contain. The same test the
+	// control plane applies to an older runner's spelling of this answer.
+	//
+	// Only when the claim names a base: without one, emptiness and a genuine landing are not
+	// distinguishable here — `merge-base S T` answers S in both — and an answer that cannot be
+	// told apart is not one to give.
+	//
+	// Before J-S2, because a landing that finds no code changed skips the integration test and the
+	// merge (the owner's rule, 2026-11-03). This is the condition J-S3 reached after a clean absorb,
+	// since the ancestors of the absorb's merge commit are those of the target and of the upstream. It
+	// only stops depending on that absorb: on a conflicting line the same branch answered CONFLICT at
+	// MAIN_SYNC, and somebody got a red item about a conflict that was not the task's. An empty tip on
+	// neither side is a commit the line does not have, and stays on the path below (J-S4).
+	if cmd.SessionBaseSha != "" && sourceSha == cmd.SessionBaseSha {
+		// And where that empty tip IS, measured rather than inferred. Being inside the TARGET says
+		// nothing of main on a project branch ahead of it: a branch forked from the line holds
+		// nothing of its own and is still not on the upstream. The control plane lets this answer
+		// out of a criterion's landing only when the tip is an ancestor of the upstream tip fetched
+		// above (2026-10-01: a rollout task with no commit, on a line ahead of main, held its
+		// criterion off LANDED for ever).
+		onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+		if onUpstream || isAncestor(scratch, sourceSha, targetSha) {
+			// Nothing to land: nothing was absorbed, checked or pushed.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			result.SourceOnUpstream = &onUpstream
+			// The branch carried no commit of its own, so none of it was applied anywhere (J-S4).
+			fullyApplied := false
+			result.SourceFullyApplied = &fullyApplied
+			return result
+		}
+	}
+
 	// ── J-S2 MAIN_SYNC ────────────────────────────────────────────────────────────────────────
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
@@ -448,36 +493,10 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	}
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
+	// An empty tip does not get here. `containedIn` holds what the target and the upstream hold, which
+	// the empty branch's answer took, and the absorb's own merge commit, which a source can only be if
+	// it carries that absorb (sourceCarriesTheAbsorb), and then J-S2 did not make it.
 	if isAncestor(scratch, sourceSha, containedIn) {
-		// THE EMPTY BRANCH FIRST, because "already contained" is trivially true of one: its tip is
-		// the commit it forked at, and every fork point is in the target it forked from. A branch
-		// whose tip IS the commit its session started at carries nothing of the task's own, and
-		// answering ALREADY_LANDED for it is what wrote a receipt for a delivery that did not exist
-		// (2026-09-23, project 34Tq39ByZ0rV4c6pJkfw7): the landing had been queued for a retry
-		// session that died on a 429 without a commit, the branch tip was the upstream, and the
-		// promotion card counted the task as work the merge did not contain. The same test the
-		// control plane applies to an older runner's spelling of this answer.
-		//
-		// Only when the claim names a base: without one, emptiness and a genuine landing are not
-		// distinguishable here — `merge-base S T` answers S in both — and an answer that cannot be
-		// told apart is not one to give.
-		if cmd.SessionBaseSha != "" && sourceSha == cmd.SessionBaseSha {
-			// Nothing to land, and nothing was pushed: the absorb commit is discarded with the
-			// worktree, exactly as in the answer below.
-			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
-			// And where that empty tip IS, measured rather than inferred. "Contained in the base"
-			// says the tip is inside the TARGET, which on a project branch ahead of main is not
-			// main: a branch forked from the line holds nothing of its own and is still not on the
-			// upstream. The control plane lets this answer out of a criterion's landing only when
-			// the tip is an ancestor of the upstream tip fetched above (2026-10-01: a rollout task
-			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
-			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
-			result.SourceOnUpstream = &onUpstream
-			// The branch carried no commit of its own, so none of it was applied anywhere (J-S4).
-			fullyApplied := false
-			result.SourceFullyApplied = &fullyApplied
-			return result
-		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
 		// upstream that carries no task work is not this job's to push.
 		result.State, result.Phase = "ALREADY_LANDED", "REBASE"
@@ -529,9 +548,9 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			// Two branches come back here, and the control plane must not read them as one. One
 			// carried commits, and the base already had every one of them (`sourceFullyApplied`):
 			// the work is on the target, as copies rather than as these commits. The other carried
-			// none, because the session started on a commit the target does not have and made
-			// nothing, so J-S3 never saw an empty tip. That one is J-S3's empty branch, measured
-			// the same way (0300, 0346).
+			// none, because the session started on a commit neither the target nor the upstream has
+			// and made nothing, so the answer before J-S2 did not take it. That one is the same empty
+			// branch, measured the same way (0300, 0346).
 			//
 			// Only on this path. A MERGE comes back at the base only when the source is already in
 			// it, and J-S4 merges such a source only after J-S2 absorbed the current upstream into the
@@ -682,8 +701,9 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 // or that was cut from a target tip that has moved since, does not carry this absorb, and J-S2
 // makes it as before: a conflict there is still the MAIN_SYNC conflict it always was.
 //
-// Not the upstream tip itself, which has nothing of its own to land. Taking this path for it would
-// push a bare main sync and turn J-S3's NOTHING_TO_LAND (0300) into a landing.
+// Not the upstream tip itself, which has nothing of its own to land. Named as its session's base it
+// never gets here (0300). Named any other way, taking this path for it would push a bare main sync and
+// turn J-S3's ALREADY_LANDED into a landing.
 func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
 	return sourceSha != upstreamSha &&
 		isAncestor(dir, upstreamSha, sourceSha) && isAncestor(dir, targetSha, sourceSha)
@@ -698,8 +718,8 @@ func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool 
 //
 // A source whose shared tip is in the target absorbed nothing the target does not know, and one
 // whose tip IS the shared tip is an upstream commit itself — nothing of its own to land, whose
-// NOTHING_TO_LAND must not be turned into a bare main sync (the same reason sourceCarriesTheAbsorb
-// excludes the upstream tip itself). Both stay on J-S2's old path.
+// answer must not be turned into a bare main sync (the same reason sourceCarriesTheAbsorb excludes
+// the upstream tip itself). Both stay on J-S2's old path.
 func sourceCarriesAnEarlierAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
 	if !isAncestor(dir, targetSha, sourceSha) || isAncestor(dir, upstreamSha, sourceSha) {
 		return false
@@ -1160,10 +1180,10 @@ func prepareIntegrationTree(stop context.Context, scratch string, progress *inte
 	}
 	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		return fmt.Errorf("%s did not finish within %s: %s",
-			integrationPrepareScript, integrationPrepareTimeout, tailOf(output.text(), 2000))
+			integrationPrepareScript, integrationPrepareTimeout, tailOf(output.text(progress.redactor()), 2000))
 	}
 	if runErr != nil {
-		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, runErr, tailOf(output.text(), 2000))
+		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, runErr, tailOf(output.text(progress.redactor()), 2000))
 	}
 	logln("integration: prepared", scratch, "with", integrationPrepareScript,
 		fmt.Sprintf("in %dms", time.Since(started).Milliseconds()))
@@ -1314,7 +1334,7 @@ func runIntegrationCheckTracked(stop context.Context, scratch string, spec Integ
 		Command:          spec.Command,
 		ExpectedExitCode: spec.ExpectedExitCode,
 		DurationMs:       time.Since(started).Milliseconds(),
-		OutputTail:       tailOf(output.text(), integrationOutputTail),
+		OutputTail:       output.text(progress.redactor()),
 	}
 	if stopErr != nil {
 		return result, stopErr
@@ -1357,11 +1377,7 @@ func addFailureLines(result *IntegrationCheckResult, output *integrationOutput, 
 	if result.ExitCode != nil && *result.ExitCode == result.ExpectedExitCode {
 		return
 	}
-	redactor := newIntegrationOutputRedactor()
-	if progress != nil && progress.uploads != nil {
-		redactor = progress.uploads.redact
-	}
-	section := output.failureSection(redactor)
+	section := output.failureSection(progress.redactor())
 	if section == "" {
 		return
 	}
@@ -1433,9 +1449,10 @@ func (o *integrationOutput) Write(p []byte) (int, error) {
 	o.bytes += int64(len(p))
 	o.tail = append(o.tail, p...)
 	// Trim in chunks rather than on every write, so a chatty check does not copy its tail once
-	// per line; text() answers exactly the last integrationOutputTail bytes either way.
+	// per line; text() answers the last integrationOutputTail bytes either way, and what it leaves
+	// out of what is kept here is the part this cut may have left without its beginning.
 	if len(o.tail) > 2*integrationOutputTail {
-		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail:]...)
+		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail-integrationOutputCarryMax:]...)
 	}
 	o.failures.write(p)
 	o.mu.Unlock()
@@ -1470,13 +1487,26 @@ func (o *integrationOutput) size() int64 {
 	return o.bytes
 }
 
-func (o *integrationOutput) text() string {
+// text is the end of what this command printed as it may leave this machine: at most the last
+// integrationOutputTail bytes, held to what the log is held to. The control plane redacts it again
+// (src/apiserver/src/runner-api/check-output-redaction.ts), and that does not make this one spare: only
+// this process knows the token it authenticates with and the credentials in its environment.
+//
+// Redacted first and cut after, as the failure lines are: a secret is matched whole or not at all, so
+// the other way round leaves its back half for no rule to recognise. The cut then falls inside a marker
+// at worst. Write's own trim has no such order, because it happens as the output goes by, so once it
+// has run the front of what is kept may start anywhere; it keeps integrationOutputCarryMax more than a
+// tail needs, and that much goes here. A value longer than that is redacted only when it arrives
+// whole, which is the limit the uploader's carry has for the same reason.
+func (o *integrationOutput) text(redactor *integrationOutputRedactor) string {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	if len(o.tail) <= integrationOutputTail {
-		return string(o.tail)
+	kept, trimmed := string(o.tail), o.bytes > int64(len(o.tail))
+	o.mu.Unlock()
+	text := redactor.redact(strings.ReplaceAll(kept, "\x00", ""))
+	if trimmed {
+		text = text[min(integrationOutputCarryMax, len(text)):]
 	}
-	return string(o.tail[len(o.tail)-integrationOutputTail:])
+	return tailOf(text, integrationOutputTail)
 }
 
 // failureSection is what this output's failure lines come to (integrationFailureScan.section).
@@ -1783,6 +1813,16 @@ func (p *integrationProgress) beginStep(phase, step string, check *IntegrationJo
 	p.mu.Unlock()
 	resp, err := p.send(p.sendCtx, p.request())
 	p.handleAnswer(resp, err)
+}
+
+// redactor is what this job's output is held to wherever it goes: the log's on a v2 claim, which
+// knows the runner's token, and otherwise (a legacy claim, a check run with no claim behind it, which
+// is a nil p) one that knows what the environment holds.
+func (p *integrationProgress) redactor() *integrationOutputRedactor {
+	if p != nil && p.uploads != nil {
+		return p.uploads.redact
+	}
+	return newIntegrationOutputRedactor()
 }
 
 // uploadOutput streams this command's writes as the check they belong to (§2.2 J-T4's output
@@ -2252,6 +2292,22 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 			return t.integrationJobOutput(ctx, job.JobID, req)
 		}
 	}
+	// Removing a scratch worktree can outlast what the stop has left (THE BUDGETS, shutdown_drain.go), and it is
+	// the hand-back the next process is waiting for. What stays on disk the next attempt clears, so the hand-back
+	// goes as soon as the job knows it stopped.
+	var startHandBack sync.Once
+	handedBack := make(chan struct{})
+	beginHandBack := func(phase string) {
+		startHandBack.Do(func() {
+			logln("integration job", job.JobID, "stopped in", phase,
+				"because this runner is stopping; nothing was pushed, so it is handed back to be run again")
+			go func() {
+				defer close(handedBack)
+				handBackIntegrationJob(handBack, t, job)
+			}()
+		})
+	}
+	job.onInterrupted = beginHandBack
 	result := runIntegrationJobUntilWithProgress(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
 		// on either way. The one report that is more than a phase is `upstreamMoved` — the control
@@ -2265,9 +2321,8 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		})
 	}, sender)
 	if result.Interrupted {
-		logln("integration job", job.JobID, "stopped in", result.Phase,
-			"because this runner is stopping; nothing was pushed and its worktree is gone, so it is handed back to be run again")
-		handBackIntegrationJob(handBack, t, job)
+		beginHandBack(result.Phase)
+		<-handedBack
 		return
 	}
 	if result.Stopped {

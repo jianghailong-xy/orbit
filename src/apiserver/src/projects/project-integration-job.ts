@@ -597,13 +597,17 @@ export function integrationItemTitle(
   kind: string,
   taskTitle: string,
   mainBranch: string | null = null,
+  /** A promotion's source (`project_promotion.source_kind`), for the job of a candidate. */
+  promotionSourceKind: string | null = null,
 ): string {
   // A promotion's failure is not about one task — it is about the branch the owner was going to be
   // asked to merge — so it is named after that rather than after whichever task landed last. An
-  // observation's is about the line it could not look at (§10.6 O-J4).
+  // observation's is about the line it could not look at (§10.6 O-J4). A TASK_BRANCH candidate's
+  // branch IS one task's, and a MAIN line has no project branch to name (§10.5 O-L8).
   const subject = kind === 'LAND_TASK' ? taskTitle
     : kind === 'OBSERVE_LANDING' ? `looking for finished work on ${mainBranch ?? 'main'}`
-      : `merging the project branch into ${mainBranch ?? 'main'}`;
+      : promotionSourceKind === 'TASK_BRANCH' ? `merging “${taskTitle}” into ${mainBranch ?? 'main'}`
+        : `merging the project branch into ${mainBranch ?? 'main'}`;
   switch (state) {
     case 'CONFLICT': return `Merge conflict: ${subject}`;
     case 'CHECK_FAILED': return `Checks failed on the combined tree: ${subject}`;

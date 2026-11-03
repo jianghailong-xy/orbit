@@ -64,6 +64,7 @@ import {
   openItemActions,
   openItemChat,
   openItemRequiredAction,
+  outdatedRunnerOf,
   primaryAction,
   openItemFacts,
   type LandedFix,
@@ -3331,7 +3332,8 @@ export class ProjectOpenItemService {
         itemId: row.id,
         kind: row.kind as OpenItemKind,
         title: row.title,
-        detailLine: detailLine(row.kind, row.payload),
+        // §10.5 O-L8's line asks for something, and nothing is asked of a settled item.
+        detailLine: outdatedRunnerOf(row.payload) ? '' : detailLine(row.kind, row.payload),
         question: null,
         startRequest: null,
         doneRequest: null,
@@ -3828,6 +3830,11 @@ function detailLine(kind: string, payload: unknown): string {
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind === LANDING_UNOBSERVED_KIND) return landingUnobservedDetailLine(payload);
   if (kind === LANDED_WITHOUT_CONFIRMATION_KIND) return landedWithoutConfirmationDetailLine(payload);
+  // §10.5 O-L8: what the error code alone would have a reader conclude about the task is not so.
+  const outdatedRunner = outdatedRunnerOf(payload);
+  if (kind === 'INTEGRATION_ERROR' && outdatedRunner) {
+    return `Runner ${outdatedRunner} is out of date: update it, then run this check again.`;
+  }
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;

@@ -62,6 +62,7 @@ final class Phase4LogicTests: XCTestCase {
         XCTAssertEqual(Launchctl.bootout(domain: "user/502", plistPath: "/p.plist"), ["bootout", "user/502", "/p.plist"])
         XCTAssertEqual(Launchctl.kickstartRestart(domain: "gui/501"), ["kickstart", "-k", "gui/501/com.orbit.runner"])
         XCTAssertEqual(Launchctl.kickstartRestart(domain: "user/502"), ["kickstart", "-k", "user/502/com.orbit.runner"])
+        XCTAssertEqual(Launchctl.terminate(domain: "gui/501"), ["kill", "SIGTERM", "gui/501/com.orbit.runner"])
     }
 
     // MARK: where the agent is
@@ -131,6 +132,7 @@ final class Phase4LogicTests: XCTestCase {
         XCTAssertFalse(plist.contains("ORBIT_NO_SELFUPDATE"))
         XCTAssertTrue(plist.contains("<key>RunAtLoad</key><true/>"))
         XCTAssertTrue(plist.contains("<key>KeepAlive</key><true/>"))
+        XCTAssertTrue(plist.contains("<key>ExitTimeOut</key><integer>60</integer>"))
         XCTAssertTrue(plist.contains("<key>StandardOutPath</key><string>/Users/me/.orbit/runner.log</string>"))
     }
 

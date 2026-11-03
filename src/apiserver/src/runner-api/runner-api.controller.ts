@@ -7471,6 +7471,17 @@ export class RunnerApiController {
         `pending confirmation reviews of ${sessionId} were not delivered: `
         + `${error instanceof Error ? error.message : error}`,
       ));
+      // And a task's run that this turn left with nothing to do and its task still owed something:
+      // nothing else tells its coordinator so (projects/task-run-stopped.producer.ts).
+      if (
+        !finalized.failSession
+        && finalized.status === RunStatus.AWAITING_INPUT
+        && 'taskId' in finalized
+        && finalized.taskId
+        && dto.turnId
+      ) {
+        await this.tasks?.deliverRunStoppedAfterCommit(sessionId, { turnId: dto.turnId });
+      }
       this.realtime.publishSessionUpdated(sessionId);
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
@@ -8730,11 +8741,14 @@ export class RunnerApiController {
     // sessions at once, which ones coordinate a project with the coordinator on, which is the first
     // thing the fuse asks, and the only sessions it goes on for.
     const fused = !merged || merged.coordinator;
-    if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
+    const engineTurnEnd = durable.find((e) => e.type === RunEventType.TURN_END && !e.turnId);
+    if (engineTurnEnd) {
       // A turn nobody delivered is one the engine started itself (a background task reporting in,
       // a scheduled wake-up). It never reaches /turn-complete, so this is where its recap is asked
       // for; without it the list kept the recap from before the turn that wrote the conclusion.
       void this.recapAfterTurn(sessionId);
+      // And where such a turn's run is found to have stopped, for the same reason.
+      await this.tasks?.deliverRunStoppedAfterCommit(sessionId, { engineTurnEndSeq: engineTurnEnd.seq });
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');

@@ -21,6 +21,7 @@ import {
   projectSettledUnmergedFact,
   projectTasksSettledFact,
   settlementVersion,
+  taskRunStoppedFact,
   unmergedLineVersion,
   wakeIdempotencyKey,
 } from './coordinator-wake';
@@ -387,6 +388,22 @@ test('a ready dependent is one fact per dispatch epoch, whatever else is written
   assert.notEqual(wakeIdempotencyKey(ended), wakeIdempotencyKey(ready));
 });
 
+test('a stopped run is one fact per stop, and is a different fact from the run ending', () => {
+  const stopped = (stopKey: string) => taskRunStoppedFact({
+    projectId: PROJECT, taskId: TASK, taskTitle: 'the work', sessionId: SESSION_ONE, stopKey, lastWords: 'Stuck.',
+  });
+  const fact = stopped('turn-1');
+  assert.equal(fact.event, 'TASK_RUN_STOPPED');
+  assert.equal(fact.subjectType, 'TASK');
+  assert.equal(fact.subjectId, TASK);
+  assert.deepEqual(fact.detail, { title: 'the work', sessionId: SESSION_ONE, lastWords: 'Stuck.' });
+  assert.equal(wakeIdempotencyKey(stopped('turn-1')), wakeIdempotencyKey(fact), 'one stop reported twice is one fact');
+  assert.notEqual(wakeIdempotencyKey(stopped('turn-2')), wakeIdempotencyKey(fact), 'stopping again is another fact');
+  const ended = attemptEndedUnsettledFact({ projectId: PROJECT, taskId: TASK, taskStatus: 'OPEN', sessionId: SESSION_ONE })!;
+  assert.notEqual(wakeIdempotencyKey(ended), wakeIdempotencyKey(fact),
+    'a later end of the same run must still be able to wake the coordinator');
+});
+
 test('a settled project with nothing left over is no fact, and the version moves only with the work', () => {
   assert.equal(projectSettledUnmergedFact(PROJECT, []), null,
     'a project that landed everything it made owes nobody a waking');
@@ -442,7 +459,7 @@ test('a settled project with nothing left over is no fact, and the version moves
   );
 });
 
-// Pointed at the newest migration — 0342 since `PROJECT_BLOCKER_RAISED` joined the set. This
+// Pointed at the newest migration — 0467 since `TASK_RUN_STOPPED` joined the set. This
 // assertion went red on purpose the moment the constant grew: the CHECK before
 // it did not list the new live event, and a wake the database refuses is a delivery that throws —
 // and it is repointed rather than loosened, because each migration restates the whole list, so the
@@ -451,12 +468,12 @@ test('the events this unit knows about are exactly those the latest migration ac
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0342_project_blocker_coordinator_wake/migration.sql',
+      '../../prisma/migrations/0467_task_run_stopped_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0342 no longer constrains the event column');
+  assert.ok(check, 'migration 0467 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,
